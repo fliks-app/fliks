@@ -18,42 +18,50 @@ const MAX_PATCH: usize = 100;
 /// A per-track grab holds its items for this long while the provider's first queue entry is awaited.
 const CLAIM_TTL: std::time::Duration = std::time::Duration::from_secs(600);
 
-type Claims = HashMap<(String, i32), (Vec<i32>, std::time::Instant)>;
+/// The tracks a per-track grab holds, keyed by `(plugin, media)`.
+#[derive(Default)]
+pub struct Claims(std::sync::Mutex<Held>);
 
-fn claims() -> std::sync::MutexGuard<'static, Claims> {
-    use crate::sync::MutexExt;
-    static C: std::sync::LazyLock<std::sync::Mutex<Claims>> =
-        std::sync::LazyLock::new(Default::default);
-    C.lock_clean()
-}
+type Held = HashMap<(String, i32), (Vec<i32>, std::time::Instant)>;
 
-/// Holds the tracks `plugin` is about to grab on `media`, for the queue row that follows.
-pub fn claim(plugin: &str, media: i32, items: Vec<i32>) {
-    claims().insert(
-        (plugin.to_owned(), media),
-        (items, std::time::Instant::now()),
-    );
-}
-
-/// Drops a claim whose grab did not happen.
-pub fn unclaim(plugin: &str, media: i32) {
-    claims().remove(&(plugin.to_owned(), media));
-}
-
-/// The tracks held for `plugin` on `media`, as the wire carries them.
-pub fn claimed(plugin: &str, media: i32) -> Vec<i64> {
-    let held = claims();
-    match held.get(&(plugin.to_owned(), media)) {
-        Some((items, at)) if at.elapsed() < CLAIM_TTL => {
-            items.iter().map(|i| i64::from(*i)).collect()
-        }
-        _ => vec![],
+impl Claims {
+    fn map(&self) -> std::sync::MutexGuard<'_, Held> {
+        use crate::sync::MutexExt;
+        self.0.lock_clean()
     }
-}
 
-fn take_claim(plugin: &str, media: i32) -> Option<Vec<i32>> {
-    let (items, at) = claims().remove(&(plugin.to_owned(), media))?;
-    (at.elapsed() < CLAIM_TTL).then_some(items)
+    /// Holds the tracks `plugin` is about to grab on `media`, for the queue row that follows.
+    pub fn claim(&self, plugin: &str, media: i32, items: Vec<i32>) {
+        self.map().insert(
+            (plugin.to_owned(), media),
+            (items, std::time::Instant::now()),
+        );
+    }
+
+    /// Drops a claim whose grab did not happen.
+    pub fn unclaim(&self, plugin: &str, media: i32) {
+        self.map().remove(&(plugin.to_owned(), media));
+    }
+
+    /// Drops every claim of a plugin that stopped.
+    pub fn forget(&self, plugin: &str) {
+        self.map().retain(|(p, _), _| p != plugin);
+    }
+
+    /// The tracks held for `plugin` on `media`, as the wire carries them.
+    pub fn claimed(&self, plugin: &str, media: i32) -> Vec<i64> {
+        match self.map().get(&(plugin.to_owned(), media)) {
+            Some((items, at)) if at.elapsed() < CLAIM_TTL => {
+                items.iter().map(|i| i64::from(*i)).collect()
+            }
+            _ => vec![],
+        }
+    }
+
+    fn take(&self, plugin: &str, media: i32) -> Option<Vec<i32>> {
+        let (items, at) = self.map().remove(&(plugin.to_owned(), media))?;
+        (at.elapsed() < CLAIM_TTL).then_some(items)
+    }
 }
 
 /// The states in which a transfer counts as in flight (`import_failed` waits for an action).
@@ -170,7 +178,10 @@ fn check(e: t::QueueEntry) -> Result<Entry, String> {
             size: e.size_bytes.map(|n| i64::try_from(n).unwrap_or(i64::MAX)),
             bytes_per_second: finite(e.bytes_per_second),
             eta: finite(e.eta_seconds),
-            error: e.error.filter(|s| !s.is_empty()),
+            error: e
+                .error
+                .filter(|s| !s.is_empty())
+                .map(|s| s.chars().take(MAX_TEXT).collect()),
         },
     })
 }
@@ -189,7 +200,7 @@ fn validate(entries: Vec<t::QueueEntry>) -> Result<(Vec<Entry>, Vec<Rejected>), 
     let mut seen = HashSet::new();
     let (mut ok, mut bad) = (Vec::with_capacity(entries.len()), vec![]);
     for e in entries {
-        let name = e.ref_.clone();
+        let name: String = e.ref_.chars().take(MAX_REF).collect();
         match check(e) {
             Ok(v) if seen.insert(v.r#ref.clone()) => ok.push(v),
             Ok(v) => bad.push((v.r#ref, "duplicate ref".to_owned())),
@@ -221,7 +232,12 @@ impl Changes {
     }
 }
 
-async fn insert(tx: &mut sqlx::PgConnection, plugin: &str, e: &Entry) -> Result<(), sqlx::Error> {
+async fn insert(
+    tx: &mut sqlx::PgConnection,
+    plugin: &str,
+    e: &Entry,
+    items: Option<Vec<i32>>,
+) -> Result<(), sqlx::Error> {
     let f = &e.f;
     sqlx::query(
         r#"INSERT INTO acquisition_queue ("pluginId", "ref", "mediaId", season, episode, "sourceId", "sourceName",
@@ -248,7 +264,7 @@ async fn insert(tx: &mut sqlx::PgConnection, plugin: &str, e: &Entry) -> Result<
     .bind(f.eta)
     .bind(&f.error)
     .bind(f.terminal())
-    .bind(take_claim(plugin, f.media))
+    .bind(items)
     .execute(tx)
     .await?;
     Ok(())
@@ -288,14 +304,14 @@ async fn update(tx: &mut sqlx::PgConnection, id: i32, f: &Fields) -> Result<(), 
 /// A removed row that returns: its fields and the tracks of its new grab replace the old ones.
 async fn reopen(
     tx: &mut sqlx::PgConnection,
-    plugin: &str,
     id: i32,
     f: &Fields,
+    items: Option<Vec<i32>>,
 ) -> Result<(), sqlx::Error> {
     update(tx, id, f).await?;
     sqlx::query(r#"UPDATE acquisition_queue SET "itemIds" = $2 WHERE id = $1"#)
         .bind(id)
-        .bind(take_claim(plugin, f.media))
+        .bind(items)
         .execute(tx)
         .await?;
     Ok(())
@@ -336,6 +352,7 @@ async fn last_closed(
 async fn reconcile(
     db: &PgPool,
     plugin: &str,
+    claims: &Claims,
     entries: Vec<Entry>,
     keep: &HashSet<String>,
 ) -> Result<Applied, sqlx::Error> {
@@ -421,8 +438,8 @@ async fn reconcile(
                     }
                 }
                 match removed {
-                    Some(id) => reopen(&mut tx, plugin, id, &e.f).await?,
-                    None => insert(&mut tx, plugin, &e).await?,
+                    Some(id) => reopen(&mut tx, id, &e.f, claims.take(plugin, e.f.media)).await?,
+                    None => insert(&mut tx, plugin, &e, claims.take(plugin, e.f.media)).await?,
                 }
                 changes.touch(e.f.media, true);
             }
@@ -441,6 +458,16 @@ async fn reconcile(
     Ok(applied)
 }
 
+/// The refs whose open row a snapshot leaves alone: refused ones, unless a valid entry carries the ref.
+fn refused_refs(entries: &[Entry], rejected: Vec<Rejected>) -> HashSet<String> {
+    let valid: HashSet<&str> = entries.iter().map(|e| e.r#ref.as_str()).collect();
+    rejected
+        .into_iter()
+        .map(|(r, _)| r)
+        .filter(|r| !valid.contains(r.as_str()))
+        .collect()
+}
+
 /// `queue.set`: the caller's full snapshot (rule 70).
 pub async fn set(
     st: &AppState,
@@ -451,13 +478,13 @@ pub async fn set(
     for (r#ref, why) in &rejected {
         tracing::warn!("queue.set of \"{plugin}\": entry \"{ref}\" refused: {why}");
     }
-    let keep: HashSet<String> = rejected.into_iter().map(|(r, _)| r).collect();
-    let applied = reconcile(&st.db, plugin, entries, &keep)
+    let keep = refused_refs(&entries, rejected);
+    let applied = reconcile(&st.db, plugin, &st.plugins.item_claims, entries, &keep)
         .await
         .map_err(db_err)?;
     let mut changes = applied.changes;
     // A placeholder holds until an entry covers it (rule 72).
-    for media in super::events::progress_gates().retire_covered(plugin, &applied.covered) {
+    for media in st.plugins.progress.retire_covered(plugin, &applied.covered) {
         changes.touch(media, false);
     }
     announce(st, plugin, changes).await;
@@ -486,10 +513,12 @@ pub async fn close_plugin(st: &AppState, plugin: &str) {
     }
 }
 
-/// Enabled users who can read the queue: `media.grab`, admins and `manage:all`.
-async fn audience(st: &AppState) -> Vec<i32> {
-    sqlx::query_scalar(
-        r#"SELECT u.id FROM users u LEFT JOIN roles r ON r.id = u."roleId"
+/// Enabled users who can read the queue (`media.grab`, admins and `manage:all`), and whether they see
+/// every library.
+async fn audience(st: &AppState) -> Vec<(i32, bool)> {
+    sqlx::query_as(
+        r#"SELECT u.id, (u."isAdmin" OR COALESCE(r.permissions LIKE '%"manage:all"%', false))
+           FROM users u LEFT JOIN roles r ON r.id = u."roleId"
            WHERE u.enabled AND (u."isAdmin" OR r.permissions LIKE '%"manage:all"%'
              OR r.permissions LIKE '%"media.grab"%') ORDER BY u.id"#,
     )
@@ -506,22 +535,35 @@ async fn announce(st: &AppState, plugin: &str, changes: Changes) {
         return;
     }
     for media in &changes.media {
-        super::events::push_progress(st, *media, super::events::progress_gates().union(*media))
-            .await;
+        super::events::push_progress(st, *media, st.plugins.progress.union(*media)).await;
     }
     let users = audience(st).await;
-    if !users.is_empty() {
-        // Rows to patch only when nothing joined or left the list and few changed; else the page reloads.
-        let rows = if changes.structural || changes.updated.len() > MAX_PATCH {
-            None
-        } else {
-            Some(super::queue_routes::rows_by_id(&st.db, &changes.updated).await)
-        };
-        st.hub.emit_raw(
-            "acquisition.queue",
-            json!({"pluginId": plugin, "rows": rows}),
-            Some(&users),
-        );
+    // Rows to patch only when nothing joined or left the list and few changed; else the page reloads.
+    if changes.structural || changes.updated.len() > MAX_PATCH {
+        let ids: Vec<i32> = users.iter().map(|(id, _)| *id).collect();
+        if !ids.is_empty() {
+            st.hub.emit_raw(
+                "acquisition.queue",
+                json!({"pluginId": plugin, "rows": null}),
+                Some(&ids),
+            );
+        }
+    } else {
+        // Each recipient gets only the rows of the libraries they can open, as the list route does.
+        for (user, all) in users {
+            let Ok(libraries) = crate::libraries::acl::library_ids_of(&st.db, user, all).await
+            else {
+                continue;
+            };
+            let rows = super::queue_routes::rows_by_id(&st.db, &changes.updated, &libraries).await;
+            if !rows.is_empty() {
+                st.hub.emit_raw(
+                    "acquisition.queue",
+                    json!({"pluginId": plugin, "rows": rows}),
+                    Some(&[user]),
+                );
+            }
+        }
     }
     if changes.structural {
         st.hub.emit(SseEvent::QueueUpdated {});
@@ -685,6 +727,30 @@ mod tests {
         let names: Vec<_> = bad.iter().map(|(r, _)| r.as_str()).collect();
         assert_eq!(names, ["", "b", "c", "a"]);
         assert!(validate((0..2001).map(|i| entry(&i.to_string())).collect()).is_err());
+    }
+
+    #[test]
+    fn a_duplicate_ref_never_shields_its_valid_entry() {
+        let (ok, bad) = validate(vec![entry("a"), entry("a"), entry("")]).unwrap();
+        let keep = refused_refs(&ok, bad);
+        assert_eq!(keep, HashSet::from([String::new()]));
+    }
+
+    #[test]
+    fn plugin_text_is_capped() {
+        let mut e = entry("a");
+        e.error = Some("x".repeat(5000));
+        assert_eq!(one(e).f.error.map(|s| s.len()), Some(MAX_TEXT));
+    }
+
+    #[test]
+    fn a_stopped_plugin_loses_its_claims() {
+        let c = Claims::default();
+        c.claim("a", 1, vec![5]);
+        c.claim("b", 1, vec![6]);
+        c.forget("a");
+        assert!(c.claimed("a", 1).is_empty());
+        assert_eq!(c.claimed("b", 1), [6]);
     }
 
     #[test]

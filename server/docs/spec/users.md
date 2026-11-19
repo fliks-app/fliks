@@ -89,7 +89,7 @@ A scoped (`stream`) token is answered 401 on every one of these (auth rule 12).
     | `spoilerHideTitles` | bool | S, M | set |
     | `sessionSync` | bool | S, M | set; opts the account in to the account session (`session.md`) |
     | `whatsNewEnabled` | bool | S, M | set; `false` turns the client's what's-new popup off |
-    | `whatsNewSeen` | string | S, M | set; the newest client version whose what's-new notes the account has seen, written by the client (no format check); `null` until then, and the client shows no notes then; accounts that existed before the column start at `5.0.0` |
+    | `whatsNewSeen` | string | S, M | set; the newest client version whose what's-new notes the account has seen, written by the client (a version of at most 32 characters, else 400); `null` until then, and the client shows no notes then; accounts that existed before the column start at `5.0.0` |
     | `sessionKinds` | `MediaKind[]` or `null` (null = every kind; each element a `MediaKind`, duplicates dropped, `[]` allowed) | S, M | set; `null` is a value here, not an error (rule 21) |
 
 21. `@IsOptional()` skips validation for both `undefined` and `null`, and the service tests `!== undefined`, so a `null` field is "present": `roleId: null` clears the role (rules 15-16), `email: null` stores NULL; for the other fields `null` reaches the column or `bcrypt` and ends as an error (500; unverifiable without running). A `null` on a non-nullable field is answered 400 (standard validation body); `roleId` and `email` keep accepting `null`.

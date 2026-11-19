@@ -54,6 +54,16 @@ impl<K: Eq + Hash + Clone> KeyedLocks<K> {
     }
 }
 
+impl<K: Eq + Hash> KeyedLocks<K> {
+    /// Whether a holder or a waiter has the key now.
+    pub fn held(&self, key: &K) -> bool {
+        self.0
+            .lock_clean()
+            .get(key)
+            .is_some_and(|m| m.try_lock().is_err())
+    }
+}
+
 /// Process-wide ingest state: the per-media lock, the relink creation lock and the queue.
 #[derive(Default)]
 pub struct Shared {

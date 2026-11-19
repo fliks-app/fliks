@@ -11,7 +11,7 @@ use std::net::IpAddr;
 use subtle::ConstantTimeEq;
 
 /// The login limiter bucket of `apiKey` calls: no username holds a NUL. Calls with `u` use that name.
-const THROTTLE_KEY: &str = "\0subsonic";
+const THROTTLE_KEY: &str = "subsonic";
 /// A sync opens many calls at once, so only failures add up.
 const MAX_FAILS: u32 = 60;
 const WRONG: &str = "Wrong username or password";
@@ -45,7 +45,9 @@ pub async fn authenticate(
             "Multiple conflicting authentication mechanisms provided",
         ));
     }
-    let bucket = user.unwrap_or(THROTTLE_KEY);
+    // A NUL prefix keeps these buckets apart from the web login's, whatever username a client sends.
+    let bucket = format!("\0{}", user.unwrap_or(THROTTLE_KEY));
+    let bucket = bucket.as_str();
     if st.login_throttle.blocked(ip, bucket, MAX_FAILS) {
         return Err(SubError::new(
             40,

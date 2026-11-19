@@ -31,11 +31,14 @@ fn album_visible(libs: &str) -> String {
 const ALBUM_ARTISTS_TEXT: &str = r#"COALESCE((SELECT string_agg(p.name, ' ' ORDER BY mc.position) FROM media_credits mc
   JOIN persons p ON p.id = mc."personId" WHERE mc."mediaId" = m.id AND mc.role = 'artist'), '')"#;
 
-/// `ILIKE ALL` patterns for the words of a query; `None` for an empty one (rule 25).
+const MAX_WORDS: usize = 8;
+
+/// `ILIKE ALL` patterns for the first `MAX_WORDS` words of a query; `None` for an empty one (rule 25).
 pub fn search_patterns(q: &str) -> Option<Vec<String>> {
     let words: Vec<String> = q
         .replace(['"', '*'], " ")
         .split_whitespace()
+        .take(MAX_WORDS)
         .map(fliks_domain::media::search::contains_pattern)
         .collect();
     (!words.is_empty()).then_some(words)
@@ -852,6 +855,7 @@ mod tests {
             search_patterns("100% _x* a\\b").unwrap(),
             vec!["%100\\%%", "%\\_x%", "%a\\\\b%"]
         );
+        assert_eq!(search_patterns(&"w ".repeat(50)).unwrap().len(), MAX_WORDS);
     }
 
     #[test]

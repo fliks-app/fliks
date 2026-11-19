@@ -362,13 +362,17 @@ async fn a_per_track_grab_reports_its_items_and_a_reused_row_drops_the_old_ones(
     let media = 720_040;
     add_media(&h, media, "movie").await;
     let set = |refs: &'static [&'static str]| queue_set(&h, "items.plugin", media as u32, refs);
-    queue::claim("items.plugin", media, vec![11, 12]);
+    h.st.plugins
+        .item_claims
+        .claim("items.plugin", media, vec![11, 12]);
     set(&["x"]).await;
     assert_eq!(progress_items(&h, media).await, json!([11, 12]));
 
     // The transfer leaves the snapshot, then returns for a grab of another track.
     set(&[]).await;
-    queue::claim("items.plugin", media, vec![13]);
+    h.st.plugins
+        .item_claims
+        .claim("items.plugin", media, vec![13]);
     set(&["x"]).await;
     assert_eq!(
         progress_items(&h, media).await,

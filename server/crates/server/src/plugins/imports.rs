@@ -498,7 +498,13 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                super::events::in_flight(&app, &id, media_id as i32, unit.as_ref()).await
+                let mut ids =
+                    super::events::in_flight(&app, &id, media_id as i32, unit.as_ref()).await?;
+                // A core sweep is grabbing it: its grab shows only once the plugin publishes `Grabbed`.
+                if app.plugins.sweeps.claims.held(&(media_id as i32)) {
+                    ids.push("core".to_owned());
+                }
+                Ok(ids)
             }
         )
     }

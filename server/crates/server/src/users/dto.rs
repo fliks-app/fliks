@@ -202,6 +202,12 @@ impl UpdateUser {
                 "quotaPeriodDays must not be less than 1",
             ),
             (
+                self.whats_new_seen
+                    .as_deref()
+                    .is_none_or(|v| v.len() <= 32 && nodejs_semver::Version::parse(v).is_ok()),
+                "whatsNewSeen must be a version of at most 32 characters",
+            ),
+            (
                 self.library_ids.as_ref().is_none_or(|v| !v.contains(&0)),
                 "libraryIds should not contain 0 values",
             ),
