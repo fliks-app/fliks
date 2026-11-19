@@ -2,7 +2,6 @@
 use super::harness::*;
 use fliks_server::events::DomainEvent;
 use fliks_server::plugins::acquisition;
-use fliks_server::plugins::events::progress_gates;
 use fliks_server::plugins::runtime::fliks::plugin::types::{CandidatesQuery, Target};
 use fliks_server::plugins::sweep::Outcome;
 use serde_json::{Value, json};
@@ -63,7 +62,7 @@ async fn forget(h: &H) {
         .unwrap();
     // A grab puts its media in flight until its plugin reports.
     for id in [A, B] {
-        progress_gates().retire(id);
+        h.st.plugins.progress.retire(id);
     }
 }
 

@@ -166,6 +166,9 @@ pub struct Plugins {
     pub counts: counts::Counts,
     pub pickers: picker::Pickers,
     pub sweeps: sweep::Sweeps,
+    /// In-flight placeholders and the tracks a per-track grab holds, cleared with the plugin.
+    pub progress: events::Progress,
+    pub item_claims: queue::Claims,
     pub staging: staging::Staging,
     pub logs: Arc<logs::Logs>,
     host: OnceLock<Arc<Host>>,
@@ -216,6 +219,8 @@ impl Plugins {
             counts: counts::Counts::default(),
             pickers: picker::Pickers::default(),
             sweeps: sweep::Sweeps::default(),
+            progress: events::Progress::default(),
+            item_claims: queue::Claims::default(),
             logs: Arc::default(),
             host: OnceLock::new(),
             locks: KeyedLocks::default(),
@@ -366,7 +371,8 @@ impl Plugins {
             app.hub
                 .emit_raw("acquisition.sources", json!({"pluginId": id}), None);
         }
-        events::progress_gates().forget(app, id).await;
+        self.item_claims.forget(id);
+        self.progress.forget(app, id).await;
         queue::close_plugin(app, id).await;
     }
 

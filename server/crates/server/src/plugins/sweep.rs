@@ -46,7 +46,7 @@ impl Queue {
 #[derive(Default)]
 pub struct Sweeps {
     /// Held from a media's in-flight check to its grab.
-    claims: KeyedLocks<i32>,
+    pub(super) claims: KeyedLocks<i32>,
     slots: Mutex<HashMap<String, Arc<Semaphore>>>,
     queue: Mutex<Queue>,
 }
@@ -285,11 +285,11 @@ impl Plugins {
             };
             let media = tg.media_id as i32;
             if !items.is_empty() {
-                super::queue::claim(&id, media, items.clone());
+                self.item_claims.claim(&id, media, items.clone());
             }
             let grabbed = self.sweep_call(&id, "POST", grab, vec![], body).await;
             if !items.is_empty() && !matches!(grabbed, Ok(_) | Err(RouteError::TimedOut)) {
-                super::queue::unclaim(&id, media);
+                self.item_claims.unclaim(&id, media);
             }
             match grabbed {
                 Ok(_) => {

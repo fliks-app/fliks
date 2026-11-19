@@ -10,11 +10,19 @@ use md5::{Digest as _, Md5};
 use std::net::IpAddr;
 use subtle::ConstantTimeEq;
 
-/// The login limiter bucket of `apiKey` calls: no username holds a NUL. Calls with `u` use that name.
+/// The limiter bucket of `apiKey` calls; a NUL prefix keeps it apart from every username's.
 const THROTTLE_KEY: &str = "\0subsonic";
 /// A sync opens many calls at once, so only failures add up.
 const MAX_FAILS: u32 = 60;
 const WRONG: &str = "Wrong username or password";
+
+/// The limiter bucket of a call; the NUL keeps it off the web login's and the other protocols' buckets.
+fn bucket(user: Option<&str>) -> String {
+    user.map_or_else(
+        || THROTTLE_KEY.to_owned(),
+        |u| format!("{THROTTLE_KEY}:{u}"),
+    )
+}
 
 fn wrong() -> SubError {
     SubError::new(40, WRONG)
@@ -45,7 +53,8 @@ pub async fn authenticate(
             "Multiple conflicting authentication mechanisms provided",
         ));
     }
-    let bucket = user.unwrap_or(THROTTLE_KEY);
+    let bucket = bucket(user);
+    let bucket = bucket.as_str();
     if st.login_throttle.blocked(ip, bucket, MAX_FAILS) {
         return Err(SubError::new(
             40,
@@ -126,7 +135,21 @@ async fn by_password(
 
 #[cfg(test)]
 mod tests {
-    use super::hex_decode;
+    use super::{MAX_FAILS, bucket, hex_decode};
+    use crate::auth::LoginThrottle;
+
+    #[test]
+    fn subsonic_failures_never_fill_another_protocols_bucket() {
+        let t = LoginThrottle::default();
+        for u in ["kosync", "opds", "kobo", "subsonic", "bob"] {
+            for _ in 0..MAX_FAILS {
+                t.fail(None, &bucket(Some(u)));
+            }
+            assert!(t.attempt(None, &format!("\0{u}")), "{u}");
+            assert!(t.attempt(None, u), "{u}");
+        }
+        assert_ne!(bucket(None), bucket(Some("subsonic")));
+    }
 
     #[test]
     fn enc_values_decode_from_hex() {

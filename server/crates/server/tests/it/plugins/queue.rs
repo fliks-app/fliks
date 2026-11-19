@@ -362,13 +362,17 @@ async fn a_per_track_grab_reports_its_items_and_a_reused_row_drops_the_old_ones(
     let media = 720_040;
     add_media(&h, media, "movie").await;
     let set = |refs: &'static [&'static str]| queue_set(&h, "items.plugin", media as u32, refs);
-    queue::claim("items.plugin", media, vec![11, 12]);
+    h.st.plugins
+        .item_claims
+        .claim("items.plugin", media, vec![11, 12]);
     set(&["x"]).await;
     assert_eq!(progress_items(&h, media).await, json!([11, 12]));
 
     // The transfer leaves the snapshot, then returns for a grab of another track.
     set(&[]).await;
-    queue::claim("items.plugin", media, vec![13]);
+    h.st.plugins
+        .item_claims
+        .claim("items.plugin", media, vec![13]);
     set(&["x"]).await;
     assert_eq!(
         progress_items(&h, media).await,
@@ -460,6 +464,83 @@ async fn the_queue_lists_only_open_libraries_and_its_actions_need_queue_manage()
         user("GET", "/api/acquisition/history".into()).await.1["total"],
         0
     );
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn queue_patches_reach_only_recipients_of_the_library_and_in_flight_reads_every_kind() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("queue_aud").await else {
+        return;
+    };
+    let h = harness(&s, "queue_aud", |_| {}).await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    add_media(&h, 720_050, "movie").await;
+    add_media(&h, 720_051, "comic").await;
+    sqlx::query(
+        r#"WITH r AS (INSERT INTO roles (name, permissions) VALUES ('grabber', '["media.grab"]') RETURNING id)
+           UPDATE users SET "roleId" = (SELECT id FROM r) WHERE username = 'user'"#,
+    )
+    .execute(&h.st.db)
+    .await
+    .unwrap();
+    let set = |progress: f64| {
+        let st = h.st.clone();
+        let mut movie = entry("m", 720_050, None, "M");
+        movie.progress = progress;
+        let issue = UnitRef {
+            group: None,
+            number: Some(2.0),
+            end_number: None,
+            label: None,
+            absolute: None,
+        };
+        let comic = entry("c", 720_051, Some(issue), "C");
+        async move {
+            queue::set(&st, "fliks.fixture", vec![movie, comic])
+                .await
+                .unwrap()
+        }
+    };
+    set(0.1).await;
+    let mut rx = h.st.hub.subscribe();
+    let patches = |rx: &mut tokio::sync::broadcast::Receiver<std::sync::Arc<Bus>>| {
+        let mut n = Vec::new();
+        while let Ok(bus) = rx.try_recv() {
+            if let Bus::Raw(r) = &*bus
+                && r.r#type == "acquisition.queue"
+            {
+                n.push(r.payload["rows"].as_array().map(Vec::len));
+            }
+        }
+        n
+    };
+    // A progress-only change: the admin gets the changed row, the user (no library yet) gets nothing.
+    set(0.2).await;
+    assert_eq!(patches(&mut rx), [Some(1)]);
+    sqlx::query(r#"INSERT INTO library_user_access ("libraryId", "userId") SELECT 720, id FROM users WHERE username = 'user'"#)
+        .execute(&h.st.db)
+        .await
+        .unwrap();
+    set(0.3).await;
+    assert_eq!(patches(&mut rx), [Some(1), Some(1)]);
+
+    // A comic issue with no group is a valid unit for the in-flight read.
+    let issue = UnitRef {
+        group: None,
+        number: Some(2.0),
+        end_number: None,
+        label: None,
+        absolute: None,
+    };
+    let seen =
+        fliks_server::plugins::events::in_flight(&h.st, "other", 720_051, Some(&issue)).await;
+    assert_eq!(seen.unwrap(), ["fliks.fixture"]);
     h.finish().await;
     s.finish().await;
 }

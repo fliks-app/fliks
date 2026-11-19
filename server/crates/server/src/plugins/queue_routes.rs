@@ -139,12 +139,13 @@ fn wire(r: Row) -> Value {
     })
 }
 
-/// The wire rows of these ids, in id order.
-pub(super) async fn rows_by_id(db: &sqlx::PgPool, ids: &[i32]) -> Vec<Value> {
+/// The wire rows of these ids that sit in `libraries`, in id order.
+pub(super) async fn rows_by_id(db: &sqlx::PgPool, ids: &[i32], libraries: &[i32]) -> Vec<Value> {
     let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{SELECT} WHERE q.id = ANY($1) ORDER BY q.id"
+        r#"{SELECT} WHERE q.id = ANY($1) AND m."libraryId" = ANY($2) ORDER BY q.id"#
     )))
     .bind(ids)
+    .bind(libraries)
     .fetch_all(db)
     .await
     .unwrap_or_default();
@@ -226,7 +227,7 @@ async fn list(st: &AppState, a: &Authed, p: &Page, open: bool) -> Result<Json<Va
 #[utoipa::path(get, path = "/api/acquisition/progress", responses((status = 200)))]
 pub async fn progress(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, AppError> {
     let libraries = accessible_library_ids(&st.db, &a).await?;
-    let gates = crate::plugins::events::progress_gates();
+    let gates = &st.plugins.progress;
     let mut media: Vec<i32> = sqlx::query_scalar(
         r#"SELECT DISTINCT "mediaId" FROM acquisition_queue WHERE "finishedAt" IS NULL AND state = ANY($1)"#,
     )

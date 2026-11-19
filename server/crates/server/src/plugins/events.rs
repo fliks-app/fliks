@@ -211,7 +211,7 @@ impl Progress {
         let st = st.clone();
         tokio::spawn(async move {
             tokio::time::sleep(PLACEHOLDER_TTL).await;
-            let gates = progress_gates();
+            let gates = &st.plugins.progress;
             for id in gates.expire(Instant::now()) {
                 push_progress(&st, id, gates.union(id)).await;
             }
@@ -234,8 +234,18 @@ pub async fn in_flight(
     media_id: i32,
     unit: Option<&t::UnitRef>,
 ) -> Result<Vec<String>, HostError> {
-    let (season, episode) = units::video(unit)?;
-    let mut ids: BTreeSet<String> = progress_gates()
+    // As `queue.set` does: only a video unit is whole numbers, any other kind asks for the whole media.
+    let video = media_row(st, media_id)
+        .await
+        .is_some_and(|(_, kind)| kind.families().contains(&Family::Video));
+    let (season, episode) = if video {
+        units::video(unit)?
+    } else {
+        (None, None)
+    };
+    let mut ids: BTreeSet<String> = st
+        .plugins
+        .progress
         .in_flight(media_id, plugin, season, episode)
         .into_iter()
         .collect();
@@ -245,11 +255,6 @@ pub async fn in_flight(
             .map_err(super::imports::db_err)?,
     );
     Ok(ids.into_iter().collect())
-}
-
-pub fn progress_gates() -> &'static Progress {
-    static P: std::sync::OnceLock<Progress> = std::sync::OnceLock::new();
-    P.get_or_init(Progress::default)
 }
 
 /// The season and episode of an event's unit; a book has no unit and a comic's issue is no episode.
@@ -321,13 +326,14 @@ pub async fn publish(
                     },
                     season_number: season,
                     episode_number: episode,
-                    item_ids: super::queue::claimed(plugin, g.media_id as i32),
+                    item_ids: st.plugins.item_claims.claimed(plugin, g.media_id as i32),
                     progress: Num(0.0),
                     dlspeed: Num(0.0),
                     eta: Num(0.0),
                     state: DownloadState::Queued,
                 };
-                progress_gates()
+                st.plugins
+                    .progress
                     .placeholder(st, plugin, g.media_id as i32, placeholder)
                     .await;
             }

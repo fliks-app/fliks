@@ -15,6 +15,21 @@ pub mod transfer;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod keyed_locks_tests {
+    use super::KeyedLocks;
+
+    #[tokio::test]
+    async fn held_is_true_only_while_the_guard_lives() {
+        let l = KeyedLocks::<i32>::default();
+        assert!(!l.held(&1));
+        let g = l.lock(1).await;
+        assert!(l.held(&1) && !l.held(&2));
+        drop(g);
+        assert!(!l.held(&1));
+    }
+}
+
 use crate::libraries::Folder;
 use crate::media::external_ids;
 use crate::state::AppState;
@@ -51,6 +66,16 @@ impl<K: Eq + Hash + Clone> KeyedLocks<K> {
             map.entry(key).or_default().clone()
         };
         m.lock_owned().await
+    }
+}
+
+impl<K: Eq + Hash> KeyedLocks<K> {
+    /// Whether a holder has the key now.
+    pub fn held(&self, key: &K) -> bool {
+        self.0
+            .lock_clean()
+            .get(key)
+            .is_some_and(|m| m.try_lock().is_err())
     }
 }
 
