@@ -5,7 +5,7 @@ import type { MediaType } from '../enums/media-type.enum';
 import type { StemMode } from './audio-player/stem-mix';
 import { Subject, filter, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
-import { RemoteCommand, RemoteState, SseService, whenIdle, type WireQueue } from './sse.service';
+import { RemoteCommand, RemoteState, SseService, whenIdle, type ReportedQueue, type WireQueue } from './sse.service';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { ToastService } from './toast.service';
 import { CastSettingsService } from './cast-settings.service';
@@ -21,8 +21,8 @@ import { DETAIL_SEGMENTS_PATTERN, KIND_REGISTRY, isMediaKind, kindFromSegment, k
 
 export type RemoteAction = RemoteCommand['action'];
 
-/** What a target reports it is playing: the heartbeat minus its routing fields. */
-export type RemoteNowPlaying = Omit<RemoteState, 'type' | 'targetId' | 'lastCmdId'>;
+/** What a target reports it is playing: the heartbeat minus its routing fields and its queue, held apart (`targetQueue`). */
+export type RemoteNowPlaying = Omit<RemoteState, 'type' | 'targetId' | 'lastCmdId' | 'queue'>;
 
 export interface RemoteTarget {
   targetId: string;
@@ -33,7 +33,8 @@ export interface RemoteTarget {
   tvPlatform: string | null;
   /** Set when the target belongs to a household member rather than the caller. */
   ownerUsername?: string | null;
-  nowPlaying: RemoteNowPlaying | null;
+  /** The listing also names the queue the device last reported. */
+  nowPlaying: (RemoteNowPlaying & { queue?: ReportedQueue | null }) | null;
   /** What a polled target applies; absent means everything. `resume` is a `load` of the file it already plays. */
   actions?: string[];
 }
@@ -261,6 +262,14 @@ export class RemoteService {
    *  own target cannot ping-pong between two devices controlling each other. */
   private appliedBrowseKey: string | null = null;
   private readonly reportedState = signal<RemoteNowPlaying | null>(null);
+  /** The device last reported this queue for this session. */
+  private readonly heldQueue = signal<{ targetId: string; sessionId: string; queue: ReportedQueue } | null>(null);
+  /** The queue the observed device plays: sent with the first beat of a session and on each change, so it outlives
+   *  the gap between two tracks. */
+  readonly targetQueue = computed(() => {
+    const held = this.heldQueue();
+    return held && held.targetId === this.observedTargetId() ? held.queue : null;
+  });
   private readonly pinnedVolume = signal<number | null>(null);
   private volumePinAt = 0;
   /** Optimistic hold for a seek: the target reads its position back only once the seek lands. */
@@ -679,8 +688,7 @@ export class RemoteService {
         if (!listed.nowPlaying) this.stoppedUntilReport = false;
         if (replaceReport && !listed.nowPlaying) this.reportedState.set(null);
         if (listed.nowPlaying && (!this.reportedState() || replaceReport) && !this.stoppedUntilReport) {
-          this.reportedState.set(listed.nowPlaying);
-          this.stateAt = Date.now();
+          this.takeListing(observed!, listed.nowPlaying);
         }
         const reportedAt = Math.max(this.stateAt, this.sessionSync.ownerReportAt(listed.targetId));
         const silentFor = Date.now() - reportedAt;
@@ -710,8 +718,9 @@ export class RemoteService {
     // Still reading the same device (the selection became the watch of its session): its reading and command in flight hold.
     if (this.observedTargetId() === observed) return;
     // The listing is all a pick of a playing device has until its next report, as `refreshTargets` takes it.
-    this.reportedState.set(this.selectedRow()?.nowPlaying ?? null);
-    this.stateAt = Date.now();
+    const listed = this.selectedRow()?.nowPlaying;
+    if (targetId && listed) this.takeListing(targetId, listed);
+    else this.reportedState.set(null);
     this.stoppedUntilReport = false;
     this.expectedMediaFileId = null;
     // Reports from a deselected target are dropped, so its pending ack can never land.
@@ -858,6 +867,7 @@ export class RemoteService {
     }
     this.stateAt = Date.now();
     this.wallClock.set(this.stateAt);
+    this.takeQueue(s.targetId, s.sessionId, s.queue);
     this.reportedState.set({
       sessionId: s.sessionId,
       mediaId: s.mediaId,
@@ -908,6 +918,19 @@ export class RemoteService {
       this.pendingAction.set(null);
       if (this.ackTimer) clearTimeout(this.ackTimer);
     }
+  }
+
+  /** A listed playback is the reading until the next report; its queue is held apart. */
+  private takeListing(targetId: string, { queue, ...reading }: NonNullable<RemoteTarget['nowPlaying']>): void {
+    this.reportedState.set(reading);
+    this.takeQueue(targetId, reading.sessionId, queue);
+    this.stateAt = Date.now();
+  }
+
+  /** A session that starts without a queue has none; a later beat of the queue's own session keeps it. */
+  private takeQueue(targetId: string, sessionId: string, queue: ReportedQueue | null | undefined): void {
+    if (queue) this.heldQueue.set({ targetId, sessionId, queue });
+    else if (this.heldQueue()?.sessionId !== sessionId) this.heldQueue.set(null);
   }
 
   /** Interpolates only while playing; the second clause covers the grace window before the target's first report. */

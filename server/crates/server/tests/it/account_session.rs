@@ -174,6 +174,7 @@ impl Ctx {
             vocal_level: None,
             pitch: None,
             stems_available: None,
+            queue: None,
             audio_plan: None,
             source_fps: None,
             bitrate_by_quality: None,

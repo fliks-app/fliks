@@ -111,6 +111,7 @@ fn alive(st: &AppState, sid: &str) {
         vocal_level: None,
         pitch: None,
         stems_available: None,
+        queue: None,
         audio_plan: None,
         source_fps: None,
         bitrate_by_quality: None,

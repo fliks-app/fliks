@@ -182,6 +182,7 @@ fn presence_beat(
                 .and_then(|p| i32::try_from(p).ok())
         }),
         stems_available: nullable(b, "stemsAvailable", Value::as_bool),
+        queue: b.get("queue").and_then(QueueState::from_beat),
     }
 }
 
@@ -303,6 +304,7 @@ pub fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -
         vocal_level: s.vocal_level.map(Num),
         pitch: s.pitch.map(i64::from),
         stems_available: s.stems_available,
+        queue: b.get("queue").and_then(QueueState::from_beat).map(Box::new),
         supports_volume: s.supports_volume,
         subtitle_id: s.subtitle_id.clone(),
         quality: s.quality.clone(),
@@ -789,6 +791,7 @@ mod tests {
             vocal_level: None,
             pitch: None,
             stems_available: None,
+            queue: None,
             audio_plan: None,
             source_fps: None,
             bitrate_by_quality: None,
@@ -874,6 +877,31 @@ mod tests {
         );
         let e = serde_json::to_value(remote_state("t".into(), &live(), 7, &json!({}))).unwrap();
         assert!(e.get("stemMode").is_none() && e.get("pitch").is_none());
+    }
+
+    #[test]
+    fn the_state_relays_the_queue_of_the_beat_only_and_the_presence_keeps_it() {
+        let q = json!({"itemIds": [11, 12], "index": 1, "shuffle": true, "repeat": "all"});
+        let beat = presence_beat(&json!({ "queue": q }), None, None, (None, None));
+        assert_eq!(beat.queue, QueueState::from_beat(&q));
+        let bad = json!({"queue": {"itemIds": [1], "index": 4}});
+        assert!(
+            presence_beat(&bad, None, None, (None, None))
+                .queue
+                .is_none()
+        );
+        let stored = LiveSession {
+            queue: beat.queue,
+            ..live()
+        };
+        let wire =
+            |b: Value| serde_json::to_value(remote_state("t".into(), &stored, 7, &b)).unwrap();
+        assert_eq!(wire(json!({ "queue": q }))["queue"], q);
+        assert!(
+            wire(json!({})).get("queue").is_none(),
+            "the stored list is not repeated on every beat"
+        );
+        assert!(wire(bad).get("queue").is_none());
     }
 
     #[test]

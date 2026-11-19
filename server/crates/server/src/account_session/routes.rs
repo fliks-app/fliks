@@ -155,6 +155,7 @@ fn snapshot(st: &AppState, user: i32, row: &Row, shown: &store::Shown) -> Option
         "episodeId": shown.episode_id,
         "itemId": row.item_id,
         "durationSeconds": row.duration,
+        "queue": live.queue,
     });
     let target = live.target_id()?.to_owned();
     Some(crate::playback::remote_state(
