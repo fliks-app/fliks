@@ -8,6 +8,8 @@ export interface SidebarCounts {
   badgeCounts: Record<string, number>;
   /** Pending requests visible to the user (own only without requests.manage). */
   pendingRequests: number;
+  /** Requests waiting for this user's decision plus follow requests waiting for an answer; absent from an older server. */
+  attention?: number;
   /** Media count per accessible library id. */
   mediaByLibrary: Record<number, number>;
 }

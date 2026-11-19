@@ -31,6 +31,7 @@ export const SERVER_SINCE = {
   lyrics: '7.0.0',
   karaoke: '7.0.0',
   sessionSync: '7.0.0',
+  push: '7.1.0',
 } as const;
 
 /** A failed version read is retried this many times, each after twice the previous delay. */

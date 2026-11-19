@@ -504,6 +504,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'notifications',
+        loadComponent: () =>
+          import('./features/app-settings/notification-settings/notification-settings').then(
+            (m) => m.NotificationSettingsPageComponent,
+          ),
+      },
+      {
         path: 'storage',
         canActivate: [noTvGuard],
         loadComponent: () =>

@@ -21,7 +21,8 @@
       "updateMode": "prefetch",
       "resources": {
         "files": [
-          "/*.js"
+          "/*.js",
+          "!/custom-sw.js"
         ]
       }
     },

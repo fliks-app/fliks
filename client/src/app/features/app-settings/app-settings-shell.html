@@ -16,6 +16,9 @@
       <li><a routerLink="/app-settings/cast" routerLinkActive="menu-active"><svg lucideCast class="h-4 w-4"></svg>{{ 'app_settings.nav.cast' | translate }}</a></li>
     }
     <li><a routerLink="/app-settings/remote" routerLinkActive="menu-active"><svg lucideMonitorSmartphone class="h-4 w-4"></svg>{{ 'app_settings.nav.remote' | translate }}</a></li>
+    @if (push.serverSupported()) {
+      <li><a routerLink="/app-settings/notifications" routerLinkActive="menu-active"><svg lucideBell class="h-4 w-4"></svg>{{ 'app_settings.nav.notifications' | translate }}</a></li>
+    }
     @if (!tv.isTv()) {
       <li><a routerLink="/app-settings/storage" routerLinkActive="menu-active"><svg lucideHardDrive class="h-4 w-4"></svg>{{ 'app_settings.nav.storage' | translate }}</a></li>
     }

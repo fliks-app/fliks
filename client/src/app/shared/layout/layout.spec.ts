@@ -26,6 +26,7 @@ import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { LibrariesApiService, type LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { CountsApiService } from '../../core/services/api/counts-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
+import { PushService } from '../../core/services/push.service';
 import { SseService, type SseEvent } from '../../core/services/sse.service';
 import { CastService } from '../../core/services/cast.service';
 import { RemoteService } from '../../core/services/remote.service';
@@ -137,6 +138,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         },
       },
       { provide: ServerConfigService, useValue: { serverUrl: () => '' } },
+      { provide: PushService, useValue: { setBadge: () => {} } },
       {
         provide: SseService,
         useValue: {

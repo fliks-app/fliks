@@ -44,7 +44,11 @@
               <td>
                 <span class="badge badge-ghost badge-sm">{{ nc.type }}</span>
               </td>
-              <td class="text-sm text-base-content/60">{{ nc.events.length }} event(s)</td>
+              <td class="text-sm text-base-content/60">
+                @if (nc.type !== relayType) {
+                  {{ nc.events.length }} event(s)
+                }
+              </td>
               <td class="text-center">
                 <app-enabled-switch
                   [enabled]="nc.enabled"
@@ -54,13 +58,15 @@
                 />
               </td>
               <td class="text-end">
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-xs text-error"
-                  (click)="deleteRow(nc)"
-                >
-                  {{ 'settings.notifications.delete' | translate }}
-                </button>
+                @if (nc.type !== relayType) {
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs text-error"
+                    (click)="deleteRow(nc)"
+                  >
+                    {{ 'settings.notifications.delete' | translate }}
+                  </button>
+                }
               </td>
             </tr>
           }
@@ -83,6 +89,46 @@
     />
 
     <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+      @if (isRelay()) {
+        <label class="label cursor-pointer justify-start gap-3">
+          <input
+            type="checkbox"
+            class="toggle toggle-sm"
+            [ngModel]="formEnabled()"
+            (ngModelChange)="formEnabled.set($event)"
+          />
+          <span class="label-text">{{ 'settings.notifications.relay_enabled' | translate }}</span>
+        </label>
+        <p class="text-sm text-base-content/60">{{ 'settings.notifications.relay_hint' | translate }}</p>
+        @if (pushStatus(); as st) {
+          <div class="flex flex-col gap-2 text-sm">
+            <p>
+              {{ 'settings.notifications.relay_state' | translate }}:
+              <span class="badge badge-sm" [class.badge-success]="st.relay.state === 'ready'" [class.badge-error]="st.relay.state === 'error'">{{ 'settings.notifications.relay_state_' + st.relay.state | translate }}</span>
+            </p>
+            @if (st.relay.error) {
+              <p class="text-error">{{ st.relay.error }}</p>
+            }
+            <p>{{ 'settings.notifications.relay_devices' | translate: { mobile: st.mobile.subscriptions, web: st.web.subscriptions } }}</p>
+            @if (st.relay.stats) {
+              <p>{{ 'settings.notifications.relay_stats' | translate: relayTotals() }}</p>
+            }
+            @if (st.relay.pendingDeletions.length) {
+              <div class="flex flex-col gap-2">
+                <p class="text-warning">{{ 'settings.notifications.relay_pending' | translate }}</p>
+                @for (p of st.relay.pendingDeletions; track p.relay) {
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono truncate">{{ p.relay }}</span>
+                    <button type="button" class="btn btn-ghost btn-sm shrink-0" (click)="dropPending(p.relay)">
+                      {{ 'settings.notifications.relay_pending_drop' | translate }}
+                    </button>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      } @else {
       <label class="form-control w-full">
         <span class="label-text">{{ 'settings.notifications.field_name' | translate }}</span>
         <input
@@ -214,6 +260,8 @@
         />
         <span class="label-text">{{ 'settings.notifications.field_enabled' | translate }}</span>
       </label>
+
+      }
 
       @if (editingId() !== null) {
         <div class="flex flex-col gap-2 pt-2 border-t border-base-200">

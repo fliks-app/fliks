@@ -1,0 +1,52 @@
+<h1 class="text-2xl font-bold mb-4">{{ 'app_settings.nav.notifications' | translate }}</h1>
+
+<div class="space-y-4">
+  @if (push.canEnableDevice() || push.mobileBlockedByAdmin() || isTv()) {
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
+        <h2 class="text-lg font-semibold">{{ 'app_settings.notifications.device_title' | translate }}</h2>
+        @if (isTv()) {
+          <app-toggle-field
+            [value]="push.toastsEnabled()"
+            (valueChange)="push.setToastsEnabled($event)"
+            [label]="'app_settings.notifications.toasts' | translate"
+            [hint]="'app_settings.notifications.toasts_hint' | translate"
+          />
+        } @else if (push.mobileBlockedByAdmin()) {
+          <p class="text-base-content/60">{{ 'app_settings.notifications.admin_disabled' | translate }}</p>
+        } @else {
+          <app-toggle-field
+            [value]="push.deviceEnabled()"
+            (valueChange)="setDevice($event)"
+            [disabled]="push.busy() || denied()"
+            [label]="'app_settings.notifications.device' | translate"
+            [hint]="(denied() ? 'app_settings.notifications.denied' : 'app_settings.notifications.device_hint') | translate"
+          />
+        }
+      </div>
+    </div>
+  }
+
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-4">
+      <div>
+        <h2 class="text-lg font-semibold">{{ 'app_settings.notifications.categories_title' | translate }}</h2>
+        <p class="text-base-content/60 mt-1">{{ 'app_settings.notifications.categories_hint' | translate }}</p>
+      </div>
+      @for (cat of categories; track cat) {
+        <app-toggle-field
+          [value]="!muted().includes(cat)"
+          (valueChange)="setCategory(cat, $event)"
+          [label]="'app_settings.notifications.cat_' + cat | translate"
+          [hint]="'app_settings.notifications.cat_' + cat + '_hint' | translate"
+        />
+      }
+    </div>
+  </div>
+
+  <div>
+    <button class="btn btn-sm" [disabled]="testing()" (click)="test()">
+      {{ 'app_settings.notifications.test' | translate }}
+    </button>
+  </div>
+</div>

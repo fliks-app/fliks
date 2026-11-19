@@ -1,5 +1,6 @@
 import { Injectable, Injector, signal, computed, inject, untracked } from '@angular/core';
 import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
+import { PushService } from './push.service';
 import { Router } from '@angular/router';
 import type { MediaType } from '../enums/media-type.enum';
 import { TranslateService } from '@ngx-translate/core';
@@ -83,6 +84,8 @@ export interface User {
   sessionSync?: boolean;
   /** Kinds the session covers; null = every kind. */
   sessionKinds?: MediaType[] | null;
+  /** Push categories this account muted, on every device. */
+  pushMuted?: string[];
   /** Show the what's-new popup after an update. */
   whatsNewEnabled?: boolean;
   /** Newest client version whose notes the account has seen; null shows no notes. */
@@ -985,6 +988,8 @@ export class AuthService {
   }
 
   async logout(): Promise<void> {
+    // Lazy: PushService reads this service. The server session is still valid here, so its row can be deleted.
+    await this.injector.get(PushService).release().catch(() => undefined);
     const refresh = this._refreshToken;
     const endSessionUrl = await this.oidcEndSessionUrl();
     try {

@@ -531,18 +531,9 @@ export class PartyService {
   private onEvent(e: PartyEvent): void {
     switch (e.type) {
       case 'party.invited':
-        this.onInvited(e);
         return;
       case 'party.starting':
-        if (e.partyId === this.party()?.id) {
-          void this.refetch();
-          return;
-        }
-        this.toast.info(
-          this.translate.instant('party.toast_starting', { name: e.name }),
-          10000,
-          { label: this.translate.instant('party.join'), run: () => void this.enter(e.partyId) },
-        );
+        if (e.partyId === this.party()?.id) void this.refetch();
         return;
       case 'party.updated':
         if (e.partyId === this.party()?.id && this.lobby()) void this.refetch();
@@ -612,16 +603,6 @@ export class PartyService {
     this.lastRev = rev;
     if (gap) void this.refetch();
     return true;
-  }
-
-  private onInvited(e: Extract<PartyEvent, { type: 'party.invited' }>): void {
-    // A party for now opens its lobby, which sends `party.starting` with the join action.
-    if (!e.scheduledAt || new Date(e.scheduledAt).getTime() <= Date.now()) return;
-    this.toast.info(
-      this.translate.instant('party.toast_added', { host: e.host.username, name: e.name }),
-      10000,
-      { label: this.translate.instant('party.view'), run: () => this.openPage(e.partyId) },
-    );
   }
 
   private onMessage(m: PartyMessage): void {

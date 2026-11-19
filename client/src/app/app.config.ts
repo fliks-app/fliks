@@ -216,7 +216,7 @@ export const appConfig: ApplicationConfig = {
       lang: resolveInitialLocale(),
       fallbackLang: DEFAULT_LOCALE,
     }),
-    provideServiceWorker('ngsw-worker.js', {
+    provideServiceWorker('custom-sw.js', {
       enabled: !isDevMode() && Capacitor.getPlatform() === 'web',
       registrationStrategy: 'registerWhenStable:30000',
     }),

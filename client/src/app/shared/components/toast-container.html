@@ -8,6 +8,9 @@
       [class.alert-info]="toast.type === 'info'"
       role="alert"
     >
+      @if (toast.image) {
+        <img [src]="toast.image" alt="" class="h-10 w-10 shrink-0 rounded object-cover" />
+      } @else {
       @switch (toast.type) {
         @case ('success') {
           <svg lucideCircleCheck class="h-5 w-5 shrink-0"></svg>
@@ -22,7 +25,11 @@
           <svg lucideInfo class="h-5 w-5 shrink-0"></svg>
         }
       }
+      }
       <div class="flex flex-1 flex-col gap-2">
+        @if (toast.title) {
+          <span class="text-sm font-semibold">{{ toast.title }}</span>
+        }
         <span class="text-sm">{{ toast.message }}</span>
         @if (toast.actions.length) {
           <div class="flex gap-2">
@@ -35,6 +42,7 @@
           </div>
         }
       </div>
+      @if (!toast.tv) {
       <button
         class="btn btn-ghost btn-xs btn-square shrink-0 text-inherit hover:border-transparent hover:bg-current/15"
         (click)="toastService.close(toast.id)"
@@ -42,6 +50,7 @@
       >
         <svg lucideX class="h-4 w-4"></svg>
       </button>
+      }
     </div>
   }
 </div>

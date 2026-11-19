@@ -391,9 +391,37 @@
       "display": "Anzeige",
       "storage": "Speicher",
       "home": "Startseite",
-      "update": "Update"
+      "update": "Update",
+      "notifications": "Benachrichtigungen"
     },
-    "version": "Version {{version}}"
+    "version": "Version {{version}}",
+    "notifications": {
+      "device_title": "Dieses Gerät",
+      "device": "Systembenachrichtigungen auf diesem Gerät",
+      "device_hint": "Benachrichtigungen kommen auch an, wenn Fliks geschlossen ist.",
+      "denied": "Benachrichtigungen sind für diese Website blockiert. Erlauben Sie sie in den Browsereinstellungen.",
+      "admin_disabled": "Der Serveradministrator hat mobile Benachrichtigungen nicht aktiviert.",
+      "toasts": "In-App-Benachrichtigungen auf diesem Gerät",
+      "toasts_hint": "Eine kurze Meldung erscheint, wenn etwas Sie betrifft.",
+      "categories_title": "Worüber benachrichtigt wird",
+      "categories_hint": "Gilt für alle Ihre Geräte.",
+      "cat_requests": "Anfragen",
+      "cat_requests_hint": "Entscheidungen zu Ihren Anfragen und Anfragen, die auf Sie warten.",
+      "cat_parties": "Watch-Partys",
+      "cat_parties_hint": "Einladungen und Partys, die gleich beginnen.",
+      "cat_social": "Soziales",
+      "cat_social_hint": "Folgeanfragen, neue Follower und Empfehlungen.",
+      "cat_episodes": "Neue Folgen",
+      "cat_episodes_hint": "Neue Folgen der Serien, die Sie schauen.",
+      "cat_account": "Konto",
+      "cat_account_hint": "Anmeldeanfragen von einem anderen Gerät.",
+      "test": "Testbenachrichtigung senden",
+      "test_sent": "Testbenachrichtigung gesendet.",
+      "test_failed": "Die Testbenachrichtigung ist fehlgeschlagen: {{error}}",
+      "enable_failed": "Benachrichtigungen konnten nicht aktiviert werden.",
+      "action_done": "Erledigt.",
+      "action_failed": "Die Aktion ist fehlgeschlagen."
+    }
   },
   "update_settings": {
     "title": "Update",
@@ -512,9 +540,7 @@
     "visibility_private": "Privat",
     "visibility_followers": "Nur Follower",
     "visibility_public": "Öffentlich",
-    "toast_new_follower": "{{username}} folgt dir jetzt",
-    "toast_follow_request": "{{username}} möchte dir folgen",
-    "toast_follow_accepted": "{{username}} hat deine Folge-Anfrage angenommen"
+    "toast_new_follower": "{{username}} folgt dir jetzt"
   },
   "likes": {
     "like": "Gefällt mir",
@@ -540,7 +566,6 @@
     "recommended_by": "Empfohlen von {{username}}:",
     "for_you": "Für Sie empfohlen",
     "dismiss": "Ausblenden",
-    "toast_received": "{{username}} empfiehlt Ihnen „{{title}}“",
     "profile_tab": "Empfehlungen",
     "profile_empty": "Momentan keine Empfehlungen.",
     "profile_received": "Was Ihnen empfohlen wurde",
@@ -2568,7 +2593,17 @@
       "save_error": "Speichern nicht möglich.",
       "save": "Speichern",
       "cancel": "Abbrechen",
-      "test_failed": "Verbindungstest fehlgeschlagen"
+      "test_failed": "Verbindungstest fehlgeschlagen",
+      "relay_enabled": "Fliks Relay aktiv",
+      "relay_hint": "Liefert Benachrichtigungen an die mobilen Apps. Das Relay sieht, welcher Server welches Gerät wie oft benachrichtigt, nie den Inhalt, der für das Gerät verschlüsselt ist.",
+      "relay_state": "Status",
+      "relay_state_disabled": "Deaktiviert",
+      "relay_state_ready": "Registriert",
+      "relay_state_error": "Fehler",
+      "relay_devices": "{{mobile}} mobile und {{web}} Browser-Abonnements.",
+      "relay_stats": "Letzte 30 Tage: {{notifications}} Benachrichtigungen, {{accepted}} zugestellt, {{limited}} begrenzt, {{failed}} fehlgeschlagen, {{dead}} ungültige Token.",
+      "relay_pending": "Löschung steht bei einem Relay aus, das nicht antwortet:",
+      "relay_pending_drop": "Aufgeben"
     },
     "media_servers": {
       "title": "Medienserver",
@@ -4539,8 +4574,6 @@
     "join": "Beitreten",
     "panel_toggle": "Party",
     "panel_close": "Party-Bereich schließen",
-    "toast_added": "{{host}} hat dich zu „{{name}}“ hinzugefügt",
-    "toast_starting": "„{{name}}“ beginnt",
     "closed_host_ended": "Die Party ist beendet",
     "closed_host_ended_by": "{{name}} hat die Sitzung beendet",
     "closed_expired": "Die Party ist abgelaufen",
@@ -5738,5 +5771,70 @@
     "loading": "Wird geladen",
     "failed": "Die Musik konnte nicht vom Server geladen werden",
     "empty": "Noch nichts vorhanden"
+  },
+  "push": {
+    "request_approved": {
+      "title": "Anfrage genehmigt",
+      "body": "„{{title}}“ wurde genehmigt."
+    },
+    "request_declined": {
+      "title": "Anfrage abgelehnt",
+      "body": "„{{title}}“ wurde abgelehnt."
+    },
+    "request_available": {
+      "title": "Jetzt verfügbar",
+      "body": "„{{title}}“ ist verfügbar."
+    },
+    "request_created": {
+      "title": "Neue Anfrage",
+      "body": "{{user}} hat „{{title}}“ angefragt."
+    },
+    "party_invited": {
+      "title": "Watch-Party",
+      "body": "{{host}} hat Sie zu „{{party}}“ eingeladen."
+    },
+    "party_starting": {
+      "title": "Beginnt jetzt",
+      "body": "„{{party}}“ beginnt."
+    },
+    "follow_request": {
+      "title": "Folgeanfrage",
+      "body": "{{user}} möchte Ihnen folgen."
+    },
+    "follow_accepted": {
+      "title": "Folgeanfrage angenommen",
+      "body": "{{user}} hat Ihre Anfrage angenommen."
+    },
+    "content_recommended": {
+      "title": "Empfehlung",
+      "body": "{{user}} empfiehlt „{{title}}“."
+    },
+    "episode_one": {
+      "title": "Neue Folge",
+      "body": "{{title}} {{episode}} ist verfügbar."
+    },
+    "episodes_many": {
+      "title": "Neue Folgen",
+      "body": "{{title}} {{season}}: {{count}} neue Folgen."
+    },
+    "episodes_series": {
+      "title": "Neue Folgen",
+      "body": "{{title}}: {{count}} neue Folgen."
+    },
+    "pairing_requested": {
+      "title": "Anmeldeanfrage",
+      "body": "{{device}} möchte sich anmelden."
+    },
+    "test": {
+      "title": "Testbenachrichtigung",
+      "body": "Benachrichtigungen funktionieren auf diesem Gerät."
+    },
+    "action": {
+      "approve": "Genehmigen",
+      "decline": "Ablehnen",
+      "join": "Beitreten",
+      "accept": "Annehmen",
+      "open": "Öffnen"
+    }
   }
 }

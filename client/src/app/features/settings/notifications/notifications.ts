@@ -35,9 +35,24 @@ interface NotificationConnection {
   settings?: Record<string, unknown>;
 }
 
+/** The built-in connection that switches mobile push on: it has no settings and cannot be created or deleted. */
+const RELAY_TYPE = 'fliks-relay';
+
+interface PushStatus {
+  relay: {
+    state: 'disabled' | 'ready' | 'error';
+    url: string | null;
+    error: string | null;
+    pendingDeletions: { relay: string; key: string }[];
+    stats: { days: { notifications: number; accepted: number; limited: number; failed: number; dead: number }[] } | null;
+  };
+  web: { subscriptions: number };
+  mobile: { subscriptions: number };
+}
+
 interface CreateNotificationBody {
   name: string;
-  type: NotificationType;
+  type: string;
   settings: Record<string, unknown>;
   events?: string[];
   enabled?: boolean;
@@ -68,6 +83,16 @@ export class NotificationsSettingsComponent implements OnInit {
   readonly togglingId = signal<number | null>(null);
 
   readonly editingId = signal<number | null>(null);
+  readonly relayType = RELAY_TYPE;
+  /** The editor shows the Fliks Relay connection. */
+  readonly isRelay = signal(false);
+  readonly pushStatus = signal<PushStatus | null>(null);
+  /** The relay's counters of the last 30 days. */
+  readonly relayTotals = computed(() => {
+    const days = this.pushStatus()?.relay.stats?.days ?? [];
+    const sum = (k: 'notifications' | 'accepted' | 'limited' | 'failed' | 'dead') => days.reduce((n, d) => n + d[k], 0);
+    return { notifications: sum('notifications'), accepted: sum('accepted'), limited: sum('limited'), failed: sum('failed'), dead: sum('dead') };
+  });
   readonly testLoading = signal(false);
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
 
@@ -130,6 +155,7 @@ export class NotificationsSettingsComponent implements OnInit {
   }
 
   openCreate() {
+    this.isRelay.set(false);
     this.editingId.set(null);
     this.formName.set('');
     this.formType.set('discord');
@@ -146,6 +172,8 @@ export class NotificationsSettingsComponent implements OnInit {
   }
 
   openEdit(nc: NotificationConnection) {
+    this.isRelay.set(nc.type === RELAY_TYPE);
+    if (nc.type === RELAY_TYPE) void this.loadPushStatus();
     this.editingId.set(nc.id);
     this.formName.set(nc.name);
     this.formType.set(nc.type as NotificationType);
@@ -163,6 +191,24 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formEvents.set([...nc.events]);
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
+  }
+
+  private async loadPushStatus() {
+    try {
+      this.pushStatus.set(await firstValueFrom(this.http.get<PushStatus>('/api/push/status')));
+    } catch {
+      this.pushStatus.set(null);
+    }
+  }
+
+  /** A deletion the relay will never answer (it is gone): the admin gives up on it. */
+  async dropPending(relay: string) {
+    try {
+      await firstValueFrom(this.http.delete(`/api/push/pending/${encodeURIComponent(relay)}`));
+    } catch {
+      // handled by global error interceptor
+    }
+    await this.loadPushStatus();
   }
 
   closeEditor() {
@@ -228,7 +274,7 @@ export class NotificationsSettingsComponent implements OnInit {
     this.saving.set(true);
     const body: CreateNotificationBody = {
       name,
-      type: this.formType(),
+      type: this.isRelay() ? RELAY_TYPE : this.formType(),
       settings: this.buildSettings(),
       events: this.formEvents(),
       enabled: this.formEnabled(),
@@ -240,6 +286,7 @@ export class NotificationsSettingsComponent implements OnInit {
         : firstValueFrom(this.http.put<NotificationConnection>(`/api/notifications/${id}`, body)));
       this.closeEditor();
       await this.reloadAll();
+      if (this.isRelay()) void this.loadPushStatus();
     } catch {
       // handled by global error interceptor
     } finally {

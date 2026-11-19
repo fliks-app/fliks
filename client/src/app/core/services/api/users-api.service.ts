@@ -102,6 +102,8 @@ export interface UpdateUserBody {
   sessionSync?: boolean;
   /** Self-editable: kinds the session covers; null = every kind. */
   sessionKinds?: MediaType[] | null;
+  /** Self-editable: push categories muted on every device. */
+  pushMuted?: string[];
   /** Self-editable: show the what's-new popup after an update. */
   whatsNewEnabled?: boolean;
   /** Self-editable: newest client version whose notes the account has seen. */

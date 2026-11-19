@@ -23,7 +23,8 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
-import { CountsApiService } from '../../core/services/api/counts-api.service';
+import { PushService } from '../../core/services/push.service';
+import { CountsApiService, SidebarCounts } from '../../core/services/api/counts-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SseEvent, SseService } from '../../core/services/sse.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -120,6 +121,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly libraryPrefs = inject(LibraryPrefsService);
   private readonly countsApi = inject(CountsApiService);
+  private readonly push = inject(PushService);
   readonly serverConfig = inject(ServerConfigService);
   readonly sse = inject(SseService);
   private readonly appResume = inject(AppResumeService);
@@ -489,6 +491,12 @@ export class LayoutComponent implements OnInit, OnDestroy {
     clearTimeout(this.restoreFallback);
   }
 
+  private applyCounts(counts: SidebarCounts) {
+    this.libraryCounts.set(counts.mediaByLibrary);
+    this.badgeCounts.set({ ...counts.badgeCounts, pendingRequests: counts.pendingRequests });
+    if (counts.attention !== undefined) this.push.setBadge(counts.attention);
+  }
+
   async refreshCounts() {
     // The list paints from cache; waiting on the uncached counts lets it drop in late and shift the nav.
     const libs = this.librariesApi
@@ -496,9 +504,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
       .then((l) => this.libraries.set(l), () => undefined)
       .finally(() => this.librariesLoaded.set(true));
     try {
-      const counts = await this.countsApi.get();
-      this.libraryCounts.set(counts.mediaByLibrary);
-      this.badgeCounts.set({ ...counts.badgeCounts, pendingRequests: counts.pendingRequests });
+      this.applyCounts(await this.countsApi.get());
     } catch {
       // silently ignore — counts are non-critical
     }
@@ -509,9 +515,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
    *  handlers ride this for every count-bearing event. */
   private async refreshSidebarCounts() {
     try {
-      const counts = await this.countsApi.get();
-      this.libraryCounts.set(counts.mediaByLibrary);
-      this.badgeCounts.set({ ...counts.badgeCounts, pendingRequests: counts.pendingRequests });
+      this.applyCounts(await this.countsApi.get());
     } catch { /* ignore */ }
   }
 

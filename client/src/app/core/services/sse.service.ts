@@ -6,6 +6,7 @@ import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
 import { DownloadProgressService } from './download-progress.service';
 import { NetworkService } from './network.service';
+import type { PushNotification } from './push.service';
 import type { StemMode } from './audio-player/stem-mix';
 import { MediaType } from '../enums/media-type.enum';
 import { DownloadProgressState } from '../enums/download-progress-state.enum';
@@ -256,6 +257,8 @@ export class SseService implements OnDestroy {
   readonly stopped = new Subject<{ targetId: string; sessionId: string | null }>();
   /** `session.changed` / `session.superseded`, on their own Subject like `commands`: a supersede must not be replaced on `lastEvent` before it is read. */
   readonly sessionEvents = new Subject<SessionEvent>();
+  /** A user notification (`notification`), on its own Subject: `PushService` shows or hides each one. */
+  readonly notifications = new Subject<PushNotification>();
   /** `likes.changed`, on its own Subject: each change matters to the view showing that like. */
   readonly likeEvents = new Subject<LikesChangedEvent>();
   /** Watch-party events, routed on their own Subject like `commands`: each one matters, not just the latest. */
@@ -385,6 +388,7 @@ export class SseService implements OnDestroy {
     const params = new URLSearchParams();
     params.set('device', targetId);
     params.set('ff', this.device.formFactor());
+    params.set('lang', this.translate.currentLang() || 'en');
     const tvPlatform = this.device.tvPlatform();
     if (tvPlatform) params.set('tvPlatform', tvPlatform);
     const deviceName = await this.ownName();
@@ -654,27 +658,8 @@ export class SseService implements OnDestroy {
           }),
         );
         break;
-      case 'social.follow_request':
-        this.toast.info(
-          this.translate.instant('social.toast_follow_request', {
-            username: event['username'] ?? '',
-          }),
-        );
-        break;
-      case 'social.follow_accepted':
-        this.toast.info(
-          this.translate.instant('social.toast_follow_accepted', {
-            username: event['username'] ?? '',
-          }),
-        );
-        break;
-      case 'social.content_recommended':
-        this.toast.info(
-          this.translate.instant('recommend.toast_received', {
-            username: event['username'] ?? '',
-            title: event['mediaTitle'] ?? '',
-          }),
-        );
+      case 'notification':
+        this.notifications.next(event as unknown as PushNotification);
         break;
       case 'rescan.started':
         // Toast shown from media-detail / episode-detail when POST /rescan returns
