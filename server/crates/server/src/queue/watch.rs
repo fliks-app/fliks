@@ -3,10 +3,12 @@ use crate::{events::SseEvent, notifications, state::AppState};
 use chrono::{DateTime, Utc};
 use serde_json::{Map, Value, json};
 use sqlx::Row;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 use tokio::sync::Notify;
 
-// Only this process writes `jobs`, so the writes that move a state are the only wake-ups needed.
+// Rust writers wake the watcher; the fallback covers the `jobs` writes of DB triggers.
+const FALLBACK: Duration = Duration::from_secs(60);
+
 pub(super) static CHANGED: Notify = Notify::const_new();
 
 /// A job was created or changed state: the watcher sweeps.
@@ -15,6 +17,10 @@ pub(crate) fn changed() {
 }
 
 pub fn spawn(st: &AppState) {
+    spawn_with_fallback(st, FALLBACK);
+}
+
+pub(super) fn spawn_with_fallback(st: &AppState, fallback: Duration) {
     let st = st.clone();
     tokio::spawn(async move {
         // Only what changes after boot is announced.
@@ -36,7 +42,7 @@ pub fn spawn(st: &AppState) {
                 Ok(None) => {}
                 Err(e) => tracing::warn!("job watch failed: {e}"),
             }
-            next.await;
+            let _ = tokio::time::timeout(fallback, next).await;
         }
     });
 }

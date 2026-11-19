@@ -62,7 +62,6 @@ fn beat(account: i32, sid: &str, target: &str, item: i32) -> BeatIn {
         position: 10.0,
         duration: Some(100.0),
         queue: None,
-        handoff: false,
     }
 }
 
@@ -307,6 +306,20 @@ async fn completion_keeps_the_playing_row_until_it_stops_and_the_sid_never_claim
     assert!(row(&st, u).await.is_none());
     assert_eq!(s.beat(&st, beat(u, "s1", "tA", i)).await, Verdict::Ignored);
     assert!(row(&st, u).await.is_none());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_beat_of_another_item_stores_the_row_after_a_completion(pool: PgPool) {
+    let st = state(&pool).await;
+    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let next = item(&pool).await;
+    let s = &st.account_sessions;
+    s.beat(&st, beat(u, "s1", "tA", i)).await;
+    s.complete(&st, u, "s1").await;
+    s.replaced(&st, u, "s1", "s2").await;
+    s.beat(&st, beat(u, "s2", "tA", next)).await;
+    let stored = store::all(&st.db).await.unwrap();
+    assert_eq!(stored.iter().map(|r| r.item_id).collect::<Vec<_>>(), [next]);
 }
 
 #[sqlx::test(migrations = false)]
@@ -621,44 +634,23 @@ async fn the_sweep_stamps_a_claim_without_presence(pool: PgPool) {
 }
 
 #[test]
-fn a_transfer_record_is_consumed_by_one_claim_of_its_item_inside_the_ttl() {
-    let rec = |g: &mut Inner| {
-        g.handoffs
-            .insert((1, "tB".into()), (7, 1_000 + HANDOFF_TTL_MS));
-    };
+fn a_claim_of_the_target_settles_its_transfer_record_by_device() {
     let mut g = Inner::default();
-    rec(&mut g);
-    assert!(g.take_handoff(1, Some("tB"), 7, 1_000));
-    assert!(!g.take_handoff(1, Some("tB"), 7, 1_000), "consumed once");
-
-    rec(&mut g);
-    assert!(
-        !g.take_handoff(1, Some("tB"), 8, 1_000),
-        "another item is a plain takeover"
-    );
-    assert!(
-        !g.take_handoff(1, Some("tB"), 7, 1_000),
-        "and it dropped the record"
-    );
-
-    rec(&mut g);
-    assert!(
-        !g.take_handoff(1, Some("tB"), 7, 1_000 + HANDOFF_TTL_MS),
-        "lapsed"
-    );
+    g.handoffs
+        .insert((1, device_id_of("dev#tab").to_owned()), 2_000);
+    g.settle_handoff(2, Some("dev#native"));
+    g.settle_handoff(1, None);
+    assert_eq!(g.handoffs.len(), 1, "another account or no target");
+    g.settle_handoff(1, Some("dev#native"));
     assert!(g.handoffs.is_empty());
-
-    rec(&mut g);
-    assert!(!g.take_handoff(2, Some("tB"), 7, 1_000), "another account");
-    assert!(!g.take_handoff(1, None, 7, 1_000));
 }
 
 #[sqlx::test(migrations = false)]
 async fn an_expected_transfer_lapses_with_the_next_record(pool: PgPool) {
     let st = state(&pool).await;
     let s = &st.account_sessions;
-    s.0.lock().await.handoffs.insert((1, "old".into()), (7, 0));
-    s.expect_handoff(&st, 1, "tB", 7).await;
+    s.0.lock().await.handoffs.insert((1, "old".into()), 0);
+    s.expect_handoff(&st, 1, "tB").await;
     let g = s.0.lock().await;
     assert_eq!(
         g.handoffs.keys().collect::<Vec<_>>(),
@@ -686,12 +678,12 @@ async fn a_reload_of_the_owning_device_keeps_the_epoch_and_supersedes_nothing(po
 #[sqlx::test(migrations = false)]
 async fn a_lapsed_transfer_record_goes_with_the_sweep(pool: PgPool) {
     let st = state(&pool).await;
-    let (u, i) = (user(&pool, "a", true, None).await, item(&pool).await);
+    let u = user(&pool, "a", true, None).await;
     let s = &st.account_sessions;
-    s.expect_handoff(&st, u, "tB", i).await;
+    s.expect_handoff(&st, u, "tB").await;
     s.sweep(&st).await;
     assert_eq!(s.0.lock().await.handoffs.len(), 1, "still inside the TTL");
-    s.0.lock().await.handoffs.values_mut().for_each(|h| h.1 = 0);
+    s.0.lock().await.handoffs.values_mut().for_each(|h| *h = 0);
     s.sweep(&st).await;
     assert!(s.0.lock().await.handoffs.is_empty());
 }
@@ -847,14 +839,6 @@ async fn a_dropped_replacement_clears_its_mark(pool: PgPool) {
     guard.disarm();
     tokio::task::yield_now().await;
     assert!(s.0.lock().await.claimed["s1"].replacing, "disarmed: kept");
-}
-
-#[test]
-fn a_transfer_record_is_keyed_by_device_not_by_face() {
-    let mut g = Inner::default();
-    g.handoffs
-        .insert((1, device_id_of("dev#tab").to_owned()), (7, 2_000));
-    assert!(g.take_handoff(1, Some("dev#native"), 7, 1_000));
 }
 
 #[sqlx::test(migrations = false)]

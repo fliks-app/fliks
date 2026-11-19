@@ -462,7 +462,6 @@ fn account_beat(
         position: s.position,
         duration: num(b, "durationSeconds"),
         queue: b.get("queue").and_then(QueueState::from_beat),
-        handoff: b.get("handoff").and_then(Value::as_bool) == Some(true),
     })
 }
 

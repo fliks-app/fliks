@@ -232,6 +232,15 @@ async fn album_reads_tracks_favourites_and_works(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn the_track_text_filter_matches_track_album_and_artist(pool: PgPool) {
+    let (app, t) = ctx(&pool).await;
+    for (q, n) in [("one", 1), ("alph", 1), ("ana", 1), ("zzz", 0)] {
+        let (status, rows) = call(&app, &t, "GET", &format!("/api/tracks?q={q}"), None).await;
+        assert_eq!((status, rows.as_array().unwrap().len()), (200, n), "{q}");
+    }
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_track_row_carries_the_last_closed_attempt_that_covers_it(pool: PgPool) {
     let (app, t) = ctx(&pool).await;
     let last = |d: &Value| {

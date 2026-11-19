@@ -422,6 +422,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::karaoke::delete_model_orphan,
         crate::karaoke::aligner::languages,
         crate::karaoke::aligner::realign_count,
+        crate::karaoke::aligner::realign_items,
         crate::karaoke::aligner::realign,
         crate::karaoke::item_state,
         crate::karaoke::prepare,

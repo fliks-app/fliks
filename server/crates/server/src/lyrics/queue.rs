@@ -75,6 +75,9 @@ async fn work(st: AppState) {
 
 /// Queues the tracks the providers failed on or never answered, now and every few hours.
 pub fn spawn_sweep(st: AppState) {
+    if crate::jobs::cron_disabled() {
+        return;
+    }
     tokio::spawn(async move {
         tokio::time::sleep(FIRST_SWEEP).await;
         loop {

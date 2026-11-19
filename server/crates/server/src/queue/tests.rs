@@ -407,3 +407,41 @@ fn a_touch_keeps_a_busy_worker_live() {
     q.touch("w");
     assert_eq!(q.workers().len(), 1);
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_state_change_without_a_wake_up_is_announced_by_the_fallback(pool: PgPool) {
+    use crate::{config::Config, events::Bus, events::SseEvent, state::AppState};
+    crate::db::migrate(&pool).await.unwrap();
+    sqlx::query(
+        r#"INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL)"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let st = AppState::new(
+        pool.clone(),
+        Config::from_lookup(|_| None),
+        "0123456789abcdef0123456789abcdef",
+    );
+    let mut rx = st.hub.subscribe();
+    super::watch::spawn_with_fallback(&st, std::time::Duration::from_millis(100));
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let id = job(&pool, Some("hevc"), "/m/a.mkv").await;
+    sqlx::query("UPDATE jobs SET state = 'cancelled' WHERE id = $1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let seen = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if let Ok(bus) = rx.recv().await
+                && let Bus::Sse(SseEvent::OptimizeJobChanged { job_id, state }) = &*bus
+                && (*job_id, state.as_str()) == (id, "cancelled")
+            {
+                return;
+            }
+        }
+    })
+    .await;
+    assert!(seen.is_ok(), "the cancellation was announced");
+}
