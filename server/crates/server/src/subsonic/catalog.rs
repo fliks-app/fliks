@@ -32,10 +32,14 @@ const ALBUM_ARTISTS_TEXT: &str = r#"COALESCE((SELECT string_agg(p.name, ' ' ORDE
   JOIN persons p ON p.id = mc."personId" WHERE mc."mediaId" = m.id AND mc.role = 'artist'), '')"#;
 
 const MAX_WORDS: usize = 8;
+const MAX_QUERY: usize = 200;
 
 /// `ILIKE ALL` patterns for the first `MAX_WORDS` words of a query; `None` for an empty one (rule 25).
 pub fn search_patterns(q: &str) -> Option<Vec<String>> {
     let words: Vec<String> = q
+        .chars()
+        .take(MAX_QUERY)
+        .collect::<String>()
         .replace(['"', '*'], " ")
         .split_whitespace()
         .take(MAX_WORDS)

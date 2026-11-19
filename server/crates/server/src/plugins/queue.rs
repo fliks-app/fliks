@@ -200,7 +200,7 @@ fn validate(entries: Vec<t::QueueEntry>) -> Result<(Vec<Entry>, Vec<Rejected>), 
     let mut seen = HashSet::new();
     let (mut ok, mut bad) = (Vec::with_capacity(entries.len()), vec![]);
     for e in entries {
-        let name: String = e.ref_.chars().take(MAX_REF).collect();
+        let name = e.ref_.clone();
         match check(e) {
             Ok(v) if seen.insert(v.r#ref.clone()) => ok.push(v),
             Ok(v) => bad.push((v.r#ref, "duplicate ref".to_owned())),
@@ -476,7 +476,8 @@ pub async fn set(
 ) -> Result<(), HostError> {
     let (entries, rejected) = validate(entries)?;
     for (r#ref, why) in &rejected {
-        tracing::warn!("queue.set of \"{plugin}\": entry \"{ref}\" refused: {why}");
+        let shown: String = r#ref.chars().take(MAX_REF).collect();
+        tracing::warn!("queue.set of \"{plugin}\": entry \"{shown}\" refused: {why}");
     }
     let keep = refused_refs(&entries, rejected);
     let applied = reconcile(&st.db, plugin, &st.plugins.item_claims, entries, &keep)

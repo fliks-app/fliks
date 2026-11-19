@@ -239,3 +239,22 @@ impl UpdateUser {
             || self.require_password_change.is_some()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn whats_new_seen_is_a_short_version() {
+        let ok = |v: &str| {
+            UpdateUser {
+                whats_new_seen: Some(v.into()),
+                ..Default::default()
+            }
+            .validate()
+            .is_ok()
+        };
+        assert!(ok("7.0.0") && ok("7.0.0-beta.1"));
+        assert!(!ok("dev") && !ok(&format!("1.0.0-{}", "a".repeat(27))));
+    }
+}
