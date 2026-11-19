@@ -813,6 +813,13 @@ describe('PlaybackSession', () => {
   describe('play', () => {
     const item = { fileId: 7, mediaId: 3, episodeId: 9 };
 
+    it('loads the receiver paused when the item says so', async () => {
+      const { session, cast, castPlayer } = setup();
+      cast.isConnected.set(true);
+      await session.play({ ...item, paused: true }, { expand: false });
+      expect(castPlayer.quickStart).toHaveBeenCalledWith(expect.objectContaining({ autoplay: false }));
+    });
+
     it('starts the receiver where the caller knows playback stopped', async () => {
       const { session, cast, castPlayer } = setup();
       cast.isConnected.set(true);

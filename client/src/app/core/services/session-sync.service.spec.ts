@@ -396,6 +396,14 @@ describe('SessionSyncService play here', () => {
     expect(resumer.mock.calls[0][1]).toBeGreaterThanOrEqual(100);
   });
 
+  it.each([[false, false], [true, true]])('opens the player with paused=%s when the session playing is %s', async (paused) => {
+    const { service, flush } = setup();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    await flush(session({ playing: !paused, state: paused ? 'paused' : 'playing' }));
+    await service.playHere();
+    expect(navigate).toHaveBeenCalledWith(['/watch', 9], expect.objectContaining({ state: { paused } }));
+  });
+
   it('ignores a report of another file than the session item', async () => {
     const { service, flush } = setup();
     await flush(session({ positionSeconds: 100, playing: false }));
