@@ -13,6 +13,7 @@ final class NowPlayingController {
     var intercept: ((_ command: String, _ value: Double) -> Bool)?
 
     private weak var player: AVPlayer?
+    private var durationObserver: NSKeyValueObservation?
     private var active = false
     private var title = ""
     private var artist: String?
@@ -48,6 +49,10 @@ final class NowPlayingController {
         self.artist = artist
         artwork = nil
         generation += 1
+        // An item's duration loads after it is published: without it the system shows no progress or seek bar.
+        durationObserver = player.observe(\.currentItem?.duration, options: [.new]) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.refresh() }
+        }
         if !active {
             active = true
             installCommands()
@@ -76,6 +81,7 @@ final class NowPlayingController {
         interrupted = false
         wasPlaying = false
         player = nil
+        durationObserver = nil
 
         for entry in targets { entry.command.removeTarget(entry.token) }
         targets.removeAll()

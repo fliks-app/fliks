@@ -247,7 +247,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             if let target = target, target != self.index {
                 self.begin(at: target, startAt: position, autoplay: self.player.timeControlStatus != .paused)
             } else {
-                self.player.seek(to: CMTime(seconds: position, preferredTimescale: 1000), toleranceBefore: .zero, toleranceAfter: .zero)
+                self.player.seek(to: CMTime(seconds: position, preferredTimescale: 1000), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+                    DispatchQueue.main.async { self?.nowPlaying.refresh() }
+                }
                 self.ended = false
             }
             call.resolve()
@@ -268,6 +270,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self.rate = rate
             self.player.defaultRate = rate
             if self.player.timeControlStatus != .paused { self.player.rate = rate }
+            self.nowPlaying.refresh()
             call.resolve()
         }
     }
@@ -350,6 +353,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             self.loading = false
             if startAt > 0 {
                 await self.player.seek(to: CMTime(seconds: startAt, preferredTimescale: 1000), toleranceBefore: .zero, toleranceAfter: .zero)
+                self.nowPlaying.refresh()
             }
             if autoplay { self.player.playImmediately(atRate: self.rate) }
         }

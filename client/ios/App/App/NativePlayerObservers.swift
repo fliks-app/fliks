@@ -40,7 +40,6 @@ extension NativePlayerPlugin {
         ) { [weak self] item, _ in
             switch item.status {
             case .readyToPlay:
-                DispatchQueue.main.async { self?.nowPlaying.refresh() }
                 self?.emitTracksChanged()
                 // `.readyToPlay` often precedes the alternate-audio playlists, leaving the `.audible` group empty: re-emit,
                 // or the client's `audioTracksChanged` guard rejects the short list and every language switch reloads (#378).
