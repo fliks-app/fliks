@@ -1863,8 +1863,8 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
 
   private pushQueue(): void {
     if (!this.nativeOn || !this._musicMode()) return;
-    const { tracks, index } = { tracks: this.mq.tracks, index: this.mq.index };
-    this.pushed = this.pushed.then(async () => this.nativeAudio?.updateQueue({ tracks: await this.nativeTracks(tracks), index })).catch(() => undefined);
+    const { tracks, index, shuffle } = this.mq;
+    this.pushed = this.pushed.then(async () => this.nativeAudio?.updateQueue({ tracks: await this.nativeTracks(tracks), index, shuffle })).catch(() => undefined);
   }
 
   /** Pushes land in the order they were made, whatever the time each one took to resolve its files. */
@@ -1889,7 +1889,8 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     this.pushGain();
     await n.setRate({ rate: this.nativeRate });
     await n.setRepeat({ mode: this.mq.repeat });
-    await n.setQueue({ tracks: await this.nativeTracks(this.mq.tracks), index: this.mq.index, autoplay, ...(startAt > 0 && { startAt }) });
+    const { tracks, index, shuffle } = this.mq;
+    await n.setQueue({ tracks: await this.nativeTracks(tracks), index, shuffle, autoplay, ...(startAt > 0 && { startAt }) });
     this.pausedStart(autoplay);
     void this.refreshStems();
   }
@@ -2002,7 +2003,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     }
   }
 
-  /** A queue the native side built (Android Auto): the web queue follows it. */
+  /** The native player's queue (a car built it, or the web layer attached late): the web queue follows it. */
   private onNativeQueue(e: NativeAudioQueue): void {
     if (!e.tracks.length || this.blockedByParty()) return;
     this.nativeOn = true;
@@ -2011,8 +2012,8 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     this.parts = [];
     this.info = null;
     this._musicMode.set(true);
-    this.mq.set(e.tracks, e.index, false);
-    this.mq.repeat = this._repeat();
+    this.mq.adopt(e.tracks, e.index, e.shuffle);
+    this.mq.repeat = e.repeat;
     this.syncQueue();
     this._track.set(this.audioOf(this.mq.current!));
     this._chapters.set([]);

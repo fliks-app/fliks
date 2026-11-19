@@ -18,6 +18,22 @@ enum CarPlayHost {
     }
 }
 
+/// CarPlay's copy from the app's translations (`public/i18n`): the first system language the app ships,
+/// else English, as the web layer picks when no language is set in its settings.
+private enum CarText {
+    private static let table: [String: String] = {
+        let codes = Locale.preferredLanguages.compactMap { tag in
+            tag.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init)
+        } + ["en"]
+        guard let url = codes.lazy.compactMap({ Bundle.main.url(forResource: $0, withExtension: "json", subdirectory: "public/i18n") }).first,
+              let data = try? Data(contentsOf: url),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
+        return root["carplay"] as? [String: String] ?? [:]
+    }()
+
+    static subscript(_ key: String) -> String { table[key] ?? key }
+}
+
 /// Audio-only CarPlay: browse tabs and the Now Playing template, over the account's music.
 @MainActor
 final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
@@ -42,13 +58,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func root() -> CPTemplate {
         guard catalog != nil else {
-            return CPListTemplate(title: "Fliks", sections: [CPListSection(items: [message(String(localized: "carplay.signedOut", defaultValue: "Not signed in to Fliks"))])])
+            return CPListTemplate(title: "Fliks", sections: [CPListSection(items: [message(CarText["signed_out"])])])
         }
         let tabs: [(String, String, String)] = [
-            ("recent", String(localized: "carplay.recent", defaultValue: "Recent"), "clock"),
-            ("playlists", String(localized: "carplay.playlists", defaultValue: "Playlists"), "music.note.list"),
-            ("albums", String(localized: "carplay.albums", defaultValue: "Albums"), "square.stack"),
-            ("artists", String(localized: "carplay.artists", defaultValue: "Artists"), "music.mic"),
+            ("recent", CarText["recent"], "clock"),
+            ("playlists", CarText["playlists"], "music.note.list"),
+            ("albums", CarText["albums"], "square.stack"),
+            ("artists", CarText["artists"], "music.mic"),
         ]
         let templates = tabs.map { id, title, symbol -> CPListTemplate in
             let template = list(id, title: title)
@@ -60,19 +76,19 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func list(_ id: String, title: String) -> CPListTemplate {
         let template = CPListTemplate(title: title, sections: [])
-        template.emptyViewSubtitleVariants = [String(localized: "carplay.loading", defaultValue: "Loading")]
+        template.emptyViewSubtitleVariants = [CarText["loading"]]
         Task {
             guard let catalog = self.catalog else { return }
             let listing = await catalog.listing(id)
             var rows = listing?.rows ?? []
             if id == "playlists" {
-                rows.insert(CarRow(folder: "favourites", title: String(localized: "carplay.favourites", defaultValue: "Favourites")), at: 0)
+                rows.insert(CarRow(folder: "favourites", title: CarText["favourites"]), at: 0)
             }
             let items = listing == nil
-                ? [self.message(String(localized: "carplay.failed", defaultValue: "Couldn't load your music from the server"))]
+                ? [self.message(CarText["failed"])]
                 : rows.map { self.item($0, listing ?? CarListing()) }
             template.updateSections([CPListSection(items: items)])
-            template.emptyViewSubtitleVariants = [String(localized: "carplay.empty", defaultValue: "Nothing here yet")]
+            template.emptyViewSubtitleVariants = [CarText["empty"]]
         }
         return template
     }

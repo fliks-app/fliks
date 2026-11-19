@@ -5673,5 +5673,16 @@
     "load_error": "Die Liste konnte nicht geladen werden.",
     "empty_queue": "Die Warteschlange ist leer.",
     "empty_history": "Der Verlauf ist leer."
+  },
+  "carplay": {
+    "signed_out": "Nicht bei Fliks angemeldet",
+    "recent": "Zuletzt",
+    "favourites": "Favoriten",
+    "playlists": "Playlists",
+    "albums": "Alben",
+    "artists": "Künstler",
+    "loading": "Wird geladen",
+    "failed": "Die Musik konnte nicht vom Server geladen werden",
+    "empty": "Noch nichts vorhanden"
   }
 }

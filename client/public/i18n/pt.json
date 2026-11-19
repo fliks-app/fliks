@@ -5673,5 +5673,16 @@
     "load_error": "Não foi possível carregar a lista.",
     "empty_queue": "Nada na fila.",
     "empty_history": "O histórico está vazio."
+  },
+  "carplay": {
+    "signed_out": "Sem sessão iniciada no Fliks",
+    "recent": "Recentes",
+    "favourites": "Favoritos",
+    "playlists": "Playlists",
+    "albums": "Álbuns",
+    "artists": "Artistas",
+    "loading": "A carregar",
+    "failed": "Não foi possível carregar a música do servidor",
+    "empty": "Ainda não há nada"
   }
 }

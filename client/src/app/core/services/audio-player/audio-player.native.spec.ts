@@ -118,7 +118,7 @@ describe('AudioPlayerService on the native player', () => {
     expect(sent.deviceType).toBe('x');
     await audio.playTracks([track(1), track(2)], 1);
     expect(getItemPlaybackInfo).not.toHaveBeenCalled();
-    expect(plugin['setQueue']).toHaveBeenCalledWith({ tracks: [track(1), track(2)], index: 1, autoplay: true });
+    expect(plugin['setQueue']).toHaveBeenCalledWith({ tracks: [track(1), track(2)], index: 1, shuffle: false, autoplay: true });
     expect(audio.track()?.itemId).toBe(2);
   });
 
@@ -200,16 +200,25 @@ describe('AudioPlayerService on the native player', () => {
     await audio.seek(30);
     expect(plugin['seek']).toHaveBeenCalledWith({ position: 30 });
     audio.setShuffle(true);
-    await vi.waitFor(() => expect(plugin['updateQueue']).toHaveBeenCalled());
+    await vi.waitFor(() => expect(plugin['updateQueue']).toHaveBeenCalledWith(expect.objectContaining({ index: 0, shuffle: true })));
   });
 
-  it('adopts a queue the native side built', async () => {
+  it('adopts the native queue as it plays, shuffle and repeat included, and beats it', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     await vi.waitFor(() => expect(plugin['attach']).toHaveBeenCalled());
-    emit('queue', { tracks: [track(5), track(6)], index: 1 });
+    emit('queue', { tracks: [track(7), track(5), track(6)], index: 2, shuffle: true, repeat: 'all' });
     expect(audio.musicMode()).toBe(true);
     expect(audio.track()?.itemId).toBe(6);
-    expect(audio.queue().length).toBe(2);
+    expect(audio.queue().map((t) => t.itemId)).toEqual([7, 5, 6]);
+    expect(audio.shuffle()).toBe(true);
+    expect(audio.repeat()).toBe('all');
+    emit('track', { index: 2, itemId: 6, mediaFileId: 60, sessionId: 's6' });
+    emit('state', { playing: true, playWhenReady: true, buffering: false, ready: true, ended: false });
+    TestBed.tick();
+    expect(updatePlaybackState).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({ sessionId: 's6', queue: { itemIds: [7, 5, 6], index: 2, shuffle: true, repeat: 'all' } }),
+    );
   });
 
   it('routes controls from outside the app to the party', async () => {

@@ -5724,5 +5724,16 @@
     "load_error": "Impossible de charger la liste.",
     "empty_queue": "Rien dans la file d’attente.",
     "empty_history": "L’historique est vide."
+  },
+  "carplay": {
+    "signed_out": "Non connecté à Fliks",
+    "recent": "Récents",
+    "favourites": "Favoris",
+    "playlists": "Playlists",
+    "albums": "Albums",
+    "artists": "Artistes",
+    "loading": "Chargement",
+    "failed": "Impossible de charger la musique depuis le serveur",
+    "empty": "Rien pour l’instant"
   }
 }
