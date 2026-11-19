@@ -568,19 +568,8 @@ async fn a_restore_blocked_on_the_row_lock_loses_to_a_purge_that_committed_first
         .unwrap();
     let (st, id) = (w.st.clone(), w.job);
     let restore = tokio::spawn(async move { recover::restore(&st, id).await });
-    for _ in 0..100 {
-        let waiting: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'
-             AND datname = current_database()",
-        )
-        .fetch_one(&w.st.db)
-        .await
-        .unwrap();
-        if waiting > 0 {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    }
+    // Long enough for the restore to reach its guarded UPDATE and block on the row.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     sqlx::query(r#"UPDATE jobs SET result = result || jsonb_build_object('trashPurgedAt', now())"#)
         .execute(&mut *tx)
         .await
@@ -596,9 +585,13 @@ async fn a_restore_blocked_on_the_row_lock_loses_to_a_purge_that_committed_first
 async fn a_user_request_takes_over_a_queued_separation_but_not_a_leased_one(pool: PgPool) {
     use crate::karaoke::store;
     let w = world(pool, json!([])).await;
+    sqlx::query("UPDATE jobs SET state = 'done'")
+        .execute(&w.st.db)
+        .await
+        .unwrap();
     sqlx::query(
-        r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", state)
-           VALUES ('separate', $1, '{}'::jsonb, 'h', 'queued')"#,
+        r#"INSERT INTO jobs (id, kind, "mediaFileId", payload, "profileHash", state)
+           VALUES (2, 'separate', $1, '{}'::jsonb, 'h', 'queued')"#,
     )
     .bind(w.file)
     .execute(&w.st.db)
