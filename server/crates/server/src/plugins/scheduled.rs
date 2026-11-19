@@ -80,18 +80,19 @@ pub async fn cancel(core: &PgPool, plugin: &str, key: &str) -> sqlx::Result<bool
     Ok(r.rows_affected() > 0)
 }
 
-/// Claims up to `limit` due rows, pushing their `runAt` past the call's deadline (the lease).
+/// Claims up to `limit` due rows but the `running` keys, pushing their `runAt` past the lease.
 pub async fn claim(
     core: &PgPool,
     plugin: &str,
     limit: usize,
     lease: Duration,
+    running: &[String],
 ) -> sqlx::Result<Vec<Claimed>> {
     let rows: Vec<(String, String, i32, i64)> = sqlx::query_as(
         r#"UPDATE plugin_scheduled_calls c
            SET attempt = c.attempt + 1, "runAt" = now() + $3 * interval '1 millisecond'
            FROM (SELECT "pluginId", key FROM plugin_scheduled_calls
-                 WHERE "pluginId" = $1 AND "runAt" <= now()
+                 WHERE "pluginId" = $1 AND "runAt" <= now() AND key <> ALL($4)
                  ORDER BY "runAt" LIMIT $2 FOR UPDATE SKIP LOCKED) d
            WHERE c."pluginId" = d."pluginId" AND c.key = d.key
            RETURNING c.key, c.payload, c.attempt, c.version"#,
@@ -99,6 +100,7 @@ pub async fn claim(
     .bind(plugin)
     .bind(limit as i64)
     .bind(lease.as_millis() as f64)
+    .bind(running)
     .fetch_all(core)
     .await?;
     Ok(rows

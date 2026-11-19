@@ -276,7 +276,7 @@ async fn a_released_call_is_not_due_again_at_once() {
         .await
         .unwrap();
     let lease = Duration::from_secs(60);
-    let c = scheduled::claim(&s.pool, ID, 1, lease).await.unwrap();
+    let c = scheduled::claim(&s.pool, ID, 1, lease, &[]).await.unwrap();
     scheduled::release(&s.pool, ID, "busy", c[0].version)
         .await
         .unwrap();
@@ -313,8 +313,8 @@ async fn scheduled_calls() {
         body(&rt.http(r, false).await.unwrap())
     };
     assert_eq!(call("again:a", "0", "\"first\"").await["ok"], Value::Null);
-    // The ring holds seconds of a parallel suite's logs and a busy key is pushed back 3 s:
-    // the first delivery is counted while waiting, before it can be evicted.
+    // The ring holds seconds of a parallel suite's logs: count the first delivery while
+    // waiting, before it can be evicted.
     let mut first = 0;
     until(
         "the re-scheduled call",
