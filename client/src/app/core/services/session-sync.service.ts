@@ -330,14 +330,15 @@ export class SessionSyncService {
     }
   }
 
-  /** Another device took the session (event or beat flag): the local player stops, silently. */
+  /** Another device took the session (event or beat flag): every player of that session stops, silently. */
   async handleSuperseded(sessionId: string): Promise<void> {
     if (this.handled.includes(sessionId)) return;
-    const player = [...this.players].find((p) => p.sessionId() === sessionId);
-    if (!player) return;
+    // The video route and the Cast output it drives share the receiver's session.
+    const players = [...this.players].filter((p) => p.sessionId() === sessionId);
+    if (!players.length) return;
     this.handled.push(sessionId);
     if (this.handled.length > HANDLED_MAX) this.handled.shift();
-    await player.yield(true);
+    await Promise.all(players.map((p) => p.yield(true)));
   }
 
   /** The owner's own report of this very file, while it is being observed: a report of another file never stands for the session. */

@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CastService, type CastResumeState } from './cast.service';
+import { SessionSyncService } from './session-sync.service';
 import type { QoeSample } from './playback-engine';
 import { hasQoeData } from './playback-engine/playback-engine';
 import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
@@ -176,6 +177,7 @@ const fromOtherLoad = (q: ReceiverSample, sid: string | null) => !!q.sid && q.si
 @Injectable({ providedIn: 'root' })
 export class CastPlayerService {
   private readonly cast = inject(CastService);
+  private readonly sessionSync = inject(SessionSyncService);
   private readonly castSettings = inject(CastSettingsService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly qoeReporter = inject(QoeReporter);
@@ -518,6 +520,12 @@ export class CastPlayerService {
   private static readonly DISCONNECT_GRACE_MS = 45_000;
   private static readonly LOAD_RETRY_DELAY_MS = 1000;
 
+  /** Stops the receiver's media and forgets it; the device stays connected. */
+  stop(): void {
+    this.cast.stop();
+    this.clear();
+  }
+
   clear() {
     if (this.disconnectGrace) {
       clearTimeout(this.disconnectGrace);
@@ -543,6 +551,12 @@ export class CastPlayerService {
   }
 
   constructor() {
+    // The receiver plays this device's session: a takeover stops it as it stops a local player.
+    this.sessionSync.registerPlayer({
+      sessionId: () => this.liveSessionId() ?? undefined,
+      active: () => this.hasMedia() && !this.controlOnly(),
+      yield: async () => this.stop(),
+    });
     // Debounced teardown: a sender blip (Wi-Fi roam, sleep) drops the session while the TV keeps playing; CAF auto-rejoins, so reconnect cancels it.
     effect(() => {
       const connected = this.cast.isConnected();
@@ -952,6 +966,7 @@ export class CastPlayerService {
         ...body,
         ...(sid ? { qoe: this.qoeSample() ?? undefined } : {}),
       });
+      if (sid && response?.superseded) void this.sessionSync.handleSuperseded(sid);
       // Backend lost the session: reload with a fresh sid, preserving the receiver's pause state.
       if (sid) void this.qoeReporter.flush(sid);
       if (lostCurrentSession(response, sid, this.liveSessionId()) && !this.reloading()) {

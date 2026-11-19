@@ -249,4 +249,8 @@ describe('lostCurrentSession', () => {
     expect(lostCurrentSession({}, 'a', 'a')).toBe(false);
     expect(lostCurrentSession(null, undefined, undefined)).toBe(false);
   });
+
+  it('never recovers a session another device took', () => {
+    expect(lostCurrentSession({ sessionLost: true, superseded: true }, 'a', 'a')).toBe(false);
+  });
 });
