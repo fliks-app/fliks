@@ -96,7 +96,8 @@ public class AudioPlayerPlugin extends Plugin {
         long startMs = (long) (call.getDouble("startAt", 0.0) * 1000);
         boolean autoplay = call.getBoolean("autoplay", true);
         boolean shuffle = call.getBoolean("shuffle", false);
-        run(call, () -> host.setQueue(items, index, startMs, autoplay, shuffle));
+        int[] order = order(call.getArray("order"));
+        run(call, () -> host.setQueue(items, index, startMs, autoplay, shuffle, order));
     }
 
     @PluginMethod
@@ -104,7 +105,8 @@ public class AudioPlayerPlugin extends Plugin {
         List<MediaItem> items = tracks(call.getArray("tracks"));
         int index = call.getInt("index", 0);
         boolean shuffle = call.getBoolean("shuffle", false);
-        run(call, () -> host.updateQueue(items, index, shuffle));
+        int[] order = order(call.getArray("order"));
+        run(call, () -> host.updateQueue(items, index, shuffle, order));
     }
 
     /** Audiobook parts: plain URLs played back to back. */
@@ -135,7 +137,7 @@ public class AudioPlayerPlugin extends Plugin {
         float rate = call.getFloat("rate", 1f);
         MusicHost.Book book = book(call.getObject("book"), parts.length());
         run(call, () -> {
-            host.setQueue(items, index, startMs, autoplay, false);
+            host.setQueue(items, index, startMs, autoplay, false, null);
             host.setBook(book);
             host.exo().setPlaybackParameters(new PlaybackParameters(rate, 1f));
         });
@@ -205,8 +207,7 @@ public class AudioPlayerPlugin extends Plugin {
     @PluginMethod
     public void setRepeat(PluginCall call) {
         String mode = call.getString("mode", "off");
-        run(call, () -> host.exo().setRepeatMode("one".equals(mode) ? Player.REPEAT_MODE_ONE
-                : "all".equals(mode) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF));
+        run(call, () -> host.setRepeat(mode));
     }
 
     @PluginMethod
@@ -262,6 +263,14 @@ public class AudioPlayerPlugin extends Plugin {
         if (url == null || url.isEmpty()) return null;
         String webView = getBridge().getLocalUrl() + Bridge.CAPACITOR_FILE_START + "/";
         return url.startsWith(webView) ? "file:///" + url.substring(webView.length()) : url;
+    }
+
+    @Nullable
+    private static int[] order(@Nullable JSArray array) {
+        if (array == null) return null;
+        int[] out = new int[array.length()];
+        for (int i = 0; i < out.length; i++) out[i] = array.optInt(i);
+        return out;
     }
 
     private static double num(JSONObject o, String key) {

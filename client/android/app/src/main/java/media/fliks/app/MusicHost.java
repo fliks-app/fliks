@@ -54,11 +54,14 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.BiConsumer;
 
 /** The native audio player (music queue, audiobook parts) with its library session for Android Auto;
  *  it outlives the WebView, and beats progress itself while no web layer observes it. */
@@ -157,8 +160,10 @@ final class MusicHost {
     @Nullable private volatile Book book;
     private boolean jsEditing;
     private boolean externalQueue;
-    /** The web layer's shuffle flag for the order it pushed, which `exo` plays as given. */
+    /** Whether `exo`'s order is shuffled: the web layer's flag for the order it pushed, or a remote shuffle. */
     private boolean shuffled;
+    /** Item ids in the order before shuffling, which turning shuffle off restores; read only while `shuffled`. */
+    private List<Long> original = new ArrayList<>();
     /** The session and queue the last native beat carried: the queue goes out again only when either changes. */
     @Nullable private volatile String queueSent;
     private int lastIndex = -1;
@@ -282,7 +287,9 @@ final class MusicHost {
         }
     }
 
-    void setQueue(List<MediaItem> items, int index, long startMs, boolean autoplay, boolean shuffle) {
+    /** `order` is the play-order index of each entry of the web layer's original order. */
+    void setQueue(List<MediaItem> items, int index, long startMs, boolean autoplay, boolean shuffle, @Nullable int[] order) {
+        original = idsIn(items, order);
         lastIndex = -1;
         book = null;
         shuffled = shuffle;
@@ -296,13 +303,14 @@ final class MusicHost {
     }
 
     /** Replaces the order around the current entry, which the web layer keeps at `index`. */
-    void updateQueue(List<MediaItem> items, int index, boolean shuffle) {
+    void updateQueue(List<MediaItem> items, int index, boolean shuffle, @Nullable int[] order) {
         int cur = exo.getCurrentMediaItemIndex();
         if (cur < 0 || cur >= exo.getMediaItemCount() || index >= items.size()
                 || !exo.getCurrentMediaItem().mediaId.equals(items.get(index).mediaId)) {
-            setQueue(items, index, C.TIME_UNSET, exo.getPlayWhenReady(), shuffle);
+            setQueue(items, index, C.TIME_UNSET, exo.getPlayWhenReady(), shuffle, order);
             return;
         }
+        original = idsIn(items, order);
         shuffled = shuffle;
         edit(() -> {
             exo.removeMediaItems(cur + 1, exo.getMediaItemCount());
@@ -310,7 +318,74 @@ final class MusicHost {
             exo.removeMediaItems(0, cur);
             exo.addMediaItems(0, items.subList(0, index));
         });
+        // The current entry may have moved: a stale index would hide the next transition.
+        lastIndex = exo.getCurrentMediaItemIndex();
         applyGain();
+    }
+
+    void setRepeat(String mode) {
+        exo.setRepeatMode("one".equals(mode) ? Player.REPEAT_MODE_ONE
+                : "all".equals(mode) ? Player.REPEAT_MODE_ALL : Player.REPEAT_MODE_OFF);
+    }
+
+    /** Shuffling keeps the current track first; turning it off restores the original order around it. */
+    private void setShuffle(boolean on) {
+        if (on == shuffled) return;
+        List<Integer> order;
+        if (on) {
+            original = itemIds();
+            int cur = exo.getCurrentMediaItemIndex();
+            order = new ArrayList<>();
+            for (int i = 0; i < original.size(); i++) if (i != cur) order.add(i);
+            Collections.shuffle(order);
+            order.add(0, cur);
+        } else {
+            order = originalOrder(original, itemIds());
+        }
+        shuffled = on;
+        // Moved, not re-added: exo's copy of a played entry holds a stream URL whose session may have ended.
+        edit(() -> reorder(order, exo::moveMediaItem));
+        lastIndex = exo.getCurrentMediaItemIndex();
+    }
+
+    private List<Long> itemIds() {
+        List<Long> ids = new ArrayList<>();
+        for (int i = 0; i < exo.getMediaItemCount(); i++) ids.add(itemOf(exo.getMediaItemAt(i)));
+        return ids;
+    }
+
+    private static List<Long> idsIn(List<MediaItem> items, @Nullable int[] order) {
+        List<Long> ids = new ArrayList<>();
+        if (order != null) for (int i : order) ids.add(itemOf(items.get(i)));
+        return ids;
+    }
+
+    /** Where each entry of `original` sits in `now`; the entries it lacks (added since) follow in play order. */
+    static List<Integer> originalOrder(List<Long> original, List<Long> now) {
+        boolean[] taken = new boolean[now.size()];
+        List<Integer> order = new ArrayList<>();
+        for (Long id : original) {
+            for (int i = 0; i < now.size(); i++) {
+                if (taken[i] || !Objects.equals(id, now.get(i))) continue;
+                taken[i] = true;
+                order.add(i);
+                break;
+            }
+        }
+        for (int i = 0; i < now.size(); i++) if (!taken[i]) order.add(i);
+        return order;
+    }
+
+    /** Puts at each slot `k` the entry now at `order[k]`, one `move(from, to)` at a time. */
+    static void reorder(List<Integer> order, BiConsumer<Integer, Integer> move) {
+        List<Integer> at = new ArrayList<>();
+        for (int i = 0; i < order.size(); i++) at.add(i);
+        for (int k = 0; k < order.size(); k++) {
+            int from = at.indexOf(order.get(k));
+            if (from == k) continue;
+            move.accept(from, k);
+            at.add(k, at.remove(from));
+        }
     }
 
     void setBook(@Nullable Book book) {
@@ -537,6 +612,7 @@ final class MusicHost {
         o.put("tracks", tracks);
         o.put("index", exo.getCurrentMediaItemIndex());
         o.put("shuffle", shuffled);
+        if (shuffled) o.put("order", new JSArray(originalOrder(original, itemIds())));
         o.put("repeat", repeat());
         emit("queue", o);
     }
@@ -606,6 +682,14 @@ final class MusicHost {
                 if (event.has("positionSeconds")) seekTo(event.optDouble("positionSeconds", 0));
                 if (event.optBoolean("paused", false)) exo.pause(); else exo.play();
                 break;
+            case "shuffle":
+                setShuffle(event.has("shuffle") ? event.optBoolean("shuffle") : !shuffled);
+                emitQueue();
+                break;
+            case "repeat":
+                setRepeat(event.optString("repeat", repeat()));
+                emitQueue();
+                break;
             default: break;
         }
         // After the player settled: the beat carries the state the command led to, and acknowledges it.
@@ -617,6 +701,8 @@ final class MusicHost {
         switch (action) {
             case "play": case "pause": case "playpause": case "stop": case "seek": case "next": case "prev":
                 return true;
+            case "shuffle": case "repeat":
+                return itemOf(exo.getCurrentMediaItem()) != null;
             case "load": {
                 // Resuming the file it holds (the server compares files too), a book's parts included.
                 long file = event.optLong("mediaFileId", -1);

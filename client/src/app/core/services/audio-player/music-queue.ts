@@ -39,6 +39,11 @@ export class MusicQueue {
     return this.shuffled;
   }
 
+  /** The play-order index of each entry of the original order, which turning shuffle off restores. */
+  get order(): number[] {
+    return this.original.map((t) => this.list.indexOf(t));
+  }
+
   /** True when every track belongs to one album, so its album gain applies. */
   get singleAlbum(): boolean {
     return this.list.length > 0 && this.list.every((t) => t.mediaId === this.list[0].mediaId);
@@ -52,10 +57,10 @@ export class MusicQueue {
     this.setShuffle(shuffle, random);
   }
 
-  /** Takes a play order as it is, flagged shuffled or not, without reordering it. */
-  adopt(tracks: readonly MusicTrackRequest[], index: number, shuffled: boolean): void {
-    this.original = tracks.map((t) => ({ ...t }));
-    this.list = [...this.original];
+  /** Takes a play order as it is, flagged shuffled or not, without reordering it; `order` as the getter gives it. */
+  adopt(tracks: readonly MusicTrackRequest[], index: number, shuffled: boolean, order?: readonly number[]): void {
+    this.list = tracks.map((t) => ({ ...t }));
+    this.original = order?.length === this.list.length ? order.map((i) => this.list[i]) : [...this.list];
     this.pos = this.list.length ? Math.min(Math.max(0, index), this.list.length - 1) : -1;
     this.shuffled = shuffled;
   }

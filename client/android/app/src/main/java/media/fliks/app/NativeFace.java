@@ -32,7 +32,7 @@ final class NativeFace {
     private volatile boolean polling;
 
     /** What the service applies alone; `resume` is a `load` of the item it holds (`remote.md` rule 21d). */
-    private static final String[] ACTIONS = {"play", "pause", "playpause", "stop", "seek", "next", "prev", "resume"};
+    private static final String[] ACTIONS = {"play", "pause", "playpause", "stop", "seek", "next", "prev", "shuffle", "repeat", "resume"};
 
     NativeFace(Context context, FliksApi api, ExecutorService io, Handler main, Consumer<JSONObject> sink) {
         this.context = context;
