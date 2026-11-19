@@ -225,7 +225,7 @@ async fn drop_job(st: &AppState, key: &str, id: i64, attempt: i32) -> sqlx::Resu
     Ok(n > 0)
 }
 
-/// A job that landed `failed` leaves its item out of the pass until a restart, like a local failure.
+/// A job that landed `failed` leaves its item out of the pass for this profile, and until a restart after a local failure.
 async fn after_failure(st: &AppState, id: i64, file: Option<i32>) {
     crate::queue::remote::sweep(st).await;
     st.queue.wake.notify_waiters();
@@ -292,6 +292,9 @@ async fn commit(
     };
     // Stems of another version than the main engine's would be invalidated at once.
     let wanted = current.is_none_or(|m| *m == (out.model.clone(), out.model_version.clone()));
+    let _separating = item
+        .filter(|_| wanted)
+        .map(|(f, _)| super::Separating::new(&st.karaoke, f));
     let moved = match item {
         Some((f, _)) if wanted => match move_stems(st, f, id, attempt, &out).await {
             Ok(m) => m,

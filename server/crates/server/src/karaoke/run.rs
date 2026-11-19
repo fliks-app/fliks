@@ -336,20 +336,32 @@ pub async fn start(
     {
         return Start::Idle;
     }
-    if let Ok(t) = track(st, item).await
-        && store::worker_separating(&st.db, t.file)
+    let file = track(st, item).await.ok().map(|t| t.file);
+    // The pass leaves a track a worker holds; a user's request may take over a job nobody has leased.
+    if let Some(f) = file {
+        let held: &[&str] = if user.is_some() {
+            &["leased"]
+        } else {
+            &["queued", "leased"]
+        };
+        if store::worker_separating(&st.db, f, held)
             .await
             .unwrap_or(false)
-    {
-        return Start::Idle;
+        {
+            return Start::Idle;
+        }
     }
     if user.is_some()
-        && store::total(&st.db).await.unwrap_or(0) >= super::budget_bytes(st).await * 2
+        && store::total(&st.db).await.unwrap_or(0)
+            >= super::budget_bytes(st).await.saturating_mul(2)
     {
         return Start::Refused(Refusal::Full);
     }
     if !pending(st, item, opts).await {
         return Start::Idle;
+    }
+    if let (Some(f), Some(_)) = (file, user) {
+        let _ = store::take_queued_separation(&st.db, f).await;
     }
     let viewers = viewers(st, item).await;
     {

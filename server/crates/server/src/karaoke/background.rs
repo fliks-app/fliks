@@ -213,6 +213,11 @@ fn fail_list(k: &Shared) -> Vec<i32> {
         .collect()
 }
 
+async fn may_separate_here(st: &AppState) -> bool {
+    route(st).await == Some(Route::Local)
+        && store::total(&st.db).await.unwrap_or(i64::MAX) < super::budget_bytes(st).await / 10 * 9
+}
+
 /// Rule 41: re-aligns the stale items one track at a time; a row is replaced only by a new one.
 pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
     st.karaoke
@@ -226,8 +231,8 @@ pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
             melody: true,
             force: true,
         };
-        // Without stems, a re-alignment would separate: only where the background pass may.
-        let outcome = if !run::stems_valid(&st, item).await && !allowed(&st).await {
+        // Without stems a re-alignment separates on the main engine: only where the local pass may.
+        let outcome = if !run::stems_valid(&st, item).await && !may_separate_here(&st).await {
             None
         } else {
             match run::start(&st, item, opts, JobPriority::Low, None).await {

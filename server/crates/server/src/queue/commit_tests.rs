@@ -465,35 +465,166 @@ async fn the_purge_leaves_the_original_of_an_unfinished_restore(pool: PgPool) {
     assert!(job(&w).await["result"]["trashPurgedAt"].is_null());
 }
 
-#[sqlx::test(migrations = false)]
-async fn a_restore_that_cannot_start_ends_and_the_original_returns_to_the_purge(pool: PgPool) {
-    let w = world(pool, json!([])).await;
-    commit::run(&w.st).await;
-    let journal: swap::Journal =
-        serde_json::from_value(job(&w).await["result"]["journal"].clone()).unwrap();
-    let back = journal.backup.clone().unwrap();
+async fn keep(w: &W) {
+    let keep = super::settings::Settings {
+        optimize_original: super::settings::OriginalPolicy::Keep,
+        ..Default::default()
+    };
+    super::settings::save(&w.st.db, &keep).await.unwrap();
+}
+
+async fn journal_of(w: &W) -> swap::Journal {
+    serde_json::from_value(job(w).await["result"]["journal"].clone()).unwrap()
+}
+
+/// Marks a restore, then edits the placed file so it can never start, and runs the recovery.
+async fn abandoned_restore(w: &W) -> swap::Journal {
+    let journal = journal_of(w).await;
     let r = swap::Restore {
         target: journal.target.clone(),
         source: journal.source.clone(),
-        back: back.clone(),
+        back: journal.backup.clone().unwrap(),
         slot: swap::optimized_slot(&w.dir.join("M"), w.job),
         optimized: journal.staged_id.clone(),
         original: journal.source_id.clone(),
         companions: vec![],
     };
     fs::write(&journal.target, b"edited elsewhere").unwrap();
+    sqlx::query(r#"UPDATE jobs SET result = result || jsonb_build_object('restore', $1::jsonb)"#)
+        .bind(json!(r))
+        .execute(&w.st.db)
+        .await
+        .unwrap();
+    recover::recover(&w.st, 0.0).await;
+    journal
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_restore_that_cannot_start_ends_and_keeps_the_recorded_trash_path(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    commit::run(&w.st).await;
+    let before = job(&w).await["result"]["trashPath"].clone();
+    abandoned_restore(&w).await;
+    let result = job(&w).await["result"].clone();
+    assert!(result.get("restore").is_none());
+    assert_eq!(result["trashPath"], before);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_abandoned_restore_under_keep_never_hands_orig_to_the_purge(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    keep(&w).await;
+    commit::run(&w.st).await;
+    let journal = abandoned_restore(&w).await;
+    sqlx::query(r#"UPDATE jobs SET "finishedAt" = now() - interval '30 days'"#)
+        .execute(&w.st.db)
+        .await
+        .unwrap();
+    trash::purge(&w.st.db).await;
+    assert_eq!(
+        fs::read(journal.backup.unwrap()).unwrap(),
+        b"original bytes"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_kept_original_stays_restorable_after_its_ocr_trash_is_purged(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    keep(&w).await;
+    commit::run(&w.st).await;
+    let srt = w.dir.join(".fliks-trash/9.ocr-1.srt");
+    fs::create_dir_all(srt.parent().unwrap()).unwrap();
+    fs::write(&srt, b"srt").unwrap();
     sqlx::query(
-        r#"UPDATE jobs SET result = result || jsonb_build_object('restore', $1::jsonb, 'trashPath', $2::text)"#,
+        r#"UPDATE jobs SET result = result || jsonb_build_object('ocrTrash',
+             jsonb_build_array(jsonb_build_array('/x/a.srt', $1::text))),
+             "finishedAt" = now() - interval '30 days'"#,
     )
-    .bind(json!(r))
-    .bind(r.slot.to_string_lossy())
+    .bind(srt.to_string_lossy())
     .execute(&w.st.db)
     .await
     .unwrap();
-    recover::recover(&w.st, 0.0).await;
+    trash::purge(&w.st.db).await;
+    assert!(!srt.exists());
     let result = job(&w).await["result"].clone();
-    assert!(result.get("restore").is_none());
-    assert_eq!(result["trashPath"], json!(back.to_string_lossy()));
+    assert!(result["ocrPurgedAt"].is_string() && result.get("trashPurgedAt").is_none());
+    recover::restore(&w.st, w.job).await.unwrap();
+    assert_eq!(
+        fs::read(w.dir.join("M/a.h264.mkv")).unwrap(),
+        b"original bytes"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_restore_blocked_on_the_row_lock_loses_to_a_purge_that_committed_first(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    commit::run(&w.st).await;
+    let journal = journal_of(&w).await;
+    let mut tx = w.st.db.begin().await.unwrap();
+    sqlx::query("SELECT id FROM jobs WHERE id = $1 FOR UPDATE")
+        .bind(w.job)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    let (st, id) = (w.st.clone(), w.job);
+    let restore = tokio::spawn(async move { recover::restore(&st, id).await });
+    for _ in 0..100 {
+        let waiting: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'
+             AND datname = current_database()",
+        )
+        .fetch_one(&w.st.db)
+        .await
+        .unwrap();
+        if waiting > 0 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    sqlx::query(r#"UPDATE jobs SET result = result || jsonb_build_object('trashPurgedAt', now())"#)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    fs::remove_file(journal.backup.as_ref().unwrap()).unwrap();
+    tx.commit().await.unwrap();
+    assert!(restore.await.unwrap().is_err());
+    assert!(job(&w).await["result"].get("restore").is_none());
+    assert_eq!(fs::read(&journal.target).unwrap(), b"new");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_user_request_takes_over_a_queued_separation_but_not_a_leased_one(pool: PgPool) {
+    use crate::karaoke::store;
+    let w = world(pool, json!([])).await;
+    sqlx::query(
+        r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", state)
+           VALUES ('separate', $1, '{}'::jsonb, 'h', 'queued')"#,
+    )
+    .bind(w.file)
+    .execute(&w.st.db)
+    .await
+    .unwrap();
+    assert!(
+        store::worker_separating(&w.st.db, w.file, &["queued"])
+            .await
+            .unwrap()
+    );
+    assert!(
+        !store::worker_separating(&w.st.db, w.file, &["leased"])
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        store::take_queued_separation(&w.st.db, w.file)
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(
+        !store::worker_separating(&w.st.db, w.file, &["queued", "leased"])
+            .await
+            .unwrap()
+    );
 }
 
 #[sqlx::test(migrations = false)]

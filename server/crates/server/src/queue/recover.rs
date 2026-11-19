@@ -173,13 +173,12 @@ pub async fn restore(st: &AppState, id: i64) -> Result<(), String> {
     }
     // The purge holds this row while it unlinks the original: losing the race means it is gone.
     let marked = sqlx::query(
-        r#"UPDATE jobs SET result = result || jsonb_build_object('restore', $2::jsonb, 'trashPath', $3::text),
+        r#"UPDATE jobs SET result = result || jsonb_build_object('restore', $2::jsonb),
              "updatedAt" = now() WHERE id = $1 AND state = 'done'
              AND NOT (result ? 'trashPurgedAt') AND NOT (result ? 'restore')"#,
     )
     .bind(id)
     .bind(json!(r))
-    .bind(r.slot.to_string_lossy())
     .execute(&st.db)
     .await
     .map_err(|e| e.to_string())?;
@@ -215,31 +214,30 @@ async fn finish_restore(st: &AppState, job: &Job) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     if let Err(e) = moved {
         if e.kind() == std::io::ErrorKind::InvalidData {
-            abandon_restore(st, job.id, &r).await;
+            abandon_restore(st, job.id).await;
         }
         return Err(e.to_string());
     }
     reinsert_ocr_rows(st, job, file_id, &r).await?;
     commit::sync_rows(st, file_id, &r.source, &r.companions, None).await?;
     sqlx::query(
-        r#"UPDATE jobs SET result = result || jsonb_build_object('restoredAt', now()), "updatedAt" = now()
-           WHERE id = $1"#,
+        r#"UPDATE jobs SET result = result || jsonb_build_object('restoredAt', now(), 'trashPath', $2::text),
+             "updatedAt" = now() WHERE id = $1"#,
     )
     .bind(job.id)
+    .bind(r.slot.to_string_lossy())
     .execute(&st.db)
     .await
     .map_err(|e| e.to_string())?;
     Ok(())
 }
 
-/// A restore that moved nothing and cannot start ends here: the original keeps its trash slot for the purge.
-async fn abandon_restore(st: &AppState, id: i64, r: &Restore) {
+/// A restore that moved nothing and cannot start ends here; the original keeps its recorded slot.
+async fn abandon_restore(st: &AppState, id: i64) {
     let res = sqlx::query(
-        r#"UPDATE jobs SET result = (result - 'restore') || jsonb_build_object('trashPath', $2::text),
-             "updatedAt" = now() WHERE id = $1"#,
+        r#"UPDATE jobs SET result = result - 'restore', "updatedAt" = now() WHERE id = $1"#,
     )
     .bind(id)
-    .bind(r.back.to_string_lossy())
     .execute(&st.db)
     .await;
     if let Err(e) = res {
@@ -275,6 +273,9 @@ async fn reinsert_ocr_rows(
         else {
             continue;
         };
+        if !back.exists() {
+            continue;
+        }
         let Some(rel) = crate::ingest::fsx::rel_under(Path::new(&f.folder), back) else {
             continue;
         };

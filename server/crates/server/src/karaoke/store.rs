@@ -253,15 +253,31 @@ pub async fn invalidate_stale_models(db: &PgPool, model: &str, version: &str) ->
     Ok(unlink(paths).await)
 }
 
-/// A worker holds or waits for the `separate` job of `file`.
-pub async fn worker_separating(db: &PgPool, file: i32) -> sqlx::Result<bool> {
+/// A `separate` job of `file` is in one of `states`.
+pub async fn worker_separating(db: &PgPool, file: i32, states: &[&str]) -> sqlx::Result<bool> {
     sqlx::query_scalar(
         r#"SELECT EXISTS (SELECT 1 FROM jobs WHERE "mediaFileId" = $1 AND kind = 'separate'
-                          AND state IN ('queued', 'leased'))"#,
+                          AND state = ANY($2))"#,
     )
     .bind(file)
+    .bind(states)
     .fetch_one(db)
     .await
+}
+
+/// Deletes the queued `separate` jobs of `file`, for a request that runs the separation itself.
+pub async fn take_queued_separation(db: &PgPool, file: i32) -> sqlx::Result<u64> {
+    let n = sqlx::query(
+        r#"DELETE FROM jobs WHERE "mediaFileId" = $1 AND kind = 'separate' AND state = 'queued'"#,
+    )
+    .bind(file)
+    .execute(db)
+    .await?
+    .rows_affected();
+    if n > 0 {
+        crate::queue::watch::changed();
+    }
+    Ok(n)
 }
 
 /// Deletes the rows whose file is gone (a lost cache): they would report `ready` for stems that 404.

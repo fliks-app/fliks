@@ -179,18 +179,18 @@ async fn serve(st: AppState, party: i32, user: i32, display: bool, _slot: Slot, 
                     heard = Instant::now();
                 }
                 match msg {
-                Some(Ok(Message::Text(t))) if !display => {
-                    if !bucket.allow() {
-                        continue;
+                    Some(Ok(Message::Text(t))) if !display => {
+                        if !bucket.allow() {
+                            continue;
+                        }
+                        if let Ok(v) = serde_json::from_str::<Value>(&t)
+                            && valid(&v)
+                        {
+                            st.relay.send(party, &stamped(&v, user));
+                        }
                     }
-                    if let Ok(v) = serde_json::from_str::<Value>(&t)
-                        && valid(&v)
-                    {
-                        st.relay.send(party, &stamped(&v, user));
-                    }
-                }
-                Some(Ok(Message::Close(_)) | Err(_)) | None => break,
-                _ => {}
+                    Some(Ok(Message::Close(_)) | Err(_)) | None => break,
+                    _ => {}
                 }
             }
             _ = recheck.tick() => {

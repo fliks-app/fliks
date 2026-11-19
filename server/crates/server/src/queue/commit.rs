@@ -670,45 +670,44 @@ async fn subtitle_rows(
         let slot = Path::new(&f.folder)
             .join(".fliks-trash")
             .join(format!("{job}.ocr-{sid}.srt"));
-        let trashed = trash_file(&abs, &slot);
-        // One transaction: a crash never leaves a trashed SRT the job does not record.
+        // Recorded before the move: a crash leaves an entry for a path never moved, which the
+        // purge and the restore skip.
         let mut tx = st.db.begin().await.map_err(sql)?;
-        match trashed {
-            Ok(()) => {
-                // The row is kept in the job, for a restore to put it back with the file.
-                sqlx::query(
-                    r#"UPDATE jobs SET result = jsonb_set(COALESCE(result, '{}'::jsonb), '{ocrRows}',
-                         COALESCE(result -> 'ocrRows', '[]'::jsonb) || jsonb_build_array(jsonb_build_object(
-                           'trashed', $3::text, 'row', (SELECT to_jsonb(s) FROM subtitle_files s WHERE s.id = $4))))
-                       WHERE id = $1"#,
-                )
-                .bind(job)
-                .bind(abs.to_string_lossy())
-                .bind(slot.to_string_lossy())
-                .bind(sid)
-                .execute(&mut *tx)
-                .await
-                .map_err(sql)?;
-                sqlx::query(
-                    r#"UPDATE jobs SET result = jsonb_set(COALESCE(result, '{}'::jsonb), '{ocrTrash}',
-                         COALESCE(result -> 'ocrTrash', '[]'::jsonb) || jsonb_build_array(jsonb_build_array($2::text, $3::text)))
-                       WHERE id = $1"#,
-                )
-                .bind(job)
-                .bind(abs.to_string_lossy())
-                .bind(slot.to_string_lossy())
-                .execute(&mut *tx)
-                .await
-                .map_err(sql)?;
-            }
-            Err(e) => tracing::warn!(job, "OCR subtitle {} kept on disk: {e}", abs.display()),
+        sqlx::query(
+            r#"UPDATE jobs SET result = jsonb_set(COALESCE(result, '{}'::jsonb), '{ocrRows}',
+                 COALESCE(result -> 'ocrRows', '[]'::jsonb) || jsonb_build_array(jsonb_build_object(
+                   'trashed', $3::text, 'row', (SELECT to_jsonb(s) FROM subtitle_files s WHERE s.id = $4))))
+               WHERE id = $1 AND NOT (COALESCE(result -> 'ocrRows', '[]'::jsonb)
+                 @> jsonb_build_array(jsonb_build_object('trashed', $3::text)))"#,
+        )
+        .bind(job)
+        .bind(abs.to_string_lossy())
+        .bind(slot.to_string_lossy())
+        .bind(sid)
+        .execute(&mut *tx)
+        .await
+        .map_err(sql)?;
+        sqlx::query(
+            r#"UPDATE jobs SET result = jsonb_set(COALESCE(result, '{}'::jsonb), '{ocrTrash}',
+                 COALESCE(result -> 'ocrTrash', '[]'::jsonb) || jsonb_build_array(jsonb_build_array($2::text, $3::text)))
+               WHERE id = $1 AND NOT (COALESCE(result -> 'ocrTrash', '[]'::jsonb)
+                 @> jsonb_build_array(jsonb_build_array($2::text, $3::text)))"#,
+        )
+        .bind(job)
+        .bind(abs.to_string_lossy())
+        .bind(slot.to_string_lossy())
+        .execute(&mut *tx)
+        .await
+        .map_err(sql)?;
+        tx.commit().await.map_err(sql)?;
+        if let Err(e) = trash_file(&abs, &slot) {
+            tracing::warn!(job, "OCR subtitle {} kept on disk: {e}", abs.display());
         }
         sqlx::query("DELETE FROM subtitle_files WHERE id = $1")
             .bind(sid)
-            .execute(&mut *tx)
+            .execute(&st.db)
             .await
             .map_err(sql)?;
-        tx.commit().await.map_err(sql)?;
     }
     Ok(())
 }

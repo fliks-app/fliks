@@ -351,6 +351,17 @@ fn failure_json(f: &run::Failure, detail: bool) -> Value {
     v
 }
 
+/// The run speaks only while queued or running; a finished one never outvotes the rows.
+fn derive_state(run: Option<&run::RunState>, ready: bool, worker: bool) -> &'static str {
+    match run {
+        Some(r) if r.active() => r.state,
+        _ if ready => "ready",
+        _ if worker => "queued",
+        Some(r) if r.state == "failed" => "failed",
+        _ => "none",
+    }
+}
+
 /// Rule 8.
 async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppError> {
     let file: Option<i32> = sqlx::query_scalar(
@@ -396,17 +407,10 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
         None => false,
     };
     let worker = match file {
-        Some(f) => store::worker_separating(&st.db, f).await?,
+        Some(f) => store::worker_separating(&st.db, f, &["queued", "leased"]).await?,
         None => false,
     };
-    // The run speaks only while it is queued or running: a finished one never outvotes the rows.
-    let state = match &run {
-        Some(r) if r.active() => r.state,
-        _ if ready => "ready",
-        _ if worker => "queued",
-        Some(r) if r.state == "failed" => "failed",
-        _ => "none",
-    };
+    let state = derive_state(run.as_ref(), ready, worker);
     let mut out = json!({
         "state": state,
         "cdg": cdg,
@@ -819,5 +823,41 @@ mod tests {
             Some("small")
         );
         assert_eq!(pick(&[other]), None);
+    }
+}
+
+#[cfg(test)]
+mod state_tests {
+    use super::*;
+
+    fn run(state: &'static str) -> run::RunState {
+        run::RunState {
+            state,
+            stage: None,
+            progress: None,
+            error: None,
+            lyrics_error: None,
+            user: None,
+            viewers: Vec::new().into(),
+        }
+    }
+
+    #[test]
+    fn the_state_follows_the_rows_once_a_run_is_over() {
+        let cases = [
+            (Some("running"), true, false, "running"),
+            (Some("queued"), false, true, "queued"),
+            (Some("ready"), true, false, "ready"),
+            (Some("ready"), false, false, "none"),
+            (Some("failed"), true, false, "ready"),
+            (Some("failed"), false, false, "failed"),
+            (Some("failed"), false, true, "queued"),
+            (None, false, true, "queued"),
+            (None, false, false, "none"),
+        ];
+        for (r, ready, worker, want) in cases {
+            let r = r.map(run);
+            assert_eq!(derive_state(r.as_ref(), ready, worker), want);
+        }
     }
 }

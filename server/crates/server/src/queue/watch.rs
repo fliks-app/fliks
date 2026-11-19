@@ -82,7 +82,10 @@ async fn sweep(
             && matches!(state.as_str(), "failed" | "cancelled" | "skipped")
             && let Some(f) = r.get::<Option<i32>, _>("file")
         {
-            crate::ingest::post_import::sprite_if_missing(st, f).await;
+            let st = st.clone();
+            tokio::spawn(
+                async move { crate::ingest::post_import::sprite_if_missing(&st, f).await },
+            );
         }
         let mut p = Map::new();
         p.insert("title".into(), r.get::<String, _>("title").into());
