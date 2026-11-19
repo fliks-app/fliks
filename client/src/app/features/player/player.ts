@@ -3916,14 +3916,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (sessionId) {
       payload.sessionId = sessionId;
       payload.handoff = this.sessionSync.handoffFor(sessionId);
-      // While casting the local engine is deliberately paused and muted: the receiver's state, volume and
-      // mute are the ones in effect.
-      const casting = this.castService.isConnected();
-      payload.state = casting
-        ? this.castService.isPaused() ? 'paused' : 'playing'
-        : this.state.buffering() ? 'buffering' : this.uiPaused() ? 'paused' : 'playing';
-      payload.volume = casting ? this.castService.volume() : this.volume();
-      payload.muted = casting ? this.castService.muted() : this.muted();
+      // The output in effect: while casting the local engine is paused and muted on purpose.
+      const out = this.session.output() ?? this.localOutput;
+      payload.state = out.buffering() ? 'buffering' : out.uiPaused() ? 'paused' : 'playing';
+      payload.volume = out.volume();
+      payload.muted = out.muted();
       const lastCmdId = this.remoteService.lastAppliedCmdId();
       if (lastCmdId) payload.lastCmdId = lastCmdId;
       payload.quality = this.activeQualityId() ?? null;
