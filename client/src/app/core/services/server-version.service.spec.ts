@@ -27,10 +27,10 @@ describe('serverSupports', () => {
 });
 
 describe('SERVER_SINCE', () => {
-  it('hides every unreleased route from the last release and opens it from 7.0.0', () => {
+  it('hides every route from the last 6.x release and opens it from the release that added it', () => {
     for (const since of Object.values(SERVER_SINCE)) {
       expect(serverSupports('6.0.2', since)).toBe(false);
-      expect(serverSupports('7.0.0', since)).toBe(true);
+      expect(serverSupports(since, since)).toBe(true);
     }
   });
 });
