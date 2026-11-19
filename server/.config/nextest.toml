@@ -11,3 +11,11 @@ path = "junit.xml"
 [[profile.default.overrides]]
 filter = "test(/^plugins::/) | test(/^backup_restore::/) | test(/^kobo::sync_/)"
 priority = 10
+
+# These tests write the shared cache directory under the same job and file ids, and some wipe it.
+[test-groups]
+karaoke-cache = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = "test(/^karaoke::/) | test(/^queue::remote_tests::/)"
+test-group = "karaoke-cache"
