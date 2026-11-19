@@ -314,6 +314,8 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   private async yieldToTakeover(): Promise<void> {
     if (!this._track()) return;
     this.fullPlayer.handTo('audio', true);
+    // A receiver this device cast to is left too: nothing of this device plays there any more.
+    if (this.castOut.active()) this.castOut.leave();
     await this.close();
   }
 

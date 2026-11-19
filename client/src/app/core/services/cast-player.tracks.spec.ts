@@ -58,6 +58,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
     saveResumeState: vi.fn(),
     saveHeartbeat: vi.fn(),
     stop: vi.fn(),
+    disconnect: vi.fn(() => cast.isConnected.set(false)),
     clearResumeState: vi.fn(),
     setActiveSubtitle: vi.fn(async () => {}),
     setActiveAudioLanguage: vi.fn(async () => false),
@@ -212,7 +213,7 @@ describe('cast rejoin after a tab reload', () => {
 describe('a takeover of the cast session', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('stops the receiver and forgets its media like a local player, the device staying connected', async () => {
+  it('leaves the receiver like a local player stops: the Cast session ends and its media is forgotten', async () => {
     const { svc, cast, players } = setup();
     cast.receiverMedia.set({ mediaFileId: 7, mediaId: 3, sid: 'sid-1' });
     TestBed.tick();
@@ -220,10 +221,10 @@ describe('a takeover of the cast session', () => {
     expect(player.sessionId()).toBe('sid-1');
     expect(player.active()).toBe(true);
     await player.yield(true);
-    expect(cast.stop).toHaveBeenCalled();
+    expect(cast.disconnect).toHaveBeenCalled();
+    expect(cast.isConnected()).toBe(false);
     expect(svc.hasMedia()).toBe(false);
     expect(player.sessionId()).toBeUndefined();
-    expect(cast.isConnected()).toBe(true);
   });
 });
 

@@ -64,6 +64,7 @@ describe('AudioPlayerService music mode', () => {
     queueNext: vi.fn(),
     hasNext: () => false,
     dropNext: vi.fn(),
+    leave: vi.fn(() => castOut.active.set(false)),
     setStemSource: vi.fn(),
     applyStems: vi.fn(async () => {}),
     clearStems: vi.fn(),
@@ -95,7 +96,7 @@ describe('AudioPlayerService music mode', () => {
     trackRequests.mockClear();
     castOut.active.set(false);
     castOut.isConnected.set(false);
-    for (const f of [castOut.play, castOut.pause, castOut.toggle, castOut.seek, castOut.stop, castOut.release, castOut.queueNext, castOut.dropNext, castOut.setStemSource, castOut.clearStems]) f.mockClear();
+    for (const f of [castOut.play, castOut.pause, castOut.toggle, castOut.seek, castOut.stop, castOut.release, castOut.queueNext, castOut.dropNext, castOut.leave, castOut.setStemSource, castOut.clearStems]) f.mockClear();
     castLoad.mockReset();
     getItemPlaybackInfo.mockImplementation(async (itemId: number) => ({
       playMethod: 'DirectPlay',
@@ -363,6 +364,17 @@ describe('AudioPlayerService music mode', () => {
     await player!.yield();
     expect(audio.track()).toBeNull();
     expect([full.open(), full.remote()]).toEqual(['audio', true]);
+  });
+
+  it('leaves the receiver it cast to when another device takes the session over', async () => {
+    castOut.isConnected.set(true);
+    castLoad.mockResolvedValue({ sessionId: 'cs', mediaFileId: 77, durationSeconds: 100, playMethod: 'DirectPlay' });
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    expect(castOut.active()).toBe(true);
+    await player!.yield();
+    expect(castOut.leave).toHaveBeenCalled();
+    expect(audio.track()).toBeNull();
   });
 
   it('closes the full player when this device stops on its own', async () => {

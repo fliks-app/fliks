@@ -283,15 +283,20 @@ describe('SessionSyncService takeover', () => {
     expect(yielded).toHaveBeenCalledOnce();
   });
 
-  it('stops every player of the superseded session: the video route and the Cast output it drives', async () => {
+  it('stops every player of the superseded session, the route before the Cast output it drives', async () => {
     const { service } = setup();
-    const route = player('cast-sid');
+    const order: string[] = [];
     const receiver = player('cast-sid');
-    service.registerPlayer(route.p);
+    const route = player('cast-sid');
+    receiver.yielded.mockImplementation(async () => void order.push('receiver'));
+    route.yielded.mockImplementation(async () => {
+      await Promise.resolve();
+      order.push('route');
+    });
     service.registerPlayer(receiver.p);
+    service.registerPlayer(route.p);
     await service.handleSuperseded('cast-sid');
-    expect(route.yielded).toHaveBeenCalledOnce();
-    expect(receiver.yielded).toHaveBeenCalledOnce();
+    expect(order).toEqual(['route', 'receiver']);
   });
 
   it('ignores a session no local player holds', async () => {

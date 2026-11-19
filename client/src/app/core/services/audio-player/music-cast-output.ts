@@ -215,6 +215,12 @@ export class MusicCastOutput {
     this.release();
   }
 
+  /** Ends the Cast session, which stops the receiver with it. */
+  leave(): void {
+    this.release();
+    this.cast.disconnect();
+  }
+
   /** Forgets the receiver media without touching it. */
   release(): void {
     this.generation++;

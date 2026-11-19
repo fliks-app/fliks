@@ -526,6 +526,12 @@ export class CastPlayerService {
     this.clear();
   }
 
+  /** Ends the Cast session, which stops the receiver with it, and forgets its media. */
+  leave(): void {
+    this.cast.disconnect();
+    this.clear();
+  }
+
   clear() {
     if (this.disconnectGrace) {
       clearTimeout(this.disconnectGrace);
@@ -551,11 +557,11 @@ export class CastPlayerService {
   }
 
   constructor() {
-    // The receiver plays this device's session: a takeover stops it as it stops a local player.
+    // The receiver plays this device's session: a takeover leaves it, as this device then plays nothing there.
     this.sessionSync.registerPlayer({
       sessionId: () => this.liveSessionId() ?? undefined,
       active: () => this.hasMedia() && !this.controlOnly(),
-      yield: async () => this.stop(),
+      yield: async () => this.leave(),
     });
     // Debounced teardown: a sender blip (Wi-Fi roam, sleep) drops the session while the TV keeps playing; CAF auto-rejoins, so reconnect cancels it.
     effect(() => {
