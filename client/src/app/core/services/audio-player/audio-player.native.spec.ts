@@ -118,7 +118,7 @@ describe('AudioPlayerService on the native player', () => {
     expect(sent.deviceType).toBe('x');
     await audio.playTracks([track(1), track(2)], 1);
     expect(getItemPlaybackInfo).not.toHaveBeenCalled();
-    expect(plugin['setQueue']).toHaveBeenCalledWith({ tracks: [track(1), track(2)], index: 1, shuffle: false, autoplay: true });
+    expect(plugin['setQueue']).toHaveBeenCalledWith({ tracks: [track(1), track(2)], index: 1, shuffle: false, order: [0, 1], autoplay: true });
     expect(audio.track()?.itemId).toBe(2);
   });
 
@@ -219,6 +219,26 @@ describe('AudioPlayerService on the native player', () => {
       1,
       expect.objectContaining({ sessionId: 's6', queue: { itemIds: [7, 5, 6], index: 2, shuffle: true, repeat: 'all' } }),
     );
+  });
+
+  it('follows a native reshuffle of the track it plays without restarting it, and unshuffles to the original order', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1), track(2), track(3)], 1);
+    emit('track', { index: 1, itemId: 2, mediaFileId: 20, sessionId: 's2' });
+    emit('state', { playing: true, playWhenReady: true, buffering: false, ready: true, ended: false });
+    emit('position', { index: 1, position: 40, duration: 98 });
+    TestBed.tick();
+    updatePlaybackState.mockClear();
+    emit('queue', { tracks: [track(2), track(3), track(1)], index: 0, shuffle: true, order: [2, 0, 1], repeat: 'one' });
+    emit('track', { index: 0, itemId: 2, mediaFileId: 20, sessionId: 's2' });
+    expect(audio.queue().map((t) => t.itemId)).toEqual([2, 3, 1]);
+    expect(audio.shuffle()).toBe(true);
+    expect(audio.repeat()).toBe('one');
+    expect(audio.position()).toBe(40);
+    expect(updatePlaybackState).not.toHaveBeenCalled();
+    audio.setShuffle(false);
+    expect(audio.queue().map((t) => t.itemId)).toEqual([1, 2, 3]);
+    await vi.waitFor(() => expect(plugin['updateQueue']).toHaveBeenLastCalledWith(expect.objectContaining({ index: 1, shuffle: false, order: [0, 1, 2] })));
   });
 
   it('routes controls from outside the app to the party', async () => {

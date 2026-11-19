@@ -31,6 +31,8 @@ export interface NativeAudioQueue {
   tracks: MusicTrackRequest[];
   index: number;
   shuffle: boolean;
+  /** While shuffled, the play-order index of each entry of the original order (`MusicQueue.order`). */
+  order?: number[];
   repeat: Repeat;
 }
 
@@ -65,9 +67,9 @@ export interface AudioPlayerPlugin {
   attach(): Promise<void>;
   detach(): Promise<void>;
   /** Tracks are named by item; the native side resolves each stream when it loads. */
-  setQueue(o: { tracks: NativeAudioTrackRequest[]; index: number; shuffle: boolean; startAt?: number; autoplay: boolean }): Promise<void>;
-  /** Replaces the order around the current entry, which stays at `index`; `shuffle` flags that order. */
-  updateQueue(o: { tracks: NativeAudioTrackRequest[]; index: number; shuffle: boolean }): Promise<void>;
+  setQueue(o: { tracks: NativeAudioTrackRequest[]; index: number; shuffle: boolean; order: number[]; startAt?: number; autoplay: boolean }): Promise<void>;
+  /** Replaces the order around the current entry, which stays at `index`; `shuffle` flags that order, `order` is `MusicQueue.order`. */
+  updateQueue(o: { tracks: NativeAudioTrackRequest[]; index: number; shuffle: boolean; order: number[] }): Promise<void>;
   loadParts(o: {
     parts: NativeAudioPart[];
     index: number;

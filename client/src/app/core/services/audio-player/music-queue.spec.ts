@@ -53,6 +53,18 @@ describe('MusicQueue', () => {
     expect(q.current?.itemId).toBe(3);
   });
 
+  it('adopts a shuffled order with its original order, and unshuffles to it', () => {
+    const q = new MusicQueue();
+    q.adopt([t(3), t(1), t(2)], 0, true, [1, 2, 0]);
+    expect(q.order).toEqual([1, 2, 0]);
+    q.setShuffle(false);
+    expect(ids(q)).toEqual([1, 2, 3]);
+    expect(q.current?.itemId).toBe(3);
+    q.adopt([t(3), t(1)], 1, true);
+    q.setShuffle(false);
+    expect(ids(q)).toEqual([3, 1]);
+  });
+
   it('adds next and last, and keeps both after an unshuffle', () => {
     const q = make(3);
     q.setShuffle(true, () => 0.5);

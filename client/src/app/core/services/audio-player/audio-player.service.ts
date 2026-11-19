@@ -1863,8 +1863,10 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
 
   private pushQueue(): void {
     if (!this.nativeOn || !this._musicMode()) return;
-    const { tracks, index, shuffle } = this.mq;
-    this.pushed = this.pushed.then(async () => this.nativeAudio?.updateQueue({ tracks: await this.nativeTracks(tracks), index, shuffle })).catch(() => undefined);
+    const { tracks, index, shuffle, order } = this.mq;
+    // The native player keeps the current entry playing at its new index: no track event marks the move.
+    this.nativeIndex = index;
+    this.pushed = this.pushed.then(async () => this.nativeAudio?.updateQueue({ tracks: await this.nativeTracks(tracks), index, shuffle, order })).catch(() => undefined);
   }
 
   /** Pushes land in the order they were made, whatever the time each one took to resolve its files. */
@@ -1889,8 +1891,8 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     this.pushGain();
     await n.setRate({ rate: this.nativeRate });
     await n.setRepeat({ mode: this.mq.repeat });
-    const { tracks, index, shuffle } = this.mq;
-    await n.setQueue({ tracks: await this.nativeTracks(tracks), index, shuffle, autoplay, ...(startAt > 0 && { startAt }) });
+    const { tracks, index, shuffle, order } = this.mq;
+    await n.setQueue({ tracks: await this.nativeTracks(tracks), index, shuffle, order, autoplay, ...(startAt > 0 && { startAt }) });
     this.pausedStart(autoplay);
     void this.refreshStems();
   }
@@ -2003,16 +2005,24 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     }
   }
 
-  /** The native player's queue (a car built it, or the web layer attached late): the web queue follows it. */
+  /** The native player's queue (a car built it, the web layer attached late, or a remote reordered it): the web queue follows it. */
   private onNativeQueue(e: NativeAudioQueue): void {
     if (!e.tracks.length || this.blockedByParty()) return;
+    if (this.nativeOn && this._musicMode() && e.tracks[e.index]?.itemId === this.mq.current?.itemId) {
+      // The track this layer follows plays on: only the order and the modes change.
+      this.mq.adopt(e.tracks, e.index, e.shuffle, e.order);
+      this.mq.repeat = e.repeat;
+      this.nativeIndex = e.index;
+      this.syncQueue();
+      return;
+    }
     this.nativeOn = true;
     this.nativeEnded = false;
     this.nativeIndex = -1;
     this.parts = [];
     this.info = null;
     this._musicMode.set(true);
-    this.mq.adopt(e.tracks, e.index, e.shuffle);
+    this.mq.adopt(e.tracks, e.index, e.shuffle, e.order);
     this.mq.repeat = e.repeat;
     this.syncQueue();
     this._track.set(this.audioOf(this.mq.current!));
