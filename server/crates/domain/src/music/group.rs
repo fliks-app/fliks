@@ -1,5 +1,5 @@
 //! Audio files into album candidates (`docs/spec/music.md`, section Grouping). Pure.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A file of the scan, `/`-separated relative to its folder root, with the album its tags name.
 #[derive(Debug, Clone)]
@@ -79,16 +79,16 @@ pub fn group(entries: &[Entry]) -> Vec<Album> {
         let key = if dir.is_empty() { e.key.clone() } else { None };
         by.entry((dir, key)).or_default().push(e.rel.clone());
     }
-    let dirs: Vec<String> = by.keys().map(|(d, _)| d.clone()).collect();
+    let dirs: BTreeSet<String> = by.keys().map(|(d, _)| d.clone()).collect();
     by.into_iter()
         .map(|((dir, key), mut files)| {
             files.sort_by_key(|f| natural(f));
+            // `0` follows `/`: the range holds exactly the folders below `dir`.
             let anchored = !dir.is_empty()
                 && dirs
-                    .iter()
-                    .filter(|d| **d == dir || d.starts_with(&format!("{dir}/")))
-                    .count()
-                    == 1;
+                    .range(format!("{dir}/")..format!("{dir}0"))
+                    .next()
+                    .is_none();
             Album {
                 dir,
                 key,

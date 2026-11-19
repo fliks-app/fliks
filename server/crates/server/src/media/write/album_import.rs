@@ -127,11 +127,6 @@ pub(super) async fn import_album(
     Ok((StatusCode::CREATED, Json(out)))
 }
 
-/// A folder component: no dot or space at the ends.
-fn component(s: &str) -> String {
-    s.trim().trim_matches('.').trim().to_owned()
-}
-
 /// The folder of a new album: the artist folder and the album folder of the naming settings, the artist's left
 /// out when the album has none; a taken name takes the first characters of the release id, 409 when that
 /// one is taken too.
@@ -151,15 +146,10 @@ async fn album_folder(
         album_type: album.primary_type.map(str::to_owned),
         ..Default::default()
     };
-    let artist_dir = component(&naming::apply_album_format(&formats.artist_folder, &tokens));
-    let album_dir = component(&naming::apply_album_format(&formats.album_folder, &tokens));
+    let (artist_dir, album_dir) = naming::album_folder_parts(&formats, &tokens);
     let invalid = || AppError::bad_request(format!("Invalid folder name for \"{}\"", album.title));
     let join = |album_dir: &str| {
-        let path = if artist_dir.is_empty() {
-            album_dir.to_owned()
-        } else {
-            format!("{artist_dir}/{album_dir}")
-        };
+        let path = naming::album_folder_path(&artist_dir, album_dir);
         naming::validate_folder_path(&path)
             .map(str::to_owned)
             .map_err(|_| invalid())
@@ -251,7 +241,7 @@ async fn held_release(st: &AppState, src: &Source, library: i32) -> Result<Optio
     }
     Ok(sqlx::query_scalar(
         r#"SELECT m.id FROM media m JOIN album_details ad ON ad."mediaId" = m.id
-            WHERE m.type = 'album' AND m."libraryId" = $1 AND ad."releaseGroupMbid"::text = $2
+            WHERE m.type = 'album' AND m."libraryId" = $1 AND ad."releaseGroupMbid" = $2::uuid
               AND (SELECT COALESCE(array_agg(DISTINCT td."recordingMbid"::text ORDER BY td."recordingMbid"::text),
                                    '{}') FROM track_details td
                     WHERE td."mediaId" = m.id AND td."recordingMbid" IS NOT NULL) = $3
@@ -344,9 +334,8 @@ pub(crate) async fn create_from(
     Ok(Created::New(media))
 }
 
-/// The album of a request: the release in the request's library with its audio want, or the want added to the
-/// album the library already holds (403 when that one sits in a library outside `readable`). A request scoped
-/// to some tracks (`scoped`) creates the album with every track unmonitored.
+/// The album of a request, and whether this call created it: the release in the request's library, or the
+/// held album (403 outside `readable`) given the want. `scoped` creates it with every track unmonitored.
 pub async fn import_album_for_request(
     st: &AppState,
     release: &str,
@@ -354,7 +343,7 @@ pub async fn import_album_for_request(
     scoped: bool,
     (library, folder): (Option<i32>, Option<i32>),
     (added_by, readable): (Option<i32>, &[i32]),
-) -> Result<i32, AppError> {
+) -> Result<(i32, bool), AppError> {
     let ns = Namespace::MUSICBRAINZ;
     let held = async || external_ids::find(&st.db, MediaKind::Album, ns, release).await;
     let add_to = async |id: i32| {
@@ -373,7 +362,7 @@ pub async fn import_album_for_request(
             .await
             .map_err(|e| wants::write_error(e, id))?;
         tx.commit().await?;
-        Ok(id)
+        Ok((id, false))
     };
     if let Some(id) = held().await? {
         return add_to(id).await;
@@ -397,7 +386,7 @@ pub async fn import_album_for_request(
     )
     .await;
     match created {
-        Ok(Created::New(id)) => Ok(id),
+        Ok(Created::New(id)) => Ok((id, true)),
         Ok(Created::Held(id)) => add_to(id).await,
         Err(e) if e.status() == StatusCode::CONFLICT => match held().await? {
             Some(id) => add_to(id).await,

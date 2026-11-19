@@ -14,7 +14,7 @@ fn usual_tracks(releases: &[&Release]) -> Option<i32> {
 }
 
 /// A release the profile allows (every release when it allows none), the best by status, country, medium,
-/// closeness to the usual track count (over the whole pool), then the earliest date; the id breaks a tie.
+/// closeness to the usual track count (over the whole pool), then the earliest date (an undated one last); the id breaks a tie.
 /// `among` limits the choice to those release ids; a profile-allowed one wins, else any of them.
 pub fn pick_target<'a>(
     releases: &'a [Release],
@@ -45,6 +45,7 @@ pub fn pick_target<'a>(
             r.track_count
                 .zip(usual)
                 .map_or(i32::MAX, |(c, u)| (c - u).abs()),
+            r.release_date.is_none(),
             r.release_date,
             r.external_id.clone(),
         )
@@ -118,6 +119,15 @@ mod tests {
         ];
         let p = pick_target(&rs, &MetadataProfile::default(), &Config::default(), None);
         assert_eq!(p.unwrap().external_id, "std-a");
+    }
+
+    #[test]
+    fn an_undated_release_loses_the_date_tie_break() {
+        let mut undated = rel("a-undated", "GB", "cd", 12, 2019);
+        undated.release_date = None;
+        let rs = [undated, rel("b-dated", "GB", "cd", 12, 2020)];
+        let p = pick_target(&rs, &MetadataProfile::default(), &Config::default(), None);
+        assert_eq!(p.unwrap().external_id, "b-dated");
     }
 
     #[test]

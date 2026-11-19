@@ -1,24 +1,12 @@
 //! Smart playlist rules and their validation (`docs/spec/playlists.md` rules 50-51).
+use super::provider::{PRIMARY_TYPES, SECONDARY_TYPES};
 use serde::{Deserialize, Serialize};
 
 pub const MAX_CRITERIA: usize = 50;
 pub const MAX_LIMIT: u32 = 5000;
+/// A hundred years: further back Postgres raises `timestamp out of range`.
+pub const MAX_DAYS: i32 = 36_500;
 const MAX_TEXT: usize = 255;
-const PRIMARY_TYPES: [&str; 5] = ["album", "single", "ep", "broadcast", "other"];
-const SECONDARY_TYPES: [&str; 12] = [
-    "compilation",
-    "soundtrack",
-    "spokenword",
-    "interview",
-    "audiobook",
-    "audio drama",
-    "live",
-    "remix",
-    "dj-mix",
-    "mixtape/street",
-    "demo",
-    "field recording",
-];
 /// Audio codecs of `streamInfo` that keep every sample; `pcm_*` is lossless too.
 pub const LOSSLESS_CODECS: [&str; 6] = ["flac", "alac", "ape", "wavpack", "tta", "mlp"];
 
@@ -143,8 +131,8 @@ fn bounds<T: PartialOrd + Copy>(min: Option<T>, max: Option<T>, lo: T) -> bool {
 
 fn days(within: Option<i32>, older: Option<i32>) -> bool {
     (within.is_some() || older.is_some())
-        && within.is_none_or(|d| d > 0)
-        && older.is_none_or(|d| d > 0)
+        && within.is_none_or(|d| (1..=MAX_DAYS).contains(&d))
+        && older.is_none_or(|d| (1..=MAX_DAYS).contains(&d))
 }
 
 fn valid(c: &Criterion) -> bool {
@@ -236,6 +224,7 @@ mod tests {
             json!([{"type": "year"}]),
             json!([{"type": "year", "min": 2000, "max": 1990}]),
             json!([{"type": "lastPlayed", "withinDays": 0}]),
+            json!([{"type": "addedAt", "olderThanDays": 2_000_000_000}]),
             json!([{"type": "releaseType", "types": ["nope"]}]),
             json!([{"type": "library", "ids": []}]),
             json!([{"type": "popularity", "min": -1.0}]),

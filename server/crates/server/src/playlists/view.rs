@@ -71,12 +71,12 @@ async fn smart_stats(
 ) -> sqlx::Result<()> {
     for p in playlists.iter().copied() {
         if let Some(Json(rules)) = &p.rules {
-            let ids = if kinds.has(MediaKind::Album) {
-                smart::evaluate(db, p.owner_id, accessible, rules).await?
+            let summary = if kinds.has(MediaKind::Album) {
+                smart::summary(db, p.owner_id, accessible, rules).await?
             } else {
-                vec![]
+                (0, vec![])
             };
-            stats.insert(p.id, smart::stats(db, &ids).await?);
+            stats.insert(p.id, summary);
         }
     }
     Ok(())

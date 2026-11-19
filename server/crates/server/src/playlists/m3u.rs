@@ -65,9 +65,13 @@ fn parse(content: &str) -> Vec<Entry> {
 }
 
 fn norm_path(p: &str) -> String {
-    p.trim_start_matches("file://")
-        .replace('\\', "/")
-        .to_lowercase()
+    let path = match p.strip_prefix("file://") {
+        Some(rest) => percent_encoding::percent_decode_str(rest)
+            .decode_utf8_lossy()
+            .into_owned(),
+        None => p.to_owned(),
+    };
+    path.replace('\\', "/").to_lowercase()
 }
 
 fn base(p: &str) -> &str {
@@ -91,23 +95,36 @@ struct Track {
     artists: Vec<String>,
 }
 
+/// The track of an entry: the longest path suffix match, the `#EXTINF` names settling a tie between albums
+/// (a tie they do not settle matches nothing); else the names alone.
 fn find(tracks: &[Track], by_base: &HashMap<&str, Vec<usize>>, e: &Entry) -> Option<i32> {
     let path = norm_path(&e.text);
-    let by_path = by_base
+    let named = |t: &&Track| {
+        matches!((e.artist.as_deref(), e.title.as_deref()),
+            (Some(a), Some(n)) if t.title == n && t.artists.iter().any(|x| x == a))
+    };
+    let by_path: Vec<&Track> = by_base
         .get(base(&path))
         .into_iter()
         .flatten()
         .map(|&i| &tracks[i])
         .filter(|t| suffix_match(&path, &t.path))
-        .max_by_key(|t| t.path.len().min(path.len()));
-    if let Some(t) = by_path {
-        return Some(t.item);
-    }
-    let (artist, title) = (e.artist.as_deref()?, e.title.as_deref()?);
-    tracks
+        .collect();
+    let best = by_path
         .iter()
-        .find(|t| t.title == title && t.artists.iter().any(|a| a == artist))
-        .map(|t| t.item)
+        .map(|t| t.path.len().min(path.len()))
+        .max()
+        .unwrap_or(0);
+    let tied: Vec<&Track> = by_path
+        .into_iter()
+        .filter(|t| t.path.len().min(path.len()) == best)
+        .collect();
+    match tied.as_slice() {
+        [t] => return Some(t.item),
+        [] => {}
+        _ => return tied.into_iter().find(named).map(|t| t.item),
+    }
+    tracks.iter().find(named).map(|t| t.item)
 }
 
 #[derive(Deserialize)]
@@ -224,8 +241,7 @@ pub async fn export_m3u(
     let tracks = crate::media::music::track_rows(&st.db, a.user.id, &acl, &ids).await?;
     let paths: HashMap<i32, String> = sqlx::query_as(
         r#"SELECT i.id, f."relativePath" FROM items i
-           JOIN LATERAL (SELECT f."relativePath" FROM item_parts p JOIN media_files f ON f.id = p."mediaFileId"
-             WHERE p."itemId" = i.id ORDER BY p.version DESC, p.position LIMIT 1) f ON true
+           JOIN media_files f ON f.id = track_file(i.id)
            WHERE i.id = ANY($1)"#,
     )
     .bind(&ids)
@@ -297,6 +313,36 @@ mod tests {
             (3, Some("ana"), Some("one"))
         );
         assert_eq!((e[1].line, e[1].title.clone()), (6, None));
+    }
+
+    #[test]
+    fn a_file_url_is_percent_decoded() {
+        assert_eq!(
+            norm_path("file:///m/Ana/My%20Song.flac"),
+            "/m/ana/my song.flac"
+        );
+        assert_eq!(norm_path("100%.flac"), "100%.flac");
+    }
+
+    #[test]
+    fn a_bare_name_held_by_several_albums_needs_its_names_to_pick() {
+        let track = |item, path: &str| Track {
+            item,
+            path: path.into(),
+            title: "one".into(),
+            artists: vec![if item == 1 { "ana" } else { "bo" }.into()],
+        };
+        let tracks = [track(1, "ana/a/1.flac"), track(2, "bo/b/1.flac")];
+        let mut by_base: HashMap<&str, Vec<usize>> = HashMap::new();
+        by_base.insert("1.flac", vec![0, 1]);
+        let entry = |artist: Option<&str>| Entry {
+            line: 1,
+            text: "1.flac".into(),
+            artist: artist.map(str::to_owned),
+            title: artist.map(|_| "one".to_owned()),
+        };
+        assert_eq!(find(&tracks, &by_base, &entry(None)), None);
+        assert_eq!(find(&tracks, &by_base, &entry(Some("bo"))), Some(2));
     }
 
     #[test]

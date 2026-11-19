@@ -607,8 +607,10 @@ pub async fn refresh(st: &AppState, media: i32, prio: Priority) -> Result<bool, 
     .fetch_optional(&st.db)
     .await?
     .flatten();
-    let group = stored
-        .or_else(|| edition.release_group_id.clone())
+    let group = edition
+        .release_group_id
+        .clone()
+        .or(stored)
         .ok_or_else(|| super::malformed(ns, "the release names no release group"))?;
     let fetched = match super::fetch(st, ns, &group, &lang, prio).await {
         Ok(f) => f,

@@ -745,15 +745,16 @@ async fn popular(
         .fetch_all(&st.db)
         .await?
     } else {
-        let ids: Vec<&str> = top
+        let ids: Vec<String> = top
             .iter()
             .filter_map(|t| t["recordingId"].as_str())
+            .filter_map(|r| fliks_domain::external_id::ExternalProvider::MusicBrainz.normalize(r))
             .collect();
         sqlx::query_as(
             r#"SELECT DISTINCT ON (td."recordingMbid") td."recordingMbid"::text, i.id FROM track_details td
                JOIN items i ON i.id = td."itemId" JOIN media m ON m.id = i."mediaId"
                JOIN editions e ON e.id = i."editionId"
-               WHERE td."recordingMbid"::text = ANY($1)
+               WHERE td."recordingMbid" = ANY($1::uuid[])
                  AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
                  AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
                ORDER BY td."recordingMbid", i.id"#,

@@ -302,7 +302,7 @@ pub(crate) struct FolderOf<'a> {
 }
 
 /// The folder name of a media of `kind` from `format`: the one derivation import, relink and
-/// transfer share.
+/// transfer share (an album's is `album_folder`).
 pub(crate) fn folder_name(format: &str, kind: MediaKind, t: &FolderOf<'_>) -> String {
     let (title, original_title) = (t.title.to_owned(), t.original_title.map(str::to_owned));
     match kind {
@@ -333,6 +333,25 @@ pub(crate) fn folder_name(format: &str, kind: MediaKind, t: &FolderOf<'_>) -> St
             },
         ),
     }
+}
+
+/// The folder of an album from the artist and album folder formats; the artist's is left out when unknown.
+pub(crate) fn album_folder(
+    f: &naming::NamingFormats,
+    artist: Option<&str>,
+    title: &str,
+    year: Option<i64>,
+) -> String {
+    let (artist_dir, album_dir) = naming::album_folder_parts(
+        f,
+        &naming::AlbumNameTokens {
+            artist_name: artist.map(str::to_owned),
+            album_title: title.to_owned(),
+            release_year: year,
+            ..Default::default()
+        },
+    );
+    naming::album_folder_path(&artist_dir, &album_dir)
 }
 
 /// `folder_name` with the stored format, else the import default.

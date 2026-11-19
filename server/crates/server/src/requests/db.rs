@@ -261,6 +261,11 @@ pub async fn media_by_id(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Optio
     .transpose()
 }
 
+/// Albums are held by release id while a request names a release or a release group.
+fn is_music_album(t: &TitleKey) -> bool {
+    t.media_type == MediaKind::Album && t.provider == Namespace::MUSICBRAINZ
+}
+
 /// The library media holding the title (rule 8); 409 when a non-unique id names several.
 pub async fn media_by_ref(db: &PgPool, t: &TitleKey) -> Result<Option<MediaRow>, AppError> {
     media_by_ref_on(&mut *db.acquire().await?, t).await
@@ -270,6 +275,14 @@ pub async fn media_by_ref_on(
     db: &mut PgConnection,
     t: &TitleKey,
 ) -> Result<Option<MediaRow>, AppError> {
+    if is_music_album(t) {
+        let held =
+            crate::metadata::music::aliases::sole_album_named(&mut *db, &t.external_id).await?;
+        return match held {
+            Some(id) => Ok(media_by_id(&mut *db, id).await?),
+            None => Ok(None),
+        };
+    }
     let held: Vec<i32> = sqlx::query_scalar(
         r#"SELECT "mediaId" FROM media_external_ids
            WHERE kind = $1 AND provider = $2 AND value = $3 ORDER BY "mediaId" LIMIT 2"#,
@@ -291,13 +304,42 @@ pub async fn media_by_ref_on(
 /// The title's own key and the other ids of the one library media holding it, so a title is one key.
 pub async fn title_keys(db: &mut PgConnection, t: &TitleKey) -> sqlx::Result<Vec<TitleKey>> {
     let mut keys = vec![t.clone()];
-    if super::is_work(t.media_type) {
+    if super::is_work(t.media_type) && !is_music_album(t) {
         return Ok(keys);
     }
     let kind = t.media_type;
-    let Some(id) = external_ids::holder(&mut *db, kind, t.provider, &t.external_id).await? else {
+    let holder = match is_music_album(t) {
+        true => crate::metadata::music::aliases::sole_album_named(&mut *db, &t.external_id).await?,
+        false => external_ids::holder(&mut *db, kind, t.provider, &t.external_id).await?,
+    };
+    let Some(id) = holder else {
         return Ok(keys);
     };
+    if is_music_album(t) {
+        let group: Option<String> = sqlx::query_scalar(
+            r#"SELECT "releaseGroupMbid"::text FROM album_details WHERE "mediaId" = $1"#,
+        )
+        .bind(id)
+        .fetch_optional(&mut *db)
+        .await?
+        .flatten();
+        let release: Option<String> = sqlx::query_scalar(
+            r#"SELECT value FROM media_external_ids
+                WHERE "mediaId" = $1 AND kind = 'album' AND provider = 'musicbrainz'"#,
+        )
+        .bind(id)
+        .fetch_optional(&mut *db)
+        .await?;
+        for external_id in group.into_iter().chain(release) {
+            let k = TitleKey {
+                external_id,
+                ..t.clone()
+            };
+            if !keys.contains(&k) {
+                keys.push(k);
+            }
+        }
+    }
     for e in external_ids::refs(&mut *db, id).await? {
         let Some(provider) = Namespace::parse(&e.provider)
             .filter(|p| p.core().is_none() || *p == Namespace::TMDB || *p == Namespace::TVDB)
@@ -667,9 +709,11 @@ pub async fn in_flight_for_media(db: &PgPool, media_id: i32) -> sqlx::Result<Vec
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
         wants AS "wants: Json<Vec<WantSpec>>", recordings
-        FROM requests r WHERE status::text = ANY($2) AND EXISTS (SELECT 1 FROM media_external_ids e
+        FROM requests r WHERE status::text = ANY($2) AND (EXISTS (SELECT 1 FROM media_external_ids e
           WHERE e."mediaId" = $1 AND e.kind = r."mediaType" AND e.provider = r.provider
           AND e.value = r."externalId")
+          OR (r."mediaType" = 'album' AND r.provider = 'musicbrainz' AND r."externalId" =
+              (SELECT "releaseGroupMbid"::text FROM album_details WHERE "mediaId" = $1)))
         ORDER BY id"#,
         media_id,
         &strs(&IN_FLIGHT)

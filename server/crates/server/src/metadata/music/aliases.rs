@@ -1,7 +1,9 @@
 //! A merged MusicBrainz id is kept as an alias of the row that holds the surviving id
 //! (`docs/spec/music.md` rule 15): lookups read the live id first, then the alias.
+use crate::ingest::music::pairing::{Key, assign};
 use crate::metadata::books::absorb::same_library;
 use crate::{media::write::orphans::Refs, state::AppState};
+use fliks_domain::external_id::ExternalProvider;
 use sqlx::{PgConnection, PgPool};
 
 const MB: &str = "musicbrainz";
@@ -29,13 +31,25 @@ pub async fn albums_named(db: impl sqlx::PgExecutor<'_>, id: &str) -> sqlx::Resu
              UNION ALL
              SELECT "mediaId" FROM media_external_id_aliases WHERE kind = 'album' AND provider = $1 AND value = $2
              UNION ALL
-             SELECT "mediaId" FROM album_details WHERE "releaseGroupMbid"::text = $2
+             SELECT "mediaId" FROM album_details WHERE "releaseGroupMbid" = $3::uuid
            ) x ORDER BY 1"#,
     )
     .bind(MB)
     .bind(id)
+    .bind(ExternalProvider::MusicBrainz.normalize(id))
     .fetch_all(db)
     .await
+}
+
+/// The one album an id names (see `albums_named`); none when it names no album or several of them.
+pub async fn sole_album_named(
+    db: impl sqlx::PgExecutor<'_>,
+    id: &str,
+) -> sqlx::Result<Option<i32>> {
+    Ok(match albums_named(db, id).await?.as_slice() {
+        [media] => Some(*media),
+        _ => None,
+    })
 }
 
 /// The person holding `id` as its live id, else as an alias.
@@ -176,23 +190,28 @@ struct Track {
     isrc: Option<String>,
     disc: i32,
     number: Option<i32>,
+    duration_ms: Option<i32>,
     title: Option<String>,
 }
 
 impl Track {
-    /// The same recording, else the same ISRC, else the same disc and number, else the same title.
-    fn is(&self, o: &Track) -> bool {
-        let same = |a: &Option<String>, b: &Option<String>| a.is_some() && a == b;
-        same(&self.recording, &o.recording)
-            || same(&self.isrc, &o.isrc)
-            || (self.number.is_some() && (self.disc, self.number) == (o.disc, o.number))
-            || self.title.as_ref().map(|t| t.trim().to_lowercase())
-                == o.title.as_ref().map(|t| t.trim().to_lowercase())
+    fn key(&self) -> Key {
+        Key::new(
+            (self.recording.clone(), self.isrc.clone()),
+            (self.disc, self.number),
+            self.duration_ms,
+            self.title.as_deref(),
+        )
     }
 }
 
+fn keys(tracks: &[&Track]) -> Vec<Key> {
+    tracks.iter().map(|t| t.key()).collect()
+}
+
 const TRACKS: &str = r#"SELECT i.id AS item, td."recordingMbid"::text AS recording, td.isrc, td."discNumber" AS disc,
-       td."trackNumber" AS number, i.title FROM items i JOIN track_details td ON td."itemId" = i.id
+       td."trackNumber" AS number, td."durationMs" AS duration_ms, i.title
+     FROM items i JOIN track_details td ON td."itemId" = i.id
      WHERE i."editionId" = $1 AND "#;
 
 /// The audio editions of `from` and of `into`, when both albums have one.
@@ -213,35 +232,52 @@ async fn editions_of(
         .zip(edition(into).fetch_optional(&mut *c).await?))
 }
 
-/// An album holds one edition: the files of the tracks of `old` move onto the tracks of `kept` that hold none
-/// and are the same recording; the filed tracks left join `kept`, and `old` goes with its other tracks.
+/// An album holds one edition: filed tracks of `old` take over the free tracks of `kept` they pair with, or
+/// join the filed ones as older versions; the free ones hand their rows over.
 async fn merge_editions(c: &mut PgConnection, old: i32, kept: i32) -> sqlx::Result<()> {
-    let filed: Vec<Track> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{TRACKS} EXISTS (SELECT 1 FROM item_parts p WHERE p.\"itemId\" = i.id) ORDER BY i.id"
-    )))
-    .bind(old)
-    .fetch_all(&mut *c)
-    .await?;
-    let mut free: Vec<Track> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{TRACKS} NOT EXISTS (SELECT 1 FROM item_parts p WHERE p.\"itemId\" = i.id) ORDER BY i.id"
-    )))
-    .bind(kept)
-    .fetch_all(&mut *c)
-    .await?;
-    for t in &filed {
-        let Some(at) = free.iter().position(|f| t.is(f)) else {
-            continue;
-        };
-        let heir = free.remove(at);
-        sqlx::query(r#"UPDATE item_parts SET "itemId" = $2 WHERE "itemId" = $1"#)
-            .bind(t.item)
-            .bind(heir.item)
-            .execute(&mut *c)
+    let load = |edition: i32, filed: bool| {
+        let clause = if filed { "EXISTS" } else { "NOT EXISTS" };
+        sqlx::query_as::<_, Track>(sqlx::AssertSqlSafe(format!(
+            "{TRACKS} {clause} (SELECT 1 FROM item_parts p WHERE p.\"itemId\" = i.id) ORDER BY i.id"
+        )))
+        .bind(edition)
+    };
+    let filed = load(old, true).fetch_all(&mut *c).await?;
+    let free = load(kept, false).fetch_all(&mut *c).await?;
+    let held = load(kept, true).fetch_all(&mut *c).await?;
+    let all: Vec<&Track> = filed.iter().collect();
+    let by_free = assign(&keys(&all), &keys(&free.iter().collect::<Vec<_>>()));
+    for (t, heir) in filed.iter().zip(&by_free) {
+        if let Some(heir) = heir {
+            take_over(c, t.item, free[*heir].item).await?;
+        }
+    }
+    let rest: Vec<&Track> = filed
+        .iter()
+        .zip(&by_free)
+        .filter(|(_, h)| h.is_none())
+        .map(|(t, _)| t)
+        .collect();
+    let by_held = assign(&keys(&rest), &keys(&held.iter().collect::<Vec<_>>()));
+    for (t, twin) in rest.iter().zip(&by_held) {
+        if let Some(twin) = twin {
+            add_versions(c, t.item, held[*twin].item).await?;
+        }
+    }
+    let unfiled = load(old, false).fetch_all(&mut *c).await?;
+    let present =
+        sqlx::query_as::<_, Track>(sqlx::AssertSqlSafe(format!("{TRACKS} TRUE ORDER BY i.id")))
+            .bind(kept)
+            .fetch_all(&mut *c)
             .await?;
-        sqlx::query("DELETE FROM items WHERE id = $1")
-            .bind(t.item)
-            .execute(&mut *c)
-            .await?;
+    let by_present = assign(
+        &keys(&unfiled.iter().collect::<Vec<_>>()),
+        &keys(&present.iter().collect::<Vec<_>>()),
+    );
+    for (t, twin) in unfiled.iter().zip(&by_present) {
+        if let Some(twin) = twin {
+            move_user_rows(c, t.item, present[*twin].item).await?;
+        }
     }
     sqlx::query(
         r#"DELETE FROM items WHERE "editionId" = $1 AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = items.id)"#,
@@ -258,6 +294,151 @@ async fn merge_editions(c: &mut PgConnection, old: i32, kept: i32) -> sqlx::Resu
         .bind(old)
         .execute(&mut *c)
         .await?;
+    Ok(())
+}
+
+/// The filed track `filed` becomes the free track `heir`: its edition, title, monitoring, details, credits and
+/// works, the queue rows that target it and the user rows it held; the file's ReplayGain and length stay.
+async fn take_over(c: &mut PgConnection, filed: i32, heir: i32) -> sqlx::Result<()> {
+    let (gain, peak, duration): (Option<f32>, Option<f32>, Option<i32>) =
+        sqlx::query_as(r#"SELECT gain, peak, "durationMs" FROM track_details WHERE "itemId" = $1"#)
+            .bind(filed)
+            .fetch_optional(&mut *c)
+            .await?
+            .unwrap_or_default();
+    for table in ["track_details", "item_credits", "item_works"] {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            r#"DELETE FROM {table} WHERE "itemId" = $1"#
+        )))
+        .bind(filed)
+        .execute(&mut *c)
+        .await?;
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            r#"UPDATE {table} SET "itemId" = $1 WHERE "itemId" = $2"#
+        )))
+        .bind(filed)
+        .bind(heir)
+        .execute(&mut *c)
+        .await?;
+    }
+    sqlx::query(
+        r#"UPDATE track_details SET gain = COALESCE($2, gain), peak = COALESCE($3, peak),
+             "durationMs" = COALESCE($4, "durationMs") WHERE "itemId" = $1"#,
+    )
+    .bind(filed)
+    .bind(gain)
+    .bind(peak)
+    .bind(duration)
+    .execute(&mut *c)
+    .await?;
+    sqlx::query(
+        r#"UPDATE items t SET title = h.title, monitored = h.monitored, "editionId" = h."editionId"
+             FROM items h WHERE t.id = $1 AND h.id = $2"#,
+    )
+    .bind(filed)
+    .bind(heir)
+    .execute(&mut *c)
+    .await?;
+    sqlx::query(
+        r#"UPDATE acquisition_queue SET "itemIds" = array_replace("itemIds", $2, $1) WHERE $2 = ANY("itemIds")"#,
+    )
+    .bind(filed)
+    .bind(heir)
+    .execute(&mut *c)
+    .await?;
+    move_user_rows(c, heir, filed).await?;
+    sqlx::query("DELETE FROM items WHERE id = $1")
+        .bind(heir)
+        .execute(&mut *c)
+        .await?;
+    Ok(())
+}
+
+/// The files of the track `from` become older versions of the track `into`, whose own keep playing (the
+/// version numbers of its files and plays move up); `from` is deleted.
+async fn add_versions(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<()> {
+    let below: i32 = sqlx::query_scalar(
+        r#"SELECT COALESCE(max(version) + 1, 0) FROM item_parts WHERE "itemId" = $1"#,
+    )
+    .bind(from)
+    .fetch_one(&mut *c)
+    .await?;
+    // Two steps: a unique key never sees a number twice.
+    for (table, columns) in [
+        ("item_parts", &["version"][..]),
+        ("playback_states", &["version"][..]),
+        ("item_version_aliases", &["version", "toVersion"][..]),
+    ] {
+        for shift in [VERSION_PARK, below - VERSION_PARK] {
+            let set: Vec<String> = columns
+                .iter()
+                .map(|c| format!(r#""{c}" = "{c}" + {shift}"#))
+                .collect();
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                r#"UPDATE {table} SET {} WHERE "itemId" = $1"#,
+                set.join(", ")
+            )))
+            .bind(into)
+            .execute(&mut *c)
+            .await?;
+        }
+    }
+    // One statement: the chapter key onto `item_parts` is checked at its end.
+    sqlx::query(
+        r#"WITH m AS (UPDATE item_markers SET "itemId" = $2 WHERE "itemId" = $1 AND "mediaFileId" IS NOT NULL)
+           UPDATE item_parts SET "itemId" = $2 WHERE "itemId" = $1"#,
+    )
+    .bind(from)
+    .bind(into)
+    .execute(&mut *c)
+    .await?;
+    move_user_rows(c, from, into).await?;
+    sqlx::query("DELETE FROM items WHERE id = $1")
+        .bind(from)
+        .execute(&mut *c)
+        .await
+        .map(drop)
+}
+
+/// Far above any version number: parks the numbers of a table while they shift.
+const VERSION_PARK: i32 = 1_000_000;
+
+/// The rows that hang on the track `from` (likes, plays, lyrics, playlists, annotations, party rows) move to
+/// `to`; a row `to` holds a twin of stays and goes with `from`.
+async fn move_user_rows(c: &mut PgConnection, from: i32, to: i32) -> sqlx::Result<()> {
+    let columns: Vec<(String, String)> = sqlx::query_as(
+        r#"SELECT DISTINCT c.conrelid::regclass::text, quote_ident(a.attname)
+             FROM pg_constraint c
+             JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+            WHERE c.contype = 'f' AND c.confrelid = 'items'::regclass AND a.attname = 'itemId'
+              AND c.conrelid NOT IN ('item_parts'::regclass, 'track_details'::regclass,
+                                     'item_credits'::regclass, 'item_works'::regclass)"#,
+    )
+    .fetch_all(&mut *c)
+    .await?;
+    for (table, column) in columns {
+        sqlx::query("SAVEPOINT move_rows").execute(&mut *c).await?;
+        let bulk = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "UPDATE {table} SET {column} = $1 WHERE {column} = $2"
+        )))
+        .bind(to)
+        .bind(from)
+        .execute(&mut *c)
+        .await;
+        match bulk {
+            Ok(_) => {}
+            Err(e) if is_duplicate(&e) => {
+                sqlx::query("ROLLBACK TO SAVEPOINT move_rows")
+                    .execute(&mut *c)
+                    .await?;
+                move_rows_apart(c, &table, &column, (from, to)).await?;
+            }
+            Err(e) => return Err(e),
+        }
+        sqlx::query("RELEASE SAVEPOINT move_rows")
+            .execute(&mut *c)
+            .await?;
+    }
     Ok(())
 }
 
@@ -322,4 +503,49 @@ pub async fn redirect_person(
     .await?;
     tx.commit().await?;
     Ok(Moved::Renamed)
+}
+
+fn is_duplicate(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .and_then(|d| d.code())
+        .is_some_and(|c| c == "23505")
+}
+
+/// The rows of `table` on `from`, one by one: a row `to` holds a twin of stays on `from`.
+async fn move_rows_apart(
+    c: &mut PgConnection,
+    table: &str,
+    column: &str,
+    (from, to): (i32, i32),
+) -> sqlx::Result<()> {
+    let rows: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT ctid::text FROM {table} WHERE {column} = $1"
+    )))
+    .bind(from)
+    .fetch_all(&mut *c)
+    .await?;
+    for ctid in rows {
+        sqlx::query("SAVEPOINT move_row").execute(&mut *c).await?;
+        let moved = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "UPDATE {table} SET {column} = $1 WHERE ctid = $2::tid AND {column} = $3"
+        )))
+        .bind(to)
+        .bind(&ctid)
+        .bind(from)
+        .execute(&mut *c)
+        .await;
+        match moved {
+            Ok(_) => {}
+            Err(e) if is_duplicate(&e) => {
+                sqlx::query("ROLLBACK TO SAVEPOINT move_row")
+                    .execute(&mut *c)
+                    .await?;
+            }
+            Err(e) => return Err(e),
+        }
+        sqlx::query("RELEASE SAVEPOINT move_row")
+            .execute(&mut *c)
+            .await?;
+    }
+    Ok(())
 }

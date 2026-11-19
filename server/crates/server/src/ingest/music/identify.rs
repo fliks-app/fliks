@@ -51,6 +51,8 @@ pub struct Candidate {
 #[derive(Debug, PartialEq)]
 pub enum Outcome {
     Applied,
+    /// The album was folded into this one, which holds the release.
+    Merged(i32),
     Review(Vec<Candidate>),
     Nothing,
 }
@@ -320,25 +322,26 @@ async fn language(st: &AppState, media: i32) -> Result<Resolved, AppError> {
     })
 }
 
-/// Links `media` to the release the files were matched to and writes it. A release another album already
-/// holds (its id or an alias of it) absorbs this album instead.
-async fn apply(
+/// Links `media` to the release and writes it. A release another album already holds (its id or an alias)
+/// absorbs this album instead.
+async fn link_release(
     st: &AppState,
     media: i32,
-    found: Found,
+    fetched: Fetched,
+    edition: Edition,
     lang: &Resolved,
     prio: Priority,
-) -> Result<bool, AppError> {
-    let release = found.edition.release.external_id.clone();
+) -> Result<Outcome, AppError> {
+    let release = edition.release.external_id.clone();
     if let Some(other) = aliases::album_of(&st.db, &release).await?
         && other != media
     {
         if aliases::absorb_into(st, media, other).await? {
             st.ingest.settle.schedule(st, other);
-            return Ok(true);
+            return Ok(Outcome::Merged(other));
         }
         tracing::warn!("album #{media}: an album of another library holds the release {release}");
-        return Ok(false);
+        return Ok(Outcome::Nothing);
     }
     let linked = {
         let mut c = st.db.acquire().await?;
@@ -353,14 +356,11 @@ async fn apply(
         .await?
     };
     if linked != Link::Linked {
-        return Ok(true);
+        return Ok(Outcome::Applied);
     }
-    let src = Source {
-        fetched: found.fetched,
-        edition: found.edition,
-    };
+    let src = Source { fetched, edition };
     write_album(st, media, NS, &src, &release, lang, (Create::No, prio)).await?;
-    Ok(true)
+    Ok(Outcome::Applied)
 }
 
 /// The release group the ids of the tags name, the group's own id first, else the one a search of the release
@@ -426,7 +426,23 @@ pub async fn identify(
     let all = stored_tags(st, media).await?;
     let tags: Vec<TrackTags> = all.into_iter().map(|(_, _, t)| t).collect();
     if tags.is_empty() {
-        return Ok(Outcome::Nothing);
+        // No file to match: the group's target release, as a new album of the library would be.
+        let library: Option<i32> =
+            sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+                .bind(media)
+                .fetch_optional(&st.db)
+                .await?
+                .flatten();
+        let (Some(group), Some(library), true) = (group, library, apply_best) else {
+            return Ok(Outcome::Nothing);
+        };
+        let lang = language(st, media).await?;
+        let profile = crate::libraries::metadata_profile(&st.db, library).await?;
+        let src = classify(st, NS, group, &lang, prio)
+            .await?
+            .pick(st, NS, &lang, &profile, None, prio)
+            .await?;
+        return link_release(st, media, src.fetched, src.edition, &lang, prio).await;
     }
     let cfg = config(st).await;
     let local = local_of(&title, &tags);
@@ -459,10 +475,7 @@ pub async fn identify(
                 scored,
             };
             tracing::info!("album #{media}: {}", found.describe("named by its tags"));
-            return Ok(match apply(st, media, found, &lang, prio).await? {
-                true => Outcome::Applied,
-                false => Outcome::Nothing,
-            });
+            return link_release(st, media, found.fetched, found.edition, &lang, prio).await;
         }
     }
     let artist_id = tags
@@ -513,10 +526,7 @@ pub async fn identify(
     match best {
         Some(b) if apply_best && b.scored.verdict(&cfg) == Verdict::Auto => {
             tracing::info!("album #{media}: applying {}", b.describe("best match"));
-            Ok(match apply(st, media, b, &lang, prio).await? {
-                true => Outcome::Applied,
-                false => Outcome::Nothing,
-            })
+            link_release(st, media, b.fetched, b.edition, &lang, prio).await
         }
         best if !review.is_empty() => {
             if let Some(b) = best {

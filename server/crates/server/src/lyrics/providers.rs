@@ -195,7 +195,7 @@ async fn keep(
     let file: Option<(i32, Option<i32>)> = sqlx::query_as(
         r#"SELECT ip."mediaFileId", td."durationMs" FROM item_parts ip
            JOIN track_details td ON td."itemId" = ip."itemId"
-           WHERE ip."itemId" = $1 ORDER BY ip.version LIMIT 1"#,
+           WHERE ip."itemId" = $1 ORDER BY ip.version DESC, ip.position LIMIT 1"#,
     )
     .bind(item)
     .fetch_optional(&st.db)

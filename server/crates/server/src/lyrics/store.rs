@@ -42,7 +42,7 @@ pub struct New<'a> {
 
 /// The layer `(item, kind, lang, source)` replaced; its offset and `reviewed` stay while the text is the same.
 pub async fn upsert(db: &PgPool, n: &New<'_>) -> sqlx::Result<i32> {
-    sqlx::query_scalar(
+    let written: Option<i32> = sqlx::query_scalar(
         r#"INSERT INTO lyrics ("itemId", "mediaFileId", kind, lang, sync, source, "sourceRef", "offsetMs",
              "audioDurationMs", doc, raw, reviewed)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
@@ -53,6 +53,12 @@ pub async fn upsert(db: &PgPool, n: &New<'_>) -> sqlx::Result<i32> {
                                THEN lyrics."offsetMs" ELSE EXCLUDED."offsetMs" END,
              reviewed = CASE WHEN lyrics.raw IS NOT DISTINCT FROM EXCLUDED.raw
                              THEN lyrics.reviewed ELSE EXCLUDED.reviewed END
+           WHERE lyrics.raw IS DISTINCT FROM EXCLUDED.raw
+              OR lyrics."mediaFileId" IS DISTINCT FROM EXCLUDED."mediaFileId"
+              OR lyrics."sourceRef" IS DISTINCT FROM EXCLUDED."sourceRef"
+              OR lyrics."audioDurationMs" IS DISTINCT FROM EXCLUDED."audioDurationMs"
+              OR lyrics.sync IS DISTINCT FROM EXCLUDED.sync
+              OR (EXCLUDED.raw IS NULL AND lyrics.doc IS DISTINCT FROM EXCLUDED.doc)
            RETURNING id"#,
     )
     .bind(n.item)
@@ -67,8 +73,22 @@ pub async fn upsert(db: &PgPool, n: &New<'_>) -> sqlx::Result<i32> {
     .bind(Json(&n.parsed.doc))
     .bind(n.raw)
     .bind(n.reviewed)
-    .fetch_one(db)
-    .await
+    .fetch_optional(db)
+    .await?;
+    match written {
+        Some(id) => Ok(id),
+        None => {
+            sqlx::query_scalar(
+                r#"SELECT id FROM lyrics WHERE "itemId" = $1 AND kind = $2 AND lang = $3 AND source = $4"#,
+            )
+            .bind(n.item)
+            .bind(n.kind)
+            .bind(n.lang)
+            .bind(n.source)
+            .fetch_one(db)
+            .await
+        }
+    }
 }
 
 /// Replaces the document of a row still holding `old` and unreviewed, and zeroes its offset (already
@@ -195,4 +215,73 @@ pub async fn has_synced_main(db: &PgPool, item: i32) -> sqlx::Result<bool> {
     .bind(item)
     .fetch_one(db)
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fliks_domain::lyrics::{Format, parse};
+
+    #[sqlx::test(migrations = false)]
+    async fn a_second_write_of_a_rawless_layer_replaces_its_document(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'M', '["album"]');
+               INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (1, 'A', 'album', 1, 'a');
+               INSERT INTO editions (id, "mediaId", family) VALUES (1, 1, 'audio');
+               INSERT INTO items (id, "mediaId", "editionId", title) VALUES (1, 1, 1, 'One')"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        let write = |text: &str| {
+            let parsed = parse(Format::Lrc, text).unwrap();
+            let db = db.clone();
+            async move {
+                upsert(
+                    &db,
+                    &New {
+                        item: 1,
+                        file: None,
+                        kind: "main",
+                        lang: "en",
+                        source: "user",
+                        source_ref: None,
+                        parsed: &parsed,
+                        raw: None,
+                        duration_ms: None,
+                        reviewed: true,
+                    },
+                )
+                .await
+                .unwrap()
+            }
+        };
+        let id = write("[00:01.00]one").await;
+        assert_eq!(write("[00:05.00]one").await, id);
+        let doc: serde_json::Value = sqlx::query_scalar("SELECT doc FROM lyrics WHERE id = $1")
+            .bind(id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert!(
+            doc.to_string().contains("5000") || doc.to_string().contains("5.0"),
+            "{doc}"
+        );
+        let stamp = |db: PgPool| async move {
+            sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+                r#"SELECT "updatedAt" FROM lyrics WHERE id = 1"#,
+            )
+            .fetch_one(&db)
+            .await
+            .unwrap()
+        };
+        let before = stamp(db.clone()).await;
+        write("[00:05.00]one").await;
+        assert_eq!(
+            stamp(db.clone()).await,
+            before,
+            "an unchanged write is a no-op"
+        );
+    }
 }

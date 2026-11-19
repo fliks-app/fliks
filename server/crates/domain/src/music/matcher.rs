@@ -286,7 +286,8 @@ pub fn track_distance(l: &LocalTrack, r: &RemoteTrack) -> f64 {
         );
     }
     if let (Some(a), Some(b)) = (l.number, r.number) {
-        p.add(W_TRACK_INDEX, f64::from(a != b));
+        let other_disc = matches!((l.disc, r.disc), (Some(x), Some(y)) if x != y);
+        p.add(W_TRACK_INDEX, f64::from(a != b || other_disc));
     }
     if let (Some(a), Some(b)) = (&l.recording, &r.recording) {
         p.add(W_RECORDING, f64::from(a != b));
@@ -534,6 +535,23 @@ mod tests {
                 .collect(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn the_same_number_on_another_disc_is_a_different_track() {
+        let l = LocalTrack {
+            title: "Song".into(),
+            number: Some(1),
+            disc: Some(1),
+            ..Default::default()
+        };
+        let on = |disc| RemoteTrack {
+            title: "Song".into(),
+            number: Some(1),
+            disc: Some(disc),
+            ..Default::default()
+        };
+        assert!(track_distance(&l, &on(2)) > track_distance(&l, &on(1)));
     }
 
     #[test]

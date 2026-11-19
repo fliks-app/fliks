@@ -17,8 +17,6 @@ use crate::release::audio::music::parse_music_release;
 pub struct MusicExpectation {
     /// The album artists' names: a release must name one of them.
     pub artists: Vec<String>,
-    /// A discography pack is accepted (a want of the whole catalogue).
-    pub allow_discography: bool,
 }
 
 /// A title naming no language has none: the parser's English default is a video convention.
@@ -69,7 +67,7 @@ pub fn score_and_sort_music_releases(
             if !named {
                 s.rejections.push(rej("ARTIST_MISMATCH"));
             }
-            if m.discography && !want.allow_discography {
+            if m.discography {
                 s.rejections.push(rej("DISCOGRAPHY"));
             }
             s

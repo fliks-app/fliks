@@ -383,14 +383,10 @@ pub async fn ensure_media(
     spec: ImportSpec,
     (added_by, approver): (Option<i32>, i32),
 ) -> Res<Option<i32>> {
-    let before = match spec.title.media_type {
-        MediaKind::Album => {
-            crate::metadata::music::aliases::albums_named(&st.db, &spec.title.external_id).await?
-        }
-        _ => vec![],
-    };
-    let media_id = match services::import_title(st, spec.clone(), (added_by, approver)).await {
-        Ok(id) => id,
+    let (media_id, created) = match services::import_title(st, spec.clone(), (added_by, approver))
+        .await
+    {
+        Ok(imported) => imported,
         Err(e) if e.status != 409 || super::is_work(spec.title.media_type) => {
             return Err(e.into());
         }
@@ -416,7 +412,7 @@ pub async fn ensure_media(
                     "This title is already in the library with a different profile and can't satisfy the request — decline it or update the library media's profiles.",
                 ));
             }
-            existing.id
+            (existing.id, false)
         }
     };
     let seasons = spec
@@ -425,11 +421,18 @@ pub async fn ensure_media(
         .filter(|_| spec.title.media_type.has_seasons());
     db::monitor_scope(&st.db, media_id, seasons).await?;
     if spec.title.media_type == MediaKind::Album {
-        match spec.recordings.as_deref() {
-            Some(recordings) => {
-                want_tracks(st, media_id, recordings, before.contains(&media_id)).await?
+        let held = !created;
+        let wanted = match spec.recordings.as_deref() {
+            Some(recordings) => want_tracks(st, media_id, recordings, held).await,
+            None => crate::metadata::music::want::monitor_all(&st.db, &[media_id])
+                .await
+                .map_err(Into::into),
+        };
+        if let Err(e) = wanted {
+            if !held {
+                crate::media::write::discard(st, media_id, MediaKind::Album).await;
             }
-            None => crate::metadata::music::want::monitor_all(&st.db, &[media_id]).await?,
+            return Err(e);
         }
     }
     Ok(Some(media_id))
@@ -693,6 +696,15 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     let id = match own {
         // The caller's pending album request grows instead of a second row.
         Some(own) => {
+            let wants_of = |w: &Option<Vec<WantSpec>>| serde_json::to_value(w).ok();
+            if dto.library_id.is_some_and(|l| own.library_id != Some(l))
+                || dto.wants.is_some()
+                    && wants_of(&dto.wants) != wants_of(&own.wants.as_ref().map(|w| w.0.clone()))
+            {
+                return Err(AppError::conflict(
+                    "A pending request for this album already exists with another library or wants",
+                ));
+            }
             match (&dto.recordings, &own.recordings) {
                 (Some(r), Some(_)) => db::add_recordings(&mut *tx, own.id, r).await?,
                 (None, Some(_)) => db::widen(&mut *tx, own.id).await?,
@@ -1055,9 +1067,7 @@ async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bo
     if !db::claim_approval(&st.db, id, by, None).await? {
         return Err(AppError::conflict("Request is not pending"));
     }
-    if whole && row.recordings.take().is_some() {
-        db::widen(&st.db, id).await?;
-    }
+    let widen = whole && row.recordings.take().is_some();
     lock.commit().await?;
     let spec = ImportSpec {
         title: key.clone(),
@@ -1083,6 +1093,9 @@ async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bo
     };
     if db::find(&st.db, id).await?.is_none() {
         return Err(not_found(id));
+    }
+    if widen {
+        db::widen(&st.db, id).await?;
     }
     if let Some(m) = media {
         db::link_if_unlinked(&st.db, id, m).await?;

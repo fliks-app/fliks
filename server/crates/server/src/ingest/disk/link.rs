@@ -305,7 +305,7 @@ pub(super) async fn confirm_import(
             }
             Some(_) => {}
             None => {
-                let folder = pin_folder(&formats, &media);
+                let folder = pin_folder(&st.db, &formats, &media).await?;
                 if folder_error(media.media_type, &folder) {
                     errors.push(format!("{name}: invalid folder name \"{folder}\""));
                     continue;
@@ -394,12 +394,32 @@ fn naming_folder_format(f: &naming::NamingFormats, kind: MediaKind) -> &str {
     match kind {
         MediaKind::Movie => &f.movie_folder,
         MediaKind::Series => &f.series_folder,
-        MediaKind::Book | MediaKind::Comic | MediaKind::Album => &f.book_folder,
+        MediaKind::Book | MediaKind::Comic => &f.book_folder,
+        MediaKind::Album => &f.album_folder,
     }
 }
 
-pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
-    mw::folder_name(
+pub(super) async fn pin_folder(
+    db: &sqlx::PgPool,
+    f: &naming::NamingFormats,
+    m: &MediaRow,
+) -> sqlx::Result<String> {
+    if m.media_type == MediaKind::Album {
+        let artist: Option<String> = sqlx::query_scalar(
+            r#"SELECT p.name FROM media_credits c JOIN persons p ON p.id = c."personId"
+               WHERE c."mediaId" = $1 AND c.role = 'artist' ORDER BY c.position LIMIT 1"#,
+        )
+        .bind(m.id)
+        .fetch_optional(db)
+        .await?;
+        return Ok(mw::album_folder(
+            f,
+            artist.as_deref(),
+            &m.title,
+            m.year.map(i64::from),
+        ));
+    }
+    Ok(mw::folder_name(
         naming_folder_format(f, m.media_type),
         m.media_type,
         &mw::FolderOf {
@@ -408,7 +428,7 @@ pub(super) fn pin_folder(f: &naming::NamingFormats, m: &MediaRow) -> String {
             year: m.year.map(i64::from),
             tmdb_id: m.tmdb_id.map(i64::from),
         },
-    )
+    ))
 }
 
 /// Whether `name` is no valid `folderName` for a media of `kind` (a book's may hold several components).
@@ -587,19 +607,23 @@ async fn target_folder(
     d: &RelinkDto,
     title: &str,
     year: Option<i32>,
+    artist: Option<&str>,
 ) -> Result<String, AppError> {
     Ok(if d.transfer.is_some() {
         let f = naming_formats(&st.db).await?;
-        let named = mw::folder_name(
-            naming_folder_format(&f, d.media_type),
-            d.media_type,
-            &mw::FolderOf {
-                title,
-                original_title: None,
-                year: year.map(i64::from),
-                tmdb_id: None,
-            },
-        );
+        let named = match d.media_type {
+            MediaKind::Album => mw::album_folder(&f, artist, title, year.map(i64::from)),
+            _ => mw::folder_name(
+                naming_folder_format(&f, d.media_type),
+                d.media_type,
+                &mw::FolderOf {
+                    title,
+                    original_title: None,
+                    year: year.map(i64::from),
+                    tmdb_id: None,
+                },
+            ),
+        };
         if folder_error(d.media_type, &named) {
             return Err(AppError::bad_request(format!(
                 "Invalid folder name for \"{title}\""
@@ -716,7 +740,11 @@ pub(super) async fn find_or_create_unmatched(
         .or(guessed_title)
         .unwrap_or_else(|| d.folder_name.clone());
     let year = d.year.or(guessed_year.and_then(|y| i32::try_from(y).ok()));
-    let folder = target_folder(st, d, &title, year).await?;
+    let artist = tagged
+        .as_ref()
+        .map(|s| s.artist.as_str())
+        .filter(|a| !a.is_empty());
+    let folder = target_folder(st, d, &title, year, artist).await?;
     let key = format!("{}:{}:{folder}", lib.id, d.media_type);
     let _lock = st.ingest.unmatched.lock(key.clone()).await;
     let mut existing = existing_unmatched(st, d, lib, &folder).await?;

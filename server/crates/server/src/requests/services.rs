@@ -179,12 +179,12 @@ pub(crate) async fn libraries_of(st: &AppState, user: i32) -> Result<Vec<i32>, s
 }
 
 /// `importFromTmdb`, or the book import of a book request (it calls `Lifecycle::on_media_imported` itself
-/// for a video title); answers the media id.
+/// for a video title); answers the media id and whether an album import created it.
 pub async fn import_title(
     st: &AppState,
     spec: ImportSpec,
     (added_by, approver): (Option<i32>, i32),
-) -> Result<i32, PortError> {
+) -> Result<(i32, bool), PortError> {
     if spec.title.media_type == MediaKind::Album {
         let readable = libraries_of(st, added_by.filter(|u| *u != 0).unwrap_or(approver))
             .await
@@ -212,6 +212,7 @@ pub async fn import_title(
             (added_by, &readable),
         )
         .await
+        .map(|id| (id, false))
         .map_err(port);
     }
     let seasons = spec.seasons.map(|s| {
@@ -229,6 +230,7 @@ pub async fn import_title(
         (seasons, vec![]),
     )
     .await
+    .map(|id| (id, false))
     .map_err(port)
 }
 

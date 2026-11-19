@@ -290,10 +290,7 @@ pub(super) async fn score(
         max_rank_inclusive: None,
         expected_issue: None,
     };
-    let expect = MusicExpectation {
-        artists,
-        allow_discography: false,
-    };
+    let expect = MusicExpectation { artists };
     let (blocked, ids, candidates) = (inp.blocked, inp.ids, inp.candidates);
     let scored = tokio::task::spawn_blocking(move || {
         let compiled = fliks_domain::release::scoring::CompiledFormats::new(&formats);

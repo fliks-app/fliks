@@ -149,7 +149,7 @@ pub(super) async fn insert_row(
 }
 
 /// Deletes the media of a creation that failed after its commit.
-pub(super) async fn discard(st: &AppState, id: i32, kind: MediaKind) {
+pub(crate) async fn discard(st: &AppState, id: i32, kind: MediaKind) {
     if let Err(e) = sqlx::query!("DELETE FROM media WHERE id = $1", id)
         .execute(&st.db)
         .await
