@@ -44,10 +44,9 @@ async function setup(account: AccountSession | null, live = true, owned = false)
   const sync = {
     session: signal(account),
     claimPending: signal(false),
-    ownedHere: signal(owned),
     parked: signal(account?.state === 'parked'),
     playHere: vi.fn(),
-    role: signal(account ? 'observer' : 'none'),
+    role: signal(owned ? 'owner' : account ? 'observer' : 'none'),
     liveReport: computed(() => (live ? { mediaFileId: 9, durationSeconds: 200 } : null)),
     positionNow: (s: AccountSession) => (live ? 70 : s.positionSeconds + (s.playing ? Math.max(0, (Date.now() - Date.parse(s.positionAt)) / 1000) : 0)),
     durationNow: (s: AccountSession) => (live ? 200 : (s.durationSeconds ?? 0)),
@@ -119,7 +118,7 @@ describe('RemoteAudioOutput', () => {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
-        { provide: SessionSyncService, useValue: { session: signal(session({ item: { ...session().item, title: 'Album A', subtitle: 'Track A' } })), parked: signal(false), ownedHere: signal(false), role: signal('observer'), liveReport: signal(null), isAudio: SessionSyncService.prototype.isAudio } },
+        { provide: SessionSyncService, useValue: { session: signal(session({ item: { ...session().item, title: 'Album A', subtitle: 'Track A' } })), parked: signal(false), role: signal('observer'), liveReport: signal(null), isAudio: SessionSyncService.prototype.isAudio } },
         { provide: RemotePlaybackTarget, useValue: {} },
         { provide: RemoteService, useValue: { isRemoting: signal(false) } },
         { provide: PlaybackSession, useValue: {} },
@@ -139,6 +138,11 @@ describe('RemoteAudioOutput', () => {
     const { out, primeTracks } = await setup(session(), true, true);
     expect(out.queue()).toEqual([]);
     expect(primeTracks).not.toHaveBeenCalled();
+  });
+
+  it('still fills the queue of a session parked on this device', async () => {
+    const { out } = await setup(session({ state: 'parked' }));
+    expect(out.queue().length).toBe(3);
   });
 
   it('primes the metadata service with the rows it loads', async () => {

@@ -303,20 +303,21 @@ export class PlaybackSession {
   }
 
   /** The device `play` loads on (`RemoteService.playTarget`); a party plays on this device or the output it drives. */
-  private playTarget(episodeId?: number): string | null {
-    return this.kind() === 'local' && this.partyActive() ? null : this.remoteSvc().playTarget(episodeId ? 'series' : 'movie');
+  private playTarget(item: Pick<PlayItem, 'episodeId' | 'media'>): string | null {
+    if (this.kind() === 'local' && this.partyActive()) return null;
+    return this.remoteSvc().playTarget(item.media?.type ?? (item.episodeId ? 'series' : 'movie'));
   }
 
-  /** A video play started now stays on this device. */
-  playsHere(episodeId?: number): boolean {
-    return this.isLocal() && !this.playTarget(episodeId);
+  /** A play of `item` started now stays on this device. */
+  playsHere(item: Pick<PlayItem, 'episodeId' | 'media'>): boolean {
+    return this.isLocal() && !this.playTarget(item);
   }
 
   /** Opens an item where this device's plays go: a remote device, the cast receiver, else the player route here. */
   async play(item: PlayItem, opts: PlayOptions = {}): Promise<OutputKind> {
     const kind = this.kind();
     const startAt = opts.fromStart ? 0 : undefined;
-    const targetId = this.playTarget(item.episodeId);
+    const targetId = this.playTarget(item);
     if (targetId) {
       void this.remoteSvc().send(targetId, {
         action: 'load',
@@ -496,8 +497,11 @@ export class PlaybackSession {
     const snap = from?.snapshot();
     if (!from || !snap || (kind === 'remote' && !deviceId)) return false;
     if (kind === 'cast') {
+      // A receiver left first reads as disconnected, so connecting the next one really waits for it.
+      const fromCast = this.kind() === 'cast';
+      if (fromCast) this.leave(from);
       if (!(await this.connectCast(deviceId))) return false;
-      this.leave(from);
+      if (!fromCast) this.leave(from);
       await this.castPlayer().quickStart({
         mediaFileId: snap.item.fileId,
         mediaId: snap.item.mediaId,
@@ -596,7 +600,7 @@ export class PlaybackSession {
     else void this.moveTo('cast');
   }
 
-  /** Any way back to this device that `moveTo` did not take (receiver lost, "stop controlling", the mini-bar's
+  /** Any way back to this device that `moveTo` did not take (receiver lost, the mini-bar's
    *  close) restarts the local player where the other output was. Created on first attach or connect: it reads the targets. */
   private watchReturnsToLocal() {
     return effect(

@@ -225,7 +225,7 @@ export class MusicCastOutput {
 
   /** Another device took the session: the receiver is left only while it still plays our session, else another sender's. */
   yield(): void {
-    if (this.cast.receiverMedia()?.['sid'] === this.loaded()?.sid) this.leave();
+    if (this.cast.receiverPlaysSession(this.loaded()?.sid) || this.cast.receiverPlaysSession(this.next?.info.sessionId)) this.leave();
     else this.release();
   }
 
@@ -423,6 +423,7 @@ export class MusicCastOutput {
         stem,
         mediaFileId: fileId,
         userId: this.auth.user()?.id,
+        sid: this.loaded()?.sid ?? undefined,
         currentTime: position,
         autoplay,
       });

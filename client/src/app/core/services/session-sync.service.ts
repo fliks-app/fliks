@@ -65,7 +65,7 @@ export interface LiveReport {
 export type SessionResumer = (session: AccountSession, positionSeconds: number) => Promise<void>;
 
 const HANDLED_MAX = 32;
-/** How long an armed hand-over waits for the new session's first beat. */
+/** How long a claim waits for the new session's first beat. */
 const CLAIM_TTL_MS = 60_000;
 
 /** The account's playback session as this device sees it: bootstrap, role, takeover. */

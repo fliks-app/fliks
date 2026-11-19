@@ -550,6 +550,11 @@ export class CastService implements OnDestroy {
     return !this.replaced() && (!m || m['mediaFileId'] === mediaFileId);
   }
 
+  /** Whether the receiver still plays the session `sid`; none known reads as not ours. */
+  receiverPlaysSession(sid: string | null | undefined): boolean {
+    return !!sid && this.receiverMedia()?.['sid'] === sid;
+  }
+
   /** Guards against re-adding on the same session so a reconnect doesn't stack listeners and double-toast. */
   private attachReceiverMessageListener(session: any) {
     const sessionId = session?.getSessionId?.();

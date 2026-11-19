@@ -42,6 +42,7 @@ describe('MusicCastOutput', () => {
     ended: signal(false),
     receiverMedia: signal<Record<string, unknown> | null>(null),
     queueNext: vi.fn(),
+    receiverPlaysSession: (sid: string | null | undefined) => !!sid && cast.receiverMedia()?.['sid'] === sid,
     loadMedia: vi.fn(async (..._a: unknown[]) => {}),
     setMix: vi.fn(async (..._a: unknown[]) => {}),
     setCastStreamBase: vi.fn(),
@@ -256,6 +257,28 @@ describe('MusicCastOutput', () => {
     expect(cast.disconnect).not.toHaveBeenCalled();
     await start(out);
     cast.receiverMedia.set({ itemId: 1, sid: 's1' });
+    out.yield();
+    expect(cast.disconnect).toHaveBeenCalled();
+  });
+
+  it('sends the session sid with a stem LOAD and leaves the stem on a takeover', async () => {
+    const out = TestBed.inject(MusicCastOutput);
+    await start(out);
+    out.setStemSource(77, STEMS);
+    karaoke = { mode: 'guide', level: 0.25 };
+    await out.applyStems();
+    expect(cast.loadMedia).toHaveBeenLastCalledWith(expect.objectContaining({ stem: 'mix', sid: 's1' }));
+    cast.receiverMedia.set({ itemId: 1, sid: 's1' });
+    out.yield();
+    expect(cast.disconnect).toHaveBeenCalled();
+  });
+
+  it('on a takeover leaves the receiver that already moved on to our queued track', async () => {
+    const out = TestBed.inject(MusicCastOutput);
+    await start(out);
+    out.queueNext(track(2));
+    await vi.waitFor(() => expect(out.hasNext()).toBe(true));
+    cast.receiverMedia.set({ itemId: 2, sid: 's2' });
     out.yield();
     expect(cast.disconnect).toHaveBeenCalled();
   });

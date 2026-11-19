@@ -52,6 +52,9 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
     resumedState: signal<unknown>(null),
     settled: Promise.resolve(),
     receiverMedia: signal<Record<string, unknown> | null>(null),
+    receiverPlaysSession(sid: string | null | undefined) {
+      return !!sid && this.receiverMedia()?.['sid'] === sid;
+    },
     receiverQoe: signal(null),
     playbackError$: new Subject<{ position?: number; mediaFileId?: number }>(),
     receiverError$: new Subject<object>(),
