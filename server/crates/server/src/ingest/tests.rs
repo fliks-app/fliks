@@ -6605,7 +6605,7 @@ mod music_ingest {
         .await
         .unwrap();
         c.fake
-            .script("POST", "/v1/probe", vec![timed("Mislabelled", 9, 100.0)]);
+            .script("POST", "/v1/probe", vec![timed("Mislabelled", 9, 306.0)]);
         let file = place(&c, &["Ana/Alpha/09 - Mislabelled.flac"]);
         music::register(&c.st, m, &file).await.unwrap();
         assert_eq!(count(&c, "SELECT count(*) FROM items").await, items);
