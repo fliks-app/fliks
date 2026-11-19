@@ -66,19 +66,16 @@ struct CarPlayCatalog {
     private func albumTracks(_ id: String) async -> CarListing? {
         guard let media = await json("/api/media/\(id)") as? [String: Any], let album = media["album"] as? [String: Any],
               let tracks = album["tracks"] as? [[String: Any]] else { return nil }
-        let editions = album["editions"] as? [[String: Any]] ?? []
-        var edition = album["targetEditionId"] as? Int
-        if edition == nil { edition = editions.first { $0["hasFiles"] as? Bool == true }?["id"] as? Int }
-        let chosen = editions.first { $0["id"] as? Int == edition }
-        let cover = Self.text(media["posterUrl"])
+        let release = album["release"] as? [String: Any]
+        let cover = Self.text(release?["coverUrl"]) ?? Self.text(media["posterUrl"])
         var out = CarListing()
-        for t in tracks where t["editionId"] as? Int == edition && t["hasFile"] as? Bool == true {
+        for t in tracks where t["hasFile"] as? Bool == true && t["orphaned"] as? Bool != true {
             var e = Self.entry(t, album: album)
             e.mediaId = media["id"] as? Int
             e.album = media["title"] as? String
             e.artwork = cover
-            e.albumGain = Self.number(chosen?["albumGain"])
-            e.albumPeak = Self.number(chosen?["albumPeak"])
+            e.albumGain = Self.number(release?["albumGain"])
+            e.albumPeak = Self.number(release?["albumPeak"])
             out.rows.append(CarRow(track: out.queue.count, title: e.title, subtitle: e.artist, artwork: cover))
             out.queue.append(e)
         }

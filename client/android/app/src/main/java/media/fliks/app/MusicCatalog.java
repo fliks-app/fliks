@@ -188,25 +188,17 @@ final class MusicCatalog {
         if (parent.startsWith("album:")) {
             JSONObject m = api.getJson("/api/media/" + parent.substring(6));
             JSONObject album = m.getJSONObject("album");
-            int edition = album.isNull("targetEditionId") ? -1 : album.getInt("targetEditionId");
-            JSONArray editions = album.getJSONArray("editions");
-            double albumGain = Double.NaN;
-            double albumPeak = Double.NaN;
-            for (int i = 0; i < editions.length(); i++) {
-                JSONObject e = editions.getJSONObject(i);
-                if (edition < 0 && e.optBoolean("hasFiles")) edition = e.getInt("id");
-                if (e.getInt("id") == edition) {
-                    albumGain = e.isNull("albumGain") ? Double.NaN : e.getDouble("albumGain");
-                    albumPeak = e.isNull("albumPeak") ? Double.NaN : e.getDouble("albumPeak");
-                }
-            }
+            JSONObject release = album.optJSONObject("release");
+            double albumGain = release == null ? Double.NaN : optDouble(release, "albumGain");
+            double albumPeak = release == null ? Double.NaN : optDouble(release, "albumPeak");
             JSONArray tracks = album.getJSONArray("tracks");
-            String cover = url(m, "posterUrl");
+            String releaseCover = release == null ? null : url(release, "coverUrl");
+            String cover = releaseCover != null ? releaseCover : url(m, "posterUrl");
             boolean discs = false;
             for (int i = 0; i < tracks.length(); i++) discs |= tracks.getJSONObject(i).optInt("discNumber", 1) > 1;
             for (int i = 0; i < tracks.length(); i++) {
                 JSONObject t = tracks.getJSONObject(i);
-                if (t.getInt("editionId") != edition || !t.optBoolean("hasFile")) continue;
+                if (!t.optBoolean("hasFile") || t.optBoolean("orphaned")) continue;
                 String by = artists(t, album);
                 MediaItem item = track(parent, t.getLong("itemId"), m.getLong("id"), t.optString("title"), by,
                         m.optString("title"), cover, optDouble(t, "durationSeconds"), optDouble(t, "gain"),
