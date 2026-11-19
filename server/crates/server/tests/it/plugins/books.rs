@@ -217,6 +217,38 @@ async fn notify_checks_its_texts_and_limits_a_plugin_to_ten_an_hour() {
     };
     let r = call(&h, "notify", &[("title", "fixture.missing")]).await;
     assert_eq!(r["error"], "ERR_VALIDATION", "{r}");
+    for q in [
+        ("url", "/\\evil.example"),
+        ("url", "https://evil.example"),
+        ("image", "/series/1"),
+    ] {
+        let r = call(&h, "notify", &[q]).await;
+        assert_eq!(r["error"], "ERR_VALIDATION", "{q:?}: {r}");
+    }
+    let nobody = ("id", "999999");
+    for _ in 0..12 {
+        let r = call(&h, "notify", &[nobody]).await;
+        assert!(r.get("error").is_none(), "no recipient spends no slot: {r}");
+    }
+    let (st, cfg) = h.call("GET", "/api/push/config", Some(&h.user), None).await;
+    assert_eq!(st, 200);
+    assert_eq!(cfg["plugins"][0]["id"], "fliks.fixture", "{cfg}");
+    assert!(cfg["plugins"][0]["name"].is_string(), "{cfg}");
+    sqlx::query(r#"UPDATE users SET "pushMuted" = ARRAY['plugin.fliks.fixture'] WHERE id = 1"#)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    for _ in 0..12 {
+        let r = call(&h, "notify", &[]).await;
+        assert!(
+            r.get("error").is_none(),
+            "a muted audience spends no slot: {r}"
+        );
+    }
+    sqlx::query(r#"UPDATE users SET "pushMuted" = '{}' WHERE id = 1"#)
+        .execute(&s.pool)
+        .await
+        .unwrap();
     for _ in 0..10 {
         let r = call(&h, "notify", &[]).await;
         assert!(r.get("error").is_none(), "{r}");

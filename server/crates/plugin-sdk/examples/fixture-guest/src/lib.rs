@@ -513,10 +513,12 @@ fn test_route(req: &Request) -> Result<Response, String> {
                 Some("viewers") => fliks_plugin_sdk::notify::NotifyAudience::Viewers(id),
                 _ => fliks_plugin_sdk::notify::NotifyAudience::Users(vec![id]),
             };
-            let n = fliks_plugin_sdk::notify::Notification::new(
+            let mut n = fliks_plugin_sdk::notify::Notification::new(
                 req.query("title").unwrap_or("fixture.nav.queue"),
                 "fixture.nav.settings",
             );
+            n.url = req.query("url").map(str::to_owned);
+            n.image = req.query("image").map(str::to_owned);
             host_result(fliks_plugin_sdk::notify::users(audience, &n))
         }
         "emit" => host_result(host::events_emit_own(

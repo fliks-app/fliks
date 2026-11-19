@@ -49,6 +49,9 @@ pub async fn config(
     Ok(Json(json!({
         "mobile": db::relay_enabled(&st.db).await?,
         "vapidPublicKey": st.push.vapid_public_key(),
+        "plugins": db::notifying_plugins(&st.db).await?.into_iter()
+            .filter_map(|id| st.plugins.registry.get(&id).map(|r| json!({"id": id, "name": r.manifest["name"]})))
+            .collect::<Vec<_>>(),
     })))
 }
 

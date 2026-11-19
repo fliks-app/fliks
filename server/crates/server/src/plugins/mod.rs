@@ -410,6 +410,7 @@ impl Plugins {
 
     /// Uninstall: nothing the plugin declared is true any more.
     pub async fn forget(&self, id: &str) {
+        self.notify.forget(id);
         self.unregister(id).await;
         self.registry.withdraw(id, false);
     }

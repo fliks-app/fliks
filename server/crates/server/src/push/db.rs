@@ -33,6 +33,15 @@ pub async fn recipients(db: &PgPool, ids: &[i32], category: &str) -> sqlx::Resul
     .await
 }
 
+/// Ids of the registered plugins granted `notify:users`.
+pub async fn notifying_plugins(db: &PgPool) -> sqlx::Result<Vec<String>> {
+    sqlx::query_scalar(
+        r#"SELECT "pluginId" FROM plugin_registrations WHERE 'notify:users' = ANY(scopes) ORDER BY 1"#,
+    )
+    .fetch_all(db)
+    .await
+}
+
 /// The rows to send to: live sessions of enabled users.
 pub async fn live(db: &PgPool, users: &[i32]) -> sqlx::Result<Vec<Sub>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(

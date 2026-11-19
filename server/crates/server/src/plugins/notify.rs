@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 
 const PER_HOUR: usize = 10;
 const WINDOW: Duration = Duration::from_secs(3600);
+const IMAGES: &str = "/api/images/";
 const DAY: u32 = 86_400;
 const MAX_USERS: usize = 500;
 const MAX_PARAMS: usize = 16;
@@ -40,16 +41,27 @@ impl Limiter {
         sent.push_back(now);
         true
     }
+
+    pub fn forget(&self, plugin: &str) {
+        self.0.lock_clean().remove(plugin);
+    }
 }
 
 fn invalid(m: impl Into<String>) -> HostError {
     host_err("ERR_VALIDATION", m)
 }
 
-/// `path` must stay on this server: absolute, not protocol-relative, no control character.
+/// `path` must stay on this server: it joins a foreign base to the same host, whatever the browser
+/// makes of backslashes or encoded slashes.
 fn local_path(what: &str, path: &str) -> Result<(), HostError> {
+    let lower = path.to_lowercase().replace("%2f", "/").replace("%5c", "\\");
+    let same_host = reqwest::Url::parse("http://x.invalid")
+        .and_then(|base| base.join(path))
+        .is_ok_and(|u| u.host_str() == Some("x.invalid"));
     let ok = path.starts_with('/')
-        && !path.starts_with("//")
+        && !lower.starts_with("//")
+        && !lower.contains('\\')
+        && same_host
         && path.len() <= MAX_TEXT
         && !path.chars().any(char::is_control);
     ok.then_some(()).ok_or_else(|| {
@@ -59,9 +71,10 @@ fn local_path(what: &str, path: &str) -> Result<(), HostError> {
     })
 }
 
-/// The texts of `key` in each language of the manifest `i18n`, by base language.
+/// The texts of `key` by base language: the plain tag (`fr`) before a regional one (`fr-CA`, then `fr-FR`);
+/// English is required, it is the fallback of every other language.
 fn table(manifest: &Value, key: &str) -> Result<BTreeMap<String, String>, HostError> {
-    let mut by_locale = BTreeMap::new();
+    let mut found: Vec<(bool, &str, &'static str, &str)> = vec![];
     for (tag, dict) in manifest["i18n"].as_object().into_iter().flatten() {
         let base = tag
             .split(['-', '_'])
@@ -71,12 +84,19 @@ fn table(manifest: &Value, key: &str) -> Result<BTreeMap<String, String>, HostEr
         if let (Some(lang), Some(text)) =
             (LOCALES.into_iter().find(|l| *l == base), dict[key].as_str())
         {
-            by_locale.insert(lang.to_owned(), text.to_owned());
+            found.push((tag.contains(['-', '_']), tag, lang, text));
         }
     }
-    if by_locale.is_empty() {
+    found.sort();
+    let mut by_locale = BTreeMap::new();
+    for (_, _, lang, text) in found {
+        by_locale
+            .entry(lang.to_owned())
+            .or_insert_with(|| text.to_owned());
+    }
+    if !by_locale.contains_key("en") {
         return Err(invalid(format!(
-            "notify.users: \"{key}\" is not in the manifest i18n"
+            "notify.users: \"{key}\" needs an English entry in the manifest i18n"
         )));
     }
     Ok(by_locale)
@@ -120,6 +140,11 @@ pub async fn send(
             local_path(what, v)?;
         }
     }
+    if n.image.as_deref().is_some_and(|i| !i.starts_with(IMAGES)) {
+        return Err(invalid(format!(
+            "notify.users: image must be under {IMAGES}"
+        )));
+    }
     let (mut url, mut image) = (n.url, n.image);
     if let Some(m) = n.media_id {
         let (_, kind) = media_row(st, m as i32)
@@ -128,17 +153,24 @@ pub async fn send(
         url.get_or_insert_with(|| media_url(m as i32, kind));
         image.get_or_insert_with(|| poster(m as i32));
     }
+    let to = match audience {
+        w::NotifyAudience::Users(u) => u.into_iter().map(|u| u as i32).collect(),
+        w::NotifyAudience::Recipients(m) => recipients(st, Some(m as i32)).await,
+        w::NotifyAudience::Viewers(m) => viewers(st, Some(m as i32)).await,
+    };
+    let category = format!("{PLUGIN_PREFIX}{id}");
+    let to = push::eligible(st, &to, &category)
+        .await
+        .map_err(|e| host_err("ERR", e.to_string()))?;
+    if to.is_empty() {
+        return Ok(());
+    }
     if !st.plugins.notify.take(id) {
         return Err(host_err(
             "ERR_RATE_LIMITED",
             "notify.users: 10 notifications per hour",
         ));
     }
-    let to = match audience {
-        w::NotifyAudience::Users(u) => u.into_iter().map(|u| u as i32).collect(),
-        w::NotifyAudience::Recipients(m) => recipients(st, Some(m as i32)).await,
-        w::NotifyAudience::Viewers(m) => viewers(st, Some(m as i32)).await,
-    };
     let params: Map<String, Value> = n
         .params
         .into_iter()
@@ -149,7 +181,7 @@ pub async fn send(
         st,
         to,
         Notification {
-            category: format!("{PLUGIN_PREFIX}{id}"),
+            category,
             title: Msg::Table {
                 by_locale: title,
                 params: params.clone(),
@@ -187,18 +219,29 @@ mod tests {
 
     #[test]
     fn texts_come_from_the_manifest_by_base_language() {
-        let m =
-            json!({"i18n": {"en": {"a.t": "Hi"}, "fr-FR": {"a.t": "Salut"}, "xx": {"a.t": "?"}}});
+        let m = json!({"i18n": {
+            "en": {"a.t": "Hi"}, "fr-FR": {"a.t": "Salut FR"}, "fr-CA": {"a.t": "Salut CA"}, "xx": {"a.t": "?"}}});
         let t = table(&m, "a.t").unwrap();
-        assert_eq!(t.get("fr").map(String::as_str), Some("Salut"));
+        assert_eq!(t.get("fr").map(String::as_str), Some("Salut CA"));
         assert_eq!(t.len(), 2);
+        let m = json!({"i18n": {"fr-FR": {"a.t": "Salut"}, "fr": {"a.t": "Plain"}, "en": {"a.t": "Hi"}}});
+        assert_eq!(table(&m, "a.t").unwrap()["fr"], "Plain");
         assert!(table(&m, "a.missing").is_err());
+        assert!(table(&json!({"i18n": {"fr": {"a.t": "Salut"}}}), "a.t").is_err());
     }
 
     #[test]
     fn urls_stay_on_the_server() {
         assert!(local_path("url", "/series/3").is_ok());
-        for bad in ["//evil.example", "https://evil.example", "series", "/a\nb"] {
+        for bad in [
+            "//evil.example",
+            "/\\evil.example/x",
+            "/%2f%2fevil.example",
+            "/%5Cevil.example",
+            "https://evil.example",
+            "series",
+            "/a\nb",
+        ] {
             assert!(local_path("url", bad).is_err(), "{bad}");
         }
     }

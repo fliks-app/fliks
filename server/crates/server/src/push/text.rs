@@ -110,7 +110,6 @@ impl Texts {
                 let template = by_locale
                     .get(lang)
                     .or_else(|| by_locale.get("en"))
-                    .or_else(|| by_locale.values().next())
                     .cloned()
                     .unwrap_or_default();
                 interpolate(&template, params)
