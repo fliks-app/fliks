@@ -273,6 +273,11 @@ export class RemotePickerListComponent {
       // One destination at a time, the same rule `selectTarget` applies the
       // other way round.
       this.remote.selectTarget(null);
+      // From this device a connect is a move: what plays here, else the account session, starts on the receiver.
+      if (this.session.isLocal()) {
+        void this.session.moveTo('cast', row.kind === 'cast' ? row.id : undefined);
+        return;
+      }
     }
     if (row.kind === 'cast') {
       void this.selectCastDevice(row.id);

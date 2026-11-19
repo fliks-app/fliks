@@ -161,6 +161,16 @@ describe('RemotePickerListComponent while controlling a device', () => {
     expect(moveTo).not.toHaveBeenCalled();
   });
 
+  it('moves to a Cast device from this device, so what plays or the account session starts there', () => {
+    const moveTo = vi.fn();
+    const selectTarget = vi.fn();
+    const { component } = setup({ session: { isLocal: signal(true), moveTo }, remote: { selectTarget } });
+    component.selectRow({ kind: 'cast', id: 'cc#1', icon: 'cast', label: 'Lounge', subtitle: null, connected: false });
+    expect(moveTo).toHaveBeenCalledWith('cast', 'cc#1');
+    component.selectRow({ kind: 'cast-web', id: 'web-chromecast', icon: 'cast', label: 'Chromecast', subtitle: null, connected: false });
+    expect(moveTo).toHaveBeenLastCalledWith('cast', undefined);
+  });
+
   it('selects the device when the session does not move there', () => {
     const moveTo = vi.fn();
     const selectTarget = vi.fn();
