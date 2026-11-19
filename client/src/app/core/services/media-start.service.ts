@@ -7,6 +7,7 @@ import { asBookMedia, readable, type BookMedia } from './api/book-media';
 import { BooksApiService } from './api/books-api.service';
 import type { BookDetail, BookEdition, BookFormatFamily } from './api/books.models';
 import { Media, MediaService } from './api/media.service';
+import { MusicDownloadsService } from './music-downloads.service';
 import type { ContinueWatchingItem } from './api/streaming-api.service';
 import type { QueueItem } from './playback-queue.service';
 import { PlayableMediaService } from './playable-media.service';
@@ -50,6 +51,7 @@ export class MediaStartService {
   private readonly playable = inject(PlayableMediaService);
   private readonly audio = inject(AudioPlayerService);
   private readonly queue = inject(PlaybackQueueService);
+  private readonly musicTracks = inject(MusicDownloadsService);
 
   private starting = false;
 
@@ -87,7 +89,7 @@ export class MediaStartService {
     const url = this.router.url;
     if (media.type === 'book') return this.startBook(media, url);
     if (media.type === 'comic') return this.startComic(media, url);
-    if (media.type === 'album') return this.openDetail(media);
+    if (media.type === 'album') return this.startAlbum(media, url);
     const full = media.files?.length ? (media as Media) : await this.mediaService.getOne(media.id);
     const file = full.files?.[0];
     if (!file) return void this.openDetail(full);
@@ -140,6 +142,12 @@ export class MediaStartService {
     if (read && (lead !== 'audio' || !audible)) return void this.router.navigate(readRoute(full.id, read.itemId!));
     if (audible) return this.listen(full);
     this.openDetail(full);
+  }
+
+  private async startAlbum(media: StartTarget, url: string): Promise<void> {
+    const tracks = await this.musicTracks.albumTracks(media.id);
+    if (tracks.length) return this.audio.playTracks(tracks);
+    if (this.router.url === url) this.openDetail(media);
   }
 
   private async startComic(media: StartTarget, url: string): Promise<void> {

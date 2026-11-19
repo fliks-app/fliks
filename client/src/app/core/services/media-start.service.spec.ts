@@ -5,6 +5,7 @@ import { AudioPlayerService } from './audio-player/audio-player.service';
 import { BooksApiService } from './api/books-api.service';
 import { MediaService } from './api/media.service';
 import { MediaStartService } from './media-start.service';
+import { MusicDownloadsService } from './music-downloads.service';
 import { PlayableMediaService } from './playable-media.service';
 import { PlaybackQueueService } from './playback-queue.service';
 
@@ -16,10 +17,11 @@ const book = (editions: unknown[], progress: unknown = null, series: unknown[] =
 });
 const issue = (o: Record<string, unknown>) => ({ itemId: 1, mediaFileId: 1, kind: 'issue', finished: false, progression: null, ...o });
 
-function setup(full?: unknown) {
+function setup(full?: unknown, tracks: unknown[] = []) {
   const router = { navigate: vi.fn().mockResolvedValue(true) };
   const playable = { play: vi.fn().mockResolvedValue(undefined), resume: vi.fn().mockResolvedValue(undefined), playFromPlaylist: vi.fn().mockResolvedValue(true) };
-  const audio = { play: vi.fn().mockResolvedValue(undefined) };
+  const audio = { play: vi.fn().mockResolvedValue(undefined), playTracks: vi.fn().mockResolvedValue(undefined) };
+  const music = { albumTracks: vi.fn().mockResolvedValue(tracks) };
   const queue = { start: vi.fn(), clear: vi.fn() };
   const media = { getOne: vi.fn().mockResolvedValue(full) };
   const books = { collection: vi.fn().mockResolvedValue({ entries: [{ media: { id: 6, title: 'a' } }, { media: { id: 7, title: 'b' } }] }) };
@@ -31,6 +33,7 @@ function setup(full?: unknown) {
       { provide: PlaybackQueueService, useValue: queue },
       { provide: MediaService, useValue: media },
       { provide: BooksApiService, useValue: books },
+      { provide: MusicDownloadsService, useValue: music },
     ],
   });
   return { svc: TestBed.inject(MediaStartService), router, playable, audio, queue, media };
@@ -47,6 +50,13 @@ describe('MediaStartService', () => {
     const h = setup({ id: 3, type: 'movie', files: [] });
     await h.svc.start({ id: 3, type: 'movie' } as any);
     expect(h.router.navigate).toHaveBeenCalledWith(['/movies', '3']);
+  });
+
+  it('plays an album from its first track', async () => {
+    const h = setup(undefined, [{ itemId: 1 }, { itemId: 2 }]);
+    await h.svc.start({ id: 4, type: 'album' } as any);
+    expect(h.audio.playTracks).toHaveBeenCalledWith([{ itemId: 1 }, { itemId: 2 }]);
+    expect(h.router.navigate).not.toHaveBeenCalled();
   });
 
   it('opens the reader on the readable edition of a book, fetching the full media', async () => {
