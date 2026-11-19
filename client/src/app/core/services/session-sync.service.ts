@@ -212,6 +212,7 @@ export class SessionSyncService {
       await this.router.navigate(['/watch', s.item.mediaFileId], {
         replaceUrl: overPlayer,
         queryParams: { mediaId: s.item.mediaId, ...episode, t: Math.floor(positionSeconds) },
+        state: { paused: !s.playing },
       });
     });
 

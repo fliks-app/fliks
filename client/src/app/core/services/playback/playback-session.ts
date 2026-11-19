@@ -35,6 +35,8 @@ export interface PlayItem {
   streamInfo?: any;
   /** Where the caller knows playback stopped; a remote target and the cast receiver start there. */
   positionSeconds?: number;
+  /** The cast receiver loads paused. */
+  paused?: boolean;
   /** Picks made on the detail header; the target honours them once, whichever it is. */
   tracks?: LaunchTracks;
 }
@@ -329,6 +331,7 @@ export class PlaybackSession {
         streamInfo: item.streamInfo,
         startTime: startAt ?? item.positionSeconds,
         tracks: item.tracks,
+        autoplay: !item.paused,
       });
     } else if (kind === 'local') {
       const query: Record<string, number> = { mediaId: item.mediaId, ...opts.query };

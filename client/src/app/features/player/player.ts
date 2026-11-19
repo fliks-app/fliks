@@ -1167,8 +1167,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (video) this.detachAirPlay = this.airPlay.attachVideo(video);
 
     // Eager backdrop from router state, set before any await so the loading screen renders on the first tick.
-    const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { backdropUrl?: string | null; tracks?: LaunchTracks | null; snapshot?: PlaybackSnapshot | null } | null;
+    const navState = (this.router.getCurrentNavigation()?.extras?.state ?? history.state) as { backdropUrl?: string | null; tracks?: LaunchTracks | null; snapshot?: PlaybackSnapshot | null; paused?: boolean } | null;
     const launch = navState?.snapshot;
+    const launchPaused = launch?.paused ?? navState?.paused ?? false;
     this.launchTracks = launch?.tracks ?? navState?.tracks ?? null;
     if (navState?.backdropUrl) this.showBackdrop(navState.backdropUrl);
 
@@ -1195,12 +1196,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.destroyed) return;
     if (this.session.isLocal()) {
       this.attachLocalOutput();
-      const completed = await this.openLocal({ position: resumeTime, paused: launch?.paused ?? false, tracks: this.launchTracks }, false);
+      const completed = await this.openLocal({ position: resumeTime, paused: launchPaused, tracks: this.launchTracks }, false);
       // Everything above awaits, so a back-out mid-launch runs ngOnDestroy first and its removals would miss the
       // listeners registered below.
       if (!completed || this.destroyed) return;
     } else {
-      await this.openOnOutput(resumeTime);
+      await this.openOnOutput(resumeTime, launchPaused);
       this.state.loading.set(false);
       if (this.destroyed) return;
       this.loadMediaAside();
@@ -3088,7 +3089,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** The route opened while another output plays: no engine. The route's item goes there when it differs. */
-  private async openOnOutput(resumeTime: number | undefined): Promise<void> {
+  private async openOnOutput(resumeTime: number | undefined, paused: boolean): Promise<void> {
     if (this.session.claimOpened(this.mediaFileId)) return;
     const cur = this.session.output()?.item();
     if (cur && cur.mediaId === this.mediaId && cur.episodeId === this.episodeId) return;
@@ -3098,6 +3099,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         mediaId: this.mediaId,
         episodeId: this.episodeId,
         positionSeconds: resumeTime,
+        paused,
         tracks: this.launchTracks ?? undefined,
       },
       { fromStart: resumeTime === 0 },
