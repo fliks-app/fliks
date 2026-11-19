@@ -15,23 +15,29 @@ struct RootView: View {
     @State private var playlistPicker = PlaylistPicker.shared
     @State private var party = PartyService.shared
     @State private var remote = RemoteControlService.shared
+    @State private var toasts = NotificationToastService.shared
     @State private var path = NavigationPath()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         content
             .overlay(alignment: .bottom) { PartyNotice() }
+            .overlay(alignment: .top) { NotificationToastView(service: toasts) }
             .task {
                 if server.isConfigured { await auth.bootstrap() }
             }
             .task(id: auth.state) {
                 if auth.state == .signedIn { await watched.loadOverview() }
                 updateRemotePolling()
+                updateToastStream()
             }
             .task(id: homeRefresh.tick) {
                 if auth.state == .signedIn { await watched.loadOverview() }
             }
-            .onChange(of: scenePhase) { _, _ in updateRemotePolling() }
+            .onChange(of: scenePhase) { _, _ in
+                updateRemotePolling()
+                updateToastStream()
+            }
             .onChange(of: party.active) { _, active in if !active { MusicPartyDriver.shared.detach() } }
             .onAppear {
                 RemoteControlService.shared.onLoadRequested = { mediaFileId, mediaId, episodeId, startAt, startPaused, tracks in
@@ -97,6 +103,11 @@ struct RootView: View {
             .environment(playlistPicker)
             .environment(party)
             .id(locale.lang)
+    }
+
+    /// The notification stream runs only while signed in and foregrounded.
+    private func updateToastStream() {
+        if scenePhase == .active, auth.state == .signedIn { toasts.start() } else { toasts.stop() }
     }
 
     /// Poll only while signed in and foregrounded: no point keeping a target

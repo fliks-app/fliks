@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 
 /// The server's SSE stream, opened with a one-time ticket and re-opened with a fresh one after every drop.
-/// The app polls everything else; only a watch party needs it, so it runs only while one is joined.
+/// The app polls everything else; a watch party and the notification toast are its only consumers.
 @MainActor
 final class ServerEventStream {
     private(set) var connected = false
@@ -20,7 +20,7 @@ final class ServerEventStream {
         session = URLSession(configuration: config)
     }
 
-    func start(deviceId: String) {
+    func start(deviceId: String?) {
         guard task == nil else { return }
         task = Task { [weak self] in
             var delay = 1.0
@@ -49,16 +49,17 @@ final class ServerEventStream {
     private struct Ticket: Decodable { let ticket: String }
 
     /// One connection; true when it reached `sse.connected` before ending.
-    private func run(deviceId: String) async -> Bool {
+    private func run(deviceId: String?) async -> Bool {
         do {
             let ticket: Ticket = try await APIClient.shared.post("/api/system/events/ticket")
             guard var comps = URLComponents(string: ServerStore.shared.resolveUrl("/api/system/events")) else { return false }
             comps.queryItems = [
                 URLQueryItem(name: "ticket", value: ticket.ticket),
-                URLQueryItem(name: "device", value: deviceId),
                 URLQueryItem(name: "ff", value: "tv"),
                 URLQueryItem(name: "name", value: DeviceName.current),
+                URLQueryItem(name: "lang", value: LocaleStore.shared.lang),
             ]
+            if let deviceId { comps.queryItems?.append(URLQueryItem(name: "device", value: deviceId)) }
             guard let url = comps.url else { return false }
             var req = URLRequest(url: url)
             req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
