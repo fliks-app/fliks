@@ -15,11 +15,11 @@
 
 ### Dev database re-baseline
 
-Dev DBs built by TypeORM `synchronize` have an empty migrations ledger and `fliks-server migrate` refuses them. Once per dev DB, from the repo root (`dc` = `docker compose -f docker-compose.yml`):
+Dev DBs built by TypeORM `synchronize` have an empty migrations ledger and `fliks-server migrate` refuses them. The same recipe fixes a DB that applied unreleased migrations later consolidated (sqlx `migration N was previously applied but is missing in the resolved migrations`, or `has been modified`). Once per dev DB, from the repo root (`dc` = `docker compose -f docker-compose.yml`):
 
 ```bash
 dc stop server
-dc exec -T postgres sh -c 'pg_dump -U $POSTGRES_USER -Fc -T migrations $POSTGRES_DB' > .dev/fliks.dump
+dc exec -T postgres sh -c 'pg_dump -U $POSTGRES_USER -Fc -T migrations -T _sqlx_migrations $POSTGRES_DB' > .dev/fliks.dump
 dc exec postgres sh -c 'dropdb -U $POSTGRES_USER $POSTGRES_DB && createdb -U $POSTGRES_USER $POSTGRES_DB'
 dc run --rm server cargo run -p fliks-server -- migrate
 echo "SELECT 'TRUNCATE ' || string_agg(format('%I', tablename), ',') || ' CASCADE' FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_sqlx_migrations' \gexec" | dc exec -T postgres sh -c 'psql -U $POSTGRES_USER $POSTGRES_DB'

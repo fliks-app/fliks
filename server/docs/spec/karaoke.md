@@ -50,7 +50,7 @@ Scope: what the host does with the engine's karaoke jobs (`fliks-engine` `docs/s
 
 ## Wire and migration
 
-22. `1789000000970_karaoke.sql` creates `derived_audio` (an index led by `mediaFileId` through the unique key, `set_updated_at`). Two SSE events join the catalogue, `karaoke.model_changed` and `karaoke.job_changed`; neither is a domain event.
+22. `1789000000970_karaoke-session-party.sql` creates `derived_audio` (an index led by `mediaFileId` through the unique key, `set_updated_at`). Two SSE events join the catalogue, `karaoke.model_changed` and `karaoke.job_changed`; neither is a domain event.
 
 ## Experience (F11, partly)
 

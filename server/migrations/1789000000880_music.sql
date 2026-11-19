@@ -247,16 +247,121 @@ CREATE TABLE "item_works" (
 );
 CREATE INDEX "IDX_item_works_work" ON "item_works" ("workId");
 
--- A user's star rating of an item (no row = unrated); favourites are the item-level `likes`
-CREATE TABLE "item_ratings" (
-  "userId" integer NOT NULL,
+-- What a music provider says of an artist beside its name: how to file and tell it apart
+ALTER TABLE "persons"
+  ADD COLUMN "disambiguation" text CONSTRAINT "CK_persons_disambiguation" CHECK ("disambiguation" <> ''),
+  ADD COLUMN "artistType" text CONSTRAINT "CK_persons_artistType"
+    CHECK ("artistType" IN ('person', 'group', 'orchestra', 'choir', 'character', 'other'));
+
+-- The search reads the sort name too ("Beatles, The")
+CREATE OR REPLACE FUNCTION persons_search_vector_update() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW."searchVector" := to_tsvector('simple', NEW.name || ' ' || COALESCE(NEW."sortName", ''));
+  RETURN NEW;
+END $$;
+DROP TRIGGER persons_search_vector ON persons;
+CREATE TRIGGER persons_search_vector BEFORE INSERT OR UPDATE OF name, "sortName"
+  ON persons FOR EACH ROW EXECUTE FUNCTION persons_search_vector_update();
+ALTER TABLE persons DISABLE TRIGGER set_updated_at;
+UPDATE persons SET "searchVector" = to_tsvector('simple', name || ' ' || COALESCE("sortName", ''))
+ WHERE "sortName" IS NOT NULL;
+ALTER TABLE persons ENABLE TRIGGER set_updated_at;
+
+-- Works are searched by title
+ALTER TABLE "works" ADD COLUMN "searchVector" tsvector;
+CREATE FUNCTION works_search_vector_update() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW."searchVector" := to_tsvector('simple', NEW.title);
+  RETURN NEW;
+END $$;
+CREATE TRIGGER works_search_vector BEFORE INSERT OR UPDATE OF title
+  ON works FOR EACH ROW EXECUTE FUNCTION works_search_vector_update();
+CREATE INDEX "IDX_works_search_vector" ON "works" USING gin ("searchVector");
+
+-- Which release groups and releases a library of albums wants (NULL: the default profile, `music.md` rule 44)
+ALTER TABLE "libraries"
+  ADD COLUMN "metadataProfile" jsonb CONSTRAINT "CK_libraries_metadataProfile"
+    CHECK ("metadataProfile" IS NULL OR jsonb_typeof("metadataProfile") = 'object');
+
+-- MP3-320 and MP3-V0 (ids 116, 117) were part of the MP3-256k bucket: an audio profile that allowed it allows both
+ALTER TABLE "quality_profiles" DISABLE TRIGGER set_updated_at;
+UPDATE "quality_profiles" p SET "items" = p."items" || (
+  SELECT jsonb_agg(jsonb_set(jsonb_set(src.e, '{quality,id}', to_jsonb(n.id)), '{quality,name}', to_jsonb(n.name)))
+  FROM (SELECT t.e FROM jsonb_array_elements(p."items") AS t(e)
+         WHERE (t.e->'quality'->>'id')::int = 104 AND (t.e->>'allowed')::boolean LIMIT 1) src,
+       (VALUES (116, 'MP3-320'), (117, 'MP3-V0')) AS n(id, name))
+WHERE p."family" = 'audio'
+  AND EXISTS (SELECT 1 FROM jsonb_array_elements(p."items") e
+               WHERE (e->'quality'->>'id')::int = 104 AND (e->>'allowed')::boolean)
+  AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(p."items") e WHERE (e->'quality'->>'id')::int = 116);
+ALTER TABLE "quality_profiles" ENABLE TRIGGER set_updated_at;
+
+-- The two rows reach a database whose audio definitions were seeded already (a fresh one seeds all of them)
+INSERT INTO "quality_definitions" ("family", "qualityId", "title", "minSize", "preferredSize", "maxSize")
+SELECT 'audio', v.id, v.title, v.min, v.preferred, v.max
+FROM (VALUES (116, 'MP3-320', 80.0, 150.0, 320.0), (117, 'MP3-V0', 60.0, 130.0, 270.0)) AS v(id, title, min, preferred, max)
+WHERE EXISTS (SELECT 1 FROM "quality_definitions" WHERE "family" = 'audio')
+ON CONFLICT ("family", "qualityId") DO NOTHING;
+
+-- A Subsonic client authenticates with token and salt, which needs the cleartext password: a `subsonic` row keeps it encrypted
+ALTER TYPE "device_token_kind" ADD VALUE IF NOT EXISTS 'subsonic';
+ALTER TABLE "device_tokens" ADD COLUMN "secret" bytea,
+  ADD CONSTRAINT "CK_device_tokens_secret" CHECK ("secret" IS NULL OR "kind"::text = 'subsonic');
+
+-- A smart playlist keeps its rules instead of rows: NULL is a static playlist (playlists.md rule 50)
+ALTER TABLE "playlists"
+  ADD COLUMN "rules" jsonb CONSTRAINT "CK_playlists_rules" CHECK (jsonb_typeof("rules") = 'object');
+
+-- The plugin that created a playlist: `playlist.sync` writes only the playlists it created (plugins.md rule 62)
+ALTER TABLE "playlists" ADD COLUMN "pluginId" varchar(255);
+CREATE UNIQUE INDEX "UQ_playlists_plugin_owner_name" ON "playlists" ("ownerId", "pluginId", "name")
+  WHERE "pluginId" IS NOT NULL;
+
+-- Lyrics belong to the track item; the file only stamps the audio they were found in or timed on (music.md rule 61)
+CREATE TABLE "lyrics" (
+  "id" serial NOT NULL,
   "itemId" integer NOT NULL,
-  "rating" smallint NOT NULL CONSTRAINT "CK_item_ratings_rating" CHECK ("rating" BETWEEN 1 AND 5),
+  "mediaFileId" integer,
+  "kind" text NOT NULL DEFAULT 'main' CONSTRAINT "CK_lyrics_kind" CHECK ("kind" IN ('main', 'translation', 'pronunciation')),
+  "lang" text NOT NULL DEFAULT 'und' CONSTRAINT "CK_lyrics_lang" CHECK ("lang" ~ '^[a-z0-9]{1,8}$'),
+  "sync" text NOT NULL CONSTRAINT "CK_lyrics_sync" CHECK ("sync" IN ('none', 'line', 'word')),
+  "source" text NOT NULL CONSTRAINT "CK_lyrics_source" CHECK (
+    length("source") <= 93
+    AND "source" ~ '^(embedded|sidecar|user|generated|provider:([a-z][a-z0-9]{1,31}|[a-z][a-z0-9]*(\.[a-z0-9]+)*:[a-z][a-z0-9-]{0,31}))$'),
+  "sourceRef" text,
+  "offsetMs" integer NOT NULL DEFAULT 0 CONSTRAINT "CK_lyrics_offset" CHECK ("offsetMs" BETWEEN -60000 AND 60000),
+  "audioDurationMs" integer,
+  "doc" jsonb NOT NULL CONSTRAINT "CK_lyrics_doc" CHECK (jsonb_typeof("doc") = 'object'),
+  "raw" text,
+  "reviewed" boolean NOT NULL DEFAULT false,
+  "preferred" boolean NOT NULL DEFAULT false,
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   "updatedAt" timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT "PK_item_ratings" PRIMARY KEY ("userId", "itemId"),
-  CONSTRAINT "FK_item_ratings_user" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE,
-  CONSTRAINT "FK_item_ratings_item" FOREIGN KEY ("itemId") REFERENCES "items"("id") ON DELETE CASCADE
+  CONSTRAINT "PK_lyrics" PRIMARY KEY ("id"),
+  CONSTRAINT "FK_lyrics_item" FOREIGN KEY ("itemId") REFERENCES "items"("id") ON DELETE CASCADE,
+  CONSTRAINT "FK_lyrics_media_file" FOREIGN KEY ("mediaFileId") REFERENCES "media_files"("id") ON DELETE SET NULL
 );
-CREATE INDEX "IDX_item_ratings_item" ON "item_ratings" ("itemId");
-CREATE TRIGGER set_updated_at BEFORE UPDATE ON "item_ratings" FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE UNIQUE INDEX "UQ_lyrics_item_layer" ON "lyrics" ("itemId", "kind", "lang", "source");
+CREATE INDEX "IDX_lyrics_media_file" ON "lyrics" ("mediaFileId");
+-- One preferred row per layer
+CREATE UNIQUE INDEX "UQ_lyrics_preferred" ON "lyrics" ("itemId", "kind", "lang") WHERE "preferred";
+CREATE TRIGGER set_updated_at BEFORE UPDATE ON "lyrics" FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- What a provider answered for a track, so a miss is not asked again at once (music.md rule 68)
+CREATE TABLE "lyrics_lookups" (
+  "itemId" integer NOT NULL,
+  "provider" text NOT NULL,
+  "status" text NOT NULL CONSTRAINT "CK_lyrics_lookups_status" CHECK ("status" IN ('found', 'miss', 'instrumental')),
+  "checkedAt" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "PK_lyrics_lookups" PRIMARY KEY ("itemId", "provider"),
+  CONSTRAINT "FK_lyrics_lookups_item" FOREIGN KEY ("itemId") REFERENCES "items"("id") ON DELETE CASCADE
+);
+
+-- An album request scoped to some tracks: their MusicBrainz recording ids and the size of the release.
+-- An album request carries its wants as a book request does.
+ALTER TABLE "requests" ADD COLUMN "recordings" text[], ADD COLUMN "trackCount" integer,
+  DROP CONSTRAINT "CK_requests_wants",
+  ADD CONSTRAINT "CK_requests_wants" CHECK (("mediaType" IN ('book', 'album') AND kind = 'add') = ("wants" IS NOT NULL)),
+  ADD CONSTRAINT "CK_requests_recordings" CHECK (
+    "recordings" IS NULL OR ("mediaType" = 'album' AND kind = 'add' AND cardinality("recordings") > 0)),
+  ADD CONSTRAINT "CK_requests_trackCount" CHECK ("trackCount" IS NULL OR "recordings" IS NOT NULL);

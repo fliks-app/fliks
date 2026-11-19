@@ -53,7 +53,7 @@ Scope: the music API third-party players speak (OpenSubsonic, a superset of Subs
 
 ## Migration
 
-32. `1789000000940_device-token-subsonic.sql` adds the `subsonic` value to `device_token_kind`; `1789000000941_device-token-secret.sql` adds `device_tokens."secret" bytea` with `CK_device_tokens_secret CHECK ("secret" IS NULL OR "kind" = 'subsonic')`. Two files because a new enum value cannot be used in the transaction that adds it.
+32. `1789000000880_music.sql` adds the `subsonic` value to `device_token_kind` and `device_tokens."secret" bytea` with `CK_device_tokens_secret CHECK ("secret" IS NULL OR "kind"::text = 'subsonic')` (cast to text: a new enum value cannot be used in the transaction that adds it).
 
 ## Lyrics and smart playlists
 

@@ -343,3 +343,32 @@ async fn a_refused_adoption_leaves_the_4x_database_as_it_was(admin: PgPool) {
     assert_eq!(count(&pool, "media_files").await, 3);
     dispose(&admin, pool).await;
 }
+
+#[sqlx::test(migrations = false)]
+async fn track_search_text_follows_a_rename_and_a_move(pool: PgPool) {
+    fliks_server::db::migrate(&pool).await.unwrap();
+    sql(
+        &pool,
+        r#"INSERT INTO media (title, type) VALUES ('Album A', 'album'), ('Album B', 'album');
+           INSERT INTO editions ("mediaId", family) SELECT id, 'audio' FROM media;
+           INSERT INTO items (title, "mediaId", "editionId")
+             SELECT 'Song', m.id, e.id FROM media m JOIN editions e ON e."mediaId" = m.id;
+           INSERT INTO track_details ("itemId", "mediaId", position) SELECT id, "mediaId", 1 FROM items;"#,
+    )
+    .await;
+    sql(
+        &pool,
+        r#"WITH a AS (UPDATE items SET title = 'Renamed', "mediaId" = 2,
+                        "editionId" = (SELECT id FROM editions WHERE "mediaId" = 2) WHERE id = 1 RETURNING 1)
+           UPDATE track_details SET "mediaId" = 2 WHERE "itemId" = 1"#,
+    )
+    .await;
+    let (text, expected): (String, String) = sqlx::query_as(
+        r#"SELECT "searchText", track_search_text("itemId", label) FROM track_details WHERE "itemId" = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(text, expected);
+    assert!(text.starts_with("Renamed Album B"), "{text}");
+}
