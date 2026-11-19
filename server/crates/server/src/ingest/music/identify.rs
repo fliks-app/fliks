@@ -322,18 +322,8 @@ async fn language(st: &AppState, media: i32) -> Result<Resolved, AppError> {
     })
 }
 
-/// Links `media` to the release the files were matched to and writes it. A release another album already
-/// holds (its id or an alias of it) absorbs this album instead.
-async fn apply(
-    st: &AppState,
-    media: i32,
-    found: Found,
-    lang: &Resolved,
-    prio: Priority,
-) -> Result<Outcome, AppError> {
-    link_release(st, media, found.fetched, found.edition, lang, prio).await
-}
-
+/// Links `media` to the release and writes it. A release another album already holds (its id or an alias)
+/// absorbs this album instead.
 async fn link_release(
     st: &AppState,
     media: i32,
@@ -485,7 +475,7 @@ pub async fn identify(
                 scored,
             };
             tracing::info!("album #{media}: {}", found.describe("named by its tags"));
-            return apply(st, media, found, &lang, prio).await;
+            return link_release(st, media, found.fetched, found.edition, &lang, prio).await;
         }
     }
     let artist_id = tags
@@ -536,7 +526,7 @@ pub async fn identify(
     match best {
         Some(b) if apply_best && b.scored.verdict(&cfg) == Verdict::Auto => {
             tracing::info!("album #{media}: applying {}", b.describe("best match"));
-            apply(st, media, b, &lang, prio).await
+            link_release(st, media, b.fetched, b.edition, &lang, prio).await
         }
         best if !review.is_empty() => {
             if let Some(b) = best {

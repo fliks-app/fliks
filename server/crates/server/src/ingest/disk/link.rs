@@ -394,7 +394,8 @@ fn naming_folder_format(f: &naming::NamingFormats, kind: MediaKind) -> &str {
     match kind {
         MediaKind::Movie => &f.movie_folder,
         MediaKind::Series => &f.series_folder,
-        MediaKind::Book | MediaKind::Comic | MediaKind::Album => &f.book_folder,
+        MediaKind::Book | MediaKind::Comic => &f.book_folder,
+        MediaKind::Album => &f.album_folder,
     }
 }
 

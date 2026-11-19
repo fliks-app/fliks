@@ -685,7 +685,7 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
         let files: Vec<Key> = at.iter().map(|i| Key::of(&todo[*i].1)).collect();
         let keys: Vec<Key> = tracks.iter().map(|f| f.key.clone()).collect();
         let mut got = assign(&files, &keys);
-        // The one targeted track left free takes the one file left over, unless the tags contradict it.
+        // The one targeted track left free takes the one file left over, unless their lengths differ.
         let aimed: Vec<usize> = (0..tracks.len())
             .filter(|j| targets.contains(&tracks[*j].item) && !got.contains(&Some(*j)))
             .collect();

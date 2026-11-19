@@ -334,10 +334,8 @@ pub(crate) async fn create_from(
     Ok(Created::New(media))
 }
 
-/// The album of a request: the release in the request's library with its audio want, or the want added to the
-/// album the library already holds (403 when that one sits in a library outside `readable`); the flag tells
-/// whether this call created the album. A request scoped to some tracks (`scoped`) creates the album with
-/// every track unmonitored.
+/// The album of a request, and whether this call created it: the release in the request's library, or the
+/// held album (403 outside `readable`) given the want. `scoped` creates it with every track unmonitored.
 pub async fn import_album_for_request(
     st: &AppState,
     release: &str,

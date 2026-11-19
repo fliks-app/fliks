@@ -51,8 +51,7 @@ impl Key {
     }
 
     /// The pass that pairs `self` with `o` (0 recording, 1 ISRC, 2 disc and number, 3 title), or `None`.
-    /// An id only confirms a pair (a recording has several ISRCs, a merged recording another id);
-    /// positions and titles need near lengths.
+    /// An id only confirms a pair; positions and titles need near lengths.
     fn rank(&self, o: &Key) -> Option<u8> {
         let same = |a: &Option<String>, b: &Option<String>| {
             a.as_ref()

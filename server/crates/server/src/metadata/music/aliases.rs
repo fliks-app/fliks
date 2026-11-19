@@ -233,7 +233,7 @@ async fn editions_of(
 }
 
 /// An album holds one edition: filed tracks of `old` take over the free tracks of `kept` they pair with, or
-/// join the filed ones as older versions; `old` goes with the rest.
+/// join the filed ones as older versions; the free ones hand their rows over.
 async fn merge_editions(c: &mut PgConnection, old: i32, kept: i32) -> sqlx::Result<()> {
     let load = |edition: i32, filed: bool| {
         let clause = if filed { "EXISTS" } else { "NOT EXISTS" };
@@ -262,6 +262,21 @@ async fn merge_editions(c: &mut PgConnection, old: i32, kept: i32) -> sqlx::Resu
     for (t, twin) in rest.iter().zip(&by_held) {
         if let Some(twin) = twin {
             add_versions(c, t.item, held[*twin].item).await?;
+        }
+    }
+    let unfiled = load(old, false).fetch_all(&mut *c).await?;
+    let present =
+        sqlx::query_as::<_, Track>(sqlx::AssertSqlSafe(format!("{TRACKS} TRUE ORDER BY i.id")))
+            .bind(kept)
+            .fetch_all(&mut *c)
+            .await?;
+    let by_present = assign(
+        &keys(&unfiled.iter().collect::<Vec<_>>()),
+        &keys(&present.iter().collect::<Vec<_>>()),
+    );
+    for (t, twin) in unfiled.iter().zip(&by_present) {
+        if let Some(twin) = twin {
+            move_user_rows(c, t.item, present[*twin].item).await?;
         }
     }
     sqlx::query(
@@ -368,11 +383,15 @@ async fn add_versions(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Resul
             .await?;
         }
     }
-    sqlx::query(r#"UPDATE item_parts SET "itemId" = $2 WHERE "itemId" = $1"#)
-        .bind(from)
-        .bind(into)
-        .execute(&mut *c)
-        .await?;
+    // One statement: the chapter key onto `item_parts` is checked at its end.
+    sqlx::query(
+        r#"WITH m AS (UPDATE item_markers SET "itemId" = $2 WHERE "itemId" = $1 AND "mediaFileId" IS NOT NULL)
+           UPDATE item_parts SET "itemId" = $2 WHERE "itemId" = $1"#,
+    )
+    .bind(from)
+    .bind(into)
+    .execute(&mut *c)
+    .await?;
     move_user_rows(c, from, into).await?;
     sqlx::query("DELETE FROM items WHERE id = $1")
         .bind(from)
@@ -384,8 +403,8 @@ async fn add_versions(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Resul
 /// Far above any version number: parks the numbers of a table while they shift.
 const VERSION_PARK: i32 = 1_000_000;
 
-/// The rows that hang on the track `from` (likes, plays, lyrics, playlist entries, annotations, party rows) move
-/// to `to`, one by one: one that `to` holds already stays and goes with `from`.
+/// The rows that hang on the track `from` (likes, plays, lyrics, playlists, annotations, party rows) move to
+/// `to`; a row `to` holds a twin of stays and goes with `from`.
 async fn move_user_rows(c: &mut PgConnection, from: i32, to: i32) -> sqlx::Result<()> {
     let columns: Vec<(String, String)> = sqlx::query_as(
         r#"SELECT DISTINCT c.conrelid::regclass::text, quote_ident(a.attname)
@@ -398,28 +417,27 @@ async fn move_user_rows(c: &mut PgConnection, from: i32, to: i32) -> sqlx::Resul
     .fetch_all(&mut *c)
     .await?;
     for (table, column) in columns {
-        let rows: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-            "SELECT ctid::text FROM {table} WHERE {column} = $1"
+        sqlx::query("SAVEPOINT move_rows").execute(&mut *c).await?;
+        let bulk = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "UPDATE {table} SET {column} = $1 WHERE {column} = $2"
         )))
+        .bind(to)
         .bind(from)
-        .fetch_all(&mut *c)
-        .await?;
-        for ctid in rows {
-            sqlx::query("SAVEPOINT move_row").execute(&mut *c).await?;
-            let moved = sqlx::query(sqlx::AssertSqlSafe(format!(
-                "UPDATE {table} SET {column} = $1 WHERE ctid = $2::tid"
-            )))
-            .bind(to)
-            .bind(&ctid)
-            .execute(&mut *c)
-            .await;
-            let undo = if moved.is_ok() {
-                "RELEASE SAVEPOINT move_row"
-            } else {
-                "ROLLBACK TO SAVEPOINT move_row"
-            };
-            sqlx::query(undo).execute(&mut *c).await?;
+        .execute(&mut *c)
+        .await;
+        match bulk {
+            Ok(_) => {}
+            Err(e) if is_duplicate(&e) => {
+                sqlx::query("ROLLBACK TO SAVEPOINT move_rows")
+                    .execute(&mut *c)
+                    .await?;
+                move_rows_apart(c, &table, &column, (from, to)).await?;
+            }
+            Err(e) => return Err(e),
         }
+        sqlx::query("RELEASE SAVEPOINT move_rows")
+            .execute(&mut *c)
+            .await?;
     }
     Ok(())
 }
@@ -485,4 +503,49 @@ pub async fn redirect_person(
     .await?;
     tx.commit().await?;
     Ok(Moved::Renamed)
+}
+
+fn is_duplicate(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .and_then(|d| d.code())
+        .is_some_and(|c| c == "23505")
+}
+
+/// The rows of `table` on `from`, one by one: a row `to` holds a twin of stays on `from`.
+async fn move_rows_apart(
+    c: &mut PgConnection,
+    table: &str,
+    column: &str,
+    (from, to): (i32, i32),
+) -> sqlx::Result<()> {
+    let rows: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT ctid::text FROM {table} WHERE {column} = $1"
+    )))
+    .bind(from)
+    .fetch_all(&mut *c)
+    .await?;
+    for ctid in rows {
+        sqlx::query("SAVEPOINT move_row").execute(&mut *c).await?;
+        let moved = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "UPDATE {table} SET {column} = $1 WHERE ctid = $2::tid AND {column} = $3"
+        )))
+        .bind(to)
+        .bind(&ctid)
+        .bind(from)
+        .execute(&mut *c)
+        .await;
+        match moved {
+            Ok(_) => {}
+            Err(e) if is_duplicate(&e) => {
+                sqlx::query("ROLLBACK TO SAVEPOINT move_row")
+                    .execute(&mut *c)
+                    .await?;
+            }
+            Err(e) => return Err(e),
+        }
+        sqlx::query("RELEASE SAVEPOINT move_row")
+            .execute(&mut *c)
+            .await?;
+    }
+    Ok(())
 }

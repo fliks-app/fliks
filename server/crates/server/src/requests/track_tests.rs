@@ -312,3 +312,86 @@ async fn an_import_monitors_its_recordings_or_is_undone(pool: PgPool) {
     assert_eq!(s, 201, "{r}");
     assert_eq!(c.monitored().await, [TWO]);
 }
+
+async fn hold_album(c: &Ctx) {
+    let body = json!({"type": "album", "provider": "musicbrainz", "externalId": GROUP, "libraryId": 1,
+                      "monitoredRecordings": [ONE]});
+    let (s, r) = c.call(&c.admin, "POST", "/api/media/import", body).await;
+    assert_eq!(s, 201, "{r}");
+}
+
+async fn albums(c: &Ctx) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM media WHERE type = 'album'")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_refused_approval_deletes_only_the_album_it_created(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, r) = c.ask(&c.user, Some(json!([ONE, THREE]))).await;
+    let (s, _) = approve(&c, r["id"].as_i64().unwrap()).await;
+    assert_eq!(s, 404);
+    assert_eq!(albums(&c).await, 0);
+    hold_album(&c).await;
+    let (_, r) = c.ask(&c.user, Some(json!([TWO]))).await;
+    sqlx::query(
+        r#"DELETE FROM items WHERE id IN (SELECT "itemId" FROM track_details WHERE "recordingMbid" = $1::uuid)"#,
+    )
+    .bind(TWO)
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let (s, _) = approve(&c, r["id"].as_i64().unwrap()).await;
+    assert_eq!(s, 404);
+    assert_eq!(albums(&c).await, 1, "the album the library held stays");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_group_request_and_a_release_request_clash_in_both_orders(pool: PgPool) {
+    let c = ctx(pool).await;
+    hold_album(&c).await;
+    let (s, r) = c.ask_for(&c.user, RELEASE, Some(json!([TWO]))).await;
+    assert_eq!(s, 201, "{r}");
+    let (s, r) = c.ask_for(&c.user, GROUP, Some(json!([TWO]))).await;
+    assert_eq!(s, 409, "{r}");
+    sqlx::query("DELETE FROM requests")
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let (s, r) = c.ask_for(&c.user, GROUP, Some(json!([TWO]))).await;
+    assert_eq!(s, 201, "{r}");
+    let (s, r) = c.ask_for(&c.user, RELEASE, Some(json!([TWO]))).await;
+    assert_eq!(s, 409, "{r}");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_fileless_album_identified_by_its_group_links_the_target_release(pool: PgPool) {
+    let c = ctx(pool).await;
+    sqlx::query(
+        r#"INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (7, 'Alpha', 'album', 1, 'a')"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let body = json!({"provider": "musicbrainz", "externalId": GROUP});
+    let (s, r) = c
+        .call(&c.admin, "POST", "/api/media/7/identify", body)
+        .await;
+    assert_eq!(s, 201, "{r}");
+    let mut held: Vec<String> = vec![];
+    for _ in 0..50 {
+        held = sqlx::query_scalar(
+            r#"SELECT value FROM media_external_ids WHERE "mediaId" = 7 AND provider = 'musicbrainz'"#,
+        )
+        .fetch_all(&c.pool)
+        .await
+        .unwrap();
+        if !held.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert_eq!(held, [RELEASE]);
+}

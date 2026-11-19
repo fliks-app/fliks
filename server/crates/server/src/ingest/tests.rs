@@ -6666,9 +6666,17 @@ mod music_ingest {
     }
 
     async fn filed_song(c: &Ctx, lib: i32, folder: &str, ms: f64) -> (i32, i32) {
+        filed_song_of(c, lib, folder, timed("Song", 3, ms)).await
+    }
+
+    async fn filed_song_of(
+        c: &Ctx,
+        lib: i32,
+        folder: &str,
+        probe: crate::engine::testkit::Answer,
+    ) -> (i32, i32) {
         let a = album(c, lib, folder).await;
-        c.fake
-            .script("POST", "/v1/probe", vec![timed("Song", 3, ms)]);
+        c.fake.script("POST", "/v1/probe", vec![probe]);
         music::register(&c.st, a, &place(c, &[&format!("{folder}/03 - Song.flac")]))
             .await
             .unwrap();
@@ -6844,6 +6852,80 @@ mod music_ingest {
             )
             .await,
             0
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_single_leftover_file_of_another_length_stays_off_the_targeted_track(pool: PgPool) {
+        use crate::metadata::music::want::tests as fixture;
+        let c = ctx_music(pool, Some(fixture::fake())).await;
+        let (m, item) = wanted_live_track(&c).await;
+        sqlx::query(
+            r#"INSERT INTO acquisition_queue ("pluginId", "ref", "mediaId", "itemIds", "sourceId", "sourceName",
+                 title, quality, method, state)
+               VALUES ('p', 'r', $1, ARRAY[$2], 's', 'S', 't', 'FLAC', 'manual', 'importing')"#,
+        )
+        .bind(m)
+        .bind(item)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        let items = count(&c, "SELECT count(*) FROM items").await;
+        c.fake
+            .script("POST", "/v1/probe", vec![timed("Mislabelled", 9, 100.0)]);
+        let file = place(&c, &["Ana/Alpha/09 - Mislabelled.flac"]);
+        music::register(&c.st, m, &file).await.unwrap();
+        assert_eq!(
+            count(
+                &c,
+                &format!(r#"SELECT count(*) FROM item_parts WHERE "itemId" = {item}"#)
+            )
+            .await,
+            0
+        );
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, items + 1);
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_copy_with_chapters_and_twin_rows_folds_into_the_held_release(pool: PgPool) {
+        use crate::metadata::music::want::tests as fixture;
+        let c = ctx_music(pool, Some(fixture::fake())).await;
+        let l = album_lib(&c).await;
+        let (b, kept) = filed_song(&c, l, "Ana/Alpha", 306.0).await;
+        let chaptered = ok(
+            json!({"ok": true, "info": {"video": [], "audio": [{"streamIndex": 0, "codec": "flac", "language": "und"}],
+            "subtitles": [], "durationSeconds": 306.0,
+            "chapters": [{"startSeconds": 0.0, "endSeconds": 10.0, "title": "a"}],
+            "tags": {"title": "Song", "album": "Alpha", "artist": "Ana", "albumArtist": "Ana", "track": 3, "disc": 1}}}),
+        );
+        let (a, copy) = filed_song_of(&c, l, "Bo/Alpha", chaptered).await;
+        for (item, provider) in [(kept, "p"), (copy, "p"), (copy, "q")] {
+            sqlx::query(
+                r#"INSERT INTO lyrics_lookups ("itemId", provider, status) VALUES ($1, $2, 'miss')"#,
+            )
+            .bind(item)
+            .bind(provider)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        }
+        assert!(meta::aliases::absorb_into(&c.st, a, b).await.unwrap());
+        assert_eq!(
+            count(
+                &c,
+                &format!(r#"SELECT count(*) FROM lyrics_lookups WHERE "itemId" = {kept}"#)
+            )
+            .await,
+            2,
+            "the twin stays out, the other row moves"
+        );
+        assert_eq!(
+            count(
+                &c,
+                &format!(r#"SELECT count(*) FROM item_markers WHERE "itemId" = {kept}"#)
+            )
+            .await,
+            1
         );
     }
 
