@@ -201,4 +201,21 @@ describe('AddDialogComponent', () => {
       { mediaType: 'album', externalId: 'g1', title: 'A', wants: [{ family: 'audio', language: null, qualityProfileId: 9 }], recordings: ['r1'], libraryId: 1 },
     ]);
   });
+
+  it('starts each add from the defaults of its own kind', async () => {
+    const { cmp, calls } = setup([lib(1, ['book', 'album'])]);
+    await cmp.add({ kind: 'book', provider: 'p', externalId: 'b1', title: 'B' });
+    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A' });
+    expect((calls['album']![0] as { wants: unknown[] }).wants).toEqual([{ family: 'audio', language: null, qualityProfileId: 9 }]);
+  });
+
+  it('ignores an add while another one loads', async () => {
+    const { cmp, calls } = setup([lib(1, ['album'])]);
+    const first = cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A' });
+    expect(cmp.idle).toBe(false);
+    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g2', title: 'B' });
+    await first;
+    expect(calls['album']).toHaveLength(1);
+    expect(cmp.idle).toBe(true);
+  });
 });

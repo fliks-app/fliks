@@ -155,7 +155,7 @@ export class AlbumPageComponent {
 
   protected addTrack(t: Track): void {
     const key = this.titleKey();
-    if (!key || !t.recordingId) return;
+    if (!key || !t.recordingId || !this.addDialog()?.idle) return;
     const [provider, externalId] = titleRef(key);
     this.pendingRecording = t.recordingId;
     void this.addDialog()?.add({ kind: 'album', provider, externalId, title: this.media().title, recording: { externalId: t.recordingId, albumExternalId: externalId }, mode: this.canAdd() ? 'import' : 'request' });

@@ -5505,7 +5505,9 @@
     "tap_sync": "Tap to sync",
     "tap_hint": "Press Stamp as each line starts to sing; Back undoes the last one.",
     "tap_stamp": "Stamp line",
-    "tap_back": "Back"
+    "tap_back": "Back",
+    "delete_title": "Delete the lyrics?",
+    "delete_message": "The shown version of the lyrics will be permanently deleted."
   },
   "karaoke": {
     "mix": "Sound mix",

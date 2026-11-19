@@ -33,6 +33,7 @@ function create(output?: ReturnType<typeof remoteOutput>) {
   const karaoke = {
     canSing: true,
     singing: signal(false),
+    starting: signal(false),
     micIssue: signal(null),
     difficulty: signal('medium'),
     latencyMs: signal(0),

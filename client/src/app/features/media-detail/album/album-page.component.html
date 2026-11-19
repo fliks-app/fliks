@@ -218,7 +218,7 @@
       <app-modal-header [title]="'media_detail.details' | translate" />
       <app-facts-grid class="py-4" [facts]="facts()" />
     </div>
-    <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+    <form method="dialog" class="modal-backdrop"><button tabindex="-1">{{ 'common.close' | translate }}</button></form>
   </dialog>
   <dialog #creditsDialog class="modal" role="dialog" aria-modal="true">
     <div class="modal-box">
@@ -230,7 +230,7 @@
         }
       </dl>
     </div>
-    <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+    <form method="dialog" class="modal-backdrop"><button tabindex="-1">{{ 'common.close' | translate }}</button></form>
   </dialog>
 }
 <app-add-dialog (done)="onRequested($event)" />

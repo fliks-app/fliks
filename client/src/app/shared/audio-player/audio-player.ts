@@ -103,7 +103,6 @@ const SING_KEYS: Record<SingKind, string> = {
 };
 const SLEEP_STEPS = [5, 10, 15, 30, 45, 60];
 
-/** The persistent mini-player bar and the full-screen audio player, mounted once in the layout. The full player shows the local player, or the audio session of another device while that one is opened. */
 const FULLSCREEN_KEY = 'fliks.audioPlayer.fullscreen';
 const LYRICS_KEY = 'fliks.audioPlayer.lyrics';
 
@@ -123,6 +122,7 @@ function writeFlag(key: string, on: boolean): void {
   }
 }
 
+/** The persistent mini-player bar and the full-screen audio player, mounted once in the layout. The full player shows the local player, or the audio session of another device while that one is opened. */
 @Component({
   selector: 'app-audio-player',
   imports: [
@@ -308,13 +308,13 @@ export class AudioPlayerComponent {
     return s?.kind === 'duration' ? this.clock(this.local.sleepLeft()) : null;
   });
 
-  /** The viewer's choice; `lyricsShown` is what is shown, since a track without lyrics has no panel. */
   /** The Lyrics toggle, remembered across tracks and visits. */
   protected readonly lyricsOn = signal(readFlag(LYRICS_KEY));
   /** Whether the playing track has lyrics; null until known. */
   protected readonly hasLyrics = signal<boolean | null>(null);
   /** The edit tools of the lyrics panel, opened from the menu. */
   protected readonly lyricsEdit = signal(false);
+  /** What is shown: a track without lyrics has no panel, whatever the viewer chose. */
   protected readonly lyricsShown = computed(() => this.lyricsOn() && (this.lyricsEdit() || this.hasLyrics() !== false));
   /** Desktop and TV list the queue inline in place of the lyrics; desktop fullscreen has room for both. */
   protected readonly queueInline = computed(
@@ -527,12 +527,11 @@ export class AudioPlayerComponent {
     this.selected.set(new Set());
   }
 
-  /** The playing track stays put, and a track never crosses it. */
   /** The queue view starts at the current track: played ones stay reachable by previous, not listed. */
   protected readonly queueStart = computed(() => Math.max(0, this.audio.queueIndex()));
   protected readonly upcoming = computed(() => this.audio.queue().slice(this.queueStart()));
 
-  /** Rendered indexes: the current track is row 0 and stays first. */
+  /** Rendered indexes: the playing track stays put, and a track never crosses it. */
   protected readonly sortAllowed = (index: number): boolean => index > 0;
 
   protected onQueueDrop(e: CdkDragDrop<unknown>): void {

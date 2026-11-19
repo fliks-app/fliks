@@ -7,7 +7,7 @@ import type { ConfigPage, SlotId, UiContribution } from '@fliks/plugin-ui';
 import type { AcquisitionProvider, PluginUiEntry } from './plugin-ui-response';
 import { ServerConfigService } from '../services/server-config.service';
 import { SessionStoreService, sessionKey } from '../services/session-store.service';
-import { readStored, writeStored } from '../services/party/local-flag';
+import { readStored, writeStored } from '../utils/local-flag';
 
 /** Bounds the boot-blocking wait: a dead plugin endpoint must never hold the splash. */
 const FETCH_TIMEOUT_MS = 3000;

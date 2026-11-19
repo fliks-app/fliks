@@ -1,7 +1,9 @@
 import type { UiContribution } from '@fliks/plugin-ui';
+import { SERVER_SINCE } from '../services/server-version.service';
 
 // `WhenPredicate` lacks the evaluator's "!" negation; cast at the two call sites rather than fork the shared type.
 type When = NonNullable<UiContribution['when']>;
+const since = (key: keyof typeof SERVER_SINCE) => `server:${SERVER_SINCE[key]}` as const;
 const not = (p: string) => `!${p}` as unknown as When[number];
 
 /** Core's own `nav.main` / `nav.acquisition` items as contributions, merged with plugin ones by weight/id; weight 200 in `nav.acquisition` is free for a plugin. */
@@ -15,8 +17,8 @@ export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.history', slot: 'nav.main', weight: 2200, labelKey: 'nav.history', icon: 'history', action: { kind: 'route', path: '/history' } },
 
   { id: 'core.requests', slot: 'nav.acquisition', weight: 100, labelKey: 'nav.requests', icon: 'clipboard-list', badge: 'pendingRequests', tone: 'danger', action: { kind: 'route', path: '/requests' } },
-  { id: 'core.queue', slot: 'nav.acquisition', weight: 150, labelKey: 'acquisition_queue.queue_title', icon: 'download', when: ['hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/queue' } },
-  { id: 'core.queue_history', slot: 'nav.acquisition', weight: 160, labelKey: 'acquisition_queue.history_title', icon: 'history', when: ['hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/history' } },
+  { id: 'core.queue', slot: 'nav.acquisition', weight: 150, labelKey: 'acquisition_queue.queue_title', icon: 'download', when: [since('acquisitionQueue'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/queue' } },
+  { id: 'core.queue_history', slot: 'nav.acquisition', weight: 160, labelKey: 'acquisition_queue.history_title', icon: 'history', when: [since('acquisitionQueue'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/history' } },
   { id: 'core.calendar', slot: 'nav.acquisition', weight: 300, labelKey: 'nav.calendar', icon: 'calendar', action: { kind: 'route', path: '/calendar' } },
 ];
 
@@ -38,7 +40,7 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
       { id: 'core.statistics', slot: 'settings.page', weight: 100, labelKey: 'nav.statistics', icon: 'bar-chart-3', action: { kind: 'route', path: '/admin/statistics' } },
       { id: 'core.system', slot: 'settings.page', weight: 200, labelKey: 'nav.system', icon: 'layout-grid', action: { kind: 'route', path: '/admin/system' } },
       { id: 'core.streams', slot: 'settings.page', weight: 300, labelKey: 'system.tab_streams', icon: 'play', action: { kind: 'route', path: '/admin/streams' } },
-      { id: 'core.optimize_queue', slot: 'settings.page', weight: 350, labelKey: 'optimize.queue.title', icon: 'zap', action: { kind: 'route', path: '/admin/optimize' } },
+      { id: 'core.optimize_queue', slot: 'settings.page', weight: 350, labelKey: 'optimize.queue.title', icon: 'zap', when: [since('optimize')], action: { kind: 'route', path: '/admin/optimize' } },
       { id: 'core.playback-quality', slot: 'settings.page', weight: 400, labelKey: 'qoe.title', icon: 'bar-chart-3', action: { kind: 'route', path: '/admin/playback-quality' } },
     ],
   },
@@ -61,9 +63,9 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
       { id: 'core.auto_approval', slot: 'settings.page', weight: 500, labelKey: 'settings.nav.auto_approval', action: { kind: 'route', path: '/admin/settings/auto-approval' } },
       { id: 'core.cleanup', slot: 'settings.page', weight: 600, labelKey: 'settings.nav.cleanup', when: ['server:5.1.0'], action: { kind: 'route', path: '/admin/settings/cleanup' } },
       { id: 'core.metadata', slot: 'settings.page', weight: 700, labelKey: 'settings.nav.metadata', action: { kind: 'route', path: '/admin/settings/metadata' } },
-      { id: 'core.acquisition', slot: 'settings.page', weight: 720, labelKey: 'settings.nav.acquisition', action: { kind: 'route', path: '/admin/settings/acquisition' } },
-      { id: 'core.lyrics', slot: 'settings.page', weight: 750, labelKey: 'settings.nav.lyrics', action: { kind: 'route', path: '/admin/settings/lyrics' } },
-      { id: 'core.karaoke', slot: 'settings.page', weight: 800, labelKey: 'settings.nav.karaoke', action: { kind: 'route', path: '/admin/settings/karaoke' } },
+      { id: 'core.acquisition', slot: 'settings.page', weight: 720, labelKey: 'settings.nav.acquisition', when: [since('acquisitionSettings')], action: { kind: 'route', path: '/admin/settings/acquisition' } },
+      { id: 'core.lyrics', slot: 'settings.page', weight: 750, labelKey: 'settings.nav.lyrics', when: [since('lyrics')], action: { kind: 'route', path: '/admin/settings/lyrics' } },
+      { id: 'core.karaoke', slot: 'settings.page', weight: 800, labelKey: 'settings.nav.karaoke', when: [since('karaoke')], action: { kind: 'route', path: '/admin/settings/karaoke' } },
     ],
   },
   {
@@ -99,9 +101,9 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
   {
     labelKey: 'admin.section_optimize',
     items: [
-      { id: 'core.optimize_profiles', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.optimize_profiles', action: { kind: 'route', path: '/admin/settings/optimize-profiles' } },
-      { id: 'core.optimize_settings', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.optimize', action: { kind: 'route', path: '/admin/settings/optimize' } },
-      { id: 'core.optimize_workers', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.optimize_workers', action: { kind: 'route', path: '/admin/settings/optimize-workers' } },
+      { id: 'core.optimize_profiles', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.optimize_profiles', when: [since('optimize')], action: { kind: 'route', path: '/admin/settings/optimize-profiles' } },
+      { id: 'core.optimize_settings', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.optimize', when: [since('optimize')], action: { kind: 'route', path: '/admin/settings/optimize' } },
+      { id: 'core.optimize_workers', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.optimize_workers', when: [since('optimize')], action: { kind: 'route', path: '/admin/settings/optimize-workers' } },
     ],
   },
   {

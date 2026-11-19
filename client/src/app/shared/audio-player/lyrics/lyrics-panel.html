@@ -28,7 +28,7 @@
       } @else {
         @if (kState(); as k) {
           @if (k.cdg) {
-            <app-cdg-canvas class="mx-auto mb-3 block w-full max-w-3xl" [fileId]="k.fileId" data-testid="karaoke-cdg" />
+            <app-cdg-canvas class="mx-auto mb-3 block w-full max-w-3xl" [fileId]="k.fileId" [output]="output()" data-testid="karaoke-cdg" />
           }
         }
         @if (loading() && !res()) {

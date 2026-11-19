@@ -90,7 +90,11 @@ export class ArtistPageComponent {
   constructor() {
     effect(() => {
       const id = this.id();
-      untracked(() => void this.load(id));
+      untracked(() => {
+        this.picked.set(null);
+        this.popularShown.set(5);
+        void this.load(id);
+      });
     });
     effect(() => {
       const name = this.data()?.artist.name;
@@ -121,7 +125,7 @@ export class ArtistPageComponent {
   }
 
   protected want(row: PopularTrack): void {
-    if (!row.albumExternalId) return;
+    if (!row.albumExternalId || !this.addDialog()?.idle) return;
     this.pending = row.recordingId;
     void this.addDialog()?.add({
       kind: 'album',

@@ -3,7 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { PartyApiService, type PartyReactionCatalog } from '../api/party-api.service';
 import { ServerConfigService } from '../server-config.service';
 import { EmojiDataService } from './emoji-data.service';
-import { readFlag, readStored, writeFlag, writeStored } from './local-flag';
+import { readFlag, readStored, writeFlag, writeStored } from '../../utils/local-flag';
 import { sanitizeBar, toggleBar } from './reaction-bar';
 
 const BAR_KEY = 'party.reactionBar';

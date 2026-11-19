@@ -7,7 +7,7 @@ import { RemoteAudioOutput } from '../audio-player/remote-audio-output';
 import { AuthService } from '../auth.service';
 import { DeviceService } from '../device.service';
 import { PartyService } from '../party/party.service';
-import { readStored, writeStored } from '../party/local-flag';
+import { readStored, writeStored } from '../../utils/local-flag';
 import type { Difficulty, PitchFrame } from './karaoke-score';
 import { FrameStore, calibrate, scoreAll, type SingerResult } from './karaoke-session';
 import { KaraokeRelayService } from './karaoke-relay.service';
@@ -17,7 +17,6 @@ import { MAX_FRAMES_PER_BATCH, encodeBatch } from './pitch-frames';
 const LATENCY_KEY = 'karaoke.latency';
 const DIFFICULTY_KEY = 'karaoke.difficulty';
 const FLUSH_MS = 250;
-const HISTORY_MAX = 50;
 /** Above the 200 ms steps webOS reports currentTime in, so only a real jump re-anchors the clock. */
 const REANCHOR_DRIFT_MS = 250;
 /** Share of the gap to the reported position closed per update: drift is absorbed without a visible step. */
@@ -47,17 +46,17 @@ export class KaraokeService {
   /** The karaoke view of the full player, kept while the lyrics are hidden; the cast receiver follows it. */
   readonly stage = signal(false);
   readonly singing = signal(false);
+  /** The mic is being opened: the permission prompt can keep it pending for seconds. */
+  readonly starting = signal(false);
   readonly micIssue = signal<'denied' | 'unavailable' | null>(null);
   readonly latencyMs = signal(Number(readStored(LATENCY_KEY)) || 0);
   readonly difficulty = signal<Difficulty>(['easy', 'medium', 'hard'].includes(readStored(DIFFICULTY_KEY) ?? '') ? (readStored(DIFFICULTY_KEY) as Difficulty) : 'medium');
-  /** Frames arrived since the track started: bumped per batch so views can re-score. */
-  readonly frameCount = signal(0);
   readonly board = signal<Board | null>(null);
-  readonly history = signal<Board[]>([]);
 
   private readonly capture = new MicCapture();
   private pending: PitchFrame[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
+  private startGen = 0;
   private anchor = { pos: 0, at: 0 };
   private anchoredState: { playing: boolean; rate: number; itemId: number | undefined } | null = null;
 
@@ -72,7 +71,6 @@ export class KaraokeService {
       this.audio.track()?.itemId;
       untracked(() => {
         this.store.clear();
-        this.frameCount.set(0);
       });
     });
     effect(() => {
@@ -105,28 +103,36 @@ export class KaraokeService {
     if (!frames.length) return;
     const key = this.audio.pitch?.() ?? 0;
     this.store.add(userId, frames.map((f) => ({ ...f, key })));
-    this.frameCount.update((n) => n + frames.length);
   }
 
   async startSinging(): Promise<void> {
     const me = this.auth.user()?.id;
-    if (this.singing() || me == null || !this.canSing) return;
+    if (this.singing() || this.starting() || me == null || !this.canSing) return;
     this.micIssue.set(null);
+    this.starting.set(true);
+    const gen = this.startGen;
     try {
       await this.capture.start((f) => {
         this.ingest(me, [f]);
         this.pending.push(f);
         if (this.pending.length >= MAX_FRAMES_PER_BATCH) this.flush();
       }, () => this.mediaMs());
+      if (gen !== this.startGen) {
+        this.capture.stop();
+        return;
+      }
       if (this.party.party() && !this.relay.isDisplay()) this.relay.open('singer');
       this.flushTimer = setInterval(() => this.flush(), FLUSH_MS);
       this.singing.set(true);
     } catch (err) {
       this.micIssue.set(err instanceof DOMException && err.name === 'NotAllowedError' ? 'denied' : 'unavailable');
+    } finally {
+      this.starting.set(false);
     }
   }
 
   stopSinging(): void {
+    this.startGen++;
     this.capture.stop();
     this.relay.close('singer');
     if (this.flushTimer) clearInterval(this.flushTimer);
@@ -168,15 +174,12 @@ export class KaraokeService {
   finish(doc: StructuredLyrics, title: string): void {
     const rows = this.results(doc).sort((a, b) => b.score - a.score);
     if (!rows.length || this.board()) return;
-    const board = { title, rows };
-    this.board.set(board);
-    this.history.update((h) => [...h, board].slice(-HISTORY_MAX));
+    this.board.set({ title, rows });
   }
 
   dismissBoard(): void {
     this.board.set(null);
     this.store.clear();
-    this.frameCount.set(0);
   }
 
   private nameOf(userId: number): string {

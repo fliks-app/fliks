@@ -1,3 +1,6 @@
+/** The release a pre-release or build version belongs to: `7.0.0-beta.1` is `7.0.0`. */
+export const releaseOf = (v: string): string => v.replace(/[-+].*/s, '');
+
 /** Semver order: numeric core, then a pre-release below its release, identifiers numeric when both are. */
 export function compareVersions(a: string, b: string): number {
   const [coreA, preA] = split(a);

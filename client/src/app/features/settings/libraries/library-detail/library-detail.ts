@@ -1,4 +1,5 @@
 import { Component, inject, OnInit } from '@angular/core';
+import { SERVER_SINCE, ServerVersionService } from '../../../../core/services/server-version.service';
 import {
   ActivatedRoute,
   Router,
@@ -41,6 +42,7 @@ export class LibraryDetailComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   readonly state = inject(LibraryDetailState);
+  readonly optimize = inject(ServerVersionService).supports(SERVER_SINCE.optimize);
 
   async ngOnInit() {
     const id = Number(this.route.snapshot.paramMap.get('id'));
