@@ -218,10 +218,11 @@ export class RemoteService {
     const s = this.sessionSync.session();
     return s && !this.sessionSync.isReading(s) ? this.sessionSync.observableOwner() : null;
   });
-  /** Whether `targetId` owns the account session's playback: that device is watched, never selected. */
-  ownsSession(targetId: string): boolean {
+  /** Whether `targetId` owns the account session's playback and this device can watch it: that device is watched, not selected.
+   *  A busy local player watches no owner, so the device stays selectable until it can be watched. */
+  watchable(targetId: string): boolean {
     const owner = this.sessionOwner();
-    return !!owner && sameTarget(owner, targetId);
+    return !!owner && sameTarget(owner, targetId) && !!this.sessionSync.observedOwnerTargetId();
   }
   /** The listed face of that owner, while this device is online with no Cast session and the owner takes a load. */
   private readonly liveOwner = computed(() => {
@@ -455,17 +456,20 @@ export class RemoteService {
     // The device that owns the account session is watched, not selected: an open video player becomes its view.
     effect(() => {
       const selected = this.selectedTargetId();
-      if (!selected || !this.ownsSession(selected)) return;
+      if (!selected || !this.watchable(selected)) return;
       untracked(() => {
         this.fullPlayer.handTo('video', true);
         this.selectTarget(null);
       });
     });
 
+    // A selected device plays outside the account session: only its owner's report stands for it.
     this.sessionSync.setLiveSource(
       () => {
         const s = this.targetState();
-        return s ? { mediaFileId: s.mediaFileId, durationSeconds: s.durationSeconds } : null;
+        const owner = this.sessionSync.observableOwner();
+        const id = this.observedTargetId();
+        return s && owner && id && sameTarget(owner, id) ? { mediaFileId: s.mediaFileId, durationSeconds: s.durationSeconds } : null;
       },
       () => this.interpolatedPosition(),
     );
@@ -703,7 +707,9 @@ export class RemoteService {
     } catch { /* blocked storage: selection is per-session only */ }
     // Still reading the same device (the selection became the watch of its session): its reading and command in flight hold.
     if (this.observedTargetId() === observed) return;
-    this.reportedState.set(null);
+    // The listing is all a pick of a playing device has until its next report, as `refreshTargets` takes it.
+    this.reportedState.set(this.selectedRow()?.nowPlaying ?? null);
+    this.stateAt = Date.now();
     this.stoppedUntilReport = false;
     this.expectedMediaFileId = null;
     // Reports from a deselected target are dropped, so its pending ack can never land.
@@ -857,6 +863,7 @@ export class RemoteService {
       episodeId: s.episodeId,
       itemId: s.itemId,
       mediaTitle: s.mediaTitle,
+      mediaType: s.mediaType,
       episodeLabel: s.episodeLabel,
       posterUrl: s.posterUrl,
       fanartUrl: s.fanartUrl,

@@ -9,6 +9,7 @@ import {
   kindFromSegment,
   kindOfListFilter,
   mediaDetailLink,
+  playsInAudioPlayer,
 } from './media-kinds';
 
 describe('media kind registry', () => {
@@ -19,6 +20,10 @@ describe('media kind registry', () => {
     expect(KIND_REGISTRY.book).toMatchObject({ segment: 'books', providerSegment: 'book', hasSeasons: false });
     expect(KIND_REGISTRY.movie).toMatchObject({ segment: 'movies', providerSegment: 'movie', hasSeasons: false });
     expect(KIND_REGISTRY.series).toMatchObject({ segment: 'series', providerSegment: 'tv', hasSeasons: true });
+  });
+
+  it('plays an album and a book in the audio player, a video kind or an unknown one elsewhere', () => {
+    expect(['album', 'book', 'movie', 'series', 'comic', 'podcast', null].map(playsInAudioPlayer)).toEqual([true, true, false, false, false, false, false]);
   });
 
   it('builds detail links', () => {

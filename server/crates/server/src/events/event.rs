@@ -487,6 +487,9 @@ pub enum SseEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         item_id: Option<i64>,
         media_title: Option<String>,
+        /// The kind of the played media: a controller picks the player family from it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        media_type: Option<String>,
         episode_label: Option<String>,
         poster_url: Option<String>,
         fanart_url: Option<String>,

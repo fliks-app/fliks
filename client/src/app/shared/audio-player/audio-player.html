@@ -147,8 +147,8 @@
         </button>
         <div class="min-w-0 flex-1 text-center">
           @if (audio.musicMode()) {
-            @if (remoteView() && !parkedView() && sync.session(); as s) {
-              <div class="truncate text-sm text-base-content/60">{{ sync.line(s) }}</div>
+            @if (remoteView() && !parkedView() && remoteLine(); as line) {
+              <div class="truncate text-sm text-base-content/60">{{ line }}</div>
               @if (t.album) {
                 <div class="truncate text-sm font-semibold">{{ t.album }}</div>
               }
@@ -427,7 +427,7 @@
 
       @if (audio.musicMode()) {
       <!-- Outside TV the device menu offers it; a TV player has no device menu. -->
-      @let canListenHere = isTv() && remoteView() && !parkedView() && sync.canPlayHere();
+      @let canListenHere = isTv() && remoteView() && !parkedView() && !remoteSelected() && sync.canPlayHere();
       <!-- TV: the actions share the transport row, leaving the height to the lyrics. -->
       <div [class]="isTv() ? 'grid grid-cols-[1fr_minmax(0,24rem)_1fr] items-center' : 'contents'">
       <!-- Elsewhere the button and the transport make a grid of their own, above the actions. -->

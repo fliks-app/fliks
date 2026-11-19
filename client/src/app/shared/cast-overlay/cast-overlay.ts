@@ -44,6 +44,9 @@ export class CastOverlayComponent {
   /** The account session played elsewhere that this device follows without having selected it. */
   protected readonly observed = this.surface.bar;
 
+  /** A selected device that plays audio shows the bar of an observed audio session, which opens the audio player. */
+  protected readonly selectedAudio = computed(() => !!this.output() && this.session.remoteFamily() === 'audio');
+
   /** The track of an observed album session, whose item title is the album and subtitle the track. */
   protected readonly observedTrack = inject(NowPlayingMetadataService).track(() => {
     const item = this.observed()?.item;
@@ -65,8 +68,8 @@ export class CastOverlayComponent {
   });
   protected readonly observedArtwork = computed(() => this.audioTrack()?.coverUrl ?? this.observed()?.item.posterUrl ?? null);
 
-  /** The owner reports the file the session names: another file's report never drives this card. */
-  protected readonly live = computed(() => this.observed() !== null && this.sync.liveReport() !== null);
+  /** The device reports what the card shows: another file's report never drives an observed session's card. */
+  protected readonly live = computed(() => this.selectedAudio() || (this.observed() !== null && this.sync.liveReport() !== null));
   protected readonly paused = computed(() => (this.live() ? this.target.uiPaused() : !this.observed()?.playing));
 
   protected readonly clock = formatTime;
@@ -74,21 +77,20 @@ export class CastOverlayComponent {
   /** An audio session reads its view, which follows a skip sent from here before the owner reports it. */
   protected readonly time = computed(() => {
     const s = this.observed();
-    if (!s) return '';
-    return formatTime(this.audio() ? this.audioView.position() : this.sync.positionNow(s));
+    if (this.audio()) return formatTime(this.audioView.position());
+    return s ? formatTime(this.sync.positionNow(s)) : '';
   });
 
   protected readonly percent = computed(() => {
     const s = this.observed();
-    if (!s) return 0;
-    const [pos, dur] = this.audio() ? [this.audioView.position(), this.audioView.duration()] : [this.sync.positionNow(s), this.sync.durationNow(s)];
+    const [pos, dur] = this.audio() ? [this.audioView.position(), this.audioView.duration()] : s ? [this.sync.positionNow(s), this.sync.durationNow(s)] : [0, 0];
     return dur > 0 ? Math.min(100, (pos / dur) * 100) : 0;
   });
 
   /** An audio session has a full controller: transport, queue, take over. */
   protected readonly audio = computed(() => {
     const s = this.observed();
-    return !!s && this.surface.isAudio(s);
+    return this.selectedAudio() || (!!s && this.surface.isAudio(s));
   });
 
   protected open(): void {

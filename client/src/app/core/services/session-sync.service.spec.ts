@@ -480,6 +480,13 @@ describe('SessionSyncService play here', () => {
     expect(service.ownerReportAt('tv#1')).toBe(0);
   });
 
+  it('dates the owner report for another face of the owner device', async () => {
+    const { service, flush } = setup();
+    await flush(session({ owner: { targetId: 'pc#native', deviceName: 'Desk', formFactor: 'desktop' }, positionAt: new Date(Date.now() - 4000).toISOString() }));
+    expect(service.ownerReportAt('pc#tab')).toBeGreaterThan(0);
+    expect(service.ownerReportAt('tv#tab')).toBe(0);
+  });
+
   it('prefers the owner live position while it is observed', async () => {
     const { service, flush } = setup();
     await flush(session());

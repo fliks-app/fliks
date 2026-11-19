@@ -1,4 +1,4 @@
-@if (output(); as o) {
+@if (selectedAudio() ? null : output(); as o) {
   @if (!o.isIdle()) {
     <app-player-bar
       [raised]="surface.aboveAudio()"
@@ -27,13 +27,14 @@
       </button>
     </app-player-bar>
   }
-} @else if (observed(); as s) {
+} @else if (selectedAudio() || observed()) {
+  @let s = observed();
   <app-player-bar
     [opens]="audio() ? 'audio' : 'video'"
     [busy]="surface.syncing()"
     [playing]="!paused()"
     [percent]="audio() || percent() > 0 ? percent() : null"
-    (opened)="surface.open(s)"
+    (opened)="s ? surface.open(s) : open()"
     (toggled)="toggleObserved()"
   >
     <ng-container ngProjectAs="[barCover]">
@@ -52,9 +53,14 @@
       <app-marquee class="text-sm font-semibold" [attr.data-morph]="n ? null : 'title'" [text]="n ? n.title : observedTitle()" [secondary]="n ? n.artists : (observedEpisode() ?? observedArtist())" />
       <span class="flex items-center gap-1 truncate text-sm text-info">
         <app-device-icon [icon]="playing.icon()" iconClass="hidden h-4 w-4 shrink-0 sm:block" />
-        <span class="truncate">{{ sync.ownerName(s) }}</span>
+        <span class="truncate">{{ s ? sync.ownerName(s) : session.deviceName() }}</span>
         <span class="hidden shrink-0 text-base-content/60 sm:inline">· {{ n ? clock(0) : time() }}</span>
       </span>
     </ng-template>
+    @if (!s) {
+      <button barActions type="button" class="btn btn-ghost btn-circle" (click)="output()?.disconnect()" [attr.aria-label]="'remote.disconnect_row' | translate">
+        <svg lucideX class="h-5 w-5"></svg>
+      </button>
+    }
   </app-player-bar>
 }

@@ -94,6 +94,8 @@ export interface RemoteState {
   episodeId?: number | null;
   itemId?: number;
   mediaTitle: string | null;
+  /** The kind of the played media, which says the player family; absent from an older server. */
+  mediaType?: MediaType | null;
   episodeLabel: string | null;
   posterUrl: string | null;
   /** Absent from an older server. */
