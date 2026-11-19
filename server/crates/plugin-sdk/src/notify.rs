@@ -1,8 +1,8 @@
 //! `notify.users` (plugins.md rule 76): a notification to some users, texts from the manifest `i18n`.
 //! Needs the scope `notify:users` and a manifest `fliks` range from the release that links `notify`.
 
-use crate::host::HostError;
 pub use crate::bindings::fliks::plugin::notify::{Notification, NotifyAudience};
+use crate::host::HostError;
 
 impl Notification {
     /// `title_key` and `body_key` name entries of the manifest `i18n`.
