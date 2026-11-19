@@ -378,7 +378,7 @@ mod tests {
                  VALUES (1, 'Salt Meadows', 'album', 1, 'a/b', false);
                INSERT INTO editions ("mediaId", family) VALUES (1, 'audio');
                INSERT INTO items ("mediaId", "editionId", monitored, title)
-                 SELECT 1, e.id, false, 'T' || n FROM editions e, generate_series(1, 4) n;
+                 SELECT 1, e.id, false, 'T' || n FROM editions e, generate_series(1, 3) n;
                INSERT INTO track_details ("itemId", "mediaId", position, "recordingMbid")
                  SELECT i.id, 1, 1, ('00000000-0000-0000-0000-00000000000' || (i.id % 10))::uuid FROM items i;
                INSERT INTO album_details ("mediaId") VALUES (1)"#,
@@ -554,7 +554,16 @@ mod tests {
 
     #[sqlx::test(migrations = false)]
     async fn a_sync_manages_only_the_rows_it_created(db: PgPool) {
-        let ids = items(&db).await;
+        let mut ids = items(&db).await;
+        ids.push(
+            sqlx::query_scalar(
+                r#"INSERT INTO items ("mediaId", "editionId", monitored, title)
+                   SELECT 1, id, false, 'T4' FROM editions LIMIT 1 RETURNING id"#,
+            )
+            .fetch_one(&db)
+            .await
+            .unwrap(),
+        );
         let u = user(&db, "u", true).await;
         let st = state(&db);
         let pl = playlist_sync(&st, "p", u as u32, "Mix", &order(&[ids[0], ids[1]]))
@@ -576,7 +585,11 @@ mod tests {
         };
         add(ids[2], None, 0).await;
         add(ids[3], Some("q"), 1).await;
-        let sync = |list: &[i32]| playlist_sync(&st, "p", u as u32, "Mix", &order(list));
+        let sync = |list: &[i32]| {
+            let list = order(list);
+            let st = &st;
+            async move { playlist_sync(st, "p", u as u32, "Mix", &list).await }
+        };
         sync(&[ids[1]]).await.unwrap();
         assert_eq!(rows(&db, pl).await, [ids[1], ids[2], ids[3]]);
         sync(&[ids[1]]).await.unwrap();
