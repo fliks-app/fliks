@@ -100,7 +100,11 @@ jobs:
         shell: pwsh
         run: Set-MpPreference -DisableRealtimeMonitoring $true
 
+      # The full history (without blobs) lets the release notes diff against the previous tag.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
 
       # The version is baked into the installer filenames and electron-builder's extraMetadata.
       - name: Resolve version
@@ -108,6 +112,24 @@ jobs:
         uses: ./.github/actions/resolve-version
         with:
           override: ${{ inputs.version }}
+
+      # The in-app update notes: the features and fixes since the last stable tag that change the
+      # desktop app, which drops server-only work and the TV and mobile scopes.
+      - name: Write the client release notes
+        shell: bash
+        run: |
+          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*' HEAD^)
+          subjects=$(git log --format=%s "$prev..HEAD" -- client/src desktop \
+            | grep -vE '^[a-z]+\((tv|android|ios|webos|tizen|mobile)(-[a-z-]+)?\)') || true
+          notes="$RUNNER_TEMP/release-notes.md"
+          : > "$notes"
+          for section in 'feat:Features' 'fix:Bug Fixes' 'perf:Performance Improvements'; do
+            lines=$(grep -E "^${section%%:*}(\(|!?:)" <<< "$subjects" \
+              | sed -E 's/^[a-z]+(\(([^)]*)\))?!?: (.*)/- **\2:** \3/; s/^- \*\*:\*\* /- /') || true
+            [[ -n "$lines" ]] && printf '### %s\n\n%s\n\n' "${section#*:}" "$lines" >> "$notes"
+          done
+          [[ -s "$notes" ]] || echo 'No changes to the app in this version.' > "$notes"
+          cat "$notes"
 
       # desktop/package.json declares Node >= 20, but electron-builder 26's
       # transitive deps (@electron/rebuild, node-abi, app-builder-lib) require
@@ -335,7 +357,8 @@ jobs:
           version=${{ steps.version.outputs.version }}
           # release-please marks a suffixed version as a pre-release; electron-builder skips a type mismatch.
           [[ "$version" == *-* ]] && type=prerelease || type=release
-          npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version="$version" -c.publish.releaseType="$type"
+          npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version="$version" -c.publish.releaseType="$type" \
+            -c.releaseInfo.releaseNotesFile="$RUNNER_TEMP/release-notes.md"
 
       # Flat APT repo on the `apt` release, the one desktop/build/fliks.sources points at.
       - name: Publish the APT repository (Linux)
@@ -399,7 +422,7 @@ jobs:
           vpk pack --packId FliksDesktop --packVersion ${{ steps.version.outputs.version }}
           --packDir release/win-unpacked --runtime win-x64 --mainExe Fliks.exe --packTitle Fliks --packAuthors Fliks
           --icon build/icon.ico --splashImage build/splash.png --aumid media.fliks.desktop
-          --noPortable --outputDir release/velopack
+          --noPortable --outputDir release/velopack --releaseNotes ${{ runner.temp }}/release-notes.md
 
       # The Fliks installer window around Velopack's silent Setup.exe (windows/Fliks.Setup).
       - name: Build installer
