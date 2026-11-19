@@ -6628,6 +6628,44 @@ mod music_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn two_unpaired_files_leave_the_track_a_queue_row_targets_empty(pool: PgPool) {
+        use crate::metadata::music::want::tests as fixture;
+        let c = ctx_music(pool, Some(fixture::fake())).await;
+        let (m, item) = wanted_live_track(&c).await;
+        sqlx::query(
+            r#"INSERT INTO acquisition_queue ("pluginId", "ref", "mediaId", "itemIds", "sourceId", "sourceName",
+                 title, quality, method, state)
+               VALUES ('p', 'r', $1, ARRAY[$2], 's', 'S', 't', 'FLAC', 'manual', 'importing')"#,
+        )
+        .bind(m)
+        .bind(item)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![timed("Mislabelled", 9, 100.0), timed("Other", 10, 100.0)],
+        );
+        let files = place(
+            &c,
+            &[
+                "Ana/Alpha/09 - Mislabelled.flac",
+                "Ana/Alpha/10 - Other.flac",
+            ],
+        );
+        music::register(&c.st, m, &files).await.unwrap();
+        assert_eq!(
+            count(
+                &c,
+                &format!(r#"SELECT count(*) FROM item_parts WHERE "itemId" = {item}"#)
+            )
+            .await,
+            0
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn an_unpaired_file_of_a_linked_album_is_an_orphan_track(pool: PgPool) {
         use crate::metadata::music::want::tests as fixture;
         let c = ctx_music(pool, Some(fixture::fake())).await;

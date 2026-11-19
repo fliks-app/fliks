@@ -324,7 +324,7 @@ pub(crate) fn folder_name(format: &str, kind: MediaKind, t: &FolderOf<'_>) -> St
                 tmdb_id: t.tmdb_id,
             },
         ),
-        MediaKind::Book | MediaKind::Comic | MediaKind::Album => naming::apply_book_format(
+        MediaKind::Book | MediaKind::Comic => naming::apply_book_format(
             format,
             &naming::BookNameTokens {
                 title,
@@ -332,7 +332,34 @@ pub(crate) fn folder_name(format: &str, kind: MediaKind, t: &FolderOf<'_>) -> St
                 ..Default::default()
             },
         ),
+        MediaKind::Album => naming::apply_album_format(
+            format,
+            &naming::AlbumNameTokens {
+                album_title: title,
+                release_year: t.year,
+                ..Default::default()
+            },
+        ),
     }
+}
+
+/// The folder of an album from the artist and album folder formats; the artist's is left out when unknown.
+pub(crate) fn album_folder(
+    f: &naming::NamingFormats,
+    artist: Option<&str>,
+    title: &str,
+    year: Option<i64>,
+) -> String {
+    let (artist_dir, album_dir) = naming::album_folder_parts(
+        f,
+        &naming::AlbumNameTokens {
+            artist_name: artist.map(str::to_owned),
+            album_title: title.to_owned(),
+            release_year: year,
+            ..Default::default()
+        },
+    );
+    naming::album_folder_path(&artist_dir, &album_dir)
 }
 
 /// `folder_name` with the stored format, else the import default.

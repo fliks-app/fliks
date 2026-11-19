@@ -1,7 +1,9 @@
 //! A merged MusicBrainz id is kept as an alias of the row that holds the surviving id
 //! (`docs/spec/music.md` rule 15): lookups read the live id first, then the alias.
+use crate::ingest::music::pairing::{Key, assign};
 use crate::metadata::books::absorb::same_library;
 use crate::{media::write::orphans::Refs, state::AppState};
+use fliks_domain::external_id::ExternalProvider;
 use sqlx::{PgConnection, PgPool};
 
 const MB: &str = "musicbrainz";
@@ -29,13 +31,25 @@ pub async fn albums_named(db: impl sqlx::PgExecutor<'_>, id: &str) -> sqlx::Resu
              UNION ALL
              SELECT "mediaId" FROM media_external_id_aliases WHERE kind = 'album' AND provider = $1 AND value = $2
              UNION ALL
-             SELECT "mediaId" FROM album_details WHERE "releaseGroupMbid"::text = $2
+             SELECT "mediaId" FROM album_details WHERE "releaseGroupMbid" = $3::uuid
            ) x ORDER BY 1"#,
     )
     .bind(MB)
     .bind(id)
+    .bind(ExternalProvider::MusicBrainz.normalize(id))
     .fetch_all(db)
     .await
+}
+
+/// The one album an id names (see `albums_named`); none when it names no album or several of them.
+pub async fn sole_album_named(
+    db: impl sqlx::PgExecutor<'_>,
+    id: &str,
+) -> sqlx::Result<Option<i32>> {
+    Ok(match albums_named(db, id).await?.as_slice() {
+        [media] => Some(*media),
+        _ => None,
+    })
 }
 
 /// The person holding `id` as its live id, else as an alias.
@@ -176,23 +190,30 @@ struct Track {
     isrc: Option<String>,
     disc: i32,
     number: Option<i32>,
+    duration_ms: Option<i32>,
     title: Option<String>,
 }
 
 impl Track {
-    /// The same recording, else the same ISRC, else the same disc and number, else the same title.
-    fn is(&self, o: &Track) -> bool {
-        let same = |a: &Option<String>, b: &Option<String>| a.is_some() && a == b;
-        same(&self.recording, &o.recording)
-            || same(&self.isrc, &o.isrc)
-            || (self.number.is_some() && (self.disc, self.number) == (o.disc, o.number))
-            || self.title.as_ref().map(|t| t.trim().to_lowercase())
-                == o.title.as_ref().map(|t| t.trim().to_lowercase())
+    fn key(&self) -> Key {
+        Key {
+            recording: self.recording.clone(),
+            isrc: self.isrc.clone(),
+            disc: self.disc,
+            number: self.number,
+            duration_ms: self.duration_ms,
+            title: self.title.clone(),
+        }
     }
 }
 
+fn keys(tracks: &[&Track]) -> Vec<Key> {
+    tracks.iter().map(|t| t.key()).collect()
+}
+
 const TRACKS: &str = r#"SELECT i.id AS item, td."recordingMbid"::text AS recording, td.isrc, td."discNumber" AS disc,
-       td."trackNumber" AS number, i.title FROM items i JOIN track_details td ON td."itemId" = i.id
+       td."trackNumber" AS number, td."durationMs" AS duration_ms, i.title
+     FROM items i JOIN track_details td ON td."itemId" = i.id
      WHERE i."editionId" = $1 AND "#;
 
 /// The audio editions of `from` and of `into`, when both albums have one.
@@ -213,35 +234,39 @@ async fn editions_of(
         .zip(edition(into).fetch_optional(&mut *c).await?))
 }
 
-/// An album holds one edition: the files of the tracks of `old` move onto the tracks of `kept` that hold none
-/// and are the same recording; the filed tracks left join `kept`, and `old` goes with its other tracks.
+/// An album holds one edition. A filed track of `old` that pairs with a free track of `kept` is kept (its
+/// plays, likes and lyrics stay) and takes that track's provider facts; one that pairs with a filed track
+/// of `kept` adds its files to it as a new version. The filed tracks left join `kept`, `old` goes with the
+/// others.
 async fn merge_editions(c: &mut PgConnection, old: i32, kept: i32) -> sqlx::Result<()> {
-    let filed: Vec<Track> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{TRACKS} EXISTS (SELECT 1 FROM item_parts p WHERE p.\"itemId\" = i.id) ORDER BY i.id"
-    )))
-    .bind(old)
-    .fetch_all(&mut *c)
-    .await?;
-    let mut free: Vec<Track> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{TRACKS} NOT EXISTS (SELECT 1 FROM item_parts p WHERE p.\"itemId\" = i.id) ORDER BY i.id"
-    )))
-    .bind(kept)
-    .fetch_all(&mut *c)
-    .await?;
-    for t in &filed {
-        let Some(at) = free.iter().position(|f| t.is(f)) else {
-            continue;
-        };
-        let heir = free.remove(at);
-        sqlx::query(r#"UPDATE item_parts SET "itemId" = $2 WHERE "itemId" = $1"#)
-            .bind(t.item)
-            .bind(heir.item)
-            .execute(&mut *c)
-            .await?;
-        sqlx::query("DELETE FROM items WHERE id = $1")
-            .bind(t.item)
-            .execute(&mut *c)
-            .await?;
+    let load = |edition: i32, filed: bool| {
+        let clause = if filed { "EXISTS" } else { "NOT EXISTS" };
+        sqlx::query_as::<_, Track>(sqlx::AssertSqlSafe(format!(
+            "{TRACKS} {clause} (SELECT 1 FROM item_parts p WHERE p.\"itemId\" = i.id) ORDER BY i.id"
+        )))
+        .bind(edition)
+    };
+    let filed = load(old, true).fetch_all(&mut *c).await?;
+    let free = load(kept, false).fetch_all(&mut *c).await?;
+    let held = load(kept, true).fetch_all(&mut *c).await?;
+    let all: Vec<&Track> = filed.iter().collect();
+    let by_free = assign(&keys(&all), &keys(&free.iter().collect::<Vec<_>>()));
+    for (t, heir) in filed.iter().zip(&by_free) {
+        if let Some(heir) = heir {
+            take_over(c, t.item, free[*heir].item).await?;
+        }
+    }
+    let rest: Vec<&Track> = filed
+        .iter()
+        .zip(&by_free)
+        .filter(|(_, h)| h.is_none())
+        .map(|(t, _)| t)
+        .collect();
+    let by_held = assign(&keys(&rest), &keys(&held.iter().collect::<Vec<_>>()));
+    for (t, twin) in rest.iter().zip(&by_held) {
+        if let Some(twin) = twin {
+            add_versions(c, t.item, held[*twin].item).await?;
+        }
     }
     sqlx::query(
         r#"DELETE FROM items WHERE "editionId" = $1 AND NOT EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = items.id)"#,
@@ -259,6 +284,64 @@ async fn merge_editions(c: &mut PgConnection, old: i32, kept: i32) -> sqlx::Resu
         .execute(&mut *c)
         .await?;
     Ok(())
+}
+
+/// The filed track `filed` becomes the free track `heir`: its edition, title, monitoring, details, credits and
+/// works, the queue rows that target it; `heir` is deleted.
+async fn take_over(c: &mut PgConnection, filed: i32, heir: i32) -> sqlx::Result<()> {
+    for table in ["track_details", "item_credits", "item_works"] {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            r#"DELETE FROM {table} WHERE "itemId" = $1"#
+        )))
+        .bind(filed)
+        .execute(&mut *c)
+        .await?;
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            r#"UPDATE {table} SET "itemId" = $1 WHERE "itemId" = $2"#
+        )))
+        .bind(filed)
+        .bind(heir)
+        .execute(&mut *c)
+        .await?;
+    }
+    sqlx::query(
+        r#"UPDATE items t SET title = h.title, monitored = h.monitored, "editionId" = h."editionId"
+             FROM items h WHERE t.id = $1 AND h.id = $2"#,
+    )
+    .bind(filed)
+    .bind(heir)
+    .execute(&mut *c)
+    .await?;
+    sqlx::query(
+        r#"UPDATE acquisition_queue SET "itemIds" = array_replace("itemIds", $2, $1) WHERE $2 = ANY("itemIds")"#,
+    )
+    .bind(filed)
+    .bind(heir)
+    .execute(&mut *c)
+    .await?;
+    sqlx::query("DELETE FROM items WHERE id = $1")
+        .bind(heir)
+        .execute(&mut *c)
+        .await?;
+    Ok(())
+}
+
+/// The files of the track `from` become new versions of the track `into`; `from` is deleted.
+async fn add_versions(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"UPDATE item_parts SET "itemId" = $2,
+             version = version + (SELECT COALESCE(max(version) + 1, 0) FROM item_parts WHERE "itemId" = $2)
+           WHERE "itemId" = $1"#,
+    )
+    .bind(from)
+    .bind(into)
+    .execute(&mut *c)
+    .await?;
+    sqlx::query("DELETE FROM items WHERE id = $1")
+        .bind(from)
+        .execute(&mut *c)
+        .await
+        .map(drop)
 }
 
 /// `from` (an album that holds no id) is folded into `into`, which holds the id its files were matched to;

@@ -91,12 +91,7 @@ pub async fn sidecars(
             continue;
         };
         if let Ok(bytes) = tokio::fs::read(&path).await {
-            out.push((
-                lang,
-                name,
-                format,
-                String::from_utf8_lossy(&bytes).into_owned(),
-            ));
+            out.push((lang, name, format, fliks_domain::srt::decode_text(&bytes)));
         }
     }
     out
@@ -120,14 +115,15 @@ fn lang_of(p: &Parsed, given: &str) -> String {
         .unwrap_or_else(|| "und".into())
 }
 
-/// Stores what the file holds and removes the sidecar and embedded rows it no longer holds.
+/// Stores what the file holds and removes the sidecar and embedded rows it no longer holds; without `emb`
+/// (the tags were not read) the embedded rows are left alone.
 pub async fn file(
     st: &AppState,
     item: i32,
     file: i32,
     audio: &Path,
     duration_ms: Option<i32>,
-    emb: &Embedded,
+    emb: Option<&Embedded>,
     listing: &[String],
 ) -> sqlx::Result<()> {
     let order = sidecar_order(st).await;
@@ -176,11 +172,13 @@ pub async fn file(
         .await?;
         kept.push((lang, "sidecar".into()));
     }
-    let embedded = [(&emb.synced, Format::Lrc), (&emb.lyrics, Format::Plain)]
-        .into_iter()
-        .filter_map(|(t, f)| t.as_deref().map(|t| (t, f)))
-        .filter(|(t, _)| t.len() as u64 <= MAX_BYTES)
-        .find_map(|(t, f)| parse(f, t).ok().map(|p| (p, t)));
+    let embedded = emb.and_then(|emb| {
+        [(&emb.synced, Format::Lrc), (&emb.lyrics, Format::Plain)]
+            .into_iter()
+            .filter_map(|(t, f)| t.as_deref().map(|t| (t, f)))
+            .filter(|(t, _)| t.len() as u64 <= MAX_BYTES)
+            .find_map(|(t, f)| parse(f, t).ok().map(|p| (p, t)))
+    });
     if let Some((p, text)) = embedded {
         let lang = lang_of(&p, "und");
         store::upsert(
@@ -204,19 +202,21 @@ pub async fn file(
     crate::karaoke::store::drop_imports(&st.db, file, &imported).await?;
     let (langs, sources): (Vec<String>, Vec<String>) = kept.into_iter().unzip();
     sqlx::query(
-        r#"DELETE FROM lyrics WHERE "mediaFileId" = $1 AND source IN ('sidecar', 'embedded')
-             AND (lang, source) NOT IN (SELECT * FROM unnest($2::text[], $3::text[]))"#,
+        r#"DELETE FROM lyrics WHERE "mediaFileId" = $1
+             AND source = ANY($4) AND (lang, source) NOT IN (SELECT * FROM unnest($2::text[], $3::text[]))"#,
     )
     .bind(file)
     .bind(&langs)
     .bind(&sources)
+    .bind(if emb.is_some() { vec!["sidecar", "embedded"] } else { vec!["sidecar"] })
     .execute(&st.db)
     .await?;
     Ok(())
 }
 
-/// The lyrics of the files just laid out, read from `(file id, path, probe tags)`.
-pub async fn after_layout(st: &AppState, files: &[(i32, PathBuf, Embedded)]) {
+/// The lyrics of the files just laid out, read from `(file id, path, probe tags)`; no tags for a file that
+/// was not probed again.
+pub async fn after_layout(st: &AppState, files: &[(i32, PathBuf, Option<Embedded>)]) {
     let mut listings: HashMap<PathBuf, Vec<String>> = HashMap::new();
     for (id, path, emb) in files {
         let dir = path.parent().unwrap_or(Path::new("")).to_path_buf();
@@ -237,7 +237,7 @@ pub async fn after_layout(st: &AppState, files: &[(i32, PathBuf, Embedded)]) {
         let Some((item, duration)) = row else {
             continue;
         };
-        if let Err(e) = file(st, item, *id, path, duration, emb, &listings[&dir]).await {
+        if let Err(e) = file(st, item, *id, path, duration, emb.as_ref(), &listings[&dir]).await {
             tracing::warn!("lyrics of file #{id} not stored: {e}");
         }
     }

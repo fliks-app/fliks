@@ -330,6 +330,27 @@ pub fn apply_album_format(format: &str, d: &AlbumNameTokens) -> String {
     )
 }
 
+/// The artist folder and the album folder of an album from the folder formats, each without dots and
+/// spaces at its ends.
+pub fn album_folder_parts(f: &NamingFormats, t: &AlbumNameTokens) -> (String, String) {
+    let part = |format: &str| {
+        apply_album_format(format, t)
+            .trim()
+            .trim_matches('.')
+            .trim()
+            .to_owned()
+    };
+    (part(&f.artist_folder), part(&f.album_folder))
+}
+
+/// `artist/album`, the artist's left out when it is empty.
+pub fn album_folder_path(artist: &str, album: &str) -> String {
+    match artist.is_empty() {
+        true => album.to_owned(),
+        false => format!("{artist}/{album}"),
+    }
+}
+
 /// Why a folder name cannot be a single path component under the library root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FolderNameError {

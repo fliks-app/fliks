@@ -448,7 +448,7 @@ async fn ultrastar_stems_are_imported_kept_and_dropped_with_their_header(pool: P
                 1,
                 &audio,
                 Some(200_000),
-                &Default::default(),
+                Some(&Default::default()),
                 &listing,
             )
             .await
@@ -616,7 +616,7 @@ async fn a_failed_copy_keeps_the_imported_stem_the_header_still_names(pool: PgPo
             1,
             &audio,
             Some(200_000),
-            &Default::default(),
+            Some(&Default::default()),
             &listing,
         )
         .await

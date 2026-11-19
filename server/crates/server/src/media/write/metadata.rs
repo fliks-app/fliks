@@ -6,6 +6,7 @@ use super::{
     fields::{Fields, apply, merge_unmatched},
     gate,
 };
+use crate::ingest::music::identify::Outcome;
 use crate::media::{
     details::{drop_details, set_release_dates, set_tmdb_collection},
     field_sources::merge_field_sources,
@@ -475,15 +476,31 @@ async fn finish_identify(
     id: i32,
     changed: bool,
     group: Option<String>,
-) -> Result<String, AppError> {
+) -> Result<(i32, String), AppError> {
+    let mut id = id;
+    if let Some(group) = group {
+        // The pick also matches the files to a release of the group (`music.md` rule 41).
+        match crate::ingest::music::identify::identify(
+            st,
+            id,
+            Some(&group),
+            Priority::Interactive,
+            true,
+        )
+        .await?
+        {
+            Outcome::Merged(into) => id = into,
+            Outcome::Applied => {}
+            _ => {
+                return Err(AppError::conflict(
+                    "No release of this group could be applied to the album",
+                ));
+            }
+        }
+    }
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    if let Some(group) = group {
-        // The pick also matches the files to a release of the group (`music.md` rule 41).
-        crate::ingest::music::identify::identify(st, id, Some(&group), Priority::Interactive, true)
-            .await?;
-    }
     if let Some(found) = refresh_any_with(st, &media, true, Priority::Interactive, changed).await?
         && media.has_seasons()
     {
@@ -499,13 +516,19 @@ async fn finish_identify(
         media_ids: vec![i64::from(id)],
         reason: "metadata-refresh".into(),
     });
-    Ok(media.title)
+    Ok((id, media.title))
 }
 
-fn settle(st: &AppState, key: String, id: i32, old_title: String, r: Result<String, AppError>) {
+fn settle(
+    st: &AppState,
+    key: String,
+    id: i32,
+    old_title: String,
+    r: Result<(i32, String), AppError>,
+) {
     st.hub.activity().remove(&key);
     match r {
-        Ok(title) => st.hub.emit(SseEvent::MetadataRefreshed {
+        Ok((id, title)) => st.hub.emit(SseEvent::MetadataRefreshed {
             media_id: i64::from(id),
             title,
         }),
@@ -621,9 +644,11 @@ pub async fn identify(
                 "Provide the id of an album provider (provider and externalId) to identify this media against",
             ));
         };
-        let other = external_ids::find(&st.db, MediaKind::Album, *ns, value)
-            .await?
-            .filter(|o| *o != id);
+        let other = match *ns == Namespace::MUSICBRAINZ {
+            true => crate::metadata::music::aliases::album_of(&st.db, value).await?,
+            false => external_ids::find(&st.db, MediaKind::Album, *ns, value).await?,
+        }
+        .filter(|o| *o != id);
         if let Some(o) = other {
             return Err(AppError::conflict(format!(
                 "Album #{o} already uses this {} id",
@@ -826,7 +851,9 @@ async fn apply_identity(
     .execute(&mut *tx)
     .await?;
     let mut written = ids.replace(&mut tx, media.id, media.media_type).await?;
+    // An album's MusicBrainz pin is a release group: `identify` links the release it resolves.
     if let Some((ns, v)) = &pin
+        && !(media.media_type == MediaKind::Album && *ns == Namespace::MUSICBRAINZ)
         && external_ids::link(&mut tx, &known, media.id, media.media_type, *ns, v).await?
             == external_ids::Link::Gone
     {
@@ -908,7 +935,7 @@ pub async fn refresh(
         let title = media.title.clone();
         let r = refresh_any(&st2, &media, false, Priority::Interactive)
             .await
-            .map(|_| title);
+            .map(|_| (id, title));
         settle(&st2, key, id, media.title, r);
     });
     Ok((StatusCode::CREATED, Json(json!({"ok": true}))))
@@ -951,7 +978,7 @@ pub async fn refresh_episode(
     tokio::spawn(async move {
         let r = refresh_one_episode(&st2, episode)
             .await
-            .map(|()| media.title.clone());
+            .map(|()| (id, media.title.clone()));
         settle(&st2, key, id, media.title, r);
     });
     Ok((StatusCode::CREATED, Json(json!({"ok": true}))))

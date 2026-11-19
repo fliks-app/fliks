@@ -164,10 +164,10 @@ pub struct Track {
     pub duration_ms: Option<i32>,
 }
 
-/// The file a track's stems derive from: its first version.
+/// The file a track's stems derive from: its newest version.
 pub async fn track(st: &AppState, item: i32) -> Result<Track, String> {
     let file: Option<i32> = sqlx::query_scalar(
-        r#"SELECT ip."mediaFileId" FROM item_parts ip WHERE ip."itemId" = $1 ORDER BY ip.version LIMIT 1"#,
+        r#"SELECT ip."mediaFileId" FROM item_parts ip WHERE ip."itemId" = $1 ORDER BY ip.version DESC, ip.position LIMIT 1"#,
     )
     .bind(item)
     .fetch_optional(&st.db)

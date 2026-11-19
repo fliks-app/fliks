@@ -107,8 +107,8 @@ async fn person_name(st: &AppState, id: i32) -> Result<String, AppError> {
         .ok_or_else(|| AppError::not_found(format!("Person #{id} not found")))
 }
 
-/// The role a person is followed in: `author` with an author credit or an `openlibrary` id, `artist` with an
-/// artist credit or a `musicbrainz` id; none for anyone else.
+/// The role a person is followed in: `author` with an author credit or an `openlibrary` id, `artist` with a
+/// `musicbrainz` id (the refresh asks the provider by it); none for anyone else.
 async fn follow_role(
     st: &AppState,
     id: i32,
@@ -117,8 +117,7 @@ async fn follow_role(
     let (author, artist): (bool, bool) = sqlx::query_as(
         r#"SELECT EXISTS (SELECT 1 FROM media_credits WHERE "personId" = $1 AND role = 'author')
                 OR EXISTS (SELECT 1 FROM person_external_ids WHERE "personId" = $1 AND provider = 'openlibrary'),
-                EXISTS (SELECT 1 FROM media_credits WHERE "personId" = $1 AND role = 'artist')
-                OR EXISTS (SELECT 1 FROM person_external_ids WHERE "personId" = $1 AND provider = 'musicbrainz')"#,
+                EXISTS (SELECT 1 FROM person_external_ids WHERE "personId" = $1 AND provider = 'musicbrainz')"#,
     )
     .bind(id)
     .fetch_one(&st.db)
@@ -153,11 +152,12 @@ async fn follow_body(st: &AppState, user: i32, person: i32, requested: Option<&s
     let role = follow_role(st, person, requested).await?;
     let follow: Option<Follow> = sqlx::query_as(
         r#"SELECT role, "newReleases", "libraryId", wants, since FROM person_follows
-           WHERE "userId" = $1 AND "personId" = $2 AND ($3::text IS NULL OR role = $3)"#,
+           WHERE "userId" = $1 AND "personId" = $2 AND ($3::text IS NULL OR role = $3)
+           ORDER BY role LIMIT 1"#,
     )
     .bind(user)
     .bind(person)
-    .bind(requested)
+    .bind(requested.or(role))
     .fetch_optional(&st.db)
     .await?;
     Ok(Json(

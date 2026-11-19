@@ -16,7 +16,7 @@ use axum::{
     extract::{Query, State},
 };
 use fliks_domain::{
-    external_id::{Namespace, Namespaces},
+    external_id::{ExternalProvider, Namespace, Namespaces},
     media::{
         kind::MediaKind,
         query::{js_number, js_parse_int},
@@ -185,18 +185,18 @@ pub(crate) async fn mark_existing(
         .await?;
         if kind == MediaKind::Album {
             // A release group names the lowest album of the library that is one of its releases.
-            let groups: Vec<&str> = ps
+            let groups: Vec<String> = ps
                 .iter()
                 .zip(&vs)
                 .filter(|(p, _)| **p == "musicbrainz")
-                .map(|(_, v)| *v)
+                .filter_map(|(_, v)| ExternalProvider::MusicBrainz.normalize(v))
                 .collect();
             held.extend(
                 sqlx::query_as::<_, (i32, String, String)>(
                     r#"SELECT min(m.id), 'musicbrainz', ad."releaseGroupMbid"::text FROM media m
                        JOIN album_details ad ON ad."mediaId" = m.id
                        WHERE m.type = 'album' AND m."libraryId" = ANY($1)
-                         AND ad."releaseGroupMbid"::text = ANY($2)
+                         AND ad."releaseGroupMbid" = ANY($2::uuid[])
                        GROUP BY ad."releaseGroupMbid""#,
                 )
                 .bind(&libs)

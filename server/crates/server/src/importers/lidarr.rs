@@ -76,7 +76,12 @@ async fn profile(st: &AppState, p: &Value, created: &mut Vec<String>) -> Res<Opt
         &mut names,
     );
     let ids: Vec<u32> = names.iter().filter_map(|n| audio_quality_id(n)).collect();
-    let Some(cutoff) = ids.iter().max().copied() else {
+    let Some(cutoff) = AUDIO_QUALITIES
+        .iter()
+        .filter(|q| ids.contains(&q.id))
+        .max_by_key(|q| q.rank)
+        .map(|q| q.id)
+    else {
         return Ok(None);
     };
     let items: Vec<Value> = AUDIO_QUALITIES

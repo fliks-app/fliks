@@ -296,11 +296,12 @@ pub(super) async fn add(st: &AppState, job: &Job, work: &str) -> Result<bool, Ap
         r#"SELECT EXISTS (SELECT 1 FROM media_external_ids WHERE kind = $3 AND provider = $1 AND value = $2)
                 OR EXISTS (SELECT 1 FROM media_external_id_aliases WHERE kind = $3 AND provider = $1 AND value = $2)
                 OR EXISTS (SELECT 1 FROM discovered_works WHERE provider = $1 AND value = $2)
-                OR EXISTS (SELECT 1 FROM album_details WHERE $3 = 'album' AND "releaseGroupMbid"::text = $2)"#,
+                OR EXISTS (SELECT 1 FROM album_details WHERE $3 = 'album' AND "releaseGroupMbid" = $4::uuid)"#,
     )
     .bind(provider_of(&job.source).as_str())
     .bind(work)
     .bind(kind.as_str())
+    .bind(fliks_domain::external_id::ExternalProvider::MusicBrainz.normalize(work))
     .fetch_one(&mut *lock)
     .await?;
     if known {
@@ -436,10 +437,6 @@ pub async fn run(st: &AppState) -> Result<(), String> {
     if jobs.is_empty() {
         return Ok(());
     }
-    if jobs.iter().any(|j| kind_of(&j.source) == MediaKind::Book) && !st.metadata.available(ANCHOR)
-    {
-        return Err("the work provider is unavailable".into());
-    }
     let lang = st
         .metadata
         .lang
@@ -461,9 +458,7 @@ pub async fn run(st: &AppState) -> Result<(), String> {
             }
         }
         ran += 1;
-        if matches!(job.source, Source::Artist { .. })
-            && !st.metadata.available(Namespace::MUSICBRAINZ)
-        {
+        if !st.metadata.available(provider_of(&job.source)) {
             failed += 1;
             continue;
         }

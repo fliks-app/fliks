@@ -3,6 +3,7 @@
 //! `metadata::music`, never here.
 pub mod identify;
 pub mod naming;
+pub(crate) mod pairing;
 pub mod tags;
 pub mod tagwrite;
 
@@ -30,6 +31,7 @@ use fliks_domain::{
         split::{ARTIST_SEPARATORS, GENRE_SEPARATORS, separators},
     },
 };
+use pairing::{Key, assign};
 use serde_json::{Value, json};
 use sqlx::PgConnection;
 use std::{
@@ -233,7 +235,7 @@ pub async fn register_with(
             conflicts.push(format!("{name}: file already linked to another media"));
             continue;
         };
-        found.push((id, f.abs.clone(), embedded(&p.info)));
+        found.push((id, f.abs.clone(), Some(embedded(&p.info))));
         out.push(Registered {
             file_id: id,
             rel: f.rel.clone(),
@@ -296,9 +298,16 @@ pub async fn refresh(
             && r.mtime_ms == mtime
             && r.probe_version == Some(PROBE_VERSION)
         {
+            found.push((r.id, abs, None));
             continue;
         }
-        let p = probe(st, &abs, false).await?;
+        let p = match probe(st, &abs, false).await {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!("Rescan[album #{media}]: {} not probed: {e}", r.rel);
+                continue;
+            }
+        };
         sqlx::query(
             r#"UPDATE media_files SET size = $2, "streamInfo" = $3, "mtimeMs" = $4, "probeVersion" = $5 WHERE id = $1"#,
         )
@@ -316,13 +325,13 @@ pub async fn refresh(
                 .map_err(|e| e.to_string())?;
         }
         changed.push(r.id);
-        found.push((r.id, abs, embedded(&p.info)));
+        found.push((r.id, abs, Some(embedded(&p.info))));
     }
     if !changed.is_empty() {
         lay_out(st, media, &changed, false).await?;
-        crate::lyrics::discover::after_layout(st, &found).await;
         st.ingest.settle.schedule(st, media);
     }
+    crate::lyrics::discover::after_layout(st, &found).await;
     Ok(changed.len() as i64)
 }
 
@@ -370,8 +379,9 @@ pub async fn unrequested(
         let name = file_name(path);
         let tags =
             TrackTags::read(&p.info, &seps, stem(&name)).with_folder_disc(&path.to_string_lossy());
-        if free.iter().any(|f| !f.monitored && f.pairs(&tags))
-            && !free.iter().any(|f| f.monitored && f.pairs(&tags))
+        let key = Key::of(&tags);
+        if free.iter().any(|f| !f.monitored && f.key.pairs(&key))
+            && !free.iter().any(|f| f.monitored && f.key.pairs(&key))
         {
             out.push(path.clone());
         }
@@ -389,61 +399,8 @@ struct FileRow {
 /// An edition's tracks the files have not claimed: a file that moved takes its old track back.
 struct Free {
     item: i32,
-    disc: i32,
-    number: Option<i32>,
-    recording: Option<String>,
-    isrc: Option<String>,
-    duration_ms: Option<i32>,
-    title: Option<String>,
+    key: Key,
     monitored: bool,
-}
-
-/// How far a file's length may be from its track's for a pairing by position or title (rule 32).
-const DURATION_TOLERANCE_MS: i32 = 3000;
-
-impl Free {
-    /// A file's track: its recording id, else its ISRC, else its disc and track number, else its title; the
-    /// last two only when both lengths are known and within the tolerance.
-    fn pairs(&self, t: &TrackTags) -> bool {
-        let same = |a: &Option<String>, b: &Option<String>| {
-            a.as_ref()
-                .zip(b.as_ref())
-                .is_some_and(|(a, b)| a.eq_ignore_ascii_case(b))
-        };
-        if same(&t.recording, &self.recording) || same(&t.isrc, &self.isrc) {
-            return true;
-        }
-        let near = match (self.duration_ms, t.duration_ms) {
-            (Some(a), Some(b)) => (a - b).abs() <= DURATION_TOLERANCE_MS,
-            _ => true,
-        };
-        near && ((t.track.is_some() && self.number == t.track && self.disc == t.disc_number())
-            || t.title.as_ref().is_some_and(|n| {
-                self.title.as_ref().is_some_and(|m| {
-                    let (m, n) = (plain_title(m), plain_title(n));
-                    !m.is_empty() && m == n
-                })
-            }))
-    }
-}
-
-/// A title as the pairing compares it: lowercase letters and digits, parenthesised parts dropped.
-fn plain_title(s: &str) -> String {
-    let mut depth = 0;
-    s.chars()
-        .filter(|c| match c {
-            '(' | '[' => {
-                depth += 1;
-                false
-            }
-            ')' | ']' => {
-                depth = (depth - 1).max(0);
-                false
-            }
-            _ => depth == 0 && c.is_alphanumeric(),
-        })
-        .flat_map(char::to_lowercase)
-        .collect()
 }
 
 /// The fileless tracks of `media` that an open or finished queue row targets by item.
@@ -503,12 +460,14 @@ async fn load_free(
             .map(
                 |(item, disc, number, recording, isrc, duration_ms, title, monitored)| Free {
                     item,
-                    disc,
-                    number,
-                    recording,
-                    isrc,
-                    duration_ms,
-                    title,
+                    key: Key {
+                        recording,
+                        isrc,
+                        disc,
+                        number,
+                        duration_ms,
+                        title,
+                    },
                     monitored,
                 },
             )
@@ -707,6 +666,43 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
     let targets = targeted(&mut tx, media).await.map_err(|e| e.to_string())?;
     let mut free: HashMap<i32, Vec<Free>> = HashMap::new();
     let mut next: HashMap<i32, i32> = HashMap::new();
+    let mut edition_of: HashMap<i32, i32> = HashMap::new();
+    let mut unfiled: HashMap<i32, Vec<usize>> = HashMap::new();
+    for (i, (r, t)) in todo.iter().enumerate() {
+        if r.has_part {
+            continue;
+        }
+        let edition = edition_for(&mut tx, media, t)
+            .await
+            .map_err(|e| e.to_string())?;
+        load_free(&mut tx, edition, &mut free, &mut next)
+            .await
+            .map_err(|e| e.to_string())?;
+        edition_of.insert(r.id, edition);
+        unfiled.entry(edition).or_default().push(i);
+    }
+    let mut heir_of: HashMap<i32, i32> = HashMap::new();
+    for (edition, at) in &unfiled {
+        let tracks = &free[edition];
+        let files: Vec<Key> = at.iter().map(|i| Key::of(&todo[*i].1)).collect();
+        let keys: Vec<Key> = tracks.iter().map(|f| f.key.clone()).collect();
+        let mut got = assign(&files, &keys);
+        // The one targeted track left free takes the one file left over, unless the tags contradict it.
+        let aimed: Vec<usize> = (0..tracks.len())
+            .filter(|j| targets.contains(&tracks[*j].item) && !got.contains(&Some(*j)))
+            .collect();
+        let left: Vec<usize> = (0..got.len()).filter(|n| got[*n].is_none()).collect();
+        if let ([j], [n]) = (&aimed[..], &left[..])
+            && files[*n].compatible(&keys[*j])
+        {
+            got[*n] = Some(*j);
+        }
+        for (n, j) in got.iter().enumerate() {
+            if let Some(j) = j {
+                heir_of.insert(todo[at[n]].0.id, tracks[*j].item);
+            }
+        }
+    }
     let mut editions = None;
     for (r, t) in &todo {
         if r.has_part {
@@ -743,29 +739,12 @@ async fn lay_out(st: &AppState, media: i32, fresh: &[i32], force: bool) -> Resul
             }
             continue;
         }
-        let edition = edition_for(&mut tx, media, t)
-            .await
-            .map_err(|e| e.to_string())?;
+        let edition = edition_of[&r.id];
         editions = Some(edition);
-        load_free(&mut tx, edition, &mut free, &mut next)
-            .await
-            .map_err(|e| e.to_string())?;
-        let heirs = free.entry(edition).or_default();
-        // The one track a queue row targets takes the file no other free track claims; else the tags decide.
-        let mut aimed = heirs.iter().filter(|f| targets.contains(&f.item));
-        let aimed = match (aimed.next(), aimed.next()) {
-            (Some(f), None) if !heirs.iter().any(|o| o.item != f.item && o.pairs(t)) => {
-                Some(f.item)
-            }
-            _ => None,
-        };
-        let heir = match aimed {
-            Some(item) => heirs.iter().position(|f| f.item == item),
-            None => heirs.iter().position(|f| f.pairs(t)),
-        };
+        let heir = heir_of.get(&r.id).copied();
         let paired = heir.is_some();
         let item = match heir {
-            Some(i) => heirs.remove(i).item,
+            Some(item) => item,
             None => {
                 let item: i32 = sqlx::query_scalar(
                     r#"INSERT INTO items ("mediaId", "editionId", monitored, title) VALUES ($1, $2, true, $3)
@@ -1028,19 +1007,6 @@ mod tests {
         assert!(album_record(&[]).is_empty());
     }
 
-    fn free(title: &str, number: i32, ms: Option<i32>) -> Free {
-        Free {
-            item: 1,
-            disc: 1,
-            number: Some(number),
-            recording: None,
-            isrc: None,
-            duration_ms: ms,
-            title: Some(title.into()),
-            monitored: true,
-        }
-    }
-
     #[sqlx::test(migrations = false)]
     async fn a_file_without_musicbrainz_tags_keeps_the_ids_of_its_track(db: sqlx::PgPool) {
         crate::db::migrate(&db).await.unwrap();
@@ -1077,32 +1043,5 @@ mod tests {
                 Some("FRABC2400001".into())
             )
         );
-    }
-
-    #[test]
-    fn a_file_of_another_length_does_not_pair_by_position_or_title() {
-        let studio = free("Song", 3, Some(237_000));
-        let live = |ms| TrackTags {
-            title: Some("Song".into()),
-            track: Some(3),
-            duration_ms: Some(ms),
-            ..Default::default()
-        };
-        assert!(!studio.pairs(&live(306_000)));
-        assert!(studio.pairs(&live(239_500)));
-        assert!(free("Song", 3, None).pairs(&live(306_000)));
-    }
-
-    #[test]
-    fn an_isrc_pairs_whatever_the_title_and_the_length() {
-        let mut t = free("Song", 3, Some(237_000));
-        t.isrc = Some("QZAAA2100001".into());
-        let file = TrackTags {
-            title: Some("Other".into()),
-            isrc: Some("qzaaa2100001".into()),
-            duration_ms: Some(10_000),
-            ..Default::default()
-        };
-        assert!(t.pairs(&file));
     }
 }

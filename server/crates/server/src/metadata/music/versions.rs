@@ -43,7 +43,7 @@ pub async fn versions(st: &AppState, media: i32, readable: &[i32]) -> Result<Vec
              FROM media m JOIN album_details ad ON ad."mediaId" = m.id
              JOIN media_external_ids x ON x."mediaId" = m.id AND x.kind = 'album' AND x.provider = 'musicbrainz'
              LEFT JOIN editions e ON e."mediaId" = m.id AND e.family = 'audio'
-            WHERE ad."releaseGroupMbid"::text = $1 AND m."libraryId" = ANY($2)
+            WHERE ad."releaseGroupMbid" = $1::uuid AND m."libraryId" = ANY($2)
             ORDER BY 6 NULLS LAST, m.id"#,
     )
     .bind(&group)

@@ -51,6 +51,8 @@ pub struct Candidate {
 #[derive(Debug, PartialEq)]
 pub enum Outcome {
     Applied,
+    /// The album was folded into this one, which holds the release.
+    Merged(i32),
     Review(Vec<Candidate>),
     Nothing,
 }
@@ -328,17 +330,17 @@ async fn apply(
     found: Found,
     lang: &Resolved,
     prio: Priority,
-) -> Result<bool, AppError> {
+) -> Result<Outcome, AppError> {
     let release = found.edition.release.external_id.clone();
     if let Some(other) = aliases::album_of(&st.db, &release).await?
         && other != media
     {
         if aliases::absorb_into(st, media, other).await? {
             st.ingest.settle.schedule(st, other);
-            return Ok(true);
+            return Ok(Outcome::Merged(other));
         }
         tracing::warn!("album #{media}: an album of another library holds the release {release}");
-        return Ok(false);
+        return Ok(Outcome::Nothing);
     }
     let linked = {
         let mut c = st.db.acquire().await?;
@@ -353,14 +355,14 @@ async fn apply(
         .await?
     };
     if linked != Link::Linked {
-        return Ok(true);
+        return Ok(Outcome::Applied);
     }
     let src = Source {
         fetched: found.fetched,
         edition: found.edition,
     };
     write_album(st, media, NS, &src, &release, lang, (Create::No, prio)).await?;
-    Ok(true)
+    Ok(Outcome::Applied)
 }
 
 /// The release group the ids of the tags name, the group's own id first, else the one a search of the release
@@ -459,10 +461,7 @@ pub async fn identify(
                 scored,
             };
             tracing::info!("album #{media}: {}", found.describe("named by its tags"));
-            return Ok(match apply(st, media, found, &lang, prio).await? {
-                true => Outcome::Applied,
-                false => Outcome::Nothing,
-            });
+            return apply(st, media, found, &lang, prio).await;
         }
     }
     let artist_id = tags
@@ -513,10 +512,7 @@ pub async fn identify(
     match best {
         Some(b) if apply_best && b.scored.verdict(&cfg) == Verdict::Auto => {
             tracing::info!("album #{media}: applying {}", b.describe("best match"));
-            Ok(match apply(st, media, b, &lang, prio).await? {
-                true => Outcome::Applied,
-                false => Outcome::Nothing,
-            })
+            apply(st, media, b, &lang, prio).await
         }
         best if !review.is_empty() => {
             if let Some(b) = best {
