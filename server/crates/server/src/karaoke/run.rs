@@ -284,19 +284,7 @@ async fn viewers(st: &AppState, item: i32) -> Arc<[i32]> {
 
 /// What a run still has to do: `Separate` is not valid, or an asked step has work and its feature.
 async fn pending(st: &AppState, item: i32, opts: Opts) -> bool {
-    let Ok(t) = track(st, item).await else {
-        return true;
-    };
-    let Ok(models) = st.engine.models().await else {
-        return true;
-    };
-    let Some(sep) = installed_model(&models.models, ModelKind::Separation) else {
-        return true;
-    };
-    if !store::valid(&st.db, t.file, &sep.id, &sep.version)
-        .await
-        .unwrap_or(false)
-    {
+    if !stems_valid(st, item).await {
         return true;
     }
     let caps = super::caps(st).await;
@@ -305,6 +293,22 @@ async fn pending(st: &AppState, item: i32, opts: Opts) -> bool {
     };
     lstore::sort(&mut rows);
     has_work(&rows, &caps, opts)
+}
+
+/// The track has valid stems of the installed separation model; false when any of that is unknown.
+pub(super) async fn stems_valid(st: &AppState, item: i32) -> bool {
+    let Ok(t) = track(st, item).await else {
+        return false;
+    };
+    let Ok(models) = st.engine.models().await else {
+        return false;
+    };
+    let Some(sep) = installed_model(&models.models, ModelKind::Separation) else {
+        return false;
+    };
+    store::valid(&st.db, t.file, &sep.id, &sep.version)
+        .await
+        .unwrap_or(false)
 }
 
 fn has_work(rows: &[lstore::Row], caps: &super::Caps, opts: Opts) -> bool {
@@ -329,6 +333,13 @@ pub async fn start(
         .unwrap_or_else(|e| e.into_inner())
         .get(&item)
         .is_some_and(RunState::active)
+    {
+        return Start::Idle;
+    }
+    if let Ok(t) = track(st, item).await
+        && store::worker_separating(&st.db, t.file)
+            .await
+            .unwrap_or(false)
     {
         return Start::Idle;
     }
@@ -468,6 +479,7 @@ async fn separate(
 ) -> Result<String, String> {
     let info = t.info.clone().ok_or("the file was not probed")?;
     stage(st, item, "separate");
+    let _separating = super::Separating::new(&st.karaoke, t.file);
     let dir = store::file_dir(t.file);
     tokio::fs::create_dir_all(&dir)
         .await

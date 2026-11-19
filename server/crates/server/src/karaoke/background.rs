@@ -38,6 +38,9 @@ pub async fn allowed(st: &AppState) -> bool {
 pub fn spawn(st: &AppState) {
     let sweeper = st.clone();
     tokio::spawn(async move {
+        if let Err(e) = store::drop_missing(&sweeper.db).await {
+            tracing::warn!("karaoke rows of missing files not dropped: {e}");
+        }
         if let Err(e) = store::sweep(&sweeper).await {
             tracing::warn!("karaoke sweep failed: {e}");
         }
@@ -223,11 +226,16 @@ pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
             melody: true,
             force: true,
         };
-        let outcome = match run::start(&st, item, opts, JobPriority::Low, None).await {
-            run::Start::Started(handle) => {
-                Some(handle.await.unwrap_or_else(|e| Err(e.to_string().into())))
+        // Without stems, a re-alignment would separate: only where the background pass may.
+        let outcome = if !run::stems_valid(&st, item).await && !allowed(&st).await {
+            None
+        } else {
+            match run::start(&st, item, opts, JobPriority::Low, None).await {
+                run::Start::Started(handle) => {
+                    Some(handle.await.unwrap_or_else(|e| Err(e.to_string().into())))
+                }
+                _ => None,
             }
-            _ => None,
         };
         st.karaoke
             .realign_results

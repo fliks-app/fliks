@@ -113,9 +113,12 @@ pub async fn file_row(st: &AppState, id: i32) -> sqlx::Result<Option<FileRow>> {
     }))
 }
 
-/// Every `staged` job that is due, one at a time.
+/// Commits per tick: the lease sweep shares the task, and the rest wait for the next tick.
+const PER_TICK: usize = 4;
+
+/// The `staged` jobs that are due, one at a time.
 pub async fn run(st: &AppState) {
-    loop {
+    for _ in 0..PER_TICK {
         let row = sqlx::query(sqlx::AssertSqlSafe(format!(
             r#"SELECT {COLS} FROM jobs WHERE state = 'staged' AND "notBefore" <= now()
                ORDER BY id LIMIT 1"#
@@ -667,7 +670,10 @@ async fn subtitle_rows(
         let slot = Path::new(&f.folder)
             .join(".fliks-trash")
             .join(format!("{job}.ocr-{sid}.srt"));
-        match trash_file(&abs, &slot) {
+        let trashed = trash_file(&abs, &slot);
+        // One transaction: a crash never leaves a trashed SRT the job does not record.
+        let mut tx = st.db.begin().await.map_err(sql)?;
+        match trashed {
             Ok(()) => {
                 // The row is kept in the job, for a restore to put it back with the file.
                 sqlx::query(
@@ -680,7 +686,7 @@ async fn subtitle_rows(
                 .bind(abs.to_string_lossy())
                 .bind(slot.to_string_lossy())
                 .bind(sid)
-                .execute(&st.db)
+                .execute(&mut *tx)
                 .await
                 .map_err(sql)?;
                 sqlx::query(
@@ -691,7 +697,7 @@ async fn subtitle_rows(
                 .bind(job)
                 .bind(abs.to_string_lossy())
                 .bind(slot.to_string_lossy())
-                .execute(&st.db)
+                .execute(&mut *tx)
                 .await
                 .map_err(sql)?;
             }
@@ -699,9 +705,10 @@ async fn subtitle_rows(
         }
         sqlx::query("DELETE FROM subtitle_files WHERE id = $1")
             .bind(sid)
-            .execute(&st.db)
+            .execute(&mut *tx)
             .await
             .map_err(sql)?;
+        tx.commit().await.map_err(sql)?;
     }
     Ok(())
 }

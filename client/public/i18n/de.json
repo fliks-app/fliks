@@ -3741,6 +3741,7 @@
       "warning": {
         "no_audio": "Die Filter würden alle Audiospuren entfernen: Es wird keine entfernt.",
         "profile_subtitle": "Untertitel „{{language}}“ bleiben erhalten: Das Sprachprofil des Mediums fordert sie an.",
+        "no_language_match": "Keine Spur hat eine angeforderte Sprache: Nach Sprache wird nichts entfernt.",
         "lossless": "Audiospur {{n}}: Verlustfreier Ton oder Atmos geht durch den Ersatz verloren.",
         "video_copied": {
           "interlaced": "Das Video wird kopiert: Es ist interlaced.",

@@ -158,6 +158,8 @@ impl Change {
 pub enum Warning {
     /// The filters would remove every audio track: none is removed.
     NoAudioWouldRemain,
+    /// No track carries a requested language: nothing is removed by language.
+    NoLanguageMatch,
     #[serde(rename_all = "camelCase")]
     ProfileSubtitleKept { language: String },
     /// `incompatible: replace` drops a lossless or immersive track.
@@ -165,6 +167,19 @@ pub enum Warning {
     LosslessReplaced { stream_index: u32 },
     #[serde(rename_all = "camelCase")]
     VideoCopied { reason: &'static str },
+}
+
+/// Dropping by language needs a track that carries a requested one, else it would empty the file.
+fn drops_languages(
+    warnings: &mut Vec<Warning>,
+    on: bool,
+    none_match: bool,
+    any_known: bool,
+) -> bool {
+    if on && none_match && any_known && !warnings.contains(&Warning::NoLanguageMatch) {
+        warnings.push(Warning::NoLanguageMatch);
+    }
+    on && !none_match
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -597,6 +612,12 @@ impl Builder<'_> {
             })
         };
         let langs: Vec<Option<String>> = info.audio.iter().map(lang_of).collect();
+        let drop_language = drops_languages(
+            &mut self.warnings,
+            p.drop_other_languages,
+            langs.iter().flatten().all(|c| !wanted.contains(c)),
+            langs.iter().any(Option::is_some),
+        );
         for (t, l) in info.audio.iter().zip(&langs) {
             let declared = languages::known(&t.language);
             if let Some(code) = l
@@ -622,8 +643,7 @@ impl Builder<'_> {
                     && p.drop.iter().any(|d| d == "audio_description")
                 {
                     Some(DropReason::AudioDescription)
-                } else if p.drop_other_languages && l.as_ref().is_some_and(|c| !wanted.contains(c))
-                {
+                } else if drop_language && l.as_ref().is_some_and(|c| !wanted.contains(c)) {
                     Some(DropReason::Language)
                 } else {
                     None
@@ -758,14 +778,23 @@ impl Builder<'_> {
                 }
             }
         }
+        let langs: Vec<String> = info
+            .subtitles
+            .iter()
+            .filter_map(|t| languages::known(&t.language))
+            .collect();
+        let drop_language = drops_languages(
+            &mut self.warnings,
+            p.drop_other_languages,
+            langs.iter().all(|c| !keep_langs.contains(c)),
+            !langs.is_empty(),
+        );
         let mut kept: Vec<&SubtitleStreamInfo> = vec![];
         for t in &info.subtitles {
             let lang = languages::known(&t.language);
             let reason = if t.is_image_based && p.image == ImageSubs::Drop {
                 Some(DropReason::ImageSubtitle)
-            } else if p.drop_other_languages
-                && lang.as_ref().is_some_and(|c| !keep_langs.contains(c))
-            {
+            } else if drop_language && lang.as_ref().is_some_and(|c| !keep_langs.contains(c)) {
                 Some(DropReason::Language)
             } else {
                 None
@@ -1064,10 +1093,18 @@ mod tests {
     }
 
     fn run(preset: Preset, path: &str, info: &MediaInfo, original: Option<&str>) -> Outcome {
-        let profile = preset.document();
+        run_profile(&preset.document(), path, info, original)
+    }
+
+    fn run_profile(
+        profile: &Profile,
+        path: &str,
+        info: &MediaInfo,
+        original: Option<&str>,
+    ) -> Outcome {
         let playable: HashSet<String> = ["aac", "ac3", "eac3"].map(String::from).into();
         let env = Env {
-            profile: &profile,
+            profile,
             allow_rename: false,
             target: Some(Target::Hevc),
             audio_playable: &playable,
@@ -1169,6 +1206,29 @@ mod tests {
         let only = info("hevc", vec![c]);
         assert!(
             !matches!(run(Preset::CleanupOnly, "a.mkv", &only, Some("en")), Outcome::Diff(d) if d.changes.iter().any(|x| matches!(x, Change::Drop { .. })))
+        );
+    }
+
+    #[test]
+    fn a_language_list_that_resolves_to_nothing_drops_nothing() {
+        let mut profile = Preset::CleanupOnly.document();
+        profile.audio.languages = vec!["original".into()];
+        profile.audio.drop_other_languages = true;
+        let i = info(
+            "hevc",
+            vec![
+                audio(1, "eng", "aac", 2),
+                audio(2, "fre", "aac", 2),
+                audio(3, "und", "aac", 2),
+            ],
+        );
+        let outcome = run_profile(&profile, "a.mkv", &i, None);
+        assert!(
+            !matches!(&outcome, Outcome::Diff(d) if d.changes.iter().any(|c| matches!(c, Change::Drop { .. })))
+        );
+        let with_original = run_profile(&profile, "a.mkv", &i, Some("en"));
+        assert!(
+            matches!(&with_original, Outcome::Diff(d) if d.changes.iter().any(|c| matches!(c, Change::Drop { stream_index: 2, .. })))
         );
     }
 

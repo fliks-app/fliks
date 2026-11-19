@@ -466,6 +466,37 @@ async fn the_purge_leaves_the_original_of_an_unfinished_restore(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_restore_that_cannot_start_ends_and_the_original_returns_to_the_purge(pool: PgPool) {
+    let w = world(pool, json!([])).await;
+    commit::run(&w.st).await;
+    let journal: swap::Journal =
+        serde_json::from_value(job(&w).await["result"]["journal"].clone()).unwrap();
+    let back = journal.backup.clone().unwrap();
+    let r = swap::Restore {
+        target: journal.target.clone(),
+        source: journal.source.clone(),
+        back: back.clone(),
+        slot: swap::optimized_slot(&w.dir.join("M"), w.job),
+        optimized: journal.staged_id.clone(),
+        original: journal.source_id.clone(),
+        companions: vec![],
+    };
+    fs::write(&w.src, b"edited elsewhere").unwrap();
+    sqlx::query(
+        r#"UPDATE jobs SET result = result || jsonb_build_object('restore', $1::jsonb, 'trashPath', $2::text)"#,
+    )
+    .bind(json!(r))
+    .bind(r.slot.to_string_lossy())
+    .execute(&w.st.db)
+    .await
+    .unwrap();
+    recover::recover(&w.st, 0.0).await;
+    let result = job(&w).await["result"].clone();
+    assert!(result.get("restore").is_none());
+    assert_eq!(result["trashPath"], json!(back.to_string_lossy()));
+}
+
+#[sqlx::test(migrations = false)]
 async fn the_preview_of_one_file_explains_an_old_probe(pool: PgPool) {
     use crate::optimize::{codec::Capabilities, diff, profile::Preset, select};
     let w = world(pool, json!([])).await;

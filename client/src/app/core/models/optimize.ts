@@ -147,6 +147,7 @@ export type Change =
 
 export type Warning =
   | { type: 'noAudioWouldRemain' }
+  | { type: 'noLanguageMatch' }
   | { type: 'profileSubtitleKept'; language: string }
   | { type: 'losslessReplaced'; streamIndex: number }
   | { type: 'videoCopied'; reason: string };

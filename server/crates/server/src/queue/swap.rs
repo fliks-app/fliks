@@ -204,25 +204,11 @@ pub fn abort(j: &Journal) -> io::Result<()> {
     }
     if let Some(b) = &j.backup
         && is(&j.source, &j.source_id)
-        && same_file(b, &j.source)
+        && is(b, &j.source_id)
     {
         fs::remove_file(b)?;
     }
     Ok(())
-}
-
-#[cfg(unix)]
-fn same_file(a: &Path, b: &Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    match (fs::metadata(a), fs::metadata(b)) {
-        (Ok(x), Ok(y)) => (x.dev(), x.ino()) == (y.dev(), y.ino()),
-        _ => false,
-    }
-}
-
-#[cfg(not(unix))]
-fn same_file(_: &Path, _: &Path) -> bool {
-    false
 }
 
 /// The optimized file of a restore waits here, never under the name that holds the original.

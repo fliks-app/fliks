@@ -105,22 +105,19 @@ pub struct Access {
     pub mappings: Vec<PathMapping>,
 }
 
-pub async fn access(pool: &PgPool, id: i32) -> sqlx::Result<Access> {
-    let row =
-        sqlx::query(r#"SELECT "pathAccess", "pathMappings" FROM worker_tokens WHERE id = $1"#)
-            .bind(id)
-            .fetch_optional(pool)
-            .await?;
-    Ok(row.map_or(
-        Access {
-            shared: false,
-            mappings: vec![],
-        },
-        |r| Access {
-            shared: r.get::<String, _>("pathAccess") == "shared",
-            mappings: serde_json::from_value(r.get("pathMappings")).unwrap_or_default(),
-        },
-    ))
+/// `None` once the token is disabled or revoked.
+pub async fn access(pool: &PgPool, id: i32) -> sqlx::Result<Option<Access>> {
+    let row = sqlx::query(
+        r#"SELECT "pathAccess", "pathMappings" FROM worker_tokens
+           WHERE id = $1 AND enabled AND "revokedAt" IS NULL"#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| Access {
+        shared: r.get::<String, _>("pathAccess") == "shared",
+        mappings: serde_json::from_value(r.get("pathMappings")).unwrap_or_default(),
+    }))
 }
 
 #[derive(Deserialize)]

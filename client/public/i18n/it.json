@@ -3741,6 +3741,7 @@
       "warning": {
         "no_audio": "I filtri rimuoverebbero tutte le tracce audio: nessuna viene rimossa.",
         "profile_subtitle": "I sottotitoli «{{language}}» vengono mantenuti: il profilo lingua del media li richiede.",
+        "no_language_match": "Nessuna traccia ha una lingua richiesta: nulla viene rimosso per lingua.",
         "lossless": "Traccia audio {{n}}: l'audio lossless o Atmos viene perso con la sostituzione.",
         "video_copied": {
           "interlaced": "Il video viene copiato: è interlacciato.",

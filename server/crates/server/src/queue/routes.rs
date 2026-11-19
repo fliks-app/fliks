@@ -199,26 +199,12 @@ pub async fn lease(
         return Err(AppError::not_found("unknown device"));
     };
     let deadline = Instant::now() + Duration::from_secs(u64::from(store::LONG_POLL_S));
-    let reach = match who {
-        Principal::Local => Reach::Path(vec![]),
-        Principal::Token(id) => {
-            let a = tokens::access(&st.db, id).await.map_err(db)?;
-            if a.shared {
-                Reach::Path(a.mappings)
-            } else {
-                // A worker without the library reads over the main engine's public data plane.
-                let base = crate::auth::oidc::db::public_url(&st.db)
-                    .await
-                    .map_err(db)?;
-                Reach::Http(base.unwrap_or_default())
-            }
-        }
-    };
-    let local = matches!(reach, Reach::Path(_));
-    let serving = !matches!(&reach, Reach::Http(b) if b.is_empty());
     loop {
         let mut woken = std::pin::pin!(st.queue.wake.notified());
         woken.as_mut().enable();
+        let reach = reach_of(&st, who).await?;
+        let local = matches!(reach, Reach::Path(_));
+        let serving = !matches!(&reach, Reach::Http(b) if b.is_empty());
         let conf = settings::load(&st.db).await.map_err(db)?;
         if serving && !conf.paused && conf.open_now() {
             let (hw, sw) = codec_split(&device.encoders);
@@ -260,6 +246,25 @@ pub async fn lease(
             return Ok(StatusCode::NO_CONTENT.into_response());
         }
     }
+}
+
+/// Read on every poll, so a revoke or a mapping change reaches a long-poll in flight.
+async fn reach_of(st: &AppState, who: Principal) -> Result<Reach, AppError> {
+    let Principal::Token(id) = who else {
+        return Ok(Reach::Path(vec![]));
+    };
+    let a = tokens::access(&st.db, id)
+        .await
+        .map_err(db)?
+        .ok_or_else(|| AppError::bare(StatusCode::UNAUTHORIZED))?;
+    if a.shared {
+        return Ok(Reach::Path(a.mappings));
+    }
+    // A worker without the library reads over the main engine's public data plane.
+    let base = crate::auth::oidc::db::public_url(&st.db)
+        .await
+        .map_err(db)?;
+    Ok(Reach::Http(base.unwrap_or_default()))
 }
 
 #[utoipa::path(post, path = "/engine/jobs/{id}/heartbeat", responses((status = 200), (status = 409)))]
@@ -419,7 +424,10 @@ async fn output_error(
     };
     let by_path = match who {
         Principal::Local => true,
-        Principal::Token(t) => tokens::access(&st.db, t).await.map_err(db)?.shared,
+        Principal::Token(t) => tokens::access(&st.db, t)
+            .await
+            .map_err(db)?
+            .is_some_and(|a| a.shared),
     };
     let staged = store::staged_of(&st.db, id).await.map_err(db)?;
     if !by_path {

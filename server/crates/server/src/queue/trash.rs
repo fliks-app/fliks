@@ -8,7 +8,8 @@ const GIB: i64 = 1 << 30;
 
 struct Held {
     id: i64,
-    path: PathBuf,
+    /// Absent under the `keep` and `delete` policies, which still trash OCR SRTs.
+    path: Option<PathBuf>,
     /// SRTs moved out of the library by the job.
     ocr: Vec<PathBuf>,
     /// Past the retention.
@@ -27,7 +28,7 @@ async fn run(pool: &PgPool) -> sqlx::Result<()> {
     let rows = sqlx::query(
         r#"SELECT id, result ->> 'trashPath' AS path, result -> 'ocrTrash' AS ocr,
              "finishedAt" < now() - make_interval(days => $1) AS expired
-           FROM jobs WHERE state = 'done' AND result ? 'trashPath' AND NOT (result ? 'trashPurgedAt')
+           FROM jobs WHERE state = 'done' AND (result ? 'trashPath' OR result ? 'ocrTrash') AND NOT (result ? 'trashPurgedAt')
              AND (NOT (result ? 'restore') OR result ? 'restoredAt')
            ORDER BY "finishedAt", id"#,
     )
@@ -38,7 +39,7 @@ async fn run(pool: &PgPool) -> sqlx::Result<()> {
         .iter()
         .map(|r| Held {
             id: r.get("id"),
-            path: PathBuf::from(r.get::<String, _>("path")),
+            path: r.get::<Option<String>, _>("path").map(PathBuf::from),
             ocr: r
                 .get::<Option<serde_json::Value>, _>("ocr")
                 .and_then(|v| serde_json::from_value::<Vec<(PathBuf, PathBuf)>>(v).ok())
@@ -51,7 +52,12 @@ async fn run(pool: &PgPool) -> sqlx::Result<()> {
         .collect();
     let threshold = i64::from(s.trash_min_free_gb) * GIB;
     for h in held {
-        let low = match h.path.parent() {
+        let dir = h
+            .path
+            .as_deref()
+            .or(h.ocr.first().map(PathBuf::as_path))
+            .and_then(Path::parent);
+        let low = match dir {
             Some(d) => {
                 let d = disk(&d.to_string_lossy()).await;
                 d.accessible && d.free_space < threshold
@@ -62,18 +68,36 @@ async fn run(pool: &PgPool) -> sqlx::Result<()> {
             // Oldest first: the next ones are younger and the disk is not low.
             continue;
         }
-        if remove(&h.path).await {
-            for p in &h.ocr {
-                remove(p).await;
-            }
-            sqlx::query(
-                r#"UPDATE jobs SET result = result || jsonb_build_object('trashPurgedAt', now()),
-                     "updatedAt" = now() WHERE id = $1"#,
-            )
-            .bind(h.id)
-            .execute(pool)
-            .await?;
+        // The row lock orders the unlink against a restore, which writes `restore` under the same row.
+        let mut tx = pool.begin().await?;
+        let free: Option<i64> = sqlx::query_scalar(
+            r#"SELECT id FROM jobs WHERE id = $1 AND state = 'done' AND NOT (result ? 'trashPurgedAt')
+                 AND (NOT (result ? 'restore') OR result ? 'restoredAt') FOR UPDATE"#,
+        )
+        .bind(h.id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if free.is_none() {
+            continue;
         }
+        let kept = match &h.path {
+            Some(p) => !remove(p).await,
+            None => false,
+        };
+        if kept {
+            continue;
+        }
+        for p in &h.ocr {
+            remove(p).await;
+        }
+        sqlx::query(
+            r#"UPDATE jobs SET result = result || jsonb_build_object('trashPurgedAt', now()),
+                 "updatedAt" = now() WHERE id = $1"#,
+        )
+        .bind(h.id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
     }
     Ok(())
 }
