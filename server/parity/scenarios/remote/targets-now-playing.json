@@ -151,6 +151,7 @@
               "posterUrl": null,
               "qualities": null,
               "quality": null,
+              "queue": null,
               "state": "playing",
               "stemMode": null,
               "stemsAvailable": null,
