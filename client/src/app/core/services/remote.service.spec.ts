@@ -59,6 +59,7 @@ function setup(opts: { selected?: string | null; held?: { targetId: string; medi
     commands: new Subject<RemoteCommand>(),
     stopped: new Subject<{ targetId: string; sessionId: string | null }>(),
     remoteState,
+    remoteStates: new Subject<RemoteState>(),
     lastEvent: signal(null),
     connectionId,
     connected: computed(() => connectionId() !== null),
@@ -290,6 +291,32 @@ describe('RemoteService observation', () => {
     service.ingestState();
     expect(service.isObserving()).toBe(false);
     expect(service.targetState()).toBeNull();
+  });
+});
+
+describe('RemoteService frames', () => {
+  const q = { itemIds: [11, 12, 13], index: 1, shuffle: true, repeat: 'off' as const };
+
+  it('ingests every frame of one tick: a queue followed by a frame without one keeps the queue', () => {
+    const { service, sse } = setup({ selected: 'tv#1' });
+    sse.remoteStates.next(frame({ queue: q }));
+    sse.remoteStates.next(frame({ positionSeconds: 31 }));
+    TestBed.tick();
+    expect(service.targetQueue()).toEqual(q);
+    expect(service.targetState()?.positionSeconds).toBe(31);
+  });
+
+  it('takes an ack followed by another frame in the same tick', async () => {
+    const { service, sse } = setup({ selected: 'tv#1' });
+    const http = TestBed.inject(HttpTestingController);
+    const sent = service.send('tv#1', { action: 'shuffle', shuffle: true });
+    http.expectOne('/api/remote/tv%231/command').flush({ cmdId: 'c1' });
+    await sent;
+    expect(service.pendingAction()).toBe('shuffle');
+    sse.remoteStates.next(frame({ lastCmdId: 'c1' }));
+    sse.remoteStates.next(frame({ lastCmdId: null }));
+    TestBed.tick();
+    expect(service.pendingAction()).toBeNull();
   });
 });
 
@@ -839,7 +866,7 @@ describe('RemoteService browse', () => {
 describe('RemoteService mirrors navigation to a target', () => {
   async function routerSetup() {
     const remoteState = signal<RemoteState | null>(null);
-    const sse = { commands: new Subject<RemoteCommand>(), stopped: new Subject<{ targetId: string; sessionId: string | null }>(), remoteState, lastEvent: signal(null), connectionId: signal<string | null>(null), targetId: signal<string | null>('phone#1') };
+    const sse = { commands: new Subject<RemoteCommand>(), stopped: new Subject<{ targetId: string; sessionId: string | null }>(), remoteState, remoteStates: new Subject<RemoteState>(), lastEvent: signal(null), connectionId: signal<string | null>(null), targetId: signal<string | null>('phone#1') };
     TestBed.configureTestingModule({
       providers: [
         RemoteService,

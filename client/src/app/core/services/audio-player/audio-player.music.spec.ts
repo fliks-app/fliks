@@ -767,6 +767,21 @@ describe('AudioPlayerService music mode', () => {
       expect(updatePlaybackState.mock.calls.at(-1)![1].playbackRate).toBe(1.5);
     });
 
+    it('beats once for a command that changes what observers see, and still beats for one that does not', async () => {
+      const audio = TestBed.inject(AudioPlayerService);
+      await audio.playTracks([track(1), track(2), track(3)]);
+      TestBed.tick();
+      updatePlaybackState.mockClear();
+      validated.next(cmd('shuffle', { shuffle: true }));
+      await vi.waitFor(() => expect(audio.shuffle()).toBe(true));
+      TestBed.tick();
+      expect(updatePlaybackState).toHaveBeenCalledTimes(1);
+      expect(updatePlaybackState.mock.calls[0][1].queue).toMatchObject({ shuffle: true });
+      updatePlaybackState.mockClear();
+      validated.next(cmd('seek', { positionSeconds: 30 }));
+      await vi.waitFor(() => expect(updatePlaybackState).toHaveBeenCalled());
+    });
+
     it('applies transport, shuffle and repeat commands and acknowledges them', async () => {
       const audio = TestBed.inject(AudioPlayerService);
       await audio.playTracks([track(1), track(2), track(3)]);

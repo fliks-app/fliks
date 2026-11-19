@@ -164,6 +164,7 @@ describe('SseService: session change', () => {
 
 describe('SseService: native dial credential', () => {
   const urls: string[] = [];
+  const sources: { onmessage: (e: { data: string }) => void }[] = [];
 
   async function dial(ticket: string | null, deviceName = ''): Promise<string> {
     vi.restoreAllMocks();
@@ -174,8 +175,10 @@ describe('SseService: native dial credential', () => {
         static CONNECTING = 0;
         static OPEN = 1;
         readyState = 0;
+        onmessage: (e: { data: string }) => void = () => {};
         constructor(url: string) {
           urls.push(url);
+          sources.push(this);
         }
         addEventListener() {}
         close() {}
@@ -227,6 +230,19 @@ describe('SseService: native dial credential', () => {
     expect(new URL(await dial('tk', 'Desk')).searchParams.get('name')).toBe('Desk');
     // The translation key stands in for the label: no catalogue is loaded here.
     expect(new URL(await dial('tk')).searchParams.get('name')).toBe('system.device_browser_on_os');
+  });
+
+  it('hands on every remote.state frame of a burst, not only the last', async () => {
+    sources.length = 0;
+    await dial('tk');
+    const sse = TestBed.inject(SseService);
+    const acks: (string | null)[] = [];
+    sse.remoteStates.subscribe((s) => acks.push(s.lastCmdId));
+    const frame = (lastCmdId: string | null) => ({ data: JSON.stringify({ type: 'remote.state', targetId: 'tv#1', lastCmdId }) });
+    sources[0].onmessage(frame('c1'));
+    sources[0].onmessage(frame(null));
+    expect(acks).toEqual(['c1', null]);
+    expect(sse.remoteState()?.lastCmdId).toBeNull();
   });
 
   it('falls back to the access token when no ticket can be minted', async () => {
