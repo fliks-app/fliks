@@ -90,7 +90,7 @@ describe('CastPlayerService reporting without the player page', () => {
       liveSessionId: () => 's',
       qoeSample: () => null,
       controlOnly: () => false,
-      cast: { receiverPlays: () => true, currentTime: () => 30, duration: () => 100, isPaused: () => false, saveHeartbeat: vi.fn() },
+      cast: { receiverPlays: () => true, currentTime: () => 30, duration: () => 100, isPaused: () => false, deviceName: () => 'Living room', saveHeartbeat: vi.fn() },
       authService: { accessToken: 'tok', ensureStreamToken: vi.fn(async () => 'st') },
       serverConfig: { resolveUrl: (p: string) => p },
       streamingApi: { updatePlaybackState: vi.fn(async () => response) },
@@ -116,7 +116,7 @@ describe('CastPlayerService reporting without the player page', () => {
     expect(self.cast.saveHeartbeat).toHaveBeenCalledWith({
       url: '/api/playback/media/2/state',
       token: 'st',
-      body: expect.objectContaining({ positionSeconds: 30, mediaFileId: 1, sessionId: 's' }),
+      body: expect.objectContaining({ positionSeconds: 30, mediaFileId: 1, sessionId: 's', castDevice: 'Living room' }),
     });
   });
 
