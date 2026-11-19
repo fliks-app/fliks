@@ -118,7 +118,9 @@ export class WhatsNewModalComponent {
         const base = `${root}${version}/`;
         let md: string | null = null;
         for (const l of new Set([lang, 'en'])) if ((md = await fetchText(`${base}${l}.md`))) break;
-        if (md) slides.push(...parseWhatsNew(md, base).map((s) => ({ ...s, version })));
+        // A listed version without notes is a broken deploy: keep it unseen for the fixed one.
+        if (!md) return;
+        slides.push(...parseWhatsNew(md, base).map((s) => ({ ...s, version })));
       }
     } catch {
       return; // Offline: try again on the next launch.

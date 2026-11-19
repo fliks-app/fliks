@@ -3,6 +3,7 @@ dist
 .angular
 .git
 *.md
+!public/whats-new/**/*.md
 
 # 82 MB of Gradle output; Dockerfile.dev copies neither, but the context ships them.
 android
