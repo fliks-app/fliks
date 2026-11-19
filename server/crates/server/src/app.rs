@@ -277,6 +277,13 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         notifications::update,
         notifications::remove,
         notifications::test,
+        crate::push::config,
+        crate::push::subscribe,
+        crate::push::unsubscribe,
+        crate::push::test,
+        crate::push::act,
+        crate::push::status,
+        crate::push::pending_drop,
         social::likes_list,
         social::like_state,
         social::like_add,
@@ -577,6 +584,7 @@ fn api() -> Router<AppState> {
         .merge(images::router())
         .merge(media::router())
         .merge(notifications::router())
+        .merge(crate::push::router())
         .merge(social::router())
         .merge(playlists::router())
         .merge(profiles::router())

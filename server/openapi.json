@@ -4976,6 +4976,83 @@
         }
       }
     },
+    "/api/push/act": {
+      "post": {
+        "tags": [
+          "crate::push"
+        ],
+        "operationId": "act",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/push/config": {
+      "get": {
+        "tags": [
+          "crate::push"
+        ],
+        "operationId": "config",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/push/pending/{relay}": {
+      "delete": {
+        "tags": [
+          "crate::push"
+        ],
+        "operationId": "pending_drop",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/push/status": {
+      "get": {
+        "tags": [
+          "crate::push"
+        ],
+        "operationId": "status",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/push/subscriptions": {
+      "post": {
+        "tags": [
+          "crate::push"
+        ],
+        "operationId": "subscribe",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
+    "/api/push/subscriptions/current": {
+      "delete": {
+        "tags": [
+          "crate::push"
+        ],
+        "operationId": "unsubscribe",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
+    "/api/push/test": {
+      "post": {
+        "tags": [
+          "crate::push"
+        ],
+        "operationId": "test",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/quality-definitions": {
       "get": {
         "tags": [

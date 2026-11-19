@@ -24,7 +24,7 @@ const DEFAULT_MAX_PER_RUN: i64 = 10;
 
 fn notify(st: &AppState, event: &'static str, payload: Value) {
     if let Value::Object(p) = payload {
-        services::notify(st, event, p);
+        services::notify(st, event, p, None);
     }
 }
 

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT\n        u.\"id\", u.\"createdAt\" AS created_at, u.\"updatedAt\" AS updated_at,\n        u.\"username\" AS username, u.\"email\" AS email, u.\"roleId\" AS role_id,\n        u.\"mediaServerType\"::text AS \"media_server_type!\",\n        u.\"mediaServerId\" AS media_server_id, u.\"avatar\" AS avatar,\n        u.\"lastLogin\" AS last_login, u.\"isAdmin\" AS is_admin, u.\"enabled\" AS enabled,\n        u.\"requirePasswordChange\" AS require_password_change,\n        COALESCE((SELECT jsonb_object_agg(q.\"kind\", q.\"limit\") FROM user_quotas q\n            WHERE q.\"userId\" = u.\"id\"), '{}'::jsonb) AS \"quotas!: Json<HashMap<MediaKind, i32>>\",\n        u.\"quotaPeriodDays\" AS quota_period_days,\n        u.\"libraryOrder\" AS \"library_order: Json<Vec<i32>>\",\n        u.\"hiddenLibraryIds\" AS \"hidden_library_ids: Json<Vec<i32>>\",\n        u.\"profileVisibility\"::text AS \"profile_visibility!\",\n        u.\"shareTastes\" AS share_tastes, u.\"shareRecommendations\" AS share_recommendations,\n        u.\"shareWatchHistory\" AS share_watch_history, u.\"shareLikes\" AS share_likes,\n        u.\"shareStats\" AS share_stats, u.\"shareDisabled\" AS share_disabled,\n        u.\"hideSpoilers\" AS hide_spoilers, u.\"edlEnabled\" AS edl_enabled,\n        u.\"edlAutoSkipCommercials\" AS edl_auto_skip_commercials,\n        u.\"spoilerHideStills\" AS spoiler_hide_stills,\n        u.\"spoilerHideOverviews\" AS spoiler_hide_overviews,\n        u.\"spoilerHideTitles\" AS spoiler_hide_titles,\n        u.\"sessionSync\" AS session_sync, u.\"sessionKinds\" AS session_kinds,\n        u.\"whatsNewEnabled\" AS whats_new_enabled, u.\"whatsNewSeen\" AS whats_new_seen,\n        r.\"id\" AS \"role_row_id?\", r.\"createdAt\" AS \"role_created_at?\", r.\"updatedAt\" AS \"role_updated_at?\",\n        r.\"name\" AS \"role_name?\", r.\"permissions\" AS \"role_permissions?\", r.\"isDefault\" AS \"role_is_default?\"\n    FROM users u LEFT JOIN roles r ON r.\"id\" = u.\"roleId\"\n    WHERE ($1::int IS NULL OR u.\"id\" = $1) AND (NOT $2 OR u.\"enabled\")\n        AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM sessions s\n            WHERE s.\"id\" = $3 AND s.\"userId\" = u.\"id\" AND s.\"revokedAt\" IS NULL))\n    ORDER BY u.\"username\" ASC",
+  "query": "SELECT\n        u.\"id\", u.\"createdAt\" AS created_at, u.\"updatedAt\" AS updated_at,\n        u.\"username\" AS username, u.\"email\" AS email, u.\"roleId\" AS role_id,\n        u.\"mediaServerType\"::text AS \"media_server_type!\",\n        u.\"mediaServerId\" AS media_server_id, u.\"avatar\" AS avatar,\n        u.\"lastLogin\" AS last_login, u.\"isAdmin\" AS is_admin, u.\"enabled\" AS enabled,\n        u.\"requirePasswordChange\" AS require_password_change,\n        COALESCE((SELECT jsonb_object_agg(q.\"kind\", q.\"limit\") FROM user_quotas q\n            WHERE q.\"userId\" = u.\"id\"), '{}'::jsonb) AS \"quotas!: Json<HashMap<MediaKind, i32>>\",\n        u.\"quotaPeriodDays\" AS quota_period_days,\n        u.\"libraryOrder\" AS \"library_order: Json<Vec<i32>>\",\n        u.\"hiddenLibraryIds\" AS \"hidden_library_ids: Json<Vec<i32>>\",\n        u.\"profileVisibility\"::text AS \"profile_visibility!\",\n        u.\"shareTastes\" AS share_tastes, u.\"shareRecommendations\" AS share_recommendations,\n        u.\"shareWatchHistory\" AS share_watch_history, u.\"shareLikes\" AS share_likes,\n        u.\"shareStats\" AS share_stats, u.\"shareDisabled\" AS share_disabled,\n        u.\"hideSpoilers\" AS hide_spoilers, u.\"edlEnabled\" AS edl_enabled,\n        u.\"edlAutoSkipCommercials\" AS edl_auto_skip_commercials,\n        u.\"spoilerHideStills\" AS spoiler_hide_stills,\n        u.\"spoilerHideOverviews\" AS spoiler_hide_overviews,\n        u.\"spoilerHideTitles\" AS spoiler_hide_titles,\n        u.\"sessionSync\" AS session_sync, u.\"sessionKinds\" AS session_kinds,\n        u.\"pushMuted\" AS \"push_muted!\",\n        u.\"whatsNewEnabled\" AS whats_new_enabled, u.\"whatsNewSeen\" AS whats_new_seen,\n        r.\"id\" AS \"role_row_id?\", r.\"createdAt\" AS \"role_created_at?\", r.\"updatedAt\" AS \"role_updated_at?\",\n        r.\"name\" AS \"role_name?\", r.\"permissions\" AS \"role_permissions?\", r.\"isDefault\" AS \"role_is_default?\"\n    FROM users u LEFT JOIN roles r ON r.\"id\" = u.\"roleId\"\n    WHERE ($1::int IS NULL OR u.\"id\" = $1) AND (NOT $2 OR u.\"enabled\")\n        AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM sessions s\n            WHERE s.\"id\" = $3 AND s.\"userId\" = u.\"id\" AND s.\"revokedAt\" IS NULL))\n    ORDER BY u.\"username\" ASC",
   "describe": {
     "columns": [
       {
@@ -342,6 +342,17 @@
       },
       {
         "ordinal": 32,
+        "name": "push_muted!",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "pushMuted"
+          }
+        }
+      },
+      {
+        "ordinal": 33,
         "name": "whats_new_enabled",
         "type_info": "Bool",
         "origin": {
@@ -352,7 +363,7 @@
         }
       },
       {
-        "ordinal": 33,
+        "ordinal": 34,
         "name": "whats_new_seen",
         "type_info": "Text",
         "origin": {
@@ -363,7 +374,7 @@
         }
       },
       {
-        "ordinal": 34,
+        "ordinal": 35,
         "name": "role_row_id?",
         "type_info": "Int4",
         "origin": {
@@ -374,7 +385,7 @@
         }
       },
       {
-        "ordinal": 35,
+        "ordinal": 36,
         "name": "role_created_at?",
         "type_info": "Timestamptz",
         "origin": {
@@ -385,7 +396,7 @@
         }
       },
       {
-        "ordinal": 36,
+        "ordinal": 37,
         "name": "role_updated_at?",
         "type_info": "Timestamptz",
         "origin": {
@@ -396,7 +407,7 @@
         }
       },
       {
-        "ordinal": 37,
+        "ordinal": 38,
         "name": "role_name?",
         "type_info": "Varchar",
         "origin": {
@@ -407,7 +418,7 @@
         }
       },
       {
-        "ordinal": 38,
+        "ordinal": 39,
         "name": "role_permissions?",
         "type_info": "Text",
         "origin": {
@@ -418,7 +429,7 @@
         }
       },
       {
-        "ordinal": 39,
+        "ordinal": 40,
         "name": "role_is_default?",
         "type_info": "Bool",
         "origin": {
@@ -470,6 +481,7 @@
       false,
       true,
       false,
+      false,
       true,
       false,
       false,
@@ -479,5 +491,5 @@
       false
     ]
   },
-  "hash": "877fba7cb3341d503c4e9a4cf3650e7d2bc5f3f1db3048e6d602fa2a715e5855"
+  "hash": "a001fd2c7af5ea2c6deb390a68a318548f45529a27fdd47ccb7a020df8b533b4"
 }

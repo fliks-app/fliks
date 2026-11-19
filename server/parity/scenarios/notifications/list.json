@@ -85,6 +85,13 @@
               "url": "https://b.example.test"
             },
             "type": "webhook"
+          },
+          {
+            "enabled": false,
+            "events": [],
+            "name": "Fliks Relay",
+            "settings": {},
+            "type": "fliks-relay"
           }
         ],
         "status": 200

@@ -336,7 +336,8 @@ pub async fn sidebar_counts(
         let ids = accessible_library_ids(&st.db, &a).await?;
         aggregates::counts_by_library(&st.db, &ids, &a.kinds).await
     };
-    let (pending, by_library) = tokio::try_join!(pending, by_library)?;
+    let attention = async { crate::push::attention(&st.db, &a).await };
+    let (pending, by_library, attention) = tokio::try_join!(pending, by_library, attention)?;
     let mut badges = serde_json::Map::new();
     let sees_queue = a.perms.can(Action::Manage, &Subject::Settings)
         || a.perms.can(Action::Track, &Subject::Media);
@@ -344,6 +345,6 @@ pub async fn sidebar_counts(
         badges.insert("queueActive".into(), n.into());
     }
     Ok(Json(
-        json!({ "badgeCounts": badges, "pendingRequests": pending, "mediaByLibrary": by_library }),
+        json!({ "badgeCounts": badges, "pendingRequests": pending, "mediaByLibrary": by_library, "attention": attention }),
     ))
 }

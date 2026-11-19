@@ -1,0 +1,114 @@
+{
+  "ignore": [
+    "$..id",
+    "$..createdAt",
+    "$..updatedAt"
+  ],
+  "name": "notifications-builtin",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "enabled": false,
+          "events": [],
+          "name": "Fliks Relay",
+          "settings": {},
+          "type": "fliks-relay"
+        },
+        "status": 200
+      },
+      "method": "GET",
+      "path": "/api/notifications/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "name": "Fliks Relay",
+        "settings": {},
+        "type": "fliks-relay"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": [
+            "type must be one of the following values: discord, slack, webhook, gotify, ntfy"
+          ],
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "POST",
+      "path": "/api/notifications"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "notifications.error_builtin",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "DELETE",
+      "path": "/api/notifications/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": "yes"
+      },
+      "expect": {
+        "body": {
+          "error": "Bad Request",
+          "message": "enabled must be a boolean value",
+          "statusCode": 400
+        },
+        "status": 400
+      },
+      "method": "PUT",
+      "path": "/api/notifications/1"
+    },
+    {
+      "as": "admin",
+      "body": {
+        "enabled": false,
+        "events": [
+          "request.created"
+        ],
+        "name": "Renamed",
+        "settings": {
+          "url": "https://x.example.test"
+        },
+        "type": "webhook"
+      },
+      "expect": {
+        "body": {
+          "enabled": false,
+          "events": [],
+          "name": "Fliks Relay",
+          "settings": {},
+          "type": "fliks-relay"
+        },
+        "status": 200
+      },
+      "method": "PUT",
+      "path": "/api/notifications/1"
+    },
+    {
+      "as": "admin",
+      "expect": {
+        "body": {
+          "message": "Fliks Relay is disabled",
+          "ok": false
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/notifications/1/test"
+    }
+  ],
+  "strictMessage": true
+}

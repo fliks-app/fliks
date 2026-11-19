@@ -47,6 +47,7 @@ pub mod playlists;
 pub mod plugins;
 pub mod presence;
 pub mod profiles;
+pub mod push;
 pub mod qoe;
 pub mod queue;
 pub mod remote;
@@ -143,6 +144,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     stream::spawn(&state);
     state.engine.start(state.db.clone(), state.cfg.port).await;
     remote::init(&state);
+    push::init(&state);
     account_session::spawn(&state).await;
     media::write::recover(&state).await;
     ingest::books::backfill_unmatched(&state).await;

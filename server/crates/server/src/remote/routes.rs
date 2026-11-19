@@ -186,6 +186,7 @@ pub async fn register(
             target_id: Some(target_id.clone()),
             form_factor: Some(dto.form_factor.unwrap_or_else(|| "tv".into())),
             tv_platform: None,
+            lang: None,
             device_name: dto.name,
             user_agent: None,
         },

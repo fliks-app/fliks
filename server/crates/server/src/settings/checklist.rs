@@ -42,7 +42,7 @@ const ITEMS: [(&str, &str, &str, &str); 7] = [
         "notification",
         "recommended",
         "notifications",
-        "SELECT EXISTS(SELECT 1 FROM notification_connections)",
+        "SELECT EXISTS(SELECT 1 FROM notification_connections WHERE type <> 'fliks-relay')",
     ),
     (
         "non-admin-user",

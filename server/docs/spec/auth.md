@@ -184,6 +184,10 @@ No auth route has a policy beyond the extractor.
 85. Secrets, tokens and the ID token are never logged or returned (the stored ID token is only an `id_token_hint`); logs carry the user id, the provider id and a hash prefix of the `sub`. Hourly, `oidc_logins` rows expired for an hour are deleted.
 86. Residual risk: an attacker who starts a flow on a native or loopback target and sends the victim the `authorizeUrl` never receives the code (it lands on the victim's device), but can still lure the victim through the provider; `prompt=consent` on the provider reduces it and no server check closes it.
 
+### L. Push cleanup
+
+87. Push subscriptions follow session revocation (`push.md` rules 22 and 45). After a session is revoked (logout with a refresh token, refresh reuse, `DELETE /auth/sessions/:id`, `DELETE /users/:id/sessions`), after a password change (every session of the target except the caller's own on a self change) and after a user is disabled (every session of the user), the push sweep deletes the `push_subscriptions` rows of those sessions and calls `DELETE /v1/subscriptions/{sub}` at the relay for each mobile one; a row stays until the relay answered. The sweep runs at those call sites right after the revoke queries and again every 10 minutes and at boot, which also catches the paths that hold no state (OIDC back-channel logout, provider disable). Revoked sessions and disabled users are also excluded from the push send query, so nothing is sent between the revoke and the sweep. A deleted user's rows are removed after their relay subscriptions are deleted (`users.md` rule 36).
+
 ## SQL
 
 Tables `users`, `roles`, `sessions`, `refresh_tokens`, `pairing_requests`, `oidc_providers`, `oidc_role_mappings`, `user_identities`, `oidc_logins` (base columns `id, "createdAt", "updatedAt"`). `roles.permissions` is `simple-json` (a text column holding a JSON array). Table DDL is in the sqlx migrations.

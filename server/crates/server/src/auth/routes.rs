@@ -364,7 +364,10 @@ pub(crate) async fn logout(
     };
     if let Some(raw) = text("refreshToken") {
         match db::revoke(&st.db, raw, Utc::now()).await {
-            Ok(Some(session)) => st.hub.drop_connections_for_session(session),
+            Ok(Some(session)) => {
+                st.hub.drop_connections_for_session(session);
+                st.push.spawn_sweep(&st);
+            }
             Ok(None) => {}
             Err(e) => tracing::debug!(error = %e, "logout revoke failed"),
         }
@@ -429,6 +432,7 @@ pub(crate) async fn revoke_session(
     let id = id?.0;
     if db::revoke_user_session(&st.db, a.user.id, id, Utc::now()).await? {
         st.hub.drop_connections_for_session(id);
+        st.push.spawn_sweep(&st);
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(AppError::not_found("Session not found"))

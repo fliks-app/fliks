@@ -4,6 +4,7 @@ use super::{
     dto::{self, CreateRequest, Field, UpdateRequest},
     rules, services,
 };
+use crate::push::ReqRef;
 use crate::{
     events::DomainEvent,
     http::{AppError, auth::Authed},
@@ -448,9 +449,9 @@ async fn want_tracks(st: &AppState, media: i32, recordings: &[String], held: boo
         .map_err(Refused::app_error)
 }
 
-fn notify(st: &AppState, event: &'static str, payload: Value) {
+fn notify(st: &AppState, event: &'static str, payload: Value, user: Option<ReqRef>) {
     if let Value::Object(m) = payload {
-        services::notify(st, event, m);
+        services::notify(st, event, m, user);
     }
 }
 
@@ -592,10 +593,16 @@ async fn finish_create(st: AppState, n: Added, spec: Option<ImportSpec>) -> Res<
     } else {
         "request.created"
     };
+    let user = (!auto).then_some(ReqRef {
+        id: n.id,
+        requester: Some(n.user),
+        media: None,
+    });
     notify(
         &st,
         event,
         json!({"title": n.title, "mediaType": media_type}),
+        user,
     );
     Ok(media_id)
 }
@@ -868,6 +875,7 @@ async fn create_delete(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Va
         st,
         "request.delete.created",
         json!({"title": dto.title, "mediaType": dto.media_type}),
+        None,
     );
     let mut row = row_json(st, id).await?;
     row.remove("qualityProfileId");
@@ -1112,7 +1120,17 @@ async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bo
         seasons: row.seasons.map(|s| s.0),
         approved_by_user_id: Some(i64::from(by)),
     });
-    notify(st, "request.approved", json!({"title": row.title}));
+    let user = ReqRef {
+        id,
+        requester: row.user_id,
+        media: media.map(|m| (m, row.media_type)),
+    };
+    notify(
+        st,
+        "request.approved",
+        json!({"title": row.title}),
+        Some(user),
+    );
     Ok(Value::Object(row_json(st, id).await?))
 }
 
@@ -1161,6 +1179,7 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
         st,
         "request.delete.approved",
         json!({"title": row.title, "mediaType": row.media_type}),
+        None,
     );
     Ok(Value::Object(row_json(st, id).await?))
 }
@@ -1179,6 +1198,11 @@ pub async fn decline(st: &AppState, a: &Authed, id: i32, reason: Option<String>)
         st,
         event,
         json!({"title": row.title, "reason": reason.unwrap_or_default()}),
+        Some(ReqRef {
+            id,
+            requester: row.user_id,
+            media: row.media_id.map(|m| (m, row.media_type)),
+        }),
     );
     let mut json = row_json(st, id).await?;
     json.remove("media");

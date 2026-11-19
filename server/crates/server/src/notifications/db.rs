@@ -71,7 +71,8 @@ pub async fn subscribed(pool: &PgPool, event: &str) -> sqlx::Result<Vec<Connecti
         r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, type AS typ,
                   settings AS "settings: Json<Map<String, Value>>",
                   events AS "events: Json<Vec<String>>", enabled
-           FROM notification_connections WHERE enabled AND jsonb_exists(events, $1)"#,
+           FROM notification_connections
+           WHERE enabled AND type <> 'fliks-relay' AND jsonb_exists(events, $1)"#,
         event
     )
     .fetch_all(pool)
@@ -112,6 +113,26 @@ pub async fn update(pool: &PgPool, id: i32, w: Write) -> sqlx::Result<Option<Con
         Value::Object(w.settings),
         w.events.map(|e| json!(e)),
         w.enabled,
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+/// The built-in connection takes no other write.
+pub async fn set_enabled(
+    pool: &PgPool,
+    id: i32,
+    enabled: bool,
+) -> sqlx::Result<Option<Connection>> {
+    sqlx::query_as!(
+        Connection,
+        r#"UPDATE notification_connections SET enabled = $2, "updatedAt" = now()
+           WHERE id = $1
+           RETURNING id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, type AS typ,
+                     settings AS "settings: Json<Map<String, Value>>",
+                     events AS "events: Json<Vec<String>>", enabled"#,
+        id,
+        enabled,
     )
     .fetch_optional(pool)
     .await

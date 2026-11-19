@@ -81,6 +81,9 @@ anyhow = "1"
 http = "1"
 http-body = "1"
 ed25519-dalek = "3"
+p256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdh", "ecdsa", "std"] }
+hkdf = "0.13"
+aes-gcm = "0.10"
 nodejs-semver = "7"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 kepub = { path = "../kepub" }

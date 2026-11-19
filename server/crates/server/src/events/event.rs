@@ -1,4 +1,4 @@
-//! Wire events (`docs/spec/events-hub.md`, Events): the 50 `SseEvent` types, the 11 `DomainEvent`
+//! Wire events (`docs/spec/events-hub.md`, Events): the 51 `SseEvent` types, the 11 `DomainEvent`
 //! types and the plugin envelope. Field names and omission rules follow `JSON.stringify` of the 4.x objects.
 use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -650,6 +650,23 @@ pub enum SseEvent {
     },
     #[serde(rename = "party.proposals")]
     PartyProposals { party_id: i64, proposals: Value },
+    #[serde(rename = "notification")]
+    Notification {
+        id: String,
+        ts: i64,
+        ttl: i64,
+        cat: String,
+        title: String,
+        body: String,
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        image: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        actions: Option<Value>,
+        badge: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tag: Option<String>,
+    },
 }
 
 impl SseEvent {
@@ -774,7 +791,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// One minimal wire sample per `SseEvent` type of the spec table (50).
+    /// One minimal wire sample per `SseEvent` type of the spec table (51).
     fn samples() -> Vec<Value> {
         let sub = json!({"title": "T"});
         vec![
@@ -839,13 +856,14 @@ mod tests {
             json!({"type":"party.signal","partyId":1,"from":{"userId":2,"deviceId":"d"},"kind":"offer","data":{"sdp":"x"}}),
             json!({"type":"party.programme","partyId":1,"rev":3,"item":{"mediaId":1}}),
             json!({"type":"party.proposals","partyId":1,"proposals":[{"id":1,"upvoterIds":[2],"downvoterIds":[]}]}),
+            json!({"type":"notification","id":"n","ts":1,"ttl":60,"cat":"requests","title":"t","body":"b","url":"/requests","badge":0}),
         ]
     }
 
     #[test]
     fn every_type_round_trips_to_the_same_json() {
         let all = samples();
-        assert_eq!(all.len(), 55);
+        assert_eq!(all.len(), 56);
         for want in all {
             let ev: SseEvent = serde_json::from_value(want.clone()).unwrap();
             assert_eq!(serde_json::to_value(&ev).unwrap(), want);

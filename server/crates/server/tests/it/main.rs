@@ -40,6 +40,7 @@ mod playback;
 mod playlists;
 mod plugins;
 mod profiles;
+mod push;
 mod remote;
 mod requests;
 mod roles;

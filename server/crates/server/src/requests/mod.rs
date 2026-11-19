@@ -4,7 +4,7 @@ pub(crate) use db::lock_titles;
 #[cfg(test)]
 mod book_tests;
 pub(crate) mod dto;
-mod flow;
+pub(crate) mod flow;
 mod lifecycle;
 mod routes;
 mod rules;
