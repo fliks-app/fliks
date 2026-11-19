@@ -1,6 +1,6 @@
 # Spec: item delivery (audio and text items, item identity on playback routes, finished rules)
 
-Scope: how the host delivers the audio and text items of a book: resolving an item to its parts, the item playback-info and its session, what the engine resolver answers for them, the `itemId` that names an item on the playback routes, the progression and locator of a text item, and the finished rule of each family. The engine side is `fliks-engine` 1.9.0 (`PROTOCOL.md`, `docs/spec/item.md`: `DecideMedia.parts`, `ResolveResponse.parts`, `PlaybackInfo.parts`). Model: `items.md`, `books.md`. The plan is `plans/books-audiobooks.plan.md` sections 3.3 and 3.7, phase items 2.1 and 2.2. No client in this change.
+Scope: how the host delivers the audio and text items of a book: resolving an item to its parts, the item playback-info and its session, what the engine resolver answers for them, the `itemId` that names an item on the playback routes, the progression and locator of a text item, and the finished rule of each family. The engine side is `fliks-engine` 1.9.0 (`PROTOCOL.md`, `docs/spec/item.md`: `DecideMedia.parts`, `ResolveResponse.parts`, `PlaybackInfo.parts`). Model: `items.md`, `books.md`. No client in this change.
 
 ## Routes
 

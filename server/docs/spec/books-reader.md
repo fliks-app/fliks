@@ -1,6 +1,6 @@
 # Spec: EPUB reader routes (Readium manifest and sanitised resources)
 
-Scope: what the web reader reads of an EPUB edition: the Readium Web Publication manifest, the positions list and the resources of the archive. An EPUB comes from an indexer and its XHTML can carry script: served on the app origin it would act with the `fliks_access` cookie, so every resource is rewritten and served under a strict CSP (`plans/books-audiobooks.plan.md` section 3.8, spike `plans/reader-spike.md`). The package reader is `fliks_domain::books::package` (pure); the routes, the zip access and the rewriter are `fliks_server::books::reader`. The client reader is described in the last section, as far as it constrains the server.
+Scope: what the web reader reads of an EPUB edition: the Readium Web Publication manifest, the positions list and the resources of the archive. An EPUB comes from an indexer and its XHTML can carry script: served on the app origin it would act with the `fliks_access` cookie, so every resource is rewritten and served under a strict CSP. The package reader is `fliks_domain::books::package` (pure); the routes, the zip access and the rewriter are `fliks_server::books::reader`. The client reader is described in the last section, as far as it constrains the server.
 
 ## Routes
 

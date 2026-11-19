@@ -1,6 +1,6 @@
 # Spec: wants, follows, the wanted list and the calendar
 
-Scope: the per-work wants (family x language) of any media, the follows of an author and the watch of a series, the scheduled `FollowRefresh` job that turns the new titles they find into monitored media, the wanted list and the release calendar over every kind. Requests, quotas and auto-approval (3.4) and the download plugin categories (3.2) are out. The plan is `plans/books-audiobooks.plan.md` sections 3.5 and 3.11; the table `wants` is `items.md` rules 29-34, widened to `text` and `audio` by `books.md` rule 1. Domain rules: `fliks_domain::media::wants`.
+Scope: the per-work wants (family x language) of any media, the follows of an author and the watch of a series, the scheduled `FollowRefresh` job that turns the new titles they find into monitored media, the wanted list and the release calendar over every kind. Requests, quotas, auto-approval and the download plugin categories are out. The table `wants` is `items.md` rules 29-34, widened to `text` and `audio` by `books.md` rule 1. Domain rules: `fliks_domain::media::wants`.
 
 ## Wants
 

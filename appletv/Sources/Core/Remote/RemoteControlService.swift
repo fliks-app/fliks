@@ -76,7 +76,7 @@ import UIKit
             for entry in entries {
                 switch entry {
                 case .command(let cmd): await apply(cmd)
-                case .superseded(let sid, _, _):
+                case .superseded(let sid, _):
                     await sessionSuperseded(sessionId: sid)
                 case .other: break
                 }

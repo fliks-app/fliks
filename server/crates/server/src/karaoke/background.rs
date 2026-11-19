@@ -79,9 +79,10 @@ async fn follow(st: AppState) {
 
 async fn pass_loop(st: AppState) {
     let mut adopted = st.engine.adoptions();
+    let timed = !crate::jobs::cron_disabled();
     loop {
         tokio::select! {
-            () = tokio::time::sleep(WAKE_EVERY) => {}
+            () = tokio::time::sleep(WAKE_EVERY), if timed => {}
             changed = adopted.changed() => {
                 if changed.is_err() { return }
                 st.karaoke.stopped.store(false, Ordering::Relaxed);

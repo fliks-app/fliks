@@ -1,6 +1,6 @@
 # Spec: OpenSubsonic API
 
-Scope: the music API third-party players speak (OpenSubsonic, a superset of Subsonic 1.16.1) over the `album` kind of `music.md`: routes, authentication, the response envelope in JSON and XML, ids, the endpoints and their shapes, the stream credential. Credentials are `device-tokens.md` (kind `subsonic`). Lyrics (`songLyrics`) and smart playlists are rules 33-34. Not in this spec: the play queue, transcoding. The plan is `plans/music-library.plan.md` section "OpenSubsonic API", batch F7a.
+Scope: the music API third-party players speak (OpenSubsonic, a superset of Subsonic 1.16.1) over the `album` kind of `music.md`: routes, authentication, the response envelope in JSON and XML, ids, the endpoints and their shapes, the stream credential. Credentials are `device-tokens.md` (kind `subsonic`). Lyrics (`songLyrics`) and smart playlists are rules 33-34. Not in this spec: the play queue, transcoding.
 
 ## Routes
 

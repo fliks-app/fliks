@@ -1,6 +1,6 @@
 # Spec: kosync (KOReader progress sync)
 
-Scope: the server KOReader's "Progress sync" plugin talks to: routes, wire format, authentication by a `kosync` device token, how a document hash names a text file, and how a position lands in the text progression the web reader uses. Credentials are `device-tokens.md`; the hash is `book-ingest.md` rule 13 and `books-files.md` rule 40; the progression is `item-delivery.md` rules 18-24. The wire follows koreader/koreader `plugins/kosync.koplugin` and the reference `koreader/koreader-sync-server`. Plan: `plans/books-audiobooks.plan.md` section 3.9 point 4, item 4.4.
+Scope: the server KOReader's "Progress sync" plugin talks to: routes, wire format, authentication by a `kosync` device token, how a document hash names a text file, and how a position lands in the text progression the web reader uses. Credentials are `device-tokens.md`; the hash is `book-ingest.md` rule 13 and `books-files.md` rule 40; the progression is `item-delivery.md` rules 18-24. The wire follows koreader/koreader `plugins/kosync.koplugin` and the reference `koreader/koreader-sync-server`.
 
 ## Routes
 

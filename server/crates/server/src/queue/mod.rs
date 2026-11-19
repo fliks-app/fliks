@@ -1,4 +1,4 @@
-//! The durable job queue (`library-optimize.plan.md`, "Generic job queue" and "Worker protocol"): workers
+//! The durable job queue (`library-optimize-workers.md`): workers
 //! lease `jobs` rows over `/engine/workers/*` and `/engine/jobs/*`. Not `jobs/`, the cron scheduler.
 pub(crate) mod api;
 mod auth;

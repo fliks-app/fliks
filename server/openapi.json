@@ -1380,6 +1380,19 @@
         }
       }
     },
+    "/api/karaoke/realign/items": {
+      "get": {
+        "tags": [
+          "crate::karaoke::aligner"
+        ],
+        "summary": "Rule 41: the stale tracks, 50 at a time, with the outcome of their last re-alignment.",
+        "operationId": "realign_items",
+        "responses": {
+          "200": {},
+          "503": {}
+        }
+      }
+    },
     "/api/karaoke/status": {
       "get": {
         "tags": [

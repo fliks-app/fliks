@@ -257,7 +257,7 @@ pub async fn transfer(
     };
     ensure_supported(&st, a.user.id, owner, &conn, &cmd).await?;
     st.account_sessions
-        .expect_handoff(&st, row.user_id, &body.to_target_id, row.item_id)
+        .expect_handoff(&st, row.user_id, &body.to_target_id)
         .await;
     send(&st, &a, &body.to_target_id, owner, &conn, cmd)
 }

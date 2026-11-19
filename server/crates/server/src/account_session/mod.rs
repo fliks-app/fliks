@@ -27,7 +27,7 @@ pub const SWEEP_EVERY: Duration = Duration::from_secs(15);
 const PARKED_TTL: chrono::Duration = chrono::Duration::hours(24);
 const PERSIST_EVERY_MS: i64 = 30_000;
 const SEEK_JUMP: f64 = 30.0;
-/// How long a transfer waits for the target's first beat to claim; past it the claim is a plain takeover.
+/// How long a transfer waits for the target's first beat to claim before its lapse is announced.
 const HANDOFF_TTL_MS: i64 = 60_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -170,15 +170,16 @@ struct Inner {
     claimed: HashMap<String, Claim>,
     /// Sids found out of scope at their first beat, so later beats skip the preference read.
     unscoped: HashSet<String>,
-    /// Transfers sent but not yet claimed: (account, device) to the item and when the record lapses (ms).
-    handoffs: HashMap<(i32, String), (i32, i64)>,
+    /// Transfers sent but not yet claimed: (account, device) to when the record lapses (ms).
+    handoffs: HashMap<(i32, String), i64>,
 }
 
 impl Inner {
-    /// Consumes the transfer record of a claiming target: true only for its item and inside the TTL.
-    fn take_handoff(&mut self, account: i32, target: Option<&str>, item: i32, now: i64) -> bool {
-        let rec = target.and_then(|t| self.handoffs.remove(&(account, device_id_of(t).to_owned())));
-        rec.is_some_and(|(i, until)| i == item && until > now)
+    /// A claim from the target settles its transfer record.
+    fn settle_handoff(&mut self, account: i32, target: Option<&str>) {
+        if let Some(t) = target {
+            self.handoffs.remove(&(account, device_id_of(t).to_owned()));
+        }
     }
 
     /// What a beat of an already claimed `sid` is (rule 8), judged on the account it claimed for.
@@ -231,8 +232,6 @@ pub struct BeatIn {
     pub position: f64,
     pub duration: Option<f64>,
     pub queue: Option<QueueState>,
-    /// The sender started this session on purpose to take it over: the previous owner stops silently.
-    pub handoff: bool,
 }
 
 /// A reader's saved position (`session.md` rule 19): the item and how far through it the account is.
@@ -435,14 +434,14 @@ impl AccountSessions {
         }
     }
 
-    /// A transfer of the account's session to `target` was sent: its first beat of `item` claims silently.
-    pub async fn expect_handoff(&self, st: &AppState, account: i32, target: &str, item: i32) {
+    /// A transfer of the account's session to `target` was sent: its lapse is announced if no claim follows.
+    pub async fn expect_handoff(&self, st: &AppState, account: i32, target: &str) {
         let mut g = self.0.lock().await;
         let now = now_ms() as i64;
         Self::announce_lapsed_handoffs(st, &mut g, now);
         g.handoffs.insert(
             (account, device_id_of(target).to_owned()),
-            (item, now + HANDOFF_TTL_MS),
+            now + HANDOFF_TTL_MS,
         );
     }
 
@@ -482,6 +481,8 @@ impl AccountSessions {
             e.row.queue.clone(),
             e.row.owner.clone(),
         );
+        // A completion unstores the item it ended; another item stores again.
+        e.done &= b.item == e.row.item_id;
         let r = &mut e.row;
         (r.item_id, r.kind, r.state) = (b.item, b.kind, b.state);
         r.media_file_id = b.file.filter(|f| Some(*f) != e.gone_file);
@@ -534,17 +535,12 @@ impl AccountSessions {
             Some(p) => p.row.epoch + 1,
             None => 1,
         };
-        let expected = g.take_handoff(
-            b.account,
-            b.owner.target_id.as_deref(),
-            b.item,
-            now_ms() as i64,
-        );
+        g.settle_handoff(b.account, b.owner.target_id.as_deref());
         if let Some(p) = prior.as_ref().filter(|_| !same_owner) {
             if let Some(c) = g.claimed.get_mut(&p.row.session_id) {
                 c.superseded = true;
             }
-            Self::supersede(st, p, &b, epoch, b.handoff || expected);
+            Self::supersede(st, p, &b, epoch);
         }
         let mut entry = Entry {
             row: Row {
@@ -593,7 +589,7 @@ impl AccountSessions {
     }
 
     /// Tells a live previous owner and stops its engine session once it had time to save.
-    fn supersede(st: &AppState, prior: &Entry, by: &BeatIn, epoch: i64, silent: bool) {
+    fn supersede(st: &AppState, prior: &Entry, by: &BeatIn, epoch: i64) {
         if prior.row.state == State::Parked {
             return;
         }
@@ -607,7 +603,6 @@ impl AccountSessions {
                     session_id: prior.row.session_id.clone(),
                     by_device_name: by.owner.device_name.clone(),
                     epoch,
-                    silent,
                 },
             );
         }
@@ -811,7 +806,7 @@ impl AccountSessions {
     fn announce_lapsed_handoffs(st: &AppState, g: &mut Inner, now: i64) {
         let mut lapsed: Vec<i32> = g
             .handoffs
-            .extract_if(|_, (_, until)| *until <= now)
+            .extract_if(|_, until| *until <= now)
             .map(|((account, _), _)| account)
             .collect();
         lapsed.sort_unstable();
@@ -910,6 +905,9 @@ impl AccountSessions {
 pub async fn spawn(st: &AppState) {
     if let Err(e) = st.account_sessions.load(st).await {
         tracing::warn!("account sessions not loaded: {e}");
+    }
+    if crate::jobs::cron_disabled() {
+        return;
     }
     let st = st.clone();
     tokio::spawn(async move {
