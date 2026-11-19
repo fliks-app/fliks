@@ -234,7 +234,6 @@ export class CastPlaybackTarget implements PlaybackOutput {
 
   /** Leave the device. Ends the Cast session, which stops the receiver with it. */
   disconnect(): void {
-    this.cast.disconnect();
-    this.cp.clear();
+    this.cp.leave();
   }
 }

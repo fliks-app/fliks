@@ -338,7 +338,8 @@ export class SessionSyncService {
     if (!players.length) return;
     this.handled.push(sessionId);
     if (this.handled.length > HANDLED_MAX) this.handled.shift();
-    await Promise.all(players.map((p) => p.yield(true)));
+    // Newest first: the route closes while its output still stands, then the Cast output leaves the device.
+    for (const p of players.reverse()) await p.yield(true);
   }
 
   /** The owner's own report of this very file, while it is being observed: a report of another file never stands for the session. */
