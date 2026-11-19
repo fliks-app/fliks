@@ -323,7 +323,14 @@ pub async fn title_keys(db: &mut PgConnection, t: &TitleKey) -> sqlx::Result<Vec
         .fetch_optional(&mut *db)
         .await?
         .flatten();
-        if let Some(external_id) = group {
+        let release: Option<String> = sqlx::query_scalar(
+            r#"SELECT value FROM media_external_ids
+                WHERE "mediaId" = $1 AND kind = 'album' AND provider = 'musicbrainz'"#,
+        )
+        .bind(id)
+        .fetch_optional(&mut *db)
+        .await?;
+        for external_id in group.into_iter().chain(release) {
             let k = TitleKey {
                 external_id,
                 ..t.clone()

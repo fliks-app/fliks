@@ -42,7 +42,7 @@ pub struct New<'a> {
 
 /// The layer `(item, kind, lang, source)` replaced; its offset and `reviewed` stay while the text is the same.
 pub async fn upsert(db: &PgPool, n: &New<'_>) -> sqlx::Result<i32> {
-    sqlx::query_scalar(
+    let written: Option<i32> = sqlx::query_scalar(
         r#"INSERT INTO lyrics ("itemId", "mediaFileId", kind, lang, sync, source, "sourceRef", "offsetMs",
              "audioDurationMs", doc, raw, reviewed)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
@@ -53,6 +53,10 @@ pub async fn upsert(db: &PgPool, n: &New<'_>) -> sqlx::Result<i32> {
                                THEN lyrics."offsetMs" ELSE EXCLUDED."offsetMs" END,
              reviewed = CASE WHEN lyrics.raw IS NOT DISTINCT FROM EXCLUDED.raw
                              THEN lyrics.reviewed ELSE EXCLUDED.reviewed END
+           WHERE lyrics.raw IS DISTINCT FROM EXCLUDED.raw
+              OR lyrics."mediaFileId" IS DISTINCT FROM EXCLUDED."mediaFileId"
+              OR lyrics."sourceRef" IS DISTINCT FROM EXCLUDED."sourceRef"
+              OR lyrics."audioDurationMs" IS DISTINCT FROM EXCLUDED."audioDurationMs"
            RETURNING id"#,
     )
     .bind(n.item)
@@ -67,8 +71,22 @@ pub async fn upsert(db: &PgPool, n: &New<'_>) -> sqlx::Result<i32> {
     .bind(Json(&n.parsed.doc))
     .bind(n.raw)
     .bind(n.reviewed)
-    .fetch_one(db)
-    .await
+    .fetch_optional(db)
+    .await?;
+    match written {
+        Some(id) => Ok(id),
+        None => {
+            sqlx::query_scalar(
+                r#"SELECT id FROM lyrics WHERE "itemId" = $1 AND kind = $2 AND lang = $3 AND source = $4"#,
+            )
+            .bind(n.item)
+            .bind(n.kind)
+            .bind(n.lang)
+            .bind(n.source)
+            .fetch_one(db)
+            .await
+        }
+    }
 }
 
 /// Replaces the document of a row still holding `old` and unreviewed, and zeroes its offset (already

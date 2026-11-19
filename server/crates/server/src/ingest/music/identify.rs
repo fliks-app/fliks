@@ -331,7 +331,18 @@ async fn apply(
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Outcome, AppError> {
-    let release = found.edition.release.external_id.clone();
+    link_release(st, media, found.fetched, found.edition, lang, prio).await
+}
+
+async fn link_release(
+    st: &AppState,
+    media: i32,
+    fetched: Fetched,
+    edition: Edition,
+    lang: &Resolved,
+    prio: Priority,
+) -> Result<Outcome, AppError> {
+    let release = edition.release.external_id.clone();
     if let Some(other) = aliases::album_of(&st.db, &release).await?
         && other != media
     {
@@ -357,10 +368,7 @@ async fn apply(
     if linked != Link::Linked {
         return Ok(Outcome::Applied);
     }
-    let src = Source {
-        fetched: found.fetched,
-        edition: found.edition,
-    };
+    let src = Source { fetched, edition };
     write_album(st, media, NS, &src, &release, lang, (Create::No, prio)).await?;
     Ok(Outcome::Applied)
 }
@@ -428,7 +436,23 @@ pub async fn identify(
     let all = stored_tags(st, media).await?;
     let tags: Vec<TrackTags> = all.into_iter().map(|(_, _, t)| t).collect();
     if tags.is_empty() {
-        return Ok(Outcome::Nothing);
+        // No file to match: the group's target release, as a new album of the library would be.
+        let library: Option<i32> =
+            sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+                .bind(media)
+                .fetch_optional(&st.db)
+                .await?
+                .flatten();
+        let (Some(group), Some(library), true) = (group, library, apply_best) else {
+            return Ok(Outcome::Nothing);
+        };
+        let lang = language(st, media).await?;
+        let profile = crate::libraries::metadata_profile(&st.db, library).await?;
+        let src = classify(st, NS, group, &lang, prio)
+            .await?
+            .pick(st, NS, &lang, &profile, None, prio)
+            .await?;
+        return link_release(st, media, src.fetched, src.edition, &lang, prio).await;
     }
     let cfg = config(st).await;
     let local = local_of(&title, &tags);

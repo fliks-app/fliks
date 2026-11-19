@@ -460,14 +460,12 @@ async fn load_free(
             .map(
                 |(item, disc, number, recording, isrc, duration_ms, title, monitored)| Free {
                     item,
-                    key: Key {
-                        recording,
-                        isrc,
-                        disc,
-                        number,
+                    key: Key::new(
+                        (recording, isrc),
+                        (disc, number),
                         duration_ms,
-                        title,
-                    },
+                        title.as_deref(),
+                    ),
                     monitored,
                 },
             )
@@ -959,11 +957,13 @@ pub async fn settled(st: &AppState, media: i32) {
     if !has_poster && let Some(bytes) = folder_cover(st, media).await {
         super::books::store_cover(st, media, &bytes).await;
     }
-    if let Err(e) = identify::identify_media(st, media).await {
-        tracing::warn!(
+    match identify::identify_media(st, media).await {
+        Ok(identify::Outcome::Merged(_)) => return,
+        Ok(_) => {}
+        Err(e) => tracing::warn!(
             "Post-import[album #{media}]: identification failed: {}",
             e.text()
-        );
+        ),
     }
     crate::lyrics::providers::enqueue_missing(st, Some(media)).await;
     if tagwrite::enabled(st).await

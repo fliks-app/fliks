@@ -6665,6 +6665,188 @@ mod music_ingest {
         );
     }
 
+    async fn filed_song(c: &Ctx, lib: i32, folder: &str, ms: f64) -> (i32, i32) {
+        let a = album(c, lib, folder).await;
+        c.fake
+            .script("POST", "/v1/probe", vec![timed("Song", 3, ms)]);
+        music::register(&c.st, a, &place(c, &[&format!("{folder}/03 - Song.flac")]))
+            .await
+            .unwrap();
+        let item: i32 = sqlx::query_scalar(r#"SELECT id FROM items WHERE "mediaId" = $1"#)
+            .bind(a)
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO lyrics ("itemId", kind, lang, sync, source, doc)
+               VALUES ($1, 'main', 'en', 'none', 'user', '{}')"#,
+        )
+        .bind(item)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        (a, item)
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_file_with_another_isrc_still_fills_the_track_it_matches_by_position(pool: PgPool) {
+        use crate::metadata::music::want::tests as fixture;
+        let c = ctx_music(pool, Some(fixture::fake())).await;
+        let (m, item) = wanted_live_track(&c).await;
+        sqlx::query(r#"UPDATE track_details SET isrc = 'QZAAA2100001', "durationMs" = 200000 WHERE "itemId" = $1"#)
+            .bind(item)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        let (disc, number): (i32, Option<i32>) = sqlx::query_as(
+            r#"SELECT "discNumber", "trackNumber" FROM track_details WHERE "itemId" = $1"#,
+        )
+        .bind(item)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        let items = count(&c, "SELECT count(*) FROM items").await;
+        c.fake.script(
+            "POST",
+            "/v1/probe",
+            vec![track(
+                "Song",
+                number.unwrap_or(1) as u32,
+                disc as u32,
+                json!({"isrc": "QZAAA2100002"}),
+            )],
+        );
+        let file = place(&c, &["Ana/Alpha/Song.flac"]);
+        music::register(&c.st, m, &file).await.unwrap();
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, items);
+        assert_eq!(
+            count(
+                &c,
+                &format!(r#"SELECT count(*) FROM item_parts WHERE "itemId" = {item}"#)
+            )
+            .await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_folded_album_keeps_its_filed_track_with_its_user_rows(pool: PgPool) {
+        use crate::metadata::music::want::tests as fixture;
+        let c = ctx_music(pool, Some(fixture::fake())).await;
+        let (b, heir) = wanted_live_track(&c).await;
+        let lib: i32 = sqlx::query_scalar(r#"SELECT "libraryId" FROM media WHERE id = $1"#)
+            .bind(b)
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO acquisition_queue ("pluginId", "ref", "mediaId", "itemIds", "sourceId", "sourceName",
+                 title, quality, method, state)
+               VALUES ('p', 'r', $1, ARRAY[$2], 's', 'S', 't', 'FLAC', 'manual', 'importing')"#,
+        )
+        .bind(b)
+        .bind(heir)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO lyrics_lookups ("itemId", provider, status) VALUES ($1, 'p', 'miss')"#,
+        )
+        .bind(heir)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        let (a, filed) = filed_song(&c, lib, "Ana/Alpha", 306.0).await;
+        assert!(meta::aliases::absorb_into(&c.st, a, b).await.unwrap());
+        let edition: i32 = sqlx::query_scalar(r#"SELECT "editionId" FROM items WHERE id = $1"#)
+            .bind(filed)
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        let kept: i32 = sqlx::query_scalar(
+            r#"SELECT "editionId" FROM items WHERE "mediaId" = $1 AND id <> $2 LIMIT 1"#,
+        )
+        .bind(b)
+        .bind(filed)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(edition, kept);
+        let recording: Option<String> = sqlx::query_scalar(
+            r#"SELECT "recordingMbid"::text FROM track_details WHERE "itemId" = $1"#,
+        )
+        .bind(filed)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(recording.as_deref(), Some(fixture::LIVE));
+        assert_eq!(
+            count(&c, &format!("SELECT count(*) FROM items WHERE id = {heir}")).await,
+            0
+        );
+        assert_eq!(
+            count(
+                &c,
+                &format!(r#"SELECT count(*) FROM lyrics WHERE "itemId" = {filed}"#)
+            )
+            .await,
+            1
+        );
+        assert_eq!(
+            count(
+                &c,
+                &format!(r#"SELECT count(*) FROM lyrics_lookups WHERE "itemId" = {filed}"#)
+            )
+            .await,
+            1
+        );
+        assert_eq!(
+            count(
+                &c,
+                &format!(
+                    r#"SELECT count(*) FROM acquisition_queue WHERE {filed} = ANY("itemIds")"#
+                )
+            )
+            .await,
+            1
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_second_copy_of_a_held_release_becomes_an_older_version(pool: PgPool) {
+        use crate::metadata::music::want::tests as fixture;
+        let c = ctx_music(pool, Some(fixture::fake())).await;
+        let l = album_lib(&c).await;
+        let (b, kept_item) = filed_song(&c, l, "Ana/Alpha", 306.0).await;
+        let (a, copy_item) = filed_song(&c, l, "Bo/Alpha", 306.0).await;
+        let before = count(&c, "SELECT count(*) FROM items").await;
+        assert!(meta::aliases::absorb_into(&c.st, a, b).await.unwrap());
+        assert_eq!(count(&c, "SELECT count(*) FROM items").await, before - 1);
+        let files: Vec<(String, i32)> = sqlx::query_as(
+            r#"SELECT f."relativePath", p.version FROM item_parts p JOIN media_files f ON f.id = p."mediaFileId"
+               WHERE p."itemId" = $1 ORDER BY p.version"#,
+        )
+        .bind(kept_item)
+        .fetch_all(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            files,
+            vec![
+                ("Bo/Alpha/03 - Song.flac".to_owned(), 0),
+                ("Ana/Alpha/03 - Song.flac".to_owned(), 1)
+            ]
+        );
+        assert_eq!(
+            count(
+                &c,
+                &format!("SELECT count(*) FROM items WHERE id = {copy_item}")
+            )
+            .await,
+            0
+        );
+    }
+
     #[sqlx::test(migrations = false)]
     async fn an_unpaired_file_of_a_linked_album_is_an_orphan_track(pool: PgPool) {
         use crate::metadata::music::want::tests as fixture;

@@ -394,8 +394,7 @@ fn naming_folder_format(f: &naming::NamingFormats, kind: MediaKind) -> &str {
     match kind {
         MediaKind::Movie => &f.movie_folder,
         MediaKind::Series => &f.series_folder,
-        MediaKind::Book | MediaKind::Comic => &f.book_folder,
-        MediaKind::Album => &f.album_folder,
+        MediaKind::Book | MediaKind::Comic | MediaKind::Album => &f.book_folder,
     }
 }
 
@@ -607,11 +606,12 @@ async fn target_folder(
     d: &RelinkDto,
     title: &str,
     year: Option<i32>,
+    artist: Option<&str>,
 ) -> Result<String, AppError> {
     Ok(if d.transfer.is_some() {
         let f = naming_formats(&st.db).await?;
         let named = match d.media_type {
-            MediaKind::Album => mw::album_folder(&f, None, title, year.map(i64::from)),
+            MediaKind::Album => mw::album_folder(&f, artist, title, year.map(i64::from)),
             _ => mw::folder_name(
                 naming_folder_format(&f, d.media_type),
                 d.media_type,
@@ -739,7 +739,11 @@ pub(super) async fn find_or_create_unmatched(
         .or(guessed_title)
         .unwrap_or_else(|| d.folder_name.clone());
     let year = d.year.or(guessed_year.and_then(|y| i32::try_from(y).ok()));
-    let folder = target_folder(st, d, &title, year).await?;
+    let artist = tagged
+        .as_ref()
+        .map(|s| s.artist.as_str())
+        .filter(|a| !a.is_empty());
+    let folder = target_folder(st, d, &title, year, artist).await?;
     let key = format!("{}:{}:{folder}", lib.id, d.media_type);
     let _lock = st.ingest.unmatched.lock(key.clone()).await;
     let mut existing = existing_unmatched(st, d, lib, &folder).await?;

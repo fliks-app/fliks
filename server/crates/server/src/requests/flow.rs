@@ -383,14 +383,10 @@ pub async fn ensure_media(
     spec: ImportSpec,
     (added_by, approver): (Option<i32>, i32),
 ) -> Res<Option<i32>> {
-    let before = match spec.title.media_type {
-        MediaKind::Album => {
-            crate::metadata::music::aliases::albums_named(&st.db, &spec.title.external_id).await?
-        }
-        _ => vec![],
-    };
-    let media_id = match services::import_title(st, spec.clone(), (added_by, approver)).await {
-        Ok(id) => id,
+    let (media_id, created) = match services::import_title(st, spec.clone(), (added_by, approver))
+        .await
+    {
+        Ok(imported) => imported,
         Err(e) if e.status != 409 || super::is_work(spec.title.media_type) => {
             return Err(e.into());
         }
@@ -416,7 +412,7 @@ pub async fn ensure_media(
                     "This title is already in the library with a different profile and can't satisfy the request — decline it or update the library media's profiles.",
                 ));
             }
-            existing.id
+            (existing.id, false)
         }
     };
     let seasons = spec
@@ -425,7 +421,7 @@ pub async fn ensure_media(
         .filter(|_| spec.title.media_type.has_seasons());
     db::monitor_scope(&st.db, media_id, seasons).await?;
     if spec.title.media_type == MediaKind::Album {
-        let held = before.contains(&media_id);
+        let held = !created;
         let wanted = match spec.recordings.as_deref() {
             Some(recordings) => want_tracks(st, media_id, recordings, held).await,
             None => crate::metadata::music::want::monitor_all(&st.db, &[media_id])

@@ -302,7 +302,7 @@ pub(crate) struct FolderOf<'a> {
 }
 
 /// The folder name of a media of `kind` from `format`: the one derivation import, relink and
-/// transfer share.
+/// transfer share (an album's is `album_folder`).
 pub(crate) fn folder_name(format: &str, kind: MediaKind, t: &FolderOf<'_>) -> String {
     let (title, original_title) = (t.title.to_owned(), t.original_title.map(str::to_owned));
     match kind {
@@ -324,19 +324,11 @@ pub(crate) fn folder_name(format: &str, kind: MediaKind, t: &FolderOf<'_>) -> St
                 tmdb_id: t.tmdb_id,
             },
         ),
-        MediaKind::Book | MediaKind::Comic => naming::apply_book_format(
+        MediaKind::Book | MediaKind::Comic | MediaKind::Album => naming::apply_book_format(
             format,
             &naming::BookNameTokens {
                 title,
                 year: t.year,
-                ..Default::default()
-            },
-        ),
-        MediaKind::Album => naming::apply_album_format(
-            format,
-            &naming::AlbumNameTokens {
-                album_title: title,
-                release_year: t.year,
                 ..Default::default()
             },
         ),

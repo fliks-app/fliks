@@ -335,8 +335,9 @@ pub(crate) async fn create_from(
 }
 
 /// The album of a request: the release in the request's library with its audio want, or the want added to the
-/// album the library already holds (403 when that one sits in a library outside `readable`). A request scoped
-/// to some tracks (`scoped`) creates the album with every track unmonitored.
+/// album the library already holds (403 when that one sits in a library outside `readable`); the flag tells
+/// whether this call created the album. A request scoped to some tracks (`scoped`) creates the album with
+/// every track unmonitored.
 pub async fn import_album_for_request(
     st: &AppState,
     release: &str,
@@ -344,7 +345,7 @@ pub async fn import_album_for_request(
     scoped: bool,
     (library, folder): (Option<i32>, Option<i32>),
     (added_by, readable): (Option<i32>, &[i32]),
-) -> Result<i32, AppError> {
+) -> Result<(i32, bool), AppError> {
     let ns = Namespace::MUSICBRAINZ;
     let held = async || external_ids::find(&st.db, MediaKind::Album, ns, release).await;
     let add_to = async |id: i32| {
@@ -363,7 +364,7 @@ pub async fn import_album_for_request(
             .await
             .map_err(|e| wants::write_error(e, id))?;
         tx.commit().await?;
-        Ok(id)
+        Ok((id, false))
     };
     if let Some(id) = held().await? {
         return add_to(id).await;
@@ -387,7 +388,7 @@ pub async fn import_album_for_request(
     )
     .await;
     match created {
-        Ok(Created::New(id)) => Ok(id),
+        Ok(Created::New(id)) => Ok((id, true)),
         Ok(Created::Held(id)) => add_to(id).await,
         Err(e) if e.status() == StatusCode::CONFLICT => match held().await? {
             Some(id) => add_to(id).await,
