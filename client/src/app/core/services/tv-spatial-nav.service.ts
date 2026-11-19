@@ -20,7 +20,6 @@ interface ContainerNode {
   readonly el: HTMLElement;
   readonly orientation: 'vertical' | 'horizontal' | 'grid';
   readonly isWrapping: boolean;
-  parent: ContainerNode | null;
   /** Last focusable that received focus inside this container (or any
    * descendant). Used to dig down on re-entry. */
   activeChild: HTMLElement | null;
@@ -102,35 +101,22 @@ export class TvSpatialNavService {
     }
   }
 
-  /** Register a container, auto-parented to the closest registered DOM ancestor (DI is too coarse here). */
+  /** Register a container; its parent is the closest registered DOM ancestor, looked up at each step
+   *  since projected content registers before it is attached under that ancestor. */
   registerContainer(
     el: HTMLElement,
     options: { orientation: 'vertical' | 'horizontal' | 'grid'; isWrapping?: boolean },
   ): void {
     if (this.containers.has(el)) return;
-    const parent = this.findParentContainer(el);
     this.containers.set(el, {
       el,
       orientation: options.orientation,
       isWrapping: !!options.isWrapping,
-      parent,
       activeChild: null,
     });
-    // Re-parent existing containers now inside `el`, so registration order doesn't matter.
-    for (const c of this.containers.values()) {
-      if (c.el === el || !el.contains(c.el)) continue;
-      c.parent = this.findParentContainer(c.el);
-    }
   }
 
   unregisterContainer(el: HTMLElement): void {
-    const node = this.containers.get(el);
-    if (!node) return;
-    // Re-parent direct children of this node to its own parent so the tree
-    // stays consistent during partial unmounts.
-    for (const c of this.containers.values()) {
-      if (c.parent === node) c.parent = node.parent;
-    }
     this.containers.delete(el);
   }
 
@@ -543,7 +529,7 @@ export class TvSpatialNavService {
       if (cur.orientation === 'grid') {
         const inGrid = nearestInDirection(this.focusablesIn(cur.el), active, dir);
         if (inGrid) return inGrid;
-        cur = cur.parent;
+        cur = this.findParentContainer(cur.el);
         continue;
       }
       const horizontal = cur.orientation === 'horizontal';
@@ -571,7 +557,7 @@ export class TvSpatialNavService {
           }
         }
       }
-      cur = cur.parent;
+      cur = this.findParentContainer(cur.el);
     }
     // Bridge to a peer top-level container so an isolated container's edge doesn't fall through to a far-away rect match.
     if (topMost) {
@@ -596,7 +582,7 @@ export class TvSpatialNavService {
     let best: ContainerNode | null = null;
     let bestScore = Infinity;
     for (const c of this.containers.values()) {
-      if (c === from || c.parent !== null) continue;
+      if (c === from || this.findParentContainer(c.el)) continue;
       if (!isRendered(c.el)) continue;
       const r = c.el.getBoundingClientRect();
       const cx = r.left + r.width / 2;
@@ -702,7 +688,9 @@ export function nearestInDirection(candidates: HTMLElement[], from: HTMLElement,
 
 /** `r` overlaps `from` along the step axis: beside it in a vertical step, above or below it in a horizontal one. */
 export function sharesBand(r: DOMRect, from: DOMRect, horizontal: boolean): boolean {
-  return horizontal ? r.left < from.right - 4 && r.right > from.left + 4 : r.top < from.bottom - 4 && r.bottom > from.top + 4;
+  // Half the smaller extent: a row's focus-ring padding overlapping the heading above it is not a shared band.
+  const [a0, a1, b0, b1] = horizontal ? [r.left, r.right, from.left, from.right] : [r.top, r.bottom, from.top, from.bottom];
+  return Math.min(a1, b1) - Math.max(a0, b0) > Math.min(a1 - a0, b1 - b0) / 2;
 }
 
 function matchesFocusable(el: HTMLElement): boolean {

@@ -37,4 +37,9 @@ describe('sharesBand', () => {
     expect(sharesBand(below, a, false)).toBe(false);
     expect(sharesBand(below, a, true)).toBe(true);
   });
+
+  it('steps onto a row whose padding overlaps the heading above it', () => {
+    const rect = (top: number, height: number) => ({ left: 0, top, width: 400, height, right: 400, bottom: top + height, x: 0, y: top, toJSON: () => ({}) });
+    expect(sharesBand(rect(358, 386), rect(328, 42), false)).toBe(false);
+  });
 });
