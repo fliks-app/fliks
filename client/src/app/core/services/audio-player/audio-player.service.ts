@@ -1494,6 +1494,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     if (!this._track() || this.blockedByParty()) return;
     const music = this._musicMode();
     const wasPlaying = this._playing();
+    const shown = this.published();
     switch (cmd.action) {
       case 'play':
         this.playLoaded();
@@ -1542,9 +1543,10 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
         return;
     }
     this.remote.markApplied(cmd.cmdId);
-    // A real play or pause beats on the element's event, carrying this ack; a beat now reports the old state.
+    // A real play or pause beats on the element's event, a change of what observers see on its own effect, both with this
+    // ack: a beat now would report the old state or repeat that one.
     const flips = cmd.action === 'playpause' || (cmd.action === 'play' && !wasPlaying) || (cmd.action === 'pause' && wasPlaying);
-    if (!flips) this.beat();
+    if (!flips && this.published() === shown) this.beat();
   }
 
   /** Pitch first: it reopens the track and resets the mix, so a mix sent with it applies after. */

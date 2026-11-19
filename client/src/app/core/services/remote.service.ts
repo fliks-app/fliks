@@ -419,10 +419,7 @@ export class RemoteService {
     // silence and nothing a trailing heartbeat can put back.
     this.sse.stopped.subscribe((e) => this.noteTargetStopped(e.targetId, e.sessionId));
 
-    effect(() => {
-      this.sse.remoteState();
-      untracked(() => this.ingestState());
-    });
+    this.sse.remoteStates.subscribe((s) => this.ingestState(s));
 
     // Before the ticker's: the grace window it measures starts here.
     effect(() => {
@@ -845,9 +842,8 @@ export class RemoteService {
     }, SLOW_ACK_ACTIONS.has(action) ? LOAD_ACK_TIMEOUT_MS : ACK_TIMEOUT_MS);
   }
 
-  /** Fold one state report from the selected target into the controller UI. */
-  ingestState(): void {
-    const s = this.sse.remoteState();
+  /** Fold one state report from the observed target into the controller UI; with none, the latest frame received. */
+  ingestState(s: RemoteState | null = this.sse.remoteState()): void {
     if (!s || s.targetId !== this.observedTargetId()) return;
     // The target flushes one last heartbeat on its way out of the player; taking
     // it would put the stopped playback straight back on screen.

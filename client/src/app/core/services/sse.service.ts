@@ -270,7 +270,9 @@ export class SseService implements OnDestroy {
   readonly grabBestEvents = new Subject<SseEvent>();
   /** Queue reports of the providers, on their own Subject: they tick with every poll and must not flood `lastEvent`. */
   readonly queueEvents = new Subject<SseEvent>();
-  /** Own signal: fires every 10s per playing session for every device, and `lastEvent` is read by a dozen unrelated effects. */
+  /** Every frame, off `lastEvent`: an ack or a queue rides on one frame, which a signal would coalesce with the next. */
+  readonly remoteStates = new Subject<RemoteState>();
+  /** The latest frame, for a reader that only wants where things stand. */
   readonly remoteState = signal<RemoteState | null>(null);
   private eventSource: EventSource | null = null;
   private deviceIdPromise: Promise<string> | null = null;
@@ -491,7 +493,9 @@ export class SseService implements OnDestroy {
           return;
         }
         if (data.type === 'remote.state') {
-          this.remoteState.set(data as unknown as RemoteState);
+          const state = data as unknown as RemoteState;
+          this.remoteState.set(state);
+          this.remoteStates.next(state);
           return;
         }
         this.handleEvent(data);
