@@ -125,7 +125,7 @@ export class KaraokeService {
       this.flushTimer = setInterval(() => this.flush(), FLUSH_MS);
       this.singing.set(true);
     } catch (err) {
-      this.micIssue.set(err instanceof DOMException && err.name === 'NotAllowedError' ? 'denied' : 'unavailable');
+      if (gen === this.startGen) this.micIssue.set(err instanceof DOMException && err.name === 'NotAllowedError' ? 'denied' : 'unavailable');
     } finally {
       this.starting.set(false);
     }

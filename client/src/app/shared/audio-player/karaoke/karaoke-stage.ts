@@ -159,6 +159,7 @@ export class KaraokeStageComponent {
 
   private refresh(): void {
     this.readColours();
+    if (!this.audio.playing()) this.redraw();
     this.rows.set(this.karaoke.results(this.doc()));
     const dur = this.audio.duration();
     if (dur > 0 && this.audio.position() >= dur - 1.5) this.karaoke.finish(this.doc(), this.title());

@@ -52,10 +52,11 @@ export function parseWhatsNew(md: string, base: string): Omit<WhatsNewSlide, 've
 
 /** Versions with notes to show, oldest first: the latest three after `seen` up to `current`. */
 export function versionsToShow(index: string[], seen: string, current: string): string[] {
+  const [last, now] = [releaseOf(seen), releaseOf(current)];
   return index
-    .filter((v) => compareVersions(v, releaseOf(current)) <= 0)
+    .filter((v) => compareVersions(v, now) <= 0)
     .sort((a, b) => compareVersions(b, a))
-    .filter((v) => compareVersions(v, seen) > 0)
+    .filter((v) => compareVersions(v, last) > 0)
     .slice(0, MAX_VERSIONS)
     .reverse();
 }
@@ -104,7 +105,7 @@ export class WhatsNewModalComponent {
     await this.auth.refreshUser();
     const user = this.auth.user();
     const seen = user?.whatsNewSeen ?? null;
-    if (user?.id !== id || (seen !== null && compareVersions(seen, releaseOf(current)) >= 0)) return;
+    if (user?.id !== id || (seen !== null && compareVersions(releaseOf(seen), releaseOf(current)) >= 0)) return;
     if (await this.updatePending()) return;
     // An account without a value, or with the popup off, only records the version.
     if (seen === null || user.whatsNewEnabled === false) return this.markSeen(id, current);

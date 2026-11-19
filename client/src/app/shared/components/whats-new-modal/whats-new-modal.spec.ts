@@ -44,4 +44,8 @@ describe('versionsToShow', () => {
   it('compares numerically and ignores a pre-release suffix', () => {
     expect(versionsToShow(['6.10.0', '6.9.0'], '6.9.0', '6.10.0-beta.2')).toEqual(['6.10.0']);
   });
+
+  it('shows nothing again for a pre-release that already recorded itself as seen', () => {
+    expect(versionsToShow(['6.0.0', '7.0.0'], '7.0.0-beta.1', '7.0.0-beta.1')).toEqual([]);
+  });
 });

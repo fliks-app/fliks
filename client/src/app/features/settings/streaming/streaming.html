@@ -42,9 +42,11 @@
       [label]="'settings.streaming.auto_crop' | translate"
       [hint]="'settings.streaming.auto_crop_help' | translate"
     />
-    <a routerLink="/admin/settings/optimize-profiles" class="link link-hover text-sm -mt-4">
-      {{ 'settings.streaming.auto_crop_profile_link' | translate }}
-    </a>
+    @if (optimize()) {
+      <a routerLink="/admin/settings/optimize-profiles" class="link link-hover text-sm -mt-4">
+        {{ 'settings.streaming.auto_crop_profile_link' | translate }}
+      </a>
+    }
 
     <!-- Throttle follows the viewer's playhead (pause ahead, resume on catch-up); disabled when ffmpeg can't pause a run (Windows without the key). -->
     <app-toggle-field
