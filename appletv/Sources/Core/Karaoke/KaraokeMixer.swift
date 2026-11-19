@@ -43,12 +43,16 @@ import AVFoundation
         return origin + Double(p.sampleTime) / p.sampleRate
     }
 
-    func start(at seconds: Double) {
+    /// Stems begin this long after `start`, so they are scheduled from where the clock will be then.
+    private static let lead = 0.1
+
+    func start(at clock: Double) {
         guard isLoaded else { return }
         pause()
+        let seconds = clock + Self.lead
         origin = seconds
         guard (try? engine.start()) != nil else { return }
-        let when = AVAudioTime(hostTime: mach_absolute_time() + AVAudioTime.hostTime(forSeconds: 0.1))
+        let when = AVAudioTime(hostTime: mach_absolute_time() + AVAudioTime.hostTime(forSeconds: Self.lead))
         for (kind, node) in nodes {
             guard let file = files[kind] else { continue }
             let rate = file.processingFormat.sampleRate

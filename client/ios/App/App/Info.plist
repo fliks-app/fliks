@@ -43,7 +43,7 @@
 	<key>NSCalendarsUsageDescription</key>
 	<string>Fliks adds watch parties to your calendar.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Fliks uses the microphone for voice chat in watch parties.</string>
+	<string>Fliks uses the microphone for voice chat in watch parties and to score your singing in karaoke.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Fliks uses the local network to discover and connect to Cast-enabled devices, and access your local server.</string>
 	<key>UIApplicationSceneManifest</key>

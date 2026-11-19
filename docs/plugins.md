@@ -381,8 +381,7 @@ only when `plugins.allow_unsigned` is on; `--key <hex seed file>` adds a dev sig
 
 ### Running a local build on the dev stack
 
-`scripts/dev-plugin.sh <plugin repo> [<plugin folder>]` packages the plugin (`cargo xtask package`
-under `fliks-heavy`, target dir `~/.cache/fliks-targets/dev-plugin`: delete it afterwards), logs in
+`scripts/dev-plugin.sh <plugin repo> [<plugin folder>]` packages the plugin (`cargo xtask package`), logs in
 and imports it through `/api/plugins/import/{inspect,confirm}`. `FLIKS_URL`, `FLIKS_USER` and
 `FLIKS_PASSWORD` default to the dev stack; a non-local URL needs `FLIKS_ALLOW_REMOTE=1`. Needs
 `plugins.allow_unsigned`, which on this debug build also lets the unsigned build replace an

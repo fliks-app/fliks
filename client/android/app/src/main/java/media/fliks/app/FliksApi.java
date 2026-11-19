@@ -20,7 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /** The fliks API from native code, with the session the web layer stores in Capacitor
- *  Preferences. While a WebView exists it owns token refresh. */
+ *  Preferences. A web layer that is loaded is asked to refresh first. */
 final class FliksApi {
     /** The kinds of the bundled web registry (`KIND_REGISTRY`), declared to the server. */
     private static final String KINDS = "movie,series,book,comic,album";
@@ -46,10 +46,12 @@ final class FliksApi {
         }
     }
 
-    private static final long REFRESH_WAIT_MS = 10_000;
+    private static final long ADOPT_WAIT_MS = 2_000;
     private static final long STREAM_TOKEN_MIN_LIFE_MS = 30 * 60 * 1000;
 
     private final SharedPreferences prefs;
+    /** How long a loaded web layer has to answer a refresh request before native rotates itself. */
+    long refreshWaitMs = 10_000;
     private volatile boolean webOwnsRefresh;
     @Nullable private volatile Runnable refreshRequest;
     private final Map<String, StreamToken> streamTokens = new HashMap<>();
@@ -72,7 +74,7 @@ final class FliksApi {
         this.prefs = prefs;
     }
 
-    /** While a WebView exists it owns token rotation; `request` asks it to refresh through this. */
+    /** While a WebView is loaded, `request` asks it to refresh through this before native rotates. */
     void setWebOwnsRefresh(boolean owns, @Nullable Runnable request) {
         webOwnsRefresh = owns;
         refreshRequest = request;
@@ -136,15 +138,20 @@ final class FliksApi {
                 + android.net.Uri.encode(streamToken(mediaFileId, boundKey));
     }
 
-    private synchronized String streamToken(long mediaFileId, String boundKey) throws IOException {
+    private String streamToken(long mediaFileId, String boundKey) throws IOException {
         String id = boundKey + "#" + mediaFileId;
-        StreamToken known = streamTokens.get(id);
+        StreamToken known;
+        synchronized (streamTokens) {
+            known = streamTokens.get(id);
+        }
         if (known != null && known.expiresAt - System.currentTimeMillis() > STREAM_TOKEN_MIN_LIFE_MS) return known.token;
         try {
             JSONObject res = new JSONObject(request("POST", "/api/auth/stream-token",
                     new JSONObject().put("mediaFileId", mediaFileId).toString(), boundKey));
             StreamToken minted = new StreamToken(res.getString("streamToken"), res.getLong("expiresAt"));
-            streamTokens.put(id, minted);
+            synchronized (streamTokens) {
+                streamTokens.put(id, minted);
+            }
             return minted.token;
         } catch (JSONException e) {
             throw new IOException(e);
@@ -231,63 +238,70 @@ final class FliksApi {
         return null;
     }
 
-    /** True once the session `key` holds a token other than `sent`, the one that was rejected: another
-     *  caller or the web layer already rotated it. Otherwise the web layer, while it exists, is asked to
-     *  refresh and awaited; with none, the stored pair is rotated here. */
-    private synchronized boolean refresh(String key, String sent) {
-        JSONObject s = session(key);
-        if (s == null) return false;
-        if (!sent.equals(s.optString("accessToken"))) return true;
+    /** Asks the web layer first when it is loaded; else, or when it stays silent, rotates the stored pair. */
+    private boolean refresh(String key, String sent) throws IOException {
         if (webOwnsRefresh) {
             Runnable ask = refreshRequest;
             if (ask != null) ask.run();
-            long deadline = System.currentTimeMillis() + REFRESH_WAIT_MS;
-            while (System.currentTimeMillis() < deadline) {
-                try {
-                    Thread.sleep(200);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return false;
-                }
-                JSONObject now = session(key);
-                if (now == null) return false;
-                if (!sent.equals(now.optString("accessToken"))) return true;
-            }
-            return false;
+            if (awaitChange(key, sent, refreshWaitMs)) return true;
         }
+        return rotateIfStale(key, sent) || awaitChange(key, sent, ADOPT_WAIT_MS);
+    }
+
+    /** True once the session `key` holds a token other than `sent` (or is gone), within `waitMs`. */
+    private boolean awaitChange(String key, String sent, long waitMs) throws IOException {
+        long deadline = System.currentTimeMillis() + waitMs;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("interrupted", e);
+            }
+            JSONObject now = session(key);
+            if (now == null || !sent.equals(now.optString("accessToken"))) return true;
+        }
+        return false;
+    }
+
+    private synchronized boolean rotateIfStale(String key, String sent) throws IOException {
+        JSONObject s = session(key);
+        if (s == null) return false;
+        if (!sent.equals(s.optString("accessToken"))) return true;
         return rotate(s);
     }
 
-    private boolean rotate(JSONObject s) {
+    /** False when the server rejects the refresh token (4xx); any other failure throws. */
+    private boolean rotate(JSONObject s) throws IOException {
+        HttpURLConnection c = (HttpURLConnection) new URL(s.optString("serverUrl") + "/api/auth/refresh").openConnection();
         try {
-            HttpURLConnection c = (HttpURLConnection) new URL(s.optString("serverUrl") + "/api/auth/refresh").openConnection();
-            try {
-                c.setRequestMethod("POST");
-                c.setConnectTimeout(15_000);
-                c.setReadTimeout(30_000);
-                c.setDoOutput(true);
-                c.setRequestProperty("Content-Type", "application/json");
-                try (OutputStream out = c.getOutputStream()) {
-                    out.write(new JSONObject().put("refreshToken", s.optString("refreshToken")).toString()
-                            .getBytes(StandardCharsets.UTF_8));
-                }
-                if (c.getResponseCode() >= 400) return false;
-                JSONObject res;
-                try (InputStream in = c.getInputStream()) {
-                    res = new JSONObject(read(in));
-                }
-                long exp = res.optLong("refreshTokenExpiresAt", 0);
-                s.put("accessToken", res.getString("accessToken"));
-                s.put("refreshToken", res.getString("refreshToken"));
-                s.put("refreshExpiresAt", exp > 0 ? exp * 1000 : JSONObject.NULL);
-                s.put("tokenVersion", s.optInt("tokenVersion", 0) + 1);
-                persist(s);
-                return true;
-            } finally {
-                c.disconnect();
+            c.setRequestMethod("POST");
+            c.setConnectTimeout(15_000);
+            c.setReadTimeout(30_000);
+            c.setDoOutput(true);
+            c.setRequestProperty("Content-Type", "application/json");
+            try (OutputStream out = c.getOutputStream()) {
+                out.write(new JSONObject().put("refreshToken", s.optString("refreshToken")).toString()
+                        .getBytes(StandardCharsets.UTF_8));
             }
-        } catch (IOException | JSONException e) {
-            return false;
+            int status = c.getResponseCode();
+            if (status >= 400 && status < 500) return false;
+            if (status >= 400) throw new IOException("POST /api/auth/refresh " + status);
+            JSONObject res;
+            try (InputStream in = c.getInputStream()) {
+                res = new JSONObject(read(in));
+            }
+            long exp = res.optLong("refreshTokenExpiresAt", 0);
+            s.put("accessToken", res.getString("accessToken"));
+            s.put("refreshToken", res.getString("refreshToken"));
+            s.put("refreshExpiresAt", exp > 0 ? exp * 1000 : JSONObject.NULL);
+            s.put("tokenVersion", s.optInt("tokenVersion", 0) + 1);
+            persist(s);
+            return true;
+        } catch (JSONException e) {
+            throw new IOException(e);
+        } finally {
+            c.disconnect();
         }
     }
 

@@ -16,9 +16,7 @@ esac
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-export CARGO_TARGET_DIR=$HOME/.cache/fliks-targets/dev-plugin
-echo "target dir: $CARGO_TARGET_DIR (delete it when done)" >&2
-(cd "$repo" && fliks-heavy cargo xtask package "$folder" --max-mib 12 --out "$tmp/dist") >&2
+(cd "$repo" && cargo xtask package "$folder" --max-mib 12 --out "$tmp/dist") >&2
 archive=$(ls "$tmp"/dist/*.fkplugin)
 
 jar=$tmp/jar
