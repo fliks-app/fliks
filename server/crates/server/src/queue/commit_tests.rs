@@ -481,7 +481,7 @@ async fn a_restore_that_cannot_start_ends_and_the_original_returns_to_the_purge(
         original: journal.source_id.clone(),
         companions: vec![],
     };
-    fs::write(&w.src, b"edited elsewhere").unwrap();
+    fs::write(&journal.target, b"edited elsewhere").unwrap();
     sqlx::query(
         r#"UPDATE jobs SET result = result || jsonb_build_object('restore', $1::jsonb, 'trashPath', $2::text)"#,
     )
