@@ -65,8 +65,9 @@ export class KaraokeModelsComponent {
   /** Changes when a model settles, so a download's progress does not reload the languages. */
   private readonly settled = computed(() => this.catalogue().models.map((m) => `${m.id}:${m.state}`).join());
   protected readonly diskMax = computed(() => this.catalogue().usedBytes + (this.catalogue().freeBytes ?? 0));
-  /** The recommended aligners the library's languages miss and whose licence needs no acceptance. */
+  /** The aligner each library language recommends. */
   protected readonly recommended = computed(() => new Set(this.languages().map((l) => l.recommended)));
+  /** The recommended aligners the library's languages miss and whose licence needs no acceptance. */
   protected readonly selection = computed(() => {
     return this.catalogue().models.filter((m) => this.recommended().has(m.id) && this.notInstalled(m) && m.licence.clear);
   });

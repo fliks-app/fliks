@@ -16,6 +16,7 @@ import { DeviceService } from '../../../core/services/device.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { UsersApiService } from '../../../core/services/api/users-api.service';
 import { SERVER_SINCE, ServerVersionService } from '../../../core/services/server-version.service';
+import { compareVersions, releaseOf } from '../../../core/utils/semver';
 import { MarkdownPipe } from '../../pipes/markdown.pipe';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
@@ -49,20 +50,13 @@ export function parseWhatsNew(md: string, base: string): Omit<WhatsNewSlide, 've
     });
 }
 
-/** Compares the numeric core of two versions; a pre-release suffix is ignored. */
-function compareVersions(a: string, b: string): number {
-  const pa = a.split('-')[0].split('.').map(Number);
-  const pb = b.split('-')[0].split('.').map(Number);
-  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
-  return 0;
-}
-
 /** Versions with notes to show, oldest first: the latest three after `seen` up to `current`. */
 export function versionsToShow(index: string[], seen: string, current: string): string[] {
+  const [last, now] = [releaseOf(seen), releaseOf(current)];
   return index
-    .filter((v) => compareVersions(v, current) <= 0)
+    .filter((v) => compareVersions(v, now) <= 0)
     .sort((a, b) => compareVersions(b, a))
-    .filter((v) => compareVersions(v, seen) > 0)
+    .filter((v) => compareVersions(v, last) > 0)
     .slice(0, MAX_VERSIONS)
     .reverse();
 }
@@ -111,7 +105,7 @@ export class WhatsNewModalComponent {
     await this.auth.refreshUser();
     const user = this.auth.user();
     const seen = user?.whatsNewSeen ?? null;
-    if (user?.id !== id || (seen !== null && compareVersions(seen, current) >= 0)) return;
+    if (user?.id !== id || (seen !== null && compareVersions(releaseOf(seen), releaseOf(current)) >= 0)) return;
     if (await this.updatePending()) return;
     // An account without a value, or with the popup off, only records the version.
     if (seen === null || user.whatsNewEnabled === false) return this.markSeen(id, current);

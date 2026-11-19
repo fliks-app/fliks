@@ -7,7 +7,7 @@ import { AuthService } from '../auth.service';
 import { DeviceService } from '../device.service';
 import { SseService } from '../sse.service';
 import { ToastService } from '../toast.service';
-import { readFlag, writeFlag } from './local-flag';
+import { readFlag, writeFlag } from '../../utils/local-flag';
 import { PartyService } from './party.service';
 import { SPEAK_HANG_MS, SPEAK_THRESHOLD, diffPeers, offersTo, peerKey, rms, routeSignal, type PeerId } from './voice-mesh';
 

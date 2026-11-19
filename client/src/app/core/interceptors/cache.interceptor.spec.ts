@@ -53,6 +53,8 @@ describe('cache.interceptor — what may be cached', () => {
     expect(isCacheable('/api/auth/me')).toBe(false);
     expect(isCacheable('/api/stream/1')).toBe(false);
     expect(isCacheable('/api/media/42/subtitles/search')).toBe(false);
+    expect(isCacheable('/api/libraries/3/optimize/summary')).toBe(false);
+    expect(isCacheable('/api/media/42/music/candidates')).toBe(false);
   });
 });
 

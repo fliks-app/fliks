@@ -32,4 +32,4 @@ The desktop and web clients show these notes once per account, in a carousel, on
 
 ## Preview
 
-Copy `<version>/` to a folder named after the version the client runs (`environment.version`) and list it in `index.json`, remove `fliks.whatsNewSeen` from local storage and reload. Never commit that copy.
+Copy `<version>/` to a folder named after the version the client runs (`environment.version`) and list it in `index.json`, set `whatsNewSeen` on the test account to an older version (it lives on the account, not in local storage) and reload. Never commit that copy.

@@ -17,4 +17,5 @@ import { SERVER_SINCE, ServerVersionService } from '../../core/services/server-v
 export class AccountShellComponent {
   private readonly versions = inject(ServerVersionService);
   readonly whatsNew = computed(() => this.versions.supports(SERVER_SINCE.whatsNew));
+  readonly continueSync = computed(() => this.versions.supports(SERVER_SINCE.sessionSync));
 }

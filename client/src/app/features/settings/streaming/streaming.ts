@@ -1,5 +1,5 @@
 import { RouterLink } from '@angular/router';
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, computed, inject, signal, OnInit } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -8,6 +8,7 @@ import { SettingsApiService } from '../../../core/services/api/settings-api.serv
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { StreamsApiService } from '../../../core/services/api/streams-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { SERVER_SINCE, ServerVersionService } from '../../../core/services/server-version.service';
 import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
@@ -22,6 +23,8 @@ export class StreamingSettingsComponent implements OnInit {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly versions = inject(ServerVersionService);
+  protected readonly optimize = computed(() => this.versions.supports(SERVER_SINCE.optimize));
 
   readonly loading = signal(true);
   readonly saving = signal(false);

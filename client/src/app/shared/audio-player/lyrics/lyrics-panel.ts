@@ -13,6 +13,7 @@ import type { LyricsFormat, LyricsKind, LyricsResponse, StructuredLyrics } from 
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { AuthService } from '../../../core/services/auth.service';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SseService } from '../../../core/services/sse.service';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { CdgCanvasComponent } from '../cdg/cdg-canvas';
@@ -35,6 +36,7 @@ export class LyricsPanelComponent {
   private readonly karaoke = inject(KaraokeApiService);
   private readonly session = inject(KaraokeService);
   private readonly translate = inject(TranslateService);
+  private readonly confirm = inject(ConfirmationService);
   private readonly local = inject(AudioPlayerService);
   protected readonly failure = (f: KaraokeFailure) => failureText(this.translate, f);
   protected readonly tv = inject(DeviceService).isTv;
@@ -123,7 +125,7 @@ export class LyricsPanelComponent {
     // The mic outlives the stage, which is rebuilt on every track: it stops with karaoke, not with the track.
     effect(() => {
       const state = this.kState();
-      if (!this.stage() || (state && state.state !== 'ready')) untracked(() => this.session.singing() && this.session.stopSinging());
+      if (!this.stage() || (state && state.state !== 'ready')) untracked(() => (this.session.singing() || this.session.starting()) && this.session.stopSinging());
     });
     void this.karaoke.status().then((s) => this.kStatus.set(s), () => undefined);
     inject(SseService)
@@ -277,7 +279,14 @@ export class LyricsPanelComponent {
     });
   }
 
-  protected remove(d: StructuredLyrics): Promise<void> {
+  protected async remove(d: StructuredLyrics): Promise<void> {
+    const ok = await this.confirm.confirm({
+      title: this.translate.instant('lyrics.delete_title'),
+      message: this.translate.instant('lyrics.delete_message'),
+      confirmLabel: this.translate.instant('common.delete'),
+      variant: 'danger',
+    });
+    if (!ok) return;
     return this.act(async () => {
       await this.api.remove(d.id);
       await this.reload();

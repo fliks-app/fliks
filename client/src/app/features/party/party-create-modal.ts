@@ -10,7 +10,7 @@ import { MediaPickerComponent, type MediaPick } from '../../shared/components/me
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { PartyHostSwitchesComponent } from '../player/party/party-host-switches';
-import { readStored, writeStored } from '../../core/services/party/local-flag';
+import { readStored, writeStored } from '../../core/utils/local-flag';
 import { AUTO_COVER, PartyCoverPickerComponent, coverChoice, coverValid, type CoverDraft } from './party-cover-picker';
 import { PartyInviteePickerComponent } from './party-invitee-picker';
 import { albumRows } from './party-programme-items';

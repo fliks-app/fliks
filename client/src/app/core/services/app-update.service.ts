@@ -4,7 +4,8 @@ import { Capacitor } from '@capacitor/core';
 import { firstValueFrom } from 'rxjs';
 import { DeviceService } from './device.service';
 import { AuthService } from './auth.service';
-import { ServerVersionService, isNewer } from './server-version.service';
+import { ServerVersionService } from './server-version.service';
+import { compareVersions } from '../utils/semver';
 import { whenIdle } from './sse.service';
 import {
   desktopUpdaterOrNull,
@@ -96,7 +97,7 @@ export class AppUpdateService {
   readonly aheadOfServer = computed(() => {
     const next = this.info()?.version;
     const server = this.serverVersion();
-    return this.mode() === 'desktop' && !!next && !!server && isNewer(next, server);
+    return this.mode() === 'desktop' && !!next && !!server && compareVersions(next, server) > 0;
   });
   /** Server version the user hid the topbar button for. */
   readonly hiddenForServer = signal(readPref(HIDE_UNTIL_KEY));

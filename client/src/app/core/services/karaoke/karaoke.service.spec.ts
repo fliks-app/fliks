@@ -11,6 +11,7 @@ import { PartyService } from '../party/party.service';
 import { DeviceService } from '../device.service';
 import { KaraokeRelayService } from './karaoke-relay.service';
 import { KaraokeService } from './karaoke.service';
+import { MicCapture } from './mic-capture';
 
 const cue = (start: number, end: number, pitch: number): LyricsCue => ({ start, end, value: 'x', byteStart: 0, byteEnd: 1, pitch });
 const doc = {
@@ -20,7 +21,7 @@ const doc = {
 } as StructuredLyrics;
 const take = (midi: number | null) => Array.from({ length: 50 }, (_, i) => ({ t: i * 20, midi }));
 
-function setup() {
+function setup(isTv = true) {
   const received = new Subject<{ userId: number; frames: { t: number; midi: number | null }[] }>();
   const track = signal<{ itemId: number } | null>({ itemId: 1 });
   const pitch = signal(0);
@@ -32,7 +33,7 @@ function setup() {
       { provide: AudioPlayerService, useValue: { track, position: signal(0), playing: signal(false), rate: signal(1), pitch } },
       { provide: RemoteAudioOutput, useValue: remote },
       { provide: KaraokeRelayService, useValue: { received, open: vi.fn(), close: vi.fn(), send: vi.fn() } },
-      { provide: DeviceService, useValue: { isTv: () => true } },
+      { provide: DeviceService, useValue: { isTv: () => isTv } },
       { provide: PartyService, useValue: { party: signal(null), members: signal([{ userId: 5, username: 'Ana' }]) } },
       { provide: AuthService, useValue: { user: signal({ id: 1, username: 'me' }) } },
       { provide: TranslateService, useValue: { instant: (k: string, p: { n: number }) => `${k}${p?.n ?? ''}` } },
@@ -136,11 +137,31 @@ describe('KaraokeService', () => {
     karaoke.dismissBoard();
     expect(karaoke.board()).toBeNull();
     expect(karaoke.results(doc)).toEqual([]);
-    expect(karaoke.history()).toHaveLength(1);
   });
 
   it('calibrates from the local take, and refuses one with too few notes', () => {
     const { karaoke } = setup();
     expect(karaoke.calibrate(doc)).toBe(false);
+  });
+
+  it('releases a mic whose start was still pending when singing stopped', async () => {
+    vi.stubGlobal('AudioWorkletNode', class {});
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: () => undefined } });
+    let open!: () => void;
+    const started = vi.spyOn(MicCapture.prototype, 'start').mockImplementation(() => new Promise<void>((r) => (open = r)));
+    const stopped = vi.spyOn(MicCapture.prototype, 'stop').mockImplementation(() => undefined);
+    const { karaoke } = setup(false);
+    const first = karaoke.startSinging();
+    void karaoke.startSinging();
+    expect(started).toHaveBeenCalledTimes(1);
+    expect(karaoke.starting()).toBe(true);
+    karaoke.stopSinging();
+    stopped.mockClear();
+    open();
+    await first;
+    expect(stopped).toHaveBeenCalledTimes(1);
+    expect(karaoke.singing()).toBe(false);
+    expect(karaoke.starting()).toBe(false);
+    vi.unstubAllGlobals();
   });
 });

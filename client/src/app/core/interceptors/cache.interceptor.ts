@@ -53,6 +53,9 @@ const EXCLUDED_PATTERNS = [
   /^\/api\/metadata\/(search|trending|popular|upcoming|discover)\//,
   /^\/api\/persons\/\d+\/(provider-credits|bibliography|discography)/,
   /^\/api\/playlists\/\d+\/export\.m3u/,
+  // Derived from profiles and jobs, which change under other prefixes: a stale count would size a rewrite.
+  /^\/api\/libraries\/\d+\/optimize\//,
+  /^\/api\/media\/\d+\/music\/candidates/,
 ];
 
 const DETAIL_PATTERN = /^\/api\/media\/\d+$/;

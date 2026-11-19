@@ -41,14 +41,16 @@
       >
         {{ 'settings.libraries.tab_users' | translate }}
       </a>
-      <a
-        role="tab"
-        class="tab"
-        [routerLink]="['/admin/settings/libraries', state.libraryId(), 'optimize']"
-        routerLinkActive="tab-active"
-      >
-        {{ 'settings.optimize.library.tab' | translate }}
-      </a>
+      @if (optimize()) {
+        <a
+          role="tab"
+          class="tab"
+          [routerLink]="['/admin/settings/libraries', state.libraryId(), 'optimize']"
+          routerLinkActive="tab-active"
+        >
+          {{ 'settings.optimize.library.tab' | translate }}
+        </a>
+      }
       <a
         role="tab"
         class="tab"

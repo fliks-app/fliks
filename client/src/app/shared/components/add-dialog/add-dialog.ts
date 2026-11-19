@@ -105,8 +105,14 @@ export class AddDialogComponent {
     return this.kind() === 'album' && !this.req()?.recording ? 'discover.request_album' : 'discover.request';
   });
 
+  /** False while an add loads or submits: a second `add()` would replace its request. */
+  get idle(): boolean {
+    return !this.loading() && !this.busy();
+  }
+
   /** Adds the hit without a question when one library takes it, else opens the dialog. */
   async add(req: AddRequest): Promise<void> {
+    if (!this.idle) return;
     const mode = req.mode ?? (this.auth.hasPermission('media.create') ? 'import' : 'request');
     this.begin(req, mode);
     if (!(await this.load(req))) {
@@ -127,6 +133,11 @@ export class AddDialogComponent {
     this.mode.set(mode);
     this.busy.set(false);
     this.loadFailed.set(false);
+    this.libraryId.set(null);
+    this.folderId.set(null);
+    this.qualityId.set(null);
+    this.languageId.set(null);
+    this.audioQualityId.set(null);
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());
     this.seasonsFailed.set(false);

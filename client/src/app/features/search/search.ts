@@ -771,6 +771,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** `release` replaces the hit's id: a recording names its own release, which is the album to add. */
   protected add(row: SearchHit, recording?: RecordingHit, release?: string): void {
+    if (this.addDialog()?.idle === false) return;
     const externalId = release ?? row.externalId;
     const req: AddRequest = {
       kind: row.mediaType,
@@ -788,7 +789,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** The row flips to pending at once; a cancelled or failed add puts it back. */
   protected addItem(i: MusicItem): void {
     const row = i.recording?.album ?? i.album;
-    if (!row) return;
+    if (!row || this.addDialog()?.idle === false) return;
     this.optimistic.update((m) => new Map(m).set(i.key, 'pending'));
     this.add(row, i.recording, i.recording?.release?.externalId);
     this.pendingAdd!.key = i.key;

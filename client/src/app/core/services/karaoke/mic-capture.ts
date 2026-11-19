@@ -65,9 +65,10 @@ export class MicCapture {
   }
 
   stop(): void {
+    // Native stop is idempotent and must also cancel a start still waiting on the permission prompt.
+    if (['android', 'ios'].includes(Capacitor.getPlatform())) void KaraokeMic.stop().catch(() => undefined);
     if (this.native) {
       void this.native.remove();
-      void KaraokeMic.stop().catch(() => undefined);
       this.native = null;
     }
     this.stream?.getTracks().forEach((t) => t.stop());

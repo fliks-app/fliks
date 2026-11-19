@@ -127,6 +127,7 @@ export class KaraokeStageComponent {
       const ro = new ResizeObserver(([e]) => {
         this.size = { w: e.contentRect.width, h: e.contentRect.height };
         this.readColours();
+        this.redraw();
       });
       ro.observe(this.canvas().nativeElement);
       destroyRef.onDestroy(() => ro.disconnect());
@@ -146,10 +147,9 @@ export class KaraokeStageComponent {
     });
     effect(() => {
       this.doc();
-      untracked(() => {
-        cancelAnimationFrame(this.frame);
-        this.draw();
-      });
+      this.audio.playing();
+      this.audio.position();
+      untracked(() => this.redraw());
     });
   }
 
@@ -159,6 +159,7 @@ export class KaraokeStageComponent {
 
   private refresh(): void {
     this.readColours();
+    if (!this.audio.playing()) this.redraw();
     this.rows.set(this.karaoke.results(this.doc()));
     const dur = this.audio.duration();
     if (dur > 0 && this.audio.position() >= dur - 1.5) this.karaoke.finish(this.doc(), this.title());
@@ -221,6 +222,12 @@ export class KaraokeStageComponent {
     return { colour: st?.colour ?? SINGER_COLOURS[i % SINGER_COLOURS.length], mark: st?.mark ?? '', name: st?.name ?? '', n: st?.n ?? 0 };
   }
 
+  private redraw(): void {
+    cancelAnimationFrame(this.frame);
+    this.draw();
+  }
+
+  /** Animates only while the track plays; a pause, seek or resize paints once through `redraw`. */
   private draw(): void {
     const cv = this.canvas().nativeElement;
     const dpr = window.devicePixelRatio || 1;
@@ -234,7 +241,7 @@ export class KaraokeStageComponent {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.paint(ctx, w, h, this.colours.ink, this.colours.primary);
     }
-    this.frame = requestAnimationFrame(() => this.draw());
+    if (this.audio.playing()) this.frame = requestAnimationFrame(() => this.draw());
   }
 
   private paint(ctx: CanvasRenderingContext2D, w: number, h: number, ink: string, primary: string): void {

@@ -5506,7 +5506,9 @@
     "tap_sync": "Synchroniser au tap",
     "tap_hint": "Appuyez sur Marquer au début de chaque ligne chantée ; Retour annule la dernière.",
     "tap_stamp": "Marquer la ligne",
-    "tap_back": "Retour"
+    "tap_back": "Retour",
+    "delete_title": "Supprimer les paroles ?",
+    "delete_message": "La version affichée des paroles sera définitivement supprimée."
   },
   "karaoke": {
     "mix": "Mixage du son",
@@ -5663,7 +5665,7 @@
       "details": "Détails",
       "details_title": "Titres à resynchroniser",
       "details_models": "{{language}} : synchronisé avec {{current}}, serait synchronisé avec {{next}}",
-      "result_rejected": "Re-synchronisation refusée : seulement {{percent}} % des paroles retrouvées dans la voix (minimum {{min}} %). La synchro précédente ({{previous}}) est conservée.",
+      "result_rejected": "Resynchronisation refusée : seulement {{percent}} % des paroles retrouvées dans la voix (minimum {{min}} %). La synchro précédente ({{previous}}) est conservée.",
       "result_failed": "Échec : {{error}}",
       "result_skipped": "Ignoré : le titre était occupé",
       "result_ok": "Resynchronisé",
