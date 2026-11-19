@@ -260,7 +260,7 @@ export class RemotePickerListComponent {
     }
     // The device that owns the account session is watched, not selected: the full player opens on it.
     const owned = this.sync.session();
-    if (row.kind === 'remote' && owned && this.remote.ownsSession(row.id)) {
+    if (row.kind === 'remote' && owned && this.remote.watchable(row.id)) {
       if (this.surface.canOpen(owned)) this.surface.open(owned);
       return;
     }
@@ -284,12 +284,9 @@ export class RemotePickerListComponent {
     } else if (row.kind === 'cast-web') {
       this.castService.requestSession();
     } else {
+      // The selection reads what the device already plays, if anything: the player of its family opens on it.
       this.remote.selectTarget(row.id);
-      // Only open the player when there is already something to control.
-      const playing = this.remote.targets().find((t) => t.targetId === row.id)?.nowPlaying;
-      if (playing?.mediaFileId && playing.mediaId) {
-        this.session.openPlayer({ fileId: playing.mediaFileId, mediaId: playing.mediaId, episodeId: playing.episodeId ?? undefined });
-      }
+      this.session.openPlayer();
     }
   }
 

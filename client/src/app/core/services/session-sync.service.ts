@@ -7,7 +7,7 @@ import type { MediaType } from '../enums/media-type.enum';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { projectPosition } from '../utils/position-anchor';
 import { deviceIdOf, sameTarget } from './remote-target-id';
-import { KIND_REGISTRY, type MediaFamily } from '../media-kinds';
+import { KIND_REGISTRY, playsInAudioPlayer, type MediaFamily } from '../media-kinds';
 import { AuthService } from './auth.service';
 import { ClockService } from './party/clock.service';
 import { SseService, type SessionEvent } from './sse.service';
@@ -366,7 +366,7 @@ export class SessionSyncService {
   /** When the observed owner last reported, on this device's clock; 0 when the session is not that device's. */
   ownerReportAt(targetId: string): number {
     const s = this._session();
-    if (!s || s.owner.targetId !== targetId) return 0;
+    if (!s?.owner.targetId || !sameTarget(s.owner.targetId, targetId)) return 0;
     return Date.now() - (this.clock.serverNow() - Date.parse(s.positionAt));
   }
 
@@ -388,9 +388,7 @@ export class SessionSyncService {
 
   /** Whether the session plays in the audio player, which has its own controller; any other family is watched in the video player. */
   isAudio(s: AccountSession): boolean {
-    if (s.item.family) return s.item.family === 'audio';
-    const families = KIND_REGISTRY[s.item.kind].families;
-    return families.includes('audio') && !families.includes('video');
+    return s.item.family ? s.item.family === 'audio' : playsInAudioPlayer(s.item.kind);
   }
 
   /** Playable sessions only: a reader's position is resumed where it is opened, never moved. */

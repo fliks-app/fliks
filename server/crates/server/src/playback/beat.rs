@@ -289,6 +289,7 @@ pub fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -
         episode_id: int(b, "episodeId"),
         item_id: int(b, "itemId"),
         media_title: s.media_title.clone(),
+        media_type: s.media_type.clone(),
         episode_label: s.episode_label.clone(),
         poster_url: s.poster_url.clone(),
         fanart_url: s.fanart_url.clone(),
@@ -873,6 +874,18 @@ mod tests {
         );
         let e = serde_json::to_value(remote_state("t".into(), &live(), 7, &json!({}))).unwrap();
         assert!(e.get("stemMode").is_none() && e.get("pitch").is_none());
+    }
+
+    #[test]
+    fn the_state_names_the_kind_of_the_played_media_once_known() {
+        let album = LiveSession {
+            media_type: Some("album".into()),
+            ..live()
+        };
+        let e = serde_json::to_value(remote_state("t".into(), &album, 7, &json!({}))).unwrap();
+        assert_eq!(e["mediaType"], json!("album"));
+        let e = serde_json::to_value(remote_state("t".into(), &live(), 7, &json!({}))).unwrap();
+        assert!(e.get("mediaType").is_none());
     }
 
     #[test]

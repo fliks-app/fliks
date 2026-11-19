@@ -43,6 +43,9 @@ function frame(over: Partial<RemoteState> = {}): RemoteState {
 
 function setup(opts: { selected?: string | null; held?: { targetId: string; mediaFileId: number }; family?: string; castOn?: string } = {}) {
   const owner = signal<string | null>(null);
+  /** A local player is busy: this device watches no owner. */
+  const busy = signal(false);
+  const watched = computed(() => (busy() ? null : owner()));
   const session = () => {
     if (opts.held) return { owner: { targetId: opts.held.targetId }, item: { mediaFileId: opts.held.mediaFileId, family: 'video' } };
     const face = opts.castOn ? { deviceName: opts.castOn, formFactor: 'cast' } : {};
@@ -66,14 +69,14 @@ function setup(opts: { selected?: string | null; held?: { targetId: string; medi
       provideHttpClientTesting(),
       provideRouter([]),
       { provide: SseService, useValue: sse },
-      { provide: SessionSyncService, useValue: { observedOwnerTargetId: owner, observableOwner: owner, session, isReading: (s: { item: { family: string } }) => s.item.family === 'text', setLiveSource: vi.fn(), ownerReportAt: () => 0, claim: async (start: () => unknown) => void (await start()) } },
+      { provide: SessionSyncService, useValue: { observedOwnerTargetId: watched, observableOwner: owner, session, isReading: (s: { item: { family: string } }) => s.item.family === 'text', setLiveSource: vi.fn(), ownerReportAt: () => 0, claim: async (start: () => unknown) => void (await start()) } },
       { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn(), info: vi.fn() } },
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
     ],
   });
   const service = TestBed.inject(RemoteService);
   service.selectedTargetId.set(opts.selected === undefined ? 'tv#1' : opts.selected);
-  return { service, remoteState, sse, owner };
+  return { service, remoteState, sse, owner, busy };
 }
 
 describe('RemoteService observation', () => {
@@ -198,7 +201,46 @@ describe('RemoteService observation', () => {
     service.selectTarget('tv#1');
     TestBed.tick();
     expect(service.selectedTargetId()).toBeNull();
-    expect(service.ownsSession('tv#1')).toBe(true);
+    expect(service.watchable('tv#1')).toBe(true);
+  });
+
+  it('keeps a selected device that takes the session while a local player is busy, and watches it once that player stops', () => {
+    const { service, owner, busy } = setup({ selected: 'tv#1' });
+    busy.set(true);
+    owner.set('tv#1');
+    TestBed.tick();
+    expect(service.selectedTargetId()).toBe('tv#1');
+    expect(service.watchable('tv#1')).toBe(false);
+    busy.set(false);
+    TestBed.tick();
+    expect(service.selectedTargetId()).toBeNull();
+    expect(service.observedTargetId()).toBe('tv#1');
+  });
+
+  it('lends the account session the report of its owner only, never the one of a selected device', () => {
+    const { service, remoteState, owner } = setup({ selected: 'tv#1' });
+    const sync = TestBed.inject(SessionSyncService) as unknown as { setLiveSource: ReturnType<typeof vi.fn> };
+    const report = sync.setLiveSource.mock.calls[0][0] as () => unknown;
+    owner.set('pc#1');
+    remoteState.set(frame());
+    service.ingestState();
+    expect(service.targetState()).not.toBeNull();
+    expect(report()).toBeNull();
+    service.selectTarget(null);
+    remoteState.set(frame({ targetId: 'pc#1' }));
+    service.ingestState();
+    expect(report()).toEqual({ mediaFileId: 2, durationSeconds: 100 });
+  });
+
+  it('reads a picked device from its listing until it reports, the kind of its media included', () => {
+    const { service, remoteState } = setup({ selected: null });
+    const { type: _t, targetId: _id, lastCmdId: _c, ...nowPlaying } = frame({ targetId: 'tv#2', mediaTitle: 'Listed', mediaType: 'album' });
+    service.targets.set([{ targetId: 'tv#2', userAgent: null, deviceName: null, systemName: null, formFactor: null, tvPlatform: null, nowPlaying }]);
+    service.selectTarget('tv#2');
+    expect(service.targetState()).toMatchObject({ mediaTitle: 'Listed', mediaType: 'album' });
+    remoteState.set(frame({ targetId: 'tv#2', mediaTitle: 'Reported', mediaType: 'series' }));
+    service.ingestState();
+    expect(service.targetState()).toMatchObject({ mediaTitle: 'Reported', mediaType: 'series' });
   });
 
   it('keeps the selection of a device that holds a reading position', () => {

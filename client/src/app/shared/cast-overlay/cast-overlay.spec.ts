@@ -89,8 +89,9 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
     viewObserved: vi.fn(),
     command: vi.fn(),
     partyActive: signal(false),
+    remoteFamily: signal<'audio' | 'video' | null>(null),
   };
-  const audioView = { expand: vi.fn(), track: signal(null), position: () => sync.positionNow(account()!), duration: () => sync.durationNow(account()!), queue: signal([]), neighbour: () => null, next: vi.fn(), previous: vi.fn() };
+  const audioView = { expand: vi.fn(), track: signal<{ title: string; artist?: string; coverUrl?: string } | null>(null), position: () => sync.positionNow(account()!), duration: () => sync.durationNow(account()!), queue: signal([]), neighbour: () => null, next: vi.fn(), previous: vi.fn() };
   const audio = { active: signal(false), track: signal(over.localTrack ? { itemId: over.localTrack } : null) };
   TestBed.configureTestingModule({
     providers: [
@@ -272,6 +273,25 @@ describe('CastOverlayComponent', () => {
       session.partyActive.set(true);
       TestBed.tick();
       expect(el.querySelector('button')).toBeNull();
+    });
+
+    it('shows a selected device that plays audio as an audio session, which opens the audio player', () => {
+      const { el, fixture, session, audioView, output, target } = setup({ account: accountSession() });
+      session.remoteFamily.set('audio');
+      audioView.track.set({ title: 'Song', artist: 'Band', coverUrl: '/r.jpg' });
+      fixture.detectChanges();
+      expect(el.querySelector('[data-player-bar]')!.getAttribute('data-player-bar')).toBe('audio');
+      expect(el.textContent).toContain('Song');
+      expect(el.textContent).toContain('Band');
+      expect(el.textContent).toContain('Living room');
+      expect(el.textContent).not.toContain('Observed title');
+      const [open, play, close] = Array.from(el.querySelectorAll('button'));
+      open.click();
+      play.click();
+      close.click();
+      expect(session.openPlayer).toHaveBeenCalledWith();
+      expect(target.pause).toHaveBeenCalled();
+      expect(output.disconnect).toHaveBeenCalled();
     });
 
     it('leaves the output strip to a selected target', () => {

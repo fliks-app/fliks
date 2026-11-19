@@ -91,6 +91,12 @@ export function kindOf(type: string | null | undefined): KindDescriptor {
   return (isMediaKind(type) ? KIND_REGISTRY[type] : undefined) ?? KIND_REGISTRY[DEFAULT_LIST_KIND];
 }
 
+/** Whether an item of `kind` plays in the audio player: an audio family and no video one. */
+export function playsInAudioPlayer(kind: string | null | undefined): boolean {
+  const families = isMediaKind(kind) ? KIND_REGISTRY[kind].families : [];
+  return families.includes('audio') && !families.includes('video');
+}
+
 /** A card toggles watched for a series (bulk endpoint) or a movie with a file; other kinds have no such state. */
 export function canMarkWatched(m: { type: MediaType; files?: readonly unknown[] }): boolean {
   if (!isMediaKind(m.type)) return false;

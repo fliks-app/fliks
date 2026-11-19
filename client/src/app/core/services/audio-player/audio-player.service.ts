@@ -288,7 +288,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
         if (routed !== sent) void this.nativeAudio!.setRouted({ routed: (sent = routed) });
       });
     }
-    this.remote.registerLoader('audio', (cmd) => this.loadFromRemote(cmd));
+    this.remote.registerLoader('audio', async (cmd) => void (await this.loadFromRemote(cmd)));
     this.remote.validated.subscribe((cmd) => void this.applyRemote(cmd));
     this.sessionSync.registerResumer('audio', (s, positionSeconds) => this.resumeSession(s, positionSeconds));
     this.sessionSync.registerPlayer({
@@ -1458,20 +1458,19 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     return this.startMusic(this.mq.current!, autoplay, exact ? startAt : 0, toCast);
   }
 
-  /** `load` of an audio family: an album queue, or the audio edition of a book. */
-  private async loadFromRemote(cmd: RemoteCommand): Promise<void> {
+  /** `load` of an audio family: an album queue, or the audio edition of a book; false when nothing was loaded. */
+  async loadFromRemote(cmd: Pick<RemoteCommand, 'kind' | 'mediaId' | 'itemId' | 'queue' | 'shuffle' | 'repeat' | 'positionSeconds' | 'paused'>): Promise<boolean> {
     const startAt = cmd.positionSeconds ?? 0;
     const autoplay = cmd.paused !== true;
     if (cmd.kind === 'album' && cmd.queue?.itemIds.length) {
-      await this.startQueue(cmd.queue, cmd.shuffle ?? false, cmd.repeat ?? 'off', startAt, autoplay);
-      return;
+      return this.startQueue(cmd.queue, cmd.shuffle ?? false, cmd.repeat ?? 'off', startAt, autoplay);
     }
-    if (!cmd.itemId || this.blockedByParty()) return;
+    if (!cmd.itemId || this.blockedByParty()) return false;
     const generation = ++this.generation;
     const req = cmd.kind === 'album' ? null : cmd.mediaId ? await this.audiobookRequest(cmd.mediaId, cmd.itemId) : null;
-    if (generation !== this.generation) return;
-    if (req) await this.play(req, { startAt, paused: !autoplay });
-    else await this.startQueue({ itemIds: [cmd.itemId], index: 0 }, false, 'off', startAt, autoplay);
+    if (generation !== this.generation) return false;
+    if (req) return this.play(req, { startAt, paused: !autoplay });
+    return this.startQueue({ itemIds: [cmd.itemId], index: 0 }, false, 'off', startAt, autoplay);
   }
 
   /** "Play here" on a session of another device: its queue and its position now. */

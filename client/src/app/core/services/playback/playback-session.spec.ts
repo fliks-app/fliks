@@ -31,6 +31,7 @@ function target() {
     playNext: vi.fn(),
     position: vi.fn(() => 42),
     paused: vi.fn(() => false),
+    play: vi.fn(),
     pause: vi.fn(async () => {}),
     stopPlayback: vi.fn(),
     disconnect: vi.fn(),
@@ -90,7 +91,7 @@ function setup() {
     liveOwner: signal<string | null>(null),
     playTarget: () => remoteSvc.selectedTargetId() ?? remoteSvc.liveOwner(),
     observedTargetId: () => remoteSvc.selectedTargetId() ?? 'tv-1',
-    targetState: signal<{ mediaFileId: number } | null>({ mediaFileId: 7 }),
+    targetState: signal<{ mediaFileId: number; mediaType?: string; mediaId?: number; itemId?: number } | null>({ mediaFileId: 7 }),
     selectTarget: vi.fn(),
     canLoad: vi.fn(() => true),
     send: vi.fn(async () => {}),
@@ -124,7 +125,10 @@ function setup() {
     videoItem: SessionSyncService.prototype.videoItem,
   };
   const device = { isTv: signal(false) };
-  const audio = { holds: vi.fn(() => false), release: vi.fn(async (): Promise<unknown> => null), stepAside: vi.fn(), resume: vi.fn(async (_s: MusicSnapshot) => {}) };
+  const audio = {
+    holds: vi.fn(() => false), release: vi.fn(async (): Promise<unknown> => null), stepAside: vi.fn(), resume: vi.fn(async (_s: MusicSnapshot) => {}),
+    loadFromRemote: vi.fn(async (_cmd: object) => true),
+  };
   const musicCast = { hasMedia: signal(false), active: signal(false), snapshot: vi.fn((): MusicSnapshot | null => null), start: vi.fn(async (_h: unknown) => {}), adopt: vi.fn() };
   const router = { navigate: vi.fn(async () => true), navigateByUrl: vi.fn(async () => true), url: '/' };
   const streaming = { stopSession: vi.fn(async () => {}) };
@@ -377,6 +381,14 @@ describe('PlaybackSession', () => {
       expect(await session.moveTo('remote', 'dev-9')).toBe(true);
       expect(syncSvc.transferTo).not.toHaveBeenCalled();
       expect(remoteSvc.send).toHaveBeenCalled();
+    });
+
+    it('does not transfer to another face of the device that owns the session', () => {
+      const { session, syncSvc, audio } = setup();
+      syncSvc.session.set({ owner: { targetId: 'dev#native' }, state: 'playing', item: { mediaFileId: 70 } });
+      audio.holds.mockReturnValue(true);
+      expect(session.transfersTo('dev#tab')).toBe(false);
+      expect(session.transfersTo('other#tab')).toBe(true);
     });
 
     it('does not transfer a party track, nor to the device that owns the session', async () => {
@@ -1050,6 +1062,72 @@ describe('PlaybackSession', () => {
       session.attachLocal(local);
       expect(await session.yieldToView()).toBe(false);
       expect(session.kind()).toBe('local');
+    });
+  });
+
+  describe('a selected device that plays audio', () => {
+    const album = { mediaFileId: 7, mediaType: 'album', mediaId: 3, itemId: 12 };
+
+    it('is driven from the audio player: the bar opens it there and its video route hands over', () => {
+      const { session, remote, remoteSvc, router } = setup();
+      remote.isConnected.set(true);
+      remoteSvc.targetState.set(album);
+      expect(session.remoteFamily()).toBe('audio');
+      expect(session.viewEnd()).toBe('audio');
+      session.openPlayer();
+      const fp = TestBed.inject(FullPlayerState);
+      expect([fp.open(), fp.remote()]).toEqual(['audio', true]);
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('keeps the video route for a device that plays a video or names no kind', () => {
+      const { session, remote, remoteSvc, router } = setup();
+      remote.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      remote.isConnected.set(true);
+      expect(session.remoteFamily()).toBeNull();
+      session.openPlayer();
+      expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], expect.anything());
+      remoteSvc.targetState.set({ mediaFileId: 7, mediaType: 'series' });
+      expect(session.remoteFamily()).toBe('video');
+      expect(session.viewEnd()).toBeNull();
+    });
+
+    it('moves its audio view to the video route once it plays a video', () => {
+      const { session, remote, remoteSvc, router } = setup();
+      remote.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      remote.isConnected.set(true);
+      remoteSvc.targetState.set(album);
+      session.openPlayer();
+      TestBed.tick();
+      expect(router.navigate).not.toHaveBeenCalled();
+      remoteSvc.targetState.set({ mediaFileId: 7, mediaType: 'movie' });
+      TestBed.tick();
+      expect(router.navigate).toHaveBeenCalledWith(['/watch', 7], expect.anything());
+    });
+
+    it('takes its track back into the audio player here, then lets the device go', async () => {
+      const { session, remote, remoteSvc, audio, router } = setup();
+      remote.isConnected.set(true);
+      remoteSvc.targetState.set(album);
+      const fp = TestBed.inject(FullPlayerState);
+      fp.show('audio', true);
+      session.takeBack();
+      await vi.waitFor(() => expect(remote.disconnect).toHaveBeenCalled());
+      expect(remote.pause).toHaveBeenCalled();
+      expect(audio.loadFromRemote).toHaveBeenCalledWith({ kind: 'album', mediaId: 3, itemId: 12, positionSeconds: 42, paused: false });
+      expect(remote.stopPlayback).toHaveBeenCalled();
+      expect([fp.open(), fp.remote()]).toEqual(['audio', false]);
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('plays the device on when its track cannot start here', async () => {
+      const { session, remote, remoteSvc, audio } = setup();
+      audio.loadFromRemote.mockResolvedValue(false);
+      remote.isConnected.set(true);
+      remoteSvc.targetState.set(album);
+      session.takeBack();
+      await vi.waitFor(() => expect(remote.play).toHaveBeenCalled());
+      expect(remote.disconnect).not.toHaveBeenCalled();
     });
   });
 

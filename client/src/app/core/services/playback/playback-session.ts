@@ -16,6 +16,8 @@ import type { Media } from '../api/media.service';
 import { SessionSyncService } from '../session-sync.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { parseDeviceLabel } from '../../utils/format-device-label';
+import { isMediaKind, playsInAudioPlayer } from '../../media-kinds';
+import { sameTarget } from '../remote-target-id';
 import { launchPickFor, type LaunchTracks } from '../track-manager.service';
 import { launchTracksToWire, RemoteService, snapshotToWire } from '../remote.service';
 import { ToastService } from '../toast.service';
@@ -117,8 +119,16 @@ export class PlaybackSession {
         ? 'cast'
         : 'local',
   );
-  /** What an open video view does once the account session moves on: `audio` hands over to the audio player, `none` closes; null follows the item. */
+  /** The player family of what the selected device plays, from its own report; null before a report names it. */
+  readonly remoteFamily = computed<'audio' | 'video' | null>(() => {
+    const kind = this.remoteSvc().isRemoting() ? this.remoteSvc().targetState()?.mediaType : null;
+    return kind ? (playsInAudioPlayer(kind) ? 'audio' : 'video') : null;
+  });
+
+  /** What the open video route on another device does once that device moves on: `audio` hands over to the audio player,
+   *  `none` closes; null follows the item. */
   readonly viewEnd = computed<'audio' | 'none' | null>(() => {
+    if (this.remoteFamily() === 'audio') return 'audio';
     const sync = this.sync();
     // A claim in flight is replacing the view: closing it would cancel that navigation.
     if (!this.viewing() || sync.claimPending()) return null;
@@ -172,6 +182,10 @@ export class PlaybackSession {
     // An audio view follows an owner that now plays a video into the video player.
     effect(() => {
       if (this.fullPlayer.open() !== 'audio' || !this.fullPlayer.remote()) return;
+      if (this.remoteSvc().isRemoting()) {
+        if (this.remoteFamily() === 'video') untracked(() => this.openPlayer());
+        return;
+      }
       const sync = this.sync();
       const s = sync.session();
       const item = s && sync.videoItem(s);
@@ -227,7 +241,9 @@ export class PlaybackSession {
   /** Brings playback back here; with no player mounted it opens one first, and an idle output is just released. */
   takeBack(): void {
     if (this.isLocal()) return;
-    if (this.local()) {
+    if (this.remoteFamily() === 'audio') {
+      void this.takeAudioBack();
+    } else if (this.local()) {
       void this.moveTo('local');
     } else if (this.playing()) {
       this.takeBackOnAttach = true;
@@ -255,7 +271,7 @@ export class PlaybackSession {
     const remote = this.remoteSvc();
     const s = sync.session();
     if (!s || !sync.canTransfer() || this.local() || this.viewing() || !remote.canLoad(deviceId, s.item.mediaFileId)) return false;
-    if (!sync.parked() && s.owner.targetId === deviceId) return false;
+    if (!sync.parked() && s.owner.targetId && sameTarget(s.owner.targetId, deviceId)) return false;
     if (this.audio().holds()) return !this.toParty({ type: 'drives' }, 'audio');
     return sync.role() === 'observer' && this.isLocal();
   }
@@ -369,8 +385,10 @@ export class PlaybackSession {
     if (this.fullPlayer.open() === 'video') this.fullPlayer.hide();
   }
 
-  /** Opens the player route on what the active output plays, without reloading it; nothing to open while the output is idle. */
+  /** Opens the full player on what the active output plays, without reloading it: the route of `item` or of a video, the
+   *  audio player for a selected device's audio. Nothing to open while the output is idle. */
   openPlayer(item?: { fileId: number; mediaId: number; episodeId?: number }): void {
+    if (!item && this.remoteFamily() === 'audio') return this.fullPlayer.show('audio', true);
     const target = item ?? this.playing();
     if (!target?.fileId || this.router().url.startsWith('/watch')) return;
     this.opened = target.fileId;
@@ -416,6 +434,22 @@ export class PlaybackSession {
     }
     await (handoff.kind === 'music' ? this.musicCast().start(handoff) : this.castVideo(handoff));
     return true;
+  }
+
+  /** The selected device's item plays on here in the audio player, where it stands; it reports no queue, so only that item. */
+  private async takeAudioBack(): Promise<void> {
+    const target = this.injector.get(RemotePlaybackTarget);
+    const s = this.remoteSvc().targetState();
+    if (!s?.itemId || !s.mediaId || !isMediaKind(s.mediaType)) return;
+    const [positionSeconds, paused] = [target.position(), target.paused()];
+    void target.pause();
+    const loaded = await this.audio().loadFromRemote({ kind: s.mediaType, mediaId: s.mediaId, itemId: s.itemId, positionSeconds, paused });
+    if (!loaded) {
+      if (!paused) target.play();
+      return;
+    }
+    this.fullPlayer.handTo('audio', false);
+    this.leave(target);
   }
 
   private async castVideo(handoff: VideoHandoff): Promise<void> {

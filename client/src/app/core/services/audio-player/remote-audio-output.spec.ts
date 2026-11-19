@@ -2,7 +2,8 @@ import { computed, provideZonelessChangeDetection, signal } from '@angular/core'
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MusicApiService } from '../api/music-api.service';
-import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
+import { NowPlayingMetadataService, type NowPlayingMetadata } from '../playback/now-playing-metadata.service';
+import { PlaybackSession } from '../playback/playback-session';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService } from '../remote.service';
 import { SessionSyncService, type AccountSession } from '../session-sync.service';
@@ -52,8 +53,14 @@ async function setup(account: AccountSession | null, live = true) {
     isAudio: SessionSyncService.prototype.isAudio,
   };
   const primeTracks = vi.fn();
-  const target = { isIdle: signal(!live), uiPaused: signal(false), position: signal(70), duration: signal(200), seek: vi.fn() };
+  const target = {
+    isIdle: signal(!live), uiPaused: signal(false), position: signal(70), duration: signal(200), seek: vi.fn(),
+    item: signal<{ mediaId: number; itemId?: number }>({ mediaId: 0 }),
+  };
+  const playback = { remoteFamily: signal<'audio' | 'video' | null>(null), nowPlaying: signal<Partial<NowPlayingMetadata> | null>(null) };
   const remote = {
+    isRemoting: signal(false),
+    selectedTargetId: signal<string | null>(null),
     observedTargetId: signal<string | null>('pc#1'),
     send: vi.fn(),
     sendCoalesced: vi.fn(),
@@ -66,6 +73,7 @@ async function setup(account: AccountSession | null, live = true) {
       { provide: SessionSyncService, useValue: sync },
       { provide: RemotePlaybackTarget, useValue: target },
       { provide: RemoteService, useValue: remote },
+      { provide: PlaybackSession, useValue: playback },
       { provide: NowPlayingMetadataService, useValue: { primeTracks } },
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async (ids: number[]) => ids.map(track)) } },
     ],
@@ -75,7 +83,23 @@ async function setup(account: AccountSession | null, live = true) {
   await Promise.resolve();
   await Promise.resolve();
   TestBed.tick();
-  return { out, sync, target, remote, primeTracks };
+  return { out, sync, target, remote, playback, primeTracks };
+}
+
+/** Selects `tv#2`, which plays a track of another album than the account session's. */
+async function select(ctx: Awaited<ReturnType<typeof setup>>, id = 'tv#2'): Promise<void> {
+  ctx.remote.isRemoting.set(true);
+  ctx.remote.selectedTargetId.set(id);
+  ctx.remote.observedTargetId.set(id);
+  ctx.remote.targetState.set({});
+  ctx.target.item.set({ mediaId: 5, itemId: 50 });
+  ctx.target.position.set(15);
+  ctx.target.duration.set(180);
+  ctx.playback.remoteFamily.set('audio');
+  ctx.playback.nowPlaying.set({ title: 'Song', artist: 'Band', album: 'Record', posterUrl: '/r.jpg' });
+  TestBed.tick();
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 describe('RemoteAudioOutput', () => {
@@ -96,7 +120,8 @@ describe('RemoteAudioOutput', () => {
         provideZonelessChangeDetection(),
         { provide: SessionSyncService, useValue: { session: signal(session({ item: { ...session().item, title: 'Album A', subtitle: 'Track A' } })), parked: signal(false), role: signal('observer'), liveReport: signal(null), isAudio: SessionSyncService.prototype.isAudio } },
         { provide: RemotePlaybackTarget, useValue: {} },
-        { provide: RemoteService, useValue: {} },
+        { provide: RemoteService, useValue: { isRemoting: signal(false) } },
+        { provide: PlaybackSession, useValue: {} },
         { provide: NowPlayingMetadataService, useValue: { primeTracks: vi.fn() } },
         { provide: MusicApiService, useValue: { trackRequests: () => new Promise(() => {}) } },
       ],
@@ -254,5 +279,46 @@ describe('RemoteAudioOutput', () => {
     expect(out.rate()).toBe(1);
     remote.targetState.set({ playbackRate: 1.5 });
     expect(out.rate()).toBe(1.5);
+  });
+
+  describe('on a selected device', () => {
+    it('reads the own report of the device instead of the account session, which it plays outside of', async () => {
+      const ctx = await setup(session({ state: 'parked' }));
+      await select(ctx);
+      const { out, target, remote } = ctx;
+      expect(out.track()).toEqual({ mediaId: 5, itemId: 50, title: 'Song', artist: 'Band', album: 'Record', coverUrl: '/r.jpg' });
+      expect(out.queue()).toEqual([]);
+      expect([out.position(), out.duration(), out.playing()]).toEqual([15, 180, true]);
+      expect([out.parked(), out.controllable()]).toEqual([false, true]);
+      target.uiPaused.set(true);
+      expect(out.playing()).toBe(false);
+      out.toggle();
+      out.next();
+      expect(remote.send.mock.calls).toEqual([['tv#2', { action: 'play' }], ['tv#2', { action: 'next' }]]);
+    });
+
+    it('keeps its track through the gap between two of its tracks, not past another selection', async () => {
+      const ctx = await setup(null);
+      await select(ctx);
+      const { out, remote, playback } = ctx;
+      expect(out.track()?.title).toBe('Song');
+      remote.targetState.set(null);
+      playback.nowPlaying.set(null);
+      playback.remoteFamily.set(null);
+      expect(out.track()?.title).toBe('Song');
+      remote.selectedTargetId.set('tv#3');
+      expect(out.track()).toBeNull();
+    });
+
+    it('keeps its view open without an account session, and closes it with the selection', async () => {
+      const ctx = await setup(null);
+      await select(ctx);
+      ctx.out.expand();
+      TestBed.tick();
+      expect(ctx.out.expanded()).toBe(true);
+      ctx.remote.isRemoting.set(false);
+      TestBed.tick();
+      expect(ctx.out.expanded()).toBe(false);
+    });
   });
 });

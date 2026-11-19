@@ -1,6 +1,7 @@
 import { Injectable, computed, effect, inject, linkedSignal, signal, untracked } from '@angular/core';
 import { MusicApiService, alignTrackRows } from '../api/music-api.service';
 import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
+import { PlaybackSession } from '../playback/playback-session';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { RemoteService, type RemoteAction, type RemoteCommandInput } from '../remote.service';
 import { SessionSyncService } from '../session-sync.service';
@@ -24,18 +25,22 @@ export class RemoteAudioOutput implements AudioOutput {
   private readonly music = inject(MusicApiService);
   private readonly metadata = inject(NowPlayingMetadataService);
   private readonly fullPlayer = inject(FullPlayerState);
+  private readonly playback = inject(PlaybackSession);
 
-  private readonly session = this.sync.session;
+  /** A selected device plays outside the account session: the view reads that device's own report instead. */
+  readonly selected = this.remote.isRemoting;
+  /** The account session, while the view follows its owner. */
+  private readonly session = computed(() => (this.selected() ? null : this.sync.session()));
   private readonly wire = computed(() => this.session()?.queue ?? null);
   /** Each row keeps its place in the wire queue, which a queue pick names. */
   private readonly rows = signal<{ row: MusicTrackRequest; wireIndex: number }[]>([]);
   private readonly idsKey = computed(() => (this.wire()?.itemIds ?? []).join(','));
-  /** The owner reports the file the session names; a report of another track never drives the view. */
-  private readonly live = computed(() => this.sync.liveReport() !== null);
-  /** Commands reach a playing owner whether or not its report has arrived; a parked session has no owner to send to. */
-  readonly controllable = computed(() => !this.sync.parked());
+  /** The device reports what the view shows: anything a selected one plays, the file the session names for its owner. */
+  private readonly live = computed(() => (this.selected() ? this.remote.targetState() !== null : this.sync.liveReport() !== null));
+  /** Commands reach a playing device whether or not its report has arrived; a parked session has no owner to send to. */
+  readonly controllable = computed(() => !this.parked());
   /** No device holds the session: play takes it here, nothing else is sent. */
-  readonly parked = this.sync.parked;
+  readonly parked = computed(() => !this.selected() && this.sync.parked());
 
   /** Whether the observed device applies `action`; a control for one it refuses stays disabled. */
   supports(action: RemoteAction): boolean {
@@ -66,16 +71,30 @@ export class RemoteAudioOutput implements AudioOutput {
   readonly uiPlaying = computed(() => (this.sync.claimPending() ? (this.session()?.playing ?? false) : this.playing()));
   readonly position = computed(() => {
     if (this.pending() !== null) return 0;
+    if (this.selected()) return this.target.position();
     const s = this.session();
     return s ? Math.min(this.sync.positionNow(s), s.durationSeconds ?? Infinity) : 0;
   });
   readonly duration = computed(() => {
     const pending = this.pending();
     if (pending !== null) return this.rows()[pending]?.row.durationSeconds ?? 0;
+    if (this.selected()) return this.target.duration();
     const s = this.session();
     return s ? this.sync.durationNow(s) : 0;
   });
+  /** The track a selected device reports, by the metadata of what it plays. */
+  private readonly reportedTrack = computed<AudioRequest | null>(() => {
+    const meta = this.playback.remoteFamily() === 'audio' ? this.playback.nowPlaying() : null;
+    const { mediaId, itemId } = this.target.item();
+    return meta && itemId ? { mediaId, itemId, title: meta.title, artist: meta.artist || undefined, album: meta.album || undefined, coverUrl: meta.posterUrl } : null;
+  });
+  /** Kept through the gap between two tracks of the selected device: each is a stream of its own, reported anew. */
+  private readonly selectedTrack = linkedSignal<{ id: string | null; track: AudioRequest | null }, AudioRequest | null>({
+    source: () => ({ id: this.remote.selectedTargetId(), track: this.reportedTrack() }),
+    computation: (now, prev) => now.track ?? (prev?.source.id === now.id ? prev.value : null),
+  });
   readonly track = computed<AudioRequest | null>(() => {
+    if (this.selected()) return this.selectedTrack();
     const s = this.session();
     // A video session has no track: read as one, the open video view would fetch lyrics for an episode.
     if (!s || !this.sync.isAudio(s)) return null;
@@ -146,9 +165,9 @@ export class RemoteAudioOutput implements AudioOutput {
         () => !stale && this.rows.set([]),
       );
     });
-    // The view ends with the observation; a takeover by this device is handed over by the player component.
+    // The view ends with what it follows, a selected device or the session; a takeover by this device is handed over by the player component.
     effect(() => {
-      if (this.expanded() && !this.session()) this.fullPlayer.hide();
+      if (this.expanded() && !this.selected() && !this.sync.session()) this.fullPlayer.hide();
     });
     // The session came back to this device (a load sent from elsewhere, a local resume): the open player follows it here.
     // Only on the change to owner: right after yielding, this device still reads as owner until the new one is announced.

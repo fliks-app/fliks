@@ -11,7 +11,7 @@ import { RouterLink } from '@angular/router';
 import { morph, relayout } from '../utils/morph-transition';
 import { PlayerBarComponent } from '../player-bar/player-bar';
 import { FullPlayerState } from '../../core/services/playback/full-player-state';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LucideBookmarkPlus,
   LucideArrowDown,
@@ -222,6 +222,15 @@ export class AudioPlayerComponent {
   protected readonly parkedView = computed(() => this.remoteView() && this.remoteOut.parked());
   /** Driving another device's live session: entries that act on this device's player are left out. */
   protected readonly drivingRemote = computed(() => this.remoteView() && !this.parkedView());
+  /** The remote view drives a selected device, which plays outside the account session. */
+  protected readonly remoteSelected = this.remoteOut.selected;
+  private readonly translate = inject(TranslateService);
+  /** Where the remote view's playback is: the selected device, else the account session's line. */
+  protected readonly remoteLine = computed(() => {
+    if (this.remoteSelected()) return this.translate.instant('session.playing_on', { device: this.playingOn.name() }) as string;
+    const s = this.sync.session();
+    return s ? this.sync.line(s) : null;
+  });
 
   /** Reset by every new cover: a cover that fails to load shows the placeholder, not a broken image. */
   protected readonly coverFailed = linkedSignal<string | null | undefined, boolean>({
