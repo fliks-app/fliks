@@ -5669,5 +5669,16 @@
     "load_error": "Impossibile caricare l’elenco.",
     "empty_queue": "Niente in coda.",
     "empty_history": "La cronologia è vuota."
+  },
+  "carplay": {
+    "signed_out": "Accesso a Fliks non effettuato",
+    "recent": "Recenti",
+    "favourites": "Preferiti",
+    "playlists": "Playlist",
+    "albums": "Album",
+    "artists": "Artisti",
+    "loading": "Caricamento",
+    "failed": "Impossibile caricare la musica dal server",
+    "empty": "Ancora niente qui"
   }
 }

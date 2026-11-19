@@ -5720,5 +5720,16 @@
     "load_error": "Unable to load the list.",
     "empty_queue": "Nothing in the queue.",
     "empty_history": "The history is empty."
+  },
+  "carplay": {
+    "signed_out": "Not signed in to Fliks",
+    "recent": "Recent",
+    "favourites": "Favourites",
+    "playlists": "Playlists",
+    "albums": "Albums",
+    "artists": "Artists",
+    "loading": "Loading",
+    "failed": "Couldn't load your music from the server",
+    "empty": "Nothing here yet"
   }
 }
