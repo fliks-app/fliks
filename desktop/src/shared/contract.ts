@@ -187,7 +187,8 @@ export type DesktopUpdateStatus =
   | { state: 'checking' }
   | { state: 'available'; info: DesktopUpdateInfo }
   | { state: 'not-available' }
-  | { state: 'downloading'; percent: number }
+  /** `percent` is null while the update can't be measured (a Velopack delta update). */
+  | { state: 'downloading'; percent: number | null }
   | { state: 'downloaded'; info: DesktopUpdateInfo }
   | { state: 'error'; message: string };
 

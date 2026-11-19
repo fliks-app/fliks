@@ -89,10 +89,15 @@
           </div>
 
           @if (downloading()) {
-            <progress class="progress progress-primary w-full" [value]="update.progress()" max="100"></progress>
+            <progress class="progress progress-primary w-full" [attr.value]="update.progress()" max="100"></progress>
             <p class="text-xs opacity-70 mt-1 text-center">
-              {{ 'update.downloading' | translate: { percent: update.progress() } }}
+              @if (update.progress() === null) {
+                {{ 'update.preparing' | translate }}
+              } @else {
+                {{ 'update.downloading' | translate: { percent: update.progress() } }}
+              }
             </p>
+            <p class="text-xs opacity-70 text-center">{{ 'update.restart_notice' | translate }}</p>
           } @else {
             <div class="flex justify-end">
               @if (installing()) {

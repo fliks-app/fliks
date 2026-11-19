@@ -14,7 +14,7 @@ export type DesktopUpdateStatus =
   | { state: 'checking' }
   | { state: 'available'; info: DesktopUpdateInfo }
   | { state: 'not-available' }
-  | { state: 'downloading'; percent: number }
+  | { state: 'downloading'; percent: number | null }
   | { state: 'downloaded'; info: DesktopUpdateInfo }
   | { state: 'error'; message: string };
 

@@ -82,7 +82,8 @@ export class AppUpdateService {
 
   readonly state = signal<UpdateState>('idle');
   readonly info = signal<UpdateInfoView | null>(null);
-  readonly progress = signal(0);
+  /** Download percent, null while the desktop app can't measure the update. */
+  readonly progress = signal<number | null>(0);
   /** False for .deb / dev (→ download link) and always false in server mode. */
   readonly canInstall = signal(false);
   readonly currentVersion = signal<string | null>(null);
