@@ -220,9 +220,11 @@ impl UpdateUser {
                 "profileVisibility must be one of the following values: public, private",
             ),
             (
-                self.push_muted
-                    .as_ref()
-                    .is_none_or(|v| v.iter().all(|c| fliks_domain::push::is_category(c))),
+                self.push_muted.as_ref().is_none_or(|v| {
+                    v.len() <= 100
+                        && v.iter()
+                            .all(|c| c.len() <= 64 && fliks_domain::push::is_category(c))
+                }),
                 "pushMuted must contain notification categories",
             ),
         ])

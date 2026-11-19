@@ -92,6 +92,27 @@ pub async fn assert_can_access_request_library(
     ))
 }
 
+/// `counts.md` rule 5: pending requests in the kinds of `a`; every request when `all`, else their
+/// own. `libraries` limits the others to those a manager may decide (`pending_row`'s library check).
+pub async fn pending_count(
+    db: &sqlx::PgPool,
+    a: &Authed,
+    all: bool,
+    libraries: Option<&[i32]>,
+) -> sqlx::Result<i32> {
+    sqlx::query_scalar(
+        r#"SELECT count(*)::int FROM requests
+           WHERE status = 'pending' AND ($1 OR "userId" = $2) AND "mediaType" = ANY($3)
+             AND ($4::int[] IS NULL OR "libraryId" IS NULL OR "libraryId" = ANY($4) OR "userId" = $2)"#,
+    )
+    .bind(all)
+    .bind(a.user.id)
+    .bind(a.kinds.names())
+    .bind(libraries)
+    .fetch_one(db)
+    .await
+}
+
 /// Rule 3: a non-manager only reaches their own requests.
 pub fn owner_or_manager(a: &Authed, owner: Option<i32>) -> Res<()> {
     if can_manage(a) || owner == Some(a.user.id) {

@@ -23,7 +23,7 @@ fn mac(key: &[u8], g: &Grant) -> String {
     let mut m = Hmac::<Sha256>::new_from_slice(key).expect("hmac takes any key length");
     m.update(
         format!(
-            "fliks-push-action:{}.{}.{}.{}",
+            "fliks-push-action:{}:{}:{}:{}",
             g.user, g.action, g.target, g.exp
         )
         .as_bytes(),
@@ -33,7 +33,7 @@ fn mac(key: &[u8], g: &Grant) -> String {
 
 pub fn mint(key: &[u8], g: &Grant) -> String {
     format!(
-        "{PREFIX}{}.{}.{}.{}.{}",
+        "{PREFIX}{}:{}:{}:{}:{}",
         g.user,
         g.action,
         g.target,

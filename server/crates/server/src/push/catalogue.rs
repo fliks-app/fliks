@@ -9,19 +9,17 @@ use crate::{
 use fliks_domain::{
     acl::{Action, Permissions, Subject},
     media::{family::Family, kind::MediaKind},
-    push::episode_code,
+    push::{episode_code, season_code},
 };
 use serde_json::{Map, Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     sync::Mutex,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 const DAY: u32 = 86_400;
 const GROUP_WINDOW: Duration = Duration::from_secs(300);
-/// How long a user stays known to have been told a media is available.
-const AVAILABLE_MEMORY: Duration = Duration::from_secs(3600);
 
 fn params(v: Value) -> Map<String, Value> {
     v.as_object().cloned().unwrap_or_default()
@@ -210,11 +208,6 @@ pub fn request_event(st: &AppState, event: &'static str, payload: &Map<String, V
                 if event != "request.declined" {
                     n.actions = vec![open(&n.url.clone())];
                 }
-                if event == "request.available"
-                    && let Some((m, _)) = r.media
-                {
-                    st.push.episodes.told(m, user);
-                }
                 (vec![user], n)
             }
             "request.created" => {
@@ -279,8 +272,6 @@ async fn approvers(st: &AppState) -> Vec<i32> {
 pub struct Episodes {
     /// Open groups by media: season to episodes.
     groups: Mutex<HashMap<i32, BTreeMap<i64, BTreeSet<i64>>>>,
-    /// Users told "available" for a media, so the new-episode notification skips them.
-    told: Mutex<HashMap<(i32, i32), Instant>>,
 }
 
 impl Episodes {
@@ -298,19 +289,6 @@ impl Episodes {
 
     fn take(&self, media: i32) -> BTreeMap<i64, BTreeSet<i64>> {
         self.groups.lock_clean().remove(&media).unwrap_or_default()
-    }
-
-    pub fn told(&self, media: i32, user: i32) {
-        let mut t = self.told.lock_clean();
-        t.retain(|_, at| at.elapsed() < AVAILABLE_MEMORY);
-        t.insert((media, user), Instant::now());
-    }
-
-    fn was_told(&self, media: i32, user: i32) -> bool {
-        self.told
-            .lock_clean()
-            .get(&(media, user))
-            .is_some_and(|at| at.elapsed() < AVAILABLE_MEMORY)
     }
 }
 
@@ -345,6 +323,41 @@ async fn listen(st: AppState) {
     }
 }
 
+/// Users who watch the series (a row not hidden from continue watching), still read its library and
+/// have no request for it: a requester gets the `requests` notifications instead.
+pub(super) async fn episode_recipients(
+    st: &AppState,
+    media: i32,
+    library: Option<i32>,
+) -> sqlx::Result<Vec<i32>> {
+    let watchers: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT ps."userId" FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+           WHERE i."mediaId" = $1
+             AND NOT EXISTS (SELECT 1 FROM requests r WHERE r."mediaId" = $1 AND r."userId" = ps."userId")
+           GROUP BY ps."userId" HAVING bool_or(NOT ps."hiddenFromContinueWatching")
+           ORDER BY ps."userId""#,
+    )
+    .bind(media)
+    .fetch_all(&st.db)
+    .await?;
+    let mut to = vec![];
+    for user in watchers {
+        let Some(a) = Authed::load(&st.db, user).await? else {
+            continue;
+        };
+        let reads = match library {
+            Some(l) => crate::libraries::acl::accessible_library_ids(&st.db, &a)
+                .await?
+                .contains(&l),
+            None => true,
+        };
+        if reads {
+            to.push(user);
+        }
+    }
+    Ok(to)
+}
+
 async fn flush(st: &AppState, media: i32) -> sqlx::Result<()> {
     let seasons = st.push.episodes.take(media);
     let count: usize = seasons.values().map(BTreeSet::len).sum();
@@ -360,31 +373,7 @@ async fn flush(st: &AppState, media: i32) -> sqlx::Result<()> {
     let Some((title, library)) = row else {
         return Ok(());
     };
-    let watchers: Vec<i32> = sqlx::query_scalar(
-        r#"SELECT "userId" FROM playback_states WHERE "mediaId" = $1 AND "userId" IS NOT NULL
-           GROUP BY "userId" HAVING bool_and(NOT "hiddenFromContinueWatching")"#,
-    )
-    .bind(media)
-    .fetch_all(&st.db)
-    .await?;
-    let mut to = vec![];
-    for user in watchers {
-        if st.push.episodes.was_told(media, user) {
-            continue;
-        }
-        let Some(a) = Authed::load(&st.db, user).await? else {
-            continue;
-        };
-        let reads = match library {
-            Some(l) => crate::libraries::acl::accessible_library_ids(&st.db, &a)
-                .await?
-                .contains(&l),
-            None => true,
-        };
-        if reads {
-            to.push(user);
-        }
-    }
+    let to = episode_recipients(st, media, library).await?;
     let url = media_url(media, MediaKind::Series);
     let mut n = match (count, seasons.len()) {
         (1, _) => {
@@ -403,7 +392,7 @@ async fn flush(st: &AppState, media: i32) -> sqlx::Result<()> {
             Notification::core(
                 "episodes",
                 "episodes_many",
-                &params(json!({"title": title, "count": count, "season": format!("S{s:02}")})),
+                &params(json!({"title": title, "count": count, "season": season_code(*s)})),
                 url.clone(),
                 DAY,
             )
@@ -468,11 +457,83 @@ mod tests {
         assert!(e.take(1).is_empty());
     }
 
-    #[test]
-    fn told_users_are_remembered() {
-        let e = Episodes::default();
-        e.told(5, 9);
-        assert!(e.was_told(5, 9));
-        assert!(!e.was_told(5, 8));
+    async fn state(pool: &sqlx::PgPool) -> AppState {
+        crate::db::migrate(pool).await.unwrap();
+        AppState::new(
+            pool.clone(),
+            crate::config::Config::from_lookup(|_| None),
+            "0123456789abcdef0123456789abcdef",
+        )
+    }
+
+    async fn user(pool: &sqlx::PgPool, name: &str) -> i32 {
+        sqlx::query_scalar(
+            r#"INSERT INTO users (username, "isAdmin") VALUES ($1, true) RETURNING id"#,
+        )
+        .bind(name)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    }
+
+    #[sqlx::test]
+    async fn episode_recipients_watch_without_a_request(pool: sqlx::PgPool) {
+        let st = state(&pool).await;
+        let (a, hidden, requester, mixed) = (
+            user(&pool, "a").await,
+            user(&pool, "hidden").await,
+            user(&pool, "requester").await,
+            user(&pool, "mixed").await,
+        );
+        let media: i32 = sqlx::query_scalar(
+            "INSERT INTO media (title, type) VALUES ('S', 'series') RETURNING id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let edition: i32 = sqlx::query_scalar(
+            r#"INSERT INTO editions ("mediaId", family) VALUES ($1, 'video') RETURNING id"#,
+        )
+        .bind(media)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let mut items = vec![];
+        for _ in 0..2 {
+            let id: i32 = sqlx::query_scalar(
+                r#"INSERT INTO items ("mediaId", "editionId") VALUES ($1, $2) RETURNING id"#,
+            )
+            .bind(media)
+            .bind(edition)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            items.push(id);
+        }
+        for (user, item, hide) in [
+            (a, 0, false),
+            (hidden, 0, true),
+            (requester, 0, false),
+            (mixed, 0, true),
+            (mixed, 1, false),
+        ] {
+            sqlx::query(r#"INSERT INTO playback_states ("userId", "itemId", "hiddenFromContinueWatching") VALUES ($1, $2, $3)"#)
+                .bind(user)
+                .bind(items[item])
+                .bind(hide)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        sqlx::query(r#"INSERT INTO requests ("mediaType", provider, "externalId", title, status, "userId", "mediaId") VALUES ('series', 'tmdb', '1', 'S', 'pending', $1, $2)"#)
+            .bind(requester)
+            .bind(media)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            episode_recipients(&st, media, None).await.unwrap(),
+            [a, mixed]
+        );
     }
 }

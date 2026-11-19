@@ -9,7 +9,7 @@ mod routes;
 mod text;
 mod webpush;
 
-pub use act::{ACTIONS, Grant};
+pub use act::{ACTIONS, Grant, mint as mint_action};
 pub use catalogue::{ReqRef, request_event};
 pub use routes::{
     __path_act, __path_config, __path_pending_drop, __path_status, __path_subscribe, __path_test,
@@ -140,8 +140,9 @@ struct Plain {
 }
 
 impl Plain {
-    /// The JSON to encrypt, with the body then the title shortened to fit (`push.md` rule 18).
-    fn bytes(&mut self) -> Vec<u8> {
+    /// The JSON to encrypt, with the body then the title shortened to fit (`push.md` rule 18); `None`
+    /// when even empty texts leave it too large (a huge `url` or `image`).
+    fn bytes(&mut self) -> Option<Vec<u8>> {
         let (title, body) = (
             std::mem::take(&mut self.title),
             std::mem::take(&mut self.body),
@@ -151,8 +152,8 @@ impl Plain {
         let jl = |s: &str| serde_json::to_string(s).map_or(2, |j| j.len());
         fit(&mut self.title, &mut self.body, PLAINTEXT_MAX, |t, b| {
             base + jl(t) + jl(b)
-        });
-        serde_json::to_vec(&*self).expect("typed plaintext")
+        })
+        .then(|| serde_json::to_vec(&*self).expect("typed plaintext"))
     }
 
     fn event(self) -> SseEvent {
@@ -349,29 +350,55 @@ impl Push {
         self.ready_client().ok_or(Unready::Unavailable)
     }
 
-    /// Deletes rows, mobile ones at the relay first; a row stays when the relay did not answer.
-    pub async fn remove_rows(&self, st: &AppState, rows: Vec<Sub>) {
+    /// The client that can delete subscriptions: the live one, else one built from the identity file
+    /// (a request can come before the first reconcile); `None` when there is no relay identity.
+    fn delete_client(&self) -> Option<Arc<Relay>> {
+        self.client().or_else(|| {
+            let r = self.identity().snapshot().relay?;
+            Relay::new(&r.url, &r.seed).ok().map(Arc::new)
+        })
+    }
+
+    /// Deletes rows, mobile ones at the relay first; a row stays when the relay did not answer. False
+    /// when a row stayed.
+    pub async fn remove_rows(&self, st: &AppState, rows: Vec<Sub>) -> bool {
+        let mut all = true;
         for row in rows {
-            if let (true, Some(sub), Some(relay)) = (row.is_mobile(), &row.sub, self.client()) {
-                match relay.delete_subscription(sub).await {
-                    Ok(()) => {}
-                    Err(e) if matches!(e.status(), Some(401 | 404)) => {}
-                    Err(e) => {
-                        tracing::warn!("relay subscription deletion: {e}");
-                        continue;
+            if let (true, Some(sub)) = (row.is_mobile(), &row.sub) {
+                // With no relay identity the relay holds nothing of ours: the row goes alone.
+                if let Some(relay) = self.delete_client() {
+                    match relay.delete_subscription(sub).await {
+                        Ok(()) => {}
+                        Err(e) if matches!(e.status(), Some(401 | 404)) => {}
+                        Err(e) => {
+                            tracing::warn!("relay subscription deletion: {e}");
+                            all = false;
+                            continue;
+                        }
                     }
                 }
             }
             if let Err(e) = db::delete(&st.db, row.id).await {
                 tracing::warn!("push row deletion: {e}");
+                all = false;
             }
+        }
+        all
+    }
+
+    /// Deletes a replaced mobile subscription at the relay; its row is already gone.
+    pub async fn forget_at_relay(&self, row: &Sub) {
+        if let (Some(sub), Some(relay)) = (&row.sub, self.delete_client())
+            && let Err(e) = relay.delete_subscription(sub).await
+        {
+            tracing::warn!("relay subscription deletion: {e}");
         }
     }
 
     /// Rows of revoked sessions and disabled users (`push.md` rule 45).
     pub async fn sweep(&self, st: &AppState) {
         match db::dead(&st.db).await {
-            Ok(rows) if !rows.is_empty() => self.remove_rows(st, rows).await,
+            Ok(rows) if !rows.is_empty() => drop(self.remove_rows(st, rows).await),
             Ok(_) => {}
             Err(e) => tracing::warn!("push sweep: {e}"),
         }
@@ -449,20 +476,14 @@ impl Push {
         plain: &[u8],
         vapid_sub: &str,
     ) -> Result<(), String> {
-        let _slot = self.sends.acquire().await.map_err(|e| e.to_string())?;
         let to = crypto::Recipient::parse(&row.p256dh, &row.auth).ok_or("bad subscription keys")?;
         let body = crypto::encrypt(plain, &to)?;
-        let work = async {
-            if row.is_mobile() {
-                self.deliver_mobile(st, row, nid, n.ttl.min(MAX_TTL), &body)
-                    .await
-            } else {
-                self.deliver_web(st, row, n, body, vapid_sub).await
-            }
-        };
-        tokio::time::timeout(SEND_TIMEOUT, work)
-            .await
-            .map_err(|_| "timeout".to_owned())?
+        if row.is_mobile() {
+            self.deliver_mobile(st, row, nid, n.ttl.min(MAX_TTL), &body)
+                .await
+        } else {
+            self.deliver_web(st, row, n, body, vapid_sub).await
+        }
     }
 
     async fn deliver_mobile(
@@ -535,17 +556,32 @@ impl Push {
         let vapid_sub = self.vapid_sub(&st.db).await;
         let n = &n;
         let (nid, key, vapid_sub) = (&nid, &key, &vapid_sub);
+        self.texts.warm().await;
         let sends = rows.iter().map(|row| async move {
             let mut plain = self.build(n, user, &row.locale, badge, ts, key);
-            let bytes = plain.bytes();
-            let res = self.deliver(st, row, nid, n, &bytes, vapid_sub).await;
+            let res = match plain.bytes() {
+                None => Err("the notification is too large".to_owned()),
+                Some(bytes) => {
+                    let _slot = self.sends.acquire().await.map_err(|e| e.to_string())?;
+                    tokio::time::timeout(
+                        SEND_TIMEOUT,
+                        self.deliver(st, row, nid, n, &bytes, vapid_sub),
+                    )
+                    .await
+                    .unwrap_or_else(|_| Err("timeout".to_owned()))
+                }
+            };
             let mut out = json!({"platform": row.platform, "ok": res.is_ok()});
             if let Err(e) = res {
                 out["error"] = e.into();
             }
-            out
+            Ok::<_, String>(out)
         });
-        let out = futures_util::future::join_all(sends).await;
+        let out: Vec<Value> = futures_util::future::join_all(sends)
+            .await
+            .into_iter()
+            .flatten()
+            .collect();
         st.hub.emit_to_user_langs(user, |lang| {
             self.build(n, user, lang.unwrap_or("en"), badge, ts, key)
                 .event()
@@ -565,6 +601,7 @@ impl Push {
         if users.is_empty() {
             return Ok(());
         }
+        self.texts.warm().await;
         let rows = db::live(&st.db, &users).await?;
         let nid = B64.encode(identity::random::<16>());
         let ts = now();
@@ -581,18 +618,33 @@ impl Push {
                     .event()
             });
             for row in rows.iter().filter(|r| r.user_id == user).cloned() {
-                let bytes = self
+                let Some(bytes) = self
                     .build(&n, user, &row.locale, badge, ts, &st.grant_key)
-                    .bytes();
+                    .bytes()
+                else {
+                    tracing::warn!("push notification too large for subscription {}", row.id);
+                    continue;
+                };
+                // No queue: past the concurrent sends the device is skipped.
+                let Ok(slot) = self.sends.clone().try_acquire_owned() else {
+                    tracing::warn!("push sends are saturated: subscription {} skipped", row.id);
+                    continue;
+                };
                 let (st, n, nid, vapid_sub) =
                     (st.clone(), n.clone(), nid.clone(), vapid_sub.clone());
                 tokio::spawn(async move {
-                    if let Err(e) = st
-                        .push
-                        .deliver(&st, &row, &nid, &n, &bytes, &vapid_sub)
-                        .await
-                    {
-                        tracing::warn!("push to {} subscription {}: {e}", row.platform, row.id);
+                    let _slot = slot;
+                    let sent = tokio::time::timeout(
+                        SEND_TIMEOUT,
+                        st.push.deliver(&st, &row, &nid, &n, &bytes, &vapid_sub),
+                    )
+                    .await;
+                    match sent {
+                        Ok(Ok(())) => {}
+                        Ok(Err(e)) => {
+                            tracing::warn!("push to {} subscription {}: {e}", row.platform, row.id);
+                        }
+                        Err(_) => tracing::warn!("push to subscription {} timed out", row.id),
                     }
                 });
             }
@@ -682,13 +734,13 @@ pub fn notify(st: &AppState, recipients: Vec<i32>, n: Notification) {
 
 /// `counts.md` rule 16: requests waiting for this user's decision plus follow requests waiting for an answer.
 pub async fn attention(db: &PgPool, a: &Authed) -> sqlx::Result<i64> {
-    let requests: i64 = if a.perms.can(
-        fliks_domain::acl::Action::Manage,
-        &fliks_domain::acl::Subject::FliksRequest,
-    ) {
-        sqlx::query_scalar("SELECT count(*) FROM requests WHERE status = 'pending'")
-            .fetch_one(db)
-            .await?
+    use crate::requests::flow;
+    let requests = if flow::can_manage(a) {
+        let libraries = match flow::is_super(a) {
+            true => None,
+            false => Some(crate::libraries::acl::accessible_library_ids(db, a).await?),
+        };
+        flow::pending_count(db, a, true, libraries.as_deref()).await?
     } else {
         0
     };
@@ -698,7 +750,7 @@ pub async fn attention(db: &PgPool, a: &Authed) -> sqlx::Result<i64> {
     .bind(a.user.id)
     .fetch_one(db)
     .await?;
-    Ok(requests + follows)
+    Ok(i64::from(requests) + follows)
 }
 
 /// Reconcile and sweep at boot, then every 10 minutes; the catalogue hooks.

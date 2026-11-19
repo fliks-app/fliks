@@ -99,25 +99,47 @@ pub fn truncate(s: &mut String, max: usize) {
     s.push('\u{2026}');
 }
 
-/// Shortens `body`, then `title`, until `size(title, body)` fits `max`.
-pub fn fit(title: &mut String, body: &mut String, max: usize, size: impl Fn(&str, &str) -> usize) {
-    let total = size(title, body);
-    if total <= max {
-        return;
+/// Shortens `body`, then `title`, until `size(title, body)` (escaped size) fits `max`; false when
+/// even empty texts do not fit, the caller then refuses to send.
+pub fn fit(
+    title: &mut String,
+    body: &mut String,
+    max: usize,
+    size: impl Fn(&str, &str) -> usize,
+) -> bool {
+    for text_is_body in [true, false] {
+        loop {
+            let total = size(title, body);
+            if total <= max {
+                return true;
+            }
+            let text = if text_is_body {
+                &mut *body
+            } else {
+                &mut *title
+            };
+            if text.is_empty() {
+                break;
+            }
+            let target = text.len().saturating_sub(total - max);
+            let before = text.len();
+            truncate(text, target);
+            if text.len() >= before {
+                text.clear();
+            }
+        }
     }
-    let over = total - max;
-    let target = body.len().saturating_sub(over);
-    truncate(body, target.max(1));
-    let total = size(title, body);
-    if total > max {
-        let target = title.len().saturating_sub(total - max);
-        truncate(title, target.max(1));
-    }
+    size(title, body) <= max
+}
+
+/// `S02`.
+pub fn season_code(season: i64) -> String {
+    format!("S{season:02}")
 }
 
 /// `S02E03`.
 pub fn episode_code(season: i64, episode: i64) -> String {
-    format!("S{season:02}E{episode:02}")
+    format!("{}E{episode:02}", season_code(season))
 }
 
 #[cfg(test)]
@@ -174,7 +196,7 @@ mod tests {
     fn fit_cuts_the_body_first_on_a_char_boundary() {
         let mut t = "Title".to_owned();
         let mut b = "\u{00e9}".repeat(400);
-        fit(&mut t, &mut b, 300, |t, b| t.len() + b.len());
+        assert!(fit(&mut t, &mut b, 300, |t, b| t.len() + b.len()));
         assert_eq!(t, "Title");
         assert!(t.len() + b.len() <= 300);
         assert!(b.ends_with('\u{2026}'));
@@ -184,7 +206,8 @@ mod tests {
     fn fit_cuts_the_title_when_the_body_is_not_enough() {
         let mut t = "T".repeat(200);
         let mut b = "b".to_owned();
-        fit(&mut t, &mut b, 50, |t, b| t.len() + b.len());
+        assert!(fit(&mut t, &mut b, 50, |t, b| t.len() + b.len()));
         assert!(t.len() + b.len() <= 50);
+        assert!(!fit(&mut t, &mut b, 0, |t, b| 10 + t.len() + b.len()));
     }
 }

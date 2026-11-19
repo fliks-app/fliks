@@ -99,17 +99,16 @@ pub async fn subscribe(
             ),
         })?)
     };
-    let session = a.session()?;
-    if let Some(oldest) = db::over_cap(&st.db, a.user.id, session, &dto.platform, USER_CAP).await? {
-        st.push.remove_rows(&st, vec![oldest]).await;
-    }
-    let fresh = B64.encode(identity::random::<16>());
-    let (id, sub) = db::upsert(
+    let (id, sub, replaced) = db::upsert(
         &st.db,
+        a.user.id,
+        USER_CAP,
         Upsert {
-            session,
+            session: a.session()?,
             platform: &dto.platform,
-            sub: (!web).then_some(fresh.as_str()),
+            sub: (!web)
+                .then(|| B64.encode(identity::random::<16>()))
+                .as_deref(),
             endpoint,
             p256dh: &dto.p256dh,
             auth: &dto.auth,
@@ -117,6 +116,9 @@ pub async fn subscribe(
         },
     )
     .await?;
+    if let Some(old) = replaced {
+        st.push.forget_at_relay(&old).await;
+    }
     let body = match (relay, sub) {
         (Some(relay), Some(sub)) => {
             let ticket = relay.ticket(&sub).await.map_err(|_| {
@@ -149,8 +151,14 @@ pub async fn unsubscribe(
             "platform must be one of the following values: apns, fcm, web",
         ));
     }
-    if let Some(row) = db::of_session(&st.db, a.session()?, &dto.platform).await? {
-        st.push.remove_rows(&st, vec![row]).await;
+    if let Some(row) = db::of_session(&st.db, a.session()?, &dto.platform).await?
+        && !st.push.remove_rows(&st, vec![row]).await
+    {
+        // The row stays until the relay answers, so the device keeps its pending deletion and retries.
+        return Err(AppError::plain(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "push.error_relay_unavailable",
+        ));
     }
     Ok(StatusCode::NO_CONTENT)
 }

@@ -79,29 +79,10 @@ pub async fn of_session(db: &PgPool, session: i32, platform: &str) -> sqlx::Resu
     .await
 }
 
-/// The oldest row of `user` when they already hold `cap` rows and `session` has none for `platform`.
-pub async fn over_cap(
-    db: &PgPool,
-    user: i32,
-    session: i32,
-    platform: &str,
-    cap: i64,
-) -> sqlx::Result<Option<Sub>> {
-    if of_session(db, session, platform).await?.is_some() {
-        return Ok(None);
-    }
-    let rows = of_user(db, user).await?;
-    if (rows.len() as i64) < cap {
-        return Ok(None);
-    }
-    sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        r#"SELECT {COLS} FROM push_subscriptions p JOIN sessions s ON s.id = p."sessionId"
-           WHERE s."userId" = $1 ORDER BY p."createdAt", p.id LIMIT 1"#
-    )))
-    .bind(user)
-    .fetch_optional(db)
-    .await
-}
+const DELETE_OLDEST: &str = r#"DELETE FROM push_subscriptions WHERE id = (
+    SELECT p.id FROM push_subscriptions p JOIN sessions s ON s.id = p."sessionId"
+    WHERE s."userId" = $1 ORDER BY p."createdAt", p.id LIMIT 1)
+  RETURNING id, $1::int AS user_id, platform, sub, endpoint, p256dh, auth, locale"#;
 
 pub struct Upsert<'a> {
     pub session: i32,
@@ -114,9 +95,43 @@ pub struct Upsert<'a> {
     pub locale: &'a str,
 }
 
-/// Returns the row id and its `sub`.
-pub async fn upsert(db: &PgPool, u: Upsert<'_>) -> sqlx::Result<(i32, Option<String>)> {
-    sqlx::query_as(
+/// Upserts the session's row; a new row of a user already at `cap` replaces their oldest one, which is
+/// returned. One transaction under a per-user advisory lock, so concurrent subscribes cannot overshoot.
+pub async fn upsert(
+    db: &PgPool,
+    user: i32,
+    cap: i64,
+    u: Upsert<'_>,
+) -> sqlx::Result<(i32, Option<String>, Option<Sub>)> {
+    let mut tx = db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('push_subscriptions'), $1)")
+        .bind(user)
+        .execute(&mut *tx)
+        .await?;
+    let exists: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM push_subscriptions WHERE "sessionId" = $1 AND platform = $2)"#,
+    )
+    .bind(u.session)
+    .bind(u.platform)
+    .fetch_one(&mut *tx)
+    .await?;
+    let mut removed = None;
+    if !exists {
+        let held: i64 = sqlx::query_scalar(
+            r#"SELECT count(*) FROM push_subscriptions p JOIN sessions s ON s.id = p."sessionId"
+               WHERE s."userId" = $1"#,
+        )
+        .bind(user)
+        .fetch_one(&mut *tx)
+        .await?;
+        if held >= cap {
+            removed = sqlx::query_as(DELETE_OLDEST)
+                .bind(user)
+                .fetch_optional(&mut *tx)
+                .await?;
+        }
+    }
+    let (id, sub): (i32, Option<String>) = sqlx::query_as(
         r#"INSERT INTO push_subscriptions ("sessionId", platform, sub, endpoint, p256dh, auth, locale)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT ("sessionId", platform) DO UPDATE
@@ -131,8 +146,10 @@ pub async fn upsert(db: &PgPool, u: Upsert<'_>) -> sqlx::Result<(i32, Option<Str
     .bind(u.p256dh)
     .bind(u.auth)
     .bind(u.locale)
-    .fetch_one(db)
-    .await
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok((id, sub, removed))
 }
 
 pub async fn delete(db: &PgPool, id: i32) -> sqlx::Result<()> {

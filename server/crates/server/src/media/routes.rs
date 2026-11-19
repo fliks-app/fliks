@@ -320,15 +320,12 @@ pub async fn sidebar_counts(
     State(st): State<AppState>,
     a: Authed,
 ) -> Result<Json<Value>, AppError> {
-    let pending = async {
-        let all = a.perms.can(Action::Manage, &Subject::FliksRequest);
-        sqlx::query_scalar::<_, i32>(r#"SELECT count(*)::int FROM requests WHERE status = 'pending' AND ($1 OR "userId" = $2) AND "mediaType" = ANY($3)"#)
-            .bind(all)
-            .bind(a.user.id)
-            .bind(a.kinds.names())
-            .fetch_one(&st.db)
-            .await
-    };
+    let pending = crate::requests::flow::pending_count(
+        &st.db,
+        &a,
+        a.perms.can(Action::Manage, &Subject::FliksRequest),
+        None,
+    );
     let by_library = async {
         if !a.perms.can(Action::Read, &Subject::Media) {
             return Ok(aggregates::ByLibrary(vec![]));

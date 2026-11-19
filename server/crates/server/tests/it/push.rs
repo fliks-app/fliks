@@ -597,3 +597,122 @@ async fn attention_counts_pending_requests_and_follow_requests(pool: PgPool) {
         (json!(1), json!(0))
     );
 }
+
+async fn act_token(c: &Ctx, user: i32, action: &str, target: i32, exp_in: i64) -> String {
+    push::mint_action(
+        &c.st.grant_key,
+        &push::Grant {
+            user,
+            action: action.into(),
+            target,
+            exp: chrono::Utc::now().timestamp() + exp_in,
+        },
+    )
+}
+
+async fn act(c: &Ctx, bearer: &str, token: &str) -> (u16, Value) {
+    call(
+        c,
+        "POST",
+        "/api/push/act",
+        Some(bearer),
+        Some(json!({"token": token})),
+    )
+    .await
+}
+
+#[sqlx::test]
+async fn act_runs_the_existing_routes_for_the_token_user_only(pool: PgPool) {
+    let c = ctx(pool).await;
+    let admin_id: i32 = sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin'")
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+    let request: i32 = sqlx::query_scalar(r#"INSERT INTO requests ("mediaType", provider, "externalId", title, status, "userId") VALUES ('movie', 'tmdb', '1', 'T', 'pending', $1) RETURNING id"#)
+        .bind(c.user_id)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+    // decline: a manager acts through the token, the requests route state follows
+    let decline = act_token(&c, admin_id, "request.decline", request, 60).await;
+    assert_eq!(
+        act(&c, &c.user, &decline).await.0,
+        403,
+        "another user's token"
+    );
+    assert_eq!(act(&c, &c.admin, &decline).await.0, 204);
+    let status: String = sqlx::query_scalar("SELECT status::text FROM requests WHERE id = $1")
+        .bind(request)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+    assert_eq!(status, "declined");
+    // a second decline is the route's own state error
+    assert_eq!(act(&c, &c.admin, &decline).await.0, 409);
+    // approve reaches the approve route: an unknown request is its 404
+    let approve = act_token(&c, admin_id, "request.approve", 9999, 60).await;
+    assert_eq!(act(&c, &c.admin, &approve).await.0, 404);
+    // a plain user keeps the route's permission check
+    let own = act_token(&c, c.user_id, "request.approve", request, 60).await;
+    assert_eq!(act(&c, &c.user, &own).await.0, 403);
+    // expired, tampered, malformed
+    let old = act_token(&c, admin_id, "request.decline", request, -5).await;
+    assert_eq!(act(&c, &c.admin, &old).await.0, 403);
+    assert_eq!(
+        act(
+            &c,
+            &c.admin,
+            &decline.replace(":request.decline:", ":request.approve:")
+        )
+        .await
+        .0,
+        403
+    );
+    assert_eq!(act(&c, &c.admin, "nope").await.0, 400);
+    let unknown = act_token(&c, admin_id, "request.explode", 1, 60).await;
+    assert_eq!(act(&c, &c.admin, &unknown).await.0, 400);
+}
+
+#[sqlx::test]
+async fn act_accepts_and_rejects_follow_requests(pool: PgPool) {
+    let c = ctx(pool).await;
+    let admin_id: i32 = sqlx::query_scalar("SELECT id FROM users WHERE username = 'admin'")
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+    let follow = |status: &'static str| {
+        let (pool, from, to) = (c.st.db.clone(), c.user_id, admin_id);
+        async move {
+            sqlx::query(r#"DELETE FROM user_follows"#)
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query(r#"INSERT INTO user_follows ("followerId", "followingId", status) VALUES ($1, $2, $3::text::user_follows_status_enum)"#)
+                .bind(from)
+                .bind(to)
+                .bind(status)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+    };
+    let state = |c: &Ctx| {
+        let pool = c.st.db.clone();
+        async move {
+            sqlx::query_scalar::<_, String>("SELECT status::text FROM user_follows")
+                .fetch_optional(&pool)
+                .await
+                .unwrap()
+        }
+    };
+    follow("pending").await;
+    let (_, counts) = call(&c, "GET", "/api/counts", Some(&c.admin), None).await;
+    assert_eq!(counts["attention"], 1);
+    let accept = act_token(&c, admin_id, "follow.accept", c.user_id, 60).await;
+    assert_eq!(act(&c, &c.admin, &accept).await.0, 204);
+    assert_eq!(state(&c).await.as_deref(), Some("accepted"));
+    follow("pending").await;
+    let reject = act_token(&c, admin_id, "follow.decline", c.user_id, 60).await;
+    assert_eq!(act(&c, &c.admin, &reject).await.0, 204);
+    assert_eq!(state(&c).await, None);
+}

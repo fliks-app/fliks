@@ -133,6 +133,7 @@ impl Relay {
             .ok_or("bad relay seed")?;
         let http = reqwest::Client::builder()
             .timeout(TIMEOUT)
+            .redirect(reqwest::redirect::Policy::none())
             .user_agent("fliks-server")
             .build()
             .map_err(|e| e.to_string())?;

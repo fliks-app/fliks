@@ -60,7 +60,7 @@ pub async fn users_by_ids(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<User>> {
 pub async fn enabled_admin_ids(db: &PgPool) -> sqlx::Result<Vec<i32>> {
     let rows = sqlx::query_as!(
         UserRow,
-        r#"SELECT u.id, u.username, u.enabled, u."isAdmin" AS is_admin, r.permissions AS "permissions?"
+        r#"SELECT u.id AS "id!", u.username AS "username!", u.enabled AS "enabled!", u."isAdmin" AS "is_admin!", r.permissions AS "permissions?"
            FROM users u LEFT JOIN roles r ON r.id = u."roleId" WHERE u.enabled"#
     )
     .fetch_all(db)

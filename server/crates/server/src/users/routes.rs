@@ -457,7 +457,6 @@ pub async fn remove(
 ) -> Result<(), AppError> {
     a.require(Action::Manage, Subject::User)?;
     let id = int_param(&id)?;
-    st.push.forget_user(&st, id).await;
     let mut tx = st.db.begin().await?;
     let target = db::lock_user(&mut tx, id)
         .await?
@@ -470,6 +469,7 @@ pub async fn remove(
     }
     crate::party::end_owned(&st, id).await?;
     let covers = crate::party::owned_uploads(&st.db, id).await?;
+    st.push.forget_user(&st, id).await;
     sqlx::query!("DELETE FROM users WHERE id = $1", id)
         .execute(&mut *tx)
         .await?;

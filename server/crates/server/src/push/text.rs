@@ -1,11 +1,12 @@
 //! Notification text: the `push` branch of the client's `i18n/<lang>.json`, English constants as fallback.
 use crate::sync::MutexExt;
-use fliks_domain::push::{english, interpolate, locale};
+use fliks_domain::push::{LOCALES, english, interpolate, locale};
 use serde_json::{Map, Value};
 use std::{
     collections::{BTreeMap, HashMap},
     path::PathBuf,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 /// A piece of text: a core key rendered from the client files, or a table of the plugin that sends it.
@@ -30,9 +31,17 @@ impl Msg {
     }
 }
 
+enum Loaded {
+    Read(Arc<Value>),
+    /// A failed read is retried after `RETRY`, not kept forever.
+    Failed(Instant),
+}
+
+const RETRY: Duration = Duration::from_secs(60);
+
 pub struct Texts {
     dir: Option<PathBuf>,
-    cache: Mutex<HashMap<&'static str, Arc<Value>>>,
+    cache: Mutex<HashMap<&'static str, Loaded>>,
 }
 
 impl Texts {
@@ -43,24 +52,42 @@ impl Texts {
         }
     }
 
-    fn file(&self, lang: &'static str) -> Arc<Value> {
-        let mut g = self.cache.lock_clean();
-        g.entry(lang)
-            .or_insert_with(|| {
-                let read = self
-                    .dir
-                    .as_ref()
-                    .and_then(|d| std::fs::read(d.join(format!("{lang}.json"))).ok());
-                Arc::new(
-                    read.and_then(|b| serde_json::from_slice(&b).ok())
-                        .unwrap_or(Value::Null),
-                )
-            })
-            .clone()
+    fn due(&self, lang: &'static str) -> bool {
+        match self.cache.lock_clean().get(lang) {
+            Some(Loaded::Read(_)) => false,
+            Some(Loaded::Failed(at)) => at.elapsed() >= RETRY,
+            None => true,
+        }
+    }
+
+    /// Reads the language files not loaded yet, off the lock; `render` then only looks them up.
+    pub async fn warm(&self) {
+        let Some(dir) = &self.dir else { return };
+        for lang in LOCALES {
+            if !self.due(lang) {
+                continue;
+            }
+            let read = tokio::fs::read(dir.join(format!("{lang}.json")))
+                .await
+                .ok()
+                .and_then(|b| serde_json::from_slice::<Value>(&b).ok());
+            let loaded = read.map_or_else(
+                || Loaded::Failed(Instant::now()),
+                |v| Loaded::Read(Arc::new(v)),
+            );
+            self.cache.lock_clean().insert(lang, loaded);
+        }
+    }
+
+    fn file(&self, lang: &'static str) -> Option<Arc<Value>> {
+        match self.cache.lock_clean().get(lang) {
+            Some(Loaded::Read(v)) => Some(v.clone()),
+            _ => None,
+        }
     }
 
     fn lookup(&self, lang: &'static str, path: &str) -> Option<String> {
-        let file = self.file(lang);
+        let file = self.file(lang)?;
         let mut at = file.get("push")?;
         for part in path.split('.') {
             at = at.get(part)?;
@@ -101,8 +128,8 @@ mod tests {
         json!({"title": "A"}).as_object().cloned().unwrap()
     }
 
-    #[test]
-    fn reads_the_client_file_then_english_then_the_constant() {
+    #[tokio::test]
+    async fn reads_the_client_file_then_english_then_the_constant() {
         let dir =
             std::env::temp_dir().join(format!("fliks-push-text-{}", crate::config::random_hex(4)));
         std::fs::create_dir_all(dir.join("i18n")).unwrap();
@@ -112,6 +139,7 @@ mod tests {
         )
         .unwrap();
         let t = Texts::new(Some(&dir));
+        t.warm().await;
         let title = Msg::core("request_approved.title", &params());
         let body = Msg::core("request_approved.body", &params());
         assert_eq!(t.render(&title, "fr-CA"), "Demande acceptee");
