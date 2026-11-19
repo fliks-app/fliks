@@ -315,7 +315,10 @@ async fn the_builtin_connection_is_seeded_and_protected(pool: PgPool) {
 async fn enabling_registers_and_disabling_deletes_everything_at_the_relay(pool: PgPool) {
     let c = ctx(pool).await;
     let (s, body) = subscribe(&c, &c.user, "apns", 1).await;
-    assert_eq!((s, body["message"].clone()), (409, json!("push.error_disabled")));
+    assert_eq!(
+        (s, body["message"].clone()),
+        (409, json!("push.error_disabled"))
+    );
     set_relay(&c, true).await;
     c.relay.wait("POST", "/v1/servers", 1).await;
     assert!(c.relay.seen("POST", "/v1/servers")[0].signed);
