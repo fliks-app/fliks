@@ -30,6 +30,8 @@
                 #pic
                 [src]="slide.image"
                 [alt]="slide.alt"
+                loading="lazy"
+                decoding="async"
                 class="w-full h-full object-cover"
                 (error)="pic.hidden = true"
               />

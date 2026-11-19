@@ -62,7 +62,9 @@
             "spoilerHideOverviews": true,
             "spoilerHideStills": true,
             "spoilerHideTitles": true,
-            "username": "admin"
+            "username": "admin",
+            "whatsNewEnabled": true,
+            "whatsNewSeen": "5.0.0"
           }
         },
         "status": 201

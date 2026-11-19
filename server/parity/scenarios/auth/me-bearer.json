@@ -54,7 +54,9 @@
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
           "updatedAt": "2026-01-01T00:00:00.000Z",
-          "username": "admin"
+          "username": "admin",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": "5.0.0"
         },
         "status": 200
       },

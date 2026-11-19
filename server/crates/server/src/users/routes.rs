@@ -358,7 +358,8 @@ fn merge_fields(t: &mut UserRow, dto: &UpdateUser) {
         spoiler_hide_stills,
         spoiler_hide_overviews,
         spoiler_hide_titles,
-        session_sync
+        session_sync,
+        whats_new_enabled
     );
     if let Some(kinds) = dto.session_kinds.clone() {
         t.session_kinds = kinds.map(|ks| {
@@ -370,6 +371,9 @@ fn merge_fields(t: &mut UserRow, dto: &UpdateUser) {
             }
             out
         });
+    }
+    if let Some(v) = dto.whats_new_seen.clone() {
+        t.whats_new_seen = Some(v);
     }
     if let Some(v) = dto.library_order.clone() {
         t.library_order = Jsonb(v);
@@ -394,7 +398,8 @@ async fn save_user(
         "shareLikes" = $16, "shareStats" = $17, "shareDisabled" = $18, "hideSpoilers" = $19,
         "edlEnabled" = $20, "edlAutoSkipCommercials" = $21, "spoilerHideStills" = $22,
         "spoilerHideOverviews" = $23, "spoilerHideTitles" = $24,
-        "sessionSync" = $25, "sessionKinds" = $26,
+        "sessionSync" = $25, "sessionKinds" = $26, "whatsNewEnabled" = $27,
+        "whatsNewSeen" = $28,
         "updatedAt" = now() WHERE "id" = $1"#,
         id,
         &t.username,
@@ -421,7 +426,9 @@ async fn save_user(
         t.spoiler_hide_overviews,
         t.spoiler_hide_titles,
         t.session_sync,
-        t.session_kinds.as_deref()
+        t.session_kinds.as_deref(),
+        t.whats_new_enabled,
+        t.whats_new_seen.as_deref()
     )
         .execute(&mut *tx)
         .await?;

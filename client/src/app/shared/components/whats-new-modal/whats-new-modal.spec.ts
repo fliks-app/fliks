@@ -41,10 +41,6 @@ describe('versionsToShow', () => {
     expect(versionsToShow(index, '5.0.0', '8.0.0')).toEqual(['7.0.0', '7.1.0', '8.0.0']);
   });
 
-  it('shows only the newest notes when nothing was seen', () => {
-    expect(versionsToShow(index, null, '7.0.2')).toEqual(['7.0.0']);
-  });
-
   it('compares numerically and ignores a pre-release suffix', () => {
     expect(versionsToShow(['6.10.0', '6.9.0'], '6.9.0', '6.10.0-beta.2')).toEqual(['6.10.0']);
   });

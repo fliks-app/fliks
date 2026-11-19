@@ -53,7 +53,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "other"
+          "username": "other",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": "5.0.0"
         },
         "status": 200
       },
@@ -107,7 +109,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "other"
+          "username": "other",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": "5.0.0"
         },
         "status": 200
       },

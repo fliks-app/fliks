@@ -56,7 +56,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "readonly"
+          "username": "readonly",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": "5.0.0"
         },
         "status": 200
       },

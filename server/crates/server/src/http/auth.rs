@@ -81,6 +81,9 @@ pub struct UserRow {
     pub spoiler_hide_overviews: bool,
     pub spoiler_hide_titles: bool,
     pub session_sync: bool,
+    pub whats_new_enabled: bool,
+    /// Newest client version whose notes the account has seen; set by the client.
+    pub whats_new_seen: Option<String>,
     /// `None` is every kind (`session.md`).
     pub session_kinds: Option<Vec<String>>,
 }
@@ -154,6 +157,7 @@ async fn load_rows(
         u."spoilerHideOverviews" AS spoiler_hide_overviews,
         u."spoilerHideTitles" AS spoiler_hide_titles,
         u."sessionSync" AS session_sync, u."sessionKinds" AS session_kinds,
+        u."whatsNewEnabled" AS whats_new_enabled, u."whatsNewSeen" AS whats_new_seen,
         r."id" AS "role_row_id?", r."createdAt" AS "role_created_at?", r."updatedAt" AS "role_updated_at?",
         r."name" AS "role_name?", r."permissions" AS "role_permissions?", r."isDefault" AS "role_is_default?"
     FROM users u LEFT JOIN roles r ON r."id" = u."roleId"
@@ -211,6 +215,8 @@ async fn load_rows(
                 spoiler_hide_overviews: r.spoiler_hide_overviews,
                 spoiler_hide_titles: r.spoiler_hide_titles,
                 session_sync: r.session_sync,
+                whats_new_enabled: r.whats_new_enabled,
+                whats_new_seen: r.whats_new_seen,
                 session_kinds: r.session_kinds,
             };
             (user, role)

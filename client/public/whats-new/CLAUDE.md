@@ -1,6 +1,6 @@
 # What's new notes
 
-The desktop and web clients show these notes once, in a carousel, on the first launch of a new version (`shared/components/whats-new-modal`). This file is excluded from the build (`angular.json` asset `ignore`).
+The desktop and web clients show these notes once per account, in a carousel, on the first launch of a new version (`shared/components/whats-new-modal`). This file is excluded from the build (`angular.json` asset `ignore`).
 
 ## Layout
 

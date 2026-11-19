@@ -118,7 +118,9 @@
             "spoilerHideOverviews": true,
             "spoilerHideStills": true,
             "spoilerHideTitles": true,
-            "username": "Carol Display"
+            "username": "Carol Display",
+            "whatsNewEnabled": true,
+            "whatsNewSeen": null
           },
           {
             "albumQuotaLimit": 0,
@@ -157,7 +159,9 @@
             "spoilerHideOverviews": true,
             "spoilerHideStills": true,
             "spoilerHideTitles": true,
-            "username": "admin"
+            "username": "admin",
+            "whatsNewEnabled": true,
+            "whatsNewSeen": "5.0.0"
           },
           {
             "albumQuotaLimit": 0,
@@ -201,7 +205,9 @@
             "spoilerHideOverviews": true,
             "spoilerHideStills": true,
             "spoilerHideTitles": true,
-            "username": "manager"
+            "username": "manager",
+            "whatsNewEnabled": true,
+            "whatsNewSeen": "5.0.0"
           },
           {
             "albumQuotaLimit": 0,
@@ -247,7 +253,9 @@
             "spoilerHideOverviews": true,
             "spoilerHideStills": true,
             "spoilerHideTitles": true,
-            "username": "other"
+            "username": "other",
+            "whatsNewEnabled": true,
+            "whatsNewSeen": "5.0.0"
           },
           {
             "albumQuotaLimit": 0,
@@ -290,7 +298,9 @@
             "spoilerHideOverviews": true,
             "spoilerHideStills": true,
             "spoilerHideTitles": true,
-            "username": "readonly"
+            "username": "readonly",
+            "whatsNewEnabled": true,
+            "whatsNewSeen": "5.0.0"
           },
           {
             "albumQuotaLimit": 0,
@@ -336,7 +346,9 @@
             "spoilerHideOverviews": true,
             "spoilerHideStills": true,
             "spoilerHideTitles": true,
-            "username": "seerr_alice"
+            "username": "seerr_alice",
+            "whatsNewEnabled": true,
+            "whatsNewSeen": null
           },
           {
             "albumQuotaLimit": 0,
@@ -382,7 +394,9 @@
             "spoilerHideOverviews": true,
             "spoilerHideStills": true,
             "spoilerHideTitles": true,
-            "username": "seerr_bob"
+            "username": "seerr_bob",
+            "whatsNewEnabled": true,
+            "whatsNewSeen": null
           },
           {
             "albumQuotaLimit": 0,
@@ -428,7 +442,9 @@
             "spoilerHideOverviews": true,
             "spoilerHideStills": true,
             "spoilerHideTitles": true,
-            "username": "user"
+            "username": "user",
+            "whatsNewEnabled": true,
+            "whatsNewSeen": "5.0.0"
           }
         ],
         "status": 200

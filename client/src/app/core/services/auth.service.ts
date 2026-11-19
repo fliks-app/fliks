@@ -83,6 +83,10 @@ export interface User {
   sessionSync?: boolean;
   /** Kinds the session covers; null = every kind. */
   sessionKinds?: MediaType[] | null;
+  /** Show the what's-new popup after an update. */
+  whatsNewEnabled?: boolean;
+  /** Newest client version whose notes the account has seen; null shows no notes. */
+  whatsNewSeen?: string | null;
 }
 
 /** Public = instant follow + shared content; private = follow on approval. */

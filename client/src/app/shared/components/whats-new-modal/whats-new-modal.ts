@@ -1,10 +1,11 @@
 import {
   Component,
   ElementRef,
-  afterNextRender,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -12,6 +13,9 @@ import { LucideRocket } from '@lucide/angular';
 import { SwUpdate } from '@angular/service-worker';
 import { environment } from '../../../../environments/environment';
 import { DeviceService } from '../../../core/services/device.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { UsersApiService } from '../../../core/services/api/users-api.service';
+import { SERVER_SINCE, ServerVersionService } from '../../../core/services/server-version.service';
 import { MarkdownPipe } from '../../pipes/markdown.pipe';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
@@ -24,7 +28,6 @@ export interface WhatsNewSlide {
   body: string;
 }
 
-const SEEN_KEY = 'fliks.whatsNewSeen';
 const MAX_VERSIONS = 3;
 
 /** One slide per `## Title` section; its first image becomes the slide picture, resolved against `base`. */
@@ -54,13 +57,11 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-/** Versions with notes to show, oldest first: the latest three after `seen` up to `current`, or the newest one when nothing was seen. */
-export function versionsToShow(index: string[], seen: string | null, current: string): string[] {
-  const upToCurrent = index
+/** Versions with notes to show, oldest first: the latest three after `seen` up to `current`. */
+export function versionsToShow(index: string[], seen: string, current: string): string[] {
+  return index
     .filter((v) => compareVersions(v, current) <= 0)
-    .sort((a, b) => compareVersions(b, a));
-  if (seen === null) return upToCurrent.slice(0, 1);
-  return upToCurrent
+    .sort((a, b) => compareVersions(b, a))
     .filter((v) => compareVersions(v, seen) > 0)
     .slice(0, MAX_VERSIONS)
     .reverse();
@@ -72,7 +73,7 @@ async function fetchText(url: string): Promise<string | null> {
   return res.ok && !res.headers.get('content-type')?.includes('html') ? res.text() : null;
 }
 
-/** Carousel of `public/whats-new/<version>/<lang>.md` for the versions listed in `whats-new/index.json`, shown on desktop and web. */
+/** Carousel of `public/whats-new/<version>/<lang>.md` for the versions listed in `whats-new/index.json`, shown on desktop and web, once per account. */
 @Component({
   selector: 'app-whats-new-modal',
   imports: [TranslatePipe, MarkdownPipe, LucideRocket, ModalHeaderComponent, ModalFooterComponent],
@@ -81,6 +82,9 @@ async function fetchText(url: string): Promise<string | null> {
 export class WhatsNewModalComponent {
   private readonly translate = inject(TranslateService);
   private readonly device = inject(DeviceService);
+  private readonly auth = inject(AuthService);
+  private readonly api = inject(UsersApiService);
+  private readonly versions = inject(ServerVersionService);
   private readonly swUpdate = inject(SwUpdate, { optional: true });
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
   private readonly track = viewChild<ElementRef<HTMLElement>>('track');
@@ -89,14 +93,28 @@ export class WhatsNewModalComponent {
   readonly index = signal(0);
   readonly version = computed(() => this.slides()[this.index()]?.version ?? environment.version);
 
+  private checkedFor: number | null = null;
+
   constructor() {
-    afterNextRender(() => void this.showIfNew());
+    effect(() => {
+      const user = this.auth.user();
+      if (!user || user.id === this.checkedFor || !this.versions.supports(SERVER_SINCE.whatsNew)) return;
+      this.checkedFor = user.id;
+      untracked(() => void this.showIfNew(user.id));
+    });
   }
 
-  private async showIfNew(): Promise<void> {
+  private async showIfNew(id: number): Promise<void> {
     const current = environment.version;
-    const seen = localStorage.getItem(SEEN_KEY);
-    if (!this.device.isDesktop() || seen === current || (await this.updatePending())) return;
+    if (!this.device.isDesktop()) return;
+    // The stored profile can predate notes seen on another device.
+    await this.auth.refreshUser();
+    const user = this.auth.user();
+    const seen = user?.whatsNewSeen ?? null;
+    if (user?.id !== id || (seen !== null && compareVersions(seen, current) >= 0)) return;
+    if (await this.updatePending()) return;
+    // An account without a value, or with the popup off, only records the version.
+    if (seen === null || user.whatsNewEnabled === false) return this.markSeen(id, current);
     const root = new URL('whats-new/', document.baseURI).href;
     const lang = this.translate.currentLang() || 'en';
     const slides: WhatsNewSlide[] = [];
@@ -111,10 +129,17 @@ export class WhatsNewModalComponent {
     } catch {
       return; // Offline: try again on the next launch.
     }
-    localStorage.setItem(SEEN_KEY, current);
+    this.markSeen(id, current);
     if (!slides.length) return;
     this.slides.set(slides);
     this.dialog()?.nativeElement.showModal();
+  }
+
+  private markSeen(id: number, version: string): void {
+    this.api.update(id, { whatsNewSeen: version }, { skipErrorToast: true }).then(
+      () => this.auth.patchUser({ whatsNewSeen: version }),
+      () => undefined,
+    );
   }
 
   /** True when the PWA is about to reload into a newer version: its own notes will show then. */
