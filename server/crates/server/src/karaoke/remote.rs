@@ -49,6 +49,17 @@ pub async fn eligible(st: &AppState, key: &str, w: &Worker) -> bool {
     )
 }
 
+/// A worker will take the file's `separate` job: it holds it, or it waits and one could.
+pub async fn held_by_worker(st: &AppState, file: i32) -> sqlx::Result<bool> {
+    if store::worker_separating(&st.db, file, &["leased"]).await? {
+        return Ok(true);
+    }
+    Ok(
+        store::worker_separating(&st.db, file, &["queued"]).await?
+            && eligible_workers(st).await > 0,
+    )
+}
+
 /// Live workers that take `Separate` jobs now.
 pub async fn eligible_workers(st: &AppState) -> usize {
     let mut n = 0;
@@ -225,7 +236,7 @@ async fn drop_job(st: &AppState, key: &str, id: i64, attempt: i32) -> sqlx::Resu
     Ok(n > 0)
 }
 
-/// A job that landed `failed` leaves its item out of the pass for this profile, and until a restart after a local failure.
+/// A job that landed `failed` leaves its item out of the pass for this profile and until a restart.
 async fn after_failure(st: &AppState, id: i64, file: Option<i32>) {
     crate::queue::remote::sweep(st).await;
     st.queue.wake.notify_waiters();

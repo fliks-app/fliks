@@ -407,7 +407,7 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
         None => false,
     };
     let worker = match file {
-        Some(f) => store::worker_separating(&st.db, f, &["queued", "leased"]).await?,
+        Some(f) => remote::held_by_worker(st, f).await?,
         None => false,
     };
     let state = derive_state(run.as_ref(), ready, worker);

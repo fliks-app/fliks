@@ -144,6 +144,17 @@ async fn pass_workers(st: &AppState) -> Result<(), sqlx::Error> {
     .fetch_one(&st.db)
     .await?;
     for item in store::unprepared(&st.db, &fail_list(&st.karaoke), PER_WAKE, &profile).await? {
+        // A local run took the track over: queueing it again would separate it twice.
+        if st
+            .karaoke
+            .runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&item)
+            .is_some_and(run::RunState::active)
+        {
+            continue;
+        }
         if active >= PER_WAKE || store::total(&st.db).await? >= budget / 10 * 9 {
             break;
         }

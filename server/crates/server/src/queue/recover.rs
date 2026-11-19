@@ -232,7 +232,7 @@ async fn finish_restore(st: &AppState, job: &Job) -> Result<(), String> {
     Ok(())
 }
 
-/// A restore that moved nothing and cannot start ends here; the original keeps its recorded slot.
+/// A restore that moved nothing and cannot start ends here; the original keeps its recorded place.
 async fn abandon_restore(st: &AppState, id: i64) {
     let res = sqlx::query(
         r#"UPDATE jobs SET result = result - 'restore', "updatedAt" = now() WHERE id = $1"#,

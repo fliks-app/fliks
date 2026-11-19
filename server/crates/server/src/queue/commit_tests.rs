@@ -553,6 +553,12 @@ async fn a_kept_original_stays_restorable_after_its_ocr_trash_is_purged(pool: Pg
         fs::read(w.dir.join("M/a.h264.mkv")).unwrap(),
         b"original bytes"
     );
+    // The slot of the restore holds the optimized file and is purged in its turn.
+    let slot = w.dir.join(format!(".fliks-trash/{}.optimized.bak", w.job));
+    assert!(slot.exists());
+    trash::purge(&w.st.db).await;
+    assert!(!slot.exists());
+    assert!(job(&w).await["result"]["trashPurgedAt"].is_string());
 }
 
 #[sqlx::test(migrations = false)]
@@ -568,22 +574,34 @@ async fn a_restore_blocked_on_the_row_lock_loses_to_a_purge_that_committed_first
         .unwrap();
     let (st, id) = (w.st.clone(), w.job);
     let restore = tokio::spawn(async move { recover::restore(&st, id).await });
-    // Long enough for the restore to reach its guarded UPDATE and block on the row.
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    for _ in 0..100 {
+        let waiting: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'
+             AND datname = current_database()",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+        if waiting > 0 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    // Only the mark: with the guard the restore loses, without it the restore would run.
     sqlx::query(r#"UPDATE jobs SET result = result || jsonb_build_object('trashPurgedAt', now())"#)
         .execute(&mut *tx)
         .await
         .unwrap();
-    fs::remove_file(journal.backup.as_ref().unwrap()).unwrap();
     tx.commit().await.unwrap();
     assert!(restore.await.unwrap().is_err());
     assert!(job(&w).await["result"].get("restore").is_none());
     assert_eq!(fs::read(&journal.target).unwrap(), b"new");
+    assert!(journal.backup.unwrap().exists());
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_user_request_takes_over_a_queued_separation_but_not_a_leased_one(pool: PgPool) {
-    use crate::karaoke::store;
+async fn a_user_request_takes_over_a_queued_separation_no_worker_will_take(pool: PgPool) {
+    use crate::karaoke::{remote, store};
     let w = world(pool, json!([])).await;
     sqlx::query("UPDATE jobs SET state = 'done'")
         .execute(&w.st.db)
@@ -597,24 +615,32 @@ async fn a_user_request_takes_over_a_queued_separation_but_not_a_leased_one(pool
     .execute(&w.st.db)
     .await
     .unwrap();
-    assert!(
-        store::worker_separating(&w.st.db, w.file, &["queued"])
-            .await
-            .unwrap()
-    );
-    assert!(
-        !store::worker_separating(&w.st.db, w.file, &["leased"])
-            .await
-            .unwrap()
-    );
+    // No eligible worker: the queued job is nobody's, and the takeover removes it.
+    assert!(!remote::held_by_worker(&w.st, w.file).await.unwrap());
     assert_eq!(
         store::take_queued_separation(&w.st.db, w.file)
             .await
             .unwrap(),
         1
     );
+    // A leased job is a worker's: held, and the takeover leaves it.
+    sqlx::query(
+        r#"INSERT INTO jobs (id, kind, "mediaFileId", payload, "profileHash", state, attempt, "workerId", "leaseUntil")
+           VALUES (3, 'separate', $1, '{}'::jsonb, 'h', 'leased', 1, 'w', now() + interval '1 minute')"#,
+    )
+    .bind(w.file)
+    .execute(&w.st.db)
+    .await
+    .unwrap();
+    assert!(remote::held_by_worker(&w.st, w.file).await.unwrap());
+    assert_eq!(
+        store::take_queued_separation(&w.st.db, w.file)
+            .await
+            .unwrap(),
+        0
+    );
     assert!(
-        !store::worker_separating(&w.st.db, w.file, &["queued", "leased"])
+        store::worker_separating(&w.st.db, w.file, &["leased"])
             .await
             .unwrap()
     );

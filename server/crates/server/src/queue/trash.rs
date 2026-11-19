@@ -24,8 +24,8 @@ pub async fn purge(pool: &PgPool) {
 }
 
 /// Not purged yet, and no restore in flight.
-const PENDING: &str = r#"state = 'done' AND (result ? 'trashPath' OR result ? 'ocrTrash')
-    AND NOT (result ? 'trashPurgedAt') AND NOT (result ? 'ocrPurgedAt')
+const PENDING: &str = r#"state = 'done' AND NOT (result ? 'trashPurgedAt')
+    AND (result ? 'trashPath' OR (result ? 'ocrTrash' AND NOT (result ? 'ocrPurgedAt')))
     AND (NOT (result ? 'restore') OR result ? 'restoredAt')"#;
 
 fn held_of(r: &sqlx::postgres::PgRow) -> Held {

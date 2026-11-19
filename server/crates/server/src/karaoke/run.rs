@@ -337,17 +337,14 @@ pub async fn start(
         return Start::Idle;
     }
     let file = track(st, item).await.ok().map(|t| t.file);
-    // The pass leaves a track a worker holds; a user's request may take over a job nobody has leased.
+    // The pass leaves any worker job alone; a user's request only a job a worker will take.
     if let Some(f) = file {
-        let held: &[&str] = if user.is_some() {
-            &["leased"]
+        let held = if user.is_some() {
+            super::remote::held_by_worker(st, f).await
         } else {
-            &["queued", "leased"]
+            store::worker_separating(&st.db, f, &["queued", "leased"]).await
         };
-        if store::worker_separating(&st.db, f, held)
-            .await
-            .unwrap_or(false)
-        {
+        if held.unwrap_or(false) {
             return Start::Idle;
         }
     }
@@ -359,9 +356,6 @@ pub async fn start(
     }
     if !pending(st, item, opts).await {
         return Start::Idle;
-    }
-    if let (Some(f), Some(_)) = (file, user) {
-        let _ = store::take_queued_separation(&st.db, f).await;
     }
     let viewers = viewers(st, item).await;
     {
@@ -383,6 +377,21 @@ pub async fn start(
                 viewers,
             },
         );
+    }
+    // After admission, so a refused request deletes nothing; a lease won meanwhile ends the run.
+    if let (Some(f), Some(_)) = (file, user) {
+        let _ = store::take_queued_separation(&st.db, f).await;
+        if store::worker_separating(&st.db, f, &["leased"])
+            .await
+            .unwrap_or(false)
+        {
+            st.karaoke
+                .runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&item);
+            return Start::Idle;
+        }
     }
     update(st, item, |_| {});
     let st = st.clone();

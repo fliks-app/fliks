@@ -246,7 +246,9 @@ impl Restore {
 /// Runs, or finishes, a restore; every step looks at the disk first.
 pub fn perform_restore(r: &Restore) -> io::Result<()> {
     let parked = r.parked();
-    let started = fs::symlink_metadata(&parked).is_ok() || is(&r.source, &r.original);
+    let started = fs::symlink_metadata(&parked).is_ok()
+        || fs::symlink_metadata(&r.slot).is_ok()
+        || is(&r.source, &r.original);
     if !started && !r.startable() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -429,6 +431,7 @@ mod tests {
         perform_restore(&r).unwrap();
         fs::write(&j.source, b"edited elsewhere").unwrap();
         assert!(!r.startable());
+        perform_restore(&r).unwrap();
         fs::remove_dir_all(d).unwrap();
     }
 

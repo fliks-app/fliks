@@ -700,7 +700,9 @@ async fn subtitle_rows(
         .await
         .map_err(sql)?;
         tx.commit().await.map_err(sql)?;
-        if let Err(e) = trash_file(&abs, &slot) {
+        if let Err(e) = trash_file(&abs, &slot)
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
             tracing::warn!(job, "OCR subtitle {} kept on disk: {e}", abs.display());
         }
         sqlx::query("DELETE FROM subtitle_files WHERE id = $1")
