@@ -50,6 +50,7 @@ mod provider_world {
             "fliks:plugin/host": super::fliks::plugin::host,
             "fliks:plugin/db": super::fliks::plugin::db,
             "fliks:plugin/log": super::fliks::plugin::log,
+            "fliks:plugin/notify": super::fliks::plugin::notify,
             "wasi:cli": wasmtime_wasi::p2::bindings::cli,
             "wasi:clocks": wasmtime_wasi::p2::bindings::clocks,
             "wasi:filesystem": wasmtime_wasi::p2::bindings::filesystem,
@@ -230,6 +231,7 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<Ctx>> {
     fliks::plugin::host::add_to_linker::<_, HasSelf<Ctx>>(&mut l, |c| c)?;
     fliks::plugin::db::add_to_linker::<_, HasSelf<Ctx>>(&mut l, |c| c)?;
     fliks::plugin::log::add_to_linker::<_, HasSelf<Ctx>>(&mut l, |c| c)?;
+    fliks::plugin::notify::add_to_linker::<_, HasSelf<Ctx>>(&mut l, |c| c)?;
     Ok(l)
 }
 

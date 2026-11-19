@@ -40,7 +40,7 @@ fn avatar(user: i64, has: &Option<String>) -> Option<String> {
     has.as_ref().map(|_| format!("/api/images/user/{user}"))
 }
 
-fn media_url(id: i32, kind: MediaKind) -> String {
+pub fn media_url(id: i32, kind: MediaKind) -> String {
     let root = match kind {
         MediaKind::Movie => "movies",
         MediaKind::Series => "series",

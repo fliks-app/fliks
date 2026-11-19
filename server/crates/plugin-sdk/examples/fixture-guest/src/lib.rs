@@ -506,6 +506,19 @@ fn test_route(req: &Request) -> Result<Response, String> {
                 reason: req.query("reason").unwrap_or("no-release").to_owned(),
             },
         )])),
+        "notify" => {
+            let id = req.query("id").and_then(|v| v.parse().ok()).unwrap_or(1);
+            let audience = match req.query("audience") {
+                Some("recipients") => fliks_plugin_sdk::notify::NotifyAudience::Recipients(id),
+                Some("viewers") => fliks_plugin_sdk::notify::NotifyAudience::Viewers(id),
+                _ => fliks_plugin_sdk::notify::NotifyAudience::Users(vec![id]),
+            };
+            let n = fliks_plugin_sdk::notify::Notification::new(
+                req.query("title").unwrap_or("fixture.nav.queue"),
+                "fixture.nav.settings",
+            );
+            host_result(fliks_plugin_sdk::notify::users(audience, &n))
+        }
         "emit" => host_result(host::events_emit_own(
             "ping",
             r#"{"n":1}"#,

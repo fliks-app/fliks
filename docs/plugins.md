@@ -220,6 +220,14 @@ Start from the SDK's examples: `examples/fixture-guest/` exercises every host be
 the host tests run, `examples/xtask/` is the build tool a plugin repository keeps.
 `fk-plugin-download` and `fk-plugin-notify` are the reference implementations.
 
+### Notifying users
+
+With the scope `notify:users` a plugin sends push notifications (`fliks_plugin_sdk::notify::users`) to
+user ids or to the requesters or viewers of a media, never to everyone. Texts are keys into the
+manifest `i18n`, shown in each device's language with English as the fallback, and each user can mute
+the plugin's category. A plugin sends at most 10 per hour, then gets `ERR_RATE_LIMITED`. The import
+is new in a release: a plugin that uses it states that release as the lower bound of its `fliks` range.
+
 ### The sandbox
 
 There are no sockets, pid files or uids: the component only has what the host links in.

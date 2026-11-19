@@ -46,6 +46,7 @@ async fn a_book_call_needs_the_grant_of_its_method() {
         ("score", "releases:score"),
         ("ingest", "ingest:write"),
         ("grabbed", "events:emit"),
+        ("notify", "notify:users"),
     ] {
         let r = call(&h, route, &[("family", "text")]).await;
         assert_eq!(r["error"], "ERR_DENIED", "{route}: {r}");
@@ -205,6 +206,23 @@ async fn a_second_language_is_acquired_through_the_host_calls() {
     let r = call(&h, "candidates", &[text]).await;
     assert_eq!(r["ok"], json!([]), "both languages are satisfied: {r}");
     let _ = std::fs::remove_dir_all(dir);
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn notify_checks_its_texts_and_limits_a_plugin_to_ten_an_hour() {
+    let Some((h, s)) = install("notify_limit", json!(["config:rw", "notify:users"])).await else {
+        return;
+    };
+    let r = call(&h, "notify", &[("title", "fixture.missing")]).await;
+    assert_eq!(r["error"], "ERR_VALIDATION", "{r}");
+    for _ in 0..10 {
+        let r = call(&h, "notify", &[]).await;
+        assert!(r.get("error").is_none(), "{r}");
+    }
+    let r = call(&h, "notify", &[]).await;
+    assert_eq!(r["error"], "ERR_RATE_LIMITED", "{r}");
     h.finish().await;
     s.finish().await;
 }
