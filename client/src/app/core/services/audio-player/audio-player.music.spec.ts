@@ -42,6 +42,7 @@ describe('AudioPlayerService music mode', () => {
   const updatePlaybackState = vi.fn();
   let observedOwner: string | null = null;
   let ownerCanEnqueue = true;
+  let observedQueue: { itemIds: number[]; index: number } | null = null;
   const stopSession = vi.fn();
   const castLoad = vi.fn();
   const itemState = vi.fn();
@@ -91,6 +92,7 @@ describe('AudioPlayerService music mode', () => {
     localStorage.clear();
     observedOwner = null;
     ownerCanEnqueue = true;
+    observedQueue = { itemIds: [7, 8, 9], index: 1 };
     validated = new Subject<RemoteCommand>();
     markApplied.mockClear();
     send.mockClear();
@@ -117,9 +119,9 @@ describe('AudioPlayerService music mode', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined);
     TestBed.configureTestingModule({
       providers: [
-      { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), playTarget: (kind: string) => (!scope || scope.includes(kind) ? playTarget : null), send, observedCan: () => ownerCanEnqueue, validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
+      { provide: RemoteService, useValue: { registerLoader: (f: string, l: Loader) => (loaders[f] = l), playTarget: (kind: string) => (!scope || scope.includes(kind) ? playTarget : null), send, observedCan: () => ownerCanEnqueue, observedTargetId: () => observedOwner, targetQueue: () => observedQueue, validated: { subscribe: (fn: (c: RemoteCommand) => void) => validated.subscribe(fn) }, markApplied, lastAppliedCmdId: signal<string | null>(null) } },
       { provide: MusicApiService, useValue: { trackRequests } },
-      { provide: SessionSyncService, useValue: { registerPlayer: (p: unknown) => ((player = p as { yield(): Promise<unknown> }), () => {}), registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), observedOwnerTargetId: () => observedOwner, session: () => ({ queue: { itemIds: [7, 8, 9], index: 1 } }) } },
+      { provide: SessionSyncService, useValue: { registerPlayer: (p: unknown) => ((player = p as { yield(): Promise<unknown> }), () => {}), registerResumer: (f: string, r: (s: unknown, at: number) => Promise<void>) => ((resumers[f] = r), () => {}), handleSuperseded: vi.fn(), observedOwnerTargetId: () => observedOwner } },
         provideZonelessChangeDetection(),
         { provide: PlaybackSession, useValue: { toParty: (c: never, p: string) => partyRouter()?.(c, p) ?? false } },
         { provide: PlayerStateService, useValue: { volume: signal(1) } },
@@ -341,7 +343,7 @@ describe('AudioPlayerService music mode', () => {
     await vi.waitFor(() => expect(getItemPlaybackInfo).toHaveBeenCalledTimes(2));
   });
 
-  it('asks the observed owner to enqueue instead of playing when nothing plays here', () => {
+  it('asks the observed device to enqueue instead of playing when nothing plays here', () => {
     const audio = TestBed.inject(AudioPlayerService);
     observedOwner = 'pc#1';
     audio.enqueueTracks([track(3)], 'next');
@@ -349,6 +351,15 @@ describe('AudioPlayerService music mode', () => {
     expect(send).toHaveBeenNthCalledWith(1, 'pc#1', { action: 'enqueue', itemIds: [3], where: 'next' });
     expect(send).toHaveBeenNthCalledWith(2, 'pc#1', { action: 'enqueue', itemIds: [4], where: 'last' });
     expect(audio.track()).toBeNull();
+  });
+
+  it('plays on the observed device when it holds no queue to add to', () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    observedOwner = 'tv#1';
+    playTarget = 'tv#1';
+    observedQueue = null;
+    audio.enqueueTracks([track(3)], 'next');
+    expect(send).toHaveBeenCalledWith('tv#1', expect.objectContaining({ action: 'load', itemId: 3 }));
   });
 
   it('plays here when the observed owner cannot enqueue', () => {

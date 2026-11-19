@@ -428,17 +428,17 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   /** Adds tracks after the current one or at the end; starts them when nothing plays. */
   enqueueTracks(tracks: readonly MusicTrackRequest[], where: 'next' | 'last'): void {
     if (!tracks.length) return;
-    if (!this._musicMode()) return void (this.enqueueOnOwner(tracks, where) || this.playTracks(tracks));
+    if (!this._musicMode()) return void (this.enqueueOnObserved(tracks, where) || this.playTracks(tracks));
     if (this.routed({ type: 'enqueue', tracks, where })) return;
     if (where === 'next') this.mq.addNext(tracks);
     else this.mq.addLast(tracks);
     this.queueEdited();
   }
 
-  /** Adds to the queue of the device this one observes instead of taking its session; false when it cannot. */
-  private enqueueOnOwner(tracks: readonly MusicTrackRequest[], where: 'next' | 'last'): boolean {
-    const target = this.sessionSync.observedOwnerTargetId();
-    if (!target || !this.sessionSync.session()?.queue || this._track() || !this.remote.observedCan('enqueue')) return false;
+  /** Adds to the queue of the device this one observes, selected or session owner, instead of replacing it; false when it cannot. */
+  private enqueueOnObserved(tracks: readonly MusicTrackRequest[], where: 'next' | 'last'): boolean {
+    const target = this.remote.observedTargetId();
+    if (!target || !this.remote.targetQueue() || this._track() || !this.remote.observedCan('enqueue')) return false;
     void this.remote.send(target, { action: 'enqueue', itemIds: tracks.map((t) => t.itemId), where });
     return true;
   }
