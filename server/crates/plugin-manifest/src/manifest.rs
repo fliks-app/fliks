@@ -495,7 +495,10 @@ pub fn fliks_satisfied(range: &str, running: &str) -> bool {
 
 /// The lowest version `range` allows, or None when the range is unparsable or empty.
 pub fn min_fliks_version(range: &str) -> Option<String> {
-    Range::parse(range).ok()?.min_version().map(|v| v.to_string())
+    Range::parse(range)
+        .ok()?
+        .min_version()
+        .map(|v| v.to_string())
 }
 
 pub fn api_supported(m: &Value) -> bool {
@@ -744,7 +747,10 @@ mod tests {
         assert!(fliks_satisfied(">=5.0.0 <6.0.0", "5.0.0-rc.1"));
         assert!(!fliks_satisfied(">=5.0.0 <6.0.0", "4.5.0"));
         assert!(!fliks_satisfied("not a range", "5.0.0"));
-        assert_eq!(min_fliks_version(">=7.0.0 <8.0.0").as_deref(), Some("7.0.0"));
+        assert_eq!(
+            min_fliks_version(">=7.0.0 <8.0.0").as_deref(),
+            Some("7.0.0")
+        );
         assert_eq!(min_fliks_version("not a range"), None);
         assert!(valid_version("1.2.3") && valid_version("1.2.3-beta.1") && !valid_version("1.2"));
     }
