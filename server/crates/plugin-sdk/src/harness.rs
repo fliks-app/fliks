@@ -33,9 +33,20 @@ pub struct Setup {
     pub network_internal: bool,
     pub tune: Option<Tune>,
     pub targets: Arc<Targets>,
+    /// The core version reported to the plugin; the template's `fliks` range minimum when None.
+    pub core_version: Option<String>,
 }
 
 impl Setup {
+    /// The core version the host reports: the override, else the lowest the template allows.
+    pub fn resolved_core_version(&self) -> String {
+        self.core_version.clone().unwrap_or_else(|| {
+            let range = self.template["fliks"].as_str().unwrap_or_default();
+            fliks_plugin_manifest::manifest::min_fliks_version(range)
+                .unwrap_or_else(|| panic!("template fliks range {range:?} allows no version"))
+        })
+    }
+
     /// The crate's template, logo, version and its already built release component.
     pub fn from_crate(dir: impl Into<PathBuf>) -> Setup {
         let c = Crate::at(&dir.into()).expect("a plugin crate");
@@ -62,6 +73,7 @@ impl Setup {
             network_internal: false,
             tune: None,
             targets: Targets::new(),
+            core_version: None,
         }
     }
 }
@@ -276,7 +288,7 @@ impl Harness {
         st.plugins = Arc::new(Plugins::new(
             pool.clone(),
             Options {
-                version: "6.0.0".into(),
+                version: setup.resolved_core_version(),
                 runtime_dir: dir,
                 disabled: false,
                 pg: fliks_server::plugins::db::PgTarget {
@@ -515,4 +527,37 @@ pub async fn until(what: &str, max: Duration, mut f: impl AsyncFnMut() -> bool) 
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     panic!("timed out waiting for {what}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup(range: &str) -> Setup {
+        Setup {
+            template: json!({ "fliks": range }),
+            version: "1.0.0".into(),
+            wasm: vec![],
+            logo: None,
+            config: vec![],
+            network_internal: false,
+            tune: None,
+            targets: Targets::new(),
+            core_version: None,
+        }
+    }
+
+    #[test]
+    fn core_version_satisfies_the_template_range() {
+        use fliks_plugin_manifest::manifest::fliks_satisfied;
+        for range in [">=7.0.0 <8.0.0", ">=6.0.0 <7.0.0"] {
+            assert!(
+                fliks_satisfied(range, &setup(range).resolved_core_version()),
+                "{range}"
+            );
+        }
+        let mut s = setup(">=6.0.0 <8.0.0");
+        s.core_version = Some("7.2.0".into());
+        assert_eq!(s.resolved_core_version(), "7.2.0");
+    }
 }
