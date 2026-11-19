@@ -4158,6 +4158,8 @@
     "version_available": "Versão {{version}}",
     "no_notes": "Nenhuma nota de versão disponível.",
     "downloading": "A transferir… {{percent}} %",
+    "preparing": "A preparar a atualização…",
+    "restart_notice": "O Fliks vai reiniciar para concluir a atualização.",
     "installing": "A instalar e reiniciar…",
     "pwa_installing": "A instalar uma atualização, o Fliks vai reiniciar…",
     "install": "Instalar",

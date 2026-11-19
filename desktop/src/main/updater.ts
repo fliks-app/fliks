@@ -102,8 +102,12 @@ function velopackUpdater(broadcast: (s: DesktopUpdateStatus) => void): Updater |
     try {
       if (!available) await check();
       if (!available) return;
-      await manager.downloadUpdateAsync(available, (percent) =>
-        broadcast({ state: 'downloading', percent: Math.round(percent) }),
+      // Velopack reports a delta update as a fixed 70% while Update.exe rebuilds the full package.
+      const measured = available.DeltasToTarget.length === 0;
+      broadcast({ state: 'downloading', percent: measured ? 0 : null });
+      await manager.downloadUpdateAsync(
+        available,
+        measured ? (percent) => broadcast({ state: 'downloading', percent: Math.round(percent) }) : undefined,
       );
       broadcast({ state: 'downloaded', info: toInfo(available) });
       // Velopack swaps the files once this process has exited, then relaunches.

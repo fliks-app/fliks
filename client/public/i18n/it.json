@@ -4158,6 +4158,8 @@
     "version_available": "Versione {{version}}",
     "no_notes": "Nessuna nota di versione disponibile.",
     "downloading": "Download… {{percent}} %",
+    "preparing": "Preparazione dell'aggiornamento…",
+    "restart_notice": "Fliks si riavvierà per completare l'aggiornamento.",
     "installing": "Installazione e riavvio…",
     "pwa_installing": "Installazione di un aggiornamento in corso, Fliks si riavvierà…",
     "install": "Installa",
