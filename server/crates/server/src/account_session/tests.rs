@@ -20,15 +20,28 @@ async fn user(pool: &PgPool, name: &str, sync: bool, kinds: Option<&[&str]>) -> 
     .unwrap()
 }
 
+/// An item whose media holds the files 1, 7 and 8 the tests name.
 async fn item(pool: &PgPool) -> i32 {
-    sqlx::query_scalar(
+    let item: i32 = sqlx::query_scalar(
         r#"WITH m AS (INSERT INTO media (title, type) VALUES ('placeholder', 'movie') RETURNING id),
                 e AS (INSERT INTO editions ("mediaId", family) SELECT id, 'video' FROM m RETURNING id, "mediaId")
            INSERT INTO items ("mediaId", "editionId") SELECT "mediaId", id FROM e RETURNING id"#,
     )
     .fetch_one(pool)
     .await
-    .unwrap()
+    .unwrap();
+    sqlx::query(
+        r#"WITH l AS (INSERT INTO libraries (name, "mediaTypes") VALUES ('L' || $1::text, '["movie"]') RETURNING id),
+                f AS (INSERT INTO library_folders ("libraryId", path) SELECT id, '/m' || $1::text FROM l RETURNING id)
+           INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+           SELECT n, (SELECT "mediaId" FROM items WHERE id = $1), (SELECT id FROM f), n || '.mkv', 1, 'HD'
+           FROM unnest(ARRAY[1, 7, 8]) n ON CONFLICT (id) DO NOTHING"#,
+    )
+    .bind(item)
+    .execute(pool)
+    .await
+    .unwrap();
+    item
 }
 
 fn beat(account: i32, sid: &str, target: &str, item: i32) -> BeatIn {
