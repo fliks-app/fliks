@@ -75,7 +75,7 @@ A music provider is a plugin that declares the kind `album`. `search work childr
 
 ## Migration
 
-42. `1789000000880_music.sql` is one transaction: the widened kind CHECKs, the MusicBrainz id CHECKs and the anchor index, the alias tables, the credit and follow roles, `album_details` and `media_details_json`, the edition facts, `track_details`, `track_file`, `item_credits`, `works` and `item_works`. It backfills nothing.
+42. `1789000000880_music.sql` is one transaction: the widened kind CHECKs, the MusicBrainz id CHECKs and the anchor index, the alias tables, the credit and follow roles, `album_details` and `media_details_json`, the edition facts, `track_details`, `track_file`, `item_credits`, `works` and `item_works`.
 
 43. `1789000000880_music.sql` adds `persons.disambiguation` and `persons."artistType"`, makes the person search vector read the sort name (backfilled for the persons that have one) and gives `works` a title search vector with its index.
 
