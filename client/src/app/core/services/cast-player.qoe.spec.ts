@@ -100,6 +100,7 @@ describe('CastPlayerService reporting without the player page', () => {
       recoveries: 0,
       playbackId: 'pb',
       qoeReporter,
+      sessionSync: { handleSuperseded: vi.fn(async () => {}) },
     };
     return { self, qoeReporter };
   }
@@ -130,6 +131,13 @@ describe('CastPlayerService reporting without the player page', () => {
       false,
       'pb',
     );
+  });
+
+  it('stops for a takeover instead of reloading the session another device took', async () => {
+    const { self } = saver({ sessionLost: true, superseded: true });
+    await proto.saveCastPosition.call(self);
+    expect(self.sessionSync.handleSuperseded).toHaveBeenCalledWith('s');
+    expect(self.reloadCastStream).not.toHaveBeenCalled();
   });
 
   it('sends the pending events with keepalive before the cast stops', () => {

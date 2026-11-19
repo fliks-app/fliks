@@ -755,6 +755,20 @@ describe('PlaybackSession', () => {
       expect(local.resume).toHaveBeenCalledWith(expect.objectContaining({ position: 42, paused: false }));
     });
 
+    it('resumes nothing here when the receiver goes once another device owns the session', () => {
+      const { session, cast, local, castPlayer, syncSvc } = setup();
+      cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });
+      castPlayer.hasMedia.mockReturnValue(true);
+      session.attachLocal(local);
+      TestBed.tick();
+      cast.isConnected.set(true);
+      TestBed.tick();
+      syncSvc.observableOwner.set('tv-1');
+      cast.isConnected.set(false);
+      TestBed.tick();
+      expect(local.resume).not.toHaveBeenCalled();
+    });
+
     it('resumes a video here when an armed music state never matched the receiver', () => {
       const { session, cast, local, castPlayer, musicCast } = setup();
       cast.item.mockReturnValue({ mediaId: 3, episodeId: 9 });

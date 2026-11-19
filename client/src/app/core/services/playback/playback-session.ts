@@ -605,7 +605,8 @@ export class PlaybackSession {
     this.releasing = false;
     const away = this.away;
     this.away = null;
-    if (!away || this.moving || releasing) return;
+    // The account session playing on another device is no playback of this one's to resume.
+    if (!away || this.moving || releasing || this.sync().observableOwner()) return;
     if (away.kind === 'music') void this.audio().resume(away.snapshot);
     else void this.local()?.resume(away.snapshot);
   }

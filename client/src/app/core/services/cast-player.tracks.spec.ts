@@ -14,6 +14,7 @@ import { buildCastAudioOptions, CastPlayerService } from './cast-player.service'
 import { PlaybackSession } from './playback/playback-session';
 import { PlayerSettingsService } from './player-settings.service';
 import { ServerConfigService } from './server-config.service';
+import { SessionSyncService, type SessionPlayer } from './session-sync.service';
 import { ToastService } from './toast.service';
 import { TrackManagerService, type SubtitleOption } from './track-manager.service';
 
@@ -56,6 +57,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
     receiverError$: new Subject<object>(),
     saveResumeState: vi.fn(),
     saveHeartbeat: vi.fn(),
+    stop: vi.fn(),
     clearResumeState: vi.fn(),
     setActiveSubtitle: vi.fn(async () => {}),
     setActiveAudioLanguage: vi.fn(async () => false),
@@ -104,6 +106,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
   const subtitlesApi = { getForMedia: vi.fn(async () => [] as unknown[]) };
 
   const mediaService = { getOne: vi.fn(async (): Promise<unknown> => ({ id: MEDIA_ID, title: 'Show', files: [] })) };
+  const players: SessionPlayer[] = [];
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -119,10 +122,11 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
       { provide: TrackManagerService, useValue: trackManager },
       { provide: MediaService, useValue: mediaService },
       { provide: ToastService, useValue: { error: vi.fn() } },
+      { provide: SessionSyncService, useValue: { registerPlayer: (p: SessionPlayer) => (players.push(p), () => {}), handleSuperseded: vi.fn() } },
     ],
   });
   const svc = TestBed.inject(CastPlayerService);
-  return { svc, cast, trackManager, streamingApi, subtitlesApi, playerSettings, mediaService };
+  return { svc, cast, trackManager, streamingApi, subtitlesApi, playerSettings, mediaService, players };
 }
 
 const base = {
@@ -202,6 +206,24 @@ describe('cast rejoin after a tab reload', () => {
     expect(svc.hasMedia()).toBe(true);
     expect(svc.mediaFileId()).toBe(7);
     expect(svc.liveSessionId()).toBe('sid-1');
+  });
+});
+
+describe('a takeover of the cast session', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('stops the receiver and forgets its media like a local player, the device staying connected', async () => {
+    const { svc, cast, players } = setup();
+    cast.receiverMedia.set({ mediaFileId: 7, mediaId: 3, sid: 'sid-1' });
+    TestBed.tick();
+    const [player] = players;
+    expect(player.sessionId()).toBe('sid-1');
+    expect(player.active()).toBe(true);
+    await player.yield(true);
+    expect(cast.stop).toHaveBeenCalled();
+    expect(svc.hasMedia()).toBe(false);
+    expect(player.sessionId()).toBeUndefined();
+    expect(cast.isConnected()).toBe(true);
   });
 });
 

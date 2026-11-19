@@ -201,7 +201,8 @@ export function lostCurrentSession(
   beatSessionId: string | null | undefined,
   currentSessionId: string | null | undefined,
 ): boolean {
-  return !!response?.sessionLost && (beatSessionId ?? null) === (currentSessionId ?? null);
+  // A superseded session was taken by another device: recovering it would take it back.
+  return !!response?.sessionLost && !response.superseded && (beatSessionId ?? null) === (currentSessionId ?? null);
 }
 
 export interface WatchHistoryItem {

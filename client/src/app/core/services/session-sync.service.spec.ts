@@ -283,6 +283,17 @@ describe('SessionSyncService takeover', () => {
     expect(yielded).toHaveBeenCalledOnce();
   });
 
+  it('stops every player of the superseded session: the video route and the Cast output it drives', async () => {
+    const { service } = setup();
+    const route = player('cast-sid');
+    const receiver = player('cast-sid');
+    service.registerPlayer(route.p);
+    service.registerPlayer(receiver.p);
+    await service.handleSuperseded('cast-sid');
+    expect(route.yielded).toHaveBeenCalledOnce();
+    expect(receiver.yielded).toHaveBeenCalledOnce();
+  });
+
   it('ignores a session no local player holds', async () => {
     const { service, confirm } = setup();
     const { p, yielded } = player('sid-1');

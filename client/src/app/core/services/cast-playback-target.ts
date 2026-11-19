@@ -229,8 +229,7 @@ export class CastPlaybackTarget implements PlaybackOutput {
   stopPlayback(): void {
     // The receiver must keep a stream for the party to drive: stopping leaves the cast instead.
     if (this.party.drives()) return this.disconnect();
-    this.cast.stop();
-    this.cp.clear();
+    this.cp.stop();
   }
 
   /** Leave the device. Ends the Cast session, which stops the receiver with it. */
