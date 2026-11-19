@@ -315,7 +315,8 @@
       "continue": "Reprise automatique entre appareils",
       "spoilers": "Divulgâchage",
       "devices": "Appareils",
-      "email_devices": "Appareils e-mail"
+      "email_devices": "Appareils e-mail",
+      "whats_new": "Nouveautés"
     },
     "recommendations": {
       "reset_title": "Réinitialiser les recommandations masquées",
@@ -2868,7 +2869,8 @@
       "no_password_sso": "Pas de mot de passe, se connecte par SSO.",
       "managed_by": "Le rôle, le statut d'administrateur et les bibliothèques sont gérés par {{name}}.",
       "sso_identities": "Fournisseurs de connexion liés",
-      "sso_unlink": "Délier"
+      "sso_unlink": "Délier",
+      "field_whats_new": "Nouveautés après une mise à jour"
     },
     "roles": {
       "title": "Rôles",
@@ -4193,7 +4195,9 @@
     "title": "Nouveautés de Fliks {{version}}",
     "previous": "Précédent",
     "next": "Suivant",
-    "done": "C'est parti"
+    "done": "C'est parti",
+    "enable": "Afficher les nouveautés après une mise à jour",
+    "enable_hint": "Une fois par mise à jour, dans le navigateur et l'application de bureau."
   },
   "plugin_view": {
     "unavailable_title": "Cette page n'est pas disponible",

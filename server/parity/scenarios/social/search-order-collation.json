@@ -61,7 +61,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "Zed"
+          "username": "Zed",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -119,7 +121,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "alpha"
+          "username": "alpha",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -177,7 +181,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "Beta"
+          "username": "Beta",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -235,7 +241,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "a-b"
+          "username": "a-b",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -293,7 +301,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "ab"
+          "username": "ab",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -351,7 +361,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "a_c"
+          "username": "a_c",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -409,7 +421,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "ac"
+          "username": "ac",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -467,7 +481,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "Charlie"
+          "username": "Charlie",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -525,7 +541,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u00"
+          "username": "u00",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -583,7 +601,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u01"
+          "username": "u01",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -641,7 +661,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u02"
+          "username": "u02",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -699,7 +721,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u03"
+          "username": "u03",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -757,7 +781,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u04"
+          "username": "u04",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -815,7 +841,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u05"
+          "username": "u05",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -873,7 +901,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u06"
+          "username": "u06",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -931,7 +961,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u07"
+          "username": "u07",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -989,7 +1021,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u08"
+          "username": "u08",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1047,7 +1081,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u09"
+          "username": "u09",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1105,7 +1141,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u10"
+          "username": "u10",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1163,7 +1201,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u11"
+          "username": "u11",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1221,7 +1261,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u12"
+          "username": "u12",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1279,7 +1321,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u13"
+          "username": "u13",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1337,7 +1381,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u14"
+          "username": "u14",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1395,7 +1441,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u15"
+          "username": "u15",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1453,7 +1501,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u16"
+          "username": "u16",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1511,7 +1561,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u17"
+          "username": "u17",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1569,7 +1621,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u18"
+          "username": "u18",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1627,7 +1681,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u19"
+          "username": "u19",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1685,7 +1741,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u20"
+          "username": "u20",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1743,7 +1801,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u21"
+          "username": "u21",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1801,7 +1861,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u22"
+          "username": "u22",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1859,7 +1921,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u23"
+          "username": "u23",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1917,7 +1981,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u24"
+          "username": "u24",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -1975,7 +2041,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u25"
+          "username": "u25",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -2033,7 +2101,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u26"
+          "username": "u26",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -2091,7 +2161,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u27"
+          "username": "u27",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -2149,7 +2221,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u28"
+          "username": "u28",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },
@@ -2207,7 +2281,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "u29"
+          "username": "u29",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },

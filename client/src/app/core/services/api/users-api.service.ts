@@ -41,6 +41,8 @@ export interface UserRow {
   accessManagedBy?: number | null;
   /** False for an account that only signs in with SSO. */
   hasPassword?: boolean;
+  /** Absent from a server older than `SERVER_SINCE.whatsNew`. */
+  whatsNewEnabled?: boolean;
 }
 
 export interface CreateUserBody {
@@ -100,6 +102,10 @@ export interface UpdateUserBody {
   sessionSync?: boolean;
   /** Self-editable: kinds the session covers; null = every kind. */
   sessionKinds?: MediaType[] | null;
+  /** Self-editable: show the what's-new popup after an update. */
+  whatsNewEnabled?: boolean;
+  /** Self-editable: newest client version whose notes the account has seen. */
+  whatsNewSeen?: string;
 }
 
 /** Aggregated stats payload for the admin user-detail Statistics tab. */

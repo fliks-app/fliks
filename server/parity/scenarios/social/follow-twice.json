@@ -79,7 +79,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "manager"
+          "username": "manager",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 200
       },

@@ -315,7 +315,8 @@
       "continue": "Geräteübergreifend fortsetzen",
       "spoilers": "Spoiler",
       "devices": "Geräte",
-      "email_devices": "E-Mail-Geräte"
+      "email_devices": "E-Mail-Geräte",
+      "whats_new": "Neuigkeiten"
     },
     "recommendations": {
       "reset_title": "Ausgeblendete Empfehlungen zurücksetzen",
@@ -2850,7 +2851,8 @@
       "no_password_sso": "Kein Passwort, meldet sich per SSO an.",
       "managed_by": "Rolle, Administratorstatus und Bibliotheken werden von {{name}} verwaltet.",
       "sso_identities": "Verknüpfte Anmeldeanbieter",
-      "sso_unlink": "Trennen"
+      "sso_unlink": "Trennen",
+      "field_whats_new": "Neuigkeiten nach einem Update"
     },
     "roles": {
       "title": "Rollen",
@@ -4170,7 +4172,9 @@
     "title": "Neu in Fliks {{version}}",
     "previous": "Zurück",
     "next": "Weiter",
-    "done": "Los geht's"
+    "done": "Los geht's",
+    "enable": "Neuigkeiten nach einem Update anzeigen",
+    "enable_hint": "Einmal pro Update, im Browser und in der Desktop-App."
   },
   "plugin_view": {
     "unavailable_title": "Diese Seite ist nicht verfügbar",

@@ -315,7 +315,8 @@
       "continue": "Continue across devices",
       "spoilers": "Spoilers",
       "devices": "Devices",
-      "email_devices": "E-mail devices"
+      "email_devices": "E-mail devices",
+      "whats_new": "What's new"
     },
     "recommendations": {
       "reset_title": "Reset dismissed recommendations",
@@ -2868,7 +2869,8 @@
       "no_password_sso": "No password, signs in with SSO.",
       "managed_by": "Role, administrator status and libraries are managed by {{name}}.",
       "sso_identities": "Linked sign-in providers",
-      "sso_unlink": "Unlink"
+      "sso_unlink": "Unlink",
+      "field_whats_new": "What's new after an update"
     },
     "roles": {
       "title": "Roles",
@@ -4193,7 +4195,9 @@
     "title": "What's new in Fliks {{version}}",
     "previous": "Previous",
     "next": "Next",
-    "done": "Got it"
+    "done": "Got it",
+    "enable": "Show what's new after an update",
+    "enable_hint": "Once per update, in the browser and the desktop app."
   },
   "plugin_view": {
     "unavailable_title": "This page isn't available",

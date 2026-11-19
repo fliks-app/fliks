@@ -315,7 +315,8 @@
       "continue": "Continua tra i dispositivi",
       "spoilers": "Spoiler",
       "devices": "Dispositivi",
-      "email_devices": "Dispositivi e-mail"
+      "email_devices": "Dispositivi e-mail",
+      "whats_new": "Novità"
     },
     "recommendations": {
       "reset_title": "Reimposta i consigli nascosti",
@@ -2850,7 +2851,8 @@
       "no_password_sso": "Nessuna password, accede con SSO.",
       "managed_by": "Ruolo, stato di amministratore e librerie sono gestiti da {{name}}.",
       "sso_identities": "Provider di accesso collegati",
-      "sso_unlink": "Scollega"
+      "sso_unlink": "Scollega",
+      "field_whats_new": "Novità dopo un aggiornamento"
     },
     "roles": {
       "title": "Ruoli",
@@ -4170,7 +4172,9 @@
     "title": "Novità di Fliks {{version}}",
     "previous": "Precedente",
     "next": "Avanti",
-    "done": "Iniziamo"
+    "done": "Iniziamo",
+    "enable": "Mostra le novità dopo un aggiornamento",
+    "enable_hint": "Una volta per aggiornamento, nel browser e nell'app desktop."
   },
   "plugin_view": {
     "unavailable_title": "Questa pagina non è disponibile",

@@ -24,6 +24,7 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import { LucideIconComponent } from '../../../../shared/components/lucide-icon';
+import { SERVER_SINCE, ServerVersionService } from '../../../../core/services/server-version.service';
 
 type QuotaKey = 'movieQuotaLimit' | 'seriesQuotaLimit' | 'bookQuotaLimit' | 'quotaPeriodDays';
 const QUOTA_KEYS: QuotaKey[] = ['movieQuotaLimit', 'seriesQuotaLimit', 'bookQuotaLimit', 'quotaPeriodDays'];
@@ -44,6 +45,8 @@ export class UserGeneralComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly confirmation = inject(ConfirmationService);
   readonly canAssignRole = this.auth.hasPermission('roles.manage');
+  private readonly versions = inject(ServerVersionService);
+  readonly whatsNew = computed(() => this.versions.supports(SERVER_SINCE.whatsNew));
   /** Changing one's own password proves the current one; an admin resetting another user's does not. */
   readonly isSelf = computed(() => this.state.user()?.id === this.auth.user()?.id);
   /** Not on one's own page, and only an admin signs out an admin. */
@@ -68,6 +71,7 @@ export class UserGeneralComponent implements OnInit {
   readonly formIsAdmin = signal(false);
   readonly formEnabled = signal(true);
   readonly formRequirePasswordChange = signal(false);
+  readonly formWhatsNew = signal(true);
   /** A Set for O(1) checkbox toggles; converted to a sorted array on save. */
   readonly formLibraryIds = signal<ReadonlySet<number>>(new Set());
   readonly libraries = signal<Library[]>([]);
@@ -92,6 +96,7 @@ export class UserGeneralComponent implements OnInit {
       this.formIsAdmin.set(user.isAdmin ?? false);
       this.formEnabled.set(user.enabled);
       this.formRequirePasswordChange.set(user.requirePasswordChange ?? false);
+      this.formWhatsNew.set(user.whatsNewEnabled ?? true);
       this.formLibraryIds.set(new Set(user.libraryIds ?? []));
       this.formQuotas.set({
         movieQuotaLimit: user.movieQuotaLimit ?? 0,
@@ -181,6 +186,7 @@ export class UserGeneralComponent implements OnInit {
       isAdmin: managed ? undefined : this.formIsAdmin(),
       enabled: this.formEnabled(),
       requirePasswordChange: this.formRequirePasswordChange(),
+      whatsNewEnabled: this.whatsNew() ? this.formWhatsNew() : undefined,
       libraryIds: managed ? undefined : [...this.formLibraryIds()].sort((a, b) => a - b),
       ...this.changedQuotas(user),
     };

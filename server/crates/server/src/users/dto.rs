@@ -106,6 +106,10 @@ pub struct UpdateUser {
     pub spoiler_hide_titles: Option<bool>,
     #[serde(default, deserialize_with = "non_null")]
     pub session_sync: Option<bool>,
+    #[serde(default, deserialize_with = "non_null")]
+    pub whats_new_enabled: Option<bool>,
+    #[serde(default, deserialize_with = "non_null")]
+    pub whats_new_seen: Option<String>,
     /// `null` is every kind.
     #[serde(default, deserialize_with = "nullable")]
     pub session_kinds: Option<Option<Vec<MediaKind>>>,

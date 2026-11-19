@@ -125,7 +125,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "readonly"
+          "username": "readonly",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 200
       },

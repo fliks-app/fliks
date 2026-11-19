@@ -430,6 +430,13 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'whats-new',
+        loadComponent: () =>
+          import('./features/account/whats-new').then(
+            (m) => m.AccountWhatsNewComponent,
+          ),
+      },
+      {
         path: 'continue',
         loadComponent: () =>
           import('./features/account/continue').then(

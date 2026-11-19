@@ -59,7 +59,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "newuser"
+          "username": "newuser",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 201
       },

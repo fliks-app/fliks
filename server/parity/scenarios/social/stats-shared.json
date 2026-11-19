@@ -59,7 +59,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "other"
+          "username": "other",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 200
       },
@@ -115,7 +117,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "other"
+          "username": "other",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 200
       },
@@ -198,7 +202,9 @@
           "spoilerHideOverviews": true,
           "spoilerHideStills": true,
           "spoilerHideTitles": true,
-          "username": "other"
+          "username": "other",
+          "whatsNewEnabled": true,
+          "whatsNewSeen": null
         },
         "status": 200
       },
