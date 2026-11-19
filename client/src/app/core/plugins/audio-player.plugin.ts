@@ -1,6 +1,6 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { InjectionToken } from '@angular/core';
-import type { MusicTrackRequest } from '../services/audio-player/music-queue';
+import type { MusicTrackRequest, Repeat } from '../services/audio-player/music-queue';
 import type { ReplayGainMode } from '../services/audio-player/replay-gain';
 
 export interface NativeAudioState {
@@ -26,10 +26,12 @@ export interface NativeAudioTrack {
   sessionId?: string;
 }
 
-/** A track queue the native side built itself (Android Auto, a headset). */
+/** The queue the native player holds, handed over when it built it (a car) or the web layer attaches. */
 export interface NativeAudioQueue {
   tracks: MusicTrackRequest[];
   index: number;
+  shuffle: boolean;
+  repeat: Repeat;
 }
 
 /** A transport control used outside the app while a party drives the audio. */
@@ -63,9 +65,9 @@ export interface AudioPlayerPlugin {
   attach(): Promise<void>;
   detach(): Promise<void>;
   /** Tracks are named by item; the native side resolves each stream when it loads. */
-  setQueue(o: { tracks: NativeAudioTrackRequest[]; index: number; startAt?: number; autoplay: boolean }): Promise<void>;
-  /** Replaces the order around the current entry, which stays at `index`. */
-  updateQueue(o: { tracks: NativeAudioTrackRequest[]; index: number }): Promise<void>;
+  setQueue(o: { tracks: NativeAudioTrackRequest[]; index: number; shuffle: boolean; startAt?: number; autoplay: boolean }): Promise<void>;
+  /** Replaces the order around the current entry, which stays at `index`; `shuffle` flags that order. */
+  updateQueue(o: { tracks: NativeAudioTrackRequest[]; index: number; shuffle: boolean }): Promise<void>;
   loadParts(o: {
     parts: NativeAudioPart[];
     index: number;
@@ -89,7 +91,7 @@ export interface AudioPlayerPlugin {
   /** Levels 0 to 1 of the queue's player and of each stem; the native side applies ReplayGain on top. */
   setStemMix(o: { main: number; instrumental: number; vocals: number }): Promise<void>;
   clearStems(): Promise<void>;
-  setRepeat(o: { mode: 'off' | 'all' | 'one' }): Promise<void>;
+  setRepeat(o: { mode: Repeat }): Promise<void>;
   /** While true, controls outside the app come back as `command` events and do nothing natively. */
   setRouted(o: { routed: boolean }): Promise<void>;
   stop(): Promise<void>;

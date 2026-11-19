@@ -70,6 +70,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     private var recoveredAt: Int?
     private var generation = 0
     private var repeatMode = "off"
+    /// The web layer's shuffle flag for the order it pushed, handed back with the queue.
+    private var shuffled = false
     private var rate: Float = 1
     private var gainMode = "track"
     private var preamp = 0
@@ -155,6 +157,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         isMusic = true
         boundKey = key
         entries = tracks
+        shuffled = false
         begin(at: index, startAt: 0, autoplay: true)
         emitQueue()
     }
@@ -166,10 +169,12 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
         let index = call.getInt("index") ?? 0
         let startAt = call.getDouble("startAt") ?? 0
         let autoplay = call.getBool("autoplay") ?? true
+        let shuffle = call.getBool("shuffle") ?? false
         DispatchQueue.main.async {
             self.isMusic = true
             self.boundKey = self.session()?.key
             self.entries = tracks
+            self.shuffled = shuffle
             self.begin(at: index, startAt: startAt, autoplay: autoplay)
             call.resolve()
         }
@@ -178,7 +183,9 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func updateQueue(_ call: CAPPluginCall) {
         let tracks = (call.getArray("tracks") as? [[String: Any]] ?? []).map(Self.entry)
         let index = call.getInt("index") ?? 0
+        let shuffle = call.getBool("shuffle") ?? false
         DispatchQueue.main.async {
+            self.shuffled = shuffle
             let current = self.entries.indices.contains(self.index) ? self.entries[self.index].itemId : nil
             guard current != nil, tracks.indices.contains(index), tracks[index].itemId == current else {
                 self.entries = tracks
@@ -748,6 +755,6 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
                 "albumGain": e.albumGain as Any, "albumPeak": e.albumPeak as Any,
             ]
         }
-        notifyListeners("queue", data: ["tracks": tracks, "index": index])
+        notifyListeners("queue", data: ["tracks": tracks, "index": index, "shuffle": shuffled, "repeat": repeatMode])
     }
 }

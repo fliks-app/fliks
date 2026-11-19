@@ -69,6 +69,8 @@ final class MusicHost {
     private static final long WATCH_MS = 2_000;
     /** A paused queue stays a remote target this long, so another device can resume it. */
     private static final long FACE_LINGER_MS = 5 * 60_000;
+    /** Most ids a beat's queue carries (`heartbeat.md` rule 25). */
+    private static final int WIRE_QUEUE_MAX = 500;
     private static final String PREFS = "fliks_audio";
 
     interface Emitter {
@@ -152,6 +154,10 @@ final class MusicHost {
     @Nullable private volatile Book book;
     private boolean jsEditing;
     private boolean externalQueue;
+    /** The web layer's shuffle flag for the order it pushed, which `exo` plays as given. */
+    private boolean shuffled;
+    /** The session and queue the last native beat carried: the queue goes out again only when either changes. */
+    @Nullable private volatile String queueSent;
     private int lastIndex = -1;
     @Nullable private Long previousItem;
     /** The session of the track left at the last transition, ended at the next one. */
@@ -273,9 +279,10 @@ final class MusicHost {
         }
     }
 
-    void setQueue(List<MediaItem> items, int index, long startMs, boolean autoplay) {
+    void setQueue(List<MediaItem> items, int index, long startMs, boolean autoplay, boolean shuffle) {
         lastIndex = -1;
         book = null;
+        shuffled = shuffle;
         sessionKey = api.activeKey();
         edit(() -> exo.setMediaItems(items, index, startMs));
         exo.prepare();
@@ -286,13 +293,14 @@ final class MusicHost {
     }
 
     /** Replaces the order around the current entry, which the web layer keeps at `index`. */
-    void updateQueue(List<MediaItem> items, int index) {
+    void updateQueue(List<MediaItem> items, int index, boolean shuffle) {
         int cur = exo.getCurrentMediaItemIndex();
         if (cur < 0 || cur >= exo.getMediaItemCount() || index >= items.size()
                 || !exo.getCurrentMediaItem().mediaId.equals(items.get(index).mediaId)) {
-            setQueue(items, index, C.TIME_UNSET, exo.getPlayWhenReady());
+            setQueue(items, index, C.TIME_UNSET, exo.getPlayWhenReady(), shuffle);
             return;
         }
+        shuffled = shuffle;
         edit(() -> {
             exo.removeMediaItems(cur + 1, exo.getMediaItemCount());
             exo.addMediaItems(items.subList(index + 1, items.size()));
@@ -525,7 +533,25 @@ final class MusicHost {
         JSObject o = new JSObject();
         o.put("tracks", tracks);
         o.put("index", exo.getCurrentMediaItemIndex());
+        o.put("shuffle", shuffled);
+        o.put("repeat", repeat());
         emit("queue", o);
+    }
+
+    private String repeat() {
+        int mode = exo.getRepeatMode();
+        return mode == Player.REPEAT_MODE_ONE ? "one" : mode == Player.REPEAT_MODE_ALL ? "all" : "off";
+    }
+
+    /** The queue as the web layer sends it: at most 500 ids around the current track, index rebased. */
+    private JSONObject wireQueue() throws JSONException {
+        int n = exo.getMediaItemCount();
+        int index = exo.getCurrentMediaItemIndex();
+        int start = Math.max(0, Math.min(index - WIRE_QUEUE_MAX / 2, n - WIRE_QUEUE_MAX));
+        JSONArray ids = new JSONArray();
+        for (int i = start; i < Math.min(n, start + WIRE_QUEUE_MAX); i++) ids.put(itemOf(exo.getMediaItemAt(i)));
+        return new JSONObject().put("itemIds", ids).put("index", index - start)
+                .put("shuffle", shuffled).put("repeat", repeat());
     }
 
     private final Runnable tick = new Runnable() {
@@ -654,7 +680,14 @@ final class MusicHost {
                 body.put("positionSeconds", position)
                         .put("durationSeconds", d == C.TIME_UNSET ? r.duration : d / 1000.0)
                         .put("mediaFileId", r.mediaFileId).put("itemId", item).put("sessionId", r.sessionId);
+                JSONObject queue = wireQueue();
+                String sent = r.sessionId + ":" + queue;
+                if (!sent.equals(queueSent)) {
+                    body.put("queue", queue);
+                    queueSent = sent;
+                }
             }
+            boolean withQueue = body.has("queue");
             String cmd = ack.id();
             if (cmd != null) body.put("lastCmdId", cmd);
             String payload = body.toString();
@@ -671,6 +704,7 @@ final class MusicHost {
                         main.post(watch);
                     }
                 } catch (IOException ignored) {
+                    if (withQueue) queueSent = null;
                     // A paused player has no tick: an owed ack retries by itself within its grace.
                     if (cmd != null && ack.owed(System.currentTimeMillis())) {
                         main.postDelayed(() -> beat(exo.isPlaying()), ACK_RETRY_MS);
@@ -741,7 +775,11 @@ final class MusicHost {
         @Override
         public void onTimelineChanged(Timeline timeline, int reason) {
             if (reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED && !jsEditing && externalQueue) {
+                // A controller's queue starts afresh like the web layer's (`setQueue`), in its own order.
                 externalQueue = false;
+                lastIndex = -1;
+                book = null;
+                shuffled = false;
                 emitQueue();
             }
             if (timeline.isEmpty()) PlaybackService.musicStopped(context);

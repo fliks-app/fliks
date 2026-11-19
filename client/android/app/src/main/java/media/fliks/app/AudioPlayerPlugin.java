@@ -95,14 +95,16 @@ public class AudioPlayerPlugin extends Plugin {
         int index = call.getInt("index", 0);
         long startMs = (long) (call.getDouble("startAt", 0.0) * 1000);
         boolean autoplay = call.getBoolean("autoplay", true);
-        run(call, () -> host.setQueue(items, index, startMs, autoplay));
+        boolean shuffle = call.getBoolean("shuffle", false);
+        run(call, () -> host.setQueue(items, index, startMs, autoplay, shuffle));
     }
 
     @PluginMethod
     public void updateQueue(PluginCall call) {
         List<MediaItem> items = tracks(call.getArray("tracks"));
         int index = call.getInt("index", 0);
-        run(call, () -> host.updateQueue(items, index));
+        boolean shuffle = call.getBoolean("shuffle", false);
+        run(call, () -> host.updateQueue(items, index, shuffle));
     }
 
     /** Audiobook parts: plain URLs played back to back. */
@@ -133,7 +135,7 @@ public class AudioPlayerPlugin extends Plugin {
         float rate = call.getFloat("rate", 1f);
         MusicHost.Book book = book(call.getObject("book"), parts.length());
         run(call, () -> {
-            host.setQueue(items, index, startMs, autoplay);
+            host.setQueue(items, index, startMs, autoplay, false);
             host.setBook(book);
             host.exo().setPlaybackParameters(new PlaybackParameters(rate, 1f));
         });
