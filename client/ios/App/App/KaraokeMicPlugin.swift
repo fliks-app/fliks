@@ -17,6 +17,23 @@ public class KaraokeMicPlugin: CAPPlugin, CAPBridgedPlugin {
     private var sink: AVAudioSinkNode?
     private var samples = [Int16]()
 
+    public override func load() {
+        let center = NotificationCenter.default
+        center.addObserver(self, selector: #selector(resume), name: .AVAudioEngineConfigurationChange, object: engine)
+        center.addObserver(self, selector: #selector(resume), name: AVAudioSession.interruptionNotification, object: nil)
+    }
+
+    /// The engine stops itself on a route change or an interruption: restart it while a capture is open.
+    @objc private func resume(_ note: Notification) {
+        if let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+           AVAudioSession.InterruptionType(rawValue: raw) == .began { return }
+        DispatchQueue.main.async {
+            guard self.sink != nil, !self.engine.isRunning else { return }
+            try? AVAudioSession.sharedInstance().setActive(true)
+            try? self.engine.start()
+        }
+    }
+
     @objc func start(_ call: CAPPluginCall) {
         AVAudioSession.sharedInstance().requestRecordPermission { granted in
             DispatchQueue.main.async { granted ? self.open(call) : call.reject("denied") }
@@ -88,10 +105,10 @@ public class KaraokeMicPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func close() {
-        guard engine.isRunning else { return }
+        guard let sink else { return }
         engine.stop()
-        if let sink { engine.detach(sink) }
-        sink = nil
+        engine.detach(sink)
+        self.sink = nil
         try? engine.inputNode.setVoiceProcessingEnabled(false)
         queue.async { self.samples.removeAll() }
         // Back to the plain playback session: a mixable one loses the lock screen controls.

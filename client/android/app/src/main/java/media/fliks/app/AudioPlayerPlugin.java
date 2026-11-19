@@ -35,7 +35,6 @@ public class AudioPlayerPlugin extends Plugin {
     public void load() {
         host = MusicHost.get(getContext());
         host.setEmitter((event, data) -> notifyListeners(event, data));
-        host.setWebLoaded(true);
     }
 
     @Override
@@ -77,6 +76,7 @@ public class AudioPlayerPlugin extends Plugin {
     @PluginMethod
     public void attach(PluginCall call) {
         host.setObserved(true);
+        host.setWebLoaded(true);
         main.post(() -> {
             call.resolve();
             host.snapshot();
@@ -86,6 +86,7 @@ public class AudioPlayerPlugin extends Plugin {
     @PluginMethod
     public void detach(PluginCall call) {
         host.setObserved(false);
+        host.setWebLoaded(false);
         call.resolve();
     }
 

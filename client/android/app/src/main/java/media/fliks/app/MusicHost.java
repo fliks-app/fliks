@@ -72,7 +72,7 @@ final class MusicHost {
     private static final long TICK_MS = 500;
     private static final long BEAT_MS = 15_000;
     private static final long ACK_RETRY_MS = 2_000;
-    private static final long WATCH_MS = 2_000;
+    private static final long WATCH_MS = 5_000;
     /** A paused queue stays a remote target this long, so another device can resume it. */
     private static final long FACE_LINGER_MS = 5 * 60_000;
     /** Most ids a beat's queue carries (`heartbeat.md` rule 25). */
@@ -235,7 +235,7 @@ final class MusicHost {
         return observed && webForeground;
     }
 
-    /** A WebView exists: it refreshes tokens when native asks, so native never rotates them. */
+    /** The web layer listens for refresh requests: native asks it first and rotates itself if it stays silent. */
     void setWebLoaded(boolean loaded) {
         api.setWebOwnsRefresh(loaded, loaded ? () -> main.post(() -> emit("refresh", new JSObject())) : null);
     }
@@ -868,6 +868,7 @@ final class MusicHost {
                 externalQueue = false;
                 lastIndex = -1;
                 book = null;
+                exo.setPlaybackSpeed(1f);
                 shuffled = false;
                 emitQueue();
             }
@@ -1046,7 +1047,7 @@ final class MusicHost {
         @Override
         public ListenableFuture<List<MediaItem>> onAddMediaItems(
                 MediaSession s, MediaSession.ControllerInfo c, List<MediaItem> items) {
-            if (player.routing() || !bindSession()) return refused();
+            if (player.routing() || book != null || !bindSession()) return refused();
             return Futures.transform(expandAll(items), q -> q.items, io);
         }
 

@@ -196,7 +196,7 @@ enum KaraokeMode: String, CaseIterable {
         let target = player.livePosition()
         if !player.isPlaying {
             if mixer.playing { mixer.pause() }
-        } else if !mixer.playing || abs(mixer.position - target) > 0.15 {
+        } else if !mixer.playing || (abs(mixer.position - target) > 0.15 && player.currentRate == 1) {
             mixer.start(at: target)
         }
     }

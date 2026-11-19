@@ -155,6 +155,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     func playFromCar(_ tracks: [Entry], index: Int) {
         guard let key = session()?.key else { return }
         isMusic = true
+        rate = 1
         boundKey = key
         entries = tracks
         shuffled = false
@@ -276,18 +277,22 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func setGain(_ call: CAPPluginCall) {
-        gainMode = call.getString("mode") ?? "track"
-        preamp = call.getInt("preamp") ?? 0
-        duck = call.getDouble("duck") ?? 1
+        let mode = call.getString("mode") ?? "track"
+        let preamp = call.getInt("preamp") ?? 0
+        let duck = call.getDouble("duck") ?? 1
         DispatchQueue.main.async {
+            self.gainMode = mode
+            self.preamp = preamp
+            self.duck = duck
             self.applyGain()
             call.resolve()
         }
     }
 
     @objc func setRepeat(_ call: CAPPluginCall) {
-        repeatMode = call.getString("mode") ?? "off"
+        let mode = call.getString("mode") ?? "off"
         DispatchQueue.main.async {
+            self.repeatMode = mode
             for item in self.player.items().dropFirst() { self.player.remove(item) }
             self.prefetchNext()
             call.resolve()
@@ -354,6 +359,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             if startAt > 0 {
                 await self.player.seek(to: CMTime(seconds: startAt, preferredTimescale: 1000), toleranceBefore: .zero, toleranceAfter: .zero)
                 self.nowPlaying.refresh()
+                guard mine == self.generation else { return }
             }
             if autoplay { self.player.playImmediately(atRate: self.rate) }
         }

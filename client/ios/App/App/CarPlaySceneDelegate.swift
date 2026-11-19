@@ -38,15 +38,35 @@ private enum CarText {
 @MainActor
 final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
     private var controller: CPInterfaceController?
-    private var images: [String: UIImage] = [:]
+    private let images = NSCache<NSString, UIImage>()
+    private var signInWatch: NSObjectProtocol?
 
     func templateApplicationScene(_ scene: CPTemplateApplicationScene, didConnect interfaceController: CPInterfaceController) {
         controller = interfaceController
         interfaceController.setRootTemplate(root(), animated: false, completion: nil)
+        watchSignIn()
     }
 
     func templateApplicationScene(_ scene: CPTemplateApplicationScene, didDisconnectInterfaceController interfaceController: CPInterfaceController) {
         controller = nil
+        stopWatching()
+    }
+
+    private func stopWatching() {
+        if let watch = signInWatch { NotificationCenter.default.removeObserver(watch) }
+        signInWatch = nil
+    }
+
+    /// A phone sign-in after the car connected replaces the signed-out root once the session is stored.
+    private func watchSignIn() {
+        guard catalog == nil, signInWatch == nil else { return }
+        signInWatch = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.catalog != nil else { return }
+                self.stopWatching()
+                self.controller?.setRootTemplate(self.root(), animated: false, completion: nil)
+            }
+        }
     }
 
     private var catalog: CarPlayCatalog? {
@@ -113,7 +133,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func open(_ row: CarRow, _ listing: CarListing) {
         if let folder = row.folder {
             controller?.pushTemplate(list(folder, title: row.title), animated: true, completion: nil)
-        } else if let track = row.track, let plugin = AudioPlayerPlugin.shared {
+        } else if let track = row.track, let plugin = CarPlayHost.plugin() {
             plugin.playFromCar(listing.queue, index: track)
             if !(controller?.topTemplate is CPNowPlayingTemplate) {
                 controller?.pushTemplate(CPNowPlayingTemplate.shared, animated: true, completion: nil)
@@ -125,11 +145,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func loadImage(_ path: String, into item: CPListItem) {
         guard let server = AudioPlayerPlugin.shared?.session()?.server,
-              let url = URL(string: path.hasPrefix("/") ? server + path : path) else { return }
-        if let cached = images[path] { return item.setImage(cached) }
+              let url = URL(string: path.hasPrefix("/") ? server + path + (path.contains("?") ? "&" : "?") + "size=thumb" : path) else { return }
+        let key = url.absoluteString as NSString
+        if let cached = images.object(forKey: key) { return item.setImage(cached) }
         Task {
-            guard let (data, _) = try? await URLSession.shared.data(from: url), let image = UIImage(data: data) else { return }
-            self.images[path] = image
+            guard let (data, _) = try? await URLSession.shared.data(from: url), let full = UIImage(data: data) else { return }
+            let image = await full.byPreparingThumbnail(ofSize: CPListItem.maximumImageSize) ?? full
+            self.images.setObject(image, forKey: key)
             item.setImage(image)
         }
     }

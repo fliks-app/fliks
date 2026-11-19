@@ -253,6 +253,7 @@ enum MusicTransport: Equatable {
     }
 
     func stop() {
+        player.defaultRate = 1
         guard current != nil || !resolved.isEmpty else { return }
         beat(state: "paused")
         generation += 1
@@ -327,13 +328,16 @@ enum MusicTransport: Equatable {
         startPosition = startAt
         duration = track.durationSeconds ?? 0
         publishNowPlaying()
+        let uid = track.uid
         Task {
-            guard let (item, index) = await makeItem(from: queue.index), mine == generation else {
+            guard let (item, _) = await makeItem(from: queue.index), mine == generation else {
                 if mine == generation { loading = false; fail(tr("music.load_failed")) }
                 return
             }
+            // Queue edits during the await move indices: find the track again by uid.
+            guard let index = queue.tracks.firstIndex(where: { $0.uid == uid }) else { loading = false; return }
             queue.play(at: index)
-            uidOfItem[ObjectIdentifier(item)] = queue.tracks[index].uid
+            uidOfItem[ObjectIdentifier(item)] = uid
             player.insert(item, after: nil)
             loading = false
             if startAt > 0 {
@@ -359,10 +363,11 @@ enum MusicTransport: Equatable {
               let index = queue.tracks.firstIndex(of: next) else { return }
         let mine = generation
         let uid = current?.uid
+        let nextUid = next.uid
         Task {
             guard case .success(let item) = await makeItem(index), mine == generation, uid == current?.uid,
-                  player.items().count < 2 else { return }
-            uidOfItem[ObjectIdentifier(item)] = queue.tracks[index].uid
+                  queue.tracks.contains(where: { $0.uid == nextUid }), player.items().count < 2 else { return }
+            uidOfItem[ObjectIdentifier(item)] = nextUid
             player.insert(item, after: player.items().last)
         }
     }
