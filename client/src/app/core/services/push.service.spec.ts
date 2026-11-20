@@ -11,6 +11,7 @@ import { DeviceService } from './device.service';
 import { PushService } from './push.service';
 import { ServerConfigService } from './server-config.service';
 import { ServerVersionService } from './server-version.service';
+import { SessionStoreService } from './session-store.service';
 import { SseService } from './sse.service';
 import { ToastService } from './toast.service';
 
@@ -22,13 +23,16 @@ describe('PushService', () => {
   const switchToServer = vi.fn();
   const navigateByUrl = vi.fn();
   const toastError = vi.fn();
+  const loadPersistedSession = vi.fn();
+  const sessionsLoad = vi.fn();
 
   function create(): { push: PushService; http: HttpTestingController } {
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: AuthService, useValue: { user, sessionEpoch: signal(0), resumeSession, switchToServer } },
+        { provide: AuthService, useValue: { user, sessionEpoch: signal(0), resumeSession, switchToServer, loadPersistedSession } },
+        { provide: SessionStoreService, useValue: { load: sessionsLoad } },
         { provide: SseService, useValue: { notifications: new Subject() } },
         { provide: ToastService, useValue: { error: toastError } },
         { provide: TranslateService, useValue: { instant: (k: string) => k, currentLang: () => 'en' } },
@@ -48,6 +52,8 @@ describe('PushService', () => {
     user.set({ id: 1 });
     vi.clearAllMocks();
     resumeSession.mockResolvedValue('resumed');
+    loadPersistedSession.mockReturnValue(null);
+    sessionsLoad.mockResolvedValue(undefined);
   });
 
   describe('opened', () => {
@@ -56,6 +62,15 @@ describe('PushService', () => {
       await push.opened({ url: '/requests', session: { serverUrl: 'https://a.test', userId: 1, key: 'k' } });
       expect(navigateByUrl).toHaveBeenCalledWith('/requests');
       expect(resumeSession).not.toHaveBeenCalled();
+    });
+
+    it('takes the stored session as current on a cold start, before the guard sets the user', async () => {
+      const { push } = create();
+      user.set(null);
+      sessionsLoad.mockImplementation(async () => void loadPersistedSession.mockReturnValue({ id: 2 }));
+      await push.opened({ url: '/requests', session: { serverUrl: 'https://a.test', userId: 2, key: 'k' } });
+      expect(resumeSession).not.toHaveBeenCalled();
+      expect(navigateByUrl).toHaveBeenCalledWith('/requests');
     });
 
     it('resumes the recipient first, and stops when that fails', async () => {
