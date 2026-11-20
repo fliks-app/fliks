@@ -325,6 +325,27 @@ interface log {
   log: func(level: level, message: string);
 }
 
+/// An optional import: a plugin that calls it needs a Fliks that links it and says so in its manifest `fliks`.
+interface notify {
+  use types.{host-error};
+
+  /// The users to notify: ids, the recipients of a media (its requesters, else the admins) or its viewers.
+  variant notify-audience { users(list<u32>), recipients(u32), viewers(u32) }
+  /// The keys name entries of the manifest `i18n`; `params` fill their `{{name}}` slots.
+  record notification {
+    title-key: string,
+    body-key: string,
+    params: list<tuple<string, string>>,
+    /// An in-app path; the media's page when none and `media-id` is set.
+    url: option<string>,
+    /// A path on this server; the media's poster when none and `media-id` is set.
+    image: option<string>,
+    media-id: option<u32>,
+  }
+
+  notify-users: func(audience: notify-audience, notification: notification) -> result<_, host-error>;
+}
+
 interface guest {
   use types.{manifest-check, health-report, http-request, http-response, json};
 
@@ -431,6 +452,7 @@ world plugin {
   import host;
   import db;
   import log;
+  import notify;
   export guest;
 }
 

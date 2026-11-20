@@ -2,7 +2,7 @@
 use super::db::UNAVAILABLE;
 use super::logs::Level;
 use super::outbound::Gates;
-use super::runtime::fliks::plugin::{db, host, log, types as t};
+use super::runtime::fliks::plugin::{db, host, log, notify, types as t};
 use super::runtime::{Ctx, HostError};
 use super::scheduled;
 use super::units;
@@ -176,6 +176,20 @@ const CREATE_CALL: std::time::Duration = std::time::Duration::from_secs(60);
 const INGEST_CALL: std::time::Duration = std::time::Duration::from_secs(1800);
 
 impl t::Host for Ctx {}
+
+impl notify::Host for Ctx {
+    async fn notify_users(
+        &mut self,
+        audience: notify::NotifyAudience,
+        notification: notify::Notification,
+    ) -> Result<(), HostError> {
+        let app = self.app();
+        let id = self.sh.id.clone();
+        call!(self, "notify.users", ["notify:users"], HOST_CALL, async {
+            super::notify::send(&app?, &id, audience, notification).await
+        })
+    }
+}
 
 impl host::Host for Ctx {
     async fn media_acquisition_context(

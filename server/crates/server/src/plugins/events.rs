@@ -43,7 +43,7 @@ pub async fn recipients(st: &AppState, media_id: Option<i32>) -> Vec<i32> {
     admins(st).await
 }
 
-async fn media_row(st: &AppState, id: i32) -> Option<(String, MediaKind)> {
+pub(super) async fn media_row(st: &AppState, id: i32) -> Option<(String, MediaKind)> {
     let (title, kind): (String, String) =
         sqlx::query_as(r#"SELECT title, type FROM media WHERE id = $1"#)
             .bind(id)

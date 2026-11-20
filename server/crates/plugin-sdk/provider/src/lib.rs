@@ -15,6 +15,7 @@ pub mod bindings {
             "fliks:plugin/host@3.0.0": fliks_plugin_sdk::bindings::fliks::plugin::host,
             "fliks:plugin/db@3.0.0": fliks_plugin_sdk::bindings::fliks::plugin::db,
             "fliks:plugin/log@3.0.0": fliks_plugin_sdk::bindings::fliks::plugin::log,
+            "fliks:plugin/notify@3.0.0": fliks_plugin_sdk::bindings::fliks::plugin::notify,
             "wasi:cli/environment@0.2.12": wasip2::cli::environment,
             "wasi:cli/exit@0.2.12": wasip2::cli::exit,
             "wasi:cli/stdin@0.2.12": wasip2::cli::stdin,

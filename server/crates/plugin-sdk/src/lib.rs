@@ -51,6 +51,7 @@ pub mod db;
 pub mod harness;
 pub mod http;
 pub mod log;
+pub mod notify;
 pub mod router;
 pub mod rt;
 pub mod scheduled;

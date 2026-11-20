@@ -10,7 +10,7 @@ mod text;
 mod webpush;
 
 pub use act::{ACTIONS, Grant, mint as mint_action};
-pub use catalogue::{ReqRef, request_event};
+pub use catalogue::{ReqRef, media_url, poster, request_event};
 pub use routes::{
     __path_act, __path_config, __path_pending_drop, __path_status, __path_subscribe, __path_test,
     __path_unsubscribe, router,
@@ -717,6 +717,11 @@ impl Push {
 
 fn pending_host(url: &str) -> String {
     reqwest::Url::parse(url).map_or_else(|_| url.to_owned(), |u| relay::canonical_host(&u))
+}
+
+/// The enabled users of `ids` who have not muted `category`: who a send would reach.
+pub async fn eligible(st: &AppState, ids: &[i32], category: &str) -> sqlx::Result<Vec<i32>> {
+    db::recipients(&st.db, ids, category).await
 }
 
 /// The one entry point: filters the recipients and sends everywhere (`push.md` rule 1).

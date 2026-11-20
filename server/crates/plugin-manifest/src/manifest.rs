@@ -73,7 +73,7 @@ const PROCESS_KEYS: [&str; 13] = [
     "checklist",
     "network",
 ];
-pub const SCOPES: [&str; 8] = [
+pub const SCOPES: [&str; 9] = [
     "media:read",
     "media:create",
     "acquisition:candidates",
@@ -82,6 +82,7 @@ pub const SCOPES: [&str; 8] = [
     "events:emit",
     "config:rw",
     "playlists:write",
+    "notify:users",
 ];
 
 fn s(v: &Value) -> Option<&str> {

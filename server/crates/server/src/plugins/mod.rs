@@ -16,6 +16,7 @@ pub mod install;
 pub mod jobs;
 pub mod logs;
 pub mod namespaces;
+pub mod notify;
 pub mod outbound;
 pub mod packages;
 pub mod picker;
@@ -164,6 +165,7 @@ pub struct Plugins {
     /// The declared plugin namespaces, read wherever an id of one is parsed or normalised.
     pub namespaces: Arc<namespaces::Known>,
     pub counts: counts::Counts,
+    pub notify: notify::Limiter,
     pub pickers: picker::Pickers,
     pub sweeps: sweep::Sweeps,
     /// In-flight placeholders and the tracks a per-track grab holds, cleared with the plugin.
@@ -217,6 +219,7 @@ impl Plugins {
             registry: Registry::default(),
             namespaces: Arc::default(),
             counts: counts::Counts::default(),
+            notify: notify::Limiter::default(),
             pickers: picker::Pickers::default(),
             sweeps: sweep::Sweeps::default(),
             progress: events::Progress::default(),
@@ -407,6 +410,7 @@ impl Plugins {
 
     /// Uninstall: nothing the plugin declared is true any more.
     pub async fn forget(&self, id: &str) {
+        self.notify.forget(id);
         self.unregister(id).await;
         self.registry.withdraw(id, false);
     }
