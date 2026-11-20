@@ -73,10 +73,11 @@ const SHORTCUTS: Record<string, ShortcutCommand> = {
   '.': 'frameNext',
 };
 
-/** What a key press means (`stats` is Shift+S: the caller checks the modifier)  to a player, before any focus or visibility rule. */
+/** What a key press means (`stats` is Shift+S: the caller checks the modifier) to a player, before any focus or visibility rule. */
 export function playerKeyAction(e: { key: string; keyCode: number }): PlayerKeyAction | null {
   const action = mediaKeyAction(e);
   if (action) return { kind: 'media', action };
-  const command = SHORTCUTS[e.key];
+  // Shift turns `s` into `S`: letters match whatever their case.
+  const command = SHORTCUTS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
   return command ? { kind: 'shortcut', command } : null;
 }

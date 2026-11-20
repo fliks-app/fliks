@@ -10,6 +10,7 @@ describe('KeyboardController layers', () => {
   let reactions: boolean;
   const openReactions = vi.fn();
   const togglePlay = vi.fn();
+  const toggleStats = vi.fn();
 
   function controller(): KeyboardController {
     const host = {
@@ -20,6 +21,7 @@ describe('KeyboardController layers', () => {
       canControlPlayback: () => true,
       playbackRate: () => 1,
       onTogglePlay: togglePlay,
+      toggleStats,
       reactionsAvailable: () => reactions,
       openReactions: () => {
         openReactions();
@@ -28,8 +30,8 @@ describe('KeyboardController layers', () => {
     } as unknown as KeyboardHost;
     return new KeyboardController(host);
   }
-  const press = (key: string) => {
-    const e = new KeyboardEvent('keydown', { key, cancelable: true });
+  const press = (key: string, shiftKey = false) => {
+    const e = new KeyboardEvent('keydown', { key, shiftKey, cancelable: true });
     Object.defineProperty(e, 'target', { value: document.body });
     return e;
   };
@@ -47,6 +49,7 @@ describe('KeyboardController layers', () => {
     reactions = true;
     openReactions.mockClear();
     togglePlay.mockClear();
+    toggleStats.mockClear();
   });
   afterEach(() => document.querySelectorAll('dialog').forEach((d) => d.remove()));
 
@@ -60,6 +63,14 @@ describe('KeyboardController layers', () => {
     expect(e.defaultPrevented).toBe(true);
     expect(togglePlay).toHaveBeenCalledOnce();
     bar.remove();
+  });
+
+  it('toggles the stats on Shift+S only', () => {
+    const k = controller();
+    k.onKeyDown(press('s'));
+    expect(toggleStats).not.toHaveBeenCalled();
+    k.onKeyDown(press('S', true));
+    expect(toggleStats).toHaveBeenCalledOnce();
   });
 
   it('leaves arrows and OK to a panel beside the bar', () => {
