@@ -399,6 +399,7 @@
       "device_title": "Questo dispositivo",
       "device": "Notifiche di sistema su questo dispositivo",
       "device_hint": "Le notifiche arrivano anche quando Fliks è chiuso.",
+      "desktop_hint": "Mostrate quando Fliks non è in primo piano. A finestra chiusa, solo se Fliks resta attivo in background.",
       "denied": "Le notifiche sono bloccate per questo sito. Consentile nelle impostazioni del browser.",
       "denied_app": "Le notifiche di Fliks sono disattivate nelle impostazioni di sistema.",
       "open_settings": "Apri le impostazioni di sistema",
