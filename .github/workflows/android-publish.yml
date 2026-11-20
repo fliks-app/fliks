@@ -5,7 +5,9 @@
 #
 # On tag builds it also assembles a signed APK and attaches it to the
 # GitHub release (release-please created it for the tag) as
-# `Fliks-<version>.apk`, for direct sideloading outside the Play Store.
+# `Fliks-<version>.apk`, for direct sideloading outside the Play Store,
+# next to `android-version.json` (AGP's output metadata), which F-Droid's
+# update check reads from the latest release.
 #
 # To backfill the APK on an already-published release, run the workflow
 # via `workflow_dispatch` with the `apk_tag` input (e.g. `v1.8.0`): it
@@ -151,6 +153,7 @@ jobs:
           [ -z "$tag" ] && tag="$GITHUB_REF_NAME"
           dest="Fliks-${tag#v}.apk"
           cp android/app/build/outputs/apk/proprietary/release/app-proprietary-release.apk "$GITHUB_WORKSPACE/$dest"
+          cp android/app/build/outputs/apk/proprietary/release/output-metadata.json "$GITHUB_WORKSPACE/android-version.json"
           echo "path=$dest" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
@@ -168,7 +171,7 @@ jobs:
         # contents: write — attaching a file never needed it.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ steps.apk.outputs.tag }}" "${{ steps.apk.outputs.path }}" --clobber
+        run: gh release upload "${{ steps.apk.outputs.tag }}" "${{ steps.apk.outputs.path }}" android-version.json --clobber
         working-directory: ${{ github.workspace }}
 
   # Separate job so a Play Store failure (rejected release notes, a transient API
