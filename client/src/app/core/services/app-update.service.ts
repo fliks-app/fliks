@@ -73,7 +73,7 @@ export class AppUpdateService {
   private readonly desktop = desktopUpdaterOrNull();
 
   readonly mode = computed<UpdateMode>(() => {
-    if (this.device.isDesktopNative() && this.desktop) return 'desktop';
+    if (this.device.isDesktopNative() && this.desktop) return this.storeManaged() ? 'none' : 'desktop';
     // Native apps (iOS/Android/TV) update through their store — no in-app
     // update path, so the topbar update check doesn't apply there.
     if (Capacitor.isNativePlatform()) return 'none';
@@ -87,6 +87,8 @@ export class AppUpdateService {
   readonly progress = signal<number | null>(0);
   /** False for .deb / dev (→ download link) and always false in server mode. */
   readonly canInstall = signal(false);
+  /** The Mac App Store updates the app: no in-app update flow, no release link. */
+  private readonly storeManaged = signal(false);
   readonly currentVersion = signal<string | null>(null);
   readonly releasesUrl = signal<string | null>(null);
   readonly errorMessage = signal<string | null>(null);
@@ -171,6 +173,7 @@ export class AppUpdateService {
     void updater
       .getCapability()
       .then((cap) => {
+        this.storeManaged.set(cap.storeManaged);
         this.canInstall.set(cap.canInstall);
         this.currentVersion.set(cap.currentVersion);
         this.releasesUrl.set(cap.releasesUrl);

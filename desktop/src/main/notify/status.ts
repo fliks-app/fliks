@@ -1,7 +1,8 @@
 import { Notification, shell } from 'electron';
 import type { DesktopNotifyStatus } from '../../shared/contract.ts';
 
-export const APP_ID = 'media.fliks.desktop';
+// The bundle id of the Mac App Store build differs from the DMG's (electron-builder.yml `mas.appId`).
+export const APP_ID = process.mas ? 'media.fliks.app' : 'media.fliks.desktop';
 
 /** The native reads, from the platform's addon; each is absent elsewhere. */
 export interface StatusAddon {

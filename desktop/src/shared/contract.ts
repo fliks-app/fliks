@@ -293,9 +293,11 @@ export type DesktopUpdateStatus =
   | { state: 'error'; message: string };
 
 /** `canInstall` is false where electron-updater can't self-install (.deb, dev)
- *  → the UI offers a download link to `releasesUrl` instead. */
+ *  → the UI offers a download link to `releasesUrl` instead. `storeManaged`
+ *  (Mac App Store) means the store updates the app: the UI shows no update. */
 export interface DesktopUpdateCapability {
   canInstall: boolean;
+  storeManaged: boolean;
   currentVersion: string;
   releasesUrl: string;
 }

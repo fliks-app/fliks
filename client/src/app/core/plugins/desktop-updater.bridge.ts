@@ -20,6 +20,7 @@ export type DesktopUpdateStatus =
 
 export interface DesktopUpdateCapability {
   canInstall: boolean;
+  storeManaged: boolean;
   currentVersion: string;
   releasesUrl: string;
 }
