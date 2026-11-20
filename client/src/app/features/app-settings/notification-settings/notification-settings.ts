@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { LucideBellOff } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { UsersApiService } from '../../../core/services/api/users-api.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -13,7 +14,7 @@ const CATEGORIES = ['requests', 'parties', 'social', 'episodes', 'account'] as c
 /** What reaches this account and this device: categories apply to every device, the switch to this one. */
 @Component({
   selector: 'app-notification-settings',
-  imports: [TranslatePipe, ToggleFieldComponent],
+  imports: [TranslatePipe, ToggleFieldComponent, LucideBellOff],
   templateUrl: './notification-settings.html',
 })
 export class NotificationSettingsPageComponent {
@@ -30,6 +31,10 @@ export class NotificationSettingsPageComponent {
   /** The system refused the permission: only its settings can undo that. */
   protected readonly denied = computed(() => this.push.permission() === 'denied');
   protected readonly native = this.push.mode === 'native';
+  /** The switch shows what reaches this device: on only once the system allows it. */
+  protected readonly deviceOn = computed(() => this.push.deviceEnabled() && this.push.permission() === 'granted');
+  /** A phone has notifications off until the system grants them; a browser only once it refused. */
+  protected readonly blocked = computed(() => (this.native ? this.push.permission() !== 'granted' : this.denied()));
 
   constructor() {
     void this.push.loadConfig();

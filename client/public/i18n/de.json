@@ -402,6 +402,7 @@
       "desktop_hint": "Erscheinen, wenn Fliks nicht im Vordergrund ist. Nach dem Schließen des Fensters nur, wenn Fliks im Hintergrund weiterläuft.",
       "denied": "Benachrichtigungen sind für diese Website blockiert. Erlauben Sie sie in den Browsereinstellungen.",
       "denied_app": "Benachrichtigungen für Fliks sind in den Systemeinstellungen ausgeschaltet.",
+      "not_allowed": "Fliks darf auf diesem Gerät noch keine Benachrichtigungen senden.",
       "open_settings": "Systemeinstellungen öffnen",
       "ask_enable": "Einschalten",
       "ask_later": "Nicht jetzt",

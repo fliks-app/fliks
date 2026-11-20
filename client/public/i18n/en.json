@@ -402,6 +402,7 @@
       "desktop_hint": "Shown while Fliks is not in front. Once the window is closed, only if Fliks keeps running in the background.",
       "denied": "Notifications are blocked for this site. Allow them in the browser settings.",
       "denied_app": "Notifications are turned off for Fliks in the system settings.",
+      "not_allowed": "Fliks is not yet allowed to send notifications on this device.",
       "open_settings": "Open system settings",
       "ask_enable": "Turn on",
       "ask_later": "Not now",

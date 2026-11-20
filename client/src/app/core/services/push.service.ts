@@ -470,9 +470,13 @@ export class PushService {
   }
 
   private async refreshPermission(): Promise<void> {
+    const before = this.permission();
     if (this.mode === 'web') this.permission.set(this.webPermission());
     else await this.startNative();
-    if (this.adoptGrant()) await this.subscribe(true).catch(() => this.subscribed.set(false));
+    const gained = before !== 'granted' && this.permission() === 'granted';
+    if ((this.adoptGrant() || gained) && this.deviceEnabled() && this.canEnableDevice()) {
+      await this.subscribe(true).catch(() => this.subscribed.set(false));
+    }
   }
 
   /** Native: a granted permission turns this device on, unless this account switched it off here. */

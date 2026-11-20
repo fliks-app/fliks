@@ -402,6 +402,7 @@
       "desktop_hint": "Se muestran cuando Fliks no está en primer plano. Con la ventana cerrada, solo si Fliks sigue en segundo plano.",
       "denied": "Las notificaciones están bloqueadas para este sitio. Permítalas en los ajustes del navegador.",
       "denied_app": "Las notificaciones de Fliks están desactivadas en los ajustes del sistema.",
+      "not_allowed": "Fliks aún no tiene permiso para enviar notificaciones en este dispositivo.",
       "open_settings": "Abrir los ajustes del sistema",
       "ask_enable": "Activar",
       "ask_later": "Ahora no",

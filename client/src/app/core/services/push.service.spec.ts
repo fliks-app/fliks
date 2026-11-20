@@ -292,6 +292,17 @@ describe('PushService', () => {
       expect(push.deviceEnabled()).toBe(false);
     });
 
+    it('subscribes again when the permission comes back from the system settings', async () => {
+      plugin.status.mockResolvedValue({ available: true, permission: 'denied' });
+      localStorage.setItem('fliks.push.device::https://a.test::1', '1');
+      const { push, http } = await started();
+      expect(push.permission()).toBe('denied');
+      plugin.status.mockResolvedValue({ available: true, permission: 'granted' });
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.waitFor(() => http.expectOne((r) => r.method === 'POST' && r.url === '/api/push/subscriptions').flush({ sub: 's', ticket: 't' }));
+      expect(push.permission()).toBe('granted');
+    });
+
     it('never asks on a TV', async () => {
       tv = true;
       const { push } = create();
