@@ -61,10 +61,9 @@
           ],
           "include_dirs": [
             "<!@(node -p \"require('node-addon-api').include_dir\")",
-            # libmpv headers (mpv/client.h, render.h, render_gl.h). Apple Silicon
-            # Homebrew prefix; CI installs mpv to get these. Override via the
-            # FLIKS_MPV_INCLUDE env if libmpv lives elsewhere.
-            "<!@(node -e \"process.stdout.write(process.env.FLIKS_MPV_INCLUDE || '/opt/homebrew/include')\")"
+            # libmpv headers (mpv/client.h, render.h, render_gl.h) from the prefix
+            # build-libmpv-mac.sh installs to. Override with FLIKS_MPV_INCLUDE.
+            "<!@(node -e \"const {join}=require('path');process.stdout.write(process.env.FLIKS_MPV_INCLUDE || join(require('os').homedir(),'.cache/fliks-libmpv-mac/prefix/include'))\")"
           ],
           "libraries": [
             "-framework Cocoa",
@@ -84,7 +83,7 @@
             "CLANG_ENABLE_OBJC_ARC": "YES",
             "CLANG_CXX_LANGUAGE_STANDARD": "c++17",
             "CLANG_CXX_LIBRARY": "libc++",
-            "MACOSX_DEPLOYMENT_TARGET": "11.0"
+            "MACOSX_DEPLOYMENT_TARGET": "13.0"
           }
         }
       ]
