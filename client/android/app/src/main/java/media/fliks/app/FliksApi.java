@@ -66,6 +66,14 @@ final class FliksApi {
         }
     }
 
+    private static FliksApi shared;
+
+    /** The one instance of the process, so a refresh is owned by one place whoever calls. */
+    static synchronized FliksApi shared(Context context) {
+        if (shared == null) shared = new FliksApi(context);
+        return shared;
+    }
+
     FliksApi(Context context) {
         this(context.getApplicationContext().getSharedPreferences(CAPACITOR_PREFS, Context.MODE_PRIVATE));
     }

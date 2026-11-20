@@ -13,8 +13,15 @@ final class PushRules {
         return ts + ttl < nowSeconds;
     }
 
-    /** `ids` with `id` appended and cut to the last {@link #MAX_IDS}; null when `id` was already there. */
+    /** Distinct PendingIntent request code per notification tag and purpose, stable across processes. */
+    static int requestCode(String tag, String purpose) {
+        return (tag + '#' + purpose).hashCode();
+    }
+
+    /** `ids` with `id` appended and cut to the last {@link #MAX_IDS}; null when `id` was already there.
+     *  An empty id is not replayable: `ids` comes back unchanged. */
     static List<String> remember(List<String> ids, String id) {
+        if (id.isEmpty()) return ids;
         if (ids.contains(id)) return null;
         List<String> next = new ArrayList<>(ids);
         next.add(id);

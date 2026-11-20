@@ -84,9 +84,16 @@ final class PushRelay {
     static void delete(String relay, String token, String sub) throws IOException {
         try {
             call(relay, "DELETE", new JSONObject().put("platform", "fcm").put("token", token).put("sub", sub));
+        } catch (HttpStatus e) {
+            if (!gone(e.status)) throw e;
         } catch (JSONException e) {
             throw new IOException(e);
         }
+    }
+
+    /** A delete the relay answers with 400 or 404 will never succeed: the row is as good as gone. */
+    static boolean gone(int status) {
+        return status == 400 || status == 404;
     }
 
     private static void call(String relay, String method, JSONObject body) throws IOException {
