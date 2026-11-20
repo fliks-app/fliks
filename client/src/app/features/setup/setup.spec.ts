@@ -44,7 +44,7 @@ async function createComponent(http: HttpClient, activeUrl = '') {
   return fixture.componentInstance;
 }
 
-describe('SetupComponent — connect', () => {
+describe('SetupComponent: connect', () => {
   async function connectTo(http: HttpClient, url: string) {
     const c = await createComponent(http);
     const auth = TestBed.inject(AuthService);
@@ -79,7 +79,7 @@ describe('SetupComponent — connect', () => {
   });
 });
 
-describe('SetupComponent — editing during a probe', () => {
+describe('SetupComponent: editing during a probe', () => {
   it('cancels the pending probe', async () => {
     const hanging = { get: () => NEVER } as unknown as HttpClient;
     const c = await createComponent(hanging);
