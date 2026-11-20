@@ -63,6 +63,9 @@ extraResources:
   - from: web
     to: web
     filter: ['**/*']
+  # The tray icon: `build/` itself is not packaged.
+  - from: build/icons/512x512.png
+    to: tray.png
 mac:
   # arm64 (Apple Silicon) only for this iteration. The vendored libmpv.dylib +
   # the native addon are built arm64 (see desktop-release.yml); a universal build

@@ -212,11 +212,19 @@ export interface DesktopNotifyPrefs {
   startAtLogin: boolean;
 }
 
+/** The shell's own strings (tray menu, badge), translated by the page. */
+export interface DesktopNotifyLabels {
+  open: string;
+  quit: string;
+  notifications: string;
+}
+
 export const NOTIFY_IPC = {
   show: 'notify:show',
   setBadge: 'notify:setBadge',
   getPrefs: 'notify:getPrefs',
   setPrefs: 'notify:setPrefs',
+  setLabels: 'notify:setLabels',
   windowActive: 'notify:windowActive',
   /** main → renderer */
   click: 'notify:click',
@@ -386,7 +394,9 @@ export interface FliksDesktopApi {
   onNotificationClick(handler: (e: DesktopNotificationClick) => void): () => void;
   setBadge(count: number): Promise<void>;
   getNotifyPrefs(): Promise<DesktopNotifyPrefs>;
+  /** Resolves with what took effect: `background` stays off where there is no tray to come back from. */
   setNotifyPrefs(patch: Partial<DesktopNotifyPrefs>): Promise<DesktopNotifyPrefs>;
+  setNotifyLabels(labels: DesktopNotifyLabels): Promise<void>;
   /** Whether the window is visible and focused. */
   windowActive(): Promise<boolean>;
   onWindowActive(handler: (active: boolean) => void): () => void;

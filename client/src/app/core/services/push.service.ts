@@ -137,6 +137,14 @@ export class PushService {
         void this.start();
       });
     });
+    effect(() => {
+      if (this.mode !== 'desktop') return;
+      this.translate.currentLang();
+      const keys = ['tray_open', 'tray_quit', 'badge_label'].map((k) => `app_settings.notifications.${k}`);
+      void firstValueFrom(this.translate.get(keys)).then((t) =>
+        desktopBridgeOrNull()?.setNotifyLabels?.({ open: t[keys[0]], quit: t[keys[1]], notifications: t[keys[2]] }),
+      );
+    });
     this.sse.notifications.subscribe((n) => this.onNotification(n));
     effect(() => {
       if (this.mode !== 'web') return;

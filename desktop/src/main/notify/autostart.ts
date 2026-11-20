@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { app } from 'electron';
-import { autostartEntry } from './desktop-entry';
+import { autostartEntry } from './desktop-entry.ts';
 
 const entryPath = () =>
   path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'autostart', 'fliks.desktop');

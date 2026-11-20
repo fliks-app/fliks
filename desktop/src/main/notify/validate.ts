@@ -1,4 +1,4 @@
-import type { DesktopNotification, DesktopNotificationAction, DesktopNotifyPrefs } from '../../shared/contract';
+import type { DesktopNotification, DesktopNotificationAction, DesktopNotifyLabels, DesktopNotifyPrefs } from '../../shared/contract.ts';
 
 const MAX_TEXT = 1000;
 const MAX_ACTIONS = 2;
@@ -68,4 +68,9 @@ export function parsePrefsPatch(v: unknown): Partial<DesktopNotifyPrefs> {
     out[k] = o[k];
   }
   return out;
+}
+
+export function parseLabels(v: unknown): DesktopNotifyLabels {
+  const o = v as Partial<DesktopNotifyLabels>;
+  return { open: text(o?.open, 100), quit: text(o?.quit, 100), notifications: text(o?.notifications, 100) };
 }

@@ -34,8 +34,6 @@ export type CompositorAddon = {
   /** Asks the window manager to bring the window to the front (best effort on Wayland). */
   raise(): void;
   hide(): void;
-  /** Whether the close button hides the window instead of quitting. */
-  setCloseHides(on: boolean): void;
   setCursorVisible(visible: boolean): void;
   setCursorShape(shape: number): void;
   /** The decoder and demuxer lists of a throwaway mpv. */
@@ -52,6 +50,8 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
   private muteFilterCount = 0;
   /** The window gained or lost focus, or was hidden. */
   onWindowActive?: (active: boolean) => void;
+  /** The close button was pressed: quit by default. */
+  onCloseRequest: () => void = () => app.quit();
 
   constructor(
     private readonly addon: CompositorAddon,
@@ -111,7 +111,7 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
         break;
       // The compositor owns the only visible window; the offscreen BrowserWindow never fires window-all-closed.
       case 'closed':
-        app.quit();
+        this.onCloseRequest();
         break;
     }
   }

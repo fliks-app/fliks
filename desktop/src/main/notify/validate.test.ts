@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseBadge, parseNotification, parsePrefsPatch } from './validate.ts';
+import { parseLabels, parseBadge, parseNotification, parsePrefsPatch } from './validate.ts';
 
 const base = {
   id: 'n1',
@@ -37,4 +37,15 @@ test('badge and prefs inputs', () => {
   assert.throws(() => parseBadge('3'));
   assert.deepEqual(parsePrefsPatch({ background: true }), { background: true });
   assert.throws(() => parsePrefsPatch({ background: 'yes' }));
+});
+
+test('script, backslash and scheme tricks leave the origin', () => {
+  for (const url of ['javascript:alert(1)', '/\\evil.example/x', '\\\\evil.example', 'data:text/html,x', 'file:///etc/passwd'])
+    assert.throws(() => parseNotification({ ...base, url }), url);
+  assert.equal(parseNotification({ ...base, url: '/a/../b?x=1#y' }).url, '/a/../b?x=1#y');
+});
+
+test('labels must be short strings', () => {
+  assert.deepEqual(parseLabels({ open: 'a', quit: 'b', notifications: 'c' }), { open: 'a', quit: 'b', notifications: 'c' });
+  assert.throws(() => parseLabels({ open: 'a' }));
 });

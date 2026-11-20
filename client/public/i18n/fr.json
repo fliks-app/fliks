@@ -429,7 +429,10 @@
       "background_hint": "Fermer la fenêtre laisse Fliks actif pour que les notifications continuent d'arriver.",
       "start_at_login": "Lancer à l'ouverture de session",
       "start_at_login_hint": "Fliks s'ouvre en arrière-plan quand vous ouvrez votre session.",
-      "pending_expired": "Reconnectez-vous pour ouvrir cette notification."
+      "pending_expired": "Reconnectez-vous pour ouvrir cette notification.",
+      "tray_open": "Ouvrir Fliks",
+      "tray_quit": "Quitter Fliks",
+      "badge_label": "Notifications"
     }
   },
   "update_settings": {

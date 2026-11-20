@@ -120,7 +120,6 @@ struct GlState {
   std::atomic<bool> run{false};
   std::atomic<bool> raiseRequest{false};
   std::atomic<bool> hideRequest{false};
-  std::atomic<bool> closeHides{false};  // close button hides the window instead of quitting
   std::atomic<int> fsRequest{-1};  // -1 none, 0 windowed, 1 fullscreen-desktop
   std::atomic<int> cursorRequest{-1};  // -1 none, 0 hidden, 1 shown
   std::atomic<int> cursorShape{-1};    // -1 none, else an index into kCursors
@@ -455,17 +454,9 @@ void RenderThreadMain(GlState* s) {
     if (g_tsfnReady.load())
       g_tsfn.BlockingCall(new std::string(active ? "{\"type\":\"focus\",\"active\":true}" : "{\"type\":\"focus\",\"active\":false}"));
   };
-  auto close = [s, &hidden, &emitActive] {
-    if (s->closeHides.load()) {
-      SDL_HideWindow(s->window);
-      hidden = true;
-      emitActive(false);
-      return;
-    }
-    // Only the main process can quit Electron; without this the closed
-    // window leaves it running and a relaunch shares the same profile.
+  auto close = [] {
+    // The main process decides: quit (which stops this loop) or hide the window.
     if (g_tsfnReady.load()) g_tsfn.BlockingCall(new std::string("{\"type\":\"closed\"}"));
-    s->run.store(false);
   };
   char ib[256];
   int lastW = -1, lastH = -1;
@@ -947,11 +938,6 @@ Napi::Value Hide(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
-Napi::Value SetCloseHides(const Napi::CallbackInfo& info) {
-  g_state.closeHides.store(info.Length() > 0 && info[0].ToBoolean().Value(), std::memory_order_release);
-  return info.Env().Undefined();
-}
-
 Napi::Value SetCursorShape(const Napi::CallbackInfo& info) {
   int shape = info.Length() > 0 ? info[0].ToNumber().Int32Value() : 0;
   g_state.cursorShape.store(shape, std::memory_order_release);
@@ -1056,7 +1042,6 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("setCursorVisible", Napi::Function::New(env, SetCursorVisible));
   exports.Set("raise", Napi::Function::New(env, Raise));
   exports.Set("hide", Napi::Function::New(env, Hide));
-  exports.Set("setCloseHides", Napi::Function::New(env, SetCloseHides));
   exports.Set("setCursorShape", Napi::Function::New(env, SetCursorShape));
   exports.Set("stop", Napi::Function::New(env, Stop));
   return exports;

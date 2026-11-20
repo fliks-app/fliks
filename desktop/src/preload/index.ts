@@ -74,6 +74,7 @@ const api: FliksDesktopApi = {
   setBadge: (count) => ipcRenderer.invoke(NOTIFY_IPC.setBadge, count),
   getNotifyPrefs: () => ipcRenderer.invoke(NOTIFY_IPC.getPrefs),
   setNotifyPrefs: (patch) => ipcRenderer.invoke(NOTIFY_IPC.setPrefs, patch),
+  setNotifyLabels: (labels) => ipcRenderer.invoke(NOTIFY_IPC.setLabels, labels),
   windowActive: () => ipcRenderer.invoke(NOTIFY_IPC.windowActive),
   onWindowActive: (handler) => {
     const listener = (_e: unknown, active: boolean) => handler(active);
