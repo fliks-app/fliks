@@ -159,7 +159,7 @@ jobs:
             -authenticationKeyIssuerID "$ISSUER_ID" \
             -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8
 
-      # CarPlay Audio, push and the shared keychain group must survive the unsigned archive and the re-sign at export.
+      # CarPlay Audio, production push and the shared keychain group must survive the unsigned archive and the re-sign at export.
       - name: Check IPA entitlements
         working-directory: client/ios/App/build
         run: |
@@ -167,7 +167,7 @@ jobs:
           check() { codesign -d --entitlements - "$1" 2>&1 | tee /dev/stderr | grep -q "$2"; }
           app=ipa/Payload/App.app
           check $app com.apple.developer.carplay-audio
-          check $app aps-environment
+          test "$(codesign -d --entitlements :- $app 2>/dev/null | /usr/libexec/PlistBuddy -c 'Print :aps-environment' /dev/stdin)" = production
           check $app keychain-access-groups
           check $app/PlugIns/FliksNotificationService.appex keychain-access-groups
 

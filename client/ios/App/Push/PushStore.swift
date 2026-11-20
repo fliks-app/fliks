@@ -23,7 +23,7 @@ enum PushStore {
     static var service = "media.fliks.app.push"
     static let replayLimit = 200
     private static let tokenAccount = "_token"
-    private static let replayAccount = "_replay"
+    private static let seenPrefix = "_seen."
 
     /// Nil when the keychain cannot be read yet (before the first unlock).
     static func subscriptions() -> [PushSubscription]? {
@@ -57,13 +57,20 @@ enum PushStore {
         set { newValue.map { write(tokenAccount, Data($0.utf8)) } ?? remove(account: tokenAccount) }
     }
 
-    static func seenIDs() -> [String] {
-        read(replayAccount).flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
-    }
+    /// One keychain item per id: the add is atomic, so two extension instances cannot both pass the replay check.
+    static func seenIDs() -> [String] { seenRows().map { $0.id } }
 
-    static func markSeen(_ id: String) {
-        let ids = Array((seenIDs() + [id]).suffix(replayLimit))
-        if let data = try? JSONEncoder().encode(ids) { write(replayAccount, data) }
+    /// False when the id was already marked.
+    @discardableResult
+    static func markSeen(_ id: String) -> Bool {
+        var add = base(seenPrefix + id)
+        add[kSecValueData as String] = Data(String(Int64(Date().timeIntervalSince1970 * 1_000_000)).utf8)
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        guard SecItemAdd(add as CFDictionary, nil) != errSecDuplicateItem else { return false }
+        for stale in seenRows().sorted(by: { $0.stamp < $1.stamp }).dropLast(replayLimit) {
+            remove(account: seenPrefix + stale.id)
+        }
+        return true
     }
 
     static func wipe() { SecItemDelete(base() as CFDictionary) }
@@ -72,6 +79,20 @@ enum PushStore {
         var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
         if let account { query[kSecAttrAccount as String] = account }
         return query
+    }
+
+    private static func seenRows() -> [(id: String, stamp: Int64)] {
+        var query = base()
+        query[kSecMatchLimit as String] = kSecMatchLimitAll
+        query[kSecReturnAttributes as String] = true
+        query[kSecReturnData as String] = true
+        var out: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess, let rows = out as? [[String: Any]] else { return [] }
+        return rows.compactMap { row in
+            guard let account = row[kSecAttrAccount as String] as? String, account.hasPrefix(seenPrefix),
+                  let stamp = (row[kSecValueData as String] as? Data).flatMap({ String(data: $0, encoding: .utf8) }).flatMap(Int64.init) else { return nil }
+            return (String(account.dropFirst(seenPrefix.count)), stamp)
+        }
     }
 
     private static func read(_ account: String) -> Data? {

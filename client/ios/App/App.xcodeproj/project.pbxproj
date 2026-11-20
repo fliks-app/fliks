@@ -35,6 +35,7 @@
 		AED749C707FF4EA235095A4D /* FliksNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8CF0FCA4483F5E6E515EF794 /* FliksNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AF804DDB1004FCAAF656A79F /* PushCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EEBEAD61E0136F360B56051 /* PushCrypto.swift */; };
 		B4FAD3CDE59AEC83E483F43E /* PushPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ADBE5B03FDE104FA76BA77D /* PushPipeline.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* StoredSessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93F07ADB48AD724D32DB8BC0 /* StoredSessions.swift */; };
 		B587692189D7023F78DC7069 /* PushTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 384895F3430BEB1FEED8793A /* PushTests.swift */; };
 		C7DE5EC0740E18AE7F2C32B8 /* PushPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EAB82DEF990FC867EB3A259 /* PushPlugin.swift */; };
 		D8CF1F0AE41B7CE25C014719 /* PushNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 202EEC1969DA16E6AB79EA32 /* PushNotifications.swift */; };
@@ -576,6 +577,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B587692189D7023F78DC7069 /* PushTests.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* StoredSessions.swift in Sources */,
 				24DAB63A3D4282A52214AE68 /* NotificationService.swift in Sources */,
 				16DDCE1510BEEFCE719ED9B7 /* PushCrypto.swift in Sources */,
 				689E5DECE5EF205C751EA55D /* PushPipeline.swift in Sources */,

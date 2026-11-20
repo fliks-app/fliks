@@ -161,12 +161,19 @@ final class PushStoreTests: XCTestCase {
         XCTAssertNil(PushStore.token)
     }
 
+    func testMarksAnIdOnlyOnce() {
+        XCTAssertTrue(PushStore.markSeen("a"))
+        XCTAssertFalse(PushStore.markSeen("a"))
+        XCTAssertEqual(PushStore.seenIDs(), ["a"])
+    }
+
     func testKeepsTheLast200Ids() {
         for i in 0..<250 { PushStore.markSeen("id-\(i)") }
-        let ids = PushStore.seenIDs()
+        let ids = Set(PushStore.seenIDs())
         XCTAssertEqual(ids.count, PushStore.replayLimit)
-        XCTAssertEqual(ids.first, "id-50")
-        XCTAssertEqual(ids.last, "id-249")
+        XCTAssertTrue(ids.contains("id-249"))
+        XCTAssertFalse(ids.contains("id-0"))
+        XCTAssertFalse(ids.contains("id-49"))
     }
 }
 
@@ -205,6 +212,7 @@ final class NotificationServiceTests: XCTestCase {
         XCTAssertEqual(out.body, "B")
         XCTAssertEqual(out.badge, 3)
         XCTAssertEqual(out.categoryIdentifier, "fliks.approve.decline")
+        XCTAssertTrue(PushCategories.sets.map(PushCategories.identifier).contains(out.categoryIdentifier))
         let info = out.userInfo["fliks"] as? [String: Any]
         XCTAssertEqual(info?["serverUrl"] as? String, "https://s.test")
         XCTAssertEqual(info?["url"] as? String, "/r/5")
@@ -221,5 +229,100 @@ final class NotificationServiceTests: XCTestCase {
         let out = await deliver(["k": relayKey, "s": sub, "p": Data(count: 120).base64URL])
         XCTAssertEqual(out.title, "relay fallback text")
         XCTAssertNil(out.badge)
+    }
+}
+
+final class PushCategoriesTests: XCTestCase {
+    // Order of the server catalogue (`push/catalogue.rs`): approve, decline | accept, decline | join.
+    func testIdentifiersFollowTheCatalogueOrder() {
+        XCTAssertEqual(PushCategories.sets.map(PushCategories.identifier), ["fliks.approve.decline", "fliks.accept.decline", "fliks.join"])
+    }
+}
+
+final class StoredSessionsTests: XCTestCase {
+    private let key = "CapacitorStorage.fliks_sessions"
+    private var saved: Any?
+
+    override func setUp() {
+        saved = UserDefaults.standard.object(forKey: key)
+        UserDefaults.standard.set(sessions(access: "old", refresh: "r1"), forKey: key)
+        UserDefaults.standard.set("https://s.test::1", forKey: "CapacitorStorage.fliks_active_session")
+        StubRefresh.reset()
+        URLProtocol.registerClass(StubRefresh.self)
+    }
+
+    override func tearDown() {
+        URLProtocol.unregisterClass(StubRefresh.self)
+        UserDefaults.standard.set(saved, forKey: key)
+        UserDefaults.standard.removeObject(forKey: "CapacitorStorage.fliks_active_session")
+    }
+
+    private func sessions(access: String, refresh: String) -> String {
+        #"[{"serverUrl":"https://s.test","accessToken":"\#(access)","refreshToken":"\#(refresh)","tokenVersion":2,"user":{"id":1}}]"#
+    }
+
+    func testNormalisesTheServerOnce() {
+        XCTAssertEqual(StoredSessions.key("HTTPS://S.Test/", 1), "https://s.test::1")
+        XCTAssertTrue(StoredSessions.isActive("https://S.test/", 1))
+        XCTAssertFalse(StoredSessions.isActive("https://s.test", 2))
+        XCTAssertEqual(StoredSessions.find("https://s.test/::1")?.token, "old")
+    }
+
+    func testRotatesTheStoredPairAndBumpsTheVersion() async throws {
+        StubRefresh.status = 200
+        let renewed = await StoredSessions.refresh("https://s.test::1", rejected: "old")
+        XCTAssertEqual(renewed, true)
+        XCTAssertEqual(StubRefresh.bodies, [#"{"refreshToken":"r1"}"#])
+        let stored = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(try XCTUnwrap(UserDefaults.standard.string(forKey: key)).utf8)) as? [[String: Any]])
+        XCTAssertEqual(stored[0]["accessToken"] as? String, "new")
+        XCTAssertEqual(stored[0]["refreshToken"] as? String, "r2")
+        XCTAssertEqual(stored[0]["refreshExpiresAt"] as? Int, 2_000_000)
+        XCTAssertEqual(stored[0]["tokenVersion"] as? Int, 3)
+    }
+
+    func testAdoptsAPairAnotherContextAlreadyStored() async {
+        let renewed = await StoredSessions.refresh("https://s.test::1", rejected: "stale")
+        XCTAssertEqual(renewed, true)
+        XCTAssertTrue(StubRefresh.bodies.isEmpty)
+    }
+
+    func testReportsARefusedAndAnUnreachableRefresh() async {
+        StubRefresh.status = 401
+        let refused = await StoredSessions.refresh("https://s.test::1", rejected: "old")
+        XCTAssertEqual(refused, false)
+        StubRefresh.status = 503
+        let unreachable = await StoredSessions.refresh("https://s.test::1", rejected: "old")
+        XCTAssertNil(unreachable)
+        XCTAssertEqual(StoredSessions.find("https://s.test::1")?.token, "old")
+    }
+}
+
+private final class StubRefresh: URLProtocol {
+    nonisolated(unsafe) static var status = 200
+    nonisolated(unsafe) static var bodies: [String] = []
+    static func reset() { status = 200; bodies = [] }
+
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.path == "/api/auth/refresh" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+
+    override func startLoading() {
+        let body = request.httpBody ?? request.httpBodyStream.map { stream -> Data in
+            stream.open()
+            defer { stream.close() }
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 1024)
+            while stream.hasBytesAvailable {
+                let n = stream.read(&buffer, maxLength: buffer.count)
+                if n <= 0 { break }
+                data.append(buffer, count: n)
+            }
+            return data
+        } ?? Data()
+        Self.bodies.append(String(decoding: body, as: UTF8.self))
+        let reply = Self.status == 200 ? #"{"accessToken":"new","refreshToken":"r2","refreshTokenExpiresAt":2000}"# : "{}"
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(reply.utf8))
+        client?.urlProtocolDidFinishLoading(self)
     }
 }

@@ -68,21 +68,25 @@ enum PushNotifications {
 
     /// A push for the session on screen is the page's toast; any other shows as a banner.
     static func presentation(_ notification: UNNotification) -> UNNotificationPresentationOptions {
-        if let info = Info(notification), StoredSessions.key(info.server, info.user) == StoredSessions.activeKey { return [] }
+        if let info = Info(notification), StoredSessions.isActive(info.server, info.user) { return [] }
         return [.banner, .sound, .list]
     }
 
     static func respond(_ response: UNNotificationResponse) async {
         guard let info = Info(response.notification) else { return }
-        let action = info.actions.first { $0["id"] == response.actionIdentifier }
         switch response.actionIdentifier {
         case UNNotificationDismissActionIdentifier:
             return
         case UNNotificationDefaultActionIdentifier:
             await open(info, info.url)
         default:
-            guard action?["kind"] == "call", let token = action?["token"] else { return await open(info, action?["url"].flatMap { $0.isEmpty ? nil : $0 } ?? info.url) }
-            await call(token, info, response.notification.request.identifier)
+            // An id the payload does not carry is ignored; only a foreground action may open the app.
+            guard let action = info.actions.first(where: { $0["id"] == response.actionIdentifier }) else { return }
+            if action["kind"] == "call", let token = action["token"] {
+                await call(token, info, response.notification.request.identifier)
+            } else if PushCategories.opening.contains(response.actionIdentifier) {
+                await open(info, action["url"].flatMap { $0.isEmpty ? nil : $0 } ?? info.url)
+            }
         }
     }
 
@@ -91,19 +95,24 @@ enum PushNotifications {
         PushPlugin.opened(server: info.server, user: info.user, url: url)
     }
 
-    /// Runs a `call` action with the stored session (no refresh here): a 401 asks the user to open the app.
+    /// Runs a `call` action with the stored session; a 401 rotates the stored pair once and retries.
+    /// "Open Fliks" is asked only when the server refuses the refresh token or the session is gone.
     static func call(_ token: String, _ info: Info, _ id: String) async {
         let background = await UIApplication.shared.beginBackgroundTask(withName: "fliks.push.act")
         defer { Task { @MainActor in UIApplication.shared.endBackgroundTask(background) } }
+        let key = StoredSessions.key(info.server, info.user)
         var outcome = "outcome_signin"
-        if let session = StoredSessions.find(StoredSessions.key(info.server, info.user)),
-           let url = URL(string: session.server + "/api/push/act") {
-            var request = URLRequest(url: url, timeoutInterval: 20)
-            request.httpMethod = "POST"
-            request.httpBody = try? JSONSerialization.data(withJSONObject: ["token": token])
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("Bearer \(session.token)", forHTTPHeaderField: "Authorization")
-            let status = (try? await URLSession.shared.data(for: request)).flatMap { ($0.1 as? HTTPURLResponse)?.statusCode }
+        if var session = StoredSessions.find(key) {
+            var status = await post(session, token)
+            if status == 401 {
+                switch await StoredSessions.refresh(key, rejected: session.token) {
+                case true?:
+                    if let renewed = StoredSessions.find(key) { session = renewed }
+                    status = await post(session, token)
+                case false?: break
+                case nil: status = nil
+                }
+            }
             outcome = status.map { (200..<300).contains($0) ? "outcome_done" : $0 == 401 ? "outcome_signin" : "outcome_failed" } ?? "outcome_failed"
         }
         let content = UNMutableNotificationContent()
@@ -112,5 +121,15 @@ enum PushNotifications {
         let center = UNUserNotificationCenter.current()
         center.removeDeliveredNotifications(withIdentifiers: [id])
         try? await center.add(UNNotificationRequest(identifier: "fliks.act.\(id)", content: content, trigger: nil))
+    }
+
+    private static func post(_ session: (server: String, token: String), _ token: String) async -> Int? {
+        guard let url = URL(string: session.server + "/api/push/act") else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: 20)
+        request.httpMethod = "POST"
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["token": token])
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(session.token)", forHTTPHeaderField: "Authorization")
+        return (try? await URLSession.shared.data(for: request)).flatMap { ($0.1 as? HTTPURLResponse)?.statusCode }
     }
 }
