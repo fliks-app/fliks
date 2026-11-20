@@ -48,6 +48,8 @@ const config: CapacitorConfig = {
     // The default ('recommended') makes the iPad WebView claim to be a desktop Mac.
     preferredContentMode: 'mobile',
     webContentsDebuggingEnabled: true,
+    // AppDelegate handles notification taps and presentation; the bridge would take the delegate over.
+    handleApplicationNotifications: false,
   },
 };
 
