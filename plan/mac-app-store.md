@@ -1,223 +1,217 @@
 # Plan — ship the Electron desktop client on the Mac App Store
 
-Status: **planned, not started**. Written 2026-08-04.
+Status: **planned, not started**. Written 2026-08-04, revised 2026-11-20 against
+main `13d2ad8f3`.
 
 Goal: a genuinely good Fliks app on the Mac App Store, built from the Electron
-client under `desktop/` (mpv playback), replacing the current "Designed for iPad"
-Mac listing.
+client under `desktop/` (in-process libmpv), replacing the current "Designed for
+iPad" Mac listing, while the notarized DMG (`media.fliks.desktop`) keeps shipping.
 
-Scope note: this is about `desktop/` (the thin client). The SwiftUI menu-bar
-**server** host under `macos/` can never go to the Mac App Store — it spawns
-PostgreSQL/Node/FFmpeg and downloads binaries, which guideline 2.4.5 (ii)/(iii)/(iv)
-forbids outright. It stays a notarized DMG.
+Scope note: this is about `desktop/`. The SwiftUI menu-bar **server** host under
+`macos/` can never go to the Mac App Store — it spawns PostgreSQL/Node/FFmpeg and
+downloads binaries, which guideline 2.4.5 (ii)/(iii)/(iv) forbids. It stays a
+notarized DMG.
 
 ## Decisions taken
 
 | Question | Decision | Why |
 | --- | --- | --- |
-| Store presence today | `media.fliks.app` is live on the Mac App Store as "Designed for iPad. Not verified for macOS" (macOS 13.5 + Apple silicon) | Verified on the public product page |
-| iPad-on-Mac listing | Turn it **off now** | It is buggy and unfit for Mac; the toggle is free, reversible, needs no build |
-| App record | **Add the macOS platform to the existing `media.fliks.app` record** (universal purchase) | One record, one listing, "Add Platform" in App Store Connect; releasing it permanently replaces the iPad-on-Mac listing, which is the desired outcome |
-| MAS bundle id | `media.fliks.app` — set via `mas.appId`, leaving the DMG on `media.fliks.desktop` | Universal purchase requires the bundle id to match iOS; `mas.appId` is honoured independently of `mac.appId`, so the DMG channel and its users' data are untouched |
-| Architecture | **arm64 only**, `minimumSystemVersion: 12.0` | Apple explicitly allows arm64-only when the minimum OS is macOS 12+ and the app never shipped Intel. Intel can be added later, never removed |
-| Media stack | Rebuild libmpv + FFmpeg **LGPL-only, from source, as a single static dylib** | GPL is the documented reason every mpv-based player is absent from the store (VLC 2011 precedent) |
-| Acquisition UI (Torznab/qBittorrent strings in the bundle) | **Do not strip up front.** Hold the stripped Angular variant in reserve | The iOS app shipped and was approved with the exact same strings in its bundle. Precedent beats speculation |
-| Distribution | Keep the notarized DMG **and** ship MAS | Apple allows both (Emby does it); different bundle ids, separate containers |
-
-## Step 0 — free, do it first (no build, no review)
-
-App Store Connect → Fliks → *Pricing and Availability* → "iPhone and iPad Apps on
-Apple Silicon Mac" → *Apple Silicon Mac Availability* → deselect "Make this app
-available" → Save.
-
-App-level, applies to all versions, reversible, effective within ~24 h. Existing
-Mac installs are never removed remotely.
-
-**Do not click "Verify Compatibility"** next to it — Apple: "Once verified, this
-option will no longer be available in App Store Connect".
+| Store presence today | `media.fliks.app` is live on the Mac App Store as "Designed for iPad" (macOS 13.5 + Apple silicon) | Verified on the public product page |
+| App record | **Add the macOS platform to the existing `media.fliks.app` record** (universal purchase) | One record, one listing; releasing it replaces the iPad-on-Mac listing and updates its existing users to the macOS app (ASC help) |
+| iPad-on-Mac toggle | Left **on** until the macOS build is approved; turned off at the macOS release (phase 5) | Turning availability off months earlier may forfeit the in-place replacement. Never click "Verify Compatibility" (irreversible) |
+| MAS bundle id | `media.fliks.app` via `mas.appId`; the DMG stays on `media.fliks.desktop` | Universal purchase needs the iOS bundle id; `mas.appId` is independent of `mac.appId` |
+| Architecture / OS floor | **arm64 only**, minimum **macOS 13.0** | Electron 45 itself requires 13; arm64-only is allowed at 12+ for an app that never shipped Intel. Intel can be added later, never removed |
+| Media stack | libmpv + FFmpeg rebuilt **from source, LGPL-2.1, TLS = OpenSSL 3**, as a single static dylib; no SecureTransport, no TLS escape hatch | GPL is why mpv players are absent from the store. OpenSSL ≥ 3 is accepted in a non-GPL FFmpeg build (LGPL-2.1+), keeps TLS 1.3, and avoids deprecated Apple API (2.4.5(viii)) |
+| Build recipe | Reuse the Linux pins: FFmpeg n8.1.2, mpv v0.41.0, libplacebo v7.351.0, libass 0.17.4 (`build-libmpv-linux.sh`) | One set of versions to maintain; the Mac script pins nothing today (Homebrew) |
+| CI | A `mas` matrix row in `desktop-release.yml`, not a copied workflow | The `v*` fan-out, signing and upload steps already exist there |
+| Updater | MAS build gated on `process.mas` in one place (the capability `updater.ts` reports), so the client update UI and the GitHub releases link hide themselves | MAS forbids self-updating (2.4.5(vii)); no build-time compile-out |
+| Acquisition UI | Nothing to strip: the client carries no torrent/indexer acquisition UI any more (acquisition moved to plugins) | Re-check before submission |
+| Distribution | Notarized DMG **and** MAS | Different bundle ids, separate containers |
 
 ## Blockers, by class
 
 ### Licensing — the only hard wall
 
-Verified in the shipped binaries, not inferred:
+Verified in the shipped binaries:
 
-- Homebrew FFmpeg is built `--enable-gpl --enable-version3 --enable-libx264
-  --enable-libx265` → GPL-3.0-or-later.
-- `libmpv.dylib` reports `gpl` in its feature list → GPL-2.0-or-later.
-- `libx264`, `libx265`, `librubberband`, `libbluray`/`libudfread` are real
-  link-time edges of the shipped `libavcodec` / `libmpv`.
-- `desktop/native/vendor/libmpv.so.2` (the one git-tracked file under `vendor/`)
-  is built `--enable-gpl --enable-nonfree` — **not redistributable at all**.
-  `vendor-libmpv-mac.sh:66`'s `rm -f` is undone by any checkout.
-- Fliks' own code is AGPL-3.0 with effectively a single copyright holder
-  (758/760 commits), so a dual-license / App Store exception is a decision, not
-  an engineering problem. x264's licence cannot be waived the same way.
+- The vendored FFmpeg is Homebrew's, built `--enable-gpl --enable-version3
+  --enable-openssl --enable-libx264 --enable-libx265` (GPLv3); `libmpv.dylib`
+  reports `gpl`; x264/x265/rubberband/libbluray are link-time edges.
+- Fliks' own code is AGPL-3.0 with effectively one copyright holder (2,581
+  commits, one external contributor with 2 commits, plus bots). Check the 7 owner
+  commits made under a work email before any dual-licensing decision. No copyleft
+  in the shipped npm dependencies.
 
-Apple runs no licence audit and there is no ingestion check: the exposure is
-copyright-holder enforcement after publication (VLC was pulled only after a
-complaint). It is real but it is not a review gate.
+Apple runs no licence audit; the exposure is copyright-holder enforcement after
+publication, not a review gate.
 
-An LGPL rebuild loses nothing this app exercises. FFmpeg's GPL list contains no
-decoders (DTS-HD/XLL, TrueHD/MLP, EAC3, HEVC 10-bit, VC-1, all subtitle codecs
-are native LGPL; AV1 via dav1d is BSD-2), `bwdif` is not GPL-gated, and mpv
-`-Dgpl=false` only drops cdda/dvdnav/dvbin/jack/oss/caca/direct3d/x11 — none
-reachable on macOS. The encoders in the tree (x264/x265/SvtAv1Enc/mp3lame) are
-dead weight in a playback client, and rubberband is never engaged (`speed` uses
-mpv's built-in scaletempo2).
+An LGPL rebuild loses nothing this app exercises: FFmpeg's GPL list has no
+decoders (DTS-HD, TrueHD, EAC3, HEVC 10-bit, VC-1 and subtitle codecs are native
+LGPL; AV1 is dav1d, BSD-2); `bwdif` is not GPL-gated; mpv `-Dgpl=false` only drops
+cdda/dvdnav/dvbin/jack/oss/caca/direct3d/x11. x264/x265/SvtAv1/mp3lame are dead
+weight in a playback client; rubberband is never engaged (`speed` uses
+scaletempo2).
 
-**TLS is the one real trade-off.** `mbedTLS` and GnuTLS(+GMP) are in FFmpeg's
-`version3` list and LibreSSL is `nonfree`, so the only path that keeps the stack
-at LGPL-2.1 (the licence VideoLAN adopted precisely to allow App Store
-distribution) is `--enable-securetransport`, which caps at **TLS 1.2**. A
-TLS-1.3-only server would fail. Keep a `FLIKS_MPV_TLS=openssl` escape hatch
-(→ LGPLv3+, to be avoided).
+The rebuild links **OpenSSL 3** (`--enable-openssl`, no `--enable-gpl`, no
+`--enable-version3`): configure accepts it and the result is "LGPL version 2.1 or
+later". mpv opens https itself through FFmpeg, so FFmpeg's TLS backend governs all
+playback; Electron's BoringSSL only carries the UI, downloads and `hls-mirror`.
+Disable libshaderc, the Vulkan loader, lua, js and libarchive (unused on the GL
+path).
 
-### Packaging (all fixable, no dead end)
+### Platform risks to accept and name
 
-- No `mas` target anywhere: `desktop/electron-builder.yml:70-86` is dmg+zip,
-  Developer ID, hardened runtime, notarize. The `mas` target pulls a **different
-  Electron build** — the standard darwin build will not launch under App Sandbox.
-- No `build/entitlements.mas.plist`. If it is missing, electron-builder silently
-  falls back to its own `entitlements.mac.plist` (no `app-sandbox`, with
-  `disable-library-validation`) → ITMS-90296 at upload.
-- `entitlements` and `entitlementsInherit` point at the same file
-  (`electron-builder.yml:84-85`); the four helpers need `app-sandbox` +
-  `com.apple.security.inherit` only.
-- Entitlement set to target (empirically matched to a live MAS Electron app —
-  Bitwarden ships `allow-jit` only and deleted the other two in commit e1778f4):
-  parent = `app-sandbox`, `network.client`, `application-groups
-  85ZC7Y8WQ2.media.fliks.app`, `cs.allow-jit`; inherit = `app-sandbox`,
-  `inherit`, `cs.allow-jit`. Drop `disable-library-validation` and
-  `allow-unsigned-executable-memory`. Note `mas.hardenedRuntime` is inverted in
-  electron-builder: off unless explicitly `true`.
-- Missing credentials: a **Mac Installer Distribution** cert (electron-builder
-  hardcodes CN `3rd Party Mac Developer Installer` for `productbuild` and throws
-  without it) and a **Mac App Store provisioning profile** (there is no
-  `-allowProvisioningUpdates` equivalent, so it must be supplied as a file;
-  mintable non-interactively via the ASC API `profileType: MAC_APP_STORE` or
-  `fastlane sigh --platform macos`; expires yearly).
-- Already reusable: `APPSTORE_API_KEY_ID` / `_ISSUER_ID` / `_KEY_P8_BASE64`,
-  `APPLE_TEAM_ID`, the throwaway-keychain block and the `altool` upload step
-  (`--type macos` instead of `ios`), and release-please's existing `v*` fan-out.
-- `electron-updater` must be compiled out for MAS: `autoUpdater` is disabled in
-  the MAS Electron build and 2.4.5 (vii) forbids self-updating.
+- Playback renders through mpv's render API on CGL/OpenGL (deprecated tech) into a
+  `CAMetalLayer` (`native/player_mac/addon.mm`); mpv's render API has no Metal
+  backend. Known 2.4.5(viii)/2.5.1 risk, no mitigation available.
+- Apple's static analysis has flagged private symbols inside Electron Framework;
+  the `mas` Electron build is the mitigation.
+- Nested Mach-O under `Contents/Resources/app.asar.unpacked/` is accepted today,
+  but TN2206 reserves the right to reject it. Relocate native code to
+  `Contents/Frameworks`: every vendored dylib is `@loader_path`-relative and the
+  addon dlopens `FLIKS_MPV_PATH`.
+
+### Packaging (all fixable)
+
+- No `mas` target: `desktop/electron-builder.yml` mac config is dmg+zip, Developer
+  ID, hardened runtime, notarize. The `mas` target pulls a **different Electron
+  build** (the standard one will not launch under App Sandbox).
+- electron-builder builds the mas config as `deepAssign(mac, mas)`, so mas inherits
+  `mac.entitlements` and `mac.hardenedRuntime`. Set `mas.entitlements` and
+  `mas.entitlementsInherit` **explicitly**, to two new plists (the
+  `build/entitlements.mas.plist` auto-pickup only runs when none is configured).
+  Inherited `hardenedRuntime: true` is fine for MAS.
+- `mas.extendInfo` and `mas.minimumSystemVersion` are ignored by 26.18: Info.plist
+  keys go in `mac.extendInfo` (a key set to `null` is deleted — that strips
+  Electron's camera/Bluetooth/audio-capture boilerplate strings) and the floor in
+  `mac.minimumSystemVersion`.
+- Entitlements. Parent: `app-sandbox`, `network.client`, **`network.server`**
+  (SSO loopback `oidc-loopback.ts` listens on `127.0.0.1`; Chromecast mDNS binds
+  UDP 5353 with multicast membership — UDP needs both), **`device.audio-input`**
+  (watch-party voice), `cs.allow-jit`. Inherit (helpers): `app-sandbox`, `inherit`,
+  `cs.allow-jit`. Drop `disable-library-validation` and
+  `allow-unsigned-executable-memory`. No file entitlement: all writes are
+  container-relative. `ElectronTeamID`, `application-identifier` and the
+  `TEAMID.bundleid` app group are added by `@electron/osx-sign` when app-sandbox is
+  on; nothing manual. No `aps-environment` (desktop push is page-driven).
+- Info.plist: add `NSLocalNetworkUsageDescription` (macOS 15+ gates LAN traffic;
+  first local-network operations may be denied before the prompt is answered, so
+  cast discovery and the first LAN server connect need retries — the 30 s mDNS
+  re-query covers discovery) and `ITSAppUsesNonExemptEncryption: false` (as iOS and
+  tvOS), plus the `CFBundleIconName` + `Assets.car` icon.
+- The macOS multicast entitlement is not required (TN3179). Optional later:
+  Bonjour browse of `_googlecast._tcp` in the addon and `ASWebAuthenticationSession`
+  for SSO would drop `network.server`.
+- Credentials: the **Mac Installer Distribution** cert is the only missing cert
+  (`IOS_DIST_CERT_P12_BASE64` is an Apple Distribution cert, which electron-builder
+  looks for first for mas). A **Mac App Store provisioning profile** must be
+  supplied as a file (mintable via the ASC API `MAC_APP_STORE` or `fastlane sigh`;
+  expires yearly). Reusable: `APPSTORE_API_KEY_*`, `APPLE_TEAM_ID`, the `altool`
+  upload (`--type macos`), release-please's `v*` fan-out.
+- CI composite actions `.github/actions/import-keychain` and `stage-asc-key`:
+  `import-keychain` writes a fixed `$RUNNER_TEMP/app-signing.keychain-db`, so it
+  takes a list of p12s (Distribution + Installer in one keychain) rather than being
+  called twice.
 - Build number: `-c.extraMetadata.version` sets `CFBundleShortVersionString` ==
-  `CFBundleVersion`, so any re-upload is rejected as a duplicate. Add
-  `-c.buildVersion=$(git rev-list --count HEAD)` with `fetch-depth: 0`.
-- Notarization is skipped for MAS by electron-builder; a `.pkg` is mandatory.
-- Also: `xattr -cr` before signing (no `com.apple.quarantine` since 2025-02-18),
-  `CFBundleIconName` + `Assets.car`, narrow `files:` to
-  `native/build/Release/*.node` (a stray `.o` → ITMS-90135), exclude
-  `native/vendor/*.so*` from the mac build.
-- Nested Mach-O under `Contents/Resources/app.asar.unpacked/` **is** accepted
-  today (proven by a shipping MAS Electron app), but TN2206 reserves the right to
-  reject nonstandard placement without notice. Relocating to
-  `Contents/Frameworks` is nearly free: every vendored dylib is already
-  `@loader_path`-relative and the addon has no link-time libmpv dependency (it
-  dlopens `FLIKS_MPV_PATH`). The static single-dylib rebuild makes this trivial.
+  `CFBundleVersion`, so a re-upload is a duplicate. Pass `-c.mas.bundleVersion` (or
+  `buildVersion`) from `git rev-list --count HEAD` (`fetch-depth: 0` is already set).
+- Notarization is skipped for MAS; a `.pkg` is mandatory. `xattr -cr` before signing.
+- Narrow `files:` to `native/build/Release/*.node` (a stray `.o` → ITMS-90135);
+  exclude `native/vendor/*.so*` and `node_modules/velopack/**` (win/linux `.node`
+  and `velopack_nodeffi_osx.node`, a Windows-only updater that is a 2.4.5(vii) and
+  static-scan risk in MAS) from the mac build.
+- Under the sandbox: `notify/status.ts` hard-codes `APP_ID = 'media.fliks.desktop'`
+  for the notification-settings deep link — derive it from the running bundle id;
+  `setLoginItemSettings` works (SMAppService) and is opt-in (satisfies 2.4.5(iii)),
+  re-test `wasOpenedAtLogin`; badges need notification permission; the calendar
+  handoff writes `os.tmpdir()` + `shell.openPath` (`index.ts`), untested under the
+  sandbox; `sw_vers` / `scutil` calls can become `process.getSystemVersion()`.
 
 ### Review
 
-- The category is fine: Infuse, Emby, VidHub, Home Assistant and Immich all ship
-  free clients that require a user-run server.
-- 2.1 (demo account) is the main wildcard, but iOS **and** tvOS were approved with
-  no demo server and no demo mode. Mitigation costs no code: review notes with a
-  reachable demo host and **non-admin** credentials.
-- 5.2.3 (acquisition UI): the same strings shipped in the approved iOS bundle, and
-  the routes are behind `adminGuard`. Keep a **non-admin** demo account so the UI
-  is unreachable, keep torrent/indexer wording out of the App Store description,
-  keywords and screenshots. Only build the stripped variant if Apple actually
-  raises it.
-- 4.2 (web wrapper) is defensible on the engine: in-process libmpv on a
-  CAOpenGLLayer, `hwdec=videotoolbox`, content-adaptive EDR/HDR, Direct Play,
-  offline downloads. Keep the phrase "thin client" out of review notes.
-- 2.5.1: Apple's static analysis has repeatedly flagged private symbols inside
-  Electron Framework. Out of our control; the `mas` Electron build is the
-  mitigation.
+- The category is fine: Infuse, Emby, VidHub, Home Assistant and Immich ship free
+  clients that need a user-run server.
+- 2.1 (demo account) is the main wildcard, but iOS and tvOS were approved with no
+  demo server. Mitigation costs no code: review notes with a reachable demo host
+  and **non-admin** credentials.
+- 4.2 (web wrapper): defensible on the engine — in-process libmpv, `hwdec=
+  videotoolbox`, content-adaptive EDR/HDR, Direct Play, offline downloads. Cite
+  4.2.7(e) as the reason to avoid the phrase "thin client" in review notes.
+- 4.8: SSO targets the user's own identity provider, so Sign in with Apple does not
+  apply. Justify `network.server` in the review notes.
+- 5.2.3: nothing to strip today; keep torrent/indexer wording out of the
+  description, keywords and screenshots.
 
-## What is already fine (no work needed)
+## Collateral bugs in the shipped DMG
 
-- No local listening socket anywhere (`grep createServer|\.listen(` → nothing);
-  `hls-mirror.ts` is an outbound `net.request` loop, `cors.ts` a header rewriter.
-  So no `network.server` entitlement is needed.
-- All writes are container-relative already: `download.ts:25`
-  (`userData/downloads`) and `log-file.ts:10-14` (`app.getPath('logs')`). No file
-  entitlement, no security-scoped bookmarks — the client never touches the user's
-  media files, it streams from the server.
-- No child process on the macOS playback path (libmpv is in-process).
-- `sw_vers` / `scutil` (`index.ts:109,148`) degrade to their existing fallbacks
-  under the sandbox.
+Open:
 
-## Collateral bugs found (independent of the store)
+1. **P0 — the DMG cannot play video on macOS 13 through 15.** 46 of 47 vendored
+   dylibs declare `minos 26.0` (Homebrew bottles inherit the build OS) while the
+   bundle declares `LSMinimumSystemVersion 13.0`; dyld refuses to load them. A CI
+   gate asserts `max(minos) <= LSMinimumSystemVersion`; the from-source rebuild is
+   the real fix.
+2. The `av_*` kill-switch (`scripts/verify-libmpv-mac.sh`) inspects only
+   `libmpv.dylib` while `libavcodec` sits beside it exporting `_av*`; a static build
+   needs an explicit `-Wl,-exported_symbols_list` with `_mpv_*`.
+3. `index.ts` accepts every certificate error for every host.
+4. Window commands: the key/main window is the frameless child overlay, so ⌘W, ⌘M
+   and Toggle Full Screen are inert (to re-test over the accessibility API); the
+   framed window reports `AXMain=false` (inactive title bar) and VoiceOver exposes
+   three windows.
+5. `window-all-closed` quits unconditionally; the dock-click reshow (#2810) exists,
+   and close-to-tray applies only with background mode.
+6. Fullscreen state is a renderer-local boolean (no fullscreen event in
+   `src/shared/contract.ts`): a native transition desynchronises the UI.
+7. `Info.plist` ships Electron's camera/Bluetooth/audio-capture strings and no
+   `NSLocalNetworkUsageDescription`.
+8. Menu role labels are English next to localized system ones; no View or Playback
+   menu.
+9. No `will-navigate` guard (`setWindowOpenHandler` exists).
+10. `<html lang>` is static (`client/src/index.html`), not the UI language.
+11. The mac `.app` ships `node_modules/velopack/**` (asarUnpack).
+12. Unverified: dead PiP control (`player.ts` sets it false on Electron — likely
+    fine).
 
-1. **P0 — the current DMG cannot play video on macOS 12 through 15.** 46 of 47
-   vendored dylibs declare `minos 26.0` (Homebrew bottles inherit the build OS)
-   while the bundle declares `LSMinimumSystemVersion 12.0`; dyld refuses to load
-   them. Add a CI gate asserting `max(minos) <= LSMinimumSystemVersion`; the
-   from-source rebuild is the real fix.
-2. The `av_*` kill-switch in `desktop-release.yml:225` inspects only
-   `libmpv.dylib` while `libavcodec` sits beside it exporting 452 `_av*` symbols.
-   It passes for the wrong reason, and a static build needs an explicit
-   `-Wl,-exported_symbols_list` with `_mpv_*`.
-3. `native/vendor/libmpv.so.2` — a 37 MB Linux x86-64 ELF built `--enable-nonfree`
-   — is git-tracked and ships inside the macOS `.app`.
-4. `index.ts:40-46` accepts every invalid TLS certificate for every host,
-   including the GitHub update feed and image.tmdb.org.
-5. `Menu.setApplicationMenu(null)` (`index.ts:234`) is a **no-op on macOS**: the
-   app currently ships Electron's stock developer menu, including "Toggle
-   Developer Tools" and "Force Reload", with English labels next to localized
-   system ones.
-6. Every window command is inert, because the key/main window is the frameless
-   child overlay: ⌘W, ⌘M and Toggle Full Screen do nothing (verified over the
-   accessibility API on the built bundle), the framed window reports
-   `AXMain=false` so its title bar draws inactive, and the Window menu plus
-   VoiceOver expose three windows.
-7. `window-all-closed` quits unconditionally (no darwin guard, no `activate`).
-8. Fullscreen state is a renderer-local boolean, so any native transition
-   desynchronises the UI and can trap the user in fullscreen.
-9. `Info.plist` ships Electron's boilerplate camera / microphone / Bluetooth /
-   audio-capture usage strings and no `NSLocalNetworkUsageDescription`, while
-   macOS 15+ gates all LAN traffic.
-10. No `setWindowOpenHandler`: an external link opens a chrome-less Electron
-    window inheriting `webSecurity: false` and the preload.
-11. Dead PiP control on desktop (`pipAvailable` defaults true, corrected only in
-    the Capacitor branch) — a visible button that does nothing is a 2.1 finding.
+Fixed since the first draft: Now Playing (#2044), the stock developer menu (#2055),
+`setWindowOpenHandler`, the Linux `libmpv.so.2` (built from source; CI deletes it
+before packaging — only a local build skipping the vendor script ships it).
 
 ## Phases and effort
 
 | # | Phase | Effort | Valuable without the store |
 | --- | --- | --- | --- |
-| 0 | Turn off the iPad-on-Mac listing; add the `minos` CI gate | 0.2 d | — |
-| 1 | LGPL media stack from source: 14 pinned deps as static archives → **one** `libmpv.dylib`, explicit `-mmacosx-version-min=12.0`, `_mpv_*` export list, SecureTransport | 5–8 d | **Yes — fixes bug 1** |
-| 2 | macOS shell: real localized application menu (no DevTools in packaged builds), window commands bound to the framed window, fullscreen event in the contract, darwin lifecycle (`activate` / hide on close), window-state persistence, `Info.plist` hygiene + `NSLocalNetworkUsageDescription`, `setWindowOpenHandler` + `will-navigate` guard, TLS bypass scoped to the configured server host, dead PiP control off, non-selectable text, `<html lang>`, darwin `before-quit` teardown | 6–8 d | **Yes** |
-| 3 | Now Playing: `MPNowPlayingInfoCenter` + `MPRemoteCommandCenter` in the existing ObjC++ addon (media keys, Control Center, widget) + a Playback menu | 2–3 d | **Yes** |
-| 4 | MAS packaging: `mas` target + `mas.appId`, two entitlements plists, installer cert, App ID + provisioning profile, `ElectronTeamID`, `buildVersion`, updater compiled out, `xattr -cr`, `extendInfo`, relocate native code to `Contents/Frameworks`, new `mac-app-store-publish.yml` (~80 % copied from `desktop-release.yml` + `appstore-publish.yml`) | 3–5 d | No |
-| 5 | Review prep: permanent public demo server + non-admin credentials, review notes, Mac screenshots, privacy label, QA matrix (resize during 4K HDR, XDR→SDR move, display unplug in fullscreen, ⌘Q mid-playback) | 2–3 d + infra | No |
-| — | *In reserve*: Angular App Store variant (`ng build --configuration=production,appstore` with `fileReplacements`, i18n strip, CI guard against reappearance) — only if Apple raises 5.2.3 | 5–6.5 d | No |
-| — | *Later*: single-window macOS refactor (fixes the inactive title bar, the 3-window accessibility tree, unlocks `hiddenInset` + vibrancy) | 3–5 d, medium risk | Yes |
-| — | *Later*: Intel support (universal build) | 4–8 d | — |
+| 0 | `minos` CI gate: every vendored Mach-O ≤ `LSMinimumSystemVersion`; kill-switch checks every dylib | 0.3 d | Yes — flags bug 1 |
+| S | **Sandbox spike** (parallel with 1): `mas-dev` build on a throwaway bundle id with today's Homebrew dylibs — libmpv dlopen under library validation, CAMetalLayer, the 3-window session, mDNS, SSO loopback, mic, `.ics` `openPath` | ~1 d | — |
+| 1 | LGPL media stack from source: Linux pins, static archives → **one** `libmpv.dylib`, `-mmacosx-version-min=13.0`, `_mpv_*` export list, OpenSSL 3, a macOS CI job; Homebrew vendor script retired | 4–6 d | **Yes — fixes bug 1** |
+| 2 | macOS shell: localized menu labels, window commands and AX bound to the framed window, fullscreen event in the contract, TLS bypass scoped to the configured server host, `will-navigate` guard, `Info.plist` hygiene, runtime `<html lang>`, window state, velopack excluded | 4–6 d | **Yes** |
+| 3 | Playback menu (Now Playing already done) | 0.5 d | **Yes** |
+| 4 | MAS packaging: `mas` row in `desktop-release.yml`, `mas.appId`, two plists, two-p12 keychain, `process.mas` updater gate, `APP_ID` fix, `buildVersion`, `extendInfo`, native code to `Contents/Frameworks`, upload | 3–5 d | No |
+| 5 | Review prep: demo server + non-admin credentials, review notes, Mac screenshots, privacy label, QA matrix (resize during 4K HDR, XDR→SDR move, display unplug in fullscreen, ⌘Q mid-playback, local-network permission denial); at release turn off the iPad-on-Mac availability | 2–3 d + infra | No |
+| — | *Later*: single-window macOS refactor (fixes the inactive title bar, the 3-window AX tree; unlocks `hiddenInset` + vibrancy) | 3–5 d | Yes |
+| — | *Later*: Intel (universal build) | 4–8 d | — |
 
-**Total before submission ≈ 19–28 d**, of which 13–19 d improve the shipped DMG
-whether or not the store happens.
+**Total before submission ≈ 14–22 d**, most of it improving the shipped DMG.
 
-Suggested order: 0 → 1 → 2 → 3 (all DMG-positive) → 4 → 5. Validate the sandbox
-with a `mas-dev` build on a throwaway bundle id before touching the real record,
-then use TestFlight for macOS (up to 10 000 external testers, Beta App Review on
-the first build only) to check sandboxed playback against real libraries.
+Order: 0 → (S ∥ 1) → 2 → 3 → 4 → 5. Validate the sandbox with a `mas-dev` build on
+a throwaway bundle id before touching the real record, then TestFlight for macOS
+(Beta App Review on the first build only) against real libraries.
+
+## Needs the owner
+
+Mac Installer Distribution cert; Mac development cert + profile for `mas-dev` (and
+the throwaway App ID); App ID capabilities and the Mac App Store profile; the
+macOS platform in App Store Connect; new GitHub secrets (installer p12, profile);
+uploading a build; the demo server and screenshots.
 
 ## Open questions
 
-- Is `IOS_DIST_CERT_P12_BASE64` an "Apple Distribution" cert (works for a MAS
-  bundle) or a legacy "iOS Distribution" one? If the latter, a Mac App
-  Distribution cert secret is needed on top of the installer cert.
-- Who mints and rotates the Mac App Store provisioning profile (yearly, no cloud
-  fallback in electron-builder)?
-- Keep quit-on-last-window-close, or true macOS lifecycle (hide + reopen on dock
-  click)? The latter means the mpv session must survive or be re-created on
-  `activate`.
-- Does the MAS build's sandbox container (`~/Library/Containers/media.fliks.app`)
-  actually contain the old iPad-on-Mac app's `UserDefaults`? If so, a ~0.5 d
-  one-time migration can pre-fill the server URL instead of dropping those users
-  on the setup screen.
-- Is TLS 1.2 (SecureTransport) acceptable for every deployed Fliks server?
+- Who mints and rotates the Mac App Store provisioning profile (yearly)?
+- Keep quit-on-last-window-close, or true macOS lifecycle (hide + reopen on
+  `activate`, mpv session surviving)?
+- Does `~/Library/Containers/media.fliks.app` carry the iPad-on-Mac app's data? The
+  iPad build keeps its server URL in Capacitor Preferences (UserDefaults); a ~0.5 d
+  one-time migration could pre-fill it instead of dropping those users on the setup
+  screen.
+- Dual-licensing (AGPL + App Store exception) is moot for FFmpeg (LGPL) but Fliks'
+  own AGPL code on the store needs the owner's call; check the work-email commits.
