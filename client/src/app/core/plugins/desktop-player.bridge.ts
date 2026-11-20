@@ -108,6 +108,44 @@ export type DesktopEvent =
   | { type: 'seekRequest'; payload: { position: number } }
   | { type: 'error'; payload: { code: number; message: string; detail?: string } };
 
+/** An action of a notification, as `PushAction`. */
+export interface DesktopNotificationAction {
+  id: string;
+  title: string;
+  kind: 'open' | 'call';
+  url?: string;
+  token?: string;
+}
+
+/** What the shell shows as an OS notification; `image` is a path on `serverUrl` (a public route) that the shell resolves. */
+export interface DesktopNotification {
+  id: string;
+  title: string;
+  body: string;
+  image?: string;
+  tag?: string;
+  url: string;
+  serverUrl: string;
+  user: number;
+  actions: DesktopNotificationAction[];
+}
+
+/** A click on a notification, or on one of its actions. */
+export interface DesktopNotificationClick {
+  url: string;
+  serverUrl: string;
+  user: number;
+  action?: DesktopNotificationAction;
+}
+
+export interface DesktopNotifyPrefs {
+  /** Closing the window leaves the app running. */
+  /** OS notifications while the window is not active; off until the user turns it on. */
+  notifications: boolean;
+  background: boolean;
+  startAtLogin: boolean;
+}
+
 export interface FliksDesktopApi {
   runtime: 'electron';
   load(opts: DesktopLoadOptions): Promise<void>;
@@ -152,6 +190,15 @@ export interface FliksDesktopApi {
   oidcWait?(id: number, state: string): Promise<string | null>;
   oidcCancel?(id: number): Promise<void>;
   on(handler: (event: DesktopEvent) => void): () => void;
+  /** OS notification; absent on a shell without notification support. */
+  notify?(n: DesktopNotification): Promise<void>;
+  onNotificationClick?(handler: (e: DesktopNotificationClick) => void): () => void;
+  setBadge?(count: number): Promise<void>;
+  getNotifyPrefs?(): Promise<DesktopNotifyPrefs>;
+  setNotifyPrefs?(patch: Partial<DesktopNotifyPrefs>): Promise<DesktopNotifyPrefs>;
+  /** Whether the window is visible and focused: notifications are shown by the OS only when it is not. */
+  windowActive?(): Promise<boolean>;
+  onWindowActive?(handler: (active: boolean) => void): () => void;
 }
 
 declare global {

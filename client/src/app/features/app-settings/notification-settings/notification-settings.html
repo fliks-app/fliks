@@ -1,7 +1,7 @@
 <h1 class="text-2xl font-bold mb-4">{{ 'app_settings.nav.notifications' | translate }}</h1>
 
 <div class="space-y-4">
-  @if (push.canEnableDevice() || push.mobileBlockedByAdmin() || isTv()) {
+  @if (push.canEnableDevice() || push.mobileBlockedByAdmin() || isTv() || push.desktopPrefs()) {
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body gap-4">
         <h2 class="text-lg font-semibold">{{ 'app_settings.notifications.device_title' | translate }}</h2>
@@ -14,13 +14,33 @@
           />
         } @else if (push.mobileBlockedByAdmin()) {
           <p class="text-base-content/60">{{ 'app_settings.notifications.admin_disabled' | translate }}</p>
-        } @else {
+        } @else if (push.canEnableDevice()) {
           <app-toggle-field
             [value]="push.deviceEnabled()"
             (valueChange)="setDevice($event)"
             [disabled]="push.busy() || denied()"
             [label]="'app_settings.notifications.device' | translate"
             [hint]="(denied() ? 'app_settings.notifications.denied' : 'app_settings.notifications.device_hint') | translate"
+          />
+        }
+        @if (push.desktopPrefs(); as prefs) {
+          <app-toggle-field
+            [value]="prefs.notifications"
+            (valueChange)="push.setDesktopPref({ notifications: $event })"
+            [label]="'app_settings.notifications.device' | translate"
+            [hint]="'app_settings.notifications.device_hint' | translate"
+          />
+          <app-toggle-field
+            [value]="prefs.background"
+            (valueChange)="push.setDesktopPref({ background: $event })"
+            [label]="'app_settings.notifications.background' | translate"
+            [hint]="'app_settings.notifications.background_hint' | translate"
+          />
+          <app-toggle-field
+            [value]="prefs.startAtLogin"
+            (valueChange)="push.setDesktopPref({ startAtLogin: $event })"
+            [label]="'app_settings.notifications.start_at_login' | translate"
+            [hint]="'app_settings.notifications.start_at_login_hint' | translate"
           />
         }
       </div>
@@ -43,6 +63,25 @@
       }
     </div>
   </div>
+
+  @if (push.plugins().length) {
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-4">
+        <div>
+          <h2 class="text-lg font-semibold">{{ 'app_settings.notifications.plugins_title' | translate }}</h2>
+          <p class="text-base-content/60 mt-1">{{ 'app_settings.notifications.plugins_hint' | translate }}</p>
+        </div>
+        @for (p of push.plugins(); track p.id) {
+          <app-toggle-field
+            [value]="!muted().includes('plugin.' + p.id)"
+            (valueChange)="setPluginMuted(p.id, $event)"
+            [label]="p.name"
+            [hint]="'app_settings.notifications.plugin_hint' | translate"
+          />
+        }
+      </div>
+    </div>
+  }
 
   <div>
     <button class="btn btn-sm" [disabled]="testing()" (click)="test()">

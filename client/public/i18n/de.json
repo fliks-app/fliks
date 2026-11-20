@@ -420,7 +420,16 @@
       "test_failed": "Die Testbenachrichtigung ist fehlgeschlagen: {{error}}",
       "enable_failed": "Benachrichtigungen konnten nicht aktiviert werden.",
       "action_done": "Erledigt.",
-      "action_failed": "Die Aktion ist fehlgeschlagen."
+      "action_failed": "Die Aktion ist fehlgeschlagen.",
+      "test_none": "Noch kein Gerät von Ihnen empfängt Systembenachrichtigungen.",
+      "plugins_title": "Plugins",
+      "plugins_hint": "Gilt für alle Ihre Geräte.",
+      "plugin_hint": "Nachrichten dieses Plugins.",
+      "background": "Im Hintergrund weiterlaufen",
+      "background_hint": "Beim Schließen des Fensters läuft Fliks weiter, damit Benachrichtigungen ankommen.",
+      "start_at_login": "Bei der Anmeldung starten",
+      "start_at_login_hint": "Fliks startet im Hintergrund, wenn Sie sich am Computer anmelden.",
+      "pending_expired": "Melden Sie sich erneut an, um diese Benachrichtigung zu öffnen."
     }
   },
   "update_settings": {
@@ -4750,7 +4759,6 @@
     "share_link": "Link teilen",
     "add_to_calendar": "Zum Kalender hinzufügen",
     "link_copied": "Link kopiert",
-    "view": "Ansehen",
     "create_title": "Neue Party",
     "create_name": "Name",
     "create_when": "Wann",

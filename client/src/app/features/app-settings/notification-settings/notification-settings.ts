@@ -39,6 +39,10 @@ export class NotificationSettingsPageComponent {
     else await this.push.disable();
   }
 
+  protected async setPluginMuted(id: string, on: boolean): Promise<void> {
+    await this.setCategory(`plugin.${id}`, on);
+  }
+
   protected async setCategory(cat: string, on: boolean): Promise<void> {
     const user = this.auth.user();
     if (!user) return;
@@ -58,7 +62,9 @@ export class NotificationSettingsPageComponent {
       const results = await this.push.sendTest();
       const failed = results.filter((r) => !r.ok);
       if (failed.length) this.toast.error(this.translate.instant('app_settings.notifications.test_failed', { error: failed[0].error ?? '' }));
-      else if (!this.isTv()) this.toast.success(this.translate.instant('app_settings.notifications.test_sent'));
+      else if (this.isTv()) return;
+      else if (!results.length) this.toast.info(this.translate.instant('app_settings.notifications.test_none'));
+      else this.toast.success(this.translate.instant('app_settings.notifications.test_sent'));
     } catch {
       // handled by the global error interceptor
     } finally {

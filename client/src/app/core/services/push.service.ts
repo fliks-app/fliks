@@ -5,8 +5,10 @@ import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
+import { desktopBridgeOrNull, type DesktopNotifyPrefs } from '../plugins/desktop-player.bridge';
 import { Push, type PushOpened, type PushPermission, type SessionRef } from '../plugins/push.plugin';
 import { readFlag, readStored, writeFlag, writeStored } from '../utils/local-flag';
+import { sameOriginPath } from '../utils/same-origin';
 import { AuthService } from './auth.service';
 import { DeviceService } from './device.service';
 import { ServerConfigService } from './server-config.service';
@@ -37,17 +39,28 @@ export interface PushAction {
   token?: string;
 }
 
-/** `native`: APNs/FCM through the plugin; `web`: Web Push through the service worker; `toast`: in-app only (TV); `none`: nothing on this device yet (desktop). */
-export type PushMode = 'native' | 'web' | 'toast' | 'none';
+/** `native`: APNs/FCM through the plugin; `web`: Web Push through the service worker; `desktop`: OS notifications from the Electron shell; `toast`: in-app only (TV); `none`: nothing on this device. */
+export type PushMode = 'native' | 'web' | 'desktop' | 'toast' | 'none';
+
+/** A plugin whose `plugin.<id>` category the user can mute. */
+export interface PushPluginInfo {
+  id: string;
+  name: string;
+}
 
 interface PushConfig {
   mobile: boolean;
   vapidPublicKey: string;
+  plugins?: PushPluginInfo[];
 }
 
 const PENDING_URL_KEY = 'fliks.push.pendingUrl';
 const TOASTS_KEY = 'fliks.push.toasts';
-const SW_SCRIPT = 'custom-sw.js';
+/** A tap that switched server resumes only if the app comes back within this. */
+const PENDING_URL_TTL_MS = 5 * 60_000;
+/** Sign-out must not hang on an unreachable push service or server. */
+const RELEASE_TIMEOUT_MS = 5000;
+const LANG_MESSAGE = 'fliks-push-lang';
 
 function b64urlToBytes(s: string): Uint8Array<ArrayBuffer> {
   const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
@@ -86,6 +99,14 @@ export class PushService {
   /** TV: show the in-app toasts. */
   readonly toastsEnabled = signal(readFlag(TOASTS_KEY, true));
   readonly busy = signal(false);
+  /** Plugins that can notify this account, from `GET /api/push/config`. */
+  readonly plugins = signal<PushPluginInfo[]>([]);
+  /** Desktop: the window is visible and focused, so the in-app toast shows instead of an OS notification. */
+  readonly desktopActive = signal(true);
+  /** Desktop: background mode and start at login; null outside a shell that supports them. */
+  readonly desktopPrefs = signal<DesktopNotifyPrefs | null>(null);
+  /** A Web Push subscription is registered on the server for this session. */
+  private readonly subscribed = signal(false);
 
   /** The device switch is offered here. */
   readonly canEnableDevice = computed(
@@ -95,16 +116,19 @@ export class PushService {
   readonly mobileBlockedByAdmin = computed(() => this.mode === 'native' && this.nativeAvailable() && !this.mobileEnabled());
   /** Whether a system notification reaches this device, so the toast would repeat it. */
   private readonly systemCovers = computed(
-    () => this.mode === 'web' && this.deviceEnabled() && this.permission() === 'granted',
+    () => this.mode === 'web' && this.subscribed() && this.permission() === 'granted',
   );
 
   private openedHandle: PluginListenerHandle | null = null;
+  /** A pending tap is honoured only by the launch that follows it, not by a later account switch. */
+  private launched = false;
 
   constructor() {
     effect(() => {
       this.auth.sessionEpoch();
       const user = this.auth.user();
       untracked(() => {
+        this.subscribed.set(false);
         if (!user || !this.serverSupported()) {
           this.deviceEnabled.set(false);
           return;
@@ -114,10 +138,22 @@ export class PushService {
       });
     });
     this.sse.notifications.subscribe((n) => this.onNotification(n));
+    effect(() => {
+      if (this.mode !== 'web') return;
+      const lang = this.translate.currentLang() || 'en';
+      void navigator.serviceWorker.ready.then((r) => r.active?.postMessage({ type: LANG_MESSAGE, lang }));
+    });
+    // Registered with the service, which the app initializer creates: a tap on the user picker or the login page must not be lost.
     if (this.mode === 'web') {
       navigator.serviceWorker.addEventListener('message', (e) => {
-        if (e.data?.type === 'fliks-push-open') void this.opened({ url: String(e.data.url ?? '/') });
+        if (e.data?.type !== 'fliks-push-open') return;
+        const user = typeof e.data.user === 'number' ? e.data.user : undefined;
+        void this.opened({ url: String(e.data.url ?? '/'), session: user === undefined ? undefined : this.sessionRef(user) });
       });
+    } else if (this.mode === 'native') {
+      void this.listenNative();
+    } else if (this.mode === 'desktop') {
+      this.listenDesktop();
     }
   }
 
@@ -138,6 +174,7 @@ export class PushService {
         if (perm !== 'granted') return false;
       }
       await this.subscribe(false);
+      writeStored(this.pendingDeleteKey(), null);
       writeFlag(this.flagKey(user.id), true);
       this.deviceEnabled.set(true);
       return true;
@@ -154,20 +191,30 @@ export class PushService {
     if (!user) return;
     this.busy.set(true);
     try {
-      await this.unsubscribe();
+      // The session is still valid: a failed server deletion stays pending and is retried at the next start.
+      await this.unsubscribe(true).catch(() => undefined);
       writeFlag(this.flagKey(user.id), false);
       this.deviceEnabled.set(false);
-    } catch {
-      // the server keeps the row and the device its pending deletion; the switch stays on
     } finally {
       this.busy.set(false);
     }
   }
 
-  /** Sign-out: drops this device's subscription but keeps the choice, so the same account signing in again resubscribes. */
+  /** Sign-out: drops this device's subscription but keeps the choice, so the same account signing in again resubscribes. The server sweeps the rows of a revoked session. */
   async release(): Promise<void> {
     if (!this.deviceEnabled()) return;
-    await this.unsubscribe().catch(() => undefined);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((resolve) => (timer = setTimeout(resolve, RELEASE_TIMEOUT_MS)));
+    try {
+      await Promise.race([this.unsubscribe(false).catch(() => undefined), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async setDesktopPref(patch: Partial<DesktopNotifyPrefs>): Promise<void> {
+    const next = await desktopBridgeOrNull()?.setNotifyPrefs?.(patch);
+    if (next) this.desktopPrefs.set(next);
   }
 
   async sendTest(): Promise<{ platform: string; ok: boolean; error?: string }[]> {
@@ -181,6 +228,10 @@ export class PushService {
   setBadge(count: number): void {
     if (this.mode === 'native') {
       if (this.nativeAvailable()) void Push.setBadge({ count }).catch(() => undefined);
+      return;
+    }
+    if (this.mode === 'desktop') {
+      void desktopBridgeOrNull()?.setBadge?.(count)?.catch(() => undefined);
       return;
     }
     if (this.mode !== 'web') return;
@@ -204,27 +255,47 @@ export class PushService {
 
   /** A tapped notification: native fires it through the plugin, the browser through the service worker. */
   async opened(e: PushOpened): Promise<void> {
-    const user = this.auth.user();
     const s = e.session;
-    if (s && user && (s.serverUrl !== this.serverConfig.serverUrl() || s.userId !== user.id)) {
-      if (s.serverUrl !== this.serverConfig.serverUrl()) {
-        writeStored(PENDING_URL_KEY, e.url);
-        await this.auth.switchToServer(s.serverUrl);
-        return;
-      }
-      if ((await this.auth.resumeSession(s.userId)) !== 'resumed') return;
+    if (s && s.serverUrl !== this.serverConfig.serverUrl()) {
+      writeStored(PENDING_URL_KEY, JSON.stringify({ url: e.url, userId: s.userId, exp: Date.now() + PENDING_URL_TTL_MS }));
+      await this.auth.switchToServer(s.serverUrl);
+      return;
     }
+    if (s && s.userId !== this.auth.user()?.id && !(await this.resume(s.userId))) return;
     await this.go(e.url);
   }
 
+  private async resume(userId: number): Promise<boolean> {
+    return (await this.auth.resumeSession(userId)) === 'resumed';
+  }
+
   private async go(url: string | undefined): Promise<void> {
-    if (url?.startsWith('/') && !url.startsWith('//')) await this.router.navigateByUrl(url);
+    const path = sameOriginPath(url);
+    if (path) await this.router.navigateByUrl(path);
   }
 
   private onNotification(n: PushNotification): void {
     if (n.badge !== undefined) this.setBadge(n.badge);
     if (this.systemCovers()) return;
     if (this.device.isTv() && !this.toastsEnabled()) return;
+    const user = this.auth.user();
+    const bridge = desktopBridgeOrNull();
+    if (this.mode === 'desktop' && !this.desktopActive() && this.desktopPrefs()?.notifications && user && bridge?.notify) {
+      void bridge
+        .notify({
+          id: n.id,
+          title: n.title,
+          body: n.body,
+          image: n.image,
+          tag: n.tag,
+          url: n.url,
+          serverUrl: this.serverConfig.serverUrl(),
+          user: user.id,
+          actions: n.actions ?? [],
+        })
+        .catch(() => undefined);
+      return;
+    }
     const tv = this.device.isTv();
     this.toast.notify({
       title: n.title,
@@ -237,21 +308,55 @@ export class PushService {
   }
 
   private async start(): Promise<void> {
-    await this.consumePendingUrl();
+    if (!this.launched) {
+      this.launched = true;
+      await this.consumePendingUrl();
+    }
+    await this.retryPendingDelete();
     if (this.mode === 'native') await this.startNative();
+    if (this.mode === 'desktop') this.desktopPrefs.set((await desktopBridgeOrNull()?.getNotifyPrefs?.()) ?? null);
     if (this.mode === 'web') this.permission.set(this.webPermission());
     if (this.mode === 'native' || this.mode === 'web') await this.loadConfig();
     if (this.deviceEnabled() && this.canEnableDevice()) {
       // Background resubscribe at login, launch and session switch: a refusal is not the user's to see.
-      await this.subscribe(true).catch(() => undefined);
+      await this.subscribe(true).catch(() => this.subscribed.set(false));
     }
   }
 
   private async consumePendingUrl(): Promise<void> {
-    const url = readStored(PENDING_URL_KEY);
-    if (!url) return;
+    const raw = readStored(PENDING_URL_KEY);
+    if (!raw) return;
     writeStored(PENDING_URL_KEY, null);
-    await this.go(url);
+    let pending: { url?: string; userId?: number; exp?: number };
+    try {
+      pending = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!pending.exp || pending.exp < Date.now()) return;
+    if (pending.userId !== undefined && pending.userId !== this.auth.user()?.id && !(await this.resume(pending.userId))) {
+      this.toast.error(this.translate.instant('app_settings.notifications.pending_expired'));
+      return;
+    }
+    await this.go(pending.url);
+  }
+
+  private async listenNative(): Promise<void> {
+    try {
+      this.openedHandle ??= await Push.addListener('pushOpened', (e) => void this.opened(e));
+    } catch {
+      // no plugin in this build: nothing taps a notification
+    }
+  }
+
+  private listenDesktop(): void {
+    const bridge = desktopBridgeOrNull();
+    bridge?.onNotificationClick?.((e) => {
+      if (e.action?.kind === 'call') void this.runAction(e.action);
+      else void this.opened({ url: e.action?.url ?? e.url, session: { serverUrl: e.serverUrl, userId: e.user, key: `${e.serverUrl}|${e.user}` } });
+    });
+    void bridge?.windowActive?.().then((a) => this.desktopActive.set(a));
+    bridge?.onWindowActive?.((a) => this.desktopActive.set(a));
   }
 
   private async startNative(): Promise<void> {
@@ -259,7 +364,6 @@ export class PushService {
       const st = await Push.status();
       this.nativeAvailable.set(st.available);
       this.permission.set(st.permission);
-      if (st.available && !this.openedHandle) this.openedHandle = await Push.addListener('pushOpened', (e) => void this.opened(e));
     } catch {
       this.nativeAvailable.set(false);
     }
@@ -271,6 +375,7 @@ export class PushService {
         this.http.get<PushConfig>('/api/push/config', { context: new HttpContext().set(SKIP_ERROR_TOAST, true) }),
       );
       this.mobileEnabled.set(cfg.mobile);
+      this.plugins.set((cfg.plugins ?? []).map((p) => ({ id: p.id, name: p.name || p.id })));
       return cfg;
     } catch {
       return null;
@@ -292,9 +397,10 @@ export class PushService {
       await Push.subscribe({ session: ref.key, sub: r.sub, ticket: r.ticket, serverUrl: ref.serverUrl });
       return;
     }
+    this.subscribed.set(false);
     const cfg = (await this.loadConfig()) ?? undefined;
     if (!cfg?.vapidPublicKey) throw new Error('no VAPID key');
-    const reg = await this.registration();
+    const reg = await navigator.serviceWorker.ready;
     const key = b64urlToBytes(cfg.vapidPublicKey);
     let sub = await reg.pushManager.getSubscription();
     // A server that changed its VAPID identity invalidates the subscription.
@@ -311,32 +417,46 @@ export class PushService {
         { context: ctx },
       ),
     );
+    this.subscribed.set(true);
   }
 
-  private async unsubscribe(): Promise<void> {
-    if (this.mode === 'native') {
-      await Push.unsubscribe({ session: this.sessionRef().key });
-      await this.deleteCurrent(Capacitor.getPlatform() === 'ios' ? 'apns' : 'fcm');
-      return;
-    }
-    await this.deleteCurrent('web');
+  /** Both sides always run, so a failed server deletion never keeps the browser or the plugin subscribed; with `retry` it stays pending until the next start. */
+  private async unsubscribe(retry: boolean): Promise<void> {
+    this.subscribed.set(false);
+    const native = this.mode === 'native';
+    const platform = native ? (Capacitor.getPlatform() === 'ios' ? 'apns' : 'fcm') : 'web';
+    const key = this.pendingDeleteKey();
+    if (retry) writeStored(key, platform);
+    const local = native ? Push.unsubscribe({ session: this.sessionRef().key }) : this.unsubscribeWeb();
+    const remote = this.deleteCurrent(platform).then(() => writeStored(key, null));
+    const failed = (await Promise.allSettled([local, remote])).find((r) => r.status === 'rejected');
+    if (failed) throw (failed as PromiseRejectedResult).reason;
+  }
+
+  private async unsubscribeWeb(): Promise<void> {
     const reg = await navigator.serviceWorker.getRegistration();
     await (await reg?.pushManager.getSubscription())?.unsubscribe();
   }
 
+  private async retryPendingDelete(): Promise<void> {
+    const platform = readStored(this.pendingDeleteKey());
+    if (!platform) return;
+    await this.deleteCurrent(platform).then(() => writeStored(this.pendingDeleteKey(), null)).catch(() => undefined);
+  }
+
   private deleteCurrent(platform: string): Promise<unknown> {
-    return firstValueFrom(this.http.delete('/api/push/subscriptions/current', { body: { platform } }));
+    return firstValueFrom(
+      this.http.delete('/api/push/subscriptions/current', { body: { platform }, context: new HttpContext().set(SKIP_ERROR_TOAST, true) }),
+    );
   }
 
-  private async registration(): Promise<ServiceWorkerRegistration> {
-    // Angular registers the same script once the app is stable; registering it again returns that registration.
-    return (await navigator.serviceWorker.getRegistration()) ?? navigator.serviceWorker.register(SW_SCRIPT);
-  }
-
-  private sessionRef(): SessionRef {
+  private sessionRef(userId = this.auth.user()?.id ?? 0): SessionRef {
     const serverUrl = this.serverConfig.serverUrl();
-    const userId = this.auth.user()?.id ?? 0;
     return { serverUrl, userId, key: `${serverUrl}|${userId}` };
+  }
+
+  private pendingDeleteKey(): string {
+    return `fliks.push.pendingDelete::${this.serverConfig.serverUrl()}::${this.auth.user()?.id ?? 0}`;
   }
 
   private flagKey(userId: number): string {
@@ -350,7 +470,7 @@ export class PushService {
   private detectMode(): PushMode {
     if (this.device.isTv()) return 'toast';
     if (Capacitor.isNativePlatform()) return 'native';
-    if (this.device.isDesktopNative()) return 'none';
+    if (this.device.isDesktopNative()) return desktopBridgeOrNull()?.notify ? 'desktop' : 'none';
     const web =
       !isDevMode() &&
       globalThis.isSecureContext &&

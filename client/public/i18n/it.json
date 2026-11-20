@@ -420,7 +420,16 @@
       "test_failed": "La notifica di prova non è riuscita: {{error}}",
       "enable_failed": "Impossibile attivare le notifiche.",
       "action_done": "Fatto.",
-      "action_failed": "L'azione non è riuscita."
+      "action_failed": "L'azione non è riuscita.",
+      "test_none": "Nessuno dei tuoi dispositivi riceve ancora notifiche di sistema.",
+      "plugins_title": "Plugin",
+      "plugins_hint": "Vale per tutti i tuoi dispositivi.",
+      "plugin_hint": "Messaggi inviati da questo plugin.",
+      "background": "Resta attivo in background",
+      "background_hint": "Chiudendo la finestra Fliks resta attivo e le notifiche continuano ad arrivare.",
+      "start_at_login": "Avvia all'accesso",
+      "start_at_login_hint": "Fliks si apre in background quando accedi al computer.",
+      "pending_expired": "Accedi di nuovo per aprire questa notifica."
     }
   },
   "update_settings": {
@@ -4750,7 +4759,6 @@
     "share_link": "Condividi link",
     "add_to_calendar": "Aggiungi al calendario",
     "link_copied": "Link copiato",
-    "view": "Vedi",
     "create_title": "Nuova sessione",
     "create_name": "Nome",
     "create_when": "Quando",

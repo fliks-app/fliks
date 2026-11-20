@@ -41,6 +41,7 @@ import { errorInterceptor } from './core/interceptors/error.interceptor';
 import { cacheInterceptor } from './core/interceptors/cache.interceptor';
 import { CachingReuseStrategy } from './core/services/route-reuse.strategy';
 import { AuthService } from './core/services/auth.service';
+import { PushService } from './core/services/push.service';
 import { ServerConfigService } from './core/services/server-config.service';
 import { SessionStoreService } from './core/services/session-store.service';
 import { translateBrowserLoaderFactory } from './utils/translate-loader';
@@ -103,6 +104,8 @@ export const appConfig: ApplicationConfig = {
     { provide: ErrorHandler, useClass: AppErrorHandler },
     provideZonelessChangeDetection(),
     provideAppInitializer(loadPersistedState),
+    // Instantiated at launch so a notification tap is handled on any page.
+    provideAppInitializer(() => void inject(PushService)),
     { provide: LOCALE_ID, useFactory: resolveInitialLocale },
     provideRouter(
       routes,

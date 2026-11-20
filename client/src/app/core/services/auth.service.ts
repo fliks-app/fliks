@@ -1,5 +1,6 @@
 import { Injectable, Injector, signal, computed, inject, untracked } from '@angular/core';
 import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
+import { sameOriginPath } from '../utils/same-origin';
 import { PushService } from './push.service';
 import { Router } from '@angular/router';
 import type { MediaType } from '../enums/media-type.enum';
@@ -981,7 +982,7 @@ export class AuthService {
     try {
       const url = sessionStorage.getItem(SIGN_IN_RETURN_KEY);
       sessionStorage.removeItem(SIGN_IN_RETURN_KEY);
-      return url?.startsWith('/') && !url.startsWith('//') ? url : '/';
+      return sameOriginPath(url) ?? '/';
     } catch {
       return '/';
     }

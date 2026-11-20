@@ -530,8 +530,6 @@ export class PartyService {
 
   private onEvent(e: PartyEvent): void {
     switch (e.type) {
-      case 'party.invited':
-        return;
       case 'party.starting':
         if (e.partyId === this.party()?.id) void this.refetch();
         return;

@@ -420,7 +420,16 @@
       "test_failed": "A notificação de teste falhou: {{error}}",
       "enable_failed": "Não foi possível ativar as notificações.",
       "action_done": "Feito.",
-      "action_failed": "A ação falhou."
+      "action_failed": "A ação falhou.",
+      "test_none": "Nenhum dos seus dispositivos recebe ainda notificações do sistema.",
+      "plugins_title": "Plugins",
+      "plugins_hint": "Aplica-se a todos os seus dispositivos.",
+      "plugin_hint": "Mensagens enviadas por este plugin.",
+      "background": "Manter em segundo plano",
+      "background_hint": "Fechar a janela mantém o Fliks ativo para que as notificações continuem a chegar.",
+      "start_at_login": "Iniciar com a sessão",
+      "start_at_login_hint": "O Fliks abre em segundo plano quando inicia sessão no computador.",
+      "pending_expired": "Inicie sessão novamente para abrir esta notificação."
     }
   },
   "update_settings": {
@@ -4750,7 +4759,6 @@
     "share_link": "Partilhar link",
     "add_to_calendar": "Adicionar ao calendário",
     "link_copied": "Link copiado",
-    "view": "Ver",
     "create_title": "Nova sessão",
     "create_name": "Nome",
     "create_when": "Quando",

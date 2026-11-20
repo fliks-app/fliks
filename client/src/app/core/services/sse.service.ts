@@ -303,6 +303,14 @@ export class SseService implements OnDestroy {
       });
     });
 
+    // The server renders each event in the `lang` the stream was dialled with.
+    effect(() => {
+      this.translate.currentLang();
+      untracked(() => {
+        if (this.eventSource) this.reconnect();
+      });
+    });
+
     // Debounced so a Wi-Fi wake-up or the resume-reconnect race doesn't flash the banner.
     effect(() => {
       this.network.isOnline();
