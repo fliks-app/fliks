@@ -38,15 +38,6 @@ export function pressMediaKey(contents: Electron.WebContents, keyCode: MediaKey)
   for (const type of ['keyDown', 'keyUp'] as const) contents.sendInputEvent({ type, keyCode });
 }
 
-/** The framed window's commands: the key window is a frameless overlay, so the window roles would hit the wrong one. */
-export interface WindowCommands {
-  toggleFullscreen(): void;
-  isFullscreen(): boolean;
-  minimize(): void;
-  zoom(): void;
-  close(): void;
-}
-
 /** `v` rebuilt key by key, or null when any label is missing or too long. */
 export function parseMenuLabels(v: unknown): DesktopMenuLabels | null {
   const o = (v ?? {}) as Record<string, unknown>;
@@ -63,11 +54,10 @@ export function parseMenuLabels(v: unknown): DesktopMenuLabels | null {
 export function menuTemplate(
   appName: string,
   l: DesktopMenuLabels,
-  win: WindowCommands | null,
+  fullScreen: boolean,
   dev: boolean,
   playback: ((key: MediaKey) => void) | null = null,
 ): MenuItemConstructorOptions[] {
-  const fullScreen = win?.isFullscreen() ?? false;
   const key = (k: MediaKey): MenuItemConstructorOptions['click'] => () => playback?.(k);
   return [
     {
@@ -99,12 +89,7 @@ export function menuTemplate(
     {
       label: l.view,
       submenu: [
-        {
-          label: fullScreen ? l.exitFullScreen : l.enterFullScreen,
-          accelerator: 'Ctrl+Command+F',
-          enabled: win !== null,
-          click: () => win?.toggleFullscreen(),
-        },
+        { role: 'togglefullscreen', label: fullScreen ? l.exitFullScreen : l.enterFullScreen },
         ...(dev ? ([{ type: 'separator' }, { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }] as MenuItemConstructorOptions[]) : []),
       ],
     },
@@ -122,9 +107,9 @@ export function menuTemplate(
     {
       label: l.window,
       submenu: [
-        { label: l.minimize, accelerator: 'Command+M', enabled: win !== null, click: () => win?.minimize() },
-        { label: l.zoom, enabled: win !== null, click: () => win?.zoom() },
-        { label: l.close, accelerator: 'Command+W', enabled: win !== null, click: () => win?.close() },
+        { role: 'minimize', label: l.minimize },
+        { role: 'zoom', label: l.zoom },
+        { role: 'close', label: l.close },
         { type: 'separator' },
         { role: 'front', label: l.bringAllToFront },
       ],

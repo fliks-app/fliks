@@ -3,7 +3,7 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { MpvPlayer } from '../mpv/mpv-player';
-import { MacMpvPlayer, keepOffMainWindow, roundWindowBottomCorners } from '../mpv/mac-mpv-player';
+import { MacMpvPlayer } from '../mpv/mac-mpv-player';
 import type { PlayerBackend } from '../mpv/player-backend';
 import { createEmbedBackend } from './backends';
 import { setPlaybackKeepAwake } from '../power';
@@ -11,7 +11,6 @@ import { forwardPlayerEvents } from './forward-events';
 import { appendLog, echoRendererConsole } from '../log-file';
 import { watchRendererCrash } from '../renderer-recovery';
 import { IPC, type DesktopEvent, type DesktopRect } from '../../shared/contract';
-import type { WindowCommands } from '../menu-template';
 import { loadWindowState, trackWindowState } from '../window-state';
 
 /**
@@ -35,12 +34,10 @@ export interface PlayerSessionOptions {
   iconPath?: string;
 }
 
-/** Window corner radius matching each OS's native window rounding, so the
- *  overlays' clipped bottom aligns with frameWin's rounded bottom: macOS ~10pt,
- *  Windows 11 DWM ~8px. */
 const UI_CLOSE_GRACE_MS = 1500;
-const OVERLAY_CORNER_RADIUS = 10;
+/** Windows 11 DWM window rounding, so the overlays' clipped bottom aligns with frameWin's. */
 const WIN_OVERLAY_CORNER_RADIUS = 8;
+const BLANK_PAGE = 'data:text/html,<body style="margin:0;background:transparent"></body>';
 
 /** Windows: a square-top / rounded-bottom window region as a horizontal-slice
  *  staircase (setShape/SetWindowRgn has no anti-aliasing, so the curve is
@@ -57,115 +54,86 @@ function roundedBottomShape(width: number, height: number): Electron.Rectangle[]
   return rects;
 }
 
+function uiWebPreferences(preload: string): Electron.WebPreferences {
+  return {
+    preload,
+    contextIsolation: true,
+    sandbox: true,
+    // The live event stream keeps running while the window is hidden in background mode.
+    backgroundThrottling: false,
+    // Trusted client: the bundled Angular app (fliks://, a secure origin)
+    // must reach the user's server even when it's plain HTTP on a LAN —
+    // disable web security to allow that cross-origin/mixed-content fetch,
+    // the same bypass the mobile apps get via native HTTP. cors.ts still
+    // reflects the ACAO header for credentialed calls.
+    webSecurity: false,
+  };
+}
+
+/** Windows: the frameless see-through windows pinned over frameWin's content area. */
+interface Overlays {
+  /** mpv's --wid child window embeds into it and shows through its (empty) transparent page. */
+  video: BrowserWindow;
+  /** The web UI, owned by `video` so it stays above it; its transparent regions reveal the video. */
+  ui: BrowserWindow;
+}
+
 /**
- * Owns three stacked, geometry-synced windows and the mpv player:
- *   • frameWin — the FRAMED master window (native title bar, min/maximize/close,
- *     taskbar entry, icon, resize). Opaque; the user drives every window
- *     operation through it. Its content area is fully covered by videoWin.
- *   • videoWin — frameless transparent window owned by frameWin, pinned over
- *     frameWin's content area. mpv embeds into it and shows through its (empty)
- *     transparent web content. A transparent window can't be framed on Windows,
- *     so the native frame and the see-through video layer must be separate
- *     stacked windows.
- *   • uiWin — frameless transparent window owned by videoWin, pinned over the
- *     same area, hosting the web UI. Its transparent regions reveal the video
- *     below; the app's own opaque pages cover it while browsing.
+ * The player window and the mpv player. frameWin is the FRAMED window (native
+ * title bar, window commands, taskbar/dock entry, resize).
+ *   • macOS — one window: the libmpv layer sits in frameWin's content view under
+ *     its own (transparent) page, so AppKit moves, resizes and animates both
+ *     together, full-screen transitions included.
+ *   • Windows — mpv is a subprocess embedded through --wid, and a transparent
+ *     window can't be framed there, so the video and the UI are two frameless
+ *     overlay windows kept over frameWin's content area.
  */
-export class PlayerSession implements WindowCommands {
+export class PlayerSession {
   private frameWin!: BrowserWindow;
-  private videoWin!: BrowserWindow;
-  private uiWin!: BrowserWindow;
+  private overlays: Overlays | null = null;
   private mpv: PlayerBackend | null = null;
   /** Set by destroy(); createPlayer() can await the (slow, Windows gpu-next)
    *  probe for several seconds, during which the window may already have closed. */
   private destroyed = false;
-  /** Quit is under way: closing the window then ends the session instead of hiding it. */
   /** Playback stopped: by the renderer (stop IPC) or by a renderer crash. */
   onStop?: () => void;
   /** Background mode: closing the window hides it instead of ending the session. */
   hideOnClose: () => boolean = () => false;
-  /** The window is visible and focused (any of its three windows). */
+  /** The window is visible and focused (any of the session's windows). */
   onActive?: (active: boolean) => void;
   /** The framed window entered or left full screen. */
   onFullscreenChange?: () => void;
 
+  private get uiWin(): BrowserWindow {
+    return this.overlays?.ui ?? this.frameWin;
+  }
+
+  private get windows(): BrowserWindow[] {
+    return this.overlays ? [this.frameWin, this.overlays.video, this.overlays.ui] : [this.frameWin];
+  }
+
   async start(opts: PlayerSessionOptions): Promise<void> {
     const { rendererUrl, preloadPath, iconPath } = opts;
-    const saved = process.platform === 'darwin' ? loadWindowState() : null;
+    const singleWindow = process.platform === 'darwin';
+    const saved = singleWindow ? loadWindowState() : null;
     this.frameWin = new BrowserWindow({
       width: 1280,
       height: 800,
       ...(saved ? { x: saved.x, y: saved.y, width: saved.width, height: saved.height } : {}),
       minWidth: 800,
       minHeight: 500,
-      backgroundColor: '#1d232a', // brand at startup; set black on first frame so a video gap reads as loading
+      // Windows: brand at startup, black on the first frame. macOS: the page is see-through over the video layer.
+      ...(singleWindow ? { backgroundColor: '#00000000' } : { backgroundColor: '#1d232a' }),
       title: 'Fliks',
       ...(iconPath ? { icon: iconPath } : {}),
+      ...(singleWindow ? { webPreferences: uiWebPreferences(preloadPath) } : {}),
     });
-    await this.frameWin.loadURL(
-      'data:text/html,<body style="margin:0;background:transparent"></body>',
-    );
+    if (singleWindow) this.frameWin.on('page-title-updated', (e) => e.preventDefault());
+    else this.overlays = await this.createOverlays(preloadPath);
 
-    this.videoWin = new BrowserWindow({
-      ...this.frameWin.getContentBounds(),
-      // Transparent so the embedded mpv child window shows through its (empty)
-      // web content; otherwise the opaque page covers the video. On Windows a
-      // transparent window must be frameless — frameWin carries the chrome.
-      frame: false,
-      transparent: true,
-      backgroundColor: '#00000000',
-      hasShadow: false,
-      roundedCorners: false,
-      resizable: false,
-      skipTaskbar: true,
-      // Owned by frameWin: stays above it (over its content area) and hides /
-      // closes with it, without its own taskbar entry.
-      parent: this.frameWin,
-      title: 'Fliks',
-    });
-    await this.videoWin.loadURL(
-      'data:text/html,<body style="margin:0;background:transparent"></body>',
-    );
-
-    this.uiWin = new BrowserWindow({
-      ...this.frameWin.getContentBounds(),
-      frame: false,
-      transparent: true,
-      backgroundColor: '#00000000',
-      hasShadow: false,
-      roundedCorners: false,
-      // Electron warns that resizing a transparent window can break its
-      // transparency on some platforms; the overlay is re-fitted via setBounds
-      // in sync(), so keep the user from resizing it directly.
-      resizable: false,
-      // Owned by videoWin: stays above it (so the controls draw over the video)
-      // without a global always-on-top.
-      skipTaskbar: true,
-      parent: this.videoWin,
-      title: 'Fliks UI',
-      webPreferences: {
-        preload: preloadPath,
-        contextIsolation: true,
-        sandbox: true,
-        // The live event stream keeps running while the window is hidden in background mode.
-        backgroundThrottling: false,
-        // Trusted client: the bundled Angular app (fliks://, a secure origin)
-        // must reach the user's server even when it's plain HTTP on a LAN —
-        // disable web security to allow that cross-origin/mixed-content fetch,
-        // the same bypass the mobile apps get via native HTTP. cors.ts still
-        // reflects the ACAO header for credentialed calls.
-        webSecurity: false,
-      },
-    });
-
-    // The overlays are key but never main, so the framed window keeps its active title bar.
-    if (process.platform === 'darwin') {
-      keepOffMainWindow(this.videoWin);
-      keepOffMainWindow(this.uiWin);
-    }
-
-    echoRendererConsole(this.uiWin.webContents);
-    watchRendererCrash(this.uiWin.webContents, {
+    const ui = this.uiWin;
+    echoRendererConsole(ui.webContents);
+    watchRendererCrash(ui.webContents, {
       appUrl: rendererUrl,
       stopPlayback: async () => {
         setPlaybackKeepAwake(false);
@@ -174,95 +142,38 @@ export class PlayerSession implements WindowCommands {
       },
       log: appendLog,
     });
-    this.uiWin.webContents.on('unresponsive', () =>
-      console.error('[uiWin] unresponsive'),
-    );
+    ui.webContents.on('unresponsive', () => console.error('[ui] unresponsive'));
 
-
-    // Keep the video + UI layers exactly over the framed window's content area.
-    const sync = () => {
-      if (
-        this.uiWin.isDestroyed() ||
-        this.videoWin.isDestroyed() ||
-        this.frameWin.isDestroyed()
-      )
-        return;
-      const b = this.frameWin.getContentBounds();
-      this.videoWin.setBounds(b);
-      // Windows turns a transparent window OPAQUE once it covers the full
-      // display (Electron #27286), which would black out the controls layer in
-      // fullscreen. Shave 1px so the overlay stays under display size + keeps
-      // its transparency; the video underneath still fills the screen.
-      const u = { ...b };
-      if (process.platform === 'win32' && this.frameWin.isFullScreen()) u.height -= 1;
-      this.uiWin.setBounds(u);
-      // frameWin rounds its bottom natively (macOS) / via DWM (Win11); clip the
-      // square overlays to match so the video + UI don't overhang it. Re-applied
-      // here so the shape tracks every resize. Skip in fullscreen (edge-to-edge).
-      const fs = this.frameWin.isFullScreen();
-      if (process.platform === 'darwin') {
-        const r = fs ? 0 : OVERLAY_CORNER_RADIUS;
-        roundWindowBottomCorners(this.videoWin, r);
-        roundWindowBottomCorners(this.uiWin, r);
-      } else if (process.platform === 'win32') {
-        this.videoWin.setShape(fs ? [] : roundedBottomShape(b.width, b.height));
-        this.uiWin.setShape(fs ? [] : roundedBottomShape(u.width, u.height));
-      }
-    };
-    // All these window events take a `() => void` listener; cast to one literal
-    // so the overload resolves (a union of event names matches none).
-    for (const ev of [
-      'move',
-      'resize',
-      'maximize',
-      'unmaximize',
-      'restore',
-      'enter-full-screen',
-    ] as const) {
-      this.frameWin.on(ev as 'resize', sync);
-    }
-    // On Windows, 'leave-full-screen' fires BEFORE the windowed frame is
-    // restored (Electron applies the size after notifying), so a synchronous
-    // getContentBounds() still returns the full-display rect. sync() would then
-    // pin the transparent video/UI overlays over the title bar, covering the
-    // native caption buttons, with no later event guaranteed to correct it.
-    // Re-fit once the restore has committed. macOS reports settled bounds at the
-    // event already, so it needs only the synchronous pass; the deferred ones
-    // are idempotent no-ops (sync() guards isDestroyed()).
     this.frameWin.on('enter-full-screen', () => this.fullscreenChanged(true));
-    this.frameWin.on('leave-full-screen', () => {
-      this.fullscreenChanged(false);
-      sync();
-      if (process.platform === 'win32') {
-        setTimeout(sync, 0);
-        setTimeout(sync, 150);
-      }
-    });
-    // Close the UI first so its unload handlers (position save, session stop) run before destroy() kills it.
+    this.frameWin.on('leave-full-screen', () => this.fullscreenChanged(false));
     this.frameWin.on('close', (e) => {
-      if (this.destroyed || this.uiWin.isDestroyed()) return;
-      e.preventDefault();
+      if (this.destroyed || ui.isDestroyed()) return;
       if (this.hideOnClose()) {
+        e.preventDefault();
         this.hide();
         return;
       }
       // macOS keeps the app alive in the dock. A hidden full-screen window would leave an empty Space.
       if (process.platform === 'darwin' && !isQuitting()) {
+        e.preventDefault();
         if (this.frameWin.isFullScreen()) {
           this.frameWin.once('leave-full-screen', () => this.hide());
           this.frameWin.setFullScreen(false);
         } else this.hide();
         return;
       }
-      this.uiWin.once('closed', () => void this.destroy());
-      this.uiWin.close();
+      if (ui === this.frameWin) return;
+      // Close the UI first so its unload handlers (position save, session stop) run before destroy() kills it.
+      e.preventDefault();
+      ui.once('closed', () => void this.destroy());
+      ui.close();
       setTimeout(() => void this.destroy(), UI_CLOSE_GRACE_MS);
     });
     this.frameWin.on('closed', () => this.destroy());
     this.watchActive();
     if (saved?.maximized) this.frameWin.maximize();
     if (saved?.fullscreen) this.frameWin.setFullScreen(true);
-    if (process.platform === 'darwin') trackWindowState(this.frameWin);
+    if (singleWindow) trackWindowState(this.frameWin);
     // Quit closes every window from Electron's own loop, and destroy() tearing the siblings down
     // inside it frees a window that loop still holds: close ours first, window-all-closed then quits.
     app.on('before-quit', (e) => {
@@ -271,14 +182,8 @@ export class PlayerSession implements WindowCommands {
       this.frameWin.close();
     });
 
-    // Shape + position the overlays BEFORE awaiting the (slow) Angular load, so
-    // the corners are rounded from the first painted frame instead of showing
-    // square for the ~0.5s the app takes to load.
-    sync();
-    await this.uiWin.loadURL(rendererUrl);
-    sync();
+    await ui.loadURL(rendererUrl);
 
-    // The video window's native handle is only valid once it has painted.
     const mpv = await this.createPlayer();
     if (this.destroyed) {
       await mpv.destroy().catch(() => {});
@@ -286,30 +191,88 @@ export class PlayerSession implements WindowCommands {
     }
     this.mpv = mpv;
     // A video gap (decoder re-init on a seek) then reads as loading, not a brand flash.
-    forwardPlayerEvents(this.mpv, (e) => this.emit(e), () => {
+    forwardPlayerEvents(this.mpv, (e) => this.emit(e), this.overlays ? () => {
       if (!this.frameWin.isDestroyed()) this.frameWin.setBackgroundColor('#000000');
-    });
+    } : undefined);
     await this.mpv.start();
     this.emit({ type: 'ready' });
   }
 
+  private async createOverlays(preloadPath: string): Promise<Overlays> {
+    await this.frameWin.loadURL(BLANK_PAGE);
+    const overlay = {
+      ...this.frameWin.getContentBounds(),
+      frame: false,
+      transparent: true,
+      backgroundColor: '#00000000',
+      hasShadow: false,
+      roundedCorners: false,
+      // Electron warns that resizing a transparent window can break its transparency; sync() re-fits it.
+      resizable: false,
+      skipTaskbar: true,
+    };
+    const video = new BrowserWindow({ ...overlay, parent: this.frameWin, title: 'Fliks' });
+    await video.loadURL(BLANK_PAGE);
+    const ui = new BrowserWindow({
+      ...overlay,
+      parent: video,
+      title: 'Fliks UI',
+      webPreferences: uiWebPreferences(preloadPath),
+    });
+
+    // Keep the video + UI layers exactly over the framed window's content area.
+    const sync = () => {
+      if (ui.isDestroyed() || video.isDestroyed() || this.frameWin.isDestroyed()) return;
+      const b = this.frameWin.getContentBounds();
+      video.setBounds(b);
+      // Windows turns a transparent window OPAQUE once it covers the full
+      // display (Electron #27286), which would black out the controls layer in
+      // fullscreen. Shave 1px so the overlay stays under display size + keeps
+      // its transparency; the video underneath still fills the screen.
+      const fs = this.frameWin.isFullScreen();
+      const u = { ...b, height: fs ? b.height - 1 : b.height };
+      ui.setBounds(u);
+      // frameWin rounds its bottom via DWM; clip the square overlays to match (edge-to-edge in fullscreen).
+      video.setShape(fs ? [] : roundedBottomShape(b.width, b.height));
+      ui.setShape(fs ? [] : roundedBottomShape(u.width, u.height));
+    };
+    // All these window events take a `() => void` listener; cast to one literal
+    // so the overload resolves (a union of event names matches none).
+    for (const ev of ['move', 'resize', 'maximize', 'unmaximize', 'restore', 'enter-full-screen'] as const) {
+      this.frameWin.on(ev as 'resize', sync);
+    }
+    // 'leave-full-screen' fires BEFORE the windowed frame is restored, so a
+    // synchronous getContentBounds() still returns the full-display rect and
+    // would pin the overlays over the native caption buttons: re-fit once the
+    // restore has committed.
+    this.frameWin.on('leave-full-screen', () => {
+      sync();
+      setTimeout(sync, 0);
+      setTimeout(sync, 150);
+    });
+    // Shaped before the (slow) Angular load, so the corners are rounded from the first painted frame.
+    sync();
+    ui.webContents.once('did-finish-load', sync);
+    return { video, ui };
+  }
+
   /**
    * Pick the playback backend for the current OS:
-   *   • macOS — in-process libmpv rendered into a CAOpenGLLayer on the video
-   *     window's NSView (mpv's subprocess ignores --wid there).
-   *   • Windows (and other --wid embed platforms) — an mpv subprocess embedded
-   *     via the platform EmbedBackend's args.
+   *   • macOS — in-process libmpv rendered into a CAMetalLayer inside the framed
+   *     window (mpv's subprocess ignores --wid there).
+   *   • Windows — an mpv subprocess embedded into the video overlay via the
+   *     platform EmbedBackend's args.
    */
   private async createPlayer(): Promise<PlayerBackend> {
-    if (process.platform === 'darwin') return new MacMpvPlayer(this.videoWin);
+    if (!this.overlays) return new MacMpvPlayer(this.frameWin);
     const mpvPath = resolveBundledMpv() ?? 'mpv';
     const backend = createEmbedBackend();
-    const { args, env } = await backend.resolve(this.videoWin, mpvPath);
+    const { args, env } = await backend.resolve(this.overlays.video, mpvPath);
     return new MpvPlayer({ baseArgs: args, env, mpvPath });
   }
 
   private emit(event: DesktopEvent): void {
-    if (this.uiWin && !this.uiWin.isDestroyed()) {
+    if (this.frameWin && !this.uiWin.isDestroyed()) {
       this.uiWin.webContents.send(IPC.event, event);
     }
   }
@@ -325,19 +288,16 @@ export class PlayerSession implements WindowCommands {
     return this.frameWin.getNativeWindowHandle();
   }
 
-  /** The page's contents, for what the main process injects into it or fetches as it. */
   /** Brings the framed window back to the front, e.g. after the browser step of an SSO sign-in. */
   focus(): void {
     if (this.frameWin.isDestroyed()) return;
     if (this.frameWin.isMinimized()) this.frameWin.restore();
-    this.frameWin.show();
-    if (!this.videoWin.isDestroyed()) this.videoWin.show();
-    if (!this.uiWin.isDestroyed()) this.uiWin.show();
+    for (const w of this.windows) if (!w.isDestroyed()) w.show();
     this.frameWin.focus();
   }
 
   hide(): void {
-    for (const w of [this.uiWin, this.videoWin, this.frameWin]) if (!w.isDestroyed()) w.hide();
+    for (const w of [...this.windows].reverse()) if (!w.isDestroyed()) w.hide();
     this.onActive?.(false);
   }
 
@@ -345,18 +305,18 @@ export class PlayerSession implements WindowCommands {
     if (!this.frameWin.isDestroyed()) this.frameWin.setOverlayIcon(icon, description);
   }
 
-  /** Focus moves between the three windows, so the verdict waits for it to settle. */
+  /** Focus moves between the session's windows, so the verdict waits for it to settle. */
   private watchActive(): void {
     let timer: NodeJS.Timeout | undefined;
     const settle = () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
         if (this.destroyed || this.frameWin.isDestroyed()) return;
-        const wins = [this.frameWin, this.videoWin, this.uiWin].filter((w) => !w.isDestroyed());
+        const wins = this.windows.filter((w) => !w.isDestroyed());
         this.onActive?.(this.frameWin.isVisible() && !this.frameWin.isMinimized() && wins.some((w) => w.isFocused()));
       }, 100);
     };
-    for (const w of [this.frameWin, this.videoWin, this.uiWin]) {
+    for (const w of this.windows) {
       w.on('focus', settle);
       w.on('blur', settle);
       w.on('show', settle);
@@ -365,6 +325,7 @@ export class PlayerSession implements WindowCommands {
     }
   }
 
+  /** The page's contents, for what the main process injects into it or fetches as it. */
   get uiContents(): Electron.WebContents {
     return this.uiWin.webContents;
   }
@@ -377,32 +338,12 @@ export class PlayerSession implements WindowCommands {
     return !!this.frameWin && !this.frameWin.isDestroyed() && this.frameWin.isFullScreen();
   }
 
-  toggleFullscreen(): void {
-    this.setFullscreen(!this.isFullscreen());
-  }
-
-  minimize(): void {
-    if (!this.frameWin.isDestroyed()) this.frameWin.minimize();
-  }
-
-  zoom(): void {
-    if (this.frameWin.isDestroyed()) return;
-    if (this.frameWin.isMaximized()) this.frameWin.unmaximize();
-    else this.frameWin.maximize();
-  }
-
-  close(): void {
-    if (!this.frameWin.isDestroyed()) this.frameWin.close();
-  }
-
   private fullscreenChanged(fullscreen: boolean): void {
     this.emit({ type: 'fullscreenChanged', payload: { fullscreen } });
     this.onFullscreenChange?.();
   }
 
   setFullscreen(enabled: boolean): void {
-    // The framed window goes fullscreen; the enter/leave-full-screen listeners
-    // re-sync the video + UI layers onto its content area (full screen).
     if (!this.frameWin.isDestroyed()) this.frameWin.setFullScreen(enabled);
   }
 
@@ -418,8 +359,6 @@ export class PlayerSession implements WindowCommands {
       console.error('[player] teardown failed', e);
     }
     this.mpv = null;
-    if (this.uiWin && !this.uiWin.isDestroyed()) this.uiWin.destroy();
-    if (this.videoWin && !this.videoWin.isDestroyed()) this.videoWin.destroy();
-    if (this.frameWin && !this.frameWin.isDestroyed()) this.frameWin.destroy();
+    for (const w of [...this.windows].reverse()) if (!w.isDestroyed()) w.destroy();
   }
 }

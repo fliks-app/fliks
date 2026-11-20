@@ -188,7 +188,7 @@ before packaging — only a local build skipping the vendor script ships it).
 | 3 | Playback menu (Now Playing already done) | 0.5 d | **Yes** |
 | 4 | MAS packaging: third-party notices (LGPL text and source offer for FFmpeg, mpv, libplacebo, fribidi; FreeType credit; OpenSSL licence), `mas` row in `desktop-release.yml`, `mas.appId`, two plists, two-p12 keychain, `process.mas` updater gate, `APP_ID` fix, `buildVersion`, `extendInfo`, native code to `Contents/Frameworks`, upload | 3–5 d | No |
 | 5 | Review prep: demo server + non-admin credentials, review notes, Mac screenshots, privacy label, QA matrix (resize during 4K HDR, XDR→SDR move, display unplug in fullscreen, ⌘Q mid-playback, local-network permission denial); at release turn off the iPad-on-Mac availability | 2–3 d + infra | No |
-| — | *Later*: single-window macOS refactor (fixes the inactive title bar, the 3-window AX tree; unlocks `hiddenInset` + vibrancy) | 3–5 d | Yes |
+| — | Single-window macOS player (fixes the inactive title bar, the 3-window AX tree and the black full-screen transition): done, stacked on phase 2 | 3–5 d | Yes |
 | — | *Later*: Intel (universal build) | 4–8 d | — |
 
 **Total before submission ≈ 14–22 d**, most of it improving the shipped DMG.

@@ -1,6 +1,6 @@
 // In-process libmpv player for macOS (the `fliks_player_mac` native addon).
 //
-// The addon embeds libmpv in a CAOpenGLLayer on the videoWin's NSView and
+// The addon embeds libmpv in a CAMetalLayer inside the player window and
 // exposes a property/command/event surface (mirroring the Linux compositor
 // addon). This class adapts that surface to `PlayerBackend` so `PlayerSession`
 // drives macOS exactly like the Windows subprocess player. The control logic is
@@ -39,9 +39,6 @@ export type MacAddon = NowPlayingAddon & {
   command(args: string[]): void;
   getProperty(name: string): string | null;
   setProperty(name: string, value: string): void;
-  resize(): void;
-  setBottomCornerRadius(wid: string, radius: number): void;
-  keepOffMainWindow(wid: string): void;
   probeLists(): { 'decoder-list'?: string; 'demuxer-lavf-list'?: string };
   stop(): void;
 };
@@ -67,19 +64,6 @@ export function loadMacAddon(): MacAddon {
   return macAddon;
 }
 
-/** Clip a window's content view to a square-top / rounded-bottom shape. Call on
- *  create and on every resize with the window's current bounds. */
-export function roundWindowBottomCorners(win: BrowserWindow, radius: number): void {
-  const wid = win.getNativeWindowHandle().readBigUInt64LE(0).toString();
-  loadMacAddon().setBottomCornerRadius(wid, radius);
-}
-
-/** Stops a window from becoming the app's main window, so it can be key (typing) while another keeps the active title bar. */
-export function keepOffMainWindow(win: BrowserWindow): void {
-  const wid = win.getNativeWindowHandle().readBigUInt64LE(0).toString();
-  loadMacAddon().keepOffMainWindow(wid);
-}
-
 export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {
   private readonly qoe = new QoeReader();
   private readonly addon: MacAddon;
@@ -95,11 +79,11 @@ export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements P
   private lastBuffered = 0;
   private readonly firstFrameGate = new FirstFrameGate();
 
-  constructor(videoWin: BrowserWindow) {
+  constructor(win: BrowserWindow) {
     super();
     // macOS getNativeWindowHandle() yields a pointer-sized (64-bit) NSView*; the
     // addon parses it back from a decimal string (a JS number can't hold it).
-    this.wid = videoWin.getNativeWindowHandle().readBigUInt64LE(0).toString();
+    this.wid = win.getNativeWindowHandle().readBigUInt64LE(0).toString();
     this.addon = loadMacAddon();
   }
 
