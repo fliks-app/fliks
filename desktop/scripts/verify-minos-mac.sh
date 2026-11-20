@@ -7,8 +7,9 @@ cd "$(dirname "$0")/../.."
 floor=$(sed -n 's/^ *minimumSystemVersion: *"\{0,1\}\([0-9.]*\)"\{0,1\}.*/\1/p' desktop/electron-builder.yml | head -1)
 test -n "$floor" || { echo "::error::mac.minimumSystemVersion missing in electron-builder.yml"; exit 1; }
 dirs=("$@")
-[ ${#dirs[@]} -gt 0 ] || dirs=(desktop/native/vendor desktop/native/build/Release)
+[ ${#dirs[@]} -gt 0 ] || dirs=(desktop/native/vendor desktop/native/build/Release desktop/node_modules/velopack/lib/native)
 
+for d in "${dirs[@]}"; do [ -d "$d" ] || { echo "::error::$d missing"; exit 1; }; done
 bad=0 n=0
 while IFS= read -r f; do
   file -b "$f" | grep -q 'Mach-O' || continue
@@ -22,7 +23,7 @@ while IFS= read -r f; do
     echo "::error file=$f::minos $max > $floor (LSMinimumSystemVersion)"
     bad=1
   fi
-done < <(find "${dirs[@]}" -type f \( -name '*.dylib' -o -name '*.node' -o -name '*.so' \) 2>/dev/null)
+done < <(find "${dirs[@]}" -type f \( -name '*.dylib' -o -name '*.node' -o -name '*.so' \))
 [ "$n" -gt 0 ] || { echo "::error::no Mach-O found under ${dirs[*]}"; exit 1; }
 [ "$bad" = 0 ] || exit 1
 echo "minos OK: $n Mach-O <= $floor"
