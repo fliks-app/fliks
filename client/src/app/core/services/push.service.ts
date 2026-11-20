@@ -19,7 +19,7 @@ import { SseService } from './sse.service';
 import { ToastService } from './toast.service';
 
 /** The plaintext version this build reads; a higher one is shown as the generic text. */
-export const PUSH_PLAIN_VERSION = 1;
+const PUSH_PLAIN_VERSION = 1;
 
 /** A user notification as the `notification` SSE event carries it (and the Web Push payload). */
 export interface PushNotification {

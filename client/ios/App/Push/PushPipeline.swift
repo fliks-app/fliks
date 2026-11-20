@@ -13,7 +13,8 @@ struct PushMessage: Decodable, Equatable {
     /// The plaintext version this build reads; a higher one is shown as the generic text.
     static let version = 1
 
-    let v: Int
+    /// Absent means 1, like on the other platforms.
+    let v: Int?
     let id: String
     let ts: Double
     let ttl: Double
@@ -53,7 +54,7 @@ enum PushPipeline {
         guard record.relayKey == key, let privateKey = record.key,
               let message = Data(base64URL: payload),
               let plain = PushCrypto.decrypt(message, privateKey: privateKey, auth: record.auth),
-              let decoded = try? JSONDecoder().decode(PushMessage.self, from: plain), decoded.v <= PushMessage.version,
+              let decoded = try? JSONDecoder().decode(PushMessage.self, from: plain), (decoded.v ?? 1) <= PushMessage.version,
               decoded.ts + decoded.ttl >= now.timeIntervalSince1970, !seen.contains(decoded.id) else { return .fallback }
         return .show(decoded, record)
     }

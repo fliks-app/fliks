@@ -16,12 +16,12 @@ const OUTCOME = {
 // The plaintext version this worker reads; a higher one gets the generic text (the same as the native apps').
 const PLAIN_VERSION = 1;
 const UNREADABLE = {
-  en: ['New notification', 'Open Fliks to read it.'],
-  fr: ['Nouvelle notification', 'Ouvrez Fliks pour la lire.'],
-  de: ['Neue Benachrichtigung', 'Öffnen Sie Fliks, um sie zu lesen.'],
-  es: ['Nueva notificación', 'Abra Fliks para leerla.'],
-  it: ['Nuova notifica', 'Apri Fliks per leggerla.'],
-  pt: ['Nova notificação', 'Abra o Fliks para a ler.'],
+  en: ['New notification', 'Update Fliks to read it.'],
+  fr: ['Nouvelle notification', 'Mettez à jour Fliks pour la lire.'],
+  de: ['Neue Benachrichtigung', 'Aktualisieren Sie Fliks, um sie zu lesen.'],
+  es: ['Nueva notificación', 'Actualice Fliks para leerla.'],
+  it: ['Nuova notifica', 'Aggiorna Fliks per leggerla.'],
+  pt: ['Nova notificação', 'Atualize o Fliks para a ler.'],
 };
 
 self.addEventListener('push', (event) => {

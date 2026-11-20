@@ -17,7 +17,7 @@
     <string name="push_channel_account">Compte</string>
     <string name="push_channel_other">Autres</string>
     <string name="push_fallback_title">Nouvelle notification</string>
-    <string name="push_fallback_body">Ouvrez Fliks pour la lire.</string>
+    <string name="push_fallback_body">Mettez à jour Fliks pour la lire.</string>
     <string name="push_action_done">Fait</string>
     <string name="push_action_failed">Échec</string>
 </resources>

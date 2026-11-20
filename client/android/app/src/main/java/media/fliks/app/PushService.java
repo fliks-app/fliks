@@ -50,7 +50,7 @@ public class PushService extends FirebaseMessagingService {
             return;
         }
         if (PushRules.newerThanKnown(plain.optInt("v"))) {
-            PushNotifier.showFallback(this);
+            if (!(PushNotifier.foreground && onScreen(entry))) PushNotifier.showFallback(this);
             return;
         }
         if (PushRules.expired(plain.optLong("ts"), plain.optLong("ttl"), System.currentTimeMillis() / 1000)) return;
