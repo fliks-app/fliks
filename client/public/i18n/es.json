@@ -5868,6 +5868,12 @@
       "accept": "Aceptar",
       "open": "Abrir"
     },
+    "done": {
+      "request_approve": "Solicitud aprobada",
+      "request_decline": "Solicitud rechazada",
+      "follow_accept": "Solicitud de seguimiento aceptada",
+      "follow_decline": "Solicitud de seguimiento rechazada"
+    },
     "outcome_done": "Hecho.",
     "outcome_failed": "La acción ha fallado.",
     "outcome_signin": "Abre Fliks para volver a iniciar sesión."

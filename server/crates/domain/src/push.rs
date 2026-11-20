@@ -58,6 +58,10 @@ pub fn english(path: &str) -> Option<&'static str> {
         "action.join" => "Join",
         "action.accept" => "Accept",
         "action.open" => "Open",
+        "done.request_approve" => "Request approved",
+        "done.request_decline" => "Request declined",
+        "done.follow_accept" => "Follow request accepted",
+        "done.follow_decline" => "Follow request declined",
         _ => return None,
     })
 }
@@ -189,6 +193,14 @@ mod tests {
         ] {
             assert!(english(&format!("{k}.title")).is_some(), "{k}");
             assert!(english(&format!("{k}.body")).is_some(), "{k}");
+        }
+        for a in [
+            "request_approve",
+            "request_decline",
+            "follow_accept",
+            "follow_decline",
+        ] {
+            assert!(english(&format!("done.{a}")).is_some(), "{a}");
         }
     }
 

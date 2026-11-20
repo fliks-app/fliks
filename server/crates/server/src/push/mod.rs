@@ -448,6 +448,7 @@ impl Push {
                 ActionSpec::Call { id, action, target } => json!({
                     "id": id, "title": self.texts.render(&Msg::core(format!("action.{id}"), &Map::new()), lang),
                     "kind": "call",
+                    "done": self.texts.render(&Msg::core(format!("done.{}", action.replace('.', "_")), &Map::new()), lang),
                     "token": act::mint(key, &Grant { user, action: (*action).to_owned(), target: *target, exp: ts + i64::from(n.ttl) }),
                 }),
             });

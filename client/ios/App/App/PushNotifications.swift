@@ -83,7 +83,7 @@ enum PushNotifications {
             // An id the payload does not carry is ignored; only a foreground action may open the app.
             guard let action = info.actions.first(where: { $0["id"] == response.actionIdentifier }) else { return }
             if action["kind"] == "call", let token = action["token"] {
-                await call(token, info, response.notification.request.identifier)
+                await call(token, done: action["done"], info, response.notification.request.identifier)
             } else if PushCategories.opening.contains(response.actionIdentifier) {
                 await open(info, action["url"].flatMap { $0.isEmpty ? nil : $0 } ?? info.url)
             }
@@ -97,7 +97,7 @@ enum PushNotifications {
 
     /// Runs a `call` action with the stored session; a 401 rotates the stored pair once and retries.
     /// "Open Fliks" is asked only when the server refuses the refresh token or the session is gone.
-    static func call(_ token: String, _ info: Info, _ id: String) async {
+    static func call(_ token: String, done: String?, _ info: Info, _ id: String) async {
         let background = await UIApplication.shared.beginBackgroundTask(withName: "fliks.push.act")
         defer { Task { @MainActor in UIApplication.shared.endBackgroundTask(background) } }
         let key = StoredSessions.key(info.server, info.user)
@@ -116,7 +116,8 @@ enum PushNotifications {
             outcome = status.map { (200..<300).contains($0) ? "outcome_done" : $0 == 401 ? "outcome_signin" : "outcome_failed" } ?? "outcome_failed"
         }
         let content = UNMutableNotificationContent()
-        content.title = BundledText["push.\(outcome)"] ?? outcome
+        let generic = BundledText["push.\(outcome)"] ?? outcome
+        content.title = outcome == "outcome_done" ? done.flatMap { $0.isEmpty ? nil : $0 } ?? generic : generic
         content.userInfo = ["fliks": ["serverUrl": info.server, "userId": info.user, "url": info.url, "actions": [[String: String]]()] as [String: Any]]
         let center = UNUserNotificationCenter.current()
         center.removeDeliveredNotifications(withIdentifiers: [id])

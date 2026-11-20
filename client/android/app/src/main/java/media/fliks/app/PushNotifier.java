@@ -31,6 +31,7 @@ final class PushNotifier {
     static final String EXTRA_TAG = "fliks.push.tag";
     static final String EXTRA_ACTION_TOKEN = "fliks.push.token";
     static final String EXTRA_TITLE = "fliks.push.title";
+    static final String EXTRA_DONE = "fliks.push.done";
     static final String EXTRA_CHANNEL = "fliks.push.channel";
     static final String ACTION_CALL = "media.fliks.app.PUSH_CALL";
 
@@ -90,7 +91,7 @@ final class PushNotifier {
                 Intent call = new Intent(ctx, PushActionReceiver.class).setAction(ACTION_CALL)
                     .putExtra(EXTRA_ACTION_TOKEN, a.optString("token")).putExtra(EXTRA_SERVER, server)
                     .putExtra(EXTRA_USER, userId).putExtra(EXTRA_TAG, tag).putExtra(EXTRA_CHANNEL, channel)
-                    .putExtra(EXTRA_TITLE, p.optString("title"));
+                    .putExtra(EXTRA_TITLE, p.optString("title")).putExtra(EXTRA_DONE, a.optString("done"));
                 b.addAction(0, a.optString("title"), PendingIntent.getBroadcast(ctx, PushRules.requestCode(tag, "call" + i),
                     call, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
             } else {
@@ -116,9 +117,9 @@ final class PushNotifier {
     }
 
     /** Replaces the notification of a call action with its outcome. */
-    static void showResult(Context ctx, String tag, String channel, String title, boolean ok) {
-        NotificationCompat.Builder b = base(ctx, channel, title,
-            ctx.getString(ok ? R.string.push_action_done : R.string.push_action_failed));
+    static void showResult(Context ctx, String tag, String channel, String title, String done, boolean ok) {
+        NotificationCompat.Builder b = base(ctx, channel, title, !ok ? ctx.getString(R.string.push_action_failed)
+            : done == null || done.isEmpty() ? ctx.getString(R.string.push_action_done) : done);
         b.setContentIntent(openIntent(ctx, "", "", "", tag, "open"));
         post(ctx, tag, b);
     }
