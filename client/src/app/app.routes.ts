@@ -393,6 +393,12 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/plugin-view/plugin-view').then((m) => m.PluginViewComponent),
       },
+      {
+        path: 'not-found',
+        loadComponent: () =>
+          import('./features/not-found/not-found').then((m) => m.NotFoundComponent),
+        data: { titleKey: 'not_found.title' },
+      },
     ],
   },
   // Account settings — own layout with sidebar
@@ -651,4 +657,5 @@ export const routes: Routes = [
       },
     ],
   },
+  { path: '**', redirectTo: 'not-found' },
 ];
