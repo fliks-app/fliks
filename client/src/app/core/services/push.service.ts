@@ -12,6 +12,7 @@ import { sameOriginPath } from '../utils/same-origin';
 import { AuthService } from './auth.service';
 import { DeviceService } from './device.service';
 import { ServerConfigService } from './server-config.service';
+import { SessionStoreService } from './session-store.service';
 import { SERVER_SINCE, ServerVersionService } from './server-version.service';
 import { SseService } from './sse.service';
 import { ToastService } from './toast.service';
@@ -83,6 +84,7 @@ export class PushService {
   private readonly translate = inject(TranslateService);
   private readonly device = inject(DeviceService);
   private readonly router = inject(Router);
+  private readonly sessions = inject(SessionStoreService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly version = inject(ServerVersionService);
 
@@ -263,13 +265,17 @@ export class PushService {
 
   /** A tapped notification: native fires it through the plugin, the browser through the service worker. */
   async opened(e: PushOpened): Promise<void> {
+    // A cold-start tap can arrive before the app initializer has read the stored sessions.
+    await this.sessions.load();
     const s = e.session;
     if (s && s.serverUrl !== this.serverConfig.serverUrl()) {
       writeStored(PENDING_URL_KEY, JSON.stringify({ url: e.url, userId: s.userId, exp: Date.now() + PENDING_URL_TTL_MS }));
       await this.auth.switchToServer(s.serverUrl);
       return;
     }
-    if (s && s.userId !== this.auth.user()?.id && !(await this.resume(s.userId))) return;
+    // The route guard sets the user after this on a cold start; the stored session is already active.
+    const current = this.auth.user()?.id ?? this.auth.loadPersistedSession()?.id;
+    if (s && s.userId !== current && !(await this.resume(s.userId))) return;
     await this.go(e.url);
   }
 
