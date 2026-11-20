@@ -65,6 +65,7 @@ step() { echo "==> $*"; }
 # fetch <url> <sha256> <file> — verified tarball, extracted to $SRC/<dir>
 fetch() {
   local url=$1 sha=$2 file=$SRC/${3}
+  SOURCE_URL=$url
   if ! echo "$sha  $file" | shasum -a 256 -c - >/dev/null 2>&1; then
     curl -fsSL -o "$file" "$url"
     echo "$sha  $file" | shasum -a 256 -c - >/dev/null || { echo "sha256 mismatch: $url" >&2; rm -f "$file"; exit 1; }
@@ -75,6 +76,14 @@ unpack() { [ -d "$SRC/$2" ] || tar -xf "$SRC/$1" -C "$SRC"; }
 # built <name>: skip a dependency already installed with these pins
 built() { [ -f "$WORK/stamps/$1" ]; }
 # Source and build trees are dropped as soon as they are installed (small disks, small CI cache).
+# notice <name> <version> <srcdir> <license files...>: what the LGPL and the other licences ask to ship.
+notice() {
+  local name=$1 version=$2 dir=$3; shift 3
+  local d="$PREFIX/share/fliks-licenses/$name"
+  mkdir -p "$d"
+  for f in "$@"; do cp "$dir/$f" "$d/"; done
+  printf '%s %s\n%s\n' "$name" "$version" "$SOURCE_URL" > "$d/SOURCE"
+}
 clean_trees() { rm -rf "${BUILD:?}"/*; find "$SRC" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +; }
 mark() { mkdir -p "$WORK/stamps"; touch "$WORK/stamps/$1"; clean_trees; }
 meson_dep() { # <name> <srcdir> [meson args...]
@@ -94,6 +103,7 @@ if ! built openssl-$OPENSSL_VERSION; then
     && ./Configure darwin64-arm64-cc no-shared no-tests no-apps no-docs no-module \
          --prefix="$PREFIX" --openssldir=/etc/ssl --libdir=lib "-mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET" \
     && make -j"$JOBS" build_libs && make install_dev)
+  notice OpenSSL $OPENSSL_VERSION "$SRC/openssl-$OPENSSL_VERSION" LICENSE.txt
   mark openssl-$OPENSSL_VERSION
 fi
 
@@ -104,6 +114,7 @@ if ! built freetype-$FREETYPE_VERSION; then
   unpack freetype.tar.xz freetype-$FREETYPE_VERSION
   meson_dep freetype "$SRC/freetype-$FREETYPE_VERSION" -Dzlib=disabled -Dbzip2=disabled -Dpng=disabled \
     -Dharfbuzz=disabled -Dbrotli=disabled
+  notice FreeType $FREETYPE_VERSION "$SRC/freetype-$FREETYPE_VERSION" LICENSE.TXT docs/FTL.TXT
   mark freetype-$FREETYPE_VERSION
 fi
 
@@ -115,6 +126,7 @@ if ! built harfbuzz-$HARFBUZZ_VERSION; then
   meson_dep harfbuzz "$SRC/harfbuzz-$HARFBUZZ_VERSION" -Dfreetype=enabled -Dglib=disabled -Dgobject=disabled \
     -Dicu=disabled -Dcairo=disabled -Dcoretext=disabled -Dtests=disabled -Ddocs=disabled \
     -Dbenchmark=disabled -Dutilities=disabled -Dintrospection=disabled
+  notice HarfBuzz $HARFBUZZ_VERSION "$SRC/harfbuzz-$HARFBUZZ_VERSION" COPYING
   mark harfbuzz-$HARFBUZZ_VERSION
 fi
 
@@ -124,6 +136,7 @@ if ! built fribidi-$FRIBIDI_VERSION; then
     1de5e8073d035388b71d0b2d452b1da1f8caeea8a7702997b401fe1b6250727f fribidi.tar.xz
   unpack fribidi.tar.xz fribidi-$FRIBIDI_VERSION
   meson_dep fribidi "$SRC/fribidi-$FRIBIDI_VERSION" -Ddocs=false -Dtests=false -Dbin=false
+  notice FriBidi $FRIBIDI_VERSION "$SRC/fribidi-$FRIBIDI_VERSION" COPYING
   mark fribidi-$FRIBIDI_VERSION
 fi
 
@@ -133,6 +146,7 @@ if ! built lcms2-$LCMS2_VERSION; then
     18ff5504fa9cc8a2b1f3591180d90ead16c8a2ea78e530523b46eab70e1ca6b9 lcms2.tar.gz
   unpack lcms2.tar.gz lcms2-$LCMS2_VERSION
   meson_dep lcms2 "$SRC/lcms2-$LCMS2_VERSION" -Djpeg=disabled -Dtiff=disabled -Dtests=disabled
+  notice LittleCMS $LCMS2_VERSION "$SRC/lcms2-$LCMS2_VERSION" LICENSE
   mark lcms2-$LCMS2_VERSION
 fi
 
@@ -142,6 +156,7 @@ if ! built dav1d-$DAV1D_VERSION; then
     ca96b1d0ba3f01f55de7231d775892b64994ba061aaeeaaa4f662a390b3abf9e dav1d.tar.xz
   unpack dav1d.tar.xz dav1d-$DAV1D_VERSION
   meson_dep dav1d "$SRC/dav1d-$DAV1D_VERSION" -Denable_tools=false -Denable_tests=false -Denable_examples=false
+  notice dav1d $DAV1D_VERSION "$SRC/dav1d-$DAV1D_VERSION" COPYING
   mark dav1d-$DAV1D_VERSION
 fi
 
@@ -153,6 +168,7 @@ if ! built unibreak-$UNIBREAK_VERSION; then
   (cd "$SRC/libunibreak-$UNIBREAK_VERSION" \
     && ./configure --prefix="$PREFIX" --disable-shared --enable-static --with-pic \
     && make -j"$JOBS" && make install)
+  notice libunibreak $UNIBREAK_VERSION "$SRC/libunibreak-$UNIBREAK_VERSION" LICENCE
   mark unibreak-$UNIBREAK_VERSION
 fi
 
@@ -165,6 +181,7 @@ if ! built libass-$LIBASS_VERSION; then
     && ./configure --prefix="$PREFIX" --disable-shared --enable-static --with-pic \
          --disable-fontconfig --disable-directwrite --enable-coretext --disable-require-system-font-provider \
     && make -j"$JOBS" && make install)
+  notice libass $LIBASS_VERSION "$SRC/libass-$LIBASS_VERSION" COPYING
   mark libass-$LIBASS_VERSION
 fi
 
@@ -182,6 +199,7 @@ if ! built ffmpeg-$FFMPEG_VERSION; then
     && make -j"$JOBS" && make install)
   grep -q '^#define CONFIG_GPL 0' "$BUILD/ffmpeg/config.h" && grep -q '^#define CONFIG_VERSION3 0' "$BUILD/ffmpeg/config.h" \
     || { echo "FFmpeg is not an LGPL-2.1 build" >&2; exit 1; }
+  notice FFmpeg $FFMPEG_VERSION "$SRC/ffmpeg-$FFMPEG_VERSION" LICENSE.md COPYING.LGPLv2.1
   mark ffmpeg-$FFMPEG_VERSION
 fi
 
@@ -191,8 +209,10 @@ if ! built libplacebo-$LIBPLACEBO_VERSION; then
   git clone -q --depth 1 --branch "$LIBPLACEBO_VERSION" --recurse-submodules --shallow-submodules \
     https://code.videolan.org/videolan/libplacebo.git "$SRC/libplacebo"
   [ "$(git -C "$SRC/libplacebo" rev-parse HEAD)" = "$LIBPLACEBO_COMMIT" ] || { echo "libplacebo tag moved" >&2; exit 1; }
+  SOURCE_URL="https://code.videolan.org/videolan/libplacebo/-/tree/$LIBPLACEBO_COMMIT"
   meson_dep libplacebo "$SRC/libplacebo" -Dvulkan=disabled -Dopengl=enabled -Dd3d11=disabled -Dglslang=disabled \
     -Dshaderc=disabled -Dlcms=enabled -Ddovi=disabled -Dlibdovi=disabled -Ddemos=false -Dtests=false
+  notice libplacebo $LIBPLACEBO_VERSION "$SRC/libplacebo" LICENSE
   mark libplacebo-$LIBPLACEBO_VERSION
 fi
 
@@ -215,10 +235,12 @@ meson setup "$BUILD/mpv" "$SRC/mpv-$MPV_VERSION" --prefix="$PREFIX" --libdir=lib
   -Dswift-build=enabled "-Dswift-flags=-target arm64-apple-macos$MACOSX_DEPLOYMENT_TARGET"
 meson compile -C "$BUILD/mpv" -j "$JOBS"
 meson install -C "$BUILD/mpv"
+notice mpv "$MPV_VERSION" "$SRC/mpv-$MPV_VERSION" LICENSE.LGPL Copyright
 clean_trees
 
 step "vendoring into $OUT"
-rm -f "$OUT"/*.dylib "$OUT"/libmpv.so.2
+rm -rf "$OUT"/*.dylib "$OUT"/libmpv.so.2 "$OUT/licenses"
+cp -R "$PREFIX/share/fliks-licenses" "$OUT/licenses"
 cp -L "$PREFIX/lib/libmpv.dylib" "$OUT/libmpv.dylib"
 chmod u+w "$OUT/libmpv.dylib"
 install_name_tool -id "@loader_path/libmpv.dylib" "$OUT/libmpv.dylib"

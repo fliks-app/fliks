@@ -104,6 +104,12 @@ mac:
   # The Velopack updater is Windows only; electron-updater updates the mac app.
   files:
     - "!node_modules/velopack/**"
+  # Licences of the libraries statically linked into libmpv (build-libmpv-mac.sh), in Contents/Resources.
+  extraResources:
+    - from: native/vendor/licenses
+      to: licenses
+    - from: ../THIRD-PARTY-NOTICES.md
+      to: THIRD-PARTY-NOTICES.md
   notarize: true
 # Mac App Store, universal purchase under the iOS bundle id. mas inherits every mac.* key (arrays
 # merged), so only what differs is set; electron-builder skips notarization and builds a .pkg.

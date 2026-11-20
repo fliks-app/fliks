@@ -14,4 +14,8 @@ test -z "$stray" || { echo "::error::non-system dependencies:"; echo "$stray"; e
 if strings "$f" | grep -E -- '--enable-(gpl|nonfree|version3)' >/dev/null; then
   echo "::error::libmpv's FFmpeg is not an LGPL-2.1 build"; exit 1
 fi
+# The licences the statically linked libraries require to ship alongside them.
+for n in FFmpeg mpv libplacebo libass FreeType HarfBuzz FriBidi LittleCMS dav1d libunibreak OpenSSL; do
+  test -s "desktop/native/vendor/licenses/$n/SOURCE" || { echo "::error::licence notice missing for $n"; exit 1; }
+done
 echo "vendored libmpv OK: $(du -sh "$f" | cut -f1)"
