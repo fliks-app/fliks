@@ -58,6 +58,8 @@
             android:foregroundServiceType="dataSync"
             android:exported="false" />
 
+        <receiver android:name=".PushActionReceiver" android:exported="false" />
+
         <service
             android:name=".PlaybackService"
             android:foregroundServiceType="mediaPlayback"

@@ -42,7 +42,7 @@ on:
         options: [internal, alpha, beta, production]
         default: internal
       apk_tag:
-        description: 'Existing release tag to (re)build a signed APK for and attach to its GitHub release, e.g. v1.8.0. APK-only — skips the Play Store upload. Leave empty for a normal Play Store run.'
+        description: 'Existing release tag to (re)build a signed APK for and attach to its GitHub release, e.g. v1.8.0. APK-only — skips the Play Store upload. Tags up to v7.0.1 predate the build flavors and cannot be rebuilt. Leave empty for a normal Play Store run.'
         type: string
         default: ''
       amazon_tag:

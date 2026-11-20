@@ -1,17 +1,22 @@
 package media.fliks.app;
 
-import android.app.Activity;
-import android.content.Intent;
+import android.content.Context;
 import com.getcapacitor.Plugin;
 import java.util.List;
 
-/** No proprietary services: the web layer hides Cast and push when their plugins are missing. */
+/** No proprietary services: Cast is absent and push reports itself unavailable. */
 final class Flavor {
     private Flavor() {}
 
     static final List<Class<? extends Plugin>> PLUGINS = List.of();
 
-    static void handleIntent(Activity activity, Intent intent) {}
+    static boolean pushAvailable(Context ctx) {
+        return false;
+    }
 
-    static void setForeground(boolean foreground) {}
+    static void enablePush() {}
+
+    static String pushToken(long timeoutSeconds) throws Exception {
+        throw new UnsupportedOperationException("no push service in this build");
+    }
 }

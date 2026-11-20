@@ -34,7 +34,7 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         handleDownloadsIntent(intent);
-        Flavor.handleIntent(this, intent);
+        PushPlugin.handleIntent(this, intent);
     }
 
     private static void handleDownloadsIntent(Intent intent) {
@@ -60,6 +60,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SaveFilePlugin.class);
         registerPlugin(CalendarPlugin.class);
         registerPlugin(WebAuthPlugin.class);
+        registerPlugin(PushPlugin.class);
         registerPlugins(Flavor.PLUGINS);
         super.onCreate(savedInstanceState);
         // A dead renderer must not take the process, and the native audio player with it.
@@ -72,7 +73,7 @@ public class MainActivity extends BridgeActivity {
         });
         if (savedInstanceState == null) {
             handleDownloadsIntent(getIntent());
-            Flavor.handleIntent(this, getIntent());
+            PushPlugin.handleIntent(this, getIntent());
         }
 
         // Tag the WebView UA when running on Android TV so the frontend can adapt its
@@ -147,13 +148,13 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onStart() {
         super.onStart();
-        Flavor.setForeground(true);
+        PushNotifier.foreground = true;
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        Flavor.setForeground(false);
+        PushNotifier.foreground = false;
     }
 
     @Override
