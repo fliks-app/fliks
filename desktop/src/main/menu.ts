@@ -1,5 +1,5 @@
 import { app, Menu } from 'electron';
-import { DEFAULT_MENU_LABELS, menuTemplate, parseMenuLabels, type PlaybackCommands, type WindowCommands } from './menu-template';
+import { DEFAULT_MENU_LABELS, menuTemplate, parseMenuLabels, type MediaKey, type WindowCommands } from './menu-template';
 import { readJson, writeJson } from './notify/prefs';
 import type { DesktopMenuLabels } from '../shared/contract';
 
@@ -8,7 +8,7 @@ const LABELS_FILE = 'menu-labels.json';
 // Read on first use: userData is only named right once index.ts has called setName.
 let labels: DesktopMenuLabels | null = null;
 let win: WindowCommands | null = null;
-let playback: PlaybackCommands | null = null;
+let playback: ((key: MediaKey) => void) | null = null;
 
 /** Rebuilds the macOS application menu; Windows and Linux have none (a menu there becomes a menu bar). */
 export function refreshMenu(): void {
@@ -17,9 +17,9 @@ export function refreshMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(app.getName(), labels, win, !app.isPackaged, playback)));
 }
 
-/** The player the Playback menu drives; refreshed on each play/pause change. */
-export function setMenuPlayback(commands: PlaybackCommands | null): void {
-  playback = commands;
+/** Where the Playback menu sends its media keys. */
+export function setMenuPlayback(send: ((key: MediaKey) => void) | null): void {
+  playback = send;
   refreshMenu();
 }
 

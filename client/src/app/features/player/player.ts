@@ -1437,7 +1437,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // The desktop shell's OS media controls ask for a seek here, so a transcode seek renegotiates like a scrub.
     this.stopDesktopSeekRequests = window.fliksDesktop?.on((e) => {
       if (e.type === 'seekRequest') this.onSeek(e.payload.position);
-      else if (e.type === 'fullscreenChanged') this.fullscreen.set(e.payload.fullscreen);
     });
   }
 
@@ -1680,6 +1679,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async createDesktopEngine(): Promise<void> {
     const { engine } = await this.createSurface('desktop');
     if (engine instanceof DesktopEngine) this.fullscreen.set(engine.fullscreen);
+    engine.on('fullscreenChanged', (e) => this.fullscreen.set(e.fullscreen));
     this.wireNativePlayerEngine(engine);
   }
 

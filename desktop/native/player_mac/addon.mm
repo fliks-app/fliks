@@ -1108,9 +1108,8 @@ Napi::Value SetBottomCornerRadius(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-// keepOffMainWindow(wid): the window of that NSView can no longer become the main window.
-// A key-but-never-main overlay leaves the framed window beneath it main, so it keeps its active
-// title bar and AXMain. -canBecomeMainWindow is swizzled once per window class and consults a flag.
+// keepOffMainWindow(wid): that view's window can no longer become main, so the framed window keeps
+// its active title bar and AXMain. Swizzles -canBecomeMainWindow once per class, read per window.
 static const char kOffMainKey = 0;
 static IMP g_canBecomeMain = nullptr;
 static BOOL CanBecomeMainOverride(id self, SEL cmd) {

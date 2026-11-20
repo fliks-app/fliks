@@ -1,3 +1,4 @@
+import { isQuitting } from '../quitting';
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -79,7 +80,6 @@ export class PlayerSession implements WindowCommands {
    *  probe for several seconds, during which the window may already have closed. */
   private destroyed = false;
   /** Quit is under way: closing the window then ends the session instead of hiding it. */
-  private quitting = false;
   /** Playback stopped: by the renderer (stop IPC) or by a renderer crash. */
   onStop?: () => void;
   /** Background mode: closing the window hides it instead of ending the session. */
@@ -246,10 +246,12 @@ export class PlayerSession implements WindowCommands {
         this.hide();
         return;
       }
-      // macOS keeps the app alive in the dock; the video stops, the page and its audio carry on.
-      if (process.platform === 'darwin' && !this.quitting) {
-        void this.mpv?.pause();
-        this.hide();
+      // macOS keeps the app alive in the dock. A hidden full-screen window would leave an empty Space.
+      if (process.platform === 'darwin' && !isQuitting()) {
+        if (this.frameWin.isFullScreen()) {
+          this.frameWin.once('leave-full-screen', () => this.hide());
+          this.frameWin.setFullScreen(false);
+        } else this.hide();
         return;
       }
       this.uiWin.once('closed', () => void this.destroy());
@@ -265,7 +267,6 @@ export class PlayerSession implements WindowCommands {
     // inside it frees a window that loop still holds: close ours first, window-all-closed then quits.
     app.on('before-quit', (e) => {
       if (this.destroyed || this.frameWin.isDestroyed()) return;
-      this.quitting = true;
       e.preventDefault();
       this.frameWin.close();
     });

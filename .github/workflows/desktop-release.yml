@@ -322,9 +322,8 @@ jobs:
           p12-base64: ${{ secrets.MAC_DEVELOPER_ID_CERT_P12_BASE64 }}
           password: ${{ secrets.MAC_DEVELOPER_ID_CERT_PASSWORD }}
 
-      # Mac App Store: the Apple Distribution cert (shared with the iOS upload) signs the app, the
-      # Mac Installer Distribution cert (MAC_INSTALLER_CERT_*) signs the .pkg, and the Mac App Store
-      # provisioning profile for media.fliks.app (MAS_PROVISIONING_PROFILE_BASE64) is embedded.
+      # Mac App Store: the Apple Distribution cert (shared with iOS) signs the app, the Mac Installer
+      # Distribution cert the .pkg; MAS_PROVISIONING_PROFILE_BASE64 is the media.fliks.app profile.
       - name: Import signing certificates (Mac App Store)
         if: matrix.label == 'mas'
         id: keychain-mas

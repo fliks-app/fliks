@@ -27,13 +27,10 @@
     "close": "Close Window",
     "bringAllToFront": "Bring All to Front",
     "playback": "Playback",
-    "play": "Play",
-    "pause": "Pause",
+    "playPause": "Play/Pause",
     "stop": "Stop",
-    "skipBack": "Back 10 Seconds",
-    "skipForward": "Forward 10 Seconds",
-    "nextItem": "Next",
-    "previousItem": "Previous"
+    "skipBack": "Skip Back",
+    "skipForward": "Skip Forward"
   },
   "file_info": {
     "companions_button": "View companion files",

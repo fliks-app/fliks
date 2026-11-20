@@ -105,9 +105,8 @@ mac:
   files:
     - "!node_modules/velopack/**"
   notarize: true
-# Mac App Store: universal purchase under the iOS bundle id. mas inherits every mac.* key (hardened
-# runtime, extendInfo, minimumSystemVersion), so only what differs is set. The MAS Electron build is
-# a different binary from the DMG's. electron-builder skips notarization and wraps the app in a .pkg.
+# Mac App Store, universal purchase under the iOS bundle id. mas inherits every mac.* key (arrays
+# merged), so only what differs is set; electron-builder skips notarization and builds a .pkg.
 mas:
   appId: media.fliks.app
   type: distribution
@@ -119,9 +118,7 @@ mas:
   extraFiles:
     - from: native/vendor/libmpv.dylib
       to: Frameworks/libmpv.dylib
-  # Listed with mac's own exclusion: mas inherits mac.* but an array here may replace it.
   files:
-    - "!node_modules/velopack/**"
     - "!native/vendor/**"
 # Windows ships through Velopack (see desktop-release.yml): electron-builder only
 # produces win-unpacked, which vpk packs into Setup.exe + the update feed.

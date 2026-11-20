@@ -27,13 +27,10 @@
     "close": "Cerrar ventana",
     "bringAllToFront": "Traer todo al frente",
     "playback": "Reproducción",
-    "play": "Reproducir",
-    "pause": "Pausa",
+    "playPause": "Reproducir/Pausa",
     "stop": "Detener",
-    "skipBack": "Retroceder 10 segundos",
-    "skipForward": "Avanzar 10 segundos",
-    "nextItem": "Siguiente",
-    "previousItem": "Anterior"
+    "skipBack": "Retroceder",
+    "skipForward": "Avanzar"
   },
   "file_info": {
     "companions_button": "Ver archivos asociados",

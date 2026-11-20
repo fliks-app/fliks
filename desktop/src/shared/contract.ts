@@ -205,13 +205,10 @@ export const MENU_LABEL_KEYS = [
   'close',
   'bringAllToFront',
   'playback',
-  'play',
-  'pause',
+  'playPause',
   'stop',
   'skipBack',
   'skipForward',
-  'nextItem',
-  'previousItem',
 ] as const;
 
 export type DesktopMenuLabels = Record<(typeof MENU_LABEL_KEYS)[number], string>;
@@ -300,9 +297,8 @@ export type DesktopUpdateStatus =
   | { state: 'downloaded'; info: DesktopUpdateInfo }
   | { state: 'error'; message: string };
 
-/** `canInstall` is false where electron-updater can't self-install (.deb, dev)
- *  → the UI offers a download link to `releasesUrl` instead. `storeManaged`
- *  (Mac App Store) means the store updates the app: the UI shows no update. */
+/** `canInstall` false (.deb, dev): the UI links to `releasesUrl` instead.
+ *  `storeManaged` (Mac App Store): the store updates the app, the UI shows no update. */
 export interface DesktopUpdateCapability {
   canInstall: boolean;
   storeManaged: boolean;

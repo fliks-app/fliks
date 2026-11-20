@@ -6,7 +6,7 @@ import { desktopBridgeOrNull } from '../plugins/desktop-player.bridge';
 const MENU_KEYS = [
   'about', 'services', 'hide', 'hideOthers', 'showAll', 'quit', 'edit', 'undo', 'redo', 'cut', 'copy', 'paste',
   'selectAll', 'view', 'enterFullScreen', 'exitFullScreen', 'window', 'minimize', 'zoom', 'close', 'bringAllToFront',
-  'playback', 'play', 'pause', 'stop', 'skipBack', 'skipForward', 'nextItem', 'previousItem',
+  'playback', 'playPause', 'stop', 'skipBack', 'skipForward',
 ];
 
 /** Hands the UI language to what is outside the page's own text: the document's `lang` and the desktop shell's application menu. */
@@ -23,7 +23,7 @@ export class ShellLanguageService {
       const keys = MENU_KEYS.map((k) => `desktop_menu.${k}`);
       void firstValueFrom(this.translate.get(keys)).then((t) =>
         bridge.setMenuLabels?.(Object.fromEntries(MENU_KEYS.map((k, i) => [k, t[keys[i]]]))),
-      );
+      ).catch(() => {});
     });
   }
 }

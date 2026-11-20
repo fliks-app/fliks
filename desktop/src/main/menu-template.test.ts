@@ -37,24 +37,10 @@ test('labels must be complete', () => {
   assert.equal(parseMenuLabels({}), null);
 });
 
-test('the Playback menu follows the player and is inert with nothing loaded', () => {
-  const calls: string[] = [];
-  let playing: boolean | null = null;
-  const playback = {
-    playing: () => playing,
-    toggle: () => calls.push('toggle'),
-    stop: () => calls.push('stop'),
-    skip: (s: number) => calls.push(`skip ${s}`),
-    next: () => calls.push('next'),
-    previous: () => calls.push('previous'),
-  };
-  const menu = () => items(menuTemplate('Fliks', DEFAULT_MENU_LABELS, null, false, playback), 'Playback');
-  assert.ok(menu().filter((i) => i.type !== 'separator').every((i) => i.enabled === false));
-  playing = true;
-  assert.equal(menu()[0].label, 'Pause');
-  playing = false;
-  const m = menu();
-  assert.equal(m[0].label, 'Play');
-  for (const i of m) (i.click as (() => void) | undefined)?.();
-  assert.deepEqual(calls, ['toggle', 'stop', 'skip -10', 'skip 10', 'previous', 'next']);
+test('the Playback menu sends the media keys the page handles', () => {
+  const keys: string[] = [];
+  assert.ok(items(menuTemplate('Fliks', DEFAULT_MENU_LABELS, null, false), 'Playback').every((i) => i.type === 'separator' || i.enabled === false));
+  const menu = items(menuTemplate('Fliks', DEFAULT_MENU_LABELS, null, false, (k) => keys.push(k)), 'Playback');
+  for (const i of menu) press(i);
+  assert.deepEqual(keys, ['MediaPlayPause', 'MediaStop', 'MediaPreviousTrack', 'MediaNextTrack']);
 });

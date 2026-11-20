@@ -414,6 +414,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
       }
       case 'fullscreenChanged':
         this._fullscreen = event.payload.fullscreen;
+        this.emit('fullscreenChanged', { fullscreen: this._fullscreen });
         break;
       case 'firstFrame': {
         if (this.firstFrameEmitted) break;

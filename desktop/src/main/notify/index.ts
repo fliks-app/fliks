@@ -1,3 +1,4 @@
+import { isQuitting } from '../quitting.ts';
 import { app, ipcMain, Menu, nativeImage, net, Notification, Tray } from 'electron';
 import { NOTIFY_IPC } from '../../shared/contract.ts';
 import type { DesktopNotification, DesktopNotificationAction, DesktopNotifyLabels, DesktopNotifyPrefs } from '../../shared/contract.ts';
@@ -56,7 +57,6 @@ export class Notifier {
   private labels = loadLabels() ?? FALLBACK_LABELS;
   private tray: Tray | null = null;
   private active = true;
-  private quitting = false;
   private readonly live = new Map<string, Electron.Notification>();
   private readonly shown = new Set<Electron.Notification>();
 
@@ -66,7 +66,6 @@ export class Notifier {
   constructor(trayIcon: string | undefined, hasTrayHost: () => Promise<boolean> = hasStatusNotifierHost) {
     this.trayIcon = trayIcon;
     this.hasTrayHost = hasTrayHost;
-    app.on('before-quit', () => (this.quitting = true));
     app.on('activate', () => this.show());
     app.on('second-instance', () => this.show());
     ipcMain.handle(NOTIFY_IPC.show, (_e, n: unknown) => this.notify(parseNotification(n)));
@@ -81,7 +80,7 @@ export class Notifier {
 
   /** Closing the window hides it instead of quitting, but only with a tray to come back from. */
   hideOnClose(): boolean {
-    return this.prefs.background && this.tray !== null && !this.quitting;
+    return this.prefs.background && this.tray !== null && !isQuitting();
   }
 
   /** The close button of a platform whose window the shell cannot veto itself. */

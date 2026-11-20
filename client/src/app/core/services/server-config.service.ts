@@ -68,7 +68,8 @@ export class ServerConfigService {
     const canonical = this.isNative
       ? await this.resolveCanonicalUrl(cleaned)
       : cleaned;
-    if (this.isNative) await this.reportToShell(canonical);
+    // The redirect came from a host whose bad certificate was accepted: it may not name another host.
+    if (this.isNative && sameHostname(canonical, cleaned)) await this.reportToShell(canonical);
     this._serverUrl.set(canonical);
     await writePreference(STORAGE_KEY, canonical);
   }
@@ -152,5 +153,13 @@ export class ServerConfigService {
 
   private async persistKnownServers(): Promise<void> {
     await writePreference(KNOWN_SERVERS_KEY, JSON.stringify(this._knownServers()));
+  }
+}
+
+function sameHostname(a: string, b: string): boolean {
+  try {
+    return new URL(a).hostname === new URL(b).hostname;
+  } catch {
+    return false;
   }
 }

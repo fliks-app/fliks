@@ -24,24 +24,18 @@ export const DEFAULT_MENU_LABELS: DesktopMenuLabels = {
   close: 'Close Window',
   bringAllToFront: 'Bring All to Front',
   playback: 'Playback',
-  play: 'Play',
-  pause: 'Pause',
+  playPause: 'Play/Pause',
   stop: 'Stop',
-  skipBack: 'Back 10 Seconds',
-  skipForward: 'Forward 10 Seconds',
-  nextItem: 'Next',
-  previousItem: 'Previous',
+  skipBack: 'Skip Back',
+  skipForward: 'Skip Forward',
 };
 
-/** The player as the OS media widgets drive it: the same media keys and seek requests reach the page. */
-export interface PlaybackCommands {
-  /** null while nothing is loaded. */
-  playing(): boolean | null;
-  toggle(): void;
-  stop(): void;
-  skip(seconds: number): void;
-  next(): void;
-  previous(): void;
+/** Keys the page's players already handle (the OS media widgets send the same ones). */
+export type MediaKey = 'MediaPlayPause' | 'MediaStop' | 'MediaNextTrack' | 'MediaPreviousTrack';
+
+/** Delivers a media key to the page as a key press; the page's own session decides what it does. */
+export function pressMediaKey(contents: Electron.WebContents, keyCode: MediaKey): void {
+  for (const type of ['keyDown', 'keyUp'] as const) contents.sendInputEvent({ type, keyCode });
 }
 
 /** The framed window's commands: the key window is a frameless overlay, so the window roles would hit the wrong one. */
@@ -71,11 +65,10 @@ export function menuTemplate(
   l: DesktopMenuLabels,
   win: WindowCommands | null,
   dev: boolean,
-  playback: PlaybackCommands | null = null,
+  playback: ((key: MediaKey) => void) | null = null,
 ): MenuItemConstructorOptions[] {
   const fullScreen = win?.isFullscreen() ?? false;
-  const playing = playback?.playing() ?? null;
-  const loaded = playing !== null;
+  const key = (k: MediaKey): MenuItemConstructorOptions['click'] => () => playback?.(k);
   return [
     {
       label: appName,
@@ -116,17 +109,14 @@ export function menuTemplate(
       ],
     },
     {
-      // No accelerators: Space and the arrows belong to the page (text fields, the player's own keys).
+      // No accelerators: Space and the arrows belong to the page. Previous/next skip, or change track in music.
       label: l.playback,
       submenu: [
-        { label: playing ? l.pause : l.play, enabled: loaded, click: () => playback?.toggle() },
-        { label: l.stop, enabled: loaded, click: () => playback?.stop() },
+        { label: l.playPause, enabled: playback !== null, click: key('MediaPlayPause') },
+        { label: l.stop, enabled: playback !== null, click: key('MediaStop') },
         { type: 'separator' },
-        { label: l.skipBack, enabled: loaded, click: () => playback?.skip(-10) },
-        { label: l.skipForward, enabled: loaded, click: () => playback?.skip(10) },
-        { type: 'separator' },
-        { label: l.previousItem, enabled: loaded, click: () => playback?.previous() },
-        { label: l.nextItem, enabled: loaded, click: () => playback?.next() },
+        { label: l.skipBack, enabled: playback !== null, click: key('MediaPreviousTrack') },
+        { label: l.skipForward, enabled: playback !== null, click: key('MediaNextTrack') },
       ],
     },
     {

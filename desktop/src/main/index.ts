@@ -21,6 +21,7 @@ import { toElectronKey } from './keymap';
 import { watchRendererCrash } from './renderer-recovery';
 import { Notifier } from './notify';
 import { refreshMenu, setMenuLabels, setMenuPlayback, setMenuWindow } from './menu';
+import { pressMediaKey, type MediaKey } from './menu-template';
 import { isTrustedServer, trustServer } from './trusted-servers';
 
 // Velopack's install/update/uninstall hooks run and exit here, before any Electron startup.
@@ -231,6 +232,7 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
   session.hideOnClose = () => notifier?.hideOnClose() ?? false;
   session.onFullscreenChange = refreshMenu;
   setMenuWindow(session);
+  setMenuPlayback((key) => pressMediaKey(session.uiContents, key));
   session.onActive = (active) => notifier?.setActive(active);
   raiseWindow = () => {
     session.focus();
@@ -271,36 +273,19 @@ async function startNowPlaying(player: PlayerBackend, uiContents: Electron.WebCo
   const { NowPlaying, mediaSessionSetter } = await import('./now-playing');
   const nowPlaying = new NowPlaying(addon);
   let playing = false;
-  let loaded = false;
-  let position = 0;
   player.on('stateChanged', ({ state }) => {
-    const was = [playing, loaded].join();
     playing = state === 'playing';
-    loaded = state !== 'idle' && state !== 'ended' && state !== 'error';
     nowPlaying.setState(state);
-    if ([playing, loaded].join() !== was) refreshMenu();
   });
-  player.on('timeUpdate', (p) => {
-    position = p.position;
-    nowPlaying.setPosition(p);
-  });
-  const press = (keyCode: string) => {
-    for (const type of ['keyDown', 'keyUp'] as const) uiContents.sendInputEvent({ type, keyCode } as any);
-  };
-  const KEYS: Record<string, string> = { toggle: 'MediaPlayPause', stop: 'MediaStop', next: 'MediaNextTrack', previous: 'MediaPreviousTrack' };
-  const seek = (to: number) => uiContents.send(IPC.event, { type: 'seekRequest', payload: { position: Math.max(0, to) } } satisfies DesktopEvent);
-  addon.onRemoteCommand((name, to = 0) => {
-    if (name === 'seek') return seek(to);
+  player.on('timeUpdate', (p) => nowPlaying.setPosition(p));
+  const KEYS: Record<string, MediaKey> = { toggle: 'MediaPlayPause', stop: 'MediaStop', next: 'MediaNextTrack', previous: 'MediaPreviousTrack' };
+  addon.onRemoteCommand((name, position = 0) => {
+    if (name === 'seek') {
+      uiContents.send(IPC.event, { type: 'seekRequest', payload: { position } } satisfies DesktopEvent);
+      return;
+    }
     // Electron has no play-only / pause-only key: a play while playing (or the reverse) is a no-op.
-    if (name === 'play' ? !playing : name === 'pause' ? playing : true) press(KEYS[name] ?? 'MediaPlayPause');
-  });
-  setMenuPlayback({
-    playing: () => (loaded ? playing : null),
-    toggle: () => press(KEYS.toggle),
-    stop: () => press(KEYS.stop),
-    skip: (seconds) => seek(position + seconds),
-    next: () => press(KEYS.next),
-    previous: () => press(KEYS.previous),
+    if (name === 'play' ? !playing : name === 'pause' ? playing : true) pressMediaKey(uiContents, KEYS[name] ?? 'MediaPlayPause');
   });
   setOsPlaybackRate = (rate) => nowPlaying.setRate(rate);
   // The OS fetches artwork without the page's session: the bytes come from here.
@@ -313,10 +298,7 @@ async function startNowPlaying(player: PlayerBackend, uiContents: Electron.WebCo
     }
   });
   setOsMediaSession = publish;
-  return () => {
-    setMenuPlayback(null);
-    void publish(null);
-  };
+  return () => void publish(null);
 }
 
 // Fallback for any platform without a playback backend (not Linux/Windows/macOS,
