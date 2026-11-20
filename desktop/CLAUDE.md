@@ -183,8 +183,8 @@ rebuilding; the addon is reloaded fresh on each Electron start.
 (gitignored; CI writes it from `MAS_PROVISIONING_PROFILE_BASE64`). libmpv ships in
 `Contents/Frameworks` there (`process.mas` in `mac-mpv-player.ts`), and `process.mas` turns the
 in-app updater off (`updater.ts` reports `storeManaged`). The `mas` leg of `desktop-release.yml`
-runs only with the repository variable `MAS_ENABLED=true`: it validates the package on any run and
-uploads it to App Store Connect on a stable `v*` tag.
+validates the package against App Store Connect on every run and uploads it on a stable `v*` tag
+when the repository variable `MAS_ENABLED` is `true`.
 
 Local sandbox check on a Mac: `electron-builder --mac mas-dev --arm64 -c.mas.type=development` with a
 macOS development profile that lists the Mac by its **Provisioning UDID** (System Information,

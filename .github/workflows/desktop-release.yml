@@ -58,8 +58,6 @@ jobs:
       id-token: write
       attestations: write
     name: ${{ matrix.os }} → ${{ matrix.label }}
-    # The Mac App Store leg needs the secrets listed at its signing step: off until MAS_ENABLED is set.
-    if: matrix.label != 'mas' || vars.MAS_ENABLED == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       # Don't cancel the other OSes when one fails — we want to see every
@@ -388,7 +386,7 @@ jobs:
           npm run ${{ matrix.dist_script }} -- --publish "$publish" -c.extraMetadata.version="$version" -c.publish.releaseType="$type" \
             -c.releaseInfo.releaseNotesFile="$RUNNER_TEMP/release-notes.md" "${extra[@]}"
 
-      # A stable tag uploads the build; any other run only validates the package against App Store Connect.
+      # A stable tag uploads the build when MAS_ENABLED is true; any other run only validates the package.
       # altool reads the API key staged above from ~/.appstoreconnect/private_keys.
       - name: Upload to App Store Connect (Mac App Store)
         if: matrix.label == 'mas'
@@ -397,7 +395,11 @@ jobs:
           KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* && "${{ steps.version.outputs.version }}" != *-* ]]; then action=--upload-app; else action=--validate-app; fi
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${{ steps.version.outputs.version }}" != *-* && "${{ vars.MAS_ENABLED }}" == true ]]; then
+            action=--upload-app
+          else
+            action=--validate-app
+          fi
           xcrun altool $action --type macos --file desktop/release/*.pkg --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
 
       # Flat APT repo on the `apt` release, the one desktop/build/fliks.sources points at.
