@@ -13,7 +13,7 @@ enum ImageURL {
         guard let path, !path.isEmpty else { return nil }
         let resolved = ServerStore.shared.resolveUrl(path)
         guard var comps = URLComponents(string: resolved) else { return resolved }
-        var items = comps.queryItems ?? []
+        var items = (comps.queryItems ?? []).filter { $0.name != "size" }
         items.append(URLQueryItem(name: "size", value: size.rawValue))
         comps.queryItems = items
         return comps.url?.absoluteString ?? resolved

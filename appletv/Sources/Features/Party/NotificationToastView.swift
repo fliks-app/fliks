@@ -8,11 +8,7 @@ struct NotificationToastView: View {
         Group {
             if let note = service.current {
                 HStack(spacing: 20) {
-                    if let image = ImageURL.build(note.image, size: .thumb) {
-                        CachedAsyncImage(url: image) { Color.white.opacity(0.1) }
-                            .frame(width: 72, height: 108)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
+                    NotificationImage(path: note.image)
                     VStack(alignment: .leading, spacing: 6) {
                         Text(note.title).font(.headline).lineLimit(1)
                         if !note.body.isEmpty { Text(note.body).font(.callout).foregroundStyle(.secondary).lineLimit(2) }
@@ -29,5 +25,51 @@ struct NotificationToastView: View {
         .animation(.easeInOut(duration: 0.25), value: service.current)
         .allowsHitTesting(false)
         .focusable(false)
+    }
+}
+
+/// The notification image, shown only once loaded; an avatar is round, anything else a poster.
+private struct NotificationImage: View {
+    let path: String?
+    @State private var image: UIImage?
+
+    private var isAvatar: Bool { path?.contains("/api/images/user/") == true }
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().scaledToFill()
+                    .frame(width: 72, height: isAvatar ? 72 : 108)
+                    .clipShape(RoundedRectangle(cornerRadius: isAvatar ? 36 : 8))
+            }
+        }
+        .task(id: path) {
+            image = nil
+            if let url = ImageURL.build(path, size: .thumb).flatMap(URL.init(string:)) { image = await ImageCache.load(url) }
+        }
+    }
+}
+
+/// A passthrough window above every presentation (party covers, sheets) that hosts the toast.
+@MainActor
+final class ToastWindow {
+    static let shared = ToastWindow()
+    private var window: UIWindow?
+
+    private final class Passthrough: UIWindow {
+        override var canBecomeKey: Bool { false }
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
+    }
+
+    func install(service: NotificationToastService) {
+        guard window == nil,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        let host = UIHostingController(rootView: NotificationToastView(service: service))
+        host.view.backgroundColor = .clear
+        let window = Passthrough(windowScene: scene)
+        window.windowLevel = .alert
+        window.rootViewController = host
+        window.isHidden = false
+        self.window = window
     }
 }

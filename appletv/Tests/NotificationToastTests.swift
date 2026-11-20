@@ -9,4 +9,26 @@ final class NotificationToastTests: XCTestCase {
         XCTAssertEqual(note?.tag, "episodes:3")
         XCTAssertNil(NotificationToastService.decode(Data(#"{"type":"sse.connected"}"#.utf8)))
     }
+
+    func testDecodeEdgeCases() {
+        XCTAssertNil(NotificationToastService.decode(Data("not json".utf8)))
+        XCTAssertNil(NotificationToastService.decode(Data(#"{"type":"notification","id":"a"}"#.utf8)))
+        let min = NotificationToastService.decode(Data(#"{"type":"notification","id":"a","title":"T","body":""}"#.utf8))
+        XCTAssertNil(min?.image)
+        XCTAssertNil(min?.tag)
+    }
+
+    @MainActor func testReplaceDismissAndDedupe() {
+        let service = NotificationToastService()
+        func note(_ id: String, tag: String? = nil) -> ServerNotification {
+            ServerNotification(id: id, title: id, body: "", image: nil, tag: tag, ttl: nil)
+        }
+        service.show(note("a", tag: "t"))
+        service.show(note("b", tag: "t"))
+        XCTAssertEqual(service.current?.id, "b")
+        service.show(note("a"))
+        XCTAssertEqual(service.current?.id, "b")
+        service.stop()
+        XCTAssertNil(service.current)
+    }
 }

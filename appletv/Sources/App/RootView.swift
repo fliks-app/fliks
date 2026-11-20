@@ -22,7 +22,6 @@ struct RootView: View {
     var body: some View {
         content
             .overlay(alignment: .bottom) { PartyNotice() }
-            .overlay(alignment: .top) { NotificationToastView(service: toasts) }
             .task {
                 if server.isConfigured { await auth.bootstrap() }
             }
@@ -38,8 +37,13 @@ struct RootView: View {
                 updateRemotePolling()
                 updateToastStream()
             }
+            .onChange(of: locale.lang) { _, _ in
+                toasts.stop()
+                updateToastStream()
+            }
             .onChange(of: party.active) { _, active in if !active { MusicPartyDriver.shared.detach() } }
             .onAppear {
+                ToastWindow.shared.install(service: toasts)
                 RemoteControlService.shared.onLoadRequested = { mediaFileId, mediaId, episodeId, startAt, startPaused, tracks in
                     // Same "reset then push" the auth-state transition above uses -
                     // a remote `load` always replaces whatever is on screen.
@@ -105,9 +109,9 @@ struct RootView: View {
             .id(locale.lang)
     }
 
-    /// The notification stream runs only while signed in and foregrounded.
+    /// Inactive (Siri, system overlays) keeps the stream: only a background stops it.
     private func updateToastStream() {
-        if scenePhase == .active, auth.state == .signedIn { toasts.start() } else { toasts.stop() }
+        if scenePhase != .background, auth.state == .signedIn { toasts.start() } else { toasts.stop() }
     }
 
     /// Poll only while signed in and foregrounded: no point keeping a target
