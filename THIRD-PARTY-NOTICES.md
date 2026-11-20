@@ -86,13 +86,26 @@ run karaoke models on the graphics card.
 
 The desktop client plays media through **mpv**. On Linux and macOS, libmpv is
 loaded **into the Fliks process**; mpv's GPL-2.0-or-later terms are compatible
-with Fliks' AGPL-3.0. Every build below links an FFmpeg configured with
-`--enable-gpl --enable-version3`, so each is distributed under GPL-3.0.
+with Fliks' AGPL-3.0. The Linux and Windows builds link an FFmpeg configured with
+`--enable-gpl --enable-version3`, so each is distributed under GPL-3.0. The macOS build
+(DMG and Mac App Store) is LGPL: `desktop/scripts/build-libmpv-mac.sh` builds every library
+below from the pinned upstream sources it names, and the app ships each licence with its
+source URL in `Contents/Resources/licenses`.
 
 | Component | License | Source |
 |---|---|---|
 | libmpv (Linux: built with `-Dgpl=true`, FFmpeg, libass, libplacebo and libunibreak linked statically) | GPL-3.0 | https://github.com/mpv-player/mpv |
-| libmpv and its dylibs (macOS, from Homebrew) | GPL-3.0 | https://github.com/mpv-player/mpv |
+| libmpv 0.41.0 (macOS, `-Dgpl=false`, one dylib with the libraries below linked statically) | LGPL-2.1-or-later | https://github.com/mpv-player/mpv |
+| FFmpeg 8.1.2 (macOS, no `--enable-gpl` / `--enable-version3`) | LGPL-2.1-or-later | https://ffmpeg.org |
+| libplacebo 7.351.0 (macOS) | LGPL-2.1-or-later | https://code.videolan.org/videolan/libplacebo |
+| FriBidi 1.0.18 (macOS) | LGPL-2.1-or-later | https://github.com/fribidi/fribidi |
+| libass 0.17.4 (macOS) | ISC | https://github.com/libass/libass |
+| FreeType 2.14.3 (macOS) | FreeType License (FTL) | https://freetype.org |
+| HarfBuzz 15.2.0 (macOS) | MIT | https://github.com/harfbuzz/harfbuzz |
+| Little CMS 2.20 (macOS) | MIT | https://github.com/mm2/Little-CMS |
+| dav1d 1.5.5 (macOS) | BSD-2-Clause | https://code.videolan.org/videolan/dav1d |
+| libunibreak 6.1 (macOS) | zlib | https://github.com/adah1972/libunibreak |
+| OpenSSL 3.5.9 (macOS, TLS for playback) | Apache-2.0 | https://www.openssl.org |
 | mpv.exe and its DLLs (Windows, zhongfly/mpv-winbuild, GPL variant, re-hosted unmodified on the Fliks releases) | GPL-3.0 | https://github.com/zhongfly/mpv-winbuild |
 | SDL3 (Linux, bundled with the compositor addon) | zlib | https://github.com/libsdl-org/SDL |
 | libva-x11 and libXpresent (Linux .deb and AppImage, from the Ubuntu 24.04 archive, `libva-x11-2` and `libxpresent1`) | MIT | https://github.com/intel/libva and https://gitlab.freedesktop.org/xorg/lib/libxpresent |
