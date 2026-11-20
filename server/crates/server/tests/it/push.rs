@@ -104,7 +104,7 @@ async fn spawn_relay() -> (String, Relay) {
             signed,
         });
         match (method.as_str(), uri.path()) {
-            ("GET", "/v1/info") => axum::Json(json!({"api": 1})).into_response(),
+            ("GET", "/v1/info") => axum::Json(json!({"api": [1, 2]})).into_response(),
             ("POST", "/v1/servers") => (StatusCode::CREATED, axum::Json(json!({}))).into_response(),
             ("GET", "/v1/servers/self/stats") => axum::Json(json!({"days": []})).into_response(),
             ("POST", "/v1/push") => axum::Json(json!({})).into_response(),

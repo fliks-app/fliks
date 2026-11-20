@@ -13,12 +13,27 @@ const OUTCOME = {
   pt: ['Feito.', 'A ação falhou.'],
 };
 
+// The plaintext version this worker reads; a higher one gets the generic text (the same as the native apps').
+const PLAIN_VERSION = 1;
+const UNREADABLE = {
+  en: ['New notification', 'Update Fliks to read it.'],
+  fr: ['Nouvelle notification', 'Mettez à jour Fliks pour la lire.'],
+  de: ['Neue Benachrichtigung', 'Aktualisieren Sie Fliks, um sie zu lesen.'],
+  es: ['Nueva notificación', 'Actualice Fliks para leerla.'],
+  it: ['Nuova notifica', 'Aggiorna Fliks per leggerla.'],
+  pt: ['Nova notificação', 'Atualize o Fliks para a ler.'],
+};
+
 self.addEventListener('push', (event) => {
   let n;
   try {
     n = event.data?.json();
   } catch {
     n = null;
+  }
+  if (n?.v > PLAIN_VERSION) {
+    event.waitUntil(unreadable());
+    return;
   }
   if (!n?.title) return;
   const actions = (n.actions ?? []).slice(0, 2);
@@ -61,9 +76,18 @@ async function call(action, url, user, tag) {
     // offline: reported as a failure below
   }
   if (status === 401) return open(url, user);
-  const lang = (await savedLang()) ?? navigator.language ?? 'en';
-  const [done, failed] = OUTCOME[lang.slice(0, 2)] ?? OUTCOME.en;
+  const [done, failed] = await localized(OUTCOME);
   return self.registration.showNotification(status >= 200 && status < 300 ? done : failed, { icon: ICON, badge: ICON, tag, data: { url, user } });
+}
+
+async function unreadable() {
+  const [title, body] = await localized(UNREADABLE);
+  return self.registration.showNotification(title, { body, icon: ICON, badge: ICON, tag: 'unreadable', data: { url: '/' } });
+}
+
+async function localized(texts) {
+  const lang = (await savedLang()) ?? navigator.language ?? 'en';
+  return texts[lang.slice(0, 2)] ?? texts.en;
 }
 
 // The page tells the worker its UI language (it can differ from the browser's); the Cache API survives worker restarts.

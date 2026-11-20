@@ -434,6 +434,8 @@
       "enable_failed": "Unable to turn notifications on.",
       "action_done": "Done.",
       "action_failed": "The action failed.",
+      "unreadable_title": "New notification",
+      "unreadable_body": "Update Fliks to read it.",
       "test_none": "No device of yours receives system notifications yet.",
       "plugins_title": "Plugins",
       "plugins_hint": "Applies to all your devices.",

@@ -55,8 +55,8 @@ final class PushPipelineTests: XCTestCase {
         PushSubscription(session: "https://s.test|1", serverUrl: "https://s.test", userId: 1, privateKey: privateKey.rawRepresentation, auth: Data(repeating: 7, count: 16), sub: sub, relayKey: relayKey)
     }
 
-    private func push(id: String = "id-1", ts: Double? = nil, ttl: Double = 600, key: String? = nil, sub: String? = nil) -> [AnyHashable: Any] {
-        let json = #"{"v":1,"id":"\#(id)","ts":\#(ts ?? now.timeIntervalSince1970),"ttl":\#(ttl),"cat":"requests","title":"T","body":"B","url":"/r","badge":3,"user":1,"tag":"x","actions":[{"id":"approve","title":"Approve","kind":"call","token":"fka_1"}]}"#
+    private func push(v: Int = PushMessage.version, id: String = "id-1", ts: Double? = nil, ttl: Double = 600, key: String? = nil, sub: String? = nil) -> [AnyHashable: Any] {
+        let json = #"{"v":\#(v),"id":"\#(id)","ts":\#(ts ?? now.timeIntervalSince1970),"ttl":\#(ttl),"cat":"requests","title":"T","body":"B","url":"/r","badge":3,"user":1,"tag":"x","actions":[{"id":"approve","title":"Approve","kind":"call","token":"fka_1"}]}"#
         let message = encrypt(Data(json.utf8), to: privateKey.publicKey.x963Representation, auth: record.auth)
         return ["k": key ?? relayKey, "s": sub ?? self.sub, "p": message.base64URL]
     }
@@ -67,6 +67,10 @@ final class PushPipelineTests: XCTestCase {
         XCTAssertEqual(message.badge, 3)
         XCTAssertEqual(message.actions?.first?.token, "fka_1")
         XCTAssertEqual(found.session, "https://s.test|1")
+    }
+
+    func testAHigherPlaintextVersionFallsBack() {
+        XCTAssertEqual(PushPipeline.evaluate(push(v: PushMessage.version + 1), subscriptions: [record], seen: [], now: now), .fallback)
     }
 
     func testAKeyThatIsNotTheStoredOneFallsBack() {

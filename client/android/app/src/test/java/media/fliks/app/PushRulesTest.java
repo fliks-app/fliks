@@ -22,6 +22,13 @@ public class PushRulesTest {
     }
 
     @Test
+    public void onlyAHigherPlaintextVersionIsUnreadable() {
+        assertFalse(PushRules.newerThanKnown(PushRules.PLAIN_VERSION));
+        assertFalse(PushRules.newerThanKnown(0));
+        assertTrue(PushRules.newerThanKnown(PushRules.PLAIN_VERSION + 1));
+    }
+
+    @Test
     public void aReplayedIdIsRefusedAndTheRingIsCut() {
         assertNull(PushRules.remember(Arrays.asList("a", "b"), "a"));
         List<String> ids = new ArrayList<>();
