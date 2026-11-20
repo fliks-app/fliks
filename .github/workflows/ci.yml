@@ -30,6 +30,7 @@ jobs:
       server: ${{ steps.diff.outputs.server }}
       client: ${{ steps.diff.outputs.client }}
       desktop: ${{ steps.diff.outputs.desktop }}
+      libmpv_mac: ${{ steps.diff.outputs.libmpv_mac }}
     steps:
       # Depth 2: a PR checks out its merge commit, whose first parent is the base branch tip.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,7 +42,7 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          out() { printf 'server=%s\nclient=%s\ndesktop=%s\n' "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
+          out() { printf 'server=%s\nclient=%s\ndesktop=%s\nlibmpv_mac=%s\n' "$1" "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
           # Release PRs only bump versions (main re-runs everything after the merge); drafts wait for review.
           if [[ "$HEAD_REF" == release-please--* || "$DRAFT" == true ]]; then out false; exit 0; fi
           case "$EVENT" in
@@ -57,6 +58,7 @@ jobs:
             echo "server=$(hit '^(server/|engine\.lock$)')"
             echo "client=$(hit '^client/')"
             echo "desktop=$(hit '^desktop/')"
+            echo "libmpv_mac=$(hit '^desktop/(scripts/(build-libmpv-mac|verify-libmpv-mac|verify-minos-mac)\.sh|native/(binding\.gyp|player_mac/))')"
           } | tee -a "$GITHUB_OUTPUT"
 
   # Added lines only: older files carry dashes. A data fixture that tests a dash spells it with its escape.
@@ -371,6 +373,36 @@ jobs:
         run: ../node_modules/.bin/node-gyp rebuild --target=45.0.0 --dist-url=https://electronjs.org/headers --arch=x64
       - run: test -f native/build/Release/fliks_smtc_win.node
 
+  # The macOS libmpv is built from source (LGPL, deployment target 13.0); the prefix is cached from main runs.
+  desktop-mac:
+    needs: changes
+    if: needs.changes.outputs.libmpv_mac == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      # Homebrew only supplies build tools: the script compiles every library itself.
+      - run: brew install meson ninja pkgconf
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/fliks-libmpv-mac
+          key: libmpv-mac-${{ hashFiles('desktop/scripts/build-libmpv-mac.sh') }}
+      - run: bash desktop/scripts/build-libmpv-mac.sh
+      - run: npm ci --ignore-scripts
+        working-directory: desktop
+      - name: Build the player addon against the Electron 45 ABI
+        working-directory: desktop/native
+        run: ../node_modules/.bin/node-gyp rebuild --target=45.0.0 --dist-url=https://electronjs.org/headers --arch=arm64
+      - run: bash desktop/scripts/verify-minos-mac.sh
+
   android:
     needs: changes
     if: needs.changes.outputs.client == 'true'
@@ -471,7 +503,7 @@ jobs:
   # The only required check: a skipped job (area untouched) counts as passed.
   ci-ok:
     if: always()
-    needs: [changes, no-em-dash, lint, build, test-shard, plugin-sdk, windows-clippy, client, tizen, desktop, desktop-win, android, ios]
+    needs: [changes, no-em-dash, lint, build, test-shard, plugin-sdk, windows-clippy, client, tizen, desktop, desktop-win, desktop-mac, android, ios]
     runs-on: ubuntu-latest
     steps:
       - env:

@@ -82,8 +82,8 @@ mac:
   # Electron 45 needs 13; verify-minos-mac.sh holds every bundled Mach-O to it.
   minimumSystemVersion: "13.0"
   # Developer ID signed + hardened-runtime + notarized. electron-builder signs
-  # every nested Mach-O (the .node addon + the vendored libmpv.dylib & its bundled
-  # deps, overriding their ad-hoc signatures) with the Developer ID cert from
+  # every nested Mach-O (the .node addon + the vendored libmpv.dylib, overriding its
+  # ad-hoc signature) with the Developer ID cert from
   # CSC_LINK/CSC_KEY_PASSWORD, then notarizes via notarytool using the App Store
   # Connect API key (APPLE_API_KEY / _ID / _ISSUER). All env is wired per-OS in
   # desktop-release.yml so a notarized .dmg opens without the Gatekeeper warning.

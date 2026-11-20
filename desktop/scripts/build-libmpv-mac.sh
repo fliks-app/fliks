@@ -16,12 +16,12 @@
 # Homebrew is never consulted: pkg-config only sees $PREFIX.
 #
 # Usage:  desktop/scripts/build-libmpv-mac.sh
-# Env:    WORK (default ~/.cache/fliks-libmpv-mac), JOBS
+# Env:    FLIKS_LIBMPV_WORK (default ~/.cache/fliks-libmpv-mac), JOBS
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="$ROOT/desktop/native/vendor"
-WORK="${WORK:-$HOME/.cache/fliks-libmpv-mac}"
+WORK="${FLIKS_LIBMPV_WORK:-$HOME/.cache/fliks-libmpv-mac}"
 JOBS="${JOBS:-$(sysctl -n hw.ncpu)}"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
 
@@ -41,7 +41,13 @@ MPV_VERSION=0.41.0
 PREFIX="$WORK/prefix"
 SRC="$WORK/src"
 BUILD="$WORK/build"
+# A changed script (flags, pins) invalidates everything built by the previous one.
+script_hash=$(shasum -a 256 "${BASH_SOURCE[0]}" | cut -c1-16)
+if [ "$(cat "$WORK/script-hash" 2>/dev/null)" != "$script_hash" ]; then
+  rm -rf "${PREFIX:?}" "${WORK:?}/stamps"
+fi
 mkdir -p "$PREFIX" "$SRC" "$BUILD" "$OUT"
+echo "$script_hash" > "$WORK/script-hash"
 
 # Only $PREFIX is visible to pkg-config; --static pulls the Libs.private of the archives.
 printf '#!/bin/sh\nexec "%s" --static "$@"\n' "$(command -v pkg-config || command -v pkgconf)" > "$WORK/pkg-config"
@@ -59,18 +65,18 @@ step() { echo "==> $*"; }
 # fetch <url> <sha256> <file> — verified tarball, extracted to $SRC/<dir>
 fetch() {
   local url=$1 sha=$2 file=$SRC/${3}
-  [ -f "$file" ] || curl -fsSL -o "$file" "$url"
-  echo "$sha  $file" | shasum -a 256 -c - >/dev/null || { echo "sha256 mismatch: $file" >&2; rm -f "$file"; exit 1; }
+  if ! echo "$sha  $file" | shasum -a 256 -c - >/dev/null 2>&1; then
+    curl -fsSL -o "$file" "$url"
+    echo "$sha  $file" | shasum -a 256 -c - >/dev/null || { echo "sha256 mismatch: $url" >&2; rm -f "$file"; exit 1; }
+  fi
 }
 unpack() { [ -d "$SRC/$2" ] || tar -xf "$SRC/$1" -C "$SRC"; }
 
 # built <name>: skip a dependency already installed with these pins
 built() { [ -f "$WORK/stamps/$1" ]; }
-# mark <name>: record the dependency and drop its trees (the CI runner and small disks stay lean)
-mark() {
-  mkdir -p "$WORK/stamps"; touch "$WORK/stamps/$1"
-  rm -rf "${BUILD:?}"/*; find "$SRC" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
-}
+# Source and build trees are dropped as soon as they are installed (small disks, small CI cache).
+clean_trees() { rm -rf "${BUILD:?}"/*; find "$SRC" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +; }
+mark() { mkdir -p "$WORK/stamps"; touch "$WORK/stamps/$1"; clean_trees; }
 meson_dep() { # <name> <srcdir> [meson args...]
   local name=$1 dir=$2; shift 2
   meson setup "$BUILD/$name" "$dir" --prefix="$PREFIX" --libdir=lib --buildtype=release \
@@ -86,7 +92,7 @@ if ! built openssl-$OPENSSL_VERSION; then
   rm -rf "$SRC/openssl-$OPENSSL_VERSION"; tar -xf "$SRC/openssl.tar.gz" -C "$SRC"
   (cd "$SRC/openssl-$OPENSSL_VERSION" \
     && ./Configure darwin64-arm64-cc no-shared no-tests no-apps no-docs no-module \
-         --prefix="$PREFIX" --libdir=lib "-mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET" \
+         --prefix="$PREFIX" --openssldir=/etc/ssl --libdir=lib "-mmacosx-version-min=$MACOSX_DEPLOYMENT_TARGET" \
     && make -j"$JOBS" build_libs && make install_dev)
   mark openssl-$OPENSSL_VERSION
 fi
@@ -202,21 +208,23 @@ sed -i '' "s|link_args: cc.get_supported_link_arguments(\['-Wl,-Bsymbolic'\]),|l
 grep -q exported_symbols_list "$SRC/mpv-$MPV_VERSION/meson.build"
 meson setup "$BUILD/mpv" "$SRC/mpv-$MPV_VERSION" --prefix="$PREFIX" --libdir=lib --buildtype=release \
   -Dc_args="$CFLAGS" -Dc_link_args="$LDFLAGS" -Dobjc_args="$CFLAGS" -Dobjc_link_args="$LDFLAGS" \
-  -Dlibmpv=true -Dcplayer=false -Dgpl=false -Dbuild-date=false \
-  -Dlua=disabled -Djavascript=disabled -Dlibarchive=disabled -Dlibbluray=disabled -Drubberband=disabled \
-  -Duchardet=disabled -Dvapoursynth=disabled -Dzimg=disabled -Djpeg=disabled -Dsdl2-gamepad=disabled \
-  -Dvulkan=disabled -Dshaderc=disabled -Dspirv-cross=disabled -Dmanpage-build=disabled -Dhtml-build=disabled \
-  -Dlcms2=enabled -Dgl=enabled -Dvideotoolbox-gl=enabled -Dcoreaudio=enabled \
-  -Dcocoa=enabled -Dgl-cocoa=enabled -Dswift-build=enabled "-Dswift-flags=-target arm64-apple-macos$MACOSX_DEPLOYMENT_TARGET" -Dmacos-cocoa-cb=disabled -Dmacos-media-player=disabled \
-  -Dmacos-touchbar=disabled
+  -Dauto_features=disabled -Dlibmpv=true -Dcplayer=false -Dgpl=false -Dbuild-date=false \
+  -Diconv=enabled -Dzlib=enabled -Dlcms2=enabled -Dcoreaudio=enabled -Davfoundation=enabled \
+  -Dcocoa=enabled -Dgl=enabled -Dgl-cocoa=enabled -Dplain-gl=enabled -Dvideotoolbox-gl=enabled \
+  -Dmacos-10-15-4-features=enabled -Dmacos-11-features=enabled -Dmacos-11-3-features=enabled -Dmacos-12-features=enabled \
+  -Dswift-build=enabled "-Dswift-flags=-target arm64-apple-macos$MACOSX_DEPLOYMENT_TARGET"
 meson compile -C "$BUILD/mpv" -j "$JOBS"
 meson install -C "$BUILD/mpv"
+clean_trees
 
 step "vendoring into $OUT"
 rm -f "$OUT"/*.dylib "$OUT"/libmpv.so.2
 cp -L "$PREFIX/lib/libmpv.dylib" "$OUT/libmpv.dylib"
 chmod u+w "$OUT/libmpv.dylib"
 install_name_tool -id "@loader_path/libmpv.dylib" "$OUT/libmpv.dylib"
+# The Swift link adds the build machine's Xcode toolchain as an rpath; only the OS runtime is wanted.
+otool -l "$OUT/libmpv.dylib" | awk '/cmd LC_RPATH/{r=1} r && $1=="path"{print $2; r=0}' | grep -vx '/usr/lib/swift' \
+  | while read -r rp; do install_name_tool -delete_rpath "$rp" "$OUT/libmpv.dylib"; done
 codesign --force --sign - "$OUT/libmpv.dylib"
 echo "libmpv headers for the addon: FLIKS_MPV_INCLUDE=$PREFIX/include"
 bash "$ROOT/desktop/scripts/verify-libmpv-mac.sh"

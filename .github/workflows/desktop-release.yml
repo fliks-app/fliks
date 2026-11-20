@@ -228,16 +228,9 @@ jobs:
           MPV_VENDOR_SHA256: "ddef3932aed791cdc3f2585e5798802e55171ab9dce06d3275bdd9ed2967774d"
         run: bash desktop/scripts/fetch-mpv-windows.sh
 
-      # macOS embeds in-process libmpv. Built from source as one static, LGPL dylib
-      # (FFmpeg + OpenSSL 3, deployment target 13.0); the dependency prefix is
-      # cached on the script, so only a pin bump rebuilds it.
-      - name: Cache libmpv (macOS)
-        if: runner.os == 'macOS'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ~/.cache/fliks-libmpv-mac
-          key: libmpv-mac-${{ hashFiles('desktop/scripts/build-libmpv-mac.sh') }}
-
+      # macOS embeds in-process libmpv, built from source as one static LGPL dylib
+      # (FFmpeg + OpenSSL 3, deployment target 13.0). ci.yml builds it on every change
+      # to the script, so a release only repeats a build that already passed.
       - name: Build libmpv (macOS)
         if: runner.os == 'macOS'
         shell: bash
