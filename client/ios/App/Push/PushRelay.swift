@@ -2,8 +2,8 @@ import Foundation
 
 /// The relay the app talks to, whatever the server says: only these hosts are accepted as a ticket audience.
 enum PushRelay {
-    /// `DEFAULT_RELAY_URL` of `server/crates/server/src/push/mod.rs`, official host undecided.
-    static let officialHost = "relay.fliks.app"
+    /// Host of `DEFAULT_RELAY_URL` in `server/crates/server/src/push/mod.rs`.
+    static let officialHost = "push-relay.fliks.media"
     static let hosts: [String] = {
         var list = [officialHost]
         #if DEBUG

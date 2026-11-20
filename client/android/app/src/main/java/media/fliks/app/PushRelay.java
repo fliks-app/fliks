@@ -17,8 +17,8 @@ import java.util.List;
 
 /** The relays this build talks to, the tickets it accepts and the two device calls of the relay protocol. */
 final class PushRelay {
-    /** The official relay, until the owner fixes the public host (same value as the server's default). */
-    static final String OFFICIAL = "https://relay.fliks.app";
+    /** The official relay, the server's default too. */
+    static final String OFFICIAL = "https://push-relay.fliks.media";
     private static final String DEBUG_RELAY = "http://localhost:8080";
 
     private PushRelay() {}
