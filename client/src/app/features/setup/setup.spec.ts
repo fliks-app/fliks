@@ -44,51 +44,56 @@ async function createComponent(http: HttpClient, activeUrl = '') {
   return fixture.componentInstance;
 }
 
-describe('SetupComponent — https fallback', () => {
-  it('retries an http entry over https and keeps the working base', async () => {
-    const c = await createComponent(httpsOnly);
-    c.url.set('http://fliks.example.com');
+describe('SetupComponent: connect', () => {
+  async function connectTo(http: HttpClient, url: string) {
+    const c = await createComponent(http);
+    const auth = TestBed.inject(AuthService);
+    vi.spyOn(auth, 'switchToServer').mockResolvedValue();
+    c.url.set(url);
+    await c.connect();
+    return { c, auth };
+  }
 
-    await c.test();
+  it('retries an http entry over https and switches to the working base', async () => {
+    const { c, auth } = await connectTo(httpsOnly, 'http://fliks.example.com');
 
-    expect(c.testResult()).toEqual({ ok: true, message: 'setup.test_success' });
+    expect(auth.switchToServer).toHaveBeenCalledWith('https://fliks.example.com');
     expect(c.url()).toBe('https://fliks.example.com');
+    expect(c.failed()).toBe(false);
   });
 
   it('keeps an http entry that answers over http', async () => {
     const reachable = { get: () => throwError(() => ({ status: 401 })) } as unknown as HttpClient;
-    const c = await createComponent(reachable);
-    c.url.set('http://192.168.1.10:3001');
+    const { auth } = await connectTo(reachable, 'http://192.168.1.10:3001');
 
-    await c.test();
-
-    expect(c.testResult()?.ok).toBe(true);
-    expect(c.url()).toBe('http://192.168.1.10:3001');
+    expect(auth.switchToServer).toHaveBeenCalledWith('http://192.168.1.10:3001');
   });
 
-  it('reports an error when neither scheme answers', async () => {
+  it('stays on the page with an error when neither scheme answers', async () => {
     const dead = { get: () => throwError(() => ({ status: 0 })) } as unknown as HttpClient;
-    const c = await createComponent(dead);
-    c.url.set('http://nope.example.com');
+    const { c, auth } = await connectTo(dead, 'http://nope.example.com');
 
-    await c.test();
-
-    expect(c.testResult()).toEqual({ ok: false, message: 'setup.test_error' });
+    expect(auth.switchToServer).not.toHaveBeenCalled();
+    expect(c.failed()).toBe(true);
+    expect(c.connecting()).toBe(false);
   });
 });
 
-describe('SetupComponent — editing during a test', () => {
-  it('cancels the pending test', async () => {
+describe('SetupComponent: editing during a probe', () => {
+  it('cancels the pending probe', async () => {
     const hanging = { get: () => NEVER } as unknown as HttpClient;
     const c = await createComponent(hanging);
+    const auth = TestBed.inject(AuthService);
+    vi.spyOn(auth, 'switchToServer').mockResolvedValue();
     c.url.set('http://slow.example.com');
 
-    const pending = c.test();
+    const pending = c.connect();
     c.onUrlChange('http://other.example.com');
     await pending;
 
-    expect(c.testing()).toBe(false);
-    expect(c.testResult()).toBeNull();
+    expect(c.connecting()).toBe(false);
+    expect(c.failed()).toBe(false);
+    expect(auth.switchToServer).not.toHaveBeenCalled();
     expect(c.url()).toBe('http://other.example.com');
   });
 });

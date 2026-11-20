@@ -850,9 +850,7 @@
     "subtitle": "Configurez l'adresse de votre serveur",
     "server_url": "Adresse du serveur",
     "server_url_hint": "L'adresse complète de votre serveur (ex: http://localhost:4848)",
-    "test": "Tester",
-    "save": "Enregistrer",
-    "test_success": "Connexion au serveur réussie.",
+    "connect": "Se connecter",
     "test_error": "Impossible de se connecter au serveur."
   },
   "login": {
