@@ -90,7 +90,7 @@ jobs:
           - os: macos-latest
             label: mas
             dist_script: dist:mas
-            artifact_glob: desktop/release/*.pkg
+            artifact_glob: desktop/release/mas-arm64/*.pkg
           - os: windows-latest
             label: exe
             dist_script: dist:win
@@ -399,7 +399,7 @@ jobs:
           else
             action=--validate-app
           fi
-          xcrun altool $action --type macos --file desktop/release/*.pkg --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
+          xcrun altool $action --type macos --file desktop/release/mas-arm64/*.pkg --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
 
       # Flat APT repo on the `apt` release, the one desktop/build/fliks.sources points at.
       - name: Publish the APT repository (Linux)
