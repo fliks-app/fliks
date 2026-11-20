@@ -31,6 +31,17 @@ android {
     // never writes secrets to disk. Only resolved when the keystore
     // file actually exists — local debug builds (no fliks-upload.jks
     // checked out) skip the release signing block entirely.
+    // libre: no Google Play Services or Firebase, for F-Droid.
+    flavorDimensions = ["variant"]
+    productFlavors {
+        proprietary {
+            dimension "variant"
+            isDefault = true
+        }
+        libre {
+            dimension "variant"
+        }
+    }
     signingConfigs {
         release {
             def keystoreFile = file('fliks-upload.jks')
@@ -88,10 +99,10 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
-    implementation 'com.google.android.gms:play-services-cast-framework:22.0.0'
-    implementation 'androidx.mediarouter:mediarouter:1.7.0'
+    proprietaryImplementation 'com.google.android.gms:play-services-cast-framework:22.0.0'
+    proprietaryImplementation 'androidx.mediarouter:mediarouter:1.7.0'
     // FCM only: no analytics library, auto-init is off in the manifest.
-    implementation 'com.google.firebase:firebase-messaging:24.1.2'
+    proprietaryImplementation 'com.google.firebase:firebase-messaging:24.1.2'
     // ExoPlayer (Media3) for native HLS playback
     implementation 'androidx.media3:media3-exoplayer:1.10.1'
     implementation 'androidx.media3:media3-exoplayer-hls:1.10.1'

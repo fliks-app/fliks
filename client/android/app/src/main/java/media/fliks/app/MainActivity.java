@@ -34,7 +34,7 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         handleDownloadsIntent(intent);
-        PushPlugin.handleIntent(this, intent);
+        Flavor.handleIntent(this, intent);
     }
 
     private static void handleDownloadsIntent(Intent intent) {
@@ -53,7 +53,6 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(HdrPlugin.class);
         registerPlugin(AudioCapabilitiesPlugin.class);
         registerPlugin(VideoCapabilitiesPlugin.class);
-        registerPlugin(CastPlugin.class);
         registerPlugin(DownloadNotificationPlugin.class);
         registerPlugin(NativePlayerPlugin.class);
         registerPlugin(AudioPlayerPlugin.class);
@@ -61,7 +60,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SaveFilePlugin.class);
         registerPlugin(CalendarPlugin.class);
         registerPlugin(WebAuthPlugin.class);
-        registerPlugin(PushPlugin.class);
+        registerPlugins(Flavor.PLUGINS);
         super.onCreate(savedInstanceState);
         // A dead renderer must not take the process, and the native audio player with it.
         getBridge().addWebViewListener(new WebViewListener() {
@@ -73,7 +72,7 @@ public class MainActivity extends BridgeActivity {
         });
         if (savedInstanceState == null) {
             handleDownloadsIntent(getIntent());
-            PushPlugin.handleIntent(this, getIntent());
+            Flavor.handleIntent(this, getIntent());
         }
 
         // Tag the WebView UA when running on Android TV so the frontend can adapt its
@@ -148,13 +147,13 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onStart() {
         super.onStart();
-        PushNotifier.foreground = true;
+        Flavor.setForeground(true);
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        PushNotifier.foreground = false;
+        Flavor.setForeground(false);
     }
 
     @Override
