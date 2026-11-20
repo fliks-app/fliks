@@ -428,7 +428,8 @@
       "background": "Im Hintergrund weiterlaufen",
       "background_hint": "Beim Schließen des Fensters läuft Fliks weiter, damit Benachrichtigungen ankommen.",
       "start_at_login": "Bei der Anmeldung starten",
-      "start_at_login_hint": "Fliks startet im Hintergrund, wenn Sie sich am Computer anmelden."
+      "start_at_login_hint": "Fliks startet im Hintergrund, wenn Sie sich am Computer anmelden.",
+      "pending_expired": "Melden Sie sich erneut an, um diese Benachrichtigung zu öffnen."
     }
   },
   "update_settings": {

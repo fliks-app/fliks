@@ -25,6 +25,12 @@
         }
         @if (push.desktopPrefs(); as prefs) {
           <app-toggle-field
+            [value]="prefs.notifications"
+            (valueChange)="push.setDesktopPref({ notifications: $event })"
+            [label]="'app_settings.notifications.device' | translate"
+            [hint]="'app_settings.notifications.device_hint' | translate"
+          />
+          <app-toggle-field
             [value]="prefs.background"
             (valueChange)="push.setDesktopPref({ background: $event })"
             [label]="'app_settings.notifications.background' | translate"

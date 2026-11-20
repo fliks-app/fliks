@@ -60,6 +60,7 @@ const TOASTS_KEY = 'fliks.push.toasts';
 const PENDING_URL_TTL_MS = 5 * 60_000;
 /** Sign-out must not hang on an unreachable push service or server. */
 const RELEASE_TIMEOUT_MS = 5000;
+const LANG_MESSAGE = 'fliks-push-lang';
 
 function b64urlToBytes(s: string): Uint8Array<ArrayBuffer> {
   const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
@@ -119,6 +120,8 @@ export class PushService {
   );
 
   private openedHandle: PluginListenerHandle | null = null;
+  /** A pending tap is honoured only by the launch that follows it, not by a later account switch. */
+  private launched = false;
 
   constructor() {
     effect(() => {
@@ -135,6 +138,11 @@ export class PushService {
       });
     });
     this.sse.notifications.subscribe((n) => this.onNotification(n));
+    effect(() => {
+      if (this.mode !== 'web') return;
+      const lang = this.translate.currentLang() || 'en';
+      void navigator.serviceWorker.ready.then((r) => r.active?.postMessage({ type: LANG_MESSAGE, lang }));
+    });
     // Registered with the service, which the app initializer creates: a tap on the user picker or the login page must not be lost.
     if (this.mode === 'web') {
       navigator.serviceWorker.addEventListener('message', (e) => {
@@ -166,6 +174,7 @@ export class PushService {
         if (perm !== 'granted') return false;
       }
       await this.subscribe(false);
+      writeStored(this.pendingDeleteKey(), null);
       writeFlag(this.flagKey(user.id), true);
       this.deviceEnabled.set(true);
       return true;
@@ -182,8 +191,8 @@ export class PushService {
     if (!user) return;
     this.busy.set(true);
     try {
-      // A failed server deletion stays pending and is retried at the next start.
-      await this.unsubscribe().catch(() => undefined);
+      // The session is still valid: a failed server deletion stays pending and is retried at the next start.
+      await this.unsubscribe(true).catch(() => undefined);
       writeFlag(this.flagKey(user.id), false);
       this.deviceEnabled.set(false);
     } finally {
@@ -191,11 +200,16 @@ export class PushService {
     }
   }
 
-  /** Sign-out: drops this device's subscription but keeps the choice, so the same account signing in again resubscribes. */
+  /** Sign-out: drops this device's subscription but keeps the choice, so the same account signing in again resubscribes. The server sweeps the rows of a revoked session. */
   async release(): Promise<void> {
     if (!this.deviceEnabled()) return;
-    const timeout = new Promise<void>((resolve) => setTimeout(resolve, RELEASE_TIMEOUT_MS));
-    await Promise.race([this.unsubscribe().catch(() => undefined), timeout]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((resolve) => (timer = setTimeout(resolve, RELEASE_TIMEOUT_MS)));
+    try {
+      await Promise.race([this.unsubscribe(false).catch(() => undefined), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async setDesktopPref(patch: Partial<DesktopNotifyPrefs>): Promise<void> {
@@ -266,13 +280,13 @@ export class PushService {
     if (this.device.isTv() && !this.toastsEnabled()) return;
     const user = this.auth.user();
     const bridge = desktopBridgeOrNull();
-    if (this.mode === 'desktop' && !this.desktopActive() && user && bridge?.notify) {
+    if (this.mode === 'desktop' && !this.desktopActive() && this.desktopPrefs()?.notifications && user && bridge?.notify) {
       void bridge
         .notify({
           id: n.id,
           title: n.title,
           body: n.body,
-          image: n.image ? this.serverConfig.resolveUrl(n.image) : undefined,
+          image: n.image,
           tag: n.tag,
           url: n.url,
           serverUrl: this.serverConfig.serverUrl(),
@@ -294,7 +308,10 @@ export class PushService {
   }
 
   private async start(): Promise<void> {
-    await this.consumePendingUrl();
+    if (!this.launched) {
+      this.launched = true;
+      await this.consumePendingUrl();
+    }
     await this.retryPendingDelete();
     if (this.mode === 'native') await this.startNative();
     if (this.mode === 'desktop') this.desktopPrefs.set((await desktopBridgeOrNull()?.getNotifyPrefs?.()) ?? null);
@@ -317,7 +334,10 @@ export class PushService {
       return;
     }
     if (!pending.exp || pending.exp < Date.now()) return;
-    if (pending.userId !== undefined && pending.userId !== this.auth.user()?.id && !(await this.resume(pending.userId))) return;
+    if (pending.userId !== undefined && pending.userId !== this.auth.user()?.id && !(await this.resume(pending.userId))) {
+      this.toast.error(this.translate.instant('app_settings.notifications.pending_expired'));
+      return;
+    }
     await this.go(pending.url);
   }
 
@@ -355,7 +375,7 @@ export class PushService {
         this.http.get<PushConfig>('/api/push/config', { context: new HttpContext().set(SKIP_ERROR_TOAST, true) }),
       );
       this.mobileEnabled.set(cfg.mobile);
-      this.plugins.set(cfg.plugins ?? []);
+      this.plugins.set((cfg.plugins ?? []).map((p) => ({ id: p.id, name: p.name || p.id })));
       return cfg;
     } catch {
       return null;
@@ -400,13 +420,13 @@ export class PushService {
     this.subscribed.set(true);
   }
 
-  /** Both sides always run: a failed server deletion stays pending (retried at the next start) and never keeps the browser or the plugin subscribed. */
-  private async unsubscribe(): Promise<void> {
+  /** Both sides always run, so a failed server deletion never keeps the browser or the plugin subscribed; with `retry` it stays pending until the next start. */
+  private async unsubscribe(retry: boolean): Promise<void> {
     this.subscribed.set(false);
     const native = this.mode === 'native';
     const platform = native ? (Capacitor.getPlatform() === 'ios' ? 'apns' : 'fcm') : 'web';
     const key = this.pendingDeleteKey();
-    writeStored(key, platform);
+    if (retry) writeStored(key, platform);
     const local = native ? Push.unsubscribe({ session: this.sessionRef().key }) : this.unsubscribeWeb();
     const remote = this.deleteCurrent(platform).then(() => writeStored(key, null));
     const failed = (await Promise.allSettled([local, remote])).find((r) => r.status === 'rejected');

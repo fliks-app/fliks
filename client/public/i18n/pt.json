@@ -428,7 +428,8 @@
       "background": "Manter em segundo plano",
       "background_hint": "Fechar a janela mantém o Fliks ativo para que as notificações continuem a chegar.",
       "start_at_login": "Iniciar com a sessão",
-      "start_at_login_hint": "O Fliks abre em segundo plano quando inicia sessão no computador."
+      "start_at_login_hint": "O Fliks abre em segundo plano quando inicia sessão no computador.",
+      "pending_expired": "Inicie sessão novamente para abrir esta notificação."
     }
   },
   "update_settings": {

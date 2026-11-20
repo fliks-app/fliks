@@ -428,7 +428,8 @@
       "background": "Keep running in the background",
       "background_hint": "Closing the window leaves Fliks running so notifications keep arriving.",
       "start_at_login": "Start at login",
-      "start_at_login_hint": "Fliks opens in the background when you sign in to your computer."
+      "start_at_login_hint": "Fliks opens in the background when you sign in to your computer.",
+      "pending_expired": "Sign in again to open this notification."
     }
   },
   "update_settings": {

@@ -61,8 +61,24 @@ async function call(action, url, user, tag) {
     // offline: reported as a failure below
   }
   if (status === 401) return open(url, user);
-  const [done, failed] = OUTCOME[(navigator.language || 'en').slice(0, 2)] ?? OUTCOME.en;
-  return self.registration.showNotification(status >= 200 && status < 300 ? done : failed, { icon: ICON, badge: ICON, tag });
+  const lang = (await savedLang()) ?? navigator.language ?? 'en';
+  const [done, failed] = OUTCOME[lang.slice(0, 2)] ?? OUTCOME.en;
+  return self.registration.showNotification(status >= 200 && status < 300 ? done : failed, { icon: ICON, badge: ICON, tag, data: { url, user } });
+}
+
+// The page tells the worker its UI language (it can differ from the browser's); the Cache API survives worker restarts.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'fliks-push-lang') {
+    event.waitUntil(caches.open('fliks-push').then((c) => c.put('/lang', new Response(String(event.data.lang)))));
+  }
+});
+
+async function savedLang() {
+  try {
+    return await (await (await caches.open('fliks-push')).match('/lang'))?.text();
+  } catch {
+    return undefined;
+  }
 }
 
 function setBadge(count) {
@@ -72,16 +88,17 @@ function setBadge(count) {
 
 // Only a path of this origin: `//host` and `/\host` resolve to another origin.
 function sameOriginPath(url) {
+  if (!url) return null;
   try {
     const u = new URL(url, location.origin);
-    return u.origin === location.origin ? u.pathname + u.search + u.hash : '/';
+    return u.origin === location.origin ? u.pathname + u.search + u.hash : null;
   } catch {
-    return '/';
+    return null;
   }
 }
 
 async function open(url, user) {
-  const target = sameOriginPath(url);
+  const target = sameOriginPath(url) ?? '/';
   const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   const client = windows.find((c) => 'focus' in c);
   if (client) {

@@ -117,7 +117,7 @@ export interface DesktopNotificationAction {
   token?: string;
 }
 
-/** What the shell shows as an OS notification; `image` is an absolute URL. */
+/** What the shell shows as an OS notification; `image` is a path on `serverUrl` (a public route) that the shell resolves. */
 export interface DesktopNotification {
   id: string;
   title: string;
@@ -140,6 +140,8 @@ export interface DesktopNotificationClick {
 
 export interface DesktopNotifyPrefs {
   /** Closing the window leaves the app running. */
+  /** OS notifications while the window is not active; off until the user turns it on. */
+  notifications: boolean;
   background: boolean;
   startAtLogin: boolean;
 }

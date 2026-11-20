@@ -428,7 +428,8 @@
       "background": "Resta attivo in background",
       "background_hint": "Chiudendo la finestra Fliks resta attivo e le notifiche continuano ad arrivare.",
       "start_at_login": "Avvia all'accesso",
-      "start_at_login_hint": "Fliks si apre in background quando accedi al computer."
+      "start_at_login_hint": "Fliks si apre in background quando accedi al computer.",
+      "pending_expired": "Accedi di nuovo per aprire questa notifica."
     }
   },
   "update_settings": {
