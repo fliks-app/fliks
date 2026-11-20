@@ -10,4 +10,14 @@
     <string name="auto_artists">Artistes</string>
     <string name="auto_disc">Disque %1$d</string>
     <string name="auto_tracks">Titres</string>
+    <string name="push_channel_requests">Demandes</string>
+    <string name="push_channel_parties">Soirées de visionnage</string>
+    <string name="push_channel_social">Social</string>
+    <string name="push_channel_episodes">Nouveaux épisodes</string>
+    <string name="push_channel_account">Compte</string>
+    <string name="push_channel_other">Autres</string>
+    <string name="push_fallback_title">Nouvelle notification</string>
+    <string name="push_fallback_body">Ouvrez Fliks pour la lire.</string>
+    <string name="push_action_done">Fait</string>
+    <string name="push_action_failed">Échec</string>
 </resources>

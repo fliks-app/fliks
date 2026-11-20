@@ -37,6 +37,7 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         handleDownloadsIntent(intent);
+        PushPlugin.handleIntent(this, intent);
     }
 
     private static void handleDownloadsIntent(Intent intent) {
@@ -63,6 +64,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SaveFilePlugin.class);
         registerPlugin(CalendarPlugin.class);
         registerPlugin(WebAuthPlugin.class);
+        registerPlugin(PushPlugin.class);
         super.onCreate(savedInstanceState);
         // A dead renderer must not take the process, and the native audio player with it.
         getBridge().addWebViewListener(new WebViewListener() {
@@ -72,7 +74,10 @@ public class MainActivity extends BridgeActivity {
                 return true;
             }
         });
-        if (savedInstanceState == null) handleDownloadsIntent(getIntent());
+        if (savedInstanceState == null) {
+            handleDownloadsIntent(getIntent());
+            PushPlugin.handleIntent(this, getIntent());
+        }
 
         // Request notification permission (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -150,6 +155,18 @@ public class MainActivity extends BridgeActivity {
         // was reset alongside.
         applyEdgeToEdge();
         getWindow().getDecorView().post(this::applyLightStatusBar);
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        PushNotifier.foreground = true;
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        PushNotifier.foreground = false;
     }
 
     @Override
