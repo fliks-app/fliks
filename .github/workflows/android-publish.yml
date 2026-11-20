@@ -26,6 +26,7 @@
 #   - ANDROID_UPLOAD_KEYSTORE_PASSWORD
 #   - ANDROID_UPLOAD_KEY_ALIAS
 #   - ANDROID_UPLOAD_KEY_PASSWORD
+#   - ANDROID_GOOGLE_SERVICES_JSON_BASE64 (optional: without it the build has no push)
 #   - PLAY_STORE_SERVICE_ACCOUNT_JSON
 #   - AMAZON_APPSTORE_CLIENT_ID, AMAZON_APPSTORE_CLIENT_SECRET, AMAZON_APPSTORE_APP_ID
 name: Publish Android to Stores
@@ -117,6 +118,15 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}" \
             | base64 -d > android/app/fliks-upload.jks
+
+      # Optional: a build without it (forks) compiles without Firebase and reports push unavailable.
+      - name: Decode Firebase config
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON_BASE64" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > android/app/google-services.json
+          fi
 
       # One Gradle run for both outputs: the AAB (skipped in APK-only mode, `apk_tag`) and,
       # on a tag or an `apk_tag` dispatch, the sideload APK with the same release signingConfig.

@@ -23,4 +23,14 @@
     <string name="auto_artists">Artists</string>
     <string name="auto_disc">Disc %1$d</string>
     <string name="auto_tracks">Tracks</string>
+    <string name="push_channel_requests">Requests</string>
+    <string name="push_channel_parties">Watch parties</string>
+    <string name="push_channel_social">Social</string>
+    <string name="push_channel_episodes">New episodes</string>
+    <string name="push_channel_account">Account</string>
+    <string name="push_channel_other">Other</string>
+    <string name="push_fallback_title">New notification</string>
+    <string name="push_fallback_body">Open Fliks to read it.</string>
+    <string name="push_action_done">Done</string>
+    <string name="push_action_failed">Failed</string>
 </resources>

@@ -121,3 +121,6 @@ client/ios/App/App/Local.xcconfig
 # dev data dir (pre-migration dumps and the like)
 server/data/
 server/crates/server/data/
+
+# Firebase config of the Android build (CI decodes it from a secret)
+client/android/app/google-services.json
