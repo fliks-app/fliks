@@ -548,7 +548,8 @@ impl Push {
 
     /// `POST /api/push/test`: sends to every subscription of `user` and reports each.
     pub async fn test(&self, st: &AppState, user: i32) -> sqlx::Result<Vec<Value>> {
-        let n = Notification::core("account", "test", &Map::new(), "/".into(), 300);
+        let mut n = Notification::core("account", "test", &Map::new(), "/".into(), 300);
+        n.tag = Some("test".to_owned());
         let rows = db::of_user(&st.db, user).await?;
         let nid = B64.encode(identity::random::<16>());
         let key = st.grant_key.clone();

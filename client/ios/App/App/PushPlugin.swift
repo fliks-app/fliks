@@ -11,6 +11,8 @@ public class PushPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "Push"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "status", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestPermission", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "openSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "prepare", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "subscribe", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "unsubscribe", returnType: CAPPluginReturnPromise),
@@ -73,13 +75,27 @@ public class PushPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    @objc func prepare(_ call: CAPPluginCall) {
-        guard let session = call.getString("session") else { return call.reject("session is required") }
-        Task { @MainActor in
+    @objc func requestPermission(_ call: CAPPluginCall) {
+        Task {
             let center = UNUserNotificationCenter.current()
             if await center.notificationSettings().authorizationStatus == .notDetermined {
                 _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
             }
+            call.resolve(["permission": Self.permission(await center.notificationSettings())])
+        }
+    }
+
+    @objc func openSettings(_ call: CAPPluginCall) {
+        Task { @MainActor in
+            if let url = URL(string: UIApplication.openNotificationSettingsURLString) { await UIApplication.shared.open(url) }
+            call.resolve()
+        }
+    }
+
+    @objc func prepare(_ call: CAPPluginCall) {
+        guard let session = call.getString("session") else { return call.reject("session is required") }
+        Task { @MainActor in
+            let center = UNUserNotificationCenter.current()
             guard Self.permission(await center.notificationSettings()) == "granted" else { return call.reject("notifications are denied") }
             guard await Self.registerForToken() != nil else { return call.reject("no push token") }
             var record = PushStore.subscription(session: session) ?? Self.newRecord(session)

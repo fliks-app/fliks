@@ -205,12 +205,15 @@ export interface DesktopNotificationClick {
 }
 
 export interface DesktopNotifyPrefs {
-  /** OS notifications while the window is not active; off until the user turns it on. */
+  /** OS notifications while the window is not active; on until the user turns it off. */
   notifications: boolean;
   /** Closing the window leaves the app running in the tray. */
   background: boolean;
   startAtLogin: boolean;
 }
+
+/** Whether the OS shows Fliks' notifications: `blocked` in its settings, `unavailable` without a notification service. */
+export type DesktopNotifyStatus = 'allowed' | 'blocked' | 'unavailable';
 
 /** The shell's own strings (tray menu, badge), translated by the page. */
 export interface DesktopNotifyLabels {
@@ -226,6 +229,8 @@ export const NOTIFY_IPC = {
   setPrefs: 'notify:setPrefs',
   setLabels: 'notify:setLabels',
   windowActive: 'notify:windowActive',
+  getStatus: 'notify:getStatus',
+  openSettings: 'notify:openSettings',
   /** main → renderer */
   click: 'notify:click',
   active: 'notify:active',
@@ -397,6 +402,10 @@ export interface FliksDesktopApi {
   /** Resolves with what took effect: `background` stays off where there is no tray to come back from. */
   setNotifyPrefs(patch: Partial<DesktopNotifyPrefs>): Promise<DesktopNotifyPrefs>;
   setNotifyLabels(labels: DesktopNotifyLabels): Promise<void>;
+  /** Read again on each call: the user may have changed it in the OS meanwhile. */
+  getNotifyStatus(): Promise<DesktopNotifyStatus>;
+  /** The OS page where notifications are given back. */
+  openNotifySettings(): Promise<void>;
   /** Whether the window is visible and focused. */
   windowActive(): Promise<boolean>;
   onWindowActive(handler: (active: boolean) => void): () => void;

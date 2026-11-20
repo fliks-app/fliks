@@ -7,6 +7,7 @@
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Media.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.UI.Notifications.h>
 
 #include <chrono>
 #include <mutex>
@@ -196,12 +197,36 @@ Napi::Value Raise(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+// notifySetting(aumid): whether Windows shows this app's toasts; "enabled" or the reason it does not.
+Napi::Value NotifySetting(const Napi::CallbackInfo& info) {
+  using Windows::UI::Notifications::NotificationSetting;
+  std::string aumid = info[0].As<Napi::String>().Utf8Value();
+  try {
+    try {
+      init_apartment(apartment_type::single_threaded);
+    } catch (hresult_error const&) {
+    }
+    switch (Windows::UI::Notifications::ToastNotificationManager::CreateToastNotifier(to_hstring(aumid)).Setting()) {
+      case NotificationSetting::Enabled: return Napi::String::New(info.Env(), "enabled");
+      case NotificationSetting::DisabledForApplication: return Napi::String::New(info.Env(), "app");
+      case NotificationSetting::DisabledForUser: return Napi::String::New(info.Env(), "user");
+      case NotificationSetting::DisabledByGroupPolicy: return Napi::String::New(info.Env(), "policy");
+      case NotificationSetting::DisabledByManifest: return Napi::String::New(info.Env(), "manifest");
+      default: return Napi::String::New(info.Env(), "unknown");
+    }
+  } catch (hresult_error const& e) {
+    Napi::Error::New(info.Env(), to_string(e.message())).ThrowAsJavaScriptException();
+  }
+  return info.Env().Undefined();
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("attach", Napi::Function::New(env, Attach));
   exports.Set("onRemoteCommand", Napi::Function::New(env, OnRemoteCommand));
   exports.Set("setNowPlaying", Napi::Function::New(env, SetNowPlaying));
   exports.Set("clearNowPlaying", Napi::Function::New(env, ClearNowPlaying));
   exports.Set("raise", Napi::Function::New(env, Raise));
+  exports.Set("notifySetting", Napi::Function::New(env, NotifySetting));
   return exports;
 }
 

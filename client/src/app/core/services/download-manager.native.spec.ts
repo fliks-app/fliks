@@ -1,9 +1,11 @@
 import { signal } from '@angular/core';
+import { Capacitor } from '@capacitor/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateService } from '@ngx-translate/core';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DownloadManagerService } from './download-manager.service';
+import { PushService } from './push.service';
 import { DownloadCacheService, type DownloadTask } from './download-cache.service';
 import { DownloadNotificationService, type NativeDownloadEvent } from './download-notification.service';
 import { StreamingApiService } from './api/streaming-api.service';
@@ -74,6 +76,7 @@ describe('DownloadManagerService native events', () => {
         { provide: DownloadSettingsService, useValue: {} },
         { provide: ServerConfigService, useValue: { serverUrl: signal('s') } },
         { provide: NetworkService, useValue: { isOnline: () => false } },
+        { provide: PushService, useValue: { askInContext: vi.fn() } },
       ],
     });
     cache = TestBed.inject(DownloadCacheService);
@@ -125,5 +128,70 @@ describe('DownloadManagerService native events', () => {
     expect(service.tasks().map((t) => t.id)).toEqual([2]);
     await done;
     expect(service.tasks().map((t) => t.id)).toEqual([2]);
+  });
+});
+
+describe('DownloadManagerService native start', () => {
+  const ask = vi.fn();
+
+  function setup(): DownloadManagerService {
+    vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
+    TestBed.configureTestingModule({
+      providers: [
+        DownloadManagerService,
+        {
+          provide: StreamingApiService,
+          useValue: { getPlaybackInfo: async () => ({ sessionId: 's' }), resolveDownloadUrl: () => 'https://s.test/hls' },
+        },
+        { provide: SubtitlesApiService, useValue: {} },
+        { provide: MediaService, useValue: {} },
+        { provide: OfflineStorageService, useValue: {} },
+        {
+          provide: DownloadNotificationService,
+          useValue: {
+            nativeEvents: new Subject(),
+            startDownload: vi.fn(),
+            setNotificationCopy: vi.fn(),
+            getDownloads: () => Promise.resolve([]),
+          },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            user: signal({ id: 1 }),
+            sessionEpoch: () => 0,
+            isAuthenticated: () => false,
+            ensureStreamToken: async () => undefined,
+            playbackTokenFor: () => 't',
+          },
+        },
+        { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
+        { provide: TranslateService, useValue: { instant: (k: string) => k } },
+        { provide: AppSettingsService, useValue: {} },
+        { provide: ImageCacheService, useValue: {} },
+        { provide: DownloadSettingsService, useValue: {} },
+        { provide: ServerConfigService, useValue: { serverUrl: signal('s') } },
+        { provide: NetworkService, useValue: { isOnline: () => false } },
+        { provide: PushService, useValue: { askInContext: ask } },
+      ],
+    });
+    return TestBed.inject(DownloadManagerService);
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    ask.mockClear();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    TestBed.resetTestingModule();
+  });
+
+  it('offers notifications when the user starts a download, not for an automatic one', async () => {
+    const service = setup();
+    await service.createDownload(10, '1080p', 'T', undefined, { auto: true });
+    expect(ask).not.toHaveBeenCalled();
+    await service.createDownload(11, '1080p', 'T');
+    expect(ask).toHaveBeenCalledWith('download');
   });
 });

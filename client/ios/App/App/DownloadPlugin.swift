@@ -189,12 +189,6 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         }
 
         reclaimOrphanActivities()
-
-        // Ask for notification permission up front so the completion banner can
-        // actually appear. Silently degrades to no banner if the user declines.
-        UNUserNotificationCenter.current().requestAuthorization(
-            options: [.alert, .sound]
-        ) { _, _ in }
     }
 
     // MARK: - Plugin Methods

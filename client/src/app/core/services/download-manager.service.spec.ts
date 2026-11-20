@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { TranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DownloadManagerService, pickRung } from './download-manager.service';
+import { PushService } from './push.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { MediaService } from './api/media.service';
@@ -41,6 +42,7 @@ async function download(pi: object): Promise<DownloadTask> {
       { provide: DownloadSettingsService, useValue: {} },
       { provide: ServerConfigService, useValue: { isNative: false } },
       { provide: NetworkService, useValue: { isOnline: () => false } },
+      { provide: PushService, useValue: { askInContext: vi.fn() } },
     ],
   });
   const service = TestBed.inject(DownloadManagerService);
@@ -94,6 +96,7 @@ describe('DownloadManagerService, offline subtitle identity', () => {
         { provide: DownloadSettingsService, useValue: {} },
         { provide: ServerConfigService, useValue: { isNative: false } },
         { provide: NetworkService, useValue: { isOnline: () => false } },
+        { provide: PushService, useValue: { askInContext: vi.fn() } },
       ],
     });
 
@@ -131,6 +134,7 @@ describe('DownloadManagerService.createMany', () => {
         { provide: DownloadSettingsService, useValue: {} },
         { provide: ServerConfigService, useValue: { isNative: false } },
         { provide: NetworkService, useValue: { isOnline: () => false } },
+        { provide: PushService, useValue: { askInContext: vi.fn() } },
       ],
     });
     const service = TestBed.inject(DownloadManagerService);

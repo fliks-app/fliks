@@ -16,19 +16,20 @@
           <p class="text-base-content/60">{{ 'app_settings.notifications.admin_disabled' | translate }}</p>
         } @else if (push.canEnableDevice()) {
           <app-toggle-field
-            [value]="push.deviceEnabled()"
+            [value]="deviceOn()"
             (valueChange)="setDevice($event)"
-            [disabled]="push.busy() || denied()"
+            [disabled]="push.busy() || push.switchLocked()"
             [label]="'app_settings.notifications.device' | translate"
-            [hint]="(denied() ? 'app_settings.notifications.denied' : 'app_settings.notifications.device_hint') | translate"
+            [hint]="'app_settings.notifications.device_hint' | translate"
           />
         }
         @if (push.desktopPrefs(); as prefs) {
           <app-toggle-field
-            [value]="prefs.notifications"
+            [value]="push.desktopShows()"
             (valueChange)="push.setDesktopPref({ notifications: $event })"
+            [disabled]="push.switchLocked()"
             [label]="'app_settings.notifications.device' | translate"
-            [hint]="'app_settings.notifications.device_hint' | translate"
+            [hint]="'app_settings.notifications.desktop_hint' | translate"
           />
           <app-toggle-field
             [value]="prefs.background"
@@ -42,6 +43,19 @@
             [label]="'app_settings.notifications.start_at_login' | translate"
             [hint]="'app_settings.notifications.start_at_login_hint' | translate"
           />
+        }
+        @if (!push.mobileBlockedByAdmin()) {
+          @if (push.systemBlock(); as block) {
+            <div role="status" class="flex flex-wrap items-center gap-3 rounded-box bg-warning/10 px-3 py-2">
+              <svg lucideBellOff class="h-5 w-5 shrink-0 text-warning" aria-hidden="true"></svg>
+              <span class="flex-1 min-w-48">{{ 'app_settings.notifications.' + block | translate }}</span>
+              @if (push.canOpenSystemSettings()) {
+                <button class="btn btn-sm" (click)="push.openSystemSettings()">
+                  {{ 'app_settings.notifications.open_settings' | translate }}
+                </button>
+              }
+            </div>
+          }
         }
       </div>
     </div>

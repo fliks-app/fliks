@@ -30,6 +30,7 @@ mock.module('electron', {
       static isSupported = () => false;
     },
     Tray,
+    shell: { openExternal: async () => undefined },
   },
 });
 const { Notifier } = await import('./index.ts');

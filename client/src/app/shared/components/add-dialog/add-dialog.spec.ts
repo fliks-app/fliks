@@ -11,6 +11,7 @@ import { MetadataService } from '../../../core/services/api/metadata.service';
 import { MusicApiService } from '../../../core/services/api/music-api.service';
 import { ProfilesService } from '../../../core/services/api/profiles.service';
 import { RequestsService } from '../../../core/services/api/requests.service';
+import { PushService } from '../../../core/services/push.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 
@@ -29,6 +30,7 @@ const lib = (id: number, types: string[], folders: number[] = [10], q: number | 
 function setup(libraries: LibrarySummary[], perms: string[] = ['media.create']) {
   const calls: Record<string, unknown[]> = { import: [], request: [], book: [], album: [], want: [], tracks: [] };
   const toast = { success: vi.fn(), error: vi.fn() };
+  const ask = vi.fn();
   const show = vi.fn();
   HTMLDialogElement.prototype.showModal = show;
   HTMLDialogElement.prototype.close = () => undefined;
@@ -69,13 +71,14 @@ function setup(libraries: LibrarySummary[], perms: string[] = ['media.create']) 
       { provide: RequestsService, useValue: { create: async (b: unknown) => (calls['request']!.push(b), { mediaId: null }) } },
       { provide: AuthService, useValue: { hasPermission: (p: string) => perms.includes(p) } },
       { provide: ToastService, useValue: toast },
+      { provide: PushService, useValue: { askInContext: ask } },
     ],
   });
   const fixture = TestBed.createComponent(AddDialogComponent);
   const done: AddResult[] = [];
   fixture.componentInstance.done.subscribe((r) => done.push(r));
   fixture.detectChanges();
-  return { cmp: fixture.componentInstance, calls, done, show, toast };
+  return { cmp: fixture.componentInstance, calls, done, show, toast, ask };
 }
 
 const movie: AddRequest = { kind: 'movie', provider: 'tmdb', externalId: '603', title: 'T' };
@@ -85,9 +88,10 @@ describe('AddDialogComponent', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('adds a movie straight away when one library takes it, with the library defaults', async () => {
-    const { cmp, calls, done, show, toast } = setup([lib(1, ['movie'], [10, 11], 5)]);
+    const { cmp, calls, done, show, toast, ask } = setup([lib(1, ['movie'], [10, 11], 5)]);
     await cmp.add(movie);
     expect(show).not.toHaveBeenCalled();
+    expect(ask).not.toHaveBeenCalled();
     expect(calls['import']).toEqual([
       { type: 'movie', provider: 'tmdb', externalId: '603', qualityProfileId: 5, languageProfileId: 3, libraryId: 1, folderId: 10 },
     ]);
@@ -132,8 +136,9 @@ describe('AddDialogComponent', () => {
   });
 
   it('requests, instead of adding, for a caller who cannot add', async () => {
-    const { cmp, calls, done } = setup([lib(1, ['movie'])], ['requests.create']);
+    const { cmp, calls, done, ask } = setup([lib(1, ['movie'])], ['requests.create']);
     await cmp.add(movie);
+    expect(ask).toHaveBeenCalledWith('request');
     expect(calls['import']).toEqual([]);
     expect(calls['request']).toEqual([
       { mediaType: 'movie', tmdbId: 603, title: 'T', qualityProfileId: 7, languageProfileId: 3, libraryId: 1 },

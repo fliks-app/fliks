@@ -21,6 +21,7 @@ import { DownloadSettingsService } from './download-settings.service';
 import { ImageCacheService } from './image-cache.service';
 import { ServerConfigService } from './server-config.service';
 import { NetworkService } from './network.service';
+import { PushService } from './push.service';
 import { imageUrlWithSize, type ImageSize } from '../pipes/resolve-url.pipe';
 import {
   desktopDownloaderOrNull,
@@ -104,6 +105,7 @@ export class DownloadManagerService {
   private readonly downloadSettings = inject(DownloadSettingsService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly network = inject(NetworkService);
+  private readonly push = inject(PushService);
 
   private readonly titles = new Map<number, { title: string; episode?: string }>();
   private nextLocalId = Date.now();
@@ -481,6 +483,7 @@ export class DownloadManagerService {
         notifFailed: this.translate.instant('downloads.notif_failed'),
       });
       this.syncActivityCopy();
+      if (!meta?.auto) void this.push.askInContext('download');
     } else {
       this.enqueueWeb(task, hlsUrl);
     }

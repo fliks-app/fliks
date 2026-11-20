@@ -140,11 +140,14 @@ export interface DesktopNotificationClick {
 
 export interface DesktopNotifyPrefs {
   /** Closing the window leaves the app running. */
-  /** OS notifications while the window is not active; off until the user turns it on. */
+  /** OS notifications while the window is not active; on until the user turns it off. */
   notifications: boolean;
   background: boolean;
   startAtLogin: boolean;
 }
+
+/** Whether the OS shows Fliks' notifications: `blocked` in its settings, `unavailable` without a notification service. */
+export type DesktopNotifyStatus = 'allowed' | 'blocked' | 'unavailable';
 
 export interface FliksDesktopApi {
   runtime: 'electron';
@@ -199,6 +202,9 @@ export interface FliksDesktopApi {
   setNotifyPrefs?(patch: Partial<DesktopNotifyPrefs>): Promise<DesktopNotifyPrefs>;
   /** The shell's own strings (tray menu, badge), in the UI language. */
   setNotifyLabels?(labels: { open: string; quit: string; notifications: string }): Promise<void>;
+  /** Read again on each call: the user may have changed it in the OS meanwhile. */
+  getNotifyStatus?(): Promise<DesktopNotifyStatus>;
+  openNotifySettings?(): Promise<void>;
   /** Whether the window is visible and focused: notifications are shown by the OS only when it is not. */
   windowActive?(): Promise<boolean>;
   onWindowActive?(handler: (active: boolean) => void): () => void;

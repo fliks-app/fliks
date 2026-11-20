@@ -11,6 +11,7 @@ import { MusicApiService } from '../../../core/services/api/music-api.service';
 import { ProfilesService } from '../../../core/services/api/profiles.service';
 import { extractMessage } from '../../../core/interceptors/error.interceptor';
 import { RequestsService, type CreateRequestBody } from '../../../core/services/api/requests.service';
+import { PushService } from '../../../core/services/push.service';
 import type { WantSpec } from '../../../core/services/api/wants-api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -50,6 +51,7 @@ export class AddDialogComponent {
   private readonly books = inject(BooksApiService);
   private readonly music = inject(MusicApiService);
   private readonly requestsApi = inject(RequestsService);
+  private readonly push = inject(PushService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
@@ -247,6 +249,7 @@ export class AddDialogComponent {
       this.toast.success(this.translate.instant(this.mode() === 'import' ? 'discover.import_success' : 'discover.request_success'));
       this.close();
       this.done.emit({ mode: this.mode(), mediaId, ...(recordings ? { recordings } : {}) });
+      if (this.mode() === 'request') void this.push.askInContext('request');
     } catch (e) {
       // A request already made counts as done; any other request failure is toasted here.
       if (e instanceof HttpErrorResponse && e.status === 409 && this.mode() === 'request') {

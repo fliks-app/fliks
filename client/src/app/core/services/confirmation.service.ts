@@ -12,6 +12,8 @@ export interface ConfirmOptions {
   variant?: ConfirmVariant;
   /** Renders `message` in a scrollable monospace block instead of prose — for raw error text. */
   monospace?: boolean;
+  /** Runs inside the confirm click, for an API that needs the user's gesture. */
+  onConfirm?: () => void;
 }
 
 /** A confirm carrying one checkbox — a decision the confirmation itself has to capture,
@@ -81,6 +83,7 @@ export class ConfirmationService {
   }
 
   accept() {
+    this.state()?.onConfirm?.();
     this.state()?.resolve(true);
     this.state.set(null);
   }
