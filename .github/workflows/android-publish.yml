@@ -42,7 +42,7 @@ on:
         options: [internal, alpha, beta, production]
         default: internal
       apk_tag:
-        description: 'Existing release tag to (re)build a signed APK for and attach to its GitHub release, e.g. v1.8.0. APK-only — skips the Play Store upload. Leave empty for a normal Play Store run.'
+        description: 'Existing release tag to (re)build a signed APK for and attach to its GitHub release, e.g. v1.8.0. APK-only — skips the Play Store upload. Tags up to v7.0.1 predate the build flavors and cannot be rebuilt. Leave empty for a normal Play Store run.'
         type: string
         default: ''
       amazon_tag:
@@ -74,9 +74,6 @@ jobs:
           # old workflow, so we run main's workflow against the tag's source).
           # Otherwise build the triggering ref.
           ref: ${{ github.event.inputs.apk_tag || github.ref }}
-          # Full history needed so `git rev-list --count HEAD` produces
-          # a meaningful commit count for the versionCode.
-          fetch-depth: 0
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -109,11 +106,6 @@ jobs:
       - name: Capacitor sync to Android shell
         run: npx cap sync android
 
-      - name: Compute versionCode from commit count
-        id: vcode
-        run: echo "value=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
-        working-directory: ${{ github.workspace }}
-
       - name: Decode upload keystore
         run: |
           echo "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}" \
@@ -132,15 +124,14 @@ jobs:
       # on a tag or an `apk_tag` dispatch, the sideload APK with the same release signingConfig.
       - name: Assemble signed release
         env:
-          ORG_GRADLE_PROJECT_FLIKS_VERSION_CODE: ${{ steps.vcode.outputs.value }}
           ORG_GRADLE_PROJECT_FLIKS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
           ORG_GRADLE_PROJECT_FLIKS_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ORG_GRADLE_PROJECT_FLIKS_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
           APK_TAG: ${{ github.event.inputs.apk_tag }}
         run: |
           tasks=()
-          [ -z "$APK_TAG" ] && tasks+=(bundleRelease)
-          if [[ "$GITHUB_REF" == refs/tags/v* || -n "$APK_TAG" ]]; then tasks+=(assembleRelease); fi
+          [ -z "$APK_TAG" ] && tasks+=(bundleProprietaryRelease)
+          if [[ "$GITHUB_REF" == refs/tags/v* || -n "$APK_TAG" ]]; then tasks+=(assembleProprietaryRelease); fi
           cd android
           ./gradlew "${tasks[@]}"
 
@@ -149,7 +140,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: signed-aab
-          path: client/android/app/build/outputs/bundle/release/app-release.aab
+          path: client/android/app/build/outputs/bundle/proprietaryRelease/app-proprietary-release.aab
           retention-days: 1
 
       - name: Stage signed APK with a versioned name
@@ -159,7 +150,7 @@ jobs:
           tag="${{ github.event.inputs.apk_tag }}"
           [ -z "$tag" ] && tag="$GITHUB_REF_NAME"
           dest="Fliks-${tag#v}.apk"
-          cp android/app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/$dest"
+          cp android/app/build/outputs/apk/proprietary/release/app-proprietary-release.apk "$GITHUB_WORKSPACE/$dest"
           echo "path=$dest" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
@@ -222,7 +213,7 @@ jobs:
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
           packageName: media.fliks.app
-          releaseFiles: client/android/app/build/outputs/bundle/release/app-release.aab
+          releaseFiles: client/android/app/build/outputs/bundle/release/app-proprietary-release.aab
           # `tracks`, not `track`: the singular is deprecated and the action already converts
           # it internally. A single value is accepted, so the dispatch input stays a choice.
           tracks: ${{ github.event.inputs.track || 'internal' }}

@@ -53,7 +53,6 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(HdrPlugin.class);
         registerPlugin(AudioCapabilitiesPlugin.class);
         registerPlugin(VideoCapabilitiesPlugin.class);
-        registerPlugin(CastPlugin.class);
         registerPlugin(DownloadNotificationPlugin.class);
         registerPlugin(NativePlayerPlugin.class);
         registerPlugin(AudioPlayerPlugin.class);
@@ -62,6 +61,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(CalendarPlugin.class);
         registerPlugin(WebAuthPlugin.class);
         registerPlugin(PushPlugin.class);
+        registerPlugins(Flavor.PLUGINS);
         super.onCreate(savedInstanceState);
         // A dead renderer must not take the process, and the native audio player with it.
         getBridge().addWebViewListener(new WebViewListener() {

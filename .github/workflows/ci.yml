@@ -453,7 +453,7 @@ jobs:
         working-directory: client/android
 
       - name: Android unit tests
-        run: ./gradlew --no-daemon testDebugUnitTest
+        run: ./gradlew --no-daemon testProprietaryDebugUnitTest
         working-directory: client/android
 
   ios:

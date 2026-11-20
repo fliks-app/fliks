@@ -42,6 +42,7 @@ const config: CapacitorConfig = {
   // Page en https://localhost + API en http://<LAN>:3001 → sinon blocage Mixed Content.
   android: {
     allowMixedContent: true,
+    flavor: 'proprietary',
   },
   ios: {
     allowMixedContent: true,

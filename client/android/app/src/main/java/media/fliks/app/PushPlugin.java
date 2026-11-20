@@ -19,17 +19,11 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.GoogleApiAvailability;
-import com.google.android.gms.tasks.Tasks;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.messaging.FirebaseMessaging;
 
 import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /** Native push of the Android app: FCM token, per-session key pair, relay registration and notification taps. */
 @CapacitorPlugin(
@@ -78,8 +72,7 @@ public class PushPlugin extends Plugin {
         Context ctx = getContext();
         UiModeManager ui = (UiModeManager) ctx.getSystemService(Context.UI_MODE_SERVICE);
         boolean tv = ui != null && ui.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
-        return !tv && !FirebaseApp.getApps(ctx).isEmpty()
-            && GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(ctx) == ConnectionResult.SUCCESS;
+        return !tv && Flavor.pushAvailable(ctx);
     }
 
     private boolean granted() {
@@ -136,7 +129,7 @@ public class PushPlugin extends Plugin {
         }
         String session = call.getString("session", "");
         try {
-            FirebaseMessaging.getInstance().setAutoInitEnabled(true);
+            Flavor.enablePush();
             JSONObject entry = store.get(session);
             if (entry == null) {
                 PushCrypto.Keys keys = PushCrypto.generate();
@@ -170,7 +163,7 @@ public class PushPlugin extends Plugin {
                 PushRelay.Ticket t = PushRelay.parse(ticket);
                 String relay = PushRelay.forAudience(PushRelay.urls(getContext()), t.aud);
                 if (relay == null) throw new IOException("ticket for an unknown relay");
-                String token = Tasks.await(FirebaseMessaging.getInstance().getToken(), 15, TimeUnit.SECONDS);
+                String token = Flavor.pushToken(15);
                 boolean unchanged = relay.equals(entry.optString("relay")) && token.equals(entry.optString("token"))
                     && t.sub.equals(entry.optString("sub"));
                 if (!unchanged) PushRelay.put(relay, ticket, token);
