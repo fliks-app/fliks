@@ -21,8 +21,10 @@ final class NotificationToastService {
     @ObservationIgnored private let stream = ServerEventStream()
     @ObservationIgnored private var dismiss: Task<Void, Never>?
     @ObservationIgnored private var seen = Set<String>()
+    @ObservationIgnored private var seenOrder: [String] = []
+    private static let seenLimit = 100
 
-    private init() {
+    init() {
         stream.onEvent = { [weak self] data in
             guard let event = Self.decode(data) else { return }
             self?.show(event)
@@ -43,8 +45,10 @@ final class NotificationToastService {
         return try? JSONDecoder().decode(ServerNotification.self, from: data)
     }
 
-    private func show(_ event: ServerNotification) {
+    func show(_ event: ServerNotification) {
         guard seen.insert(event.id).inserted else { return }
+        seenOrder.append(event.id)
+        if seenOrder.count > Self.seenLimit { seen.remove(seenOrder.removeFirst()) }
         current = event
         dismiss?.cancel()
         dismiss = Task { [weak self] in
