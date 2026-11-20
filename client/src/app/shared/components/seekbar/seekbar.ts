@@ -409,11 +409,12 @@ export class SeekbarComponent {
     }
 
     e.preventDefault();
-    e.stopPropagation();
+    // The arming press bubbles on: a player whose controls are hidden wakes them with it.
     if (!this.armed()) {
       this.arm();
       return;
     }
+    e.stopPropagation();
     this.arm();
     this.keyScrubbing.set(true);
     if (edge !== null) {

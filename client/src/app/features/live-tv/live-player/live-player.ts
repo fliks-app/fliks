@@ -664,9 +664,10 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
         return;
       case 'scrub':
         event.preventDefault();
+        event.stopPropagation();
         this.chrome.show();
-        // The seekbar owns the accelerating run, one deferred seek for the lot.
-        this.controlsCmp()?.scrubFromKey(event);
+        // The next arrows scrub on the armed seekbar, one deferred seek for the lot.
+        this.controlsCmp()?.seekbar()?.focus();
         return;
       case 'digit':
         this.chrome.show();
