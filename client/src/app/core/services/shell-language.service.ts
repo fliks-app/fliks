@@ -6,6 +6,7 @@ import { desktopBridgeOrNull } from '../plugins/desktop-player.bridge';
 const MENU_KEYS = [
   'about', 'services', 'hide', 'hideOthers', 'showAll', 'quit', 'edit', 'undo', 'redo', 'cut', 'copy', 'paste',
   'selectAll', 'view', 'enterFullScreen', 'exitFullScreen', 'window', 'minimize', 'zoom', 'close', 'bringAllToFront',
+  'playback', 'play', 'pause', 'stop', 'skipBack', 'skipForward', 'nextItem', 'previousItem',
 ];
 
 /** Hands the UI language to what is outside the page's own text: the document's `lang` and the desktop shell's application menu. */

@@ -25,7 +25,15 @@
     "minimize": "Minimizar",
     "zoom": "Zoom",
     "close": "Cerrar ventana",
-    "bringAllToFront": "Traer todo al frente"
+    "bringAllToFront": "Traer todo al frente",
+    "playback": "Reproducción",
+    "play": "Reproducir",
+    "pause": "Pausa",
+    "stop": "Detener",
+    "skipBack": "Retroceder 10 segundos",
+    "skipForward": "Avanzar 10 segundos",
+    "nextItem": "Siguiente",
+    "previousItem": "Anterior"
   },
   "file_info": {
     "companions_button": "Ver archivos asociados",

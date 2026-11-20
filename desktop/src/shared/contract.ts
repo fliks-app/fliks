@@ -204,6 +204,14 @@ export const MENU_LABEL_KEYS = [
   'zoom',
   'close',
   'bringAllToFront',
+  'playback',
+  'play',
+  'pause',
+  'stop',
+  'skipBack',
+  'skipForward',
+  'nextItem',
+  'previousItem',
 ] as const;
 
 export type DesktopMenuLabels = Record<(typeof MENU_LABEL_KEYS)[number], string>;

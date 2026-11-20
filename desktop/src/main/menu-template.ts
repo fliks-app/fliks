@@ -23,7 +23,26 @@ export const DEFAULT_MENU_LABELS: DesktopMenuLabels = {
   zoom: 'Zoom',
   close: 'Close Window',
   bringAllToFront: 'Bring All to Front',
+  playback: 'Playback',
+  play: 'Play',
+  pause: 'Pause',
+  stop: 'Stop',
+  skipBack: 'Back 10 Seconds',
+  skipForward: 'Forward 10 Seconds',
+  nextItem: 'Next',
+  previousItem: 'Previous',
 };
+
+/** The player as the OS media widgets drive it: the same media keys and seek requests reach the page. */
+export interface PlaybackCommands {
+  /** null while nothing is loaded. */
+  playing(): boolean | null;
+  toggle(): void;
+  stop(): void;
+  skip(seconds: number): void;
+  next(): void;
+  previous(): void;
+}
 
 /** The framed window's commands: the key window is a frameless overlay, so the window roles would hit the wrong one. */
 export interface WindowCommands {
@@ -47,8 +66,16 @@ export function parseMenuLabels(v: unknown): DesktopMenuLabels | null {
 }
 
 /** `dev` adds the reload and DevTools items an unpackaged run needs. */
-export function menuTemplate(appName: string, l: DesktopMenuLabels, win: WindowCommands | null, dev: boolean): MenuItemConstructorOptions[] {
+export function menuTemplate(
+  appName: string,
+  l: DesktopMenuLabels,
+  win: WindowCommands | null,
+  dev: boolean,
+  playback: PlaybackCommands | null = null,
+): MenuItemConstructorOptions[] {
   const fullScreen = win?.isFullscreen() ?? false;
+  const playing = playback?.playing() ?? null;
+  const loaded = playing !== null;
   return [
     {
       label: appName,
@@ -86,6 +113,20 @@ export function menuTemplate(appName: string, l: DesktopMenuLabels, win: WindowC
           click: () => win?.toggleFullscreen(),
         },
         ...(dev ? ([{ type: 'separator' }, { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }] as MenuItemConstructorOptions[]) : []),
+      ],
+    },
+    {
+      // No accelerators: Space and the arrows belong to the page (text fields, the player's own keys).
+      label: l.playback,
+      submenu: [
+        { label: playing ? l.pause : l.play, enabled: loaded, click: () => playback?.toggle() },
+        { label: l.stop, enabled: loaded, click: () => playback?.stop() },
+        { type: 'separator' },
+        { label: l.skipBack, enabled: loaded, click: () => playback?.skip(-10) },
+        { label: l.skipForward, enabled: loaded, click: () => playback?.skip(10) },
+        { type: 'separator' },
+        { label: l.previousItem, enabled: loaded, click: () => playback?.previous() },
+        { label: l.nextItem, enabled: loaded, click: () => playback?.next() },
       ],
     },
     {

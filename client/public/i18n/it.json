@@ -25,7 +25,15 @@
     "minimize": "Riduci",
     "zoom": "Zoom",
     "close": "Chiudi finestra",
-    "bringAllToFront": "Porta tutto in primo piano"
+    "bringAllToFront": "Porta tutto in primo piano",
+    "playback": "Riproduzione",
+    "play": "Riproduci",
+    "pause": "Pausa",
+    "stop": "Interrompi",
+    "skipBack": "Indietro di 10 secondi",
+    "skipForward": "Avanti di 10 secondi",
+    "nextItem": "Successivo",
+    "previousItem": "Precedente"
   },
   "file_info": {
     "companions_button": "Mostra file associati",

@@ -25,7 +25,15 @@
     "minimize": "Minimize",
     "zoom": "Zoom",
     "close": "Close Window",
-    "bringAllToFront": "Bring All to Front"
+    "bringAllToFront": "Bring All to Front",
+    "playback": "Playback",
+    "play": "Play",
+    "pause": "Pause",
+    "stop": "Stop",
+    "skipBack": "Back 10 Seconds",
+    "skipForward": "Forward 10 Seconds",
+    "nextItem": "Next",
+    "previousItem": "Previous"
   },
   "file_info": {
     "companions_button": "View companion files",

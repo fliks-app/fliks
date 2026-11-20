@@ -25,7 +25,15 @@
     "minimize": "Placer dans le Dock",
     "zoom": "Zoom",
     "close": "Fermer la fenêtre",
-    "bringAllToFront": "Tout ramener au premier plan"
+    "bringAllToFront": "Tout ramener au premier plan",
+    "playback": "Lecture",
+    "play": "Lire",
+    "pause": "Pause",
+    "stop": "Arrêter",
+    "skipBack": "Reculer de 10 secondes",
+    "skipForward": "Avancer de 10 secondes",
+    "nextItem": "Suivant",
+    "previousItem": "Précédent"
   },
   "file_info": {
     "companions_button": "Voir les fichiers associés",
