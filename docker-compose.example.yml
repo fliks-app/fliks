@@ -120,6 +120,12 @@ services:
   # Several NVIDIA cards are one GPU each (NVIDIA_VISIBLE_DEVICES: all, or a list of indexes
   # such as 0,1). With an Intel iGPU as well, add the /dev/dri device above next to
   # `runtime: nvidia`: the iGPU and each NVIDIA card are then separate GPUs.
+  # Docker Desktop on Windows (WSL2) leaves the NVENC/NVDEC libraries out of the container
+  # (`Cannot load libnvidia-encode.so.1`). Mount them from the host as well:
+  #   environment:
+  #     LD_LIBRARY_PATH: /opt/wsl-lib
+  #   volumes:
+  #     - C:/Windows/System32/lxss/lib:/opt/wsl-lib:ro
 
   # arm64 (Pi 5, ARM NAS) pulls fine, but the Intel and NVIDIA stacks are
   # amd64-only — transcodes fall back to CPU.
