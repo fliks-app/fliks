@@ -47,7 +47,7 @@ import { NavigationHistoryService } from '../../core/services/navigation-history
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService } from '../../core/services/playback-queue.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
-import { buildPlayerStats, formatAudioLabel, formatAudioParts, playbackModeOf, readyDownloadFor, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop, type PlaybackMode } from '../../core/utils/player.utils';
+import { buildPlayerStats, formatAudioLabel, formatAudioParts, playbackModeOf, readyDownloadFor, snapToKeyframe, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop, type PlaybackMode } from '../../core/utils/player.utils';
 import { formatErrorDiagnostics, isNetworkOrAbort, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
@@ -117,6 +117,7 @@ import { CopyFallbackController } from './copy-fallback-controller';
 import { HEARTBEAT_MS, RecoveryController } from './recovery-controller';
 import { WebVideoCropController } from './web-video-crop-controller';
 import { EdlController } from './edl-controller';
+import { KeyframeGrid } from './keyframe-grid';
 import { CueController } from './cue-controller';
 import { QueueController } from './queue-controller';
 import { RemoteController } from './remote-controller';
@@ -442,6 +443,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       spriteMetadata: this.spriteMetadata(),
       skipCueLabelKey: this.localOutput.skipCue()?.labelKey ?? null,
       timeline: this.localOutput.timeline(),
+      keyframes: this.keyframeGrid.keyframes(),
       nextCue: false,
     };
   });
@@ -551,6 +553,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return !this.preRollActive() || this.mediaFileId === this.preRollMainFileId;
   }
 
+  private readonly keyframeGrid = new KeyframeGrid((id) => this.streamingApi.getKeyframes(id));
   private readonly edl = new EdlController({
     engine: () => this.engine,
     active: () => this.edlActive(),
@@ -1687,6 +1690,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       container: this.containerEl()?.nativeElement,
     });
     this.edl.attach(surface.engine);
+    this.keyframeGrid.attach(surface.engine);
     return surface;
   }
 
@@ -1927,7 +1931,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.edlEnded = false;
       this.state.ended.set(false);
     }
-    const t = this.edl.resolveSeek(requested);
+    const t = this.edl.resolveSeek(snapToKeyframe(requested, this.currentTime(), this.keyframeGrid.keyframes()));
     if (t === null) return;
     this.seekInternal(t);
     // Suppress auto-skip for 2s after a manual seek so the user can step back
@@ -2763,6 +2767,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.outroMarker.set(pi.markers?.outro ?? null);
     this.chapters.set(pi.chapters ?? []);
     this.edl.load(this.mediaFileId, pi.edl);
+    this.keyframeGrid.use(this.state.playbackMode() === 'direct' ? this.mediaFileId : null);
   }
 
   /** The old sid must not outlive the new open as a sibling that splits onto a cold job: the server retires

@@ -103,6 +103,28 @@ pub async fn edl(
     Ok(Json(json!({"ranges": ranges})))
 }
 
+/// Keyframe times of the stored scan on the container timeline, for engines whose seeks land on one.
+#[utoipa::path(get, path = "/api/stream/{mediaFileId}/keyframes", responses((status = 200)))]
+pub async fn keyframes(
+    State(st): State<AppState>,
+    StreamAuthed(a): StreamAuthed,
+    PathParams(id): PathParams<i64>,
+) -> Result<Json<Value>, AppError> {
+    let file = resolve_file(&st, Some(&a), id).await?;
+    let held = super::scan::lookup(&st, file.id, &file.absolute, None).await;
+    let mut times: Vec<f64> = held
+        .scan
+        .map(|s| {
+            s.keyframes
+                .iter()
+                .map(|k| (k.pts * 1000.0).round() / 1000.0)
+                .collect()
+        })
+        .unwrap_or_default();
+    times.sort_by(f64::total_cmp);
+    Ok(Json(json!({"keyframes": times})))
+}
+
 /// Explicit stop from the client: ends the presence and the engine session; 204 for an unknown sid.
 #[utoipa::path(delete, path = "/api/stream/sessions/{sessionId}", responses((status = 204)))]
 pub async fn delete_session(

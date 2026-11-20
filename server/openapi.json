@@ -5747,6 +5747,18 @@
         }
       }
     },
+    "/api/stream/{mediaFileId}/keyframes": {
+      "get": {
+        "tags": [
+          "crate::stream"
+        ],
+        "summary": "Keyframe times of the stored scan on the container timeline, for engines whose seeks land on one.",
+        "operationId": "keyframes",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/stream/{mediaFileId}/playback-info": {
       "post": {
         "tags": [

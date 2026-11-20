@@ -1,4 +1,4 @@
-import { buildPlayerStats, computeVideoCropStyle, deliveredKindFromVariant, offlineCropOf, readyDownloadFor, type BuildPlayerStatsParams } from './player.utils';
+import { buildPlayerStats, computeVideoCropStyle, deliveredKindFromVariant, offlineCropOf, readyDownloadFor, snapToKeyframe, type BuildPlayerStatsParams } from './player.utils';
 import type { DownloadTask } from '../services/download-cache.service';
 import type { PlaybackInfoResponse } from '../services/api/streaming-api.service';
 
@@ -318,5 +318,31 @@ describe('readyDownloadFor', () => {
   it('uses the network without a ready download', () => {
     expect(readyDownloadFor(tasks, 2, false)).toBeUndefined();
     expect(readyDownloadFor(tasks, 3, false)).toBeUndefined();
+  });
+});
+
+describe('snapToKeyframe', () => {
+  const kf = [0, 4, 9, 20, 30];
+
+  it('aims a hair past the nearest keyframe', () => {
+    expect(snapToKeyframe(10, 1, kf)).toBeCloseTo(9.05);
+    expect(snapToKeyframe(17, 7, kf)).toBeCloseTo(20.05);
+  });
+
+  it('never stays put or turns back', () => {
+    // Forward from 9.5: 9 is nearer to 10 but behind the playhead.
+    expect(snapToKeyframe(10, 9.5, kf)).toBeCloseTo(20.05);
+    // Backward from 20.02: 20 is nearer to 19 but lands ahead of the playhead.
+    expect(snapToKeyframe(19, 20.02, kf)).toBeCloseTo(9.05);
+  });
+
+  it('keeps the target with no keyframes or none on that side', () => {
+    expect(snapToKeyframe(10, 1, [])).toBe(10);
+    expect(snapToKeyframe(40, 31, kf)).toBe(40);
+  });
+
+  it('is stable on its own result', () => {
+    const once = snapToKeyframe(10, 1, kf);
+    expect(snapToKeyframe(once, 1, kf)).toBe(once);
   });
 });

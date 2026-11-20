@@ -560,6 +560,13 @@ export class StreamingApiService {
   }
 
   /** `.edl` ranges on the container timeline (original-file downloads). */
+  async getKeyframes(mediaFileId: number): Promise<number[]> {
+    const res = await firstValueFrom(
+      this.http.get<{ keyframes: number[] }>(`/api/stream/${mediaFileId}/keyframes`),
+    );
+    return res.keyframes ?? [];
+  }
+
   async getEdl(mediaFileId: number): Promise<EdlRange[]> {
     const res = await firstValueFrom(
       this.http.get<{ ranges: EdlRange[] }>(`/api/stream/${mediaFileId}/edl`),

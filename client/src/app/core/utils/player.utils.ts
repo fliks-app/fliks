@@ -781,3 +781,27 @@ export function remainingLabel(remainingSeconds: number, translate: TranslateSer
   const suffix = translate.instant('media_info.remaining');
   return h > 0 ? `${h}h${String(m).padStart(2, '0')} ${suffix}` : `${m}min ${suffix}`;
 }
+
+/** A hair past the keyframe: the pipeline lands on the last one at or before the target, so rounding must not fall short. */
+const PAST_KEYFRAME_S = 0.05;
+
+/** The keyframe nearest `target` on the side the seek goes from `from`, so a press never stays put or turns back. */
+export function snapToKeyframe(target: number, from: number, keyframes: readonly number[]): number {
+  if (!keyframes.length) return target;
+  const forward = target >= from;
+  let hi = keyframes.length;
+  for (let lo = 0; lo < hi; ) {
+    const mid = (lo + hi) >> 1;
+    if (keyframes[mid] <= target) lo = mid + 1;
+    else hi = mid;
+  }
+  let best = target;
+  let bestDist = Infinity;
+  for (const k of [keyframes[hi - 1], keyframes[hi]]) {
+    if (k === undefined) continue;
+    const lands = k + PAST_KEYFRAME_S;
+    if (forward ? lands <= from : lands >= from) continue;
+    if (Math.abs(lands - target) < bestDist) [best, bestDist] = [lands, Math.abs(lands - target)];
+  }
+  return best;
+}

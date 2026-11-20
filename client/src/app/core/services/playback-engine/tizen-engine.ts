@@ -557,6 +557,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   get volume(): number { return this._volume; }
   readonly supportsVolume = false;
   readonly measuresBuffer = false;
+  readonly seeksToKeyframe = true;
 
   set volume(v: number) {
     this._volume = v;

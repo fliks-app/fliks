@@ -8,7 +8,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { formatTime, calcDragTime, calcHoverPercent, SpriteMetadata } from '../../../core/utils/player.utils';
+import { formatTime, calcDragTime, calcHoverPercent, snapToKeyframe, SpriteMetadata } from '../../../core/utils/player.utils';
 import { muteRangesOf, type EdlRange } from '../../../core/utils/edl-policy';
 import { TvService } from '../../../core/services/tv.service';
 
@@ -46,6 +46,8 @@ export class SeekbarComponent {
   readonly outroMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
   /** EDL ranges drawn over the track: cuts and commercials as bands, mutes as one thin strip. */
   readonly edlRanges = input<readonly EdlRange[]>([]);
+  /** What a seek lands on when the player cannot land between keyframes: the bar settles where the video will. */
+  readonly keyframes = input<readonly number[]>([]);
   /** Chapter start times as % of duration for seekbar tick rendering. */
   readonly chapterTicks = computed(() => {
     const dur = this.duration() || 0;
@@ -357,12 +359,7 @@ export class SeekbarComponent {
   }
 
   private finishDrag() {
-    if (!this.dragging()) return;
-    this.dragging.set(false);
-    this.dragChange.emit(false);
-    this.seekTarget = this.dragTime();
-    this.armSeekPending();
-    this.seek.emit(this.seekTarget);
+    if (this.dragging()) this.commit(this.dragTime());
   }
 
   private updateDragFromPointer(e: PointerEvent, bar: HTMLElement) {
@@ -483,18 +480,17 @@ export class SeekbarComponent {
   }
 
   private commitScrub() {
-    if (!this.dragging()) return;
-    const target = this.snapToChapter(this.dragTime());
-    this.dragTime.set(target);
-    this.dragging.set(false);
-    this.dragChange.emit(false);
-    this.seekTarget = target;
-    this.armSeekPending();
-    this.seek.emit(target);
+    if (this.dragging()) this.commit(this.snapToChapter(this.dragTime()));
   }
 
   private commitScrubTo(rawTarget: number) {
-    const target = this.clampToSeekable(rawTarget);
+    this.commit(this.clampToSeekable(rawTarget));
+  }
+
+  /** Every seek leaves here, aimed where the video will actually land. */
+  private commit(raw: number) {
+    const target = snapToKeyframe(raw, this.currentTime(), this.keyframes());
+    this.dragTime.set(target);
     if (this.dragging()) {
       this.dragging.set(false);
       this.dragChange.emit(false);

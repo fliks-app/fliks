@@ -224,6 +224,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::stream::effective_settings,
         crate::stream::gpus,
         crate::stream::edl,
+        crate::stream::keyframes,
         crate::stream::delete_session,
         crate::stream::streams,
         crate::stream::command,
