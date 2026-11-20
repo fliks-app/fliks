@@ -33,9 +33,10 @@ it is NOT the menu-bar server host under `macos/`.
      what makes the window translucent for Chromium (a page with alpha, cleared
      every frame) while keeping its title bar; a clear `backgroundColor` alone
      leaves Chromium treating its surface as opaque, so stale pixels pile up.
-     AppKit then moves, resizes and animates video and UI together. On a resize the addon presents a frame at the new size inside the
-     resize's Core Animation transaction (`presentsWithTransaction`), so the
-     full-screen animation never snapshots a stale frame.
+     AppKit then moves, resizes and animates video and UI together. On a resize
+     the main thread waits (100 ms at most) until a frame at the new size is on
+     screen (Metal's presented handler): the full-screen animations snapshot the
+     window, and a stale frame would show for their whole length.
 
   `PlayerSession.createPlayer()` picks #2/#3 by platform; both implement
   `PlayerBackend` (`src/main/mpv/player-backend.ts`). All three share

@@ -152,11 +152,11 @@ struct State {
   std::mutex wakeMutex;
   std::condition_variable wakeCv;
   std::atomic<bool> wake{false};
-  // Resize handshake, under wakeMutex: the main thread asks for a frame (syncWanted, a request
-  // id), the render thread hands over the one it renders for that request unpresented.
+  // Resize handshake, under wakeMutex: the main thread asks for a frame (syncWanted, a request id)
+  // and waits until the frame rendered for it is on screen (syncPresented).
   uint64_t syncWanted = 0;
   uint64_t syncCount = 0;
-  id<CAMetalDrawable> syncDrawable = nil;
+  uint64_t syncPresented = 0;
   double duration = 0;
 };
 
@@ -400,7 +400,16 @@ void RenderThreadMain(State* s) {
             destinationLevel:0
            destinationOrigin:MTLOriginMake(0, 0, 0)];
       [blit endEncoding];
-      if (!syncFor) [cb presentDrawable:drawable];
+      if (syncFor) {
+        [drawable addPresentedHandler:^(id<MTLDrawable>) {
+          {
+            std::lock_guard<std::mutex> lk(s->wakeMutex);
+            if (s->syncWanted == syncFor) s->syncPresented = syncFor;
+          }
+          s->wakeCv.notify_all();
+        }];
+      }
+      [cb presentDrawable:drawable];
       slot.busy.store(true);
       const uint64_t gen = slot.gen;
       [cb addCompletedHandler:^(id<MTLCommandBuffer>) {
@@ -413,17 +422,6 @@ void RenderThreadMain(State* s) {
         s->wakeCv.notify_all();  // the main thread may be waiting on wakeCv too
       }];
       [cb commit];
-      if (syncFor) {
-        [cb waitUntilScheduled];
-        std::unique_lock<std::mutex> lk(s->wakeMutex);
-        if (s->syncWanted == syncFor) {
-          s->syncDrawable = drawable;
-          s->wakeCv.notify_all();
-          s->wakeCv.wait(lk, [s, syncFor] { return s->syncWanted != syncFor || !s->run.load(); });
-        } else {
-          [drawable present];  // that request timed out or a newer resize superseded it
-        }
-      }
       M::rc_report_swap(s->mpvGl);
     }
   }
@@ -470,30 +468,18 @@ struct HdrMeta {
 };
 HdrMeta g_lastHdrMeta;  // main-thread only; reused when re-evaluating for a display change
 
-// Main thread, on a resize: the next frame, at the new size, joins the resize's Core Animation
-// transaction, so AppKit's full-screen animation snapshots it rather than the stale frame.
-void PresentFrameInTransaction() {
+// Main thread, on a resize: wait until a frame at the new size is on screen, so AppKit's full-screen
+// animation snapshots it rather than the stale frame.
+void PresentFrameAtNewSize() {
   if (!g_state.renderReady.load()) return RequestRedraw();
   std::unique_lock<std::mutex> lk(g_state.wakeMutex);
-  g_state.syncWanted = ++g_state.syncCount;
-  g_state.syncDrawable = nil;
+  const uint64_t id = ++g_state.syncCount;
+  g_state.syncWanted = id;
   g_state.dirty.store(true);
   g_state.wakeCv.notify_all();
   // Bounded: a render thread stalled in nextDrawable must not freeze the UI.
-  const bool ready = g_state.wakeCv.wait_for(lk, std::chrono::milliseconds(100),
-                                             [] { return g_state.syncDrawable != nil; });
-  id<CAMetalDrawable> drawable = g_state.syncDrawable;
-  g_state.syncDrawable = nil;
-  if (ready) {
-    lk.unlock();  // the render thread stays parked until syncWanted changes
-    g_layer.presentsWithTransaction = YES;
-    [drawable present];
-    g_layer.presentsWithTransaction = NO;
-    lk.lock();
-  }
+  g_state.wakeCv.wait_for(lk, std::chrono::milliseconds(100), [id] { return g_state.syncPresented == id; });
   g_state.syncWanted = 0;
-  lk.unlock();
-  g_state.wakeCv.notify_all();
 }
 
 void UpdateLayerGeometry() {
@@ -508,7 +494,7 @@ void UpdateLayerGeometry() {
       CGSizeMake(g_view.bounds.size.width * scale, g_view.bounds.size.height * scale);
   g_layer.drawableSize = drawableSize;
   [CATransaction commit];
-  PresentFrameInTransaction();
+  PresentFrameAtNewSize();
 }
 
 // Boot the layer into a safe SDR (BT.709 / sRGB) state that matches mpv's default
@@ -978,7 +964,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   g_frameObserver = [[NSNotificationCenter defaultCenter]
       addObserverForName:NSViewFrameDidChangeNotification
                   object:g_view
-                   queue:nil  // synchronous: inside the resize's transaction
+                   queue:nil  // synchronous: the frame must be on screen before AppKit snapshots the window
               usingBlock:^(NSNotification*) { UpdateLayerGeometry(); }];
   // Re-evaluate the colorspace/EDR config for the current content whenever the
   // display situation changes. Three notifications, because none covers every case:
