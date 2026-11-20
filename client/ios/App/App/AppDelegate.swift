@@ -20,6 +20,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // Present download completion banners even while the app is foregrounded
         // (default iOS behaviour suppresses them when the app is active).
         UNUserNotificationCenter.current().delegate = self
+        PushNotifications.start()
 
         // Initialize Google Cast SDK early (required for device discovery)
         let castAppId = Bundle.main.object(forInfoDictionaryKey: "FliksCastAppId") as? String ?? "66BF4DAE"
@@ -90,13 +91,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         }
     }
 
-    // Show download banners as alerts while the app is in the foreground.
+    // Show download banners (and pushes of other sessions) as alerts while the app is in the foreground.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound])
+        completionHandler(PushNotifications.presentation(notification))
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        PushPlugin.didRegister(token: deviceToken)
     }
 
     // Tapping a download banner opens the downloads page.
@@ -108,7 +113,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         if response.notification.request.content.userInfo["openDownloads"] as? Bool == true {
             DownloadPlugin.openDownloads()
         }
-        completionHandler()
+        Task {
+            await PushNotifications.respond(response)
+            completionHandler()
+        }
     }
 
     // The scene delegate takes the Main storyboard (FlksViewController) as its window content.

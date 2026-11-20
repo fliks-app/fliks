@@ -5846,6 +5846,9 @@
       "join": "Join",
       "accept": "Accept",
       "open": "Open"
-    }
+    },
+    "outcome_done": "Done.",
+    "outcome_failed": "The action failed.",
+    "outcome_signin": "Open Fliks to sign in again."
   }
 }

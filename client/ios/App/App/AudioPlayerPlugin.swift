@@ -451,16 +451,8 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Streams
 
     func session() -> (key: String, server: String, token: String)? {
-        let defaults = UserDefaults.standard
-        guard let key = defaults.string(forKey: "CapacitorStorage.fliks_active_session"),
-              let raw = defaults.string(forKey: "CapacitorStorage.fliks_sessions"),
-              let list = (try? JSONSerialization.jsonObject(with: Data(raw.utf8))) as? [[String: Any]] else { return nil }
-        for s in list {
-            let server = s["serverUrl"] as? String ?? ""
-            let user = ((s["user"] as? [String: Any])?["id"] as? NSNumber)?.intValue ?? 0
-            if "\(server)::\(user)" == key, let token = s["accessToken"] as? String, !token.isEmpty { return (key, server, token) }
-        }
-        return nil
+        guard let key = StoredSessions.activeKey, let s = StoredSessions.find(key) else { return nil }
+        return (key, s.server, s.token)
     }
 
     /// A call under session `key`; a 401 has the web layer refresh the session, then runs once more.

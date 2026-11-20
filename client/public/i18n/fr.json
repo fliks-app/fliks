@@ -5846,6 +5846,9 @@
       "join": "Rejoindre",
       "accept": "Accepter",
       "open": "Ouvrir"
-    }
+    },
+    "outcome_done": "Fait.",
+    "outcome_failed": "L'action a échoué.",
+    "outcome_signin": "Ouvrez Fliks pour vous reconnecter."
   }
 }

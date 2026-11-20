@@ -18,20 +18,9 @@ enum CarPlayHost {
     }
 }
 
-/// CarPlay's copy from the app's translations (`public/i18n`): the first system language the app ships,
-/// else English, as the web layer picks when no language is set in its settings.
+/// CarPlay's copy from the app's translations (`carplay` branch of `public/i18n`).
 private enum CarText {
-    private static let table: [String: String] = {
-        let codes = Locale.preferredLanguages.compactMap { tag in
-            tag.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init)
-        } + ["en"]
-        guard let url = codes.lazy.compactMap({ Bundle.main.url(forResource: $0, withExtension: "json", subdirectory: "public/i18n") }).first,
-              let data = try? Data(contentsOf: url),
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
-        return root["carplay"] as? [String: String] ?? [:]
-    }()
-
-    static subscript(_ key: String) -> String { table[key] ?? key }
+    static subscript(_ key: String) -> String { BundledText["carplay.\(key)"] ?? key }
 }
 
 /// Audio-only CarPlay: browse tabs and the Now Playing template, over the account's music.

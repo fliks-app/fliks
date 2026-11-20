@@ -5846,6 +5846,9 @@
       "join": "Beitreten",
       "accept": "Annehmen",
       "open": "Öffnen"
-    }
+    },
+    "outcome_done": "Erledigt.",
+    "outcome_failed": "Die Aktion ist fehlgeschlagen.",
+    "outcome_signin": "Öffne Fliks, um dich erneut anzumelden."
   }
 }
