@@ -373,7 +373,7 @@ export class PlayerSession implements WindowCommands {
   }
 
   isFullscreen(): boolean {
-    return !this.frameWin.isDestroyed() && this.frameWin.isFullScreen();
+    return !!this.frameWin && !this.frameWin.isDestroyed() && this.frameWin.isFullScreen();
   }
 
   toggleFullscreen(): void {
