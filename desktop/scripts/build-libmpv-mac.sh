@@ -207,8 +207,8 @@ meson setup "$BUILD/mpv" "$SRC/mpv-$MPV_VERSION" --prefix="$PREFIX" --libdir=lib
   -Duchardet=disabled -Dvapoursynth=disabled -Dzimg=disabled -Djpeg=disabled -Dsdl2-gamepad=disabled \
   -Dvulkan=disabled -Dshaderc=disabled -Dspirv-cross=disabled -Dmanpage-build=disabled -Dhtml-build=disabled \
   -Dlcms2=enabled -Dgl=enabled -Dvideotoolbox-gl=enabled -Dcoreaudio=enabled \
-  -Dcocoa=disabled -Dswift-build=disabled -Dmacos-cocoa-cb=disabled -Dmacos-media-player=disabled \
-  -Dmacos-touchbar=disabled -Dgl-cocoa=disabled
+  -Dcocoa=enabled -Dgl-cocoa=enabled -Dswift-build=enabled "-Dswift-flags=-target arm64-apple-macos$MACOSX_DEPLOYMENT_TARGET" -Dmacos-cocoa-cb=disabled -Dmacos-media-player=disabled \
+  -Dmacos-touchbar=disabled
 meson compile -C "$BUILD/mpv" -j "$JOBS"
 meson install -C "$BUILD/mpv"
 
