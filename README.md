@@ -109,6 +109,11 @@ create, no subscription, and nothing leaves the house.
   removed to give the space back. Nothing to think about before a flight.
   A whole season or show downloads in one go, or keeps the next episodes
   on the device, over wifi only if you prefer.
+- **Notifications** — request decisions, party invitations, follow
+  requests, new episodes and plugin messages reach you in the app, in the
+  browser, from the desktop app and on your phone, even with Fliks
+  closed. Mobile ones are end-to-end encrypted through an optional relay
+  that an administrator turns on. See [Privacy](PRIVACY.md#push-notifications).
 - **Everyone stays in control** — each user decides whether their
   profile is public and what appears on it: tastes, recent activity,
   favourites, statistics — or nothing at all.
