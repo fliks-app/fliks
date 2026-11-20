@@ -123,6 +123,8 @@ export type DesktopEvent =
       payload: { audioTracks: DesktopAudioTrack[]; subtitleTracks: DesktopSubtitleTrack[] };
     }
   | { type: 'firstFrame' }
+  /** The window entered or left native full screen, however it got there (menu, green button, the page). */
+  | { type: 'fullscreenChanged'; payload: { fullscreen: boolean } }
   /** An OS media control (scrubber) asks the page to seek to `position` seconds. */
   | { type: 'seekRequest'; payload: { position: number } }
   | {
@@ -147,6 +149,7 @@ export const IPC = {
   setMuted: 'player:setMuted',
   setMuteRanges: 'player:setMuteRanges',
   setFullscreen: 'player:setFullscreen',
+  isFullscreen: 'player:isFullscreen',
   setMediaSession: 'player:setMediaSession',
   getPosition: 'player:getPosition',
   getQoe: 'player:getQoe',
@@ -166,12 +169,52 @@ export const IPC = {
   openCalendarEvent: 'system:openCalendarEvent',
   /** Runtime playback capabilities (e.g. Dolby Vision reshape support). */
   getPlayerCapabilities: 'player:getCapabilities',
+  /** The Fliks server the page talks to: its host is the only one whose invalid TLS certificate is accepted. */
+  setServerUrl: 'system:setServerUrl',
   /** Loopback listener for the OIDC redirect (see `oidc-loopback.ts`). */
   oidcListen: 'oidc:listen',
   oidcWait: 'oidc:wait',
   oidcCancel: 'oidc:cancel',
   /** main → renderer (one channel, discriminated by DesktopEvent.type). */
   event: 'player:event',
+} as const;
+
+// ── Application menu (macOS) ──
+
+/** The menu's strings, in the UI language the page reports. */
+export const MENU_LABEL_KEYS = [
+  'about',
+  'services',
+  'hide',
+  'hideOthers',
+  'showAll',
+  'quit',
+  'edit',
+  'undo',
+  'redo',
+  'cut',
+  'copy',
+  'paste',
+  'selectAll',
+  'view',
+  'enterFullScreen',
+  'exitFullScreen',
+  'window',
+  'minimize',
+  'zoom',
+  'close',
+  'bringAllToFront',
+  'playback',
+  'playPause',
+  'stop',
+  'skipBack',
+  'skipForward',
+] as const;
+
+export type DesktopMenuLabels = Record<(typeof MENU_LABEL_KEYS)[number], string>;
+
+export const MENU_IPC = {
+  setLabels: 'menu:setLabels',
 } as const;
 
 // ── Notifications (mirrors the client's desktop-player.bridge.ts) ──
@@ -254,10 +297,11 @@ export type DesktopUpdateStatus =
   | { state: 'downloaded'; info: DesktopUpdateInfo }
   | { state: 'error'; message: string };
 
-/** `canInstall` is false where electron-updater can't self-install (.deb, dev)
- *  → the UI offers a download link to `releasesUrl` instead. */
+/** `canInstall` false (.deb, dev): the UI links to `releasesUrl` instead.
+ *  `storeManaged` (Mac App Store): the store updates the app, the UI shows no update. */
 export interface DesktopUpdateCapability {
   canInstall: boolean;
+  storeManaged: boolean;
   currentVersion: string;
   releasesUrl: string;
 }
@@ -365,6 +409,7 @@ export interface FliksDesktopApi {
   /** Replace the silenced content-time ranges ([] clears). Survives reloads. */
   setMuteRanges(ranges: DesktopMuteRange[]): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
+  isFullscreen(): Promise<boolean>;
   /** Describes the playback to the OS media widgets; null withdraws it. */
   setMediaSession(meta: DesktopMediaMetadata | null): Promise<void>;
   getPosition(): Promise<DesktopPositionInfo>;
@@ -388,6 +433,7 @@ export interface FliksDesktopApi {
   getSystemInfo(): Promise<DesktopSystemInfo>;
   openCalendarEvent(ics: string, fileName: string): Promise<void>;
   getPlayerCapabilities(): Promise<DesktopPlayerCapabilities>;
+  setServerUrl(url: string): Promise<void>;
   /** Opens a loopback listener for the OIDC redirect; `pages` is what the browser tab shows: `done` after a callback with a code, `failed` after one with an error. */
   oidcListen(pages: { done: { title: string; message: string }; failed: { title: string; message: string } }): Promise<{ id: number; port: number }>;
   /** The redirect's query string (`code` and `state`, or `error`) once it carries `state`; other states are refused. Null on timeout or when listener `id` was cancelled or replaced. */
@@ -402,6 +448,7 @@ export interface FliksDesktopApi {
   /** Resolves with what took effect: `background` stays off where there is no tray to come back from. */
   setNotifyPrefs(patch: Partial<DesktopNotifyPrefs>): Promise<DesktopNotifyPrefs>;
   setNotifyLabels(labels: DesktopNotifyLabels): Promise<void>;
+  setMenuLabels(labels: DesktopMenuLabels): Promise<void>;
   /** Read again on each call: the user may have changed it in the OS meanwhile. */
   getNotifyStatus(): Promise<DesktopNotifyStatus>;
   /** The OS page where notifications are given back. */

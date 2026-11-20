@@ -5,6 +5,13 @@ inputs:
     required: true
   password:
     required: true
+  extra-p12-base64:
+    description: A second certificate for the same keychain (the Mac App Store installer cert).
+    required: false
+    default: ''
+  extra-password:
+    required: false
+    default: ''
 outputs:
   keychain:
     description: Path of the keychain
@@ -17,6 +24,8 @@ runs:
       env:
         P12_BASE64: ${{ inputs.p12-base64 }}
         P12_PASSWORD: ${{ inputs.password }}
+        EXTRA_P12_BASE64: ${{ inputs.extra-p12-base64 }}
+        EXTRA_P12_PASSWORD: ${{ inputs.extra-password }}
       run: |
         keychain="$RUNNER_TEMP/app-signing.keychain-db"
         pw="$(openssl rand -base64 24)"
@@ -25,6 +34,11 @@ runs:
         security set-keychain-settings -lut 21600 "$keychain"
         security unlock-keychain -p "$pw" "$keychain"
         security import "$RUNNER_TEMP/cert.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+        if [ -n "$EXTRA_P12_BASE64" ]; then
+          echo "$EXTRA_P12_BASE64" | base64 -d > "$RUNNER_TEMP/extra.p12"
+          security import "$RUNNER_TEMP/extra.p12" -P "$EXTRA_P12_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          rm -f "$RUNNER_TEMP/extra.p12"
+        fi
         security set-key-partition-list -S apple-tool:,apple: -s -k "$pw" "$keychain"
         security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
         rm -f "$RUNNER_TEMP/cert.p12"

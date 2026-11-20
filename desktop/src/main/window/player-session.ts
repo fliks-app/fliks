@@ -1,8 +1,9 @@
+import { isQuitting } from '../quitting';
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { MpvPlayer } from '../mpv/mpv-player';
-import { MacMpvPlayer, roundWindowBottomCorners } from '../mpv/mac-mpv-player';
+import { MacMpvPlayer, keepOffMainWindow, roundWindowBottomCorners } from '../mpv/mac-mpv-player';
 import type { PlayerBackend } from '../mpv/player-backend';
 import { createEmbedBackend } from './backends';
 import { setPlaybackKeepAwake } from '../power';
@@ -10,6 +11,8 @@ import { forwardPlayerEvents } from './forward-events';
 import { appendLog, echoRendererConsole } from '../log-file';
 import { watchRendererCrash } from '../renderer-recovery';
 import { IPC, type DesktopEvent, type DesktopRect } from '../../shared/contract';
+import type { WindowCommands } from '../menu-template';
+import { loadWindowState, trackWindowState } from '../window-state';
 
 /**
  * Path to a vendored mpv BINARY for the embed (--wid) path, or undefined to
@@ -68,7 +71,7 @@ function roundedBottomShape(width: number, height: number): Electron.Rectangle[]
  *     same area, hosting the web UI. Its transparent regions reveal the video
  *     below; the app's own opaque pages cover it while browsing.
  */
-export class PlayerSession {
+export class PlayerSession implements WindowCommands {
   private frameWin!: BrowserWindow;
   private videoWin!: BrowserWindow;
   private uiWin!: BrowserWindow;
@@ -76,18 +79,23 @@ export class PlayerSession {
   /** Set by destroy(); createPlayer() can await the (slow, Windows gpu-next)
    *  probe for several seconds, during which the window may already have closed. */
   private destroyed = false;
+  /** Quit is under way: closing the window then ends the session instead of hiding it. */
   /** Playback stopped: by the renderer (stop IPC) or by a renderer crash. */
   onStop?: () => void;
   /** Background mode: closing the window hides it instead of ending the session. */
   hideOnClose: () => boolean = () => false;
   /** The window is visible and focused (any of its three windows). */
   onActive?: (active: boolean) => void;
+  /** The framed window entered or left full screen. */
+  onFullscreenChange?: () => void;
 
   async start(opts: PlayerSessionOptions): Promise<void> {
     const { rendererUrl, preloadPath, iconPath } = opts;
+    const saved = process.platform === 'darwin' ? loadWindowState() : null;
     this.frameWin = new BrowserWindow({
       width: 1280,
       height: 800,
+      ...(saved ? { x: saved.x, y: saved.y, width: saved.width, height: saved.height } : {}),
       minWidth: 800,
       minHeight: 500,
       backgroundColor: '#1d232a', // brand at startup; set black on first frame so a video gap reads as loading
@@ -149,6 +157,12 @@ export class PlayerSession {
         webSecurity: false,
       },
     });
+
+    // The overlays are key but never main, so the framed window keeps its active title bar.
+    if (process.platform === 'darwin') {
+      keepOffMainWindow(this.videoWin);
+      keepOffMainWindow(this.uiWin);
+    }
 
     echoRendererConsole(this.uiWin.webContents);
     watchRendererCrash(this.uiWin.webContents, {
@@ -215,7 +229,9 @@ export class PlayerSession {
     // Re-fit once the restore has committed. macOS reports settled bounds at the
     // event already, so it needs only the synchronous pass; the deferred ones
     // are idempotent no-ops (sync() guards isDestroyed()).
+    this.frameWin.on('enter-full-screen', () => this.fullscreenChanged(true));
     this.frameWin.on('leave-full-screen', () => {
+      this.fullscreenChanged(false);
       sync();
       if (process.platform === 'win32') {
         setTimeout(sync, 0);
@@ -230,12 +246,23 @@ export class PlayerSession {
         this.hide();
         return;
       }
+      // macOS keeps the app alive in the dock. A hidden full-screen window would leave an empty Space.
+      if (process.platform === 'darwin' && !isQuitting()) {
+        if (this.frameWin.isFullScreen()) {
+          this.frameWin.once('leave-full-screen', () => this.hide());
+          this.frameWin.setFullScreen(false);
+        } else this.hide();
+        return;
+      }
       this.uiWin.once('closed', () => void this.destroy());
       this.uiWin.close();
       setTimeout(() => void this.destroy(), UI_CLOSE_GRACE_MS);
     });
     this.frameWin.on('closed', () => this.destroy());
     this.watchActive();
+    if (saved?.maximized) this.frameWin.maximize();
+    if (saved?.fullscreen) this.frameWin.setFullScreen(true);
+    if (process.platform === 'darwin') trackWindowState(this.frameWin);
     // Quit closes every window from Electron's own loop, and destroy() tearing the siblings down
     // inside it frees a window that loop still holds: close ours first, window-all-closed then quits.
     app.on('before-quit', (e) => {
@@ -346,6 +373,33 @@ export class PlayerSession {
     if (!this.frameWin.isDestroyed()) this.frameWin.setBounds(rect);
   }
 
+  isFullscreen(): boolean {
+    return !!this.frameWin && !this.frameWin.isDestroyed() && this.frameWin.isFullScreen();
+  }
+
+  toggleFullscreen(): void {
+    this.setFullscreen(!this.isFullscreen());
+  }
+
+  minimize(): void {
+    if (!this.frameWin.isDestroyed()) this.frameWin.minimize();
+  }
+
+  zoom(): void {
+    if (this.frameWin.isDestroyed()) return;
+    if (this.frameWin.isMaximized()) this.frameWin.unmaximize();
+    else this.frameWin.maximize();
+  }
+
+  close(): void {
+    if (!this.frameWin.isDestroyed()) this.frameWin.close();
+  }
+
+  private fullscreenChanged(fullscreen: boolean): void {
+    this.emit({ type: 'fullscreenChanged', payload: { fullscreen } });
+    this.onFullscreenChange?.();
+  }
+
   setFullscreen(enabled: boolean): void {
     // The framed window goes fullscreen; the enter/leave-full-screen listeners
     // re-sync the video + UI layers onto its content area (full screen).
@@ -356,7 +410,13 @@ export class PlayerSession {
     if (this.destroyed) return;
     this.destroyed = true;
     setPlaybackKeepAwake(false);
-    await this.mpv?.destroy();
+    this.onStop?.();
+    // The windows go even when the player's teardown throws, or quit would hang on them.
+    try {
+      await this.mpv?.destroy();
+    } catch (e) {
+      console.error('[player] teardown failed', e);
+    }
     this.mpv = null;
     if (this.uiWin && !this.uiWin.isDestroyed()) this.uiWin.destroy();
     if (this.videoWin && !this.videoWin.isDestroyed()) this.videoWin.destroy();

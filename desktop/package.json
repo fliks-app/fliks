@@ -18,6 +18,7 @@
     "dist": "electron-builder",
     "dist:linux": "electron-builder --linux AppImage deb",
     "dist:mac": "electron-builder --mac dmg zip",
+    "dist:mas": "electron-builder --mac mas --arm64",
     "dist:win": "electron-builder --win dir"
   },
   "engines": {

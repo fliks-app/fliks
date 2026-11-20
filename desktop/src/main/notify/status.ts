@@ -1,7 +1,8 @@
 import { Notification, shell } from 'electron';
 import type { DesktopNotifyStatus } from '../../shared/contract.ts';
 
-export const APP_ID = 'media.fliks.desktop';
+// The bundle id of the Mac App Store build differs from the DMG's (electron-builder.yml `mas.appId`).
+export const APP_ID = process.mas ? 'media.fliks.app' : 'media.fliks.desktop';
 
 /** The native reads, from the platform's addon; each is absent elsewhere. */
 export interface StatusAddon {
@@ -43,6 +44,16 @@ export async function notifyStatus(
     console.error('[notify] status', e);
   }
   return 'allowed';
+}
+
+/** macOS only: notifications already allowed. Unlike {@link notifyStatus}, an undetermined app is not. */
+export async function macNotificationsAllowed(addon: () => Promise<StatusAddon | null> = platformAddon): Promise<boolean> {
+  try {
+    const a = await addon();
+    return !!a?.notifyAuthorization && (await withTimeout(a.notifyAuthorization(), 'undetermined')) === 'allowed';
+  } catch {
+    return false;
+  }
 }
 
 /** The OS page where the user gives notifications back; Linux has no common one. */

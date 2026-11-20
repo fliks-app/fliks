@@ -42,6 +42,7 @@ import { cacheInterceptor } from './core/interceptors/cache.interceptor';
 import { CachingReuseStrategy } from './core/services/route-reuse.strategy';
 import { AuthService } from './core/services/auth.service';
 import { PushService } from './core/services/push.service';
+import { ShellLanguageService } from './core/services/shell-language.service';
 import { ServerConfigService } from './core/services/server-config.service';
 import { SessionStoreService } from './core/services/session-store.service';
 import { translateBrowserLoaderFactory } from './utils/translate-loader';
@@ -106,6 +107,7 @@ export const appConfig: ApplicationConfig = {
     provideAppInitializer(loadPersistedState),
     // Instantiated at launch so a notification tap is handled on any page.
     provideAppInitializer(() => void inject(PushService)),
+    provideAppInitializer(() => void inject(ShellLanguageService)),
     { provide: LOCALE_ID, useFactory: resolveInitialLocale },
     provideRouter(
       routes,

@@ -1,7 +1,7 @@
 # Plan — ship the Electron desktop client on the Mac App Store
 
-Status: **planned, not started**. Written 2026-08-04, revised 2026-11-20 against
-main `13d2ad8f3`.
+Status: **phases 0-4 implemented** (#2831, #2832, and the macOS shell + Playback menu + MAS packaging
+PR); phase 5 is owner work. Written 2026-08-04, revised 2026-11-20 against main `13d2ad8f3`.
 
 Goal: a genuinely good Fliks app on the Mac App Store, built from the Electron
 client under `desktop/` (in-process libmpv), replacing the current "Designed for
@@ -215,3 +215,21 @@ uploading a build; the demo server and screenshots.
   screen.
 - Dual-licensing (AGPL + App Store exception) is moot for FFmpeg (LGPL) but Fliks'
   own AGPL code on the store needs the owner's call; check the work-email commits.
+
+## Phase 5 — review prep (owner)
+
+- App Store Connect: macOS platform on `media.fliks.app`, privacy label (no tracking; data stays on
+  the user's own server), age rating, Mac screenshots (library, detail page, player with controls,
+  settings), description and keywords without torrent/indexer wording.
+- Review notes draft: "Fliks is a client for a self-hosted Fliks media server, like Infuse, Emby or
+  Plex clients. Demo server: <host>, account <non-admin user>. Playback runs on an in-process media
+  engine (libmpv with VideoToolbox decoding and HDR output), not a web view. The network.server
+  entitlement serves two local-only uses: the sign-in redirect of the user's own identity provider
+  on 127.0.0.1, and Chromecast discovery over mDNS. The microphone is used only for voice chat in
+  watch parties."
+- A permanent demo server with a non-admin account and a few public-domain titles.
+- QA matrix on the TestFlight build: resize during 4K HDR, move between an XDR and an SDR display,
+  unplug the display in full screen, Cmd+Q mid-playback, local-network permission denied then
+  granted, Chromecast discovery, SSO sign-in, a watch party with voice, the Playback menu.
+- At the macOS release: turn off "iPhone and iPad Apps on Apple Silicon Mac" availability (never
+  "Verify Compatibility").

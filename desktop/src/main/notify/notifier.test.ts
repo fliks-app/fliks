@@ -22,6 +22,7 @@ class Tray {
 mock.module('electron', {
   namedExports: {
     app,
+    autoUpdater: new EventEmitter(),
     ipcMain: { handle: (ch: string, fn: (...a: unknown[]) => unknown) => handlers.set(ch, fn) },
     Menu: { buildFromTemplate: (t: unknown) => t },
     nativeImage: { createFromPath: () => ({ resize: () => ({}) }), createFromBitmap: () => ({}) },

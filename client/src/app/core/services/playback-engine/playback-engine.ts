@@ -168,6 +168,8 @@ export type EngineEventMap = {
     audioCodec?: string;
   };
   audioTracksChanged: { tracks: AudioTrack[] };
+  /** Desktop: the native window entered or left full screen (also on the OS's own controls). */
+  fullscreenChanged: { fullscreen: boolean };
   /** Single source of truth for the UI volume slider; `volume` is the raw 0..1 level, independent of `muted`. */
   volumechange: { volume: number; muted: boolean };
   ended: void;

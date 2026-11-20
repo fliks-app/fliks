@@ -91,9 +91,35 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # A key set to null is removed: Electron's boilerplate strings for hardware the app never uses.
   extendInfo:
     NSMicrophoneUsageDescription: Fliks uses the microphone for voice chat in watch parties.
+    NSLocalNetworkUsageDescription: Fliks connects to your Fliks server and Chromecast devices on your local network.
+    NSCameraUsageDescription: null
+    NSBluetoothAlwaysUsageDescription: null
+    NSBluetoothPeripheralUsageDescription: null
+    NSAudioCaptureUsageDescription: null
+    # Only standard TLS (OpenSSL in libmpv, Chromium): the export-compliance question is answered here.
+    ITSAppUsesNonExemptEncryption: false
+  # The Velopack updater is Windows only; electron-updater updates the mac app.
+  files:
+    - "!node_modules/velopack/**"
   notarize: true
+# Mac App Store, universal purchase under the iOS bundle id. mas inherits every mac.* key (arrays
+# merged), so only what differs is set; electron-builder skips notarization and builds a .pkg.
+mas:
+  appId: media.fliks.app
+  type: distribution
+  entitlements: build/entitlements.mas.plist
+  entitlementsInherit: build/entitlements.mas.inherit.plist
+  # Written from a secret by the release job; gitignored.
+  provisioningProfile: build/embedded.provisionprofile
+  # Mach-O outside Contents/Frameworks risks a TN2206 rejection: libmpv moves there (mac-mpv-player.ts).
+  extraFiles:
+    - from: native/vendor/libmpv.dylib
+      to: Frameworks/libmpv.dylib
+  files:
+    - "!native/vendor/**"
 # Windows ships through Velopack (see desktop-release.yml): electron-builder only
 # produces win-unpacked, which vpk packs into Setup.exe + the update feed.
 win:

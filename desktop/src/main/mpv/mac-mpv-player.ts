@@ -41,6 +41,7 @@ export type MacAddon = NowPlayingAddon & {
   setProperty(name: string, value: string): void;
   resize(): void;
   setBottomCornerRadius(wid: string, radius: number): void;
+  keepOffMainWindow(wid: string): void;
   probeLists(): { 'decoder-list'?: string; 'demuxer-lavf-list'?: string };
   stop(): void;
 };
@@ -55,7 +56,10 @@ export function loadMacAddon(): MacAddon {
     ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked')
     : app.getAppPath();
   if (!process.env.FLIKS_MPV_PATH) {
-    process.env.FLIKS_MPV_PATH = path.join(base, 'native', 'vendor', 'libmpv.dylib');
+    // The Mac App Store build ships libmpv in Contents/Frameworks (electron-builder.yml `mas.extraFiles`).
+    process.env.FLIKS_MPV_PATH = process.mas
+      ? path.join(process.resourcesPath, '..', 'Frameworks', 'libmpv.dylib')
+      : path.join(base, 'native', 'vendor', 'libmpv.dylib');
   }
   macAddon = createRequire(__filename)(
     path.join(base, 'native', 'build', 'Release', 'fliks_player_mac.node'),
@@ -68,6 +72,12 @@ export function loadMacAddon(): MacAddon {
 export function roundWindowBottomCorners(win: BrowserWindow, radius: number): void {
   const wid = win.getNativeWindowHandle().readBigUInt64LE(0).toString();
   loadMacAddon().setBottomCornerRadius(wid, radius);
+}
+
+/** Stops a window from becoming the app's main window, so it can be key (typing) while another keeps the active title bar. */
+export function keepOffMainWindow(win: BrowserWindow): void {
+  const wid = win.getNativeWindowHandle().readBigUInt64LE(0).toString();
+  loadMacAddon().keepOffMainWindow(wid);
 }
 
 export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {

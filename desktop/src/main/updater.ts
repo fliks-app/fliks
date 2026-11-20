@@ -133,6 +133,7 @@ function canSelfInstall(): boolean {
 function capability(): DesktopUpdateCapability {
   return {
     canInstall: canSelfInstall(),
+    storeManaged: !!process.mas,
     currentVersion: app.getVersion(),
     releasesUrl: RELEASES_URL,
   };
@@ -169,9 +170,9 @@ export function setupUpdater(): void {
   ipcMain.handle(UPDATE_IPC.getCapability, () => capability());
   ipcMain.handle(UPDATE_IPC.openReleases, () => shell.openExternal(RELEASES_URL));
 
-  // Opted out, or a snap (snapd refreshes it): register no-op channels (so renderer calls
+  // Opted out, a snap (snapd refreshes it) or a Mac App Store build: register no-op channels (so renderer calls
   // resolve) and never contact GitHub. The check reports "up to date", so no update button shows.
-  if (updateCheckDisabled() || process.env.SNAP) {
+  if (updateCheckDisabled() || process.env.SNAP || process.mas) {
     ipcMain.handle(UPDATE_IPC.check, () => broadcast({ state: 'not-available' }));
     ipcMain.handle(UPDATE_IPC.install, () => shell.openExternal(RELEASES_URL));
     return;

@@ -31,6 +31,8 @@ export type CompositorAddon = {
   getProperty(name: string): string | null;
   setProperty(name: string, value: string): void;
   setFullscreen(enabled: boolean): void;
+  /** Whether SDL's window is full screen right now (the state its enter/leave events report). */
+  isFullscreen(): boolean;
   /** Asks the window manager to bring the window to the front (best effort on Wayland). */
   raise(): void;
   hide(): void;
@@ -50,6 +52,8 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
   private muteFilterCount = 0;
   /** The window gained or lost focus, or was hidden. */
   onWindowActive?: (active: boolean) => void;
+  /** SDL entered or left full screen, whoever asked for it. */
+  onFullscreenChange?: (fullscreen: boolean) => void;
   /** The close button was pressed: quit by default. */
   onCloseRequest: () => void = () => app.quit();
 
@@ -58,6 +62,14 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
     private readonly window: { width: number; height: number; title: string; icon?: string },
   ) {
     super();
+  }
+
+  setFullscreen(enabled: boolean): void {
+    this.addon.setFullscreen(enabled);
+  }
+
+  isFullscreen(): boolean {
+    return this.addon.isFullscreen();
   }
 
   async start(): Promise<this> {
@@ -108,6 +120,9 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
         break;
       case 'focus':
         this.onWindowActive?.(raw.active === true);
+        break;
+      case 'fullscreen':
+        this.onFullscreenChange?.(raw.active === true);
         break;
       // The compositor owns the only visible window; the offscreen BrowserWindow never fires window-all-closed.
       case 'closed':

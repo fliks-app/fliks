@@ -104,6 +104,8 @@ export type DesktopEvent =
       payload: { audioTracks: DesktopAudioTrack[]; subtitleTracks: DesktopSubtitleTrack[] };
     }
   | { type: 'firstFrame' }
+  /** The window entered or left native full screen, however it got there. */
+  | { type: 'fullscreenChanged'; payload: { fullscreen: boolean } }
   /** An OS media control (scrubber) asks the page to seek to `position` seconds. */
   | { type: 'seekRequest'; payload: { position: number } }
   | { type: 'error'; payload: { code: number; message: string; detail?: string } };
@@ -179,6 +181,8 @@ export interface FliksDesktopApi {
   setMuteRanges?(ranges: { start: number; end: number }[]): Promise<void>;
   resize(rect: DesktopRect): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
+  /** Absent on a shell that predates the fullscreen event. */
+  isFullscreen?(): Promise<boolean>;
   /** Describes the playback to the OS media widgets; null withdraws it. */
   setMediaSession(meta: { title: string; artist?: string; artworkUrl?: string } | null): Promise<void>;
   destroy(): Promise<void>;
@@ -187,6 +191,8 @@ export interface FliksDesktopApi {
   /** Opens an ICS in the OS default calendar app. Absent on older shells. */
   openCalendarEvent?(ics: string, fileName: string): Promise<void>;
   getPlayerCapabilities(): Promise<DesktopPlayerCapabilities>;
+  /** The server the page talks to: the shell accepts an invalid TLS certificate from this host only. Absent on older shells. */
+  setServerUrl?(url: string): Promise<void>;
   /** Loopback listener for the OIDC redirect; `pages` is what the browser tab shows. Absent on older shells. */
   oidcListen?(pages: OidcPages): Promise<{ id: number; port: number }>;
   /** The redirect's query string once it carries `state`; null on timeout or when listener `id` was cancelled or replaced. */
@@ -202,6 +208,8 @@ export interface FliksDesktopApi {
   setNotifyPrefs?(patch: Partial<DesktopNotifyPrefs>): Promise<DesktopNotifyPrefs>;
   /** The shell's own strings (tray menu, badge), in the UI language. */
   setNotifyLabels?(labels: { open: string; quit: string; notifications: string }): Promise<void>;
+  /** The application menu's strings (macOS), in the UI language. */
+  setMenuLabels?(labels: Record<string, string>): Promise<void>;
   /** Read again on each call: the user may have changed it in the OS meanwhile. */
   getNotifyStatus?(): Promise<DesktopNotifyStatus>;
   openNotifySettings?(): Promise<void>;

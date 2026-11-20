@@ -29,6 +29,7 @@ void InitNowPlaying(Napi::Env env, Napi::Object exports);  // now_playing.mm
 void InitNotifyStatus(Napi::Env env, Napi::Object exports);  // notify_status.mm
 
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 #import <OpenGL/OpenGL.h>
 #import <OpenGL/gl3.h>
@@ -890,6 +891,8 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   g_layer.framebufferOnly = NO;  // a framebufferOnly drawable rejects blit destinations
   g_layer.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
   g_layer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
+  // Until mpv draws at the new size (live resize, full-screen animation), scale the last frame, never stretch it.
+  g_layer.contentsGravity = kCAGravityResizeAspect;
   BootLayerColorDefaults(g_layer);
   g_layer.frame = g_view.bounds;
   CGFloat scale = g_view.window ? g_view.window.backingScaleFactor : 2.0;
@@ -1107,6 +1110,39 @@ Napi::Value SetBottomCornerRadius(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+// keepOffMainWindow(wid): that view's window can no longer become main, so the framed window keeps
+// its active title bar and AXMain. Swizzles -canBecomeMainWindow once per class, read per window.
+static const char kOffMainKey = 0;
+static IMP g_canBecomeMain = nullptr;
+static BOOL CanBecomeMainOverride(id self, SEL cmd) {
+  if (objc_getAssociatedObject(self, &kOffMainKey)) return NO;
+  return g_canBecomeMain ? ((BOOL (*)(id, SEL))g_canBecomeMain)(self, cmd) : YES;
+}
+
+Napi::Value KeepOffMainWindow(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 1) return env.Undefined();
+  uintptr_t ptr = static_cast<uintptr_t>(strtoull(info[0].ToString().Utf8Value().c_str(), nullptr, 10));
+  NSView* view = (__bridge NSView*)reinterpret_cast<void*>(ptr);
+  NSWindow* window = view.window;
+  if (!window) return env.Undefined();
+  if (!g_canBecomeMain) {
+    Class cls = object_getClass(window);
+    Method m = class_getInstanceMethod(cls, @selector(canBecomeMainWindow));
+    g_canBecomeMain = method_getImplementation(m);
+    class_replaceMethod(cls, @selector(canBecomeMainWindow), (IMP)CanBecomeMainOverride,
+                        method_getTypeEncoding(m));
+  }
+  objc_setAssociatedObject(window, &kOffMainKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  // A window shown before the flag is already main: hand that to the root of its parent chain.
+  if (window.isMainWindow) {
+    NSWindow* root = window;
+    while (root.parentWindow) root = root.parentWindow;
+    [root makeMainWindow];
+  }
+  return env.Undefined();
+}
+
 Napi::Value Stop(const Napi::CallbackInfo& info) {
   // run.store(false) MUST stay first: a still-queued ApplyLayerColorConfig block
   // (posted from the event thread) is only safe because it early-returns on
@@ -1189,6 +1225,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("setProperty", Napi::Function::New(env, SetProperty));
   exports.Set("resize", Napi::Function::New(env, Resize));
   exports.Set("setBottomCornerRadius", Napi::Function::New(env, SetBottomCornerRadius));
+  exports.Set("keepOffMainWindow", Napi::Function::New(env, KeepOffMainWindow));
   exports.Set("stop", Napi::Function::New(env, Stop));
   return exports;
 }

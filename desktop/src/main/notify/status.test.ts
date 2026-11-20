@@ -6,7 +6,7 @@ const openExternal = mock.fn(async (_url: string) => undefined);
 mock.module('electron', {
   namedExports: { Notification: { isSupported: () => supported }, shell: { openExternal } },
 });
-const { notifyStatus, openNotifySettings } = await import('./status.ts');
+const { macNotificationsAllowed, notifyStatus, openNotifySettings } = await import('./status.ts');
 
 const addon = (a: object) => async () => a;
 
@@ -60,4 +60,11 @@ test('opens the notification settings of the OS, none on Linux', async () => {
     openExternal.mock.calls.map((c) => c.arguments[0]),
     ['ms-settings:notifications', 'x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=media.fliks.desktop'],
   );
+});
+
+test('macOS badge: only an already allowed app, never an undetermined one', async () => {
+  assert.equal(await macNotificationsAllowed(addon({ notifyAuthorization: async () => 'allowed' })), true);
+  assert.equal(await macNotificationsAllowed(addon({ notifyAuthorization: async () => 'undetermined' })), false);
+  assert.equal(await macNotificationsAllowed(addon({})), false);
+  assert.equal(await macNotificationsAllowed(async () => { throw new Error('no addon'); }), false);
 });
