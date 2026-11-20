@@ -5846,6 +5846,9 @@
       "join": "Unisciti",
       "accept": "Accetta",
       "open": "Apri"
-    }
+    },
+    "outcome_done": "Fatto.",
+    "outcome_failed": "L'azione non è riuscita.",
+    "outcome_signin": "Apri Fliks per accedere di nuovo."
   }
 }

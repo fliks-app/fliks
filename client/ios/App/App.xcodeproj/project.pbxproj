@@ -8,54 +8,91 @@
 
 /* Begin PBXBuildFile section */
 		0182C69BFDA23ED357D87951 /* FliksDownloadWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4556EE894302C0882439DDE7 /* FliksDownloadWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		13E68961C5B5336F938C000C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6F95214B133B7B5140D7D297 /* Foundation.framework */; };
+		16DDCE1510BEEFCE719ED9B7 /* PushCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EEBEAD61E0136F360B56051 /* PushCrypto.swift */; };
+		24DAB63A3D4282A52214AE68 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C32A8CCD7F66FC8195E8912 /* NotificationService.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
+		47D909B6CD1B2D1CBFEBE82D /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C32A8CCD7F66FC8195E8912 /* NotificationService.swift */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
-		F9A0000200000000000000A1 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9A0000100000000000000A1 /* SceneDelegate.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
+		5A45E877D61253F627EFBAD2 /* StoredSessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93F07ADB48AD724D32DB8BC0 /* StoredSessions.swift */; };
+		5E38BE1275ECAEDC374D9745 /* PushStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E824DE4C0A219E49AA346A /* PushStore.swift */; };
+		689E5DECE5EF205C751EA55D /* PushPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ADBE5B03FDE104FA76BA77D /* PushPipeline.swift */; };
+		6CA7EC26B1C17E4E06EF7BCE /* PushCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EEBEAD61E0136F360B56051 /* PushCrypto.swift */; };
+		71341FA2F278CDBBCBA36D97 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B7D38D4C0C960DAD1D945B5A /* Localizable.strings */; };
+		722AA908B0EFB6D9C5D823FB /* PushStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E824DE4C0A219E49AA346A /* PushStore.swift */; };
+		79822AAD3016E70BE5CD5A83 /* BundledText.swift in Sources */ = {isa = PBXBuildFile; fileRef = E602C63295CCFAA90DB4CE13 /* BundledText.swift */; };
+		8EC13A645AB0A3781521BCA1 /* PushRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEFBB3FB5003BF8A113A43BF /* PushRelay.swift */; };
+		9C2BCC01916B819D1E233AEE /* PushRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEFBB3FB5003BF8A113A43BF /* PushRelay.swift */; };
 		A084ECDBA7D38E1E42DFC39D /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */; };
+		A46AF8B6F4774791753BFA31 /* PushPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ADBE5B03FDE104FA76BA77D /* PushPipeline.swift */; };
 		A5BFFD74DD3ACBEA9EFFE03C /* DownloadLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1CFB5B9999E3F369F363538 /* DownloadLiveActivity.swift */; };
+		AD064E5A97801D880D5616B1 /* PushStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E824DE4C0A219E49AA346A /* PushStore.swift */; };
+		AED749C707FF4EA235095A4D /* FliksNotificationService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8CF0FCA4483F5E6E515EF794 /* FliksNotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AF804DDB1004FCAAF656A79F /* PushCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EEBEAD61E0136F360B56051 /* PushCrypto.swift */; };
+		B4FAD3CDE59AEC83E483F43E /* PushPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ADBE5B03FDE104FA76BA77D /* PushPipeline.swift */; };
+		B587692189D7023F78DC7069 /* PushTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 384895F3430BEB1FEED8793A /* PushTests.swift */; };
+		C7DE5EC0740E18AE7F2C32B8 /* PushPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EAB82DEF990FC867EB3A259 /* PushPlugin.swift */; };
+		D8CF1F0AE41B7CE25C014719 /* PushNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 202EEC1969DA16E6AB79EA32 /* PushNotifications.swift */; };
 		DDA1A6BB527B466CBB92C6F9 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6F95214B133B7B5140D7D297 /* Foundation.framework */; };
 		E767D512577E33EDD09F137D /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */; };
+		EE4237B786C819AED7B10DF6 /* PushRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEFBB3FB5003BF8A113A43BF /* PushRelay.swift */; };
 		F1000001AAAA000000000001 /* FlksViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000011 /* FlksViewController.swift */; };
 		F1000001AAAA000000000002 /* HdrPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000012 /* HdrPlugin.swift */; };
 		F1000001AAAA000000000003 /* NativePlayerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000013 /* NativePlayerPlugin.swift */; };
-		F1000001AAAA000000000A22 /* NativePlayerObservers.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000A21 /* NativePlayerObservers.swift */; };
-		F1000001AAAA000000000A12 /* NativePlayerTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000A11 /* NativePlayerTypes.swift */; };
 		F1000001AAAA000000000004 /* ImmersivePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000014 /* ImmersivePlugin.swift */; };
 		F1000001AAAA000000000005 /* PipPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000015 /* PipPlugin.swift */; };
 		F1000001AAAA000000000006 /* CastPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000016 /* CastPlugin.swift */; };
-		F1000001AAAA000000000B12 /* CastPluginListeners.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000B11 /* CastPluginListeners.swift */; };
 		F1000001AAAA000000000007 /* AudioCapabilitiesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */; };
-		F1000001AAAA0000000000C8 /* VideoCapabilitiesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000C9 /* VideoCapabilitiesPlugin.swift */; };
 		F1000001AAAA000000000008 /* SubtitleOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000018 /* SubtitleOverlayView.swift */; };
 		F1000001AAAA000000000009 /* DownloadPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000019 /* DownloadPlugin.swift */; };
 		F1000001AAAA00000000000A /* OrientationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA00000000001A /* OrientationPlugin.swift */; };
-		F1000001AAAA0000000000FA /* KaraokeMicPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000FB /* KaraokeMicPlugin.swift */; };
 		F1000001AAAA00000000000B /* BackGesturePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA00000000001B /* BackGesturePlugin.swift */; };
-		F954F4DC03C3615047B0AABF /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */; };
-		F9D6B0DE0B5D3649DA0CC8B8 /* FliksDownloadWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2014FCBAA5253E0B35A8DFD6 /* FliksDownloadWidgetBundle.swift */; };
+		F1000001AAAA0000000000A92 /* RemoteNotificationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000A91 /* RemoteNotificationPlugin.swift */; };
+		F1000001AAAA0000000000C2 /* CalendarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000C1 /* CalendarPlugin.swift */; };
+		F1000001AAAA0000000000C8 /* VideoCapabilitiesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000C9 /* VideoCapabilitiesPlugin.swift */; };
 		F1000001AAAA0000000000E1 /* NowPlayingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D1 /* NowPlayingController.swift */; };
 		F1000001AAAA0000000000E2 /* AirPlayPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000D2 /* AirPlayPlugin.swift */; };
 		F1000001AAAA0000000000F2 /* SaveFilePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000F1 /* SaveFilePlugin.swift */; };
+		F1000001AAAA0000000000FA /* KaraokeMicPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000FB /* KaraokeMicPlugin.swift */; };
 		F1000001AAAA000000000A02 /* WebAuthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000A01 /* WebAuthPlugin.swift */; };
-		F1000001AAAA0000000000C2 /* CalendarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000C1 /* CalendarPlugin.swift */; };
-		F1000001AAAA0000000000A92 /* RemoteNotificationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA0000000000A91 /* RemoteNotificationPlugin.swift */; };
+		F1000001AAAA000000000A12 /* NativePlayerTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000A11 /* NativePlayerTypes.swift */; };
+		F1000001AAAA000000000A22 /* NativePlayerObservers.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000A21 /* NativePlayerObservers.swift */; };
 		F1000001AAAA000000000B02 /* AudioPlayerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000B01 /* AudioPlayerPlugin.swift */; };
+		F1000001AAAA000000000B12 /* CastPluginListeners.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000001AAAA000000000B11 /* CastPluginListeners.swift */; };
+		F6AA9C117BDF6A4608AA1039 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6F95214B133B7B5140D7D297 /* Foundation.framework */; };
+		F954F4DC03C3615047B0AABF /* DownloadActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */; };
+		F9A0000200000000000000A1 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9A0000100000000000000A1 /* SceneDelegate.swift */; };
 		F9B000020000000000000001 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B000010000000000000001 /* CarPlaySceneDelegate.swift */; };
 		F9B000020000000000000002 /* CarPlayCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B000010000000000000002 /* CarPlayCatalog.swift */; };
+		F9D6B0DE0B5D3649DA0CC8B8 /* FliksDownloadWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2014FCBAA5253E0B35A8DFD6 /* FliksDownloadWidgetBundle.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		056047E58A0790C3855E139C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 504EC3031FED79650016851F;
+			remoteInfo = App;
+		};
 		36CE9162945F5F8D50A45670 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = EC6D67A307A83F77678EB64F;
 			remoteInfo = FliksDownloadWidget;
+		};
+		9D1D7245F29EC805D6B58AFE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FC0E08B5CC5919BD20CE6F21;
+			remoteInfo = FliksNotificationService;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -67,6 +104,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				0182C69BFDA23ED357D87951 /* FliksDownloadWidget.appex in Embed Foundation Extensions */,
+				AED749C707FF4EA235095A4D /* FliksNotificationService.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -74,52 +112,73 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		F1000001AAAA000000000C01 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		02AF5ECC06EDA3DC23159DC3 /* NotificationService.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = NotificationService.entitlements; sourceTree = "<group>"; };
+		0EA72EAD8937B9757259AD00 /* es */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/Localizable.strings; sourceTree = "<group>"; };
+		1843BBCDB92F48FD66A77E5C /* en */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		1E13851727ACD3C0FC404D34 /* FliksPushTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FliksPushTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2014FCBAA5253E0B35A8DFD6 /* FliksDownloadWidgetBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FliksDownloadWidgetBundle.swift; sourceTree = "<group>"; };
+		202EEC1969DA16E6AB79EA32 /* PushNotifications.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushNotifications.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
+		30B12593EC9C76EB2CABCB1E /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		384895F3430BEB1FEED8793A /* PushTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushTests.swift; sourceTree = "<group>"; };
+		3ADBE5B03FDE104FA76BA77D /* PushPipeline.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushPipeline.swift; sourceTree = "<group>"; };
 		4556EE894302C0882439DDE7 /* FliksDownloadWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FliksDownloadWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		F9A0000100000000000000A1 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		5C32A8CCD7F66FC8195E8912 /* NotificationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		5EEBEAD61E0136F360B56051 /* PushCrypto.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushCrypto.swift; sourceTree = "<group>"; };
+		6EAB82DEF990FC867EB3A259 /* PushPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushPlugin.swift; sourceTree = "<group>"; };
 		6F95214B133B7B5140D7D297 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		8546BB7ADC2E5B59E726E7ED /* DownloadActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DownloadActivityAttributes.swift; sourceTree = "<group>"; };
+		8CF0FCA4483F5E6E515EF794 /* FliksNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FliksNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		93F07ADB48AD724D32DB8BC0 /* StoredSessions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StoredSessions.swift; sourceTree = "<group>"; };
 		A89664499363506F1B6D7298 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AF277DCFFFF123FFC6DF26C7 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
 		B1CFB5B9999E3F369F363538 /* DownloadLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DownloadLiveActivity.swift; sourceTree = "<group>"; };
+		BC99CC4CB53DBB4F24A90E57 /* it */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = it; path = it.lproj/Localizable.strings; sourceTree = "<group>"; };
+		C8C44AE1EF39FC107144FD0F /* de */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/Localizable.strings; sourceTree = "<group>"; };
+		CA429D65792601203ADADF19 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D1D7E931CF4068654562550B /* fr */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/Localizable.strings; sourceTree = "<group>"; };
+		E602C63295CCFAA90DB4CE13 /* BundledText.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BundledText.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000011 /* FlksViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlksViewController.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000012 /* HdrPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HdrPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000013 /* NativePlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePlayerPlugin.swift; sourceTree = "<group>"; };
-		F1000001AAAA000000000A21 /* NativePlayerObservers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePlayerObservers.swift; sourceTree = "<group>"; };
-		F1000001AAAA000000000A11 /* NativePlayerTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePlayerTypes.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000014 /* ImmersivePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImmersivePlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000015 /* PipPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000016 /* CastPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastPlugin.swift; sourceTree = "<group>"; };
-		F1000001AAAA000000000B11 /* CastPluginListeners.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastPluginListeners.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000017 /* AudioCapabilitiesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCapabilitiesPlugin.swift; sourceTree = "<group>"; };
-		F1000001AAAA0000000000C9 /* VideoCapabilitiesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoCapabilitiesPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000018 /* SubtitleOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleOverlayView.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000019 /* DownloadPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA00000000001A /* OrientationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrientationPlugin.swift; sourceTree = "<group>"; };
-		F1000001AAAA0000000000FB /* KaraokeMicPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaraokeMicPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA00000000001B /* BackGesturePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackGesturePlugin.swift; sourceTree = "<group>"; };
-		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
+		F1000001AAAA0000000000A91 /* RemoteNotificationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteNotificationPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA0000000000C1 /* CalendarPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA0000000000C9 /* VideoCapabilitiesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoCapabilitiesPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA0000000000D1 /* NowPlayingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingController.swift; sourceTree = "<group>"; };
 		F1000001AAAA0000000000D2 /* AirPlayPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPlayPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA0000000000F1 /* SaveFilePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveFilePlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA0000000000FB /* KaraokeMicPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaraokeMicPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000A01 /* WebAuthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthPlugin.swift; sourceTree = "<group>"; };
-		F1000001AAAA0000000000A91 /* RemoteNotificationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteNotificationPlugin.swift; sourceTree = "<group>"; };
-		F1000001AAAA0000000000C1 /* CalendarPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA000000000A11 /* NativePlayerTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePlayerTypes.swift; sourceTree = "<group>"; };
+		F1000001AAAA000000000A21 /* NativePlayerObservers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePlayerObservers.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000B01 /* AudioPlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerPlugin.swift; sourceTree = "<group>"; };
+		F1000001AAAA000000000B11 /* CastPluginListeners.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastPluginListeners.swift; sourceTree = "<group>"; };
+		F1000001AAAA000000000C01 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		F1E824DE4C0A219E49AA346A /* PushStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushStore.swift; sourceTree = "<group>"; };
+		F9A0000100000000000000A1 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		F9B000010000000000000001 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		F9B000010000000000000002 /* CarPlayCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayCatalog.swift; sourceTree = "<group>"; };
 		F9B0000100000000000000E1 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Pods/Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
+		FD82533F8E808EAB1C2A00BE /* pt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = pt; path = pt.lproj/Localizable.strings; sourceTree = "<group>"; };
+		FEFBB3FB5003BF8A113A43BF /* PushRelay.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushRelay.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -131,6 +190,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		859C96A1323A198D2078A8AE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F6AA9C117BDF6A4608AA1039 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D8E61D15D46A9A3D9A53A1B8 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -139,9 +206,29 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E4F4899BF1A795174FCA9E73 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				13E68961C5B5336F938C000C /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		174464FF3BC08FDCBDDE674C /* Push */ = {
+			isa = PBXGroup;
+			children = (
+				5EEBEAD61E0136F360B56051 /* PushCrypto.swift */,
+				3ADBE5B03FDE104FA76BA77D /* PushPipeline.swift */,
+				FEFBB3FB5003BF8A113A43BF /* PushRelay.swift */,
+				F1E824DE4C0A219E49AA346A /* PushStore.swift */,
+			);
+			name = Push;
+			path = Push;
+			sourceTree = "<group>";
+		};
 		27E2DDA53C4D2A4D1A88CE4A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -159,6 +246,9 @@
 				7F8756D8B27F46E3366F6CEA /* Pods */,
 				27E2DDA53C4D2A4D1A88CE4A /* Frameworks */,
 				960BEF959FF3D17AE53A833B /* FliksDownloadWidget */,
+				174464FF3BC08FDCBDDE674C /* Push */,
+				DC5A81AA7F5039683E5DA4BF /* FliksNotificationService */,
+				D4A24AA472CBD8516E1F7BD8 /* FliksPushTests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -167,6 +257,8 @@
 			children = (
 				504EC3041FED79650016851F /* App.app */,
 				4556EE894302C0882439DDE7 /* FliksDownloadWidget.appex */,
+				8CF0FCA4483F5E6E515EF794 /* FliksNotificationService.appex */,
+				1E13851727ACD3C0FC404D34 /* FliksPushTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -210,6 +302,11 @@
 				504EC3131FED79650016851F /* Info.plist */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
+				6EAB82DEF990FC867EB3A259 /* PushPlugin.swift */,
+				202EEC1969DA16E6AB79EA32 /* PushNotifications.swift */,
+				E602C63295CCFAA90DB4CE13 /* BundledText.swift */,
+				93F07ADB48AD724D32DB8BC0 /* StoredSessions.swift */,
+				B7D38D4C0C960DAD1D945B5A /* Localizable.strings */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -243,6 +340,27 @@
 			name = iOS;
 			sourceTree = "<group>";
 		};
+		D4A24AA472CBD8516E1F7BD8 /* FliksPushTests */ = {
+			isa = PBXGroup;
+			children = (
+				384895F3430BEB1FEED8793A /* PushTests.swift */,
+				30B12593EC9C76EB2CABCB1E /* Info.plist */,
+			);
+			name = FliksPushTests;
+			path = FliksPushTests;
+			sourceTree = "<group>";
+		};
+		DC5A81AA7F5039683E5DA4BF /* FliksNotificationService */ = {
+			isa = PBXGroup;
+			children = (
+				5C32A8CCD7F66FC8195E8912 /* NotificationService.swift */,
+				CA429D65792601203ADADF19 /* Info.plist */,
+				02AF5ECC06EDA3DC23159DC3 /* NotificationService.entitlements */,
+			);
+			name = FliksNotificationService;
+			path = FliksNotificationService;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -262,11 +380,30 @@
 			);
 			dependencies = (
 				15558A150BDC471DA8A0372D /* PBXTargetDependency */,
+				80120B043A709A6C2D769DF5 /* PBXTargetDependency */,
 			);
 			name = App;
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		65707E9AE697F6501FD01FD4 /* FliksPushTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A6291CD52D7537E9FB1E9EF /* Build configuration list for PBXNativeTarget "FliksPushTests" */;
+			buildPhases = (
+				17E296F84BAC40F338757DD4 /* Sources */,
+				859C96A1323A198D2078A8AE /* Frameworks */,
+				F911F090C457277584A2C325 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6ECC365F007F086F70DCCC58 /* PBXTargetDependency */,
+			);
+			name = FliksPushTests;
+			productName = FliksPushTests;
+			productReference = 1E13851727ACD3C0FC404D34 /* FliksPushTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 		EC6D67A307A83F77678EB64F /* FliksDownloadWidget */ = {
 			isa = PBXNativeTarget;
@@ -283,6 +420,23 @@
 			name = FliksDownloadWidget;
 			productName = FliksDownloadWidget;
 			productReference = 4556EE894302C0882439DDE7 /* FliksDownloadWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		FC0E08B5CC5919BD20CE6F21 /* FliksNotificationService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9E6662E6522DE85C4A208F7B /* Build configuration list for PBXNativeTarget "FliksNotificationService" */;
+			buildPhases = (
+				F545414597909CBF06430631 /* Sources */,
+				E4F4899BF1A795174FCA9E73 /* Frameworks */,
+				06DE84C036FEBD5BDDDE3560 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FliksNotificationService;
+			productName = FliksNotificationService;
+			productReference = 8CF0FCA4483F5E6E515EF794 /* FliksNotificationService.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
@@ -308,6 +462,11 @@
 			knownRegions = (
 				en,
 				Base,
+				fr,
+				de,
+				es,
+				it,
+				pt,
 			);
 			mainGroup = 504EC2FB1FED79650016851F;
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
@@ -316,11 +475,20 @@
 			targets = (
 				504EC3031FED79650016851F /* App */,
 				EC6D67A307A83F77678EB64F /* FliksDownloadWidget */,
+				FC0E08B5CC5919BD20CE6F21 /* FliksNotificationService */,
+				65707E9AE697F6501FD01FD4 /* FliksPushTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		06DE84C036FEBD5BDDDE3560 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		504EC3021FED79650016851F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -331,10 +499,18 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+				71341FA2F278CDBBCBA36D97 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5361D39D8601446131BA40CF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F911F090C457277584A2C325 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -395,6 +571,19 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		17E296F84BAC40F338757DD4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B587692189D7023F78DC7069 /* PushTests.swift in Sources */,
+				24DAB63A3D4282A52214AE68 /* NotificationService.swift in Sources */,
+				16DDCE1510BEEFCE719ED9B7 /* PushCrypto.swift in Sources */,
+				689E5DECE5EF205C751EA55D /* PushPipeline.swift in Sources */,
+				8EC13A645AB0A3781521BCA1 /* PushRelay.swift in Sources */,
+				722AA908B0EFB6D9C5D823FB /* PushStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		504EC3001FED79650016851F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -427,6 +616,14 @@
 				F1000001AAAA0000000000C2 /* CalendarPlugin.swift in Sources */,
 				F1000001AAAA0000000000A92 /* RemoteNotificationPlugin.swift in Sources */,
 				F1000001AAAA000000000B02 /* AudioPlayerPlugin.swift in Sources */,
+				C7DE5EC0740E18AE7F2C32B8 /* PushPlugin.swift in Sources */,
+				D8CF1F0AE41B7CE25C014719 /* PushNotifications.swift in Sources */,
+				79822AAD3016E70BE5CD5A83 /* BundledText.swift in Sources */,
+				5A45E877D61253F627EFBAD2 /* StoredSessions.swift in Sources */,
+				AF804DDB1004FCAAF656A79F /* PushCrypto.swift in Sources */,
+				A46AF8B6F4774791753BFA31 /* PushPipeline.swift in Sources */,
+				9C2BCC01916B819D1E233AEE /* PushRelay.swift in Sources */,
+				5E38BE1275ECAEDC374D9745 /* PushStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -440,6 +637,18 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F545414597909CBF06430631 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				47D909B6CD1B2D1CBFEBE82D /* NotificationService.swift in Sources */,
+				6CA7EC26B1C17E4E06EF7BCE /* PushCrypto.swift in Sources */,
+				B4FAD3CDE59AEC83E483F43E /* PushPipeline.swift in Sources */,
+				EE4237B786C819AED7B10DF6 /* PushRelay.swift in Sources */,
+				AD064E5A97801D880D5616B1 /* PushStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -448,6 +657,18 @@
 			name = FliksDownloadWidget;
 			target = EC6D67A307A83F77678EB64F /* FliksDownloadWidget */;
 			targetProxy = 36CE9162945F5F8D50A45670 /* PBXContainerItemProxy */;
+		};
+		6ECC365F007F086F70DCCC58 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = App;
+			target = 504EC3031FED79650016851F /* App */;
+			targetProxy = 056047E58A0790C3855E139C /* PBXContainerItemProxy */;
+		};
+		80120B043A709A6C2D769DF5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = FliksNotificationService;
+			target = FC0E08B5CC5919BD20CE6F21 /* FliksNotificationService */;
+			targetProxy = 9D1D7245F29EC805D6B58AFE /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -468,9 +689,65 @@
 			name = LaunchScreen.storyboard;
 			sourceTree = "<group>";
 		};
+		B7D38D4C0C960DAD1D945B5A /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				1843BBCDB92F48FD66A77E5C /* en */,
+				D1D7E931CF4068654562550B /* fr */,
+				C8C44AE1EF39FC107144FD0F /* de */,
+				0EA72EAD8937B9757259AD00 /* es */,
+				BC99CC4CB53DBB4F24A90E57 /* it */,
+				FD82533F8E808EAB1C2A00BE /* pt */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		1D0A9D617054E4F5E84E98C1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 85ZC7Y8WQ2;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FliksPushTests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				PRODUCT_BUNDLE_IDENTIFIER = media.fliks.app.PushTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/App.app/App";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		39BE48B4C780C1603A90ED7F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = FliksNotificationService/NotificationService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 85ZC7Y8WQ2;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FliksNotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 7.0.1; /* x-release-please-version */
+				PRODUCT_BUNDLE_IDENTIFIER = media.fliks.app.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		504EC3141FED79650016851F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = F1000001AAAA000000000C01 /* Debug.xcconfig */;
@@ -532,7 +809,6 @@
 		504EC3151FED79650016851F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				FLIKS_CAST_APP_ID = 66BF4DAE;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -564,6 +840,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				FLIKS_CAST_APP_ID = 66BF4DAE;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -585,10 +862,10 @@
 			baseConfigurationReference = FC68EB0AF532CFC21C3344DD /* Pods-App.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 85ZC7Y8WQ2;
-				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Fliks;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
@@ -609,10 +886,10 @@
 			baseConfigurationReference = AF51FD2D460BCFE21FA515B2 /* Pods-App.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 85ZC7Y8WQ2;
-				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Fliks;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
@@ -648,6 +925,30 @@
 			};
 			name = Debug;
 		};
+		6D86C313D1E5FD024BE2AD27 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = FliksNotificationService/NotificationService.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 85ZC7Y8WQ2;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FliksNotificationService/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 7.0.1; /* x-release-please-version */
+				PRODUCT_BUNDLE_IDENTIFIER = media.fliks.app.NotificationService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		94C142DA5BE1215EDD8EEF3C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -669,6 +970,25 @@
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
+		};
+		C7A69E3FF4BC093BB4BB76B6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 85ZC7Y8WQ2;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = FliksPushTests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				PRODUCT_BUNDLE_IDENTIFIER = media.fliks.app.PushTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/App.app/App";
+			};
+			name = Debug;
 		};
 /* End XCBuildConfiguration section */
 
@@ -696,6 +1016,24 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7A6291CD52D7537E9FB1E9EF /* Build configuration list for PBXNativeTarget "FliksPushTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1D0A9D617054E4F5E84E98C1 /* Release */,
+				C7A69E3FF4BC093BB4BB76B6 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9E6662E6522DE85C4A208F7B /* Build configuration list for PBXNativeTarget "FliksNotificationService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6D86C313D1E5FD024BE2AD27 /* Release */,
+				39BE48B4C780C1603A90ED7F /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
