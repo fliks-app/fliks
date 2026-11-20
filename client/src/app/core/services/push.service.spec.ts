@@ -5,10 +5,11 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { Subject } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from './auth.service';
+import { ConfirmationService } from './confirmation.service';
 import { DeviceService } from './device.service';
-import { PushService } from './push.service';
+import { type AskState, PushService, shouldAsk } from './push.service';
 import { ServerConfigService } from './server-config.service';
 import { ServerVersionService } from './server-version.service';
 import { SessionStoreService } from './session-store.service';
@@ -16,6 +17,16 @@ import { SseService } from './sse.service';
 import { ToastService } from './toast.service';
 
 const PENDING = 'fliks.push.pendingUrl';
+const SNOOZE = 'fliks.push.askSnooze';
+
+const { plugin, platform } = vi.hoisted(() => ({
+  plugin: { status: vi.fn(), requestPermission: vi.fn(), prepare: vi.fn(), subscribe: vi.fn(), addListener: vi.fn() },
+  platform: { native: false },
+}));
+vi.mock('@capacitor/core', async (original) => {
+  const core = await original<typeof import('@capacitor/core')>();
+  return { ...core, Capacitor: { ...core.Capacitor, isNativePlatform: () => platform.native }, registerPlugin: () => plugin };
+});
 
 describe('PushService', () => {
   const user = signal<{ id: number } | null>({ id: 1 });
@@ -25,6 +36,8 @@ describe('PushService', () => {
   const toastError = vi.fn();
   const loadPersistedSession = vi.fn();
   const sessionsLoad = vi.fn();
+  const confirm = vi.fn();
+  let tv = false;
 
   function create(): { push: PushService; http: HttpTestingController } {
     TestBed.configureTestingModule({
@@ -36,7 +49,8 @@ describe('PushService', () => {
         { provide: SseService, useValue: { notifications: new Subject() } },
         { provide: ToastService, useValue: { error: toastError } },
         { provide: TranslateService, useValue: { instant: (k: string) => k, currentLang: () => 'en' } },
-        { provide: DeviceService, useValue: { isTv: () => false, isDesktopNative: () => false } },
+        { provide: DeviceService, useValue: { isTv: () => tv, isDesktopNative: () => false } },
+        { provide: ConfirmationService, useValue: { confirm } },
         { provide: Router, useValue: { navigateByUrl } },
         { provide: ServerConfigService, useValue: { serverUrl: () => 'https://a.test', resolveUrl: (u: string) => u } },
         { provide: ServerVersionService, useValue: { supports: () => true } },
@@ -54,6 +68,7 @@ describe('PushService', () => {
     resumeSession.mockResolvedValue('resumed');
     loadPersistedSession.mockReturnValue(null);
     sessionsLoad.mockResolvedValue(undefined);
+    tv = false;
   });
 
   describe('opened', () => {
@@ -132,5 +147,135 @@ describe('PushService', () => {
     const { http } = create();
     await vi.waitFor(() => http.expectOne((r) => r.method === 'DELETE' && r.url === '/api/push/subscriptions/current').flush(null));
     await vi.waitFor(() => expect(localStorage.getItem('fliks.push.pendingDelete::https://a.test::1')).toBeNull());
+  });
+
+  describe('askInContext', () => {
+    beforeEach(() => {
+      platform.native = true;
+      plugin.status.mockResolvedValue({ available: true, permission: 'prompt' });
+      plugin.addListener.mockResolvedValue({ remove: async () => undefined });
+      plugin.prepare.mockResolvedValue({ platform: 'fcm', p256dh: 'k', auth: 'a' });
+      plugin.subscribe.mockResolvedValue(undefined);
+    });
+    afterEach(() => (platform.native = false));
+
+    async function started(mobile = true): Promise<{ push: PushService; http: HttpTestingController }> {
+      const r = create();
+      await vi.waitFor(() => r.http.expectOne('/api/push/config').flush({ mobile, vapidPublicKey: '' }));
+      await vi.waitFor(() => expect(r.push.mobileEnabled()).toBe(mobile));
+      return r;
+    }
+
+    it('turns push on after the pre-prompt and the system dialog', async () => {
+      confirm.mockResolvedValue(true);
+      plugin.requestPermission.mockResolvedValue({ permission: 'granted' });
+      const { push, http } = await started();
+      const asked = push.askInContext('request');
+      await vi.waitFor(() => http.expectOne((r) => r.method === 'POST' && r.url === '/api/push/subscriptions').flush({ sub: 's', ticket: 't' }));
+      await asked;
+      expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ title: 'app_settings.notifications.ask_request_title' }));
+      expect(push.deviceEnabled()).toBe(true);
+      expect(localStorage.getItem(SNOOZE)).toBeNull();
+      await push.askInContext('party');
+      expect(confirm).toHaveBeenCalledTimes(1);
+    });
+
+    it('snoozes after Not now without touching the system dialog', async () => {
+      confirm.mockResolvedValue(false);
+      const { push } = await started();
+      await push.askInContext('request');
+      await push.askInContext('party');
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(plugin.requestPermission).not.toHaveBeenCalled();
+      expect(JSON.parse(localStorage.getItem(SNOOZE)!).declined).toBe(1);
+    });
+
+    it('leaves a refusal at the system dialog to the settings page', async () => {
+      confirm.mockResolvedValue(true);
+      plugin.requestPermission.mockResolvedValue({ permission: 'denied' });
+      const { push } = await started();
+      await push.askInContext('request');
+      expect(push.permission()).toBe('denied');
+      expect(push.deviceEnabled()).toBe(false);
+      expect(plugin.prepare).not.toHaveBeenCalled();
+    });
+
+    it('asks only the permission for a download when the admin keeps push off', async () => {
+      confirm.mockResolvedValue(true);
+      plugin.requestPermission.mockResolvedValue({ permission: 'granted' });
+      const { push } = await started(false);
+      await push.askInContext('request');
+      expect(confirm).not.toHaveBeenCalled();
+      await push.askInContext('download');
+      expect(plugin.requestPermission).toHaveBeenCalledTimes(1);
+      expect(plugin.prepare).not.toHaveBeenCalled();
+    });
+
+    it('shows one pre-prompt for a batch of downloads', async () => {
+      let answer!: (v: boolean) => void;
+      confirm.mockReturnValue(new Promise<boolean>((r) => (answer = r)));
+      const { push } = await started(false);
+      const first = push.askInContext('download');
+      await push.askInContext('download');
+      answer(false);
+      await first;
+      expect(confirm).toHaveBeenCalledTimes(1);
+    });
+
+    it('never asks on a TV', async () => {
+      tv = true;
+      const { push } = create();
+      await push.askInContext('download');
+      await push.askInContext('request');
+      expect(confirm).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('shouldAsk', () => {
+  const base: AskState = {
+    mode: 'native',
+    reason: 'request',
+    pushReady: true,
+    permission: 'prompt',
+    deviceEnabled: false,
+    deviceOff: false,
+    snooze: { declined: 0, until: 0 },
+    now: 1000,
+  };
+  const ask = (patch: Partial<AskState>) => shouldAsk({ ...base, ...patch });
+
+  it('asks on a phone or a browser that can still show the dialog', () => {
+    expect(ask({})).toBe(true);
+    expect(ask({ mode: 'web' })).toBe(true);
+    expect(ask({ reason: 'party' })).toBe(true);
+  });
+
+  it('never asks where there is no system dialog', () => {
+    for (const mode of ['toast', 'desktop', 'none'] as const) expect(ask({ mode })).toBe(false);
+  });
+
+  it('leaves a denied permission to the settings page', () => {
+    expect(ask({ permission: 'denied' })).toBe(false);
+    expect(ask({ permission: 'denied', reason: 'download' })).toBe(false);
+  });
+
+  it('waits out the snooze and stops after three refusals', () => {
+    expect(ask({ snooze: { declined: 1, until: 2000 } })).toBe(false);
+    expect(ask({ snooze: { declined: 2, until: 999 } })).toBe(true);
+    expect(ask({ snooze: { declined: 3, until: 0 } })).toBe(false);
+  });
+
+  it('respects a device switched off in the settings and one already on', () => {
+    expect(ask({ deviceOff: true })).toBe(false);
+    expect(ask({ deviceEnabled: true, permission: 'granted' })).toBe(false);
+    expect(ask({ deviceEnabled: true, permission: 'prompt' })).toBe(true);
+    expect(ask({ pushReady: false })).toBe(false);
+  });
+
+  it('asks for a download only on a phone that lacks the permission', () => {
+    expect(ask({ reason: 'download', pushReady: false })).toBe(true);
+    expect(ask({ reason: 'download', permission: 'granted' })).toBe(false);
+    expect(ask({ reason: 'download', mode: 'web' })).toBe(false);
   });
 });

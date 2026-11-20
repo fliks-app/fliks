@@ -5,6 +5,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MusicTrackRequest } from './audio-player/music-queue';
 import { DownloadManagerService, type BookDownloadTarget } from './download-manager.service';
+import { PushService } from './push.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { MediaService } from './api/media.service';
@@ -69,6 +70,7 @@ function setup(initial: DownloadTask[] = [], opts: { wifiOnly?: boolean; connect
       { provide: DownloadSettingsService, useValue: { maxConcurrent: () => 3, wifiOnly: () => !!opts.wifiOnly } },
       { provide: ServerConfigService, useValue: { isNative: false, resolveUrl: (u: string) => u } },
       { provide: NetworkService, useValue: { isOnline: () => true, connectionType: () => opts.connection ?? 'unknown' } },
+      { provide: PushService, useValue: { askInContext: vi.fn() } },
     ],
   });
   const service = TestBed.inject(DownloadManagerService);

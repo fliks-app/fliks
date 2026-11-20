@@ -10,6 +10,7 @@ import { Push, type PushOpened, type PushPermission, type SessionRef } from '../
 import { readFlag, readStored, writeFlag, writeStored } from '../utils/local-flag';
 import { sameOriginPath } from '../utils/same-origin';
 import { AuthService } from './auth.service';
+import { ConfirmationService } from './confirmation.service';
 import { DeviceService } from './device.service';
 import { ServerConfigService } from './server-config.service';
 import { SessionStoreService } from './session-store.service';
@@ -55,8 +56,44 @@ interface PushConfig {
   plugins?: PushPluginInfo[];
 }
 
+/** A moment where a notification is clearly useful: the pre-prompt says why. */
+export type PushReason = 'request' | 'party' | 'download';
+
+export interface AskState {
+  mode: PushMode;
+  reason: PushReason;
+  /** Push can be switched on here: server, platform and admin allow it. */
+  pushReady: boolean;
+  permission: PushPermission;
+  deviceEnabled: boolean;
+  /** The user turned this device off in the settings. */
+  deviceOff: boolean;
+  snooze: AskSnooze;
+  now: number;
+}
+
+export interface AskSnooze {
+  declined: number;
+  until: number;
+}
+
+/** After this many "Not now" only the settings page turns notifications on. */
+const MAX_DECLINES = 3;
+const SNOOZE_MS = 14 * 24 * 3600_000;
+
+/** Whether to show the pre-prompt; a denied permission is left to the settings page. */
+export function shouldAsk(s: AskState): boolean {
+  if (s.mode !== 'native' && s.mode !== 'web') return false;
+  if (s.permission === 'denied' || s.snooze.declined >= MAX_DECLINES || s.now < s.snooze.until) return false;
+  // A download only needs the permission: its banner is local.
+  if (s.reason === 'download') return s.mode === 'native' && s.permission !== 'granted';
+  return s.pushReady && !s.deviceOff && !(s.deviceEnabled && s.permission === 'granted');
+}
+
 const PENDING_URL_KEY = 'fliks.push.pendingUrl';
 const TOASTS_KEY = 'fliks.push.toasts';
+/** Per device, like the OS permission it guards. */
+const SNOOZE_KEY = 'fliks.push.askSnooze';
 /** A tap that switched server resumes only if the app comes back within this. */
 const PENDING_URL_TTL_MS = 5 * 60_000;
 /** Sign-out must not hang on an unreachable push service or server. */
@@ -87,6 +124,7 @@ export class PushService {
   private readonly sessions = inject(SessionStoreService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly version = inject(ServerVersionService);
+  private readonly confirm = inject(ConfirmationService);
 
   readonly mode: PushMode = this.detectMode();
   /** The server speaks the push API; an older one answers 404 on every route. */
@@ -124,6 +162,7 @@ export class PushService {
   private openedHandle: PluginListenerHandle | null = null;
   /** A pending tap is honoured only by the launch that follows it, not by a later account switch. */
   private launched = false;
+  private asking = false;
 
   constructor() {
     effect(() => {
@@ -153,6 +192,12 @@ export class PushService {
       const lang = this.translate.currentLang() || 'en';
       void navigator.serviceWorker.ready.then((r) => r.active?.postMessage({ type: LANG_MESSAGE, lang }));
     });
+    // The user may have changed the permission in the system settings meanwhile.
+    if (this.mode === 'native' || this.mode === 'web') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') void this.refreshPermission();
+      });
+    }
     // Registered with the service, which the app initializer creates: a tap on the user picker or the login page must not be lost.
     if (this.mode === 'web') {
       navigator.serviceWorker.addEventListener('message', (e) => {
@@ -178,11 +223,7 @@ export class PushService {
     if (!user || !this.canEnableDevice()) return false;
     this.busy.set(true);
     try {
-      if (this.mode === 'web') {
-        const perm = await Notification.requestPermission();
-        this.permission.set(perm === 'default' ? 'prompt' : perm);
-        if (perm !== 'granted') return false;
-      }
+      if ((await this.requestPermission()) !== 'granted') return false;
       await this.subscribe(false);
       writeStored(this.pendingDeleteKey(), null);
       writeFlag(this.flagKey(user.id), true);
@@ -194,6 +235,45 @@ export class PushService {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /** Offers notifications at a moment where they help; snoozed after "Not now", silent once the system denied them. */
+  async askInContext(reason: PushReason): Promise<void> {
+    if (this.asking) return;
+    const user = this.auth.user();
+    const stored = user ? readStored(this.flagKey(user.id)) : null;
+    const snooze = this.readSnooze();
+    const state: AskState = {
+      mode: this.mode,
+      reason,
+      pushReady: this.canEnableDevice() && !this.mobileBlockedByAdmin(),
+      permission: this.permission(),
+      deviceEnabled: this.deviceEnabled(),
+      deviceOff: stored === '0',
+      snooze,
+      now: Date.now(),
+    };
+    if (!user || !shouldAsk(state)) return;
+    this.asking = true;
+    try {
+      const key = `app_settings.notifications.ask_${reason}`;
+      const yes = await this.confirm.confirm({
+        title: this.translate.instant(`${key}_title`),
+        message: this.translate.instant(`${key}_body`),
+        confirmLabel: this.translate.instant('app_settings.notifications.ask_enable'),
+        cancelLabel: this.translate.instant('app_settings.notifications.ask_later'),
+        variant: 'info',
+      });
+      const ok = yes && (state.pushReady && !state.deviceOff ? await this.enable() : (await this.requestPermission().catch(() => 'prompt')) === 'granted');
+      if (!ok) writeStored(SNOOZE_KEY, JSON.stringify({ declined: snooze.declined + 1, until: Date.now() + SNOOZE_MS }));
+    } finally {
+      this.asking = false;
+    }
+  }
+
+  /** Native only: the system page where a refused permission is given back. */
+  openSystemSettings(): void {
+    void Push.openSettings().catch(() => undefined);
   }
 
   async disable(): Promise<void> {
@@ -371,6 +451,29 @@ export class PushService {
     });
     void bridge?.windowActive?.().then((a) => this.desktopActive.set(a));
     bridge?.onWindowActive?.((a) => this.desktopActive.set(a));
+  }
+
+  private async requestPermission(): Promise<PushPermission> {
+    const perm =
+      this.mode === 'web'
+        ? await Notification.requestPermission().then((p) => (p === 'default' ? 'prompt' : p))
+        : (await Push.requestPermission()).permission;
+    this.permission.set(perm);
+    return perm;
+  }
+
+  private async refreshPermission(): Promise<void> {
+    if (this.mode === 'web') this.permission.set(this.webPermission());
+    else await this.startNative();
+  }
+
+  private readSnooze(): AskSnooze {
+    try {
+      const s = JSON.parse(readStored(SNOOZE_KEY) ?? '{}') as Partial<AskSnooze>;
+      return { declined: s.declined ?? 0, until: s.until ?? 0 };
+    } catch {
+      return { declined: 0, until: 0 };
+    }
   }
 
   private async startNative(): Promise<void> {

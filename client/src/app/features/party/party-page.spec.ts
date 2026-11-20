@@ -12,6 +12,7 @@ import { BackgroundService } from '../../core/services/background.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { DeviceService } from '../../core/services/device.service';
 import { NavbarService } from '../../core/services/navbar.service';
+import { PushService } from '../../core/services/push.service';
 import { ClockService } from '../../core/services/party/clock.service';
 import { PartyService } from '../../core/services/party/party.service';
 import { VoiceService } from '../../core/services/party/voice.service';
@@ -31,6 +32,7 @@ describe('PartyPageComponent film selection', () => {
   let enter: ReturnType<typeof vi.fn>;
   let connected: ReturnType<typeof signal<boolean>>;
   let lobby: ReturnType<typeof signal<boolean>>;
+  const ask = vi.fn();
   let service: { party: ReturnType<typeof signal<PartyDto | null>>; proposals: ReturnType<typeof signal<PartyProposal[]>> };
   const flush = async () => {
     for (let i = 0; i < 5; i++) await Promise.resolve();
@@ -70,6 +72,7 @@ describe('PartyPageComponent film selection', () => {
         { provide: TvService, useValue: {} },
         { provide: BackgroundService, useValue: stub({ set() {}, release() {} }) },
         { provide: DeviceService, useValue: stub({ isTv: () => false }) },
+        { provide: PushService, useValue: { askInContext: ask } },
       ],
     });
   });
@@ -109,6 +112,23 @@ describe('PartyPageComponent film selection', () => {
     svc.party.set(dto(item(2)));
     await flush();
     expect(page.canStart()).toBe(true);
+  });
+
+  it('offers notifications to a guest waiting for a scheduled start', async () => {
+    ask.mockClear();
+    const guests = [{ userId: 1, username: 'me', source: 'invite' }];
+    api.get.mockResolvedValue({ ...dto(null), host: { userId: 2, username: 'h' }, scheduledAt: '2099-01-01T20:00:00Z', guests });
+    TestBed.createComponent(PartyPageComponent).detectChanges();
+    await flush();
+    expect(ask).toHaveBeenCalledExactlyOnceWith('party');
+  });
+
+  it('does not offer notifications for a party without a start time', async () => {
+    ask.mockClear();
+    api.get.mockResolvedValue({ ...dto(null), host: { userId: 2, username: 'h' }, guests: [{ userId: 1, username: 'me', source: 'invite' }] });
+    TestBed.createComponent(PartyPageComponent).detectChanges();
+    await flush();
+    expect(ask).not.toHaveBeenCalled();
   });
 
   describe('joining the lobby', () => {

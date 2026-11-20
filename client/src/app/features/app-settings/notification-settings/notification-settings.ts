@@ -27,8 +27,9 @@ export class NotificationSettingsPageComponent {
   protected readonly categories = CATEGORIES;
   protected readonly muted = computed(() => this.auth.user()?.pushMuted ?? []);
   protected readonly testing = signal(false);
-  /** The browser refused the permission: only its site settings can undo that. */
+  /** The system refused the permission: only its settings can undo that. */
   protected readonly denied = computed(() => this.push.permission() === 'denied');
+  protected readonly native = this.push.mode === 'native';
 
   constructor() {
     void this.push.loadConfig();

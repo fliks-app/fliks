@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Build;
+import android.provider.Settings;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationManagerCompat;
@@ -89,28 +90,46 @@ public class PushPlugin extends Plugin {
     public void status(PluginCall call) {
         JSObject r = new JSObject();
         r.put("available", available());
-        r.put("permission", granted() ? "granted" : "denied");
+        r.put("permission", permission());
         call.resolve(r);
+    }
+
+    /** `prompt` while Android 13+ can still show its dialog; app notifications switched off read as `denied`. */
+    private String permission() {
+        if (granted()) return "granted";
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return "denied";
+        PermissionState state = getPermissionState("notifications");
+        return state == PermissionState.PROMPT || state == PermissionState.PROMPT_WITH_RATIONALE ? "prompt" : "denied";
+    }
+
+    @PluginMethod
+    public void requestPermission(PluginCall call) {
+        if ("prompt".equals(permission())) requestPermissionForAlias("notifications", call, "permissionAnswered");
+        else permissionAnswered(call);
+    }
+
+    @PermissionCallback
+    private void permissionAnswered(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("permission", permission());
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void openSettings(PluginCall call) {
+        Intent intent = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+            ? new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName())
+            : new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", getContext().getPackageName(), null));
+        getActivity().startActivity(intent);
+        call.resolve();
     }
 
     @PluginMethod
     public void prepare(PluginCall call) {
         if (!available()) {
             call.reject("push unavailable");
-        } else if (!granted() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-            && getPermissionState("notifications") != PermissionState.GRANTED) {
-            requestPermissionForAlias("notifications", call, "prepareAfterPermission");
-        } else {
-            finishPrepare(call);
+            return;
         }
-    }
-
-    @PermissionCallback
-    private void prepareAfterPermission(PluginCall call) {
-        finishPrepare(call);
-    }
-
-    private void finishPrepare(PluginCall call) {
         if (!granted()) {
             call.reject("notification permission denied");
             return;

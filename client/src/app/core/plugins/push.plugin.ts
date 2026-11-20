@@ -6,7 +6,11 @@ export type PushPermission = 'granted' | 'denied' | 'prompt';
 export interface PushPlugin {
   /** `available: false` without Google Play services, on TV and in a build without Firebase config. */
   status(): Promise<{ available: boolean; permission: PushPermission }>;
-  /** Asks the permission when it is undetermined (rejects when denied) and returns this session's public key material. `session` is `SessionRef.key`. */
+  /** Shows the system dialog when the permission is still undetermined; never at launch, only from `PushService`. */
+  requestPermission(): Promise<{ permission: PushPermission }>;
+  /** The app's notification page of the system settings, where a refused permission is given back. */
+  openSettings(): Promise<void>;
+  /** Rejects unless the permission is granted, and returns this session's public key material. `session` is `SessionRef.key`. */
   prepare(options: { session: string }): Promise<{ platform: 'apns' | 'fcm'; p256dh: string; auth: string }>;
   /** Registers the platform token at the relay with the ticket the server issued; the token never reaches the web layer. */
   subscribe(options: { session: string; sub: string; ticket: string; serverUrl: string }): Promise<void>;

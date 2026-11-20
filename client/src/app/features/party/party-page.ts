@@ -34,6 +34,7 @@ import { LucideCalendarPlus, LucideCheck, LucideCrown, LucideDices, LucideEllips
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { BackgroundService } from '../../core/services/background.service';
 import { DeviceService } from '../../core/services/device.service';
+import { PushService } from '../../core/services/push.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../core/utils/viewport';
@@ -80,6 +81,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   protected readonly tv = inject(TvService);
   private readonly background = inject(BackgroundService);
   protected readonly device = inject(DeviceService);
+  private readonly push = inject(PushService);
   private readonly mdUp = mediaQuerySignal(MD_BREAKPOINT_QUERY);
 
   protected readonly hostDialog = viewChild(PartyHostDialogComponent);
@@ -162,6 +164,8 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     const me = this.auth.user()?.id;
     return !!this.hostView()?.guests.some((g) => g.userId === me);
   });
+  /** A guest waiting for a scheduled start: the server tells them when it begins. */
+  private readonly awaitsStart = computed(() => this.guest() && this.view()?.status === 'scheduled' && (this.msLeft() ?? 0) > 0);
   protected readonly connectedCount = computed(() => connectedCount(this.people()));
   protected readonly missingCount = computed(() => missingCount(this.people()));
   protected readonly canHost = computed(() =>
@@ -215,6 +219,9 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     effect(() => {
       const id = this.head()?.item?.mediaId ?? null;
       untracked(() => void this.loadMedia(id));
+    });
+    effect(() => {
+      if (this.awaitsStart()) untracked(() => void this.push.askInContext('party'));
     });
     // The lobby is open from creation: the page joins it once the live stream is up.
     effect(() => {

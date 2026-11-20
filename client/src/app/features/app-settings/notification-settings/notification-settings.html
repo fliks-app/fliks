@@ -20,8 +20,15 @@
             (valueChange)="setDevice($event)"
             [disabled]="push.busy() || denied()"
             [label]="'app_settings.notifications.device' | translate"
-            [hint]="(denied() ? 'app_settings.notifications.denied' : 'app_settings.notifications.device_hint') | translate"
+            [hint]="(denied() ? (native ? 'app_settings.notifications.denied_app' : 'app_settings.notifications.denied') : 'app_settings.notifications.device_hint') | translate"
           />
+          @if (denied() && native) {
+            <div>
+              <button class="btn btn-sm" (click)="push.openSystemSettings()">
+                {{ 'app_settings.notifications.open_settings' | translate }}
+              </button>
+            </div>
+          }
         }
         @if (push.desktopPrefs(); as prefs) {
           <app-toggle-field
