@@ -14,6 +14,7 @@ import { oidcCancel, oidcListen, oidcWait, type OidcPage, type OidcPages } from 
 import { IPC, MENU_IPC, type DesktopEvent, type DesktopMediaMetadata } from '../shared/contract';
 import { LinuxCompositorPlayer, type CompositorAddon } from './mpv/linux-compositor-player';
 import { forwardPlayerEvents } from './window/forward-events';
+import { linuxFullscreen } from './mpv/linux-fullscreen';
 import { registerPlayerIpc } from './ipc';
 import type { NowPlayingAddon } from './now-playing';
 import type { PlayerBackend } from './mpv/player-backend';
@@ -507,6 +508,7 @@ app.whenReady().then(async () => {
   });
   forwardPlayerEvents(player, send);
   player.onWindowActive = (active) => notifier?.setActive(active);
+  const fullscreen = linuxFullscreen(player, send);
   player.onCloseRequest = () => notifier?.requestClose() ?? app.quit();
   await player.start();
   await notifier?.attach({
@@ -596,15 +598,10 @@ app.whenReady().then(async () => {
     }
   });
 
-  let fullscreen = false;
   registerPlayerIpc({
     player,
-    setFullscreen: (enabled) => {
-      addon.setFullscreen(enabled);
-      fullscreen = enabled;
-      send({ type: 'fullscreenChanged', payload: { fullscreen } });
-    },
-    isFullscreen: () => fullscreen,
+    setFullscreen: fullscreen.set,
+    isFullscreen: fullscreen.get,
     setCursorVisible: (visible) => addon.setCursorVisible(visible),
     resize: () => {},
     destroy: () => player.destroy(),

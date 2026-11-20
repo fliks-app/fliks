@@ -121,6 +121,7 @@ struct GlState {
   std::atomic<bool> raiseRequest{false};
   std::atomic<bool> hideRequest{false};
   std::atomic<int> fsRequest{-1};  // -1 none, 0 windowed, 1 fullscreen-desktop
+  std::atomic<bool> fullscreen{false};  // what SDL committed, set by the enter/leave events
   std::atomic<int> cursorRequest{-1};  // -1 none, 0 hidden, 1 shown
   std::atomic<int> cursorShape{-1};    // -1 none, else an index into kCursors
   std::thread renderThread;
@@ -454,6 +455,11 @@ void RenderThreadMain(GlState* s) {
     if (g_tsfnReady.load())
       g_tsfn.BlockingCall(new std::string(active ? "{\"type\":\"focus\",\"active\":true}" : "{\"type\":\"focus\",\"active\":false}"));
   };
+  auto emitFullscreen = [s](bool on) {
+    s->fullscreen.store(on, std::memory_order_release);
+    if (g_tsfnReady.load())
+      g_tsfn.BlockingCall(new std::string(on ? "{\"type\":\"fullscreen\",\"active\":true}" : "{\"type\":\"fullscreen\",\"active\":false}"));
+  };
   auto close = [] {
     // The main process decides: quit (which stops this loop) or hide the window.
     if (g_tsfnReady.load()) g_tsfn.BlockingCall(new std::string("{\"type\":\"closed\"}"));
@@ -483,6 +489,12 @@ void RenderThreadMain(GlState* s) {
           break;
         case SDL_EVENT_WINDOW_FOCUS_LOST:
           emitActive(false);
+          break;
+        case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+          emitFullscreen(true);
+          break;
+        case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+          emitFullscreen(false);
           break;
         case SDL_EVENT_WINDOW_MOUSE_LEAVE:
           hover = -1;
@@ -928,6 +940,10 @@ Napi::Value SetFullscreen(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+Napi::Value IsFullscreen(const Napi::CallbackInfo& info) {
+  return Napi::Boolean::New(info.Env(), g_state.fullscreen.load(std::memory_order_acquire));
+}
+
 Napi::Value Raise(const Napi::CallbackInfo& info) {
   g_state.raiseRequest.store(true, std::memory_order_release);
   return info.Env().Undefined();
@@ -1039,6 +1055,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("probeLists", Napi::Function::New(env, ProbeLists));
   exports.Set("setProperty", Napi::Function::New(env, SetProperty));
   exports.Set("setFullscreen", Napi::Function::New(env, SetFullscreen));
+  exports.Set("isFullscreen", Napi::Function::New(env, IsFullscreen));
   exports.Set("setCursorVisible", Napi::Function::New(env, SetCursorVisible));
   exports.Set("raise", Napi::Function::New(env, Raise));
   exports.Set("hide", Napi::Function::New(env, Hide));
