@@ -3,6 +3,16 @@ importScripts('./ngsw-worker.js');
 
 const ICON = '/icons/icon-192x192.png';
 
+// The worker has no translate service: the two outcome lines of a `call` action, per UI language.
+const OUTCOME = {
+  en: ['Done.', 'The action failed.'],
+  fr: ['Fait.', "L'action a échoué."],
+  de: ['Erledigt.', 'Die Aktion ist fehlgeschlagen.'],
+  es: ['Hecho.', 'La acción falló.'],
+  it: ['Fatto.', "L'azione non è riuscita."],
+  pt: ['Feito.', 'A ação falhou.'],
+};
+
 self.addEventListener('push', (event) => {
   let n;
   try {
@@ -21,7 +31,7 @@ self.addEventListener('push', (event) => {
         image: n.image,
         tag: n.tag ?? n.id,
         renotify: !!n.tag,
-        data: { url: n.url, actions },
+        data: { url: n.url, user: n.user, tag: n.tag ?? n.id, actions },
         actions: actions.map((a) => ({ action: a.id, title: a.title })),
       }),
       setBadge(n.badge),
@@ -30,35 +40,53 @@ self.addEventListener('push', (event) => {
 });
 
 self.addEventListener('notificationclick', (event) => {
-  const { url, actions } = event.notification.data ?? {};
+  const { url, user, tag, actions } = event.notification.data ?? {};
   event.notification.close();
   const action = (actions ?? []).find((a) => a.id === event.action);
-  if (action?.kind === 'call') {
-    event.waitUntil(
-      fetch('/api/push/act', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token: action.token }),
-      }).then((r) => (r.ok ? undefined : open(url)), () => open(url)),
-    );
-    return;
-  }
-  event.waitUntil(open(action?.url ?? url));
+  event.waitUntil(action?.kind === 'call' ? call(action, url, user, tag) : open(action?.url ?? url, user));
 });
+
+// The refresh token lives in the page's storage, not in the worker: an expired access cookie (401) opens the app at the notification's url instead.
+async function call(action, url, user, tag) {
+  let status = 0;
+  try {
+    const r = await fetch('/api/push/act', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: action.token }),
+    });
+    status = r.status;
+  } catch {
+    // offline: reported as a failure below
+  }
+  if (status === 401) return open(url, user);
+  const [done, failed] = OUTCOME[(navigator.language || 'en').slice(0, 2)] ?? OUTCOME.en;
+  return self.registration.showNotification(status >= 200 && status < 300 ? done : failed, { icon: ICON, badge: ICON, tag });
+}
 
 function setBadge(count) {
   if (count === undefined) return Promise.resolve();
   return (count > 0 ? navigator.setAppBadge?.(count) : navigator.clearAppBadge?.())?.catch(() => undefined);
 }
 
-async function open(url) {
-  const target = url?.startsWith('/') ? url : '/';
+// Only a path of this origin: `//host` and `/\host` resolve to another origin.
+function sameOriginPath(url) {
+  try {
+    const u = new URL(url, location.origin);
+    return u.origin === location.origin ? u.pathname + u.search + u.hash : '/';
+  } catch {
+    return '/';
+  }
+}
+
+async function open(url, user) {
+  const target = sameOriginPath(url);
   const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
   const client = windows.find((c) => 'focus' in c);
   if (client) {
     await client.focus();
-    client.postMessage({ type: 'fliks-push-open', url: target });
+    client.postMessage({ type: 'fliks-push-open', url: target, user });
   } else {
     await self.clients.openWindow(target);
   }

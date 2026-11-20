@@ -26,6 +26,8 @@ const NOTIFICATION_TYPES = ['discord', 'slack', 'webhook', 'gotify', 'ntfy'] as 
 
 type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
+const isNotificationType = (t: string): t is NotificationType => (NOTIFICATION_TYPES as readonly string[]).includes(t);
+
 interface NotificationConnection {
   id: number;
   name: string;
@@ -176,16 +178,16 @@ export class NotificationsSettingsComponent implements OnInit {
     if (nc.type === RELAY_TYPE) void this.loadPushStatus();
     this.editingId.set(nc.id);
     this.formName.set(nc.name);
-    this.formType.set(nc.type as NotificationType);
+    if (isNotificationType(nc.type)) this.formType.set(nc.type);
     this.formEnabled.set(nc.enabled);
     const s = nc.settings ?? {};
     this.formWebhookUrl.set(String(s['webhookUrl'] ?? s['url'] ?? ''));
     this.formToken.set('');
     const secretsSet = s[SECRETS_SET_KEY];
     const urlStored = Array.isArray(secretsSet) && secretsSet.includes('webhookUrl');
-    this.webhookUrlStoredType.set(urlStored ? (nc.type as NotificationType) : null);
+    this.webhookUrlStoredType.set(urlStored && isNotificationType(nc.type) ? nc.type : null);
     const tokenStored = Array.isArray(secretsSet) && secretsSet.includes('token');
-    this.tokenStoredType.set(tokenStored ? (nc.type as NotificationType) : null);
+    this.tokenStoredType.set(tokenStored && isNotificationType(nc.type) ? nc.type : null);
     this.formTokenCleared.set(false);
     this.formTopic.set(String(s['topic'] ?? ''));
     this.formEvents.set([...nc.events]);

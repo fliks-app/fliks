@@ -420,7 +420,15 @@
       "test_failed": "The test notification failed: {{error}}",
       "enable_failed": "Unable to turn notifications on.",
       "action_done": "Done.",
-      "action_failed": "The action failed."
+      "action_failed": "The action failed.",
+      "test_none": "No device of yours receives system notifications yet.",
+      "plugins_title": "Plugins",
+      "plugins_hint": "Applies to all your devices.",
+      "plugin_hint": "Messages sent by this plugin.",
+      "background": "Keep running in the background",
+      "background_hint": "Closing the window leaves Fliks running so notifications keep arriving.",
+      "start_at_login": "Start at login",
+      "start_at_login_hint": "Fliks opens in the background when you sign in to your computer."
     }
   },
   "update_settings": {
@@ -4750,7 +4758,6 @@
     "share_link": "Share link",
     "add_to_calendar": "Add to calendar",
     "link_copied": "Link copied",
-    "view": "View",
     "create_title": "New party",
     "create_name": "Name",
     "create_when": "When",

@@ -420,7 +420,15 @@
       "test_failed": "La notification de test a échoué : {{error}}",
       "enable_failed": "Impossible d'activer les notifications.",
       "action_done": "Fait.",
-      "action_failed": "L'action a échoué."
+      "action_failed": "L'action a échoué.",
+      "test_none": "Aucun de vos appareils ne reçoit encore de notifications système.",
+      "plugins_title": "Plugins",
+      "plugins_hint": "Valable pour tous vos appareils.",
+      "plugin_hint": "Messages envoyés par ce plugin.",
+      "background": "Rester actif en arrière-plan",
+      "background_hint": "Fermer la fenêtre laisse Fliks actif pour que les notifications continuent d'arriver.",
+      "start_at_login": "Lancer à l'ouverture de session",
+      "start_at_login_hint": "Fliks s'ouvre en arrière-plan quand vous ouvrez votre session."
     }
   },
   "update_settings": {
@@ -4750,7 +4758,6 @@
     "share_link": "Partager le lien",
     "add_to_calendar": "Ajouter au calendrier",
     "link_copied": "Lien copié",
-    "view": "Voir",
     "create_title": "Nouvelle séance",
     "create_name": "Nom",
     "create_when": "Quand",
