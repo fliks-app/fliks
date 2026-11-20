@@ -949,8 +949,11 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   g_view = [[FliksVideoView alloc] initWithFrame:content.bounds];
   g_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   g_view.wantsLayer = YES;
-  // Under Chromium's compositor view, which draws the page with alpha in a window with a clear background.
-  [content addSubview:g_view positioned:NSWindowBelow relativeTo:nil];
+  // Right above the vibrancy view of a translucent window, under Chromium's compositor view and its page.
+  NSView* vibrancy = nil;
+  for (NSView* v in content.subviews)
+    if ([v isKindOfClass:[NSVisualEffectView class]]) vibrancy = v;
+  [content addSubview:g_view positioned:(vibrancy ? NSWindowAbove : NSWindowBelow) relativeTo:vibrancy];
 
   g_layer = [CAMetalLayer layer];
   g_layer.device = g_device;

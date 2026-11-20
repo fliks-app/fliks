@@ -114,8 +114,9 @@ export class PlayerSession {
       ...(saved ? { x: saved.x, y: saved.y, width: saved.width, height: saved.height } : {}),
       minWidth: 800,
       minHeight: 500,
-      // Windows: brand at startup, black on the first frame. macOS: the page is see-through over the video layer.
-      ...(singleWindow ? { backgroundColor: '#00000000' } : { backgroundColor: '#1d232a' }),
+      // macOS: vibrancy makes the window translucent for Chromium (a page with alpha, cleared every frame)
+      // while keeping its title bar, unlike `transparent`. Windows: brand at startup, black on the first frame.
+      ...(singleWindow ? { vibrancy: 'window' as const } : { backgroundColor: '#1d232a' }),
       title: 'Fliks',
       ...(iconPath ? { icon: iconPath } : {}),
       // macOS: shown once the page paints, since the clear background would show the system one until then.

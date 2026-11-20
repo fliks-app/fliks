@@ -28,11 +28,12 @@ it is NOT the menu-bar server host under `macos/`.
      a `CAMetalLayer` (render API, `vo=libmpv`, `hwdec=videotoolbox`,
      EDR/HDR-capable). mpv's subprocess `--wid` doesn't embed on macOS (0.41
      ignores the handle and opens its own window), so it CAN'T use backend #2.
-     `PlayerSession` keeps it in **one window**: the layer's view sits at the
-     bottom of the framed window's content view, under Chromium's compositor
-     view, and the window's clear `backgroundColor` keeps the page transparent
-     where the video shows. AppKit then moves, resizes and animates video and UI
-     together. On a resize the addon presents a frame at the new size inside the
+     `PlayerSession` keeps it in **one window**: the layer's view sits right above
+     the window's vibrancy view, under Chromium's compositor view. `vibrancy` is
+     what makes the window translucent for Chromium (a page with alpha, cleared
+     every frame) while keeping its title bar; a clear `backgroundColor` alone
+     leaves Chromium treating its surface as opaque, so stale pixels pile up.
+     AppKit then moves, resizes and animates video and UI together. On a resize the addon presents a frame at the new size inside the
      resize's Core Animation transaction (`presentsWithTransaction`), so the
      full-screen animation never snapshots a stale frame.
 
