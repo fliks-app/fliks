@@ -15,15 +15,17 @@ struct NotificationToastView: View {
                     }
                 }
                 .padding(20)
-                .frame(maxWidth: 900, alignment: .leading)
-                .background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 16))
-                .padding(.top, 40)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .frame(width: 600, alignment: .leading)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .shadow(color: .black.opacity(0.35), radius: 24, y: 8)
+                .padding(.top, 60)
+                .padding(.trailing, 80)
+                .transition(.move(edge: .trailing).combined(with: .opacity))
                 .accessibilityElement(children: .combine)
             }
         }
         .animation(.easeInOut(duration: 0.25), value: service.current)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .allowsHitTesting(false)
         .focusable(false)
     }
