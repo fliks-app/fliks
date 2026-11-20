@@ -78,6 +78,10 @@ export class PlayerSession {
   private destroyed = false;
   /** Playback stopped: by the renderer (stop IPC) or by a renderer crash. */
   onStop?: () => void;
+  /** Background mode: closing the window hides it instead of ending the session. */
+  hideOnClose: () => boolean = () => false;
+  /** The window is visible and focused (any of its three windows). */
+  onActive?: (active: boolean) => void;
 
   async start(opts: PlayerSessionOptions): Promise<void> {
     const { rendererUrl, preloadPath, iconPath } = opts;
@@ -135,6 +139,8 @@ export class PlayerSession {
         preload: preloadPath,
         contextIsolation: true,
         sandbox: true,
+        // The live event stream keeps running while the window is hidden in background mode.
+        backgroundThrottling: false,
         // Trusted client: the bundled Angular app (fliks://, a secure origin)
         // must reach the user's server even when it's plain HTTP on a LAN —
         // disable web security to allow that cross-origin/mixed-content fetch,
@@ -220,11 +226,16 @@ export class PlayerSession {
     this.frameWin.on('close', (e) => {
       if (this.destroyed || this.uiWin.isDestroyed()) return;
       e.preventDefault();
+      if (this.hideOnClose()) {
+        this.hide();
+        return;
+      }
       this.uiWin.once('closed', () => void this.destroy());
       this.uiWin.close();
       setTimeout(() => void this.destroy(), UI_CLOSE_GRACE_MS);
     });
     this.frameWin.on('closed', () => this.destroy());
+    this.watchActive();
     // Quit closes every window from Electron's own loop, and destroy() tearing the siblings down
     // inside it frees a window that loop still holds: close ours first, window-all-closed then quits.
     app.on('before-quit', (e) => {
@@ -293,7 +304,38 @@ export class PlayerSession {
     if (this.frameWin.isDestroyed()) return;
     if (this.frameWin.isMinimized()) this.frameWin.restore();
     this.frameWin.show();
+    if (!this.videoWin.isDestroyed()) this.videoWin.show();
+    if (!this.uiWin.isDestroyed()) this.uiWin.show();
     this.frameWin.focus();
+  }
+
+  hide(): void {
+    for (const w of [this.uiWin, this.videoWin, this.frameWin]) if (!w.isDestroyed()) w.hide();
+    this.onActive?.(false);
+  }
+
+  setOverlay(icon: Electron.NativeImage | null, description: string): void {
+    if (!this.frameWin.isDestroyed()) this.frameWin.setOverlayIcon(icon, description);
+  }
+
+  /** Focus moves between the three windows, so the verdict waits for it to settle. */
+  private watchActive(): void {
+    let timer: NodeJS.Timeout | undefined;
+    const settle = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (this.destroyed || this.frameWin.isDestroyed()) return;
+        const wins = [this.frameWin, this.videoWin, this.uiWin].filter((w) => !w.isDestroyed());
+        this.onActive?.(this.frameWin.isVisible() && !this.frameWin.isMinimized() && wins.some((w) => w.isFocused()));
+      }, 100);
+    };
+    for (const w of [this.frameWin, this.videoWin, this.uiWin]) {
+      w.on('focus', settle);
+      w.on('blur', settle);
+      w.on('show', settle);
+      w.on('minimize', settle);
+      w.on('restore', settle);
+    }
   }
 
   get uiContents(): Electron.WebContents {

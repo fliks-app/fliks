@@ -119,6 +119,7 @@ struct GlState {
   std::string iconPath;  // BMP loaded onto the window via SDL_SetWindowIcon
   std::atomic<bool> run{false};
   std::atomic<bool> raiseRequest{false};
+  std::atomic<bool> hideRequest{false};
   std::atomic<int> fsRequest{-1};  // -1 none, 0 windowed, 1 fullscreen-desktop
   std::atomic<int> cursorRequest{-1};  // -1 none, 0 hidden, 1 shown
   std::atomic<int> cursorShape{-1};    // -1 none, else an index into kCursors
@@ -448,11 +449,14 @@ void RenderThreadMain(GlState* s) {
   auto emitInput = [](const std::string& j) {
     if (g_inputReady.load()) g_inputTsfn.BlockingCall(new std::string(j));
   };
-  auto close = [s] {
-    // Only the main process can quit Electron; without this the closed
-    // window leaves it running and a relaunch shares the same profile.
+  bool hidden = false;
+  auto emitActive = [](bool active) {
+    if (g_tsfnReady.load())
+      g_tsfn.BlockingCall(new std::string(active ? "{\"type\":\"focus\",\"active\":true}" : "{\"type\":\"focus\",\"active\":false}"));
+  };
+  auto close = [] {
+    // The main process decides: quit (which stops this loop) or hide the window.
     if (g_tsfnReady.load()) g_tsfn.BlockingCall(new std::string("{\"type\":\"closed\"}"));
-    s->run.store(false);
   };
   char ib[256];
   int lastW = -1, lastH = -1;
@@ -473,6 +477,12 @@ void RenderThreadMain(GlState* s) {
       switch (ev.type) {
         case SDL_EVENT_QUIT:
           close();
+          break;
+        case SDL_EVENT_WINDOW_FOCUS_GAINED:
+          emitActive(true);
+          break;
+        case SDL_EVENT_WINDOW_FOCUS_LOST:
+          emitActive(false);
           break;
         case SDL_EVENT_WINDOW_MOUSE_LEAVE:
           hover = -1;
@@ -557,7 +567,21 @@ void RenderThreadMain(GlState* s) {
           break;
       }
     }
-    if (s->raiseRequest.exchange(false, std::memory_order_acq_rel)) SDL_RaiseWindow(s->window);
+    if (s->raiseRequest.exchange(false, std::memory_order_acq_rel)) {
+      if (hidden) SDL_ShowWindow(s->window);
+      hidden = false;
+      SDL_RaiseWindow(s->window);
+    }
+    if (s->hideRequest.exchange(false, std::memory_order_acq_rel) && !hidden) {
+      SDL_HideWindow(s->window);
+      hidden = true;
+      emitActive(false);
+    }
+    // Nothing is drawn for a window nobody sees.
+    if (hidden) {
+      SDL_Delay(100);
+      continue;
+    }
     int fs = s->fsRequest.exchange(-1, std::memory_order_acq_rel);
     if (fs >= 0) SDL_SetWindowFullscreen(s->window, fs == 1);
     // The page's CSS cursor only covers the offscreen bitmap; the pointer the
@@ -909,6 +933,11 @@ Napi::Value Raise(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+Napi::Value Hide(const Napi::CallbackInfo& info) {
+  g_state.hideRequest.store(true, std::memory_order_release);
+  return info.Env().Undefined();
+}
+
 Napi::Value SetCursorShape(const Napi::CallbackInfo& info) {
   int shape = info.Length() > 0 ? info[0].ToNumber().Int32Value() : 0;
   g_state.cursorShape.store(shape, std::memory_order_release);
@@ -1012,6 +1041,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("setFullscreen", Napi::Function::New(env, SetFullscreen));
   exports.Set("setCursorVisible", Napi::Function::New(env, SetCursorVisible));
   exports.Set("raise", Napi::Function::New(env, Raise));
+  exports.Set("hide", Napi::Function::New(env, Hide));
   exports.Set("setCursorShape", Napi::Function::New(env, SetCursorShape));
   exports.Set("stop", Napi::Function::New(env, Stop));
   return exports;

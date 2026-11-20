@@ -195,7 +195,10 @@ export interface FliksDesktopApi {
   onNotificationClick?(handler: (e: DesktopNotificationClick) => void): () => void;
   setBadge?(count: number): Promise<void>;
   getNotifyPrefs?(): Promise<DesktopNotifyPrefs>;
+  /** Resolves with what took effect: `background` stays off where the shell has no tray to come back from. */
   setNotifyPrefs?(patch: Partial<DesktopNotifyPrefs>): Promise<DesktopNotifyPrefs>;
+  /** The shell's own strings (tray menu, badge), in the UI language. */
+  setNotifyLabels?(labels: { open: string; quit: string; notifications: string }): Promise<void>;
   /** Whether the window is visible and focused: notifications are shown by the OS only when it is not. */
   windowActive?(): Promise<boolean>;
   onWindowActive?(handler: (active: boolean) => void): () => void;

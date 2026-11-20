@@ -4,6 +4,8 @@ import {
   UPDATE_IPC,
   DOWNLOAD_IPC,
   CAST_IPC,
+  NOTIFY_IPC,
+  type DesktopNotificationClick,
   type DesktopDownloadRequest,
   type DesktopDownloadStatus,
   type DesktopEvent,
@@ -62,6 +64,22 @@ const api: FliksDesktopApi = {
     const listener = (_e: unknown, event: DesktopEvent) => handler(event);
     ipcRenderer.on(IPC.event, listener);
     return () => ipcRenderer.removeListener(IPC.event, listener);
+  },
+  notify: (n) => ipcRenderer.invoke(NOTIFY_IPC.show, n),
+  onNotificationClick: (handler) => {
+    const listener = (_e: unknown, click: DesktopNotificationClick) => handler(click);
+    ipcRenderer.on(NOTIFY_IPC.click, listener);
+    return () => ipcRenderer.removeListener(NOTIFY_IPC.click, listener);
+  },
+  setBadge: (count) => ipcRenderer.invoke(NOTIFY_IPC.setBadge, count),
+  getNotifyPrefs: () => ipcRenderer.invoke(NOTIFY_IPC.getPrefs),
+  setNotifyPrefs: (patch) => ipcRenderer.invoke(NOTIFY_IPC.setPrefs, patch),
+  setNotifyLabels: (labels) => ipcRenderer.invoke(NOTIFY_IPC.setLabels, labels),
+  windowActive: () => ipcRenderer.invoke(NOTIFY_IPC.windowActive),
+  onWindowActive: (handler) => {
+    const listener = (_e: unknown, active: boolean) => handler(active);
+    ipcRenderer.on(NOTIFY_IPC.active, listener);
+    return () => ipcRenderer.removeListener(NOTIFY_IPC.active, listener);
   },
 };
 

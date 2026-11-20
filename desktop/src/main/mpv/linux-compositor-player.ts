@@ -33,6 +33,7 @@ export type CompositorAddon = {
   setFullscreen(enabled: boolean): void;
   /** Asks the window manager to bring the window to the front (best effort on Wayland). */
   raise(): void;
+  hide(): void;
   setCursorVisible(visible: boolean): void;
   setCursorShape(shape: number): void;
   /** The decoder and demuxer lists of a throwaway mpv. */
@@ -47,6 +48,10 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
   private readonly firstFrameGate = new FirstFrameGate();
   private muteRanges: DesktopMuteRange[] = [];
   private muteFilterCount = 0;
+  /** The window gained or lost focus, or was hidden. */
+  onWindowActive?: (active: boolean) => void;
+  /** The close button was pressed: quit by default. */
+  onCloseRequest: () => void = () => app.quit();
 
   constructor(
     private readonly addon: CompositorAddon,
@@ -68,7 +73,7 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
   private lastAt = { position: 0, duration: 0 };
 
   private onAddonEvent(json: string): void {
-    let raw: { type?: string; state?: string; message?: string; position?: number; duration?: number; buffered?: number };
+    let raw: { active?: boolean; type?: string; state?: string; message?: string; position?: number; duration?: number; buffered?: number };
     try {
       raw = JSON.parse(json);
     } catch {
@@ -101,9 +106,12 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
         this.firstFrameGate.release();
         this.emit('error', { code: -1, message: raw.message ?? 'error' });
         break;
+      case 'focus':
+        this.onWindowActive?.(raw.active === true);
+        break;
       // The compositor owns the only visible window; the offscreen BrowserWindow never fires window-all-closed.
       case 'closed':
-        app.quit();
+        this.onCloseRequest();
         break;
     }
   }

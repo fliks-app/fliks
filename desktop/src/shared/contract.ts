@@ -174,6 +174,63 @@ export const IPC = {
   event: 'player:event',
 } as const;
 
+// ── Notifications (mirrors the client's desktop-player.bridge.ts) ──
+
+export interface DesktopNotificationAction {
+  id: string;
+  title: string;
+  kind: 'open' | 'call';
+  url?: string;
+  token?: string;
+}
+
+/** `image`, `url` and action urls are paths on `serverUrl`; `image` is a public route. */
+export interface DesktopNotification {
+  id: string;
+  title: string;
+  body: string;
+  image?: string;
+  tag?: string;
+  url: string;
+  serverUrl: string;
+  user: number;
+  actions: DesktopNotificationAction[];
+}
+
+export interface DesktopNotificationClick {
+  url: string;
+  serverUrl: string;
+  user: number;
+  action?: DesktopNotificationAction;
+}
+
+export interface DesktopNotifyPrefs {
+  /** OS notifications while the window is not active; off until the user turns it on. */
+  notifications: boolean;
+  /** Closing the window leaves the app running in the tray. */
+  background: boolean;
+  startAtLogin: boolean;
+}
+
+/** The shell's own strings (tray menu, badge), translated by the page. */
+export interface DesktopNotifyLabels {
+  open: string;
+  quit: string;
+  notifications: string;
+}
+
+export const NOTIFY_IPC = {
+  show: 'notify:show',
+  setBadge: 'notify:setBadge',
+  getPrefs: 'notify:getPrefs',
+  setPrefs: 'notify:setPrefs',
+  setLabels: 'notify:setLabels',
+  windowActive: 'notify:windowActive',
+  /** main → renderer */
+  click: 'notify:click',
+  active: 'notify:active',
+} as const;
+
 export interface DesktopUpdateInfo {
   version: string;
   releaseName: string | null;
@@ -333,6 +390,16 @@ export interface FliksDesktopApi {
   /** Closes listener `id`. */
   oidcCancel(id: number): Promise<void>;
   on(handler: (event: DesktopEvent) => void): () => void;
+  notify(n: DesktopNotification): Promise<void>;
+  onNotificationClick(handler: (e: DesktopNotificationClick) => void): () => void;
+  setBadge(count: number): Promise<void>;
+  getNotifyPrefs(): Promise<DesktopNotifyPrefs>;
+  /** Resolves with what took effect: `background` stays off where there is no tray to come back from. */
+  setNotifyPrefs(patch: Partial<DesktopNotifyPrefs>): Promise<DesktopNotifyPrefs>;
+  setNotifyLabels(labels: DesktopNotifyLabels): Promise<void>;
+  /** Whether the window is visible and focused. */
+  windowActive(): Promise<boolean>;
+  onWindowActive(handler: (active: boolean) => void): () => void;
 }
 
 // ── Chromecast ──
