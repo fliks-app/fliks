@@ -18,8 +18,12 @@ import { SERVER_SINCE, ServerVersionService } from './server-version.service';
 import { SseService } from './sse.service';
 import { ToastService } from './toast.service';
 
+/** The plaintext version this build reads; a higher one is shown as the generic text. */
+export const PUSH_PLAIN_VERSION = 1;
+
 /** A user notification as the `notification` SSE event carries it (and the Web Push payload). */
 export interface PushNotification {
+  v: number;
   id: string;
   ts: number;
   ttl: number;
@@ -400,7 +404,8 @@ export class PushService {
     if (path) await this.router.navigateByUrl(path);
   }
 
-  private onNotification(n: PushNotification): void {
+  private onNotification(received: PushNotification): void {
+    const n = received.v > PUSH_PLAIN_VERSION ? this.unreadable(received) : received;
     if (n.badge !== undefined) this.setBadge(n.badge);
     if (this.systemCovers()) return;
     if (this.device.isTv() && !this.toastsEnabled()) return;
@@ -433,6 +438,19 @@ export class PushService {
       tv,
       actions: (n.actions ?? []).map((a) => ({ label: a.title, run: () => void this.runAction(a) })),
     });
+  }
+
+  private unreadable(n: PushNotification): PushNotification {
+    return {
+      v: PUSH_PLAIN_VERSION,
+      id: n.id,
+      ts: n.ts,
+      ttl: n.ttl,
+      cat: n.cat,
+      title: this.translate.instant('app_settings.notifications.unreadable_title'),
+      body: this.translate.instant('app_settings.notifications.unreadable_body'),
+      url: '/',
+    };
   }
 
   private async start(): Promise<void> {

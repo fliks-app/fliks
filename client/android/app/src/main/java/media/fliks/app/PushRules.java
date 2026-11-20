@@ -6,8 +6,14 @@ import java.util.List;
 /** The device rules that need no Android: expiry and the ring of shown ids. */
 final class PushRules {
     static final int MAX_IDS = 200;
+    /** The plaintext version (`v`) this build reads; a higher one is shown as the generic text. */
+    static final int PLAIN_VERSION = 1;
 
     private PushRules() {}
+
+    static boolean newerThanKnown(int v) {
+        return v > PLAIN_VERSION;
+    }
 
     static boolean expired(long ts, long ttl, long nowSeconds) {
         return ts + ttl < nowSeconds;

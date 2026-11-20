@@ -55,12 +55,13 @@ Scope: the push pipeline (`push::notify`), the relay client, the identity file, 
 17. Plaintext (JSON before encryption, mobile and web): `{v: 1, id, ts, ttl, cat, title, body, url, image?, actions?, badge?, user, tag?}`.
     - `id`: 16 random bytes base64url, the replay key on the device. `ts`: unix seconds. `ttl`: seconds. `cat`: the category. `user`: the recipient's user id.
     - `url`: an in-app path. `image`: a path on the server. `badge`: the recipient's `attention` count (`counts.md` rule 16).
+    - `v`: the plaintext version. A device that gets a `v` higher than the one it knows shows its generic text for an unreadable notification and nothing else of it (relay `PROTOCOL.md`, device rules).
     - `actions`: `[{id, title, kind: 'open'|'call', url?, token?}]`, two at most.
     - `tag?`: the replace key (rule 35, `episodes:<mediaId>`; `test` for rule 28): a device replaces a shown notification with the same `tag`; `id` stays unique.
 18. Size: the plaintext is 2500 bytes at most. The server shortens `body`, then `title`, cutting on a character boundary and counting the JSON-escaped size, until it fits; when even empty texts do not fit (a huge `url` or `image`) that device is skipped and logged. The relay payload limit is 2700 bytes once decoded.
 19. Locale: a tag is normalised to its base language when it is one of `en fr de es it pt`, else `en`; the `locale` of a subscription is stored normalised.
 20. Reconcile compares the identity file with the `enabled` flag of the `fliks-relay` connection and runs at boot, after every write to that connection, and every 10 minutes while work is pending (a pending deletion, a failed registration). A reconcile never runs twice at once.
-    - Enabled with no current identity: make one, check `GET /v1/info` (`api` equals 1), `POST /v1/servers` (201 or 200). A failure is the `error` state of `GET /api/push/status`; the connection stays enabled and the next reconcile retries.
+    - Enabled with no current identity: make one, check `GET /v1/info` (`api` is the list of versions the relay serves and must contain 1), `POST /v1/servers` (201 or 200). A failure is the `error` state of `GET /api/push/status`; the connection stays enabled and the next reconcile retries.
     - Disabled with a current identity: delete every mobile subscription row at once, then `DELETE /v1/servers/self` (204, idempotent), then delete the identity. While the relay is unreachable the identity moves to the pending deletions and is retried every 10 minutes; `GET /api/push/status` says so (`pendingDeletions`).
     - Relay URL changed (the variable): register the new identity at once, move the old one to the pending deletions, retried in the background until the relay answers 204.
 21. Web subscriptions are not affected by the connection: they never touch the relay.

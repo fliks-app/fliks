@@ -434,6 +434,8 @@
       "enable_failed": "Não foi possível ativar as notificações.",
       "action_done": "Feito.",
       "action_failed": "A ação falhou.",
+      "unreadable_title": "Nova notificação",
+      "unreadable_body": "Abra o Fliks para a ler.",
       "test_none": "Nenhum dos seus dispositivos recebe ainda notificações do sistema.",
       "plugins_title": "Plugins",
       "plugins_hint": "Aplica-se a todos os seus dispositivos.",

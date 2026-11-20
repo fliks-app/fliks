@@ -188,7 +188,7 @@ describe('PushService', () => {
       await vi.waitFor(() => expect(r.push.desktopPrefs()).not.toBeNull());
       return r;
     }
-    const note = (tag?: string) => ({ id: 'n', ts: 0, ttl: 60, cat: 'account', title: 't', body: 'b', url: '/', tag });
+    const note = (tag?: string, v = 1) => ({ v, id: 'n', ts: 0, ttl: 60, cat: 'account', title: 't', body: 'b', url: '/', tag });
 
     it('shows the test notification through the OS even with the window in front', async () => {
       await started();
@@ -198,6 +198,21 @@ describe('PushService', () => {
       sseNotifications.next(note());
       expect(notify).toHaveBeenCalledOnce();
       expect(toastNotify).toHaveBeenCalledOnce();
+    });
+
+    it('shows the generic text, nothing of the payload, for a higher plaintext version', async () => {
+      await started();
+      sseNotifications.next({ ...note('x', 2), badge: 5, image: '/i', actions: [{ id: 'a', title: 'A', kind: 'open' }] });
+      expect(toastNotify).toHaveBeenCalledOnce();
+      expect(toastNotify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'app_settings.notifications.unreadable_title',
+          body: 'app_settings.notifications.unreadable_body',
+          tag: undefined,
+          image: undefined,
+          actions: [],
+        }),
+      );
     });
 
     it('reads the OS block, again when the window comes back, and opens its settings', async () => {

@@ -434,6 +434,8 @@
       "enable_failed": "Impossibile attivare le notifiche.",
       "action_done": "Fatto.",
       "action_failed": "L'azione non è riuscita.",
+      "unreadable_title": "Nuova notifica",
+      "unreadable_body": "Apri Fliks per leggerla.",
       "test_none": "Nessuno dei tuoi dispositivi riceve ancora notifiche di sistema.",
       "plugins_title": "Plugin",
       "plugins_hint": "Vale per tutti i tuoi dispositivi.",

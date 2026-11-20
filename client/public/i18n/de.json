@@ -434,6 +434,8 @@
       "enable_failed": "Benachrichtigungen konnten nicht aktiviert werden.",
       "action_done": "Erledigt.",
       "action_failed": "Die Aktion ist fehlgeschlagen.",
+      "unreadable_title": "Neue Benachrichtigung",
+      "unreadable_body": "Öffnen Sie Fliks, um sie zu lesen.",
       "test_none": "Noch kein Gerät von Ihnen empfängt Systembenachrichtigungen.",
       "plugins_title": "Plugins",
       "plugins_hint": "Gilt für alle Ihre Geräte.",

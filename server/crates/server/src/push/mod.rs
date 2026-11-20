@@ -118,6 +118,19 @@ pub enum Unready {
     Unavailable,
 }
 
+/// The relay protocol version this server speaks.
+const RELAY_API: u64 = 1;
+
+/// The plaintext version the apps read (`v`).
+const PLAIN_VERSION: u8 = 1;
+
+/// Whether `GET /v1/info` lists the version this server speaks.
+fn serves_api(info: &Value) -> bool {
+    info["api"]
+        .as_array()
+        .is_some_and(|l| l.iter().any(|v| v.as_u64() == Some(RELAY_API)))
+}
+
 /// The plaintext of one notification for one recipient: also the `notification` SSE event.
 #[derive(Serialize)]
 struct Plain {
@@ -276,7 +289,7 @@ impl Push {
         *self.client.write_clean() = Some(relay.clone());
         let registered = async {
             let info = relay.info().await?;
-            if info["api"] != 1 {
+            if !serves_api(&info) {
                 return Ok(Some("the relay speaks another protocol version".to_owned()));
             }
             relay.register().await.map(|()| None)
@@ -440,7 +453,7 @@ impl Push {
             });
         }
         Plain {
-            v: 1,
+            v: PLAIN_VERSION,
             id: B64.encode(identity::random::<16>()),
             ts,
             ttl: n.ttl,
@@ -770,4 +783,19 @@ pub fn init(st: &AppState) {
             tokio::time::sleep(TICK).await;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_relay_must_list_the_version_this_server_speaks() {
+        assert!(serves_api(&json!({"api": [1]})));
+        assert!(serves_api(&json!({"api": [2, 1]})));
+        assert!(!serves_api(&json!({"api": [2]})));
+        assert!(!serves_api(&json!({"api": []})));
+        assert!(!serves_api(&json!({"api": 1})));
+        assert!(!serves_api(&json!({})));
+    }
 }
