@@ -87,12 +87,15 @@ pub async fn mark_running(db: &PgPool, id: i32) -> sqlx::Result<()> {
         .map(drop)
 }
 
-/// `status` is `completed` or `failed`.
-pub async fn finish(db: &PgPool, id: i32, status: &str) -> sqlx::Result<()> {
-    sqlx::query(r#"UPDATE commands SET status = $2, "endedOn" = now() WHERE id = $1"#)
-        .bind(id)
-        .bind(status)
-        .execute(db)
+/// `status` is `completed` or `failed`; a `body` replaces the row's.
+pub async fn finish(db: &PgPool, id: i32, status: &str, body: Option<Value>) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"UPDATE commands SET status = $2, "endedOn" = now(), body = COALESCE($3, body) WHERE id = $1"#,
+    )
+    .bind(id)
+    .bind(status)
+    .bind(body)
+    .execute(db)
         .await
         .map(drop)
 }
@@ -168,23 +171,40 @@ pub async fn last_runs(
     Ok(rows.into_iter().map(|(n, s, st)| (n, (s, st))).collect())
 }
 
+/// What a job hands back for its row's `body`.
+pub trait JobBody {
+    fn into_body(self) -> Option<Value>;
+}
+
+impl JobBody for () {
+    fn into_body(self) -> Option<Value> {
+        None
+    }
+}
+
+impl JobBody for Option<Value> {
+    fn into_body(self) -> Option<Value> {
+        self
+    }
+}
+
 /// Runs an already inserted row from `running` to its end (rules 4, 6); the error is logged, never returned.
-pub async fn execute<E: Display>(
+pub async fn execute<T: JobBody, E: Display>(
     st: &AppState,
     id: i32,
     name: &str,
     failed: &str,
-    work: impl Future<Output = Result<(), E>>,
+    work: impl Future<Output = Result<T, E>>,
 ) {
     st.hub.emit(SseEvent::CommandStarted { name: name.into() });
-    let status = match work.await {
-        Ok(()) => "completed",
+    let (status, body) = match work.await {
+        Ok(out) => ("completed", out.into_body()),
         Err(e) => {
             tracing::error!("Command {name} {failed}: {e}");
-            "failed"
+            ("failed", None)
         }
     };
-    if let Err(e) = finish(&st.db, id, status).await {
+    if let Err(e) = finish(&st.db, id, status, body).await {
         tracing::error!("Command {name}: cannot record {status}: {e}");
     }
     st.hub.emit(SseEvent::CommandCompleted {
@@ -195,11 +215,11 @@ pub async fn execute<E: Display>(
 
 /// Every in-process audited job runs here, so its `commands` row and events follow one lifecycle.
 /// Without a row the work does not run and the answer is `false`.
-pub async fn run_audited<E: Display>(
+pub async fn run_audited<T: JobBody, E: Display>(
     st: &AppState,
     name: &str,
     trigger: Trigger,
-    work: impl Future<Output = Result<(), E>>,
+    work: impl Future<Output = Result<T, E>>,
 ) -> bool {
     match insert_running(&st.db, name, trigger).await {
         Ok(id) => {

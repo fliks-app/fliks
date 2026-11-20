@@ -1,7 +1,7 @@
 //! The job name lists of `scheduler.md` rules 10 and 15; they equal `core-scheduler-jobs.ts`.
 
 /// `(name, cron, labelKey)`, in listing order; every one is triggerable.
-pub const CORE: [(&str, &str, &str); 8] = [
+pub const CORE: [(&str, &str, &str); 9] = [
     ("Backup", "0 02 * * *", "system.cmd_backup"),
     (
         "RefreshMetadata",
@@ -13,6 +13,7 @@ pub const CORE: [(&str, &str, &str); 8] = [
         "0 3 * * *",
         "system.cmd_refresh_plugin_sources",
     ),
+    ("UpdatePlugins", "30 3 * * *", "system.cmd_update_plugins"),
     (
         "SubtitleSearch",
         "0 0-23/6 * * *",

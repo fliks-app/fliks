@@ -390,7 +390,7 @@ async fn run_detection(
     st.hub.activity().remove(&id);
     drop(claim);
     let run = match run {
-        Ok(n) => finish(&st.db, cmd, "completed")
+        Ok(n) => finish(&st.db, cmd, "completed", None)
             .await
             .map(|()| n)
             .map_err(|e| e.to_string()),
@@ -411,7 +411,7 @@ async fn run_detection(
         }
         Err(e) => {
             tracing::error!("IntroDetection failed for season #{season}: {e}");
-            match finish(&st.db, cmd, "failed").await {
+            match finish(&st.db, cmd, "failed", None).await {
                 Ok(()) => st.hub.emit(SseEvent::CommandCompleted {
                     name: COMMAND.into(),
                     status: "failed".into(),

@@ -14,7 +14,7 @@ import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu'
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { subjectEpisodeLine, subjectEpisodeLink, subjectMediaLink } from '../../../shared/utils/media-subject';
 
-interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
+export interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
 interface ServiceStatus { name: string; ok: boolean; message?: string; }
 interface HealthReport { version: string; uptimeSeconds: number; database: ServiceStatus; installedPlugins: number; runningPlugins: number; restartSupervisor: string | null; }
 /** Trimmed to what the manual-trigger button list needs. */
@@ -340,9 +340,18 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
     }
   }
 
+  readonly pluginUpdates = pluginUpdates;
+
   /** i18n key for known scheduler commands (progress bar + consistency with manual actions). */
   commandLabelKey(commandName: string): string {
     const baseName = commandName.split(':')[0];
     return this.availableCommands().find((c) => c.name === baseName)?.label ?? commandName;
   }
+}
+
+/** `id from → to` of each plugin an `UpdatePlugins` run installed; null on any other row. */
+export function pluginUpdates(cmd: Pick<CommandEntry, 'name' | 'body'>): string | null {
+  const updated = cmd.name === 'UpdatePlugins' ? cmd.body?.['updated'] : undefined;
+  if (!Array.isArray(updated)) return null;
+  return updated.map((u: { pluginId: string; from: string; to: string }) => `${u.pluginId} ${u.from} → ${u.to}`).join(', ');
 }

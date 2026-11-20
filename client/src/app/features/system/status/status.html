@@ -227,6 +227,11 @@
                 @if (cmd.body?.['mediaTitle']) {
                   <span class="text-sm text-base-content/50 ml-1">- {{ cmd.body?.['mediaTitle'] }}</span>
                 }
+                @if (pluginUpdates(cmd); as updates) {
+                  <div class="text-sm font-normal text-base-content/60">{{ 'system.plugins_updated' | translate: { plugins: updates } }}</div>
+                } @else if (pluginUpdates(cmd) === '') {
+                  <div class="text-sm font-normal text-base-content/60">{{ 'system.plugins_none_updated' | translate }}</div>
+                }
               </td>
               <td class="text-sm text-base-content/60">{{ cmd.trigger }}</td>
               <td><span class="badge badge-sm" [ngClass]="statusClass(cmd.status)">{{ cmd.status }}</span></td>
