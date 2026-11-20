@@ -891,6 +891,8 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   g_layer.framebufferOnly = NO;  // a framebufferOnly drawable rejects blit destinations
   g_layer.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
   g_layer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
+  // Until mpv draws at the new size (live resize, full-screen animation), scale the last frame, never stretch it.
+  g_layer.contentsGravity = kCAGravityResizeAspect;
   BootLayerColorDefaults(g_layer);
   g_layer.frame = g_view.bounds;
   CGFloat scale = g_view.window ? g_view.window.backingScaleFactor : 2.0;
