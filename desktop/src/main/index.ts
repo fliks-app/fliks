@@ -19,6 +19,7 @@ import type { NowPlayingAddon } from './now-playing';
 import type { PlayerBackend } from './mpv/player-backend';
 import { toElectronKey } from './keymap';
 import { watchRendererCrash } from './renderer-recovery';
+import { Notifier } from './notify';
 
 // Velopack's install/update/uninstall hooks run and exit here, before any Electron startup.
 if (process.platform === 'win32') {
@@ -182,6 +183,7 @@ const CURSOR_SHAPES: Record<string, number> = {
 const WHEEL_PIXELS_PER_NOTCH = 100;
 
 let uiWin: BrowserWindow | null = null;
+let notifier: Notifier;
 // Brings the window the user sees back to the front; set by the start path of each platform.
 let raiseWindow: (() => void) | null = null;
 // Set where the OS has a media session to feed (Linux MPRIS, macOS Now Playing, Windows SMTC).
@@ -212,6 +214,8 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
   // Register the IPC handlers BEFORE start() loads the renderer + emits 'ready',
   // so the renderer can't invoke an unregistered channel.
   registerPlayerIpc(session, ipcHooks);
+  session.hideOnClose = () => notifier.hideOnClose();
+  session.onActive = (active) => notifier.setActive(active);
   raiseWindow = () => {
     session.focus();
     if (process.platform === 'darwin') app.focus({ steal: true });
@@ -220,6 +224,12 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
     rendererUrl: rendererUrl(haveApp),
     preloadPath: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
     iconPath: windowIcon(),
+  });
+  notifier.attach({
+    show: () => raiseWindow?.(),
+    hide: () => session.hide(),
+    setOverlay: (icon, description) => session.setOverlay(icon, description),
+    sendToPage: (channel, payload) => session.uiContents.send(channel, payload),
   });
   try {
     const { loadMacAddon } = await import('./mpv/mac-mpv-player');
@@ -292,6 +302,11 @@ async function startUiOnly(haveApp: boolean): Promise<void> {
   });
   echoRendererConsole(uiWin.webContents);
   raiseWindow = () => uiWin?.focus();
+  notifier.attach({
+    show: () => uiWin?.show(),
+    hide: () => uiWin?.hide(),
+    sendToPage: (channel, payload) => uiWin?.webContents.send(channel, payload),
+  });
   await uiWin.loadURL(rendererUrl(haveApp));
   send({ type: 'ready' });
 }
@@ -313,6 +328,7 @@ app.whenReady().then(async () => {
   }
 
   installCorsBypass();
+  notifier = new Notifier(windowIcon());
 
   // Available on every platform path (embed / compositor / ui-only) so the
   // renderer can label this device with its real OS + version.
@@ -457,7 +473,14 @@ app.whenReady().then(async () => {
     icon: compositorIcon(),
   });
   forwardPlayerEvents(player, send);
+  player.onWindowActive = (active) => notifier.setActive(active);
   await player.start();
+  notifier.attach({
+    show: () => addon.raise(),
+    hide: () => addon.hide(),
+    setHideOnClose: (on) => addon.setCloseHides(on),
+    sendToPage: (channel, payload) => uiWin?.webContents.send(channel, payload),
+  });
   let stopOsMediaSession = () => {};
   try {
     const { Mpris } = await import('./mpris');
