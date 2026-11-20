@@ -7,7 +7,7 @@ struct NotificationToastView: View {
     var body: some View {
         Group {
             if let note = service.current {
-                HStack(spacing: 20) {
+                HStack(spacing: 0) {
                     NotificationImage(path: note.image)
                     VStack(alignment: .leading, spacing: 6) {
                         Text(note.title).font(.headline).lineLimit(1)
@@ -23,6 +23,7 @@ struct NotificationToastView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: service.current)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .allowsHitTesting(false)
         .focusable(false)
     }
@@ -36,11 +37,14 @@ private struct NotificationImage: View {
     private var isAvatar: Bool { path?.contains("/api/images/user/") == true }
 
     var body: some View {
-        Group {
+        // The zero-size anchor keeps `.task` alive while there is no image.
+        ZStack {
+            Color.clear.frame(width: 0, height: 0)
             if let image {
                 Image(uiImage: image).resizable().scaledToFill()
                     .frame(width: 72, height: isAvatar ? 72 : 108)
                     .clipShape(RoundedRectangle(cornerRadius: isAvatar ? 36 : 8))
+                    .padding(.trailing, 20)
             }
         }
         .task(id: path) {
