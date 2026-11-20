@@ -2005,6 +2005,11 @@
   "connectivity": {
     "server_unreachable": "Server unreachable"
   },
+  "not_found": {
+    "title": "Page not found",
+    "body": "This page does not exist or has moved.",
+    "home": "Back to home"
+  },
   "pagination": {
     "label": "Pagination",
     "previous": "Previous page",

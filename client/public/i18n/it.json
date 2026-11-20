@@ -2005,6 +2005,11 @@
   "connectivity": {
     "server_unreachable": "Server non raggiungibile"
   },
+  "not_found": {
+    "title": "Pagina non trovata",
+    "body": "Questa pagina non esiste o è stata spostata.",
+    "home": "Torna alla home"
+  },
   "pagination": {
     "label": "Impaginazione",
     "previous": "Pagina precedente",
