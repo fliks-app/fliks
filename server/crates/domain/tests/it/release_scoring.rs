@@ -254,5 +254,5 @@ fn run(i: &Value) -> Value {
 
 #[test]
 fn release_scoring_reproduces_expected() {
-    replay("release-scoring", 3029, run);
+    replay("release-scoring", 3034, run);
 }

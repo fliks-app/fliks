@@ -174,6 +174,7 @@ pub fn score_and_sort_releases(
                 rank: Some(quality.rank.into()),
                 min_rank_exclusive: opts.min_rank_exclusive,
                 max_rank_inclusive: opts.max_rank_inclusive,
+                title_leads: true,
             });
             if unresolved {
                 rejections.push(scene_unresolved());

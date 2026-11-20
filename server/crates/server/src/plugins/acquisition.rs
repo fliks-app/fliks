@@ -16,9 +16,9 @@ use fliks_domain::release::parsing::season_episode::{
 use fliks_domain::release::scoring::{
     AudioLanguageItem, CustomFormat, ExpectedTitle, Param, QualityProfileItem, ReleaseCandidate,
     ScoreOptions, SearchMedia, SizeLimits, WhenUnreadable, allowed_audio_language_ids,
-    build_allowed_quality_ids, index_title_expectations, matches_indexed_expectation,
-    max_resolution_from_quality_strings, release_flags, release_title_tokens,
-    resolve_search_titles, score_and_sort_releases,
+    build_allowed_quality_ids, index_title_expectations, leads_with_expectation,
+    matches_indexed_expectation, max_resolution_from_quality_strings, release_flags,
+    release_lead_tokens, release_title_tokens, resolve_search_titles, score_and_sort_releases,
 };
 use serde_json::Value;
 use sqlx::{FromRow, PgPool};
