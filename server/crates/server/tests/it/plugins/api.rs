@@ -3,6 +3,7 @@ use super::harness::*;
 use super::net::{Reply, StubNet, pki, stub};
 use base64::Engine;
 use ed25519_dalek::{Signer, SigningKey};
+use fliks_server::jobs::{Trigger, run_audited};
 use fliks_server::plugins::fetch::Fetcher;
 use fliks_server::plugins::{archive, packages};
 use serde_json::{Value, json};
@@ -620,7 +621,23 @@ async fn sources_catalog_denylist_and_auto_update() {
         .execute(&s.pool)
         .await
         .unwrap();
-    let out = h.st.plugins.auto_update().await;
+    // Through the job, so the outcome lands in the task history.
+    let ran = run_audited(
+        &h.st,
+        "UpdatePlugins",
+        Trigger::Manual,
+        fliks_server::plugins::sources::update_plugins(&h.st),
+    )
+    .await;
+    assert!(ran);
+    let (status, out): (String, Value) = sqlx::query_as(
+        "SELECT status, body FROM commands WHERE name = 'UpdatePlugins' ORDER BY id DESC LIMIT 1",
+    )
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "completed");
+    assert_eq!(out["updated"][0]["pluginId"], "fliks.fixture", "{out}");
     assert_eq!(out["updated"][0]["to"], "0.1.0", "{out}");
     let pkg = packages::find(&s.pool, "fliks.fixture")
         .await
@@ -1179,9 +1196,10 @@ async fn disabled_plugins_never_refresh_the_catalog() {
         .await
         .unwrap();
     fliks_server::plugins::sources::refresh_all(&h.st, false).await;
-    fliks_server::plugins::sources::refresh_and_update(&h.st)
+    let out = fliks_server::plugins::sources::update_plugins(&h.st)
         .await
         .unwrap();
+    assert_eq!(out, None);
     let (at, err): (Option<chrono::DateTime<chrono::Utc>>, Option<String>) =
         sqlx::query_as(r#"SELECT "lastRefreshedAt", "lastRefreshError" FROM plugin_sources"#)
             .fetch_one(&s.pool)

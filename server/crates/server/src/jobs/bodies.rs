@@ -14,8 +14,16 @@ use sqlx::{FromRow, PgPool};
 
 type Outcome = Result<(), String>;
 
-/// Runs the named job to its end; an `Err` is logged by the audit wrapper and ends the row `failed`.
-pub async fn run(st: &AppState, name: &str) -> Outcome {
+/// Runs the named job to its end; an `Err` is logged by the audit wrapper and ends the row `failed`,
+/// an `Ok(Some(_))` becomes the row's `body`.
+pub async fn run(st: &AppState, name: &str) -> Result<Option<serde_json::Value>, String> {
+    if name == "UpdatePlugins" {
+        return crate::plugins::sources::update_plugins(st).await;
+    }
+    run_unit(st, name).await.map(|()| None)
+}
+
+async fn run_unit(st: &AppState, name: &str) -> Outcome {
     match name {
         "Backup" => backup_job(st).await,
         "RefreshMetadata" => refresh_metadata(st).await,
@@ -40,7 +48,10 @@ pub async fn run(st: &AppState, name: &str) -> Outcome {
         "LiveTvGuidePrune" => crate::livetv::jobs::prune_guide(st).await,
         "MediaCleanup" => crate::cleanup::run(st).await,
         "FollowRefresh" => crate::wanted::refresh_follows(st).await,
-        "RefreshPluginSources" => crate::plugins::sources::refresh_and_update(st).await,
+        "RefreshPluginSources" => {
+            crate::plugins::sources::refresh_all(st, false).await;
+            Ok(())
+        }
         _ => Err(format!("unknown job {name}")),
     }
 }

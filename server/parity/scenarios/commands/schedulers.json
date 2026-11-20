@@ -35,6 +35,14 @@
             "triggerable": true
           },
           {
+            "cron": "30 3 * * *",
+            "labelKey": "system.cmd_update_plugins",
+            "lastStatus": null,
+            "name": "UpdatePlugins",
+            "pluginId": null,
+            "triggerable": true
+          },
+          {
             "cron": "0 0-23/6 * * *",
             "labelKey": "system.cmd_subtitle_search",
             "lastStatus": null,

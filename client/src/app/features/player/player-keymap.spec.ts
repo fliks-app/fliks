@@ -26,6 +26,11 @@ describe('playerKeyAction', () => {
   it('prefers media keys', () => {
     expect(key('MediaStop')).toEqual({ kind: 'media', action: 'stop' });
   });
+  it('matches letters whatever their case', () => {
+    expect(key('S')).toEqual({ kind: 'shortcut', command: 'stats' });
+    expect(key('K')).toEqual({ kind: 'shortcut', command: 'togglePlay' });
+    expect(key('<')).toEqual({ kind: 'shortcut', command: 'slower' });
+  });
   it('maps shortcuts', () => {
     expect(key(' ')).toEqual({ kind: 'shortcut', command: 'togglePlay' });
     expect(key('k')).toEqual({ kind: 'shortcut', command: 'togglePlay' });

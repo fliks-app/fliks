@@ -1,4 +1,4 @@
-//! Catalog sources: refresh, inspect from a catalog, the daily job and auto-update
+//! Catalog sources: refresh, inspect from a catalog, the daily jobs and auto-update
 //! (`plugins.md` rules 25-29).
 use super::fetch::ArchiveError;
 use super::install::{InstallError, Report, carries_grant, ie};
@@ -409,16 +409,15 @@ pub async fn refresh_all(st: &AppState, stale_only: bool) {
     }
 }
 
-/// The `RefreshPluginSources` body: refresh, then auto-update.
-pub fn refresh_and_update(
+/// The `UpdatePlugins` body: auto-update over fresh catalogs; its outcome is the command's `body`.
+pub fn update_plugins(
     st: &AppState,
-) -> futures_util::future::BoxFuture<'_, Result<(), String>> {
+) -> futures_util::future::BoxFuture<'_, Result<Option<Value>, String>> {
     Box::pin(async move {
         if st.plugins.opts.disabled {
-            return Ok(());
+            return Ok(None);
         }
-        refresh_all(st, false).await;
-        st.plugins.auto_update().await;
-        Ok(())
+        refresh_all(st, true).await;
+        Ok(Some(st.plugins.auto_update().await))
     })
 }
