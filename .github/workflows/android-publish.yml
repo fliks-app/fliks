@@ -74,9 +74,6 @@ jobs:
           # old workflow, so we run main's workflow against the tag's source).
           # Otherwise build the triggering ref.
           ref: ${{ github.event.inputs.apk_tag || github.ref }}
-          # Full history needed so `git rev-list --count HEAD` produces
-          # a meaningful commit count for the versionCode.
-          fetch-depth: 0
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -109,11 +106,6 @@ jobs:
       - name: Capacitor sync to Android shell
         run: npx cap sync android
 
-      - name: Compute versionCode from commit count
-        id: vcode
-        run: echo "value=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
-        working-directory: ${{ github.workspace }}
-
       - name: Decode upload keystore
         run: |
           echo "${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}" \
@@ -132,7 +124,6 @@ jobs:
       # on a tag or an `apk_tag` dispatch, the sideload APK with the same release signingConfig.
       - name: Assemble signed release
         env:
-          ORG_GRADLE_PROJECT_FLIKS_VERSION_CODE: ${{ steps.vcode.outputs.value }}
           ORG_GRADLE_PROJECT_FLIKS_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
           ORG_GRADLE_PROJECT_FLIKS_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           ORG_GRADLE_PROJECT_FLIKS_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}

@@ -5,6 +5,17 @@ def castAppId = file('../../../.env.local').with {
     it.exists() ? it.readLines().findResult { l -> l.startsWith('FLIKS_CAST_APP_ID=') ? l.substring(18).trim().replaceAll(/^(['"])(.*)\1$/, '$2') : null } : null
 }
 
+// MMmmppNN from M.m.p[-pre.N]: NN is N for a prerelease, 99 for the release, so codes rise with versions.
+// Derived from the source, not CI, so F-Droid rebuilds the same code.
+static int versionCodeOf(String name) {
+    def m = name =~ /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z]+\.(\d+))?$/
+    if (!m.matches()) throw new GradleException("versionName ${name} is not M.m.p or M.m.p-pre.N")
+    def (major, minor, patch) = (1..3).collect { m.group(it) as int }
+    def pre = m.group(4) == null ? 99 : (m.group(4) as int)
+    if (minor > 99 || patch > 99 || (m.group(4) != null && pre > 98)) throw new GradleException("versionName ${name} overflows the versionCode")
+    return major * 1_000_000 + minor * 10_000 + patch * 100 + pre
+}
+
 android {
     namespace "media.fliks.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -12,14 +23,8 @@ android {
         applicationId "media.fliks.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // versionCode is monotonic. CI overrides it via the Gradle
-        // property `FLIKS_VERSION_CODE` (set from `git rev-list --count
-        // HEAD` in the android-publish workflow) so each merge to
-        // main produces a strictly-increasing value Play Store will
-        // accept. The committed default of 1 keeps local debug builds
-        // working without any env setup.
-        versionCode = ((project.findProperty('FLIKS_VERSION_CODE') ?: 1) as int)
         versionName "7.0.1" // x-release-please-version
+        versionCode = versionCodeOf(versionName)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
