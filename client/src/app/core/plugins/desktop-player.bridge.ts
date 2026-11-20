@@ -146,6 +146,9 @@ export interface DesktopNotifyPrefs {
   startAtLogin: boolean;
 }
 
+/** Whether the OS shows Fliks' notifications: `blocked` in its settings, `unavailable` without a notification service. */
+export type DesktopNotifyStatus = 'allowed' | 'blocked' | 'unavailable';
+
 export interface FliksDesktopApi {
   runtime: 'electron';
   load(opts: DesktopLoadOptions): Promise<void>;
@@ -199,6 +202,9 @@ export interface FliksDesktopApi {
   setNotifyPrefs?(patch: Partial<DesktopNotifyPrefs>): Promise<DesktopNotifyPrefs>;
   /** The shell's own strings (tray menu, badge), in the UI language. */
   setNotifyLabels?(labels: { open: string; quit: string; notifications: string }): Promise<void>;
+  /** Read again on each call: the user may have changed it in the OS meanwhile. */
+  getNotifyStatus?(): Promise<DesktopNotifyStatus>;
+  openNotifySettings?(): Promise<void>;
   /** Whether the window is visible and focused: notifications are shown by the OS only when it is not. */
   windowActive?(): Promise<boolean>;
   onWindowActive?(handler: (active: boolean) => void): () => void;

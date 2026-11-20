@@ -32,6 +32,7 @@ import { TypedEmitter } from './typed-emitter';
 import type { NowPlayingAddon } from '../now-playing';
 
 export type MacAddon = NowPlayingAddon & {
+  notifyAuthorization(): string;
   start(o: { wid: string; scale?: number }): void;
   onEvent(cb: (json: string) => void): void;
   load(o: MpvLoadRequest): void;

@@ -5,6 +5,7 @@ import { setStartAtLogin, startedAtLogin } from './autostart.ts';
 import { saneSize, readCapped } from './image.ts';
 import { hasStatusNotifierHost } from './status-notifier.ts';
 import { loadLabels, loadPrefs, saveLabels, savePrefs } from './prefs.ts';
+import { notifyStatus, openNotifySettings } from './status.ts';
 import { parseBadge, parseLabels, parseNotification, parsePrefsPatch } from './validate.ts';
 
 /** What the notifier needs from the platform's window code; handed over once the window exists. */
@@ -74,6 +75,8 @@ export class Notifier {
     ipcMain.handle(NOTIFY_IPC.setPrefs, (_e, patch: unknown) => this.setPrefs(parsePrefsPatch(patch)));
     ipcMain.handle(NOTIFY_IPC.setLabels, (_e, l: unknown) => this.setLabels(parseLabels(l)));
     ipcMain.handle(NOTIFY_IPC.windowActive, () => this.active);
+    ipcMain.handle(NOTIFY_IPC.getStatus, () => notifyStatus());
+    ipcMain.handle(NOTIFY_IPC.openSettings, () => openNotifySettings());
   }
 
   /** Closing the window hides it instead of quitting, but only with a tray to come back from. */

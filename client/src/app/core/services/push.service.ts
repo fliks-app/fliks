@@ -5,7 +5,7 @@ import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { TranslateService } from '@ngx-translate/core';
 import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
-import { desktopBridgeOrNull, type DesktopNotifyPrefs } from '../plugins/desktop-player.bridge';
+import { desktopBridgeOrNull, type DesktopNotifyPrefs, type DesktopNotifyStatus } from '../plugins/desktop-player.bridge';
 import { Push, type PushOpened, type PushPermission, type SessionRef } from '../plugins/push.plugin';
 import { readFlag, readStored, writeFlag, writeStored } from '../utils/local-flag';
 import { sameOriginPath } from '../utils/same-origin';
@@ -43,6 +43,9 @@ export interface PushAction {
 
 /** `native`: APNs/FCM through the plugin; `web`: Web Push through the service worker; `desktop`: OS notifications from the Electron shell; `toast`: in-app only (TV); `none`: nothing on this device. */
 export type PushMode = 'native' | 'web' | 'desktop' | 'toast' | 'none';
+
+/** Why the system keeps notifications from this device, named after its text key. */
+export type SystemBlock = 'not_allowed' | 'denied_app' | 'denied' | 'unavailable';
 
 /** A plugin whose `plugin.<id>` category the user can mute. */
 export interface PushPluginInfo {
@@ -147,6 +150,21 @@ export class PushService {
   readonly desktopActive = signal(true);
   /** Desktop: background mode and start at login; null outside a shell that supports them. */
   readonly desktopPrefs = signal<DesktopNotifyPrefs | null>(null);
+  /** Desktop: whether the OS shows Fliks' notifications, read again when the window comes back. */
+  readonly desktopStatus = signal<DesktopNotifyStatus | null>(null);
+  /** Null when the system shows notifications here, else why not. */
+  readonly systemBlock = computed<SystemBlock | null>(() => {
+    const p = this.permission();
+    if (this.mode === 'native') return p === 'granted' ? null : p === 'denied' ? 'denied_app' : 'not_allowed';
+    if (this.mode === 'web') return p === 'denied' ? 'denied' : null;
+    if (this.mode === 'desktop') {
+      const s = this.desktopStatus();
+      return s === 'blocked' ? 'denied_app' : s === 'unavailable' ? 'unavailable' : null;
+    }
+    return null;
+  });
+  /** Only the app's own system settings can lift the block. */
+  readonly canOpenSystemSettings = computed(() => this.systemBlock() === 'denied_app');
   /** A Web Push subscription is registered on the server for this session. */
   private readonly subscribed = signal(false);
 
@@ -274,9 +292,10 @@ export class PushService {
     }
   }
 
-  /** Native only: the system page where a refused permission is given back. */
+  /** The system page where a refused permission is given back. */
   openSystemSettings(): void {
-    void Push.openSettings().catch(() => undefined);
+    const open = this.mode === 'desktop' ? desktopBridgeOrNull()?.openNotifySettings?.() : Push.openSettings();
+    void open?.catch(() => undefined);
   }
 
   async disable(): Promise<void> {
@@ -415,6 +434,7 @@ export class PushService {
     await this.retryPendingDelete();
     if (this.mode === 'native') await this.startNative();
     if (this.mode === 'desktop') this.desktopPrefs.set((await desktopBridgeOrNull()?.getNotifyPrefs?.()) ?? null);
+    if (this.mode === 'desktop') await this.refreshDesktopStatus();
     if (this.mode === 'web') this.permission.set(this.webPermission());
     if (this.mode === 'native' || this.mode === 'web') await this.loadConfig();
     this.adoptGrant();
@@ -457,7 +477,10 @@ export class PushService {
       else void this.opened({ url: e.action?.url ?? e.url, session: { serverUrl: e.serverUrl, userId: e.user, key: `${e.serverUrl}|${e.user}` } });
     });
     void bridge?.windowActive?.().then((a) => this.desktopActive.set(a));
-    bridge?.onWindowActive?.((a) => this.desktopActive.set(a));
+    bridge?.onWindowActive?.((a) => {
+      this.desktopActive.set(a);
+      if (a) void this.refreshDesktopStatus();
+    });
   }
 
   private async requestPermission(): Promise<PushPermission> {
@@ -487,6 +510,10 @@ export class PushService {
     writeFlag(this.flagKey(user.id), true);
     this.deviceEnabled.set(true);
     return true;
+  }
+
+  private async refreshDesktopStatus(): Promise<void> {
+    this.desktopStatus.set((await desktopBridgeOrNull()?.getNotifyStatus?.().catch(() => null)) ?? null);
   }
 
   private readSnooze(): AskSnooze {

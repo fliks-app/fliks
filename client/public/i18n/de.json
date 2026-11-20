@@ -403,6 +403,7 @@
       "denied": "Benachrichtigungen sind für diese Website blockiert. Erlauben Sie sie in den Browsereinstellungen.",
       "denied_app": "Benachrichtigungen für Fliks sind in den Systemeinstellungen ausgeschaltet.",
       "not_allowed": "Fliks darf auf diesem Gerät noch keine Benachrichtigungen senden.",
+      "unavailable": "Dieses System hat keinen Benachrichtigungsdienst für Fliks.",
       "open_settings": "Systemeinstellungen öffnen",
       "ask_enable": "Einschalten",
       "ask_later": "Nicht jetzt",

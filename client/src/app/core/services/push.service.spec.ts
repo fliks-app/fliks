@@ -23,10 +23,15 @@ const { plugin, platform } = vi.hoisted(() => ({
   plugin: { status: vi.fn(), requestPermission: vi.fn(), prepare: vi.fn(), subscribe: vi.fn(), addListener: vi.fn() },
   platform: { native: false },
 }));
-vi.mock('@capacitor/core', async (original) => {
-  const core = await original<typeof import('@capacitor/core')>();
-  return { ...core, Capacitor: { ...core.Capacitor, isNativePlatform: () => platform.native }, registerPlugin: () => plugin };
-});
+vi.mock('@capacitor/core', () => ({
+  Capacitor: {
+    isNativePlatform: () => platform.native,
+    getPlatform: () => (platform.native ? 'android' : 'web'),
+    isPluginAvailable: () => false,
+    convertFileSrc: (s: string) => s,
+  },
+  registerPlugin: () => plugin,
+}));
 
 describe('PushService', () => {
   const user = signal<{ id: number } | null>({ id: 1 });
@@ -157,17 +162,22 @@ describe('PushService', () => {
   describe('desktop', () => {
     const notify = vi.fn();
     const prefs = { notifications: true, background: false, startAtLogin: false };
+    let status = 'allowed';
+    let onActive: (a: boolean) => void = () => undefined;
     const win = window as unknown as { fliksDesktop?: unknown };
 
     beforeEach(() => {
       desktop = true;
       prefs.notifications = true;
+      status = 'allowed';
       notify.mockResolvedValue(undefined);
       win.fliksDesktop = {
         notify,
         getNotifyPrefs: async () => ({ ...prefs }),
         windowActive: async () => true,
-        onWindowActive: () => undefined,
+        onWindowActive: (h: (a: boolean) => void) => (onActive = h),
+        getNotifyStatus: async () => status,
+        openNotifySettings: vi.fn(async () => undefined),
         onNotificationClick: () => undefined,
       };
     });
@@ -188,6 +198,25 @@ describe('PushService', () => {
       sseNotifications.next(note());
       expect(notify).toHaveBeenCalledOnce();
       expect(toastNotify).toHaveBeenCalledOnce();
+    });
+
+    it('reads the OS block, again when the window comes back, and opens its settings', async () => {
+      status = 'blocked';
+      const { push } = await started();
+      await vi.waitFor(() => expect(push.systemBlock()).toBe('denied_app'));
+      expect(push.canOpenSystemSettings()).toBe(true);
+      push.openSystemSettings();
+      expect((win.fliksDesktop as { openNotifySettings: ReturnType<typeof vi.fn> }).openNotifySettings).toHaveBeenCalledOnce();
+      status = 'allowed';
+      onActive(true);
+      await vi.waitFor(() => expect(push.systemBlock()).toBeNull());
+    });
+
+    it('says when the system has no notification service, with no settings to open', async () => {
+      status = 'unavailable';
+      const { push } = await started();
+      await vi.waitFor(() => expect(push.systemBlock()).toBe('unavailable'));
+      expect(push.canOpenSystemSettings()).toBe(false);
     });
 
     it('counts this desktop among the devices the test reaches while its notifications are on', async () => {
@@ -301,6 +330,17 @@ describe('PushService', () => {
       document.dispatchEvent(new Event('visibilitychange'));
       await vi.waitFor(() => http.expectOne((r) => r.method === 'POST' && r.url === '/api/push/subscriptions').flush({ sub: 's', ticket: 't' }));
       expect(push.permission()).toBe('granted');
+    });
+
+    it('tells a phone not yet allowed from one that refused', async () => {
+      const { push } = await started();
+      expect(push.systemBlock()).toBe('not_allowed');
+      expect(push.canOpenSystemSettings()).toBe(false);
+      push.permission.set('denied');
+      expect(push.systemBlock()).toBe('denied_app');
+      expect(push.canOpenSystemSettings()).toBe(true);
+      push.permission.set('granted');
+      expect(push.systemBlock()).toBeNull();
     });
 
     it('never asks on a TV', async () => {

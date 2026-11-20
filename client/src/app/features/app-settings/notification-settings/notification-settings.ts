@@ -30,11 +30,8 @@ export class NotificationSettingsPageComponent {
   protected readonly testing = signal(false);
   /** The system refused the permission: only its settings can undo that. */
   protected readonly denied = computed(() => this.push.permission() === 'denied');
-  protected readonly native = this.push.mode === 'native';
-  /** The switch shows what reaches this device: on only once the system allows it. */
-  protected readonly deviceOn = computed(() => this.push.deviceEnabled() && this.push.permission() === 'granted');
-  /** A phone has notifications off until the system grants them; a browser only once it refused. */
-  protected readonly blocked = computed(() => (this.native ? this.push.permission() !== 'granted' : this.denied()));
+  /** The switches show what reaches this device: on only while the system shows notifications. */
+  protected readonly deviceOn = computed(() => this.push.deviceEnabled() && !this.push.systemBlock());
 
   constructor() {
     void this.push.loadConfig();

@@ -403,6 +403,7 @@
       "denied": "Las notificaciones están bloqueadas para este sitio. Permítalas en los ajustes del navegador.",
       "denied_app": "Las notificaciones de Fliks están desactivadas en los ajustes del sistema.",
       "not_allowed": "Fliks aún no tiene permiso para enviar notificaciones en este dispositivo.",
+      "unavailable": "Este sistema no tiene un servicio de notificaciones para Fliks.",
       "open_settings": "Abrir los ajustes del sistema",
       "ask_enable": "Activar",
       "ask_later": "Ahora no",

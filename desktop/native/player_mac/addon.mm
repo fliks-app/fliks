@@ -26,6 +26,7 @@
 #include <napi.h>
 
 void InitNowPlaying(Napi::Env env, Napi::Object exports);  // now_playing.mm
+void InitNotifyStatus(Napi::Env env, Napi::Object exports);  // notify_status.mm
 
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
@@ -1178,6 +1179,7 @@ Napi::Value ProbeLists(const Napi::CallbackInfo& info) {
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   InitNowPlaying(env, exports);
+  InitNotifyStatus(env, exports);
   exports.Set("start", Napi::Function::New(env, Start));
   exports.Set("onEvent", Napi::Function::New(env, OnEvent));
   exports.Set("load", Napi::Function::New(env, Load));
