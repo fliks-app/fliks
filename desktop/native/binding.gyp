@@ -5,8 +5,8 @@
   #     Its `<!@(pkg-config sdl3 …)` would FAIL at gyp time on macOS, hence the
   #     condition gate rather than a per-target no-op.
   #   - mac   → fliks_player_mac: in-process libmpv rendering offscreen via GL
-  #     into an IOSurface, blit-copied by Metal into a CAMetalLayer on the
-  #     Electron videoWin's NSView (Cocoa/QuartzCore/OpenGL/Metal/IOSurface).
+  #     into an IOSurface, blit-copied by Metal into a CAMetalLayer inside the
+  #     player window (Cocoa/QuartzCore/OpenGL/Metal/IOSurface).
   #   - win   → fliks_smtc_win: System Media Transport Controls and the toast setting (C++/WinRT);
   #     playback itself is an mpv subprocess embedded via --wid.
   "targets": [],

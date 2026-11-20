@@ -217,9 +217,8 @@ function rendererUrl(haveApp: boolean): string {
   return haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>';
 }
 
-// Windows / macOS: PlayerSession owns the framed player window. macOS draws
-// in-process libmpv under the page inside it; Windows embeds an mpv subprocess
-// via --wid into overlay windows pinned over it. See PlayerSession for why.
+// Windows / macOS: PlayerSession owns the framed player window, with libmpv under the page on macOS
+// and an --wid mpv subprocess in overlay windows on Windows.
 async function startEmbedSession(haveApp: boolean): Promise<void> {
   const { PlayerSession } = await import('./window/player-session');
   const { registerPlayerIpc } = await import('./ipc');

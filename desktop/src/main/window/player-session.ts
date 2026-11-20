@@ -78,16 +78,8 @@ interface Overlays {
   ui: BrowserWindow;
 }
 
-/**
- * The player window and the mpv player. frameWin is the FRAMED window (native
- * title bar, window commands, taskbar/dock entry, resize).
- *   • macOS — one window: the libmpv layer sits in frameWin's content view under
- *     its own (transparent) page, so AppKit moves, resizes and animates both
- *     together, full-screen transitions included.
- *   • Windows — mpv is a subprocess embedded through --wid, and a transparent
- *     window can't be framed there, so the video and the UI are two frameless
- *     overlay windows kept over frameWin's content area.
- */
+/** The framed player window and mpv. macOS draws the video under frameWin's own page, so AppKit animates both
+ *  together; Windows embeds an --wid subprocess, and a framed window can't be transparent there: hence Overlays. */
 export class PlayerSession {
   private frameWin!: BrowserWindow;
   private overlays: Overlays | null = null;
@@ -126,10 +118,17 @@ export class PlayerSession {
       ...(singleWindow ? { backgroundColor: '#00000000' } : { backgroundColor: '#1d232a' }),
       title: 'Fliks',
       ...(iconPath ? { icon: iconPath } : {}),
-      ...(singleWindow ? { webPreferences: uiWebPreferences(preloadPath) } : {}),
+      // macOS: shown once the page paints, since the clear background would show the system one until then.
+      ...(singleWindow ? { webPreferences: uiWebPreferences(preloadPath), show: false } : {}),
     });
-    if (singleWindow) this.frameWin.on('page-title-updated', (e) => e.preventDefault());
-    else this.overlays = await this.createOverlays(preloadPath);
+    if (singleWindow) {
+      this.frameWin.on('page-title-updated', (e) => e.preventDefault());
+      this.frameWin.once('ready-to-show', () => {
+        this.frameWin.show();
+        if (saved?.maximized) this.frameWin.maximize();
+        if (saved?.fullscreen) this.frameWin.setFullScreen(true);
+      });
+    } else this.overlays = await this.createOverlays(preloadPath);
 
     const ui = this.uiWin;
     echoRendererConsole(ui.webContents);
@@ -162,17 +161,16 @@ export class PlayerSession {
         } else this.hide();
         return;
       }
+      // A renderer stuck in its unload handlers must not keep the app from quitting.
+      setTimeout(() => void this.destroy(), UI_CLOSE_GRACE_MS);
       if (ui === this.frameWin) return;
       // Close the UI first so its unload handlers (position save, session stop) run before destroy() kills it.
       e.preventDefault();
       ui.once('closed', () => void this.destroy());
       ui.close();
-      setTimeout(() => void this.destroy(), UI_CLOSE_GRACE_MS);
     });
     this.frameWin.on('closed', () => this.destroy());
     this.watchActive();
-    if (saved?.maximized) this.frameWin.maximize();
-    if (saved?.fullscreen) this.frameWin.setFullScreen(true);
     if (singleWindow) trackWindowState(this.frameWin);
     // Quit closes every window from Electron's own loop, and destroy() tearing the siblings down
     // inside it frees a window that loop still holds: close ours first, window-all-closed then quits.
@@ -241,10 +239,8 @@ export class PlayerSession {
     for (const ev of ['move', 'resize', 'maximize', 'unmaximize', 'restore', 'enter-full-screen'] as const) {
       this.frameWin.on(ev as 'resize', sync);
     }
-    // 'leave-full-screen' fires BEFORE the windowed frame is restored, so a
-    // synchronous getContentBounds() still returns the full-display rect and
-    // would pin the overlays over the native caption buttons: re-fit once the
-    // restore has committed.
+    // 'leave-full-screen' fires before the windowed frame is restored: re-fit once it has committed,
+    // or the overlays stay at full-display size over the caption buttons.
     this.frameWin.on('leave-full-screen', () => {
       sync();
       setTimeout(sync, 0);

@@ -146,6 +146,7 @@ struct State {
   // tagging is meaningless on an 8-bit unorm FBO (can't carry values >1.0), so
   // ApplyLayerColorConfig gates the HDR branch on this, not just display headroom.
   std::atomic<bool> hdrBacking{false};
+  std::atomic<bool> renderReady{false};  // the render thread has a render context and runs its loop
   std::thread eventThread;
   std::thread renderThread;
   std::mutex wakeMutex;
@@ -175,7 +176,7 @@ void* GetProcGL(void*, const char* name) {
 // render thread, which does the actual rc_update/rc_render.
 void OnMpvUpdate(void*) {
   g_state.wake.store(true);
-  g_state.wakeCv.notify_one();
+  g_state.wakeCv.notify_all();
 }
 
 void Emit(const std::string& json) {
@@ -187,7 +188,7 @@ void Emit(const std::string& json) {
 // inert on CAMetalLayer.
 void RequestRedraw() {
   g_state.dirty.store(true);
-  g_state.wakeCv.notify_one();
+  g_state.wakeCv.notify_all();
 }
 
 // GL/IOSurface/Metal format triple chosen once in Start(), read only by the
@@ -272,6 +273,7 @@ void RenderThreadMain(State* s) {
     return;
   }
   M::rc_set_update_callback(s->mpvGl, OnMpvUpdate, s);
+  s->renderReady.store(true);
   fprintf(stderr, "[player-mac] mpv render context ready\n");
 
   const bool hasUnifiedMemory = g_device.hasUnifiedMemory;
@@ -330,97 +332,103 @@ void RenderThreadMain(State* s) {
   };
 
   while (s->run.load()) {
-    {
-      std::unique_lock<std::mutex> lk(s->wakeMutex);
-      s->wakeCv.wait_for(lk, std::chrono::milliseconds(100),
-                         [s] { return s->wake.load() || s->dirty.load() || !s->run.load(); });
-      s->wake.store(false);
-    }
-    if (!s->run.load()) break;
+    // nextDrawable and the command buffer are autoreleased, and this thread has no pool of its own.
+    @autoreleasepool {
+      {
+        std::unique_lock<std::mutex> lk(s->wakeMutex);
+        s->wakeCv.wait_for(lk, std::chrono::milliseconds(100),
+                           [s] { return s->wake.load() || s->dirty.load() || !s->run.load(); });
+        s->wake.store(false);
+      }
+      if (!s->run.load()) break;
 
-    uint64_t flags = M::rc_update(s->mpvGl);  // ADVANCED_CONTROL: required after every callback
-    if (!(flags & MPV_RENDER_UPDATE_FRAME) && !s->dirty.load()) continue;
-    s->dirty.store(false);
-    uint64_t syncFor;
-    {
-      std::lock_guard<std::mutex> lk(s->wakeMutex);
-      syncFor = s->syncWanted;
-    }
-
-    // Render at the size of the drawable it lands in: AppKit snapshots the first frame after a
-    // resize for its full-screen animation, so a frame cropped to a stale size would show.
-    id<CAMetalDrawable> drawable = [g_layer nextDrawable];
-    if (!drawable) {
-      s->dirty.store(true);  // retry next wake instead of dropping the frame
-      continue;
-    }
-    const int w = static_cast<int>(drawable.texture.width);
-    const int h = static_cast<int>(drawable.texture.height);
-
-    if (w != ringW || h != ringH) {
-      glFinish();
-      for (auto& slot : g_ring) releaseSlot(slot);
-      for (auto& slot : g_ring) buildSlot(slot, w, h);
-      ringW = w;
-      ringH = h;
-    }
-
-    SurfaceSlot& slot = g_ring[frameIndex++ & 1];
-    if (slot.busy.load()) waitUntilFree(slot);  // never in practice at ring size 2
-
-    mpv_opengl_fbo mfbo{static_cast<int>(slot.fbo), w, h, g_pixelFormat.glInternalFormat};
-    // No FLIP_Y: mpv's render-API output is top-down, and so is an FBO texture
-    // (unlike the CAOpenGLLayer default framebuffer, which is bottom-up). If
-    // the first SDR frame renders upside down, re-add flip=1 here.
-    // A resize frame goes out at once, not at its display time: the main thread is waiting for it.
-    int blockForTargetTime = syncFor ? 0 : 1;
-    mpv_render_param render_params[] = {
-        {MPV_RENDER_PARAM_OPENGL_FBO, &mfbo},
-        {MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &blockForTargetTime},
-        {static_cast<mpv_render_param_type>(0), nullptr},
-    };
-    M::rc_render(s->mpvGl, render_params);
-    glFlush();  // ensure GL's IOSurface writes are visible before the Metal blit reads it
-
-    id<MTLCommandBuffer> cb = [g_queue commandBuffer];
-    id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
-    [blit copyFromTexture:slot.mtl
-               sourceSlice:0
-               sourceLevel:0
-              sourceOrigin:MTLOriginMake(0, 0, 0)
-                sourceSize:MTLSizeMake(w, h, 1)
-                 toTexture:drawable.texture
-          destinationSlice:0
-          destinationLevel:0
-         destinationOrigin:MTLOriginMake(0, 0, 0)];
-    [blit endEncoding];
-    if (!syncFor) [cb presentDrawable:drawable];
-    slot.busy.store(true);
-    const uint64_t gen = slot.gen;
-    [cb addCompletedHandler:^(id<MTLCommandBuffer>) {
-      // Clear under wakeMutex: an unlocked store can land between waitUntilFree's
-      // predicate check and its block, losing the wakeup and stalling the loop.
+      uint64_t flags = M::rc_update(s->mpvGl);  // ADVANCED_CONTROL: required after every callback
+      if (!(flags & MPV_RENDER_UPDATE_FRAME) && !s->dirty.load()) continue;
+      s->dirty.store(false);
+      uint64_t syncFor;
       {
         std::lock_guard<std::mutex> lk(s->wakeMutex);
-        if (slot.gen == gen) slot.busy.store(false);
+        syncFor = s->syncWanted;
       }
-      s->wakeCv.notify_one();
-    }];
-    [cb commit];
-    if (syncFor) {
-      [cb waitUntilScheduled];
-      std::unique_lock<std::mutex> lk(s->wakeMutex);
-      if (s->syncWanted == syncFor) {
-        s->syncDrawable = drawable;
-        s->wakeCv.notify_all();
-        s->wakeCv.wait(lk, [s, syncFor] { return s->syncWanted != syncFor || !s->run.load(); });
-      } else {
-        [drawable present];  // that request timed out or a newer resize superseded it
+
+      // Render at the size of the drawable it lands in: AppKit snapshots the first frame after a
+      // resize for its full-screen animation, so a frame cropped to a stale size would show.
+      const CGSize drawableSize = g_layer.drawableSize;
+      if (drawableSize.width < 1 || drawableSize.height < 1) continue;  // nextDrawable would fail at once
+      id<CAMetalDrawable> drawable = [g_layer nextDrawable];
+      if (!drawable) {
+        s->dirty.store(true);  // retry next wake instead of dropping the frame
+        continue;
       }
+      const int w = static_cast<int>(drawable.texture.width);
+      const int h = static_cast<int>(drawable.texture.height);
+
+      if (w != ringW || h != ringH) {
+        glFinish();
+        for (auto& slot : g_ring) releaseSlot(slot);
+        for (auto& slot : g_ring) buildSlot(slot, w, h);
+        ringW = w;
+        ringH = h;
+      }
+
+      SurfaceSlot& slot = g_ring[frameIndex++ & 1];
+      if (slot.busy.load()) waitUntilFree(slot);  // never in practice at ring size 2
+
+      // A resize frame goes out at once, not at its display time: the main thread is waiting for it.
+      int blockForTargetTime = syncFor ? 0 : 1;
+      mpv_opengl_fbo mfbo{static_cast<int>(slot.fbo), w, h, g_pixelFormat.glInternalFormat};
+      // No FLIP_Y: mpv's render-API output is top-down, and so is an FBO texture
+      // (unlike the CAOpenGLLayer default framebuffer, which is bottom-up). If
+      // the first SDR frame renders upside down, re-add flip=1 here.
+      mpv_render_param render_params[] = {
+          {MPV_RENDER_PARAM_OPENGL_FBO, &mfbo},
+          {MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &blockForTargetTime},
+          {static_cast<mpv_render_param_type>(0), nullptr},
+      };
+      M::rc_render(s->mpvGl, render_params);
+      glFlush();  // ensure GL's IOSurface writes are visible before the Metal blit reads it
+
+      id<MTLCommandBuffer> cb = [g_queue commandBuffer];
+      id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+      [blit copyFromTexture:slot.mtl
+                 sourceSlice:0
+                 sourceLevel:0
+                sourceOrigin:MTLOriginMake(0, 0, 0)
+                  sourceSize:MTLSizeMake(w, h, 1)
+                   toTexture:drawable.texture
+            destinationSlice:0
+            destinationLevel:0
+           destinationOrigin:MTLOriginMake(0, 0, 0)];
+      [blit endEncoding];
+      if (!syncFor) [cb presentDrawable:drawable];
+      slot.busy.store(true);
+      const uint64_t gen = slot.gen;
+      [cb addCompletedHandler:^(id<MTLCommandBuffer>) {
+        // Clear under wakeMutex: an unlocked store can land between waitUntilFree's
+        // predicate check and its block, losing the wakeup and stalling the loop.
+        {
+          std::lock_guard<std::mutex> lk(s->wakeMutex);
+          if (slot.gen == gen) slot.busy.store(false);
+        }
+        s->wakeCv.notify_all();  // the main thread may be waiting on wakeCv too
+      }];
+      [cb commit];
+      if (syncFor) {
+        [cb waitUntilScheduled];
+        std::unique_lock<std::mutex> lk(s->wakeMutex);
+        if (s->syncWanted == syncFor) {
+          s->syncDrawable = drawable;
+          s->wakeCv.notify_all();
+          s->wakeCv.wait(lk, [s, syncFor] { return s->syncWanted != syncFor || !s->run.load(); });
+        } else {
+          [drawable present];  // that request timed out or a newer resize superseded it
+        }
+      }
+      M::rc_report_swap(s->mpvGl);
     }
-    M::rc_report_swap(s->mpvGl);
   }
 
+  s->renderReady.store(false);
   if (s->mpvGl) {
     M::rc_free(s->mpvGl);
     s->mpvGl = nullptr;
@@ -465,7 +473,7 @@ HdrMeta g_lastHdrMeta;  // main-thread only; reused when re-evaluating for a dis
 // Main thread, on a resize: the next frame, at the new size, joins the resize's Core Animation
 // transaction, so AppKit's full-screen animation snapshots it rather than the stale frame.
 void PresentFrameInTransaction() {
-  if (!g_state.run.load()) return RequestRedraw();
+  if (!g_state.renderReady.load()) return RequestRedraw();
   std::unique_lock<std::mutex> lk(g_state.wakeMutex);
   g_state.syncWanted = ++g_state.syncCount;
   g_state.syncDrawable = nil;
@@ -474,11 +482,14 @@ void PresentFrameInTransaction() {
   // Bounded: a render thread stalled in nextDrawable must not freeze the UI.
   const bool ready = g_state.wakeCv.wait_for(lk, std::chrono::milliseconds(100),
                                              [] { return g_state.syncDrawable != nil; });
+  id<CAMetalDrawable> drawable = g_state.syncDrawable;
+  g_state.syncDrawable = nil;
   if (ready) {
+    lk.unlock();  // the render thread stays parked until syncWanted changes
     g_layer.presentsWithTransaction = YES;
-    [g_state.syncDrawable present];
+    [drawable present];
     g_layer.presentsWithTransaction = NO;
-    g_state.syncDrawable = nil;
+    lk.lock();
   }
   g_state.syncWanted = 0;
   lk.unlock();
@@ -489,11 +500,14 @@ void UpdateLayerGeometry() {
   if (!g_layer || !g_view) return;
   NSWindow* win = g_view.window;
   CGFloat scale = win ? win.backingScaleFactor : 2.0;
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];  // a standalone sublayer would animate its frame
   g_layer.contentsScale = scale;
   g_layer.frame = g_view.bounds;
   CGSize drawableSize =
       CGSizeMake(g_view.bounds.size.width * scale, g_view.bounds.size.height * scale);
   g_layer.drawableSize = drawableSize;
+  [CATransaction commit];
   PresentFrameInTransaction();
 }
 
@@ -912,13 +926,6 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
       getenv("FLIKS_MPV_LOGLEVEL") ? getenv("FLIKS_MPV_LOGLEVEL") : "v");
   fprintf(stderr, "[player-mac] mpv ready (hwdec=videotoolbox)\n");
 
-  // N-API runs on the AppKit main thread, so NSView/CALayer mutation here is safe.
-  g_view = [[FliksVideoView alloc] initWithFrame:content.bounds];
-  g_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  g_view.wantsLayer = YES;
-  // Under Chromium's compositor view, which draws the page with alpha in a window with a clear background.
-  [content addSubview:g_view positioned:NSWindowBelow relativeTo:nil];
-
   const char* forceSdr = getenv("FLIKS_HDR");
   const bool wantHdr = !(forceSdr && std::strcmp(forceSdr, "no") == 0);
   g_device = MTLCreateSystemDefaultDevice();
@@ -937,6 +944,13 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
     fprintf(stderr, "[player-mac] metal pixel format: BGRA8 (SDR)\n");
   }
   g_state.hdrBacking.store(wantHdr);
+
+  // N-API runs on the AppKit main thread, so NSView/CALayer mutation here is safe.
+  g_view = [[FliksVideoView alloc] initWithFrame:content.bounds];
+  g_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  g_view.wantsLayer = YES;
+  // Under Chromium's compositor view, which draws the page with alpha in a window with a clear background.
+  [content addSubview:g_view positioned:NSWindowBelow relativeTo:nil];
 
   g_layer = [CAMetalLayer layer];
   g_layer.device = g_device;
