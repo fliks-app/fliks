@@ -175,6 +175,21 @@ before its first launch (`strings fliks_compositor.node | grep startPaused` tell
 → step 2. `client/**` → step 3 (+ the `/tmp` sync). Only the changed unit needs
 rebuilding; the addon is reloaded fresh on each Electron start.
 
+## Mac App Store build
+
+`npm run dist:mas` (electron-builder `mas` target, `electron-builder.yml` `mas:`) builds the store
+`.pkg` under `media.fliks.app` with the MAS Electron binary, the sandbox entitlements in
+`build/entitlements.mas*.plist` and the provisioning profile at `build/embedded.provisionprofile`
+(gitignored; CI writes it from `MAS_PROVISIONING_PROFILE_BASE64`). libmpv ships in
+`Contents/Frameworks` there (`process.mas` in `mac-mpv-player.ts`), and `process.mas` turns the
+in-app updater off (`updater.ts` reports `storeManaged`). The `mas` leg of `desktop-release.yml`
+runs only with the repository variable `MAS_ENABLED=true`: it validates the package on any run and
+uploads it to App Store Connect on a stable `v*` tag.
+
+Local sandbox check on a Mac: `electron-builder --mac mas-dev --arm64 -c.mas.type=development` with a
+macOS development profile that lists the Mac by its **Provisioning UDID** (System Information,
+Hardware); a profile listing the hardware UUID gets the app killed at launch (exit 137).
+
 ## Run
 
 From `desktop/` (Electron resolves `.` and `node_modules` there):
