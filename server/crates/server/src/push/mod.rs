@@ -37,8 +37,8 @@ use std::{
 };
 use tokio::sync::Semaphore;
 
-/// The official relay, until the owner fixes the public host.
-pub const DEFAULT_RELAY_URL: &str = "https://relay.fliks.app";
+/// The official relay; the Android and iOS apps compile in the same host.
+pub const DEFAULT_RELAY_URL: &str = "https://push-relay.fliks.media";
 const SEND_TIMEOUT: Duration = Duration::from_secs(10);
 const CONCURRENT_SENDS: usize = 8;
 const TICK: Duration = Duration::from_secs(600);
