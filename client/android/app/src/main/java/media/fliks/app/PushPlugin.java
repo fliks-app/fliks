@@ -59,14 +59,14 @@ public class PushPlugin extends Plugin {
     }
 
     /** A notification tap (from {@link MainActivity}); held until the plugin is loaded. */
-    static void opened(String serverUrl, String userId, String url) {
+    static void opened(@Nullable String serverUrl, int userId, String url) {
         JSObject o = new JSObject();
         o.put("url", url);
-        if (!serverUrl.isEmpty() && !userId.isEmpty()) {
+        if (serverUrl != null) {
             JSObject session = new JSObject();
             session.put("serverUrl", serverUrl);
-            session.put("userId", Integer.parseInt(userId));
-            session.put("key", PushStore.sessionKey(serverUrl, Integer.parseInt(userId)));
+            session.put("userId", userId);
+            session.put("key", PushStore.sessionKey(serverUrl, userId));
             o.put("session", session);
         }
         if (instance != null) instance.notifyListeners("pushOpened", o, true);
@@ -189,7 +189,7 @@ public class PushPlugin extends Plugin {
         String relay = entry.optString("relay");
         try {
             if (!sub.isEmpty() && !token.isEmpty() && !relay.isEmpty()) PushRelay.delete(relay, token, sub);
-            store.remove(entry.optString("session"));
+            store.removeIfDeleting(entry.optString("session"));
         } catch (IOException e) {
             // Kept marked for the next launch.
         }
@@ -216,6 +216,12 @@ public class PushPlugin extends Plugin {
         intent.removeExtra(PushNotifier.EXTRA_URL);
         if (tag != null) PushNotifier.cancel(ctx, tag);
         if (url == null || url.isEmpty()) return;
-        opened(server == null ? "" : server, user == null ? "" : user, url);
+        // The extras are not trusted: only a session this device holds a subscription for is forwarded.
+        try {
+            int id = Integer.parseInt(user);
+            if (server != null && new PushStore(ctx).get(PushStore.sessionKey(server, id)) != null) opened(server, id, url);
+        } catch (NumberFormatException e) {
+            // No session: nothing is opened.
+        }
     }
 }

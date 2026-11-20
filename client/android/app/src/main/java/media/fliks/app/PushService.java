@@ -41,7 +41,7 @@ public class PushService extends FirebaseMessagingService {
         JSONObject plain;
         try {
             byte[] raw = PushCrypto.decrypt(B64.decode(p),
-                new PushCrypto.Keys(store.unwrap(entry.getString("priv")), B64.decode(entry.getString("pub"))),
+                new PushCrypto.Keys(store.unwrap(entry), B64.decode(entry.getString("pub"))),
                 B64.decode(entry.getString("auth")));
             plain = new JSONObject(new String(raw, StandardCharsets.UTF_8));
         } catch (Exception e) {
@@ -52,12 +52,17 @@ public class PushService extends FirebaseMessagingService {
         if (PushRules.expired(plain.optLong("ts"), plain.optLong("ttl"), System.currentTimeMillis() / 1000)) return;
         if (!store.markSeen(plain.optString("id"))) return;
         if (PushNotifier.foreground && onScreen(entry)) return;
-        PushNotifier.show(this, entry, plain);
+        try {
+            PushNotifier.show(this, entry, plain);
+        } catch (RuntimeException | OutOfMemoryError e) {
+            Log.w(TAG, "show failed: " + e.getClass().getSimpleName());
+            PushNotifier.showFallback(this);
+        }
     }
 
     private boolean onScreen(JSONObject entry) {
-        String active = new FliksApi(this).activeKey();
-        return active != null && active.equals(entry.optString("serverUrl") + "::" + entry.optInt("userId"));
+        String active = FliksApi.shared(this).activeKey();
+        return active != null && active.equals(PushStore.apiKey(entry.optString("serverUrl"), String.valueOf(entry.optInt("userId"))));
     }
 
     /** An unknown subscription id: the relay is told to drop it, whichever relay of this build holds it. */

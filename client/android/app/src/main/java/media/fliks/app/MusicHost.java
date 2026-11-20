@@ -183,7 +183,7 @@ final class MusicHost {
         prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         mode = prefs.getString("replayGain", "track");
         preamp = prefs.getInt("preamp", 0);
-        api = new FliksApi(context);
+        api = FliksApi.shared(context);
         catalog = new MusicCatalog(context, api);
         DefaultRenderersFactory renderers = new DefaultRenderersFactory(context) {
             @Override

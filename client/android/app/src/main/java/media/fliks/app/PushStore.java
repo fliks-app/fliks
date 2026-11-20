@@ -34,8 +34,13 @@ final class PushStore {
         prefs = ctx.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
+    /** The key of this store; {@link FliksApi} keys its sessions `serverUrl::userId`, see {@link #apiKey}. */
     static String sessionKey(String serverUrl, int userId) {
         return serverUrl + "|" + userId;
+    }
+
+    static String apiKey(String serverUrl, String userId) {
+        return serverUrl + "::" + userId;
     }
 
     @Nullable
@@ -67,6 +72,12 @@ final class PushStore {
         prefs.edit().remove("s:" + session).apply();
     }
 
+    /** Removes the entry only while it is still marked `deleting`: a re-prepare in between keeps it. */
+    synchronized void removeIfDeleting(String session) {
+        JSONObject now = get(session);
+        if (now != null && now.optBoolean("deleting")) remove(session);
+    }
+
     @Nullable
     private JSONObject read(String key) {
         try {
@@ -93,7 +104,7 @@ final class PushStore {
     synchronized boolean markSeen(String id) {
         List<String> next = PushRules.remember(seen(), id);
         if (next == null) return false;
-        prefs.edit().putString(SEEN, new JSONArray(next).toString()).apply();
+        prefs.edit().putString(SEEN, new JSONArray(next).toString()).commit();
         return true;
     }
 
@@ -108,11 +119,18 @@ final class PushStore {
         return B64.encode(out);
     }
 
-    byte[] unwrap(String wrapped) throws GeneralSecurityException {
-        byte[] in = B64.decode(wrapped);
-        Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
-        c.init(Cipher.DECRYPT_MODE, wrapKey(), new GCMParameterSpec(128, in, 0, 12));
-        return c.doFinal(in, 12, in.length - 12);
+    /** The private scalar of `entry`; when the Keystore key is gone the entry is dropped so the next
+     *  `prepare` generates a new pair. */
+    byte[] unwrap(JSONObject entry) throws GeneralSecurityException {
+        try {
+            byte[] in = B64.decode(entry.getString("priv"));
+            Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
+            c.init(Cipher.DECRYPT_MODE, wrapKey(), new GCMParameterSpec(128, in, 0, 12));
+            return c.doFinal(in, 12, in.length - 12);
+        } catch (GeneralSecurityException | JSONException | RuntimeException e) {
+            remove(entry.optString("session"));
+            throw e instanceof GeneralSecurityException ? (GeneralSecurityException) e : new GeneralSecurityException(e);
+        }
     }
 
     private static SecretKey wrapKey() throws GeneralSecurityException {

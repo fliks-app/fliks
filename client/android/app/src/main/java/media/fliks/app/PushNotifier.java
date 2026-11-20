@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.UUID;
 
 /** Builds and posts the system notification of a decrypted push, and the done or failed line of a call action. */
 final class PushNotifier {
@@ -35,10 +35,12 @@ final class PushNotifier {
     static final String ACTION_CALL = "media.fliks.app.PUSH_CALL";
 
     private static final int NOTIFICATION_ID = 1;
-    private static final int IMAGE_TIMEOUT_MS = 5_000;
+    private static final int IMAGE_TIMEOUT_MS = 3_000;
+    /** Whole download budget; FCM gives the service about 20 s. */
+    private static final long IMAGE_DEADLINE_MS = 6_000;
+    private static final int IMAGE_MAX_SIDE = 1024;
     private static final int IMAGE_MAX_BYTES = 3 * 1024 * 1024;
     private static final String[] CATEGORIES = {"requests", "parties", "social", "episodes", "account"};
-    private static final AtomicInteger requestCodes = new AtomicInteger();
 
     /** True while the activity is started; the plugin hides a notification of the session on screen. */
     static volatile boolean foreground;
@@ -75,9 +77,10 @@ final class PushNotifier {
         String server = entry.optString("serverUrl");
         String userId = String.valueOf(entry.optInt("userId"));
         String tag = p.optString("tag", p.optString("id"));
+        if (tag.isEmpty()) tag = UUID.randomUUID().toString();
         String channel = channelFor(p.optString("cat"));
         NotificationCompat.Builder b = base(ctx, channel, p.optString("title"), p.optString("body"));
-        b.setContentIntent(openIntent(ctx, server, userId, p.optString("url"), tag));
+        b.setContentIntent(openIntent(ctx, server, userId, p.optString("url"), tag, "open"));
 
         JSONArray actions = p.optJSONArray("actions");
         for (int i = 0; actions != null && i < Math.min(actions.length(), 2); i++) {
@@ -88,10 +91,10 @@ final class PushNotifier {
                     .putExtra(EXTRA_ACTION_TOKEN, a.optString("token")).putExtra(EXTRA_SERVER, server)
                     .putExtra(EXTRA_USER, userId).putExtra(EXTRA_TAG, tag).putExtra(EXTRA_CHANNEL, channel)
                     .putExtra(EXTRA_TITLE, p.optString("title"));
-                b.addAction(0, a.optString("title"), PendingIntent.getBroadcast(ctx, requestCodes.incrementAndGet(),
+                b.addAction(0, a.optString("title"), PendingIntent.getBroadcast(ctx, PushRules.requestCode(tag, "call" + i),
                     call, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
             } else {
-                b.addAction(0, a.optString("title"), openIntent(ctx, server, userId, a.optString("url"), tag));
+                b.addAction(0, a.optString("title"), openIntent(ctx, server, userId, a.optString("url"), tag, "action" + i));
             }
         }
 
@@ -108,7 +111,7 @@ final class PushNotifier {
         ensureChannels(ctx);
         NotificationCompat.Builder b = base(ctx, channelFor(""), ctx.getString(R.string.push_fallback_title),
             ctx.getString(R.string.push_fallback_body));
-        b.setContentIntent(openIntent(ctx, "", "", "", "fallback"));
+        b.setContentIntent(openIntent(ctx, "", "", "", "fallback", "open"));
         post(ctx, "fallback", b);
     }
 
@@ -116,13 +119,13 @@ final class PushNotifier {
     static void showResult(Context ctx, String tag, String channel, String title, boolean ok) {
         NotificationCompat.Builder b = base(ctx, channel, title,
             ctx.getString(ok ? R.string.push_action_done : R.string.push_action_failed));
-        b.setContentIntent(openIntent(ctx, "", "", "", tag));
+        b.setContentIntent(openIntent(ctx, "", "", "", tag, "open"));
         post(ctx, tag, b);
     }
 
     private static NotificationCompat.Builder base(Context ctx, String channel, String title, String body) {
         return new NotificationCompat.Builder(ctx, channel)
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setSmallIcon(R.drawable.ic_stat_fliks)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
@@ -131,11 +134,11 @@ final class PushNotifier {
             .setCategory(NotificationCompat.CATEGORY_SOCIAL);
     }
 
-    private static PendingIntent openIntent(Context ctx, String server, String userId, String url, String tag) {
+    private static PendingIntent openIntent(Context ctx, String server, String userId, String url, String tag, String purpose) {
         Intent i = new Intent(ctx, MainActivity.class).setAction(Intent.ACTION_MAIN)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP)
             .putExtra(EXTRA_URL, url).putExtra(EXTRA_SERVER, server).putExtra(EXTRA_USER, userId).putExtra(EXTRA_TAG, tag);
-        return PendingIntent.getActivity(ctx, requestCodes.incrementAndGet(), i,
+        return PendingIntent.getActivity(ctx, PushRules.requestCode(tag, purpose), i,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
@@ -157,7 +160,9 @@ final class PushNotifier {
     private static Bitmap fetchImage(String url) {
         HttpURLConnection c = null;
         try {
+            long deadline = System.currentTimeMillis() + IMAGE_DEADLINE_MS;
             c = (HttpURLConnection) new URL(url).openConnection();
+            c.setInstanceFollowRedirects(false);
             c.setConnectTimeout(IMAGE_TIMEOUT_MS);
             c.setReadTimeout(IMAGE_TIMEOUT_MS);
             if (c.getResponseCode() != 200) return null;
@@ -166,17 +171,18 @@ final class PushNotifier {
                 byte[] buf = new byte[8192];
                 for (int n; (n = in.read(buf)) > 0; ) {
                     out.write(buf, 0, n);
-                    if (out.size() > IMAGE_MAX_BYTES) return null;
+                    if (out.size() > IMAGE_MAX_BYTES || System.currentTimeMillis() > deadline) return null;
                 }
             }
             byte[] data = out.toByteArray();
             BitmapFactory.Options o = new BitmapFactory.Options();
             o.inJustDecodeBounds = true;
             BitmapFactory.decodeByteArray(data, 0, data.length, o);
-            o.inSampleSize = Math.max(1, o.outWidth / 1024);
+            if (o.outWidth <= 0 || o.outHeight <= 0) return null;
+            o.inSampleSize = Integer.highestOneBit(Math.max(1, Math.max(o.outWidth, o.outHeight) / IMAGE_MAX_SIDE));
             o.inJustDecodeBounds = false;
             return BitmapFactory.decodeByteArray(data, 0, data.length, o);
-        } catch (IOException | RuntimeException e) {
+        } catch (IOException | RuntimeException | OutOfMemoryError e) {
             return null;
         } finally {
             if (c != null) c.disconnect();
