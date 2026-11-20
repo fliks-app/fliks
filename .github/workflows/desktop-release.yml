@@ -272,6 +272,11 @@ jobs:
             --dist-url=https://electronjs.org/headers \
             --arch=arm64
 
+      - name: Verify minimum macOS of bundled binaries
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash desktop/scripts/verify-minos-mac.sh
+
       # Windows: the System Media Transport Controls addon (fliks_smtc_win, C++/WinRT).
       - name: Build native addon (Windows)
         if: runner.os == 'Windows'
