@@ -39,58 +39,53 @@ export class SetupComponent {
   private readonly toast = inject(ToastService);
 
   readonly url = signal(this.serverConfig.serverUrl() || 'http://');
-  readonly testing = signal(false);
-  readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
+  /** Probe-then-switch of the typed address in flight. */
+  readonly connecting = signal(false);
+  readonly failed = signal(false);
   readonly knownServers = this.serverConfig.knownServers;
   /** URL being switched to, or null. The app restarts on a server switch, so
    *  this only has to hold until then. */
   readonly switchingTo = signal<string | null>(null);
-  /** True only for a switch started by the save button, so the recent-server
-   *  rows don't spin its spinner. */
-  readonly saving = signal(false);
   /** URL of the entry whose ⋯ menu is open, or null. */
   readonly openMenuFor = signal<string | null>(null);
-  private readonly saveBtn = viewChild<ElementRef<HTMLButtonElement>>('saveBtn');
   private readonly editDialog = viewChild<ElementRef<HTMLDialogElement>>('editDialog');
   /** Server the edit dialog changes. */
   readonly editing = signal<KnownServer | null>(null);
   readonly editName = signal('');
   readonly editUrl = signal('');
-  private testRun = 0;
-  private readonly cancelTest$ = new Subject<void>();
+  private connectRun = 0;
+  private readonly cancelConnect$ = new Subject<void>();
 
-  /** Editing the URL drops any running test and its now-stale result. */
+  /** Editing the URL drops any running probe and its now-stale error. */
   onUrlChange(value: string) {
     this.url.set(value);
-    this.testRun++;
-    this.cancelTest$.next();
-    this.testing.set(false);
-    this.testResult.set(null);
+    this.connectRun++;
+    this.cancelConnect$.next();
+    this.connecting.set(false);
+    this.failed.set(false);
   }
 
-  async test() {
+  /** The button stays enabled while busy: a probe can outlast the D-pad focus rescue window. */
+  async connect() {
     const raw = this.url().trim().replace(/\/+$/, '');
-    if (!raw) return;
+    if (!raw || this.connecting() || this.switchingTo()) return;
 
-    const run = ++this.testRun;
-    this.testing.set(true);
-    this.testResult.set(null);
+    const run = ++this.connectRun;
+    this.connecting.set(true);
+    this.failed.set(false);
     try {
       for (const base of withHttpsFallback(raw)) {
-        const ok = await this.reachable(base, this.cancelTest$);
-        if (run !== this.testRun) return;
+        const ok = await this.reachable(base, this.cancelConnect$);
+        if (run !== this.connectRun) return;
         if (ok) {
           this.url.set(base);
-          this.testResult.set({ ok: true, message: 'setup.test_success' });
-          // Save is disabled until the test passes — hand it the focus once
-          // the render that enables it has happened, so the D-pad lands there.
-          setTimeout(() => this.saveBtn()?.nativeElement.focus());
+          await this.switchTo(base);
           return;
         }
       }
-      this.testResult.set({ ok: false, message: 'setup.test_error' });
+      this.failed.set(true);
     } finally {
-      if (run === this.testRun) this.testing.set(false);
+      if (run === this.connectRun) this.connecting.set(false);
     }
   }
 
@@ -108,20 +103,9 @@ export class SetupComponent {
     }
   }
 
-  async save() {
-    const result = this.testResult();
-    if (!result?.ok) return;
-    this.saving.set(true);
-    try {
-      await this.switchTo(this.url().trim());
-    } finally {
-      this.saving.set(false);
-    }
-  }
-
   /** One-tap "use this server": probe it first, then resume its stored session if any. */
   async useKnown(server: KnownServer) {
-    if (this.switchingTo()) return;
+    if (this.switchingTo() || this.connecting()) return;
     this.switchingTo.set(server.url);
     const ok = await this.reachable(server.url);
     this.switchingTo.set(null);

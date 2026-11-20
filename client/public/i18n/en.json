@@ -848,9 +848,7 @@
     "subtitle": "Configure the address of your server",
     "server_url": "Server address",
     "server_url_hint": "The full address of your server (e.g. http://localhost:4848)",
-    "test": "Test",
-    "save": "Save",
-    "test_success": "Successfully connected to the server.",
+    "connect": "Connect",
     "test_error": "Unable to connect to the server."
   },
   "login": {

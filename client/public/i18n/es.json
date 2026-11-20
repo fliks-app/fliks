@@ -848,9 +848,7 @@
     "subtitle": "Configure la dirección de su servidor",
     "server_url": "Dirección del servidor",
     "server_url_hint": "La dirección completa de su servidor (ej.: http://localhost:4848)",
-    "test": "Probar",
-    "save": "Guardar",
-    "test_success": "Conexión al servidor correcta.",
+    "connect": "Conectar",
     "test_error": "No se puede conectar al servidor."
   },
   "login": {

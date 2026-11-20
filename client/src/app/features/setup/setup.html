@@ -61,7 +61,7 @@
           class="input input-bordered w-full"
           [ngModel]="url()"
           (ngModelChange)="onUrlChange($event)"
-          (keydown.enter)="test()"
+          (keydown.enter)="connect()"
           placeholder="http://localhost:4848"
         />
         <div class="label">
@@ -69,42 +69,24 @@
         </div>
       </label>
 
-      @if (testResult(); as result) {
-        <div
-          role="alert"
-          class="alert text-sm"
-          [class.alert-success]="result.ok"
-          [class.alert-error]="!result.ok"
-        >
-          {{ result.message | translate }}
+      @if (failed()) {
+        <div role="alert" class="alert alert-error text-sm">
+          {{ 'setup.test_error' | translate }}
         </div>
       }
 
-      <div class="flex gap-2">
-        <button
-          type="button"
-          class="btn btn-outline flex-1"
-          [disabled]="testing() || !url().trim()"
-          (click)="test()"
-        >
-          @if (testing()) {
-            <span class="loading loading-spinner loading-sm"></span>
-          }
-          {{ 'setup.test' | translate }}
-        </button>
-        <button
-          #saveBtn
-          type="button"
-          class="btn btn-primary flex-1"
-          [disabled]="!testResult()?.ok || !!switchingTo()"
-          (click)="save()"
-        >
-          @if (saving()) {
-            <span class="loading loading-spinner loading-sm"></span>
-          }
-          {{ 'setup.save' | translate }}
-        </button>
-      </div>
+      <button
+        type="button"
+        class="btn btn-primary w-full"
+        [disabled]="!url().trim()"
+        [attr.aria-busy]="connecting()"
+        (click)="connect()"
+      >
+        @if (connecting()) {
+          <span class="loading loading-spinner loading-sm"></span>
+        }
+        {{ 'setup.connect' | translate }}
+      </button>
     </div>
   </div>
 </div>
