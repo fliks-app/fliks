@@ -1133,6 +1133,12 @@ Napi::Value KeepOffMainWindow(const Napi::CallbackInfo& info) {
                         method_getTypeEncoding(m));
   }
   objc_setAssociatedObject(window, &kOffMainKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  // A window shown before the flag is already main: hand that to the root of its parent chain.
+  if (window.isMainWindow) {
+    NSWindow* root = window;
+    while (root.parentWindow) root = root.parentWindow;
+    [root makeMainWindow];
+  }
   return env.Undefined();
 }
 
