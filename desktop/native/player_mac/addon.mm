@@ -623,10 +623,10 @@ void ReconfigureColorForCurrentVideo() {
   dispatch_async(dispatch_get_main_queue(), ^{ ApplyLayerColorConfig(clsInt, meta); });
 }
 
-// mpv documents the video-params enum values as subject to change, and the
-// vendored libmpv tracks whatever version Homebrew serves (vendor-libmpv-mac.sh
-// pins nothing). A rename degrades silently — an unrecognised gamma classifies as
-// CC_SDR_709, so HDR would play tone-mapped with no error — so check the names
+// mpv documents the video-params enum values as subject to change, so a libmpv
+// bump (build-libmpv-mac.sh pins it) can rename them. A rename degrades
+// silently — an unrecognised gamma classifies as CC_SDR_709, so HDR would play
+// tone-mapped with no error — so check the names
 // ReconfigureColorForCurrentVideo compares against once at startup. mpv's own
 // choice lists come from the same tables that format video-params.
 void VerifyColorEnums() {

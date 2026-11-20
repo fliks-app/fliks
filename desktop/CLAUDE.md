@@ -114,18 +114,18 @@ Kill-switch (MUST print nothing):
 nm -D native/vendor/libmpv.so.2 | grep ' av_'
 ```
 
-**macOS** — `native/vendor/libmpv.dylib` + its bundled deps. Produce them from a
-Homebrew mpv with the vendor script (relocates every dep to `@loader_path`; the
-two-level namespace keeps the bundled FFmpeg distinct from Electron's):
+**macOS** — `native/vendor/libmpv.dylib`, one self-contained dylib (FFmpeg, libass,
+libplacebo, OpenSSL 3 and the rest linked statically; only `mpv_*` exported). Build it from
+source with the same pins as Linux (LGPL-2.1, deployment target 13.0); needs Xcode CLT,
+meson, ninja, pkg-config, git. Homebrew libraries are never used:
 ```bash
-brew install mpv dylibbundler
-desktop/scripts/vendor-libmpv-mac.sh
+desktop/scripts/build-libmpv-mac.sh     # ~/.cache/fliks-libmpv-mac, then verify-libmpv-mac.sh
 ```
-Kill-switch (MUST print nothing — note the Mach-O leading underscore):
-```bash
-nm -gU native/vendor/libmpv.dylib | grep ' _av_'
-otool -L native/vendor/*.dylib | grep -E '/opt/homebrew|/usr/local'  # also empty
-```
+The dependency prefix is cached between runs (stamp per pinned version); it also holds the
+libmpv headers the addon compiles against (`FLIKS_MPV_INCLUDE` overrides the path).
+`verify-libmpv-mac.sh` (MUST pass) rejects non-`mpv_*` exports, non-system dependencies and a
+GPL/nonfree FFmpeg; `verify-minos-mac.sh` rejects a Mach-O that needs a newer macOS than
+`mac.minimumSystemVersion`.
 
 ## Build
 

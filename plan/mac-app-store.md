@@ -54,7 +54,7 @@ scaletempo2).
 
 The rebuild links **OpenSSL 3** (`--enable-openssl`, no `--enable-gpl`, no
 `--enable-version3`): configure accepts it and the result is "LGPL version 2.1 or
-later". mpv opens https itself through FFmpeg, so FFmpeg's TLS backend governs all
+later" by configure; FFmpeg's own LICENSE.md calls Apache-2.0 code incompatible with LGPL v2.1, so ship the stack as LGPL-3 to be safe (owner's call, a legal point rather than an engineering one). mpv opens https itself through FFmpeg, so FFmpeg's TLS backend governs all
 playback; Electron's BoringSSL only carries the UI, downloads and `hls-mirror`.
 Disable libshaderc, the Vulkan loader, lua, js and libarchive (unused on the GL
 path).
@@ -184,9 +184,9 @@ before packaging — only a local build skipping the vendor script ships it).
 | 0 | `minos` CI gate: every vendored Mach-O ≤ `LSMinimumSystemVersion`; kill-switch checks every dylib | 0.3 d | Yes — flags bug 1 |
 | S | **Sandbox spike** (parallel with 1): `mas-dev` build on a throwaway bundle id with today's Homebrew dylibs — libmpv dlopen under library validation, CAMetalLayer, the 3-window session, mDNS, SSO loopback, mic, `.ics` `openPath` | ~1 d | — |
 | 1 | LGPL media stack from source: Linux pins, static archives → **one** `libmpv.dylib`, `-mmacosx-version-min=13.0`, `_mpv_*` export list, OpenSSL 3, a macOS CI job; Homebrew vendor script retired | 4–6 d | **Yes — fixes bug 1** |
-| 2 | macOS shell: localized menu labels, window commands and AX bound to the framed window, fullscreen event in the contract, TLS bypass scoped to the configured server host, `will-navigate` guard, `Info.plist` hygiene, runtime `<html lang>`, window state, velopack excluded | 4–6 d | **Yes** |
+| 2 | macOS shell: localized menu labels, window commands and AX bound to the framed window, fullscreen event in the contract, TLS bypass scoped to the configured server host (and mpv's `tls-verify`, which defaults to no, so `tls-ca-file` is never used today), `will-navigate` guard, `Info.plist` hygiene, runtime `<html lang>`, window state, velopack excluded | 4–6 d | **Yes** |
 | 3 | Playback menu (Now Playing already done) | 0.5 d | **Yes** |
-| 4 | MAS packaging: `mas` row in `desktop-release.yml`, `mas.appId`, two plists, two-p12 keychain, `process.mas` updater gate, `APP_ID` fix, `buildVersion`, `extendInfo`, native code to `Contents/Frameworks`, upload | 3–5 d | No |
+| 4 | MAS packaging: third-party notices (LGPL text and source offer for FFmpeg, mpv, libplacebo, fribidi; FreeType credit; OpenSSL licence), `mas` row in `desktop-release.yml`, `mas.appId`, two plists, two-p12 keychain, `process.mas` updater gate, `APP_ID` fix, `buildVersion`, `extendInfo`, native code to `Contents/Frameworks`, upload | 3–5 d | No |
 | 5 | Review prep: demo server + non-admin credentials, review notes, Mac screenshots, privacy label, QA matrix (resize during 4K HDR, XDR→SDR move, display unplug in fullscreen, ⌘Q mid-playback, local-network permission denial); at release turn off the iPad-on-Mac availability | 2–3 d + infra | No |
 | — | *Later*: single-window macOS refactor (fixes the inactive title bar, the 3-window AX tree; unlocks `hiddenInset` + vibrancy) | 3–5 d | Yes |
 | — | *Later*: Intel (universal build) | 4–8 d | — |

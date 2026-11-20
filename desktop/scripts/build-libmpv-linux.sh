@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Build desktop/native/vendor/libmpv.so.2 — the runtime libmpv for the Linux
-# desktop client. Counterpart of vendor-libmpv-mac.sh.
+# desktop client. Counterpart of build-libmpv-mac.sh (keep the pins in step).
 #
 # The build itself is mpv-build, the mpv project's own out-of-tree builder.
 # Two constraints drive what we ask of it:

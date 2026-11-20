@@ -180,12 +180,11 @@ jobs:
             libx11-dev libxext-dev libxcursor-dev libxi-dev libxfixes-dev libxrandr-dev \
             libxrender-dev libxss-dev apt-utils
 
-      # macOS embeds in-process libmpv (no SDL/GLES addon). `mpv` provides the
-      # libmpv headers the addon compiles against + the dylib the vendor script
-      # bundles; `dylibbundler` makes it self-contained (see Vendor step below).
-      - name: Install macOS build deps
+      # macOS embeds in-process libmpv (no SDL/GLES addon). Homebrew only supplies
+      # the build tools: build-libmpv-mac.sh compiles every library itself.
+      - name: Install macOS build tools
         if: runner.os == 'macOS'
-        run: brew install mpv dylibbundler
+        run: brew install meson ninja pkgconf
 
       # ── Install node deps (desktop + client) ──
       - name: Install desktop deps
@@ -229,22 +228,13 @@ jobs:
           MPV_VENDOR_SHA256: "ddef3932aed791cdc3f2585e5798802e55171ab9dce06d3275bdd9ed2967774d"
         run: bash desktop/scripts/fetch-mpv-windows.sh
 
-      # macOS embeds in-process libmpv (CAOpenGLLayer on the videoWin NSView).
-      # Build a self-contained, relocatable libmpv.dylib (+ its deps) from the
-      # Homebrew mpv: dylibbundler copies every non-system dep next to it and
-      # rewrites load commands to @loader_path. macOS's two-level namespace keeps
-      # the bundled FFmpeg distinct from Electron's libffmpeg.dylib. The script
-      # also drops the committed Linux libmpv.so.2 (unused on mac). UNTESTED on a
-      # real release box — local bring-up only so far.
-      - name: Vendor libmpv (macOS)
+      # macOS embeds in-process libmpv, built from source as one static LGPL dylib
+      # (FFmpeg + OpenSSL 3, deployment target 13.0). ci.yml builds it on every change
+      # to the script, so a release only repeats a build that already passed.
+      - name: Build libmpv (macOS)
         if: runner.os == 'macOS'
         shell: bash
-        run: bash desktop/scripts/vendor-libmpv-mac.sh
-
-      - name: Verify vendored libmpv (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: bash desktop/scripts/verify-libmpv-mac.sh
+        run: bash desktop/scripts/build-libmpv-mac.sh
 
       # ── Build the native compositor addon against the Electron 45 ABI ──
       # Linux-only: SDL3 + GL/EGL OSR compositor (the Mutter/X11 model). macOS
@@ -261,7 +251,7 @@ jobs:
 
       # macOS: build the in-process libmpv addon (fliks_player_mac) for arm64.
       # binding.gyp gates this target on OS=='mac' and finds the libmpv headers
-      # under the Homebrew prefix (mpv installed above).
+      # in the prefix build-libmpv-mac.sh installed them to.
       - name: Build native addon (macOS)
         if: runner.os == 'macOS'
         working-directory: desktop/native
