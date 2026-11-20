@@ -1437,6 +1437,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // The desktop shell's OS media controls ask for a seek here, so a transcode seek renegotiates like a scrub.
     this.stopDesktopSeekRequests = window.fliksDesktop?.on((e) => {
       if (e.type === 'seekRequest') this.onSeek(e.payload.position);
+      else if (e.type === 'fullscreenChanged') this.fullscreen.set(e.payload.fullscreen);
     });
   }
 
@@ -1678,6 +1679,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   private async createDesktopEngine(): Promise<void> {
     const { engine } = await this.createSurface('desktop');
+    if (engine instanceof DesktopEngine) this.fullscreen.set(engine.fullscreen);
     this.wireNativePlayerEngine(engine);
   }
 
@@ -2449,7 +2451,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // by the addon, not this offscreen WebView, so toggle fullscreen there.
     if (this.isDesktopNative && this.engine instanceof DesktopEngine) {
       this.engine.setFullscreen(!this.engine.fullscreen);
-      this.fullscreen.set(this.engine.fullscreen);
       return;
     }
     // iOS Safari rejects the Fullscreen API on arbitrary elements; only the <video> tag's
@@ -3530,7 +3531,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine.fullscreen
     ) {
       this.engine.setFullscreen(false);
-      this.fullscreen.set(false);
       return;
     }
     // TV remote Return and desktop Escape close a visible controls bar first, then exit on the next press;

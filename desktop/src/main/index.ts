@@ -4,14 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { registerAppSchemePrivileged, registerAppProtocol, APP_URL } from './protocol';
+import { registerAppSchemePrivileged, registerAppProtocol, APP_URL, APP_SCHEME } from './protocol';
 import { installCorsBypass } from './cors';
 import { appendLog, echoRendererConsole, redactQuery } from './log-file';
 import { setupUpdater } from './updater';
 import { registerDownloadIpc } from './download';
 import { registerCastIpc } from './cast';
 import { oidcCancel, oidcListen, oidcWait, type OidcPage, type OidcPages } from './oidc-loopback';
-import { IPC, type DesktopEvent, type DesktopMediaMetadata } from '../shared/contract';
+import { IPC, MENU_IPC, type DesktopEvent, type DesktopMediaMetadata } from '../shared/contract';
 import { LinuxCompositorPlayer, type CompositorAddon } from './mpv/linux-compositor-player';
 import { forwardPlayerEvents } from './window/forward-events';
 import { registerPlayerIpc } from './ipc';
@@ -20,6 +20,8 @@ import type { PlayerBackend } from './mpv/player-backend';
 import { toElectronKey } from './keymap';
 import { watchRendererCrash } from './renderer-recovery';
 import { Notifier } from './notify';
+import { refreshMenu, setMenuLabels, setMenuWindow } from './menu';
+import { isTrustedServer, trustServer } from './trusted-servers';
 
 // Velopack's install/update/uninstall hooks run and exit here, before any Electron startup.
 if (process.platform === 'win32') {
@@ -46,12 +48,22 @@ if (process.platform === 'linux') {
 // is already locked: it boots with no server and no session.
 if (!app.requestSingleInstanceLock()) app.exit(0);
 
+const openExternal = (url: string) => {
+  if (url.startsWith('https://') || url.startsWith('http://')) void shell.openExternal(url);
+};
+
 // The UI only ever opens outside links (a trailer, a release page). A child
 // BrowserWindow would inherit the parent's offscreen prefs and never be seen.
 app.on('web-contents-created', (_e, contents) => {
   contents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https://') || url.startsWith('http://')) void shell.openExternal(url);
+    openExternal(url);
     return { action: 'deny' };
+  });
+  // The page stays on the app's own origin: a link elsewhere opens in the browser instead.
+  contents.on('will-navigate', (e, url) => {
+    if (new URL(url).protocol === `${APP_SCHEME}:`) return;
+    e.preventDefault();
+    openExternal(url);
   });
 });
 registerAppSchemePrivileged();
@@ -59,17 +71,13 @@ registerAppSchemePrivileged();
 process.on('uncaughtException', (e) => console.error('[main:uncaughtException]', e?.stack ?? e));
 process.on('unhandledRejection', (e) => console.error('[main:unhandledRejection]', e));
 
-// The desktop client connects to the user's self-hosted Fliks server, which
-// commonly uses a self-signed or private-CA TLS certificate the OS doesn't
-// trust — Chromium would otherwise refuse the HTTPS connection. Accept cert
-// errors: the app only ever loads its own fliks:// UI and talks to the server
-// the user explicitly configured (same trust model as the mobile apps).
+// A self-hosted Fliks server commonly has a self-signed or private-CA certificate the OS
+// doesn't trust: only the host the page reports as its server is accepted, others are refused.
 app.on('certificate-error', (event, _wc, url, error, _cert, callback) => {
-  // Logged before the accept: if this fires for the media host, a "TLS
-  // failure" report has nothing to do with mpv's own verification at all.
-  appendLog(`[tls] ${redactQuery(url)} ${error}`);
+  const trusted = isTrustedServer(url);
+  appendLog(`[tls] ${redactQuery(url)} ${error} ${trusted ? 'accepted' : 'refused'}`);
   event.preventDefault();
-  callback(true);
+  callback(trusted);
 });
 
 const WIDTH = 1280;
@@ -221,6 +229,8 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
   // so the renderer can't invoke an unregistered channel.
   registerPlayerIpc(session, ipcHooks);
   session.hideOnClose = () => notifier?.hideOnClose() ?? false;
+  session.onFullscreenChange = refreshMenu;
+  setMenuWindow(session);
   session.onActive = (active) => notifier?.setActive(active);
   raiseWindow = () => {
     session.focus();
@@ -336,11 +346,12 @@ async function startUiOnly(haveApp: boolean): Promise<void> {
 
 app.whenReady().then(async () => {
   // macOS needs the menu for Cmd+C/V/A/Z/Q; Windows and Linux have none.
-  Menu.setApplicationMenu(
-    process.platform === 'darwin'
-      ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }])
-      : null,
-  );
+  if (process.platform === 'darwin') refreshMenu();
+  else Menu.setApplicationMenu(null);
+  ipcMain.handle(MENU_IPC.setLabels, (_e, labels: unknown) => {
+    if (process.platform === 'darwin') setMenuLabels(labels);
+  });
+  ipcMain.handle(IPC.setServerUrl, (_e, url: unknown) => trustServer(url));
 
   // macOS ignores a BrowserWindow's `icon`; the dock icon comes from the app
   // bundle when packaged, but a dev `electron .` run shows Electron's default.
@@ -586,9 +597,15 @@ app.whenReady().then(async () => {
     }
   });
 
+  let fullscreen = false;
   registerPlayerIpc({
     player,
-    setFullscreen: (enabled) => addon.setFullscreen(enabled),
+    setFullscreen: (enabled) => {
+      addon.setFullscreen(enabled);
+      fullscreen = enabled;
+      send({ type: 'fullscreenChanged', payload: { fullscreen } });
+    },
+    isFullscreen: () => fullscreen,
     setCursorVisible: (visible) => addon.setCursorVisible(visible),
     resize: () => {},
     destroy: () => player.destroy(),

@@ -14,6 +14,7 @@ import type {
 export interface PlayerIpcHost {
   readonly player: PlayerBackend;
   setFullscreen(enabled: boolean): void;
+  isFullscreen(): boolean;
   resize(rect: DesktopRect): void;
   destroy(): Promise<void>;
   /** Absent where the page is the visible surface and its CSS cursor already applies. */
@@ -71,6 +72,7 @@ export function registerPlayerIpc(
   ipcMain.handle(IPC.setFillScreen, (_e, fill: boolean) => session.player.setFillScreen(fill));
   ipcMain.handle(IPC.setCursorVisible, (_e, visible: boolean) => session.setCursorVisible?.(visible));
   ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => session.setFullscreen(enabled));
+  ipcMain.handle(IPC.isFullscreen, () => session.isFullscreen());
   ipcMain.handle(IPC.resize, (_e, rect: DesktopRect) => session.resize(rect));
   ipcMain.handle(IPC.destroy, () => session.destroy());
 }

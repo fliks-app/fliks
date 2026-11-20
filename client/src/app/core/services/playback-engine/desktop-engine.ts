@@ -86,6 +86,7 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     // The video window + mpv already exist in the Electron main process; just
     // wire the event stream (and re-apply any style set before init).
     this.subscribe();
+    this._fullscreen = (await this.bridge.isFullscreen?.().catch(() => false)) ?? false;
     this._initialized = true;
     if (this._subtitleStyle) {
       this.bridge.setSubtitleStyle(this._subtitleStyle).catch(() => {});
@@ -224,9 +225,8 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
     await this.bridge.selectAudioTrack(mpvId);
   }
 
-  /** Toggle the native (SDL) compositor window fullscreen. */
+  /** Asks the native window to enter or leave fullscreen; {@link fullscreen} follows its `fullscreenChanged` event. */
   async setFullscreen(enabled: boolean): Promise<void> {
-    this._fullscreen = enabled;
     await this.bridge.setFullscreen(enabled).catch(() => {});
   }
   get fullscreen(): boolean {
@@ -412,6 +412,9 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
         this.resolveSubtitle();
         break;
       }
+      case 'fullscreenChanged':
+        this._fullscreen = event.payload.fullscreen;
+        break;
       case 'firstFrame': {
         if (this.firstFrameEmitted) break;
         this.emitFirstFrameOnce();

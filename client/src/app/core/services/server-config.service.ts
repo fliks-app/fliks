@@ -1,4 +1,5 @@
 import { Injectable, signal, computed } from '@angular/core';
+import { desktopBridgeOrNull } from '../plugins/desktop-player.bridge';
 import { IS_STANDALONE_BUNDLE } from '../utils/standalone-bundle';
 import {
   readPreference,
@@ -38,7 +39,15 @@ export class ServerConfigService {
 
   private async loadActiveUrl(): Promise<void> {
     const value = await readPreference(STORAGE_KEY);
-    if (value) this._serverUrl.set(value);
+    if (value) {
+      this._serverUrl.set(value);
+      await this.reportToShell(value);
+    }
+  }
+
+  /** The desktop shell accepts an invalid TLS certificate from this host only. */
+  private async reportToShell(url: string): Promise<void> {
+    await desktopBridgeOrNull()?.setServerUrl?.(url).catch(() => {});
   }
 
   private async loadKnownServers(): Promise<void> {
@@ -54,9 +63,12 @@ export class ServerConfigService {
 
   async save(url: string): Promise<void> {
     const cleaned = url.replace(/\/+$/, '');
+    // Before the probe below: the first request to a self-signed server must already pass.
+    if (this.isNative) await this.reportToShell(cleaned);
     const canonical = this.isNative
       ? await this.resolveCanonicalUrl(cleaned)
       : cleaned;
+    if (this.isNative) await this.reportToShell(canonical);
     this._serverUrl.set(canonical);
     await writePreference(STORAGE_KEY, canonical);
   }

@@ -41,6 +41,7 @@ export type MacAddon = NowPlayingAddon & {
   setProperty(name: string, value: string): void;
   resize(): void;
   setBottomCornerRadius(wid: string, radius: number): void;
+  keepOffMainWindow(wid: string): void;
   probeLists(): { 'decoder-list'?: string; 'demuxer-lavf-list'?: string };
   stop(): void;
 };
@@ -68,6 +69,12 @@ export function loadMacAddon(): MacAddon {
 export function roundWindowBottomCorners(win: BrowserWindow, radius: number): void {
   const wid = win.getNativeWindowHandle().readBigUInt64LE(0).toString();
   loadMacAddon().setBottomCornerRadius(wid, radius);
+}
+
+/** Stops a window from becoming the app's main window, so it can be key (typing) while another keeps the active title bar. */
+export function keepOffMainWindow(win: BrowserWindow): void {
+  const wid = win.getNativeWindowHandle().readBigUInt64LE(0).toString();
+  loadMacAddon().keepOffMainWindow(wid);
 }
 
 export class MacMpvPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {
