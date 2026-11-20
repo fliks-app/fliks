@@ -89,6 +89,9 @@ pub struct RejectionInput {
     pub min_rank_exclusive: Option<i64>,
     #[serde(default)]
     pub max_rank_inclusive: Option<i64>,
+    /// Video names open with the work title; book and music names open with the creator.
+    #[serde(default)]
+    pub title_leads: bool,
 }
 
 /// `S04E03`, `S04`, `E03`, `?`; ranges `S01-S03`, `S01E04-E05`.
@@ -133,6 +136,7 @@ fn title_block(
         folded_contains(&index, title)
     } else {
         matches_indexed_expectation(&release_title_tokens(title), &index, WhenUnreadable::Match)
+            && (!o.title_leads || leads_with_expectation(&release_lead_tokens(title), &index))
     };
     if !matches {
         out.push(rej("TITLE_MISMATCH", vec![]));

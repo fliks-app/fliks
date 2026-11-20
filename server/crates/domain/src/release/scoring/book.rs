@@ -305,6 +305,7 @@ pub(super) fn score_one(
         rank: Some(p.quality.rank.into()),
         min_rank_exclusive: opts.min_rank_exclusive,
         max_rank_inclusive: opts.max_rank_inclusive,
+        title_leads: false,
     });
     if let (Some(want), Some(got)) = (&opts.expected_issue, &p.comic) {
         rejections.extend(issue_rejections(want, got));

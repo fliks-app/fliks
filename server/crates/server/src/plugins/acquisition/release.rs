@@ -114,10 +114,13 @@ async fn identify(
                 let se = parse_season_episode(&entry.title);
                 let coverage = wit_coverage(&coverage_of(&se));
                 let tokens = release_title_tokens(&entry.title);
+                let lead = release_lead_tokens(&entry.title);
                 let named =
                     |idx: &_| matches_indexed_expectation(&tokens, idx, WhenUnreadable::NoMatch);
                 let by = |i: &usize| {
                     named(&indexed[*i])
+                        && (!matches!(library[*i].kind, MediaKind::Movie | MediaKind::Series)
+                            || leads_with_expectation(&lead, &indexed[*i]))
                         && (library[*i].kind != MediaKind::Album
                             || matches_indexed_expectation(
                                 &tokens,

@@ -85,7 +85,10 @@ pub fn index_title_expectations(expected: &[String]) -> TitleExpectationIndex {
                     .cloned(),
             );
             let tokens = significant_tokens(&reading);
-            if !tokens.is_empty() {
+            // Letters outside ASCII split as separators: a CJK title with a year would read as a bare year.
+            let lost_letters = tokens.iter().all(|t| t.bytes().all(|b| b.is_ascii_digit()))
+                && cand.chars().any(char::is_alphabetic);
+            if !tokens.is_empty() && !lost_letters {
                 readings.push(tokens);
             }
         }
@@ -123,6 +126,22 @@ pub fn matches_indexed_expectation(
             .iter()
             .any(|r| r.iter().all(|t| tokens.contains(t)))
         || (index.readings.is_empty() && when_unreadable == WhenUnreadable::Match)
+}
+
+/// Significant tokens of both readings of a release name, leading bracket and site tags cut.
+pub fn release_lead_tokens(title: &str) -> [Vec<String>; 2] {
+    let rest = rx!(r"(?i)^(?:\s*(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\}|【[^】]*】|(?:www\.)?[a-z0-9-]+\.(?:com|net|org|cc|to|io|me|tv|ws|xyz|info|co)\b)[\s._:-]*)*")
+        .replace(title, "");
+    title_readings(&rest).map(|r| significant_tokens(&r))
+}
+
+/// Whether the release name starts with an expected title, so `Lost on Nova` is not `Nova`.
+pub fn leads_with_expectation(lead: &[Vec<String>; 2], index: &TitleExpectationIndex) -> bool {
+    index.vacuous
+        || index.readings.is_empty()
+        || lead
+            .iter()
+            .any(|l| index.readings.iter().any(|r| l.starts_with(r)))
 }
 
 /// Index of the release token after the expected tokens, found in order with gaps allowed.
@@ -249,5 +268,41 @@ pub fn resolve_search_titles(media: &SearchMedia, custom_query: Option<&str>) ->
     SearchTitles {
         search_title,
         expected_titles,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn leads(release: &str, expected: &[&str]) -> bool {
+        let expected: Vec<String> = expected.iter().map(|s| (*s).to_owned()).collect();
+        leads_with_expectation(
+            &release_lead_tokens(release),
+            &index_title_expectations(&expected),
+        )
+    }
+
+    #[test]
+    fn a_title_inside_a_longer_one_does_not_lead() {
+        assert!(!leads("Lost on Nova (2009) [BluRay] [1080p]", &["Nova"]));
+        assert!(leads("Nova (2009) 1080p BrRip x264", &["Nova"]));
+        assert!(leads("The.Nova.2009.1080p", &["Nova"]));
+        assert!(leads("[Group] Nova - 01 [1080p]", &["Nova"]));
+        assert!(leads("www.site.cc - Nova 2009 1080p", &["Nova"]));
+        assert!(leads("Nova - Autre titre 2009", &["Nova"]));
+    }
+
+    #[test]
+    fn a_title_of_non_ascii_letters_and_a_year_is_no_reading() {
+        let index =
+            index_title_expectations(&["2009新星".into(), "Звезда 2112".into(), "1917".into()]);
+        assert_eq!(index.readings, vec![vec!["1917".to_owned()]; 2]);
+        let tokens = release_title_tokens("Other Film (2009) 1080p");
+        assert!(!matches_indexed_expectation(
+            &tokens,
+            &index,
+            WhenUnreadable::Match
+        ));
     }
 }
