@@ -79,6 +79,8 @@ mac:
     - target: zip
       arch: arm64
   category: public.app-category.entertainment
+  # Electron 45 needs 13; verify-minos-mac.sh holds every bundled Mach-O to it.
+  minimumSystemVersion: "13.0"
   # Developer ID signed + hardened-runtime + notarized. electron-builder signs
   # every nested Mach-O (the .node addon + the vendored libmpv.dylib & its bundled
   # deps, overriding their ad-hoc signatures) with the Developer ID cert from
