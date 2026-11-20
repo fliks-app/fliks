@@ -34,7 +34,7 @@ function setup(autoPlayNext = true, partyActive = false) {
       { provide: CastPlayerService, useValue: cp },
       { provide: MusicCastOutput, useValue: { hasMedia: signal(false), active: signal(false) } },
       { provide: AudioPlayerService, useValue: { holds: () => false } },
-      { provide: TranslateService, useValue: { instant: (k: string) => k } },
+      { provide: TranslateService, useValue: { instant: (k: string) => k, currentLang: () => 'en' } },
       { provide: MediaService, useValue: { getOne: vi.fn(async () => media) } },
       { provide: PartyService, useValue: { drives: signal(partyActive) } },
       { provide: CastSettingsService, useValue: castSettings },
