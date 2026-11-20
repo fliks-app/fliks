@@ -4,7 +4,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
-import { Subject } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthService } from './auth.service';
 import { ConfirmationService } from './confirmation.service';
@@ -37,19 +37,23 @@ describe('PushService', () => {
   const loadPersistedSession = vi.fn();
   const sessionsLoad = vi.fn();
   const confirm = vi.fn();
+  const toastNotify = vi.fn();
+  let sseNotifications = new Subject<unknown>();
   let tv = false;
+  let desktop = false;
 
   function create(): { push: PushService; http: HttpTestingController } {
+    sseNotifications = new Subject<unknown>();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: AuthService, useValue: { user, sessionEpoch: signal(0), resumeSession, switchToServer, loadPersistedSession } },
         { provide: SessionStoreService, useValue: { load: sessionsLoad } },
-        { provide: SseService, useValue: { notifications: new Subject() } },
-        { provide: ToastService, useValue: { error: toastError } },
-        { provide: TranslateService, useValue: { instant: (k: string) => k, currentLang: () => 'en' } },
-        { provide: DeviceService, useValue: { isTv: () => tv, isDesktopNative: () => false } },
+        { provide: SseService, useValue: { notifications: sseNotifications } },
+        { provide: ToastService, useValue: { error: toastError, notify: toastNotify } },
+        { provide: TranslateService, useValue: { instant: (k: string) => k, currentLang: () => 'en', get: () => of({}) } },
+        { provide: DeviceService, useValue: { isTv: () => tv, isDesktopNative: () => desktop } },
         { provide: ConfirmationService, useValue: { confirm } },
         { provide: Router, useValue: { navigateByUrl } },
         { provide: ServerConfigService, useValue: { serverUrl: () => 'https://a.test', resolveUrl: (u: string) => u } },
@@ -69,6 +73,7 @@ describe('PushService', () => {
     loadPersistedSession.mockReturnValue(null);
     sessionsLoad.mockResolvedValue(undefined);
     tv = false;
+    desktop = false;
   });
 
   describe('opened', () => {
@@ -147,6 +152,54 @@ describe('PushService', () => {
     const { http } = create();
     await vi.waitFor(() => http.expectOne((r) => r.method === 'DELETE' && r.url === '/api/push/subscriptions/current').flush(null));
     await vi.waitFor(() => expect(localStorage.getItem('fliks.push.pendingDelete::https://a.test::1')).toBeNull());
+  });
+
+  describe('desktop', () => {
+    const notify = vi.fn();
+    const prefs = { notifications: true, background: false, startAtLogin: false };
+    const win = window as unknown as { fliksDesktop?: unknown };
+
+    beforeEach(() => {
+      desktop = true;
+      prefs.notifications = true;
+      notify.mockResolvedValue(undefined);
+      win.fliksDesktop = {
+        notify,
+        getNotifyPrefs: async () => ({ ...prefs }),
+        windowActive: async () => true,
+        onWindowActive: () => undefined,
+        onNotificationClick: () => undefined,
+      };
+    });
+    afterEach(() => delete win.fliksDesktop);
+
+    async function started(): Promise<{ push: PushService; http: HttpTestingController }> {
+      const r = create();
+      await vi.waitFor(() => expect(r.push.desktopPrefs()).not.toBeNull());
+      return r;
+    }
+    const note = (tag?: string) => ({ id: 'n', ts: 0, ttl: 60, cat: 'account', title: 't', body: 'b', url: '/', tag });
+
+    it('shows the test notification through the OS even with the window in front', async () => {
+      await started();
+      sseNotifications.next(note('test'));
+      expect(notify).toHaveBeenCalledOnce();
+      expect(toastNotify).not.toHaveBeenCalled();
+      sseNotifications.next(note());
+      expect(notify).toHaveBeenCalledOnce();
+      expect(toastNotify).toHaveBeenCalledOnce();
+    });
+
+    it('counts this desktop among the devices the test reaches while its notifications are on', async () => {
+      const { push, http } = await started();
+      const sent = push.sendTest();
+      http.expectOne('/api/push/test').flush({ results: [] });
+      expect(await sent).toEqual([{ platform: 'desktop', ok: true }]);
+      push.desktopPrefs.set({ ...prefs, notifications: false });
+      const none = push.sendTest();
+      http.expectOne('/api/push/test').flush({ results: [] });
+      expect(await none).toEqual([]);
+    });
   });
 
   describe('askInContext', () => {

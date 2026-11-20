@@ -99,6 +99,8 @@ const PENDING_URL_TTL_MS = 5 * 60_000;
 /** Sign-out must not hang on an unreachable push service or server. */
 const RELEASE_TIMEOUT_MS = 5000;
 const LANG_MESSAGE = 'fliks-push-lang';
+/** The server's `tag` on the notification of `POST /api/push/test`. */
+const TEST_TAG = 'test';
 
 function b64urlToBytes(s: string): Uint8Array<ArrayBuffer> {
   const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
@@ -308,11 +310,12 @@ export class PushService {
     if (next) this.desktopPrefs.set(next);
   }
 
+  /** One result per device that shows it; the desktop receives over the live connection, not a subscription. */
   async sendTest(): Promise<{ platform: string; ok: boolean; error?: string }[]> {
     const r = await firstValueFrom(
       this.http.post<{ results: { platform: string; ok: boolean; error?: string }[] }>('/api/push/test', {}),
     );
-    return r.results;
+    return this.mode === 'desktop' && this.desktopPrefs()?.notifications ? [...r.results, { platform: 'desktop', ok: true }] : r.results;
   }
 
   /** The app badge follows the user's `attention` count. */
@@ -375,7 +378,9 @@ export class PushService {
     if (this.device.isTv() && !this.toastsEnabled()) return;
     const user = this.auth.user();
     const bridge = desktopBridgeOrNull();
-    if (this.mode === 'desktop' && !this.desktopActive() && this.desktopPrefs()?.notifications && user && bridge?.notify) {
+    // The test checks the OS path, so it skips the in-app toast even with the window in front.
+    const away = !this.desktopActive() || n.tag === TEST_TAG;
+    if (this.mode === 'desktop' && away && this.desktopPrefs()?.notifications && user && bridge?.notify) {
       void bridge
         .notify({
           id: n.id,
