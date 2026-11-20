@@ -27,6 +27,7 @@ public class PushActionReceiver extends BroadcastReceiver {
         final String tag = intent.getStringExtra(PushNotifier.EXTRA_TAG);
         final String channel = intent.getStringExtra(PushNotifier.EXTRA_CHANNEL);
         final String title = intent.getStringExtra(PushNotifier.EXTRA_TITLE);
+        final String done = intent.getStringExtra(PushNotifier.EXTRA_DONE);
         if (token == null || server == null || user == null || tag == null || channel == null || title == null) return;
         final PendingResult pending = goAsync();
         new Thread(() -> {
@@ -48,7 +49,7 @@ public class PushActionReceiver extends BroadcastReceiver {
                 Log.w("FliksPush", "call action failed: " + e.getMessage());
             } finally {
                 call.shutdownNow();
-                PushNotifier.showResult(app, tag, channel, title, ok);
+                PushNotifier.showResult(app, tag, channel, title, done, ok);
                 pending.finish();
             }
         }).start();

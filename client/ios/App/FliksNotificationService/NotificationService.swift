@@ -47,7 +47,7 @@ final class NotificationService: UNNotificationServiceExtension {
         content.threadIdentifier = "\(record.session)|\(message.cat)"
         if let badge = message.badge { content.badge = NSNumber(value: badge) }
         let actions = (message.actions ?? []).map { a in
-            ["id": a.id, "title": a.title, "kind": a.kind, "url": a.url ?? "", "token": a.token ?? ""]
+            ["id": a.id, "title": a.title, "kind": a.kind, "url": a.url ?? "", "token": a.token ?? "", "done": a.done ?? ""]
         }
         if !actions.isEmpty { content.categoryIdentifier = PushCategories.identifier(actions.compactMap { $0["id"] }) }
         content.userInfo = ["fliks": [

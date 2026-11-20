@@ -5868,6 +5868,12 @@
       "accept": "Accepter",
       "open": "Ouvrir"
     },
+    "done": {
+      "request_approve": "Demande approuvée",
+      "request_decline": "Demande refusée",
+      "follow_accept": "Demande d'abonnement acceptée",
+      "follow_decline": "Demande d'abonnement refusée"
+    },
     "outcome_done": "Fait.",
     "outcome_failed": "L'action a échoué.",
     "outcome_signin": "Ouvrez Fliks pour vous reconnecter."

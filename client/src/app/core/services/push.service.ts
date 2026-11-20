@@ -43,6 +43,8 @@ export interface PushAction {
   kind: 'open' | 'call';
   url?: string;
   token?: string;
+  /** Shown once a `call` succeeds; without it, the generic done text. */
+  done?: string;
 }
 
 /** `native`: APNs/FCM through the plugin; `web`: Web Push through the service worker; `desktop`: OS notifications from the Electron shell; `toast`: in-app only (TV); `none`: nothing on this device. */
@@ -373,7 +375,7 @@ export class PushService {
     }
     try {
       await firstValueFrom(this.http.post('/api/push/act', { token: a.token }, { context: new HttpContext().set(SKIP_ERROR_TOAST, true) }));
-      this.toast.success(this.translate.instant('app_settings.notifications.action_done'));
+      this.toast.success(a.done || this.translate.instant('app_settings.notifications.action_done'));
     } catch {
       this.toast.error(this.translate.instant('app_settings.notifications.action_failed'));
     }

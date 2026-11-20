@@ -8,6 +8,7 @@ struct PushMessage: Decodable, Equatable {
         let kind: String
         let url: String?
         let token: String?
+        let done: String?
     }
 
     /// The plaintext version this build reads; a higher one is shown as the generic text.

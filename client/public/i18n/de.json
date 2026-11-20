@@ -5868,6 +5868,12 @@
       "accept": "Annehmen",
       "open": "Öffnen"
     },
+    "done": {
+      "request_approve": "Anfrage genehmigt",
+      "request_decline": "Anfrage abgelehnt",
+      "follow_accept": "Folgeanfrage angenommen",
+      "follow_decline": "Folgeanfrage abgelehnt"
+    },
     "outcome_done": "Erledigt.",
     "outcome_failed": "Die Aktion ist fehlgeschlagen.",
     "outcome_signin": "Öffne Fliks, um dich erneut anzumelden."

@@ -77,7 +77,7 @@ async function call(action, url, user, tag) {
   }
   if (status === 401) return open(url, user);
   const [done, failed] = await localized(OUTCOME);
-  return self.registration.showNotification(status >= 200 && status < 300 ? done : failed, { icon: ICON, badge: ICON, tag, data: { url, user } });
+  return self.registration.showNotification(status >= 200 && status < 300 ? action.done || done : failed, { icon: ICON, badge: ICON, tag, data: { url, user } });
 }
 
 async function unreadable() {
