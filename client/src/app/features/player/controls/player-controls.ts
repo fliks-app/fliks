@@ -194,6 +194,8 @@ export class PlayerControlsComponent {
       this.lastVisible = visible;
       // Focus play/pause on keyboard / D-pad reveal only; the seek OSD has no play/pause, so arrow-seek keeps focus on the seekbar.
       const btn = this.playPauseBtn()?.nativeElement;
+      // A hidden bar's seekbar keeps the focus: rested, its next arrow wakes the bar instead of seeking unseen.
+      if (!visible) this.seekbar()?.rest();
       // A button focused before the hide keeps the focus.
       if (visible && !wasVisible && this.autoFocusModality() && !btn?.closest('app-player-controls')?.contains(document.activeElement)) {
         this.closeDropdown();
@@ -538,14 +540,6 @@ export class PlayerControlsComponent {
 
   readonly seekbar = viewChild(SeekbarComponent);
 
-  /** Wake-and-scrub: focus the seekbar and let it own the press, so the whole
-   *  arrow run accumulates into one deferred seek instead of one per key. */
-  scrubFromKey(e: KeyboardEvent): void {
-    const bar = this.seekbar();
-    if (!bar) return;
-    bar.focus();
-    bar.onKeydown(e);
-  }
   /** Desktop/TV play-pause button — focused on TV every time the controls
    *  bar reappears, so the next D-pad center triggers play/pause. */
   private readonly playPauseBtn = viewChild<ElementRef<HTMLButtonElement>>('playPauseBtn');

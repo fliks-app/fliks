@@ -758,23 +758,22 @@ describe('PlayerComponent seek OSD', () => {
 
   function hiddenBar() {
     const h = createHarness();
-    const scrubFromKey = vi.fn();
-    h.component.controls = () => ({ scrubFromKey });
+    const focusSeekbar = vi.fn();
+    h.component.controls = () => ({ seekbar: () => ({ focus: focusSeekbar }) });
     h.component.onSeek = vi.fn();
     h.component.chrome.visible.set(false);
     h.component.chrome.seekOsd.set(false);
-    return { ...h, scrubFromKey };
+    return { ...h, focusSeekbar };
   }
 
-  it('an arrow on a hidden bar raises the seek-only OSD and hands the press to the seekbar', () => {
+  it('an arrow on a hidden bar raises the seek-only OSD with the seekbar focused, without seeking', () => {
     const h = hiddenBar();
 
     h.component['keyboard'].onKeyDown(press('ArrowRight'));
 
     expect(h.component.chrome.visible()).toBe(true);
     expect(h.component.chrome.seekOsd()).toBe(true);
-    // The seekbar owns the scrub: no per-key seek fired from the player.
-    expect(h.scrubFromKey).toHaveBeenCalledTimes(1);
+    expect(h.focusSeekbar).toHaveBeenCalledTimes(1);
     expect(h.component.onSeek).not.toHaveBeenCalled();
   });
 

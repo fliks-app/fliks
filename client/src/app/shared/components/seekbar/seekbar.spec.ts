@@ -67,6 +67,17 @@ describe('SeekbarComponent keyboard preview', () => {
     expect(seeks).toEqual([110]);
   });
 
+  it('lets the arming press bubble to the host, then keeps the scrubbing ones', () => {
+    bar.rest();
+    const arming = arrow('ArrowRight');
+    bar.onKeydown(arming);
+    expect(arming.stopPropagation).not.toHaveBeenCalled();
+
+    const scrub = arrow('ArrowRight');
+    bar.onKeydown(scrub);
+    expect(scrub.stopPropagation).toHaveBeenCalled();
+  });
+
   it('a keyboard focus arms the bar with the playhead time alone', () => {
     bar.rest();
     bar.onFocus({ target: { matches: () => true } } as unknown as FocusEvent);

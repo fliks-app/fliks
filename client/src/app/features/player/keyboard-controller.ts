@@ -99,13 +99,13 @@ export class KeyboardController {
       return;
     }
 
-    // Controls hidden + Left/Right: raise the seek OSD and let the seekbar own the scrub.
+    // Controls hidden + Left/Right: raise the seek OSD with the seekbar armed; the next arrow seeks.
     const isSeekArrow = e.key === 'ArrowLeft' || e.key === 'ArrowRight';
     if (!this.host.chrome.visible() && isSeekArrow && control && !floatingKey) {
       e.preventDefault();
       e.stopPropagation();
       this.host.chrome.show(true);
-      this.host.controls()?.scrubFromKey(e);
+      this.host.controls()?.seekbar()?.focus();
       return;
     }
 
