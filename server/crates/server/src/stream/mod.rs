@@ -22,7 +22,7 @@ pub(crate) use item::audio_parts_of_file;
 pub(crate) use media_jobs::{scan_file, sprite_file};
 pub use routes::{
     __path_delete_session, __path_edl, __path_effective_settings, __path_gpus, __path_hw_accel,
-    __path_qualities, __path_tonemap_algos,
+    __path_keyframes, __path_qualities, __path_tonemap_algos,
 };
 pub(crate) use scan::{keep_now as keep_scan, scan_now, spawn_scan, version_of};
 pub use system::{
@@ -86,6 +86,10 @@ pub fn router() -> Router<AppState> {
         )
         .route("/api/stream/info/gpus", get(routes::gpus))
         .route("/api/stream/{mediaFileId}/edl", get(routes::edl))
+        .route(
+            "/api/stream/{mediaFileId}/keyframes",
+            get(routes::keyframes),
+        )
         .route(
             "/api/stream/sessions/{sessionId}",
             delete(routes::delete_session),

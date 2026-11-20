@@ -78,6 +78,21 @@ describe('SeekbarComponent keyboard preview', () => {
     expect(scrub.stopPropagation).toHaveBeenCalled();
   });
 
+  it('commits a scrub on the keyframe the video will land on', () => {
+    const fixture = TestBed.createComponent(SeekbarComponent);
+    fixture.componentRef.setInput('duration', 600);
+    fixture.componentRef.setInput('currentTime', 100);
+    fixture.componentRef.setInput('keyframes', [96, 108.5, 120]);
+    const b = fixture.componentInstance;
+    const seeks: number[] = [];
+    b.seek.subscribe((t) => seeks.push(t));
+    b.focus();
+    b.onKeydown(arrow('ArrowRight'));
+    vi.advanceTimersByTime(800);
+    expect(seeks[0]).toBeCloseTo(108.55);
+    expect(b.previewTime()).toBeCloseTo(108.55);
+  });
+
   it('a keyboard focus arms the bar with the playhead time alone', () => {
     bar.rest();
     bar.onFocus({ target: { matches: () => true } } as unknown as FocusEvent);

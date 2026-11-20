@@ -628,6 +628,28 @@ async fn a_stored_scan_goes_to_the_engine_and_restores_the_clock_break(pool: PgP
 }
 
 #[sqlx::test(migrations = false)]
+async fn keyframes_come_sorted_from_a_matching_scan_only(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let uri = format!("/api/stream/{}/keyframes", c.file);
+    let (s, b) = call(&c, "GET", &uri, &c.token, None).await;
+    assert_eq!(s, 200);
+    assert_eq!(b, json!({"keyframes": []}));
+
+    let m = fs::metadata(c.dir.join("clip.mkv")).unwrap();
+    let d = m
+        .modified()
+        .unwrap()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap();
+    let mtime = d.as_secs() as f64 * 1000.0 + f64::from(d.subsec_nanos()) / 1e6;
+    let scan = json!({"keyframes": [{"pts": 4.0004, "dts": 3.9}, {"pts": 0.0, "dts": 0.0}], "end": 10.0, "audioConfigChanges": {}});
+    sqlx::query(r#"INSERT INTO media_file_scans ("mediaFileId", size, "mtimeMs", scan) VALUES ($1, $2, $3, $4)"#)
+        .bind(c.file).bind(m.len() as i64).bind(mtime).bind(scan).execute(&c.pool).await.unwrap();
+    let (_, b) = call(&c, "GET", &uri, &c.token, None).await;
+    assert_eq!(b, json!({"keyframes": [0.0, 4.0]}));
+}
+
+#[sqlx::test(migrations = false)]
 async fn the_scan_a_remux_open_ran_is_kept_without_a_job(pool: PgPool) {
     let c = ctx(pool, true).await;
     let (mut open, _) = golden();
@@ -1021,6 +1043,7 @@ async fn a_file_whose_edition_sits_in_a_hidden_library_is_a_404_everywhere(pool:
         ),
         ("GET", format!("/api/stream/info/qualities/{f}"), None),
         ("GET", format!("/api/stream/{f}/edl"), None),
+        ("GET", format!("/api/stream/{f}/keyframes"), None),
         ("GET", format!("/api/media/{m}/streams/{f}"), None),
         (
             "POST",

@@ -316,6 +316,8 @@ export interface PlaybackEngine {
   /** How often `currentTime` refreshes when slower than a frame (native players: 1 s, and only while
    *  playing); a playhead that stays put for less than that is not frozen. */
   readonly positionUpdateMs?: number;
+  /** A seek lands on the source keyframe at or before the target (native TV pipelines), not on the target frame. */
+  readonly seeksToKeyframe?: boolean;
   /** Silences `ranges` (content seconds, sorted, disjoint) without touching the user's mute/volume.
    *  Persists across loads until replaced; [] clears. */
   setMuteRanges(ranges: readonly TimeRange[]): void;

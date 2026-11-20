@@ -33,6 +33,8 @@ export interface ControlsModel {
   spriteMetadata: SpriteMetadata | null;
   skipCueLabelKey: string | null;
   timeline: PlaybackTimeline;
+  /** What a seek lands on when the output cannot land between keyframes; empty for exact seeks. */
+  keyframes: readonly number[];
   /** The credits have started and something follows; a local player keeps its own timed cue. */
   nextCue: boolean;
 }
@@ -71,6 +73,7 @@ export function outputModel(o: PlaybackOutput, meta: NowPlayingMetadata | null):
     spriteMetadata: o.spriteMetadata(),
     skipCueLabelKey: o.skipCue()?.labelKey ?? null,
     timeline,
+    keyframes: [],
     nextCue: o.canPlayNext() && inOutroRange(timeline.outro, o.position()),
   };
 }

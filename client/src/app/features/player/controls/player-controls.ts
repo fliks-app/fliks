@@ -341,6 +341,7 @@ export class PlayerControlsComponent {
   readonly introMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
   readonly outroMarker = input<{ startSeconds: number; endSeconds: number } | null>(null);
   readonly edlRanges = input<readonly EdlRange[]>([]);
+  readonly keyframes = input<readonly number[]>([]);
   readonly fillScreen = input(false);
   readonly statsVisible = input(false);
   readonly showSkipIntro = input(false);
