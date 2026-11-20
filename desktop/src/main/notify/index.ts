@@ -6,7 +6,7 @@ import { setStartAtLogin, startedAtLogin } from './autostart.ts';
 import { saneSize, readCapped } from './image.ts';
 import { hasStatusNotifierHost } from './status-notifier.ts';
 import { loadLabels, loadPrefs, saveLabels, savePrefs } from './prefs.ts';
-import { notifyStatus, openNotifySettings } from './status.ts';
+import { macNotificationsAllowed, notifyStatus, openNotifySettings } from './status.ts';
 import { parseBadge, parseLabels, parseNotification, parsePrefsPatch } from './validate.ts';
 
 /** What the notifier needs from the platform's window code; handed over once the window exists. */
@@ -158,9 +158,10 @@ export class Notifier {
     this.tray.on('click', () => this.show());
   }
 
-  private setBadge(count: number): void {
+  private async setBadge(count: number): Promise<void> {
     if (process.platform === 'win32') this.host?.setOverlay?.(count > 0 ? dotIcon() : null, this.labels.notifications);
-    else app.setBadgeCount(count);
+    // On macOS a badge asks for the notification permission: only the user's own opt-in may prompt.
+    else if (process.platform !== 'darwin' || (await macNotificationsAllowed())) app.setBadgeCount(count);
   }
 
   private async notify(n: DesktopNotification): Promise<void> {

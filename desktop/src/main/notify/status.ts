@@ -46,6 +46,16 @@ export async function notifyStatus(
   return 'allowed';
 }
 
+/** macOS only: notifications already allowed. Unlike {@link notifyStatus}, an undetermined app is not. */
+export async function macNotificationsAllowed(addon: () => Promise<StatusAddon | null> = platformAddon): Promise<boolean> {
+  try {
+    const a = await addon();
+    return !!a?.notifyAuthorization && (await withTimeout(a.notifyAuthorization(), 'undetermined')) === 'allowed';
+  } catch {
+    return false;
+  }
+}
+
 /** The OS page where the user gives notifications back; Linux has no common one. */
 export async function openNotifySettings(platform: NodeJS.Platform = process.platform): Promise<void> {
   if (platform === 'win32') await shell.openExternal('ms-settings:notifications');
