@@ -8,10 +8,12 @@ export interface StatusAddon {
   /** Windows `ToastNotifier.Setting`: `enabled` or why toasts are off. */
   notifySetting?(aumid: string): string;
   /** macOS `UNAuthorizationStatus`: `allowed`, `denied` or `undetermined`. */
-  notifyAuthorization?(): string;
+  notifyAuthorization?(): Promise<string>;
 }
 
-export const fromWinSetting = (s: string): DesktopNotifyStatus => (s === 'enabled' ? 'allowed' : 'blocked');
+const WIN_BLOCKS = ['app', 'user', 'policy', 'manifest'];
+/** A setting Windows did not name counts as allowed, like an unreadable one. */
+export const fromWinSetting = (s: string): DesktopNotifyStatus => (WIN_BLOCKS.includes(s) ? 'blocked' : 'allowed');
 /** macOS asks on the first notification, so an undetermined app is not blocked. */
 export const fromMacAuthorization = (s: string): DesktopNotifyStatus => (s === 'denied' ? 'blocked' : 'allowed');
 
@@ -19,6 +21,12 @@ async function platformAddon(): Promise<StatusAddon | null> {
   if (process.platform === 'win32') return (await import('../smtc-win')).winAddon();
   if (process.platform === 'darwin') return (await import('../mpv/mac-mpv-player')).loadMacAddon();
   return null;
+}
+
+const READ_TIMEOUT_MS = 2000;
+/** A notification daemon that never answers must not leave the page waiting. */
+function withTimeout<T>(p: Promise<T>, fallback: T): Promise<T> {
+  return Promise.race([p, new Promise<T>((r) => setTimeout(() => r(fallback), READ_TIMEOUT_MS).unref())]);
 }
 
 /** Whether the OS shows this app's notifications; an unreadable setting counts as allowed. */
@@ -30,7 +38,7 @@ export async function notifyStatus(
   try {
     const a = await addon();
     if (platform === 'win32' && a?.notifySetting) return fromWinSetting(a.notifySetting(APP_ID));
-    if (platform === 'darwin' && a?.notifyAuthorization) return fromMacAuthorization(a.notifyAuthorization());
+    if (platform === 'darwin' && a?.notifyAuthorization) return fromMacAuthorization(await withTimeout(a.notifyAuthorization(), 'undetermined'));
   } catch (e) {
     console.error('[notify] status', e);
   }

@@ -15,6 +15,7 @@ test('Windows: only an enabled toast setting is allowed', async () => {
   for (const s of ['app', 'user', 'policy', 'manifest']) {
     assert.equal(await notifyStatus(addon({ notifySetting: () => s }), 'win32'), 'blocked');
   }
+  assert.equal(await notifyStatus(addon({ notifySetting: () => 'unknown' }), 'win32'), 'allowed');
 });
 
 test('Windows: the setting is read for the app id the shell registers', async () => {
@@ -24,9 +25,19 @@ test('Windows: the setting is read for the app id the shell registers', async ()
 });
 
 test('macOS: denied is blocked, undetermined is left to the first notification', async () => {
-  assert.equal(await notifyStatus(addon({ notifyAuthorization: () => 'denied' }), 'darwin'), 'blocked');
-  assert.equal(await notifyStatus(addon({ notifyAuthorization: () => 'undetermined' }), 'darwin'), 'allowed');
-  assert.equal(await notifyStatus(addon({ notifyAuthorization: () => 'allowed' }), 'darwin'), 'allowed');
+  assert.equal(await notifyStatus(addon({ notifyAuthorization: async () => 'denied' }), 'darwin'), 'blocked');
+  assert.equal(await notifyStatus(addon({ notifyAuthorization: async () => 'undetermined' }), 'darwin'), 'allowed');
+  assert.equal(await notifyStatus(addon({ notifyAuthorization: async () => 'allowed' }), 'darwin'), 'allowed');
+});
+
+test('macOS: a daemon that never answers counts as allowed', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  const pending = notifyStatus(addon({ notifyAuthorization: () => new Promise(() => {}) }), 'darwin');
+  await Promise.resolve();
+  await Promise.resolve();
+  mock.timers.tick(2000);
+  assert.equal(await pending, 'allowed');
+  mock.timers.reset();
 });
 
 test('an unreadable setting counts as allowed', async () => {

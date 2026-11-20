@@ -212,6 +212,7 @@ Napi::Value NotifySetting(const Napi::CallbackInfo& info) {
       case NotificationSetting::DisabledForUser: return Napi::String::New(info.Env(), "user");
       case NotificationSetting::DisabledByGroupPolicy: return Napi::String::New(info.Env(), "policy");
       case NotificationSetting::DisabledByManifest: return Napi::String::New(info.Env(), "manifest");
+      default: return Napi::String::New(info.Env(), "unknown");
     }
   } catch (hresult_error const& e) {
     Napi::Error::New(info.Env(), to_string(e.message())).ThrowAsJavaScriptException();

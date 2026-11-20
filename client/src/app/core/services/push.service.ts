@@ -165,6 +165,10 @@ export class PushService {
   });
   /** Only the app's own system settings can lift the block. */
   readonly canOpenSystemSettings = computed(() => this.systemBlock() === 'denied_app');
+  /** The device switch cannot lift the block: only the system settings can, or nothing. */
+  readonly switchLocked = computed(() => !!this.systemBlock() && this.systemBlock() !== 'not_allowed');
+  /** Desktop: OS notifications reach the user; otherwise the in-app toast shows them. */
+  readonly desktopShows = computed(() => this.mode === 'desktop' && !!this.desktopPrefs()?.notifications && !this.systemBlock());
   /** A Web Push subscription is registered on the server for this session. */
   private readonly subscribed = signal(false);
 
@@ -277,16 +281,21 @@ export class PushService {
     this.asking = true;
     try {
       const key = `app_settings.notifications.ask_${reason}`;
+      let answer: Promise<PushPermission> = Promise.resolve(this.permission());
       const yes = await this.confirm.confirm({
         title: this.translate.instant(`${key}_title`),
         message: this.translate.instant(`${key}_body`),
         confirmLabel: this.translate.instant('app_settings.notifications.ask_enable'),
         cancelLabel: this.translate.instant('app_settings.notifications.ask_later'),
         variant: 'info',
+        // Safari shows the dialog only from the click itself.
+        onConfirm: () => (answer = this.requestPermission().catch(() => this.permission())),
       });
-      const ok = yes && (state.pushReady && !state.deviceOff ? await this.enable() : (await this.requestPermission().catch(() => 'prompt')) === 'granted');
-      if (ok) this.adoptGrant();
-      if (!ok) writeStored(SNOOZE_KEY, JSON.stringify({ declined: snooze.declined + 1, until: Date.now() + SNOOZE_MS }));
+      const granted = yes && (await answer) === 'granted';
+      if (granted && state.pushReady && !state.deviceOff) await this.enable();
+      if (granted) this.adoptGrant();
+      // A failed subscription is not a refusal: the next launch retries it.
+      else writeStored(SNOOZE_KEY, JSON.stringify({ declined: snooze.declined + 1, until: Date.now() + SNOOZE_MS }));
     } finally {
       this.asking = false;
     }
@@ -334,7 +343,7 @@ export class PushService {
     const r = await firstValueFrom(
       this.http.post<{ results: { platform: string; ok: boolean; error?: string }[] }>('/api/push/test', {}),
     );
-    return this.mode === 'desktop' && this.desktopPrefs()?.notifications ? [...r.results, { platform: 'desktop', ok: true }] : r.results;
+    return this.desktopShows() ? [...r.results, { platform: 'desktop', ok: true }] : r.results;
   }
 
   /** The app badge follows the user's `attention` count. */
@@ -399,7 +408,7 @@ export class PushService {
     const bridge = desktopBridgeOrNull();
     // The test checks the OS path, so it skips the in-app toast even with the window in front.
     const away = !this.desktopActive() || n.tag === TEST_TAG;
-    if (this.mode === 'desktop' && away && this.desktopPrefs()?.notifications && user && bridge?.notify) {
+    if (away && this.desktopShows() && user && bridge?.notify) {
       void bridge
         .notify({
           id: n.id,

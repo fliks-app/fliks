@@ -21,6 +21,8 @@ async function render(o: { block: SystemBlock | null; canOpen: boolean; desktop?
     permission: () => (o.block ? 'denied' : 'granted'),
     systemBlock: () => o.block,
     canOpenSystemSettings: () => o.canOpen,
+    switchLocked: () => !!o.block && o.block !== 'not_allowed',
+    desktopShows: () => !!o.desktop && !o.block,
     busy: () => false,
     plugins: () => [],
     loadConfig: async () => null,

@@ -219,6 +219,19 @@ describe('PushService', () => {
       expect(push.canOpenSystemSettings()).toBe(false);
     });
 
+    it('falls back to the in-app toast while the OS blocks Fliks, and leaves this desktop out of the test', async () => {
+      status = 'blocked';
+      const { push, http } = await started();
+      await vi.waitFor(() => expect(push.systemBlock()).toBe('denied_app'));
+      expect(push.desktopShows()).toBe(false);
+      sseNotifications.next(note('test'));
+      expect(notify).not.toHaveBeenCalled();
+      expect(toastNotify).toHaveBeenCalledOnce();
+      const sent = push.sendTest();
+      http.expectOne('/api/push/test').flush({ results: [] });
+      expect(await sent).toEqual([]);
+    });
+
     it('counts this desktop among the devices the test reaches while its notifications are on', async () => {
       const { push, http } = await started();
       const sent = push.sendTest();
@@ -240,6 +253,8 @@ describe('PushService', () => {
       plugin.subscribe.mockResolvedValue(undefined);
     });
     afterEach(() => (platform.native = false));
+    /** The pre-prompt's Turn on: runs the confirm hook inside the click, as the dialog does. */
+    const turnOn = async (o: { onConfirm?: () => void }) => (o.onConfirm?.(), true);
 
     async function started(mobile = true): Promise<{ push: PushService; http: HttpTestingController }> {
       const r = create();
@@ -249,7 +264,7 @@ describe('PushService', () => {
     }
 
     it('turns push on after the pre-prompt and the system dialog', async () => {
-      confirm.mockResolvedValue(true);
+      confirm.mockImplementation(turnOn);
       plugin.requestPermission.mockResolvedValue({ permission: 'granted' });
       const { push, http } = await started();
       const asked = push.askInContext('request');
@@ -260,6 +275,30 @@ describe('PushService', () => {
       expect(localStorage.getItem(SNOOZE)).toBeNull();
       await push.askInContext('party');
       expect(confirm).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not count a subscription that failed after the permission as a refusal', async () => {
+      confirm.mockImplementation(turnOn);
+      plugin.requestPermission.mockResolvedValue({ permission: 'granted' });
+      const { push, http } = await started();
+      const asked = push.askInContext('request');
+      await vi.waitFor(() =>
+        http.expectOne((r) => r.method === 'POST' && r.url === '/api/push/subscriptions').flush(null, { status: 503, statusText: 'Unavailable' }),
+      );
+      await asked;
+      expect(localStorage.getItem(SNOOZE)).toBeNull();
+      expect(toastError).toHaveBeenCalledWith('app_settings.notifications.enable_failed');
+      expect(localStorage.getItem('fliks.push.device::https://a.test::1')).toBe('1');
+    });
+
+    it('asks the system inside the Turn on click, not after it', async () => {
+      let hook: (() => void) | undefined;
+      confirm.mockImplementation(async (o: { onConfirm?: () => void }) => ((hook = o.onConfirm), true));
+      plugin.requestPermission.mockResolvedValue({ permission: 'denied' });
+      const { push } = await started();
+      await push.askInContext('request');
+      expect(hook).toBeTypeOf('function');
+      expect(plugin.requestPermission).not.toHaveBeenCalled();
     });
 
     it('snoozes after Not now without touching the system dialog', async () => {
@@ -273,7 +312,7 @@ describe('PushService', () => {
     });
 
     it('leaves a refusal at the system dialog to the settings page', async () => {
-      confirm.mockResolvedValue(true);
+      confirm.mockImplementation(turnOn);
       plugin.requestPermission.mockResolvedValue({ permission: 'denied' });
       const { push } = await started();
       await push.askInContext('request');
@@ -283,7 +322,7 @@ describe('PushService', () => {
     });
 
     it('asks only the permission for a download when the admin keeps push off', async () => {
-      confirm.mockResolvedValue(true);
+      confirm.mockImplementation(turnOn);
       plugin.requestPermission.mockResolvedValue({ permission: 'granted' });
       const { push } = await started(false);
       await push.askInContext('request');

@@ -28,8 +28,6 @@ export class NotificationSettingsPageComponent {
   protected readonly categories = CATEGORIES;
   protected readonly muted = computed(() => this.auth.user()?.pushMuted ?? []);
   protected readonly testing = signal(false);
-  /** The system refused the permission: only its settings can undo that. */
-  protected readonly denied = computed(() => this.push.permission() === 'denied');
   /** The switches show what reaches this device: on only while the system shows notifications. */
   protected readonly deviceOn = computed(() => this.push.deviceEnabled() && !this.push.systemBlock());
 

@@ -2,24 +2,26 @@
 #include <napi.h>
 #import <UserNotifications/UserNotifications.h>
 
+#include <memory>
+#include <string>
+
 namespace {
 
-// "allowed", "denied" or "undetermined" (macOS asks on the first notification).
+// Resolves "allowed", "denied" or "undetermined" (macOS asks on the first notification).
 Napi::Value NotifyAuthorization(const Napi::CallbackInfo& info) {
-  __block UNAuthorizationStatus status = UNAuthorizationStatusNotDetermined;
-  dispatch_semaphore_t done = dispatch_semaphore_create(0);
+  Napi::Env env = info.Env();
+  auto deferred = std::make_shared<Napi::Promise::Deferred>(Napi::Promise::Deferred::New(env));
+  auto tsfn = Napi::ThreadSafeFunction::New(env, Napi::Function::New(env, [](const Napi::CallbackInfo&) {}),
+                                            "notifyAuthorization", 0, 1);
   [[UNUserNotificationCenter currentNotificationCenter] getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings* s) {
-    status = s.authorizationStatus;
-    dispatch_semaphore_signal(done);
+    std::string out = s.authorizationStatus == UNAuthorizationStatusDenied          ? "denied"
+                      : s.authorizationStatus == UNAuthorizationStatusNotDetermined ? "undetermined"
+                                                                                    : "allowed";
+    Napi::ThreadSafeFunction fn = tsfn;
+    fn.BlockingCall([deferred, out](Napi::Env env, Napi::Function) { deferred->Resolve(Napi::String::New(env, out)); });
+    fn.Release();
   }];
-  // The handler runs on a background queue; a stuck daemon must not freeze the main process.
-  if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC)) != 0) {
-    return Napi::String::New(info.Env(), "undetermined");
-  }
-  const char* out = status == UNAuthorizationStatusDenied ? "denied"
-                    : status == UNAuthorizationStatusNotDetermined ? "undetermined"
-                                                                     : "allowed";
-  return Napi::String::New(info.Env(), out);
+  return deferred->Promise();
 }
 
 }  // namespace
