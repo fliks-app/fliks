@@ -265,6 +265,7 @@ export class PushService {
         variant: 'info',
       });
       const ok = yes && (state.pushReady && !state.deviceOff ? await this.enable() : (await this.requestPermission().catch(() => 'prompt')) === 'granted');
+      if (ok) this.adoptGrant();
       if (!ok) writeStored(SNOOZE_KEY, JSON.stringify({ declined: snooze.declined + 1, until: Date.now() + SNOOZE_MS }));
     } finally {
       this.asking = false;
@@ -411,6 +412,7 @@ export class PushService {
     if (this.mode === 'desktop') this.desktopPrefs.set((await desktopBridgeOrNull()?.getNotifyPrefs?.()) ?? null);
     if (this.mode === 'web') this.permission.set(this.webPermission());
     if (this.mode === 'native' || this.mode === 'web') await this.loadConfig();
+    this.adoptGrant();
     if (this.deviceEnabled() && this.canEnableDevice()) {
       // Background resubscribe at login, launch and session switch: a refusal is not the user's to see.
       await this.subscribe(true).catch(() => this.subscribed.set(false));
@@ -465,6 +467,17 @@ export class PushService {
   private async refreshPermission(): Promise<void> {
     if (this.mode === 'web') this.permission.set(this.webPermission());
     else await this.startNative();
+    if (this.adoptGrant()) await this.subscribe(true).catch(() => this.subscribed.set(false));
+  }
+
+  /** Native: a granted permission turns this device on, unless this account switched it off here. */
+  private adoptGrant(): boolean {
+    const user = this.auth.user();
+    if (this.mode !== 'native' || !user || this.deviceEnabled() || this.permission() !== 'granted' || !this.canEnableDevice()) return false;
+    if (readStored(this.flagKey(user.id)) !== null) return false;
+    writeFlag(this.flagKey(user.id), true);
+    this.deviceEnabled.set(true);
+    return true;
   }
 
   private readSnooze(): AskSnooze {

@@ -222,6 +222,23 @@ describe('PushService', () => {
       expect(confirm).toHaveBeenCalledTimes(1);
     });
 
+    it('turns the device on at launch when the permission is already granted', async () => {
+      plugin.status.mockResolvedValue({ available: true, permission: 'granted' });
+      const { push, http } = await started();
+      await vi.waitFor(() => http.expectOne((r) => r.method === 'POST' && r.url === '/api/push/subscriptions').flush({ sub: 's', ticket: 't' }));
+      expect(push.deviceEnabled()).toBe(true);
+      expect(localStorage.getItem('fliks.push.device::https://a.test::1')).toBe('1');
+    });
+
+    it('keeps the device off when the user switched it off, permission or not', async () => {
+      plugin.status.mockResolvedValue({ available: true, permission: 'granted' });
+      localStorage.setItem('fliks.push.device::https://a.test::1', '0');
+      const { push, http } = await started();
+      await new Promise((r) => setTimeout(r));
+      http.expectNone((r) => r.method === 'POST');
+      expect(push.deviceEnabled()).toBe(false);
+    });
+
     it('never asks on a TV', async () => {
       tv = true;
       const { push } = create();

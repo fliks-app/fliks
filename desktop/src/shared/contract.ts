@@ -205,7 +205,7 @@ export interface DesktopNotificationClick {
 }
 
 export interface DesktopNotifyPrefs {
-  /** OS notifications while the window is not active; off until the user turns it on. */
+  /** OS notifications while the window is not active; on until the user turns it off. */
   notifications: boolean;
   /** Closing the window leaves the app running in the tray. */
   background: boolean;

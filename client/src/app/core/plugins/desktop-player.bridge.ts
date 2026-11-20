@@ -140,7 +140,7 @@ export interface DesktopNotificationClick {
 
 export interface DesktopNotifyPrefs {
   /** Closing the window leaves the app running. */
-  /** OS notifications while the window is not active; off until the user turns it on. */
+  /** OS notifications while the window is not active; on until the user turns it off. */
   notifications: boolean;
   background: boolean;
   startAtLogin: boolean;

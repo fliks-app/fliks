@@ -3,7 +3,7 @@ import path from 'node:path';
 import { app } from 'electron';
 import type { DesktopNotifyLabels, DesktopNotifyPrefs } from '../../shared/contract.ts';
 
-export const DEFAULT_PREFS: DesktopNotifyPrefs = { notifications: false, background: false, startAtLogin: false };
+export const DEFAULT_PREFS: DesktopNotifyPrefs = { notifications: true, background: false, startAtLogin: false };
 
 const file = (name: string) => path.join(app.getPath('userData'), name);
 
@@ -24,7 +24,7 @@ function write(name: string, value: unknown): void {
 export function loadPrefs(): DesktopNotifyPrefs {
   const raw = read<DesktopNotifyPrefs>('notify-prefs.json');
   return {
-    notifications: raw.notifications === true,
+    notifications: raw.notifications !== false,
     background: raw.background === true,
     startAtLogin: raw.startAtLogin === true,
   };
