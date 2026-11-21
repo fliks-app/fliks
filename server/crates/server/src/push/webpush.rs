@@ -14,8 +14,10 @@ const JWT_TTL_SECS: i64 = 12 * 3600;
 const CACHE: Duration = Duration::from_secs(3600);
 
 /// Hosts of the push services the browsers use; a suffix entry starts with a dot.
-const HOSTS: [&str; 7] = [
+const HOSTS: [&str; 8] = [
     "fcm.googleapis.com",
+    // FCM of Chromium builds outside the stable channel (Beta, Dev, Canary, distribution packages).
+    "jmt17.google.com",
     "updates.push.services.mozilla.com",
     ".push.services.mozilla.com",
     "web.push.apple.com",
@@ -128,6 +130,7 @@ mod tests {
     fn only_known_https_push_services() {
         for ok in [
             "https://fcm.googleapis.com/fcm/send/abc",
+            "https://jmt17.google.com/fcm/send/abc",
             "https://updates.push.services.mozilla.com/wpush/v2/x",
             "https://web.push.apple.com/Qx",
             "https://wns2-par02p.notify.windows.com/w/?token=x",
