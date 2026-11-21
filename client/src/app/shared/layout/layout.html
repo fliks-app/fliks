@@ -343,7 +343,8 @@
   <!-- Optimize dialog, single instance, opened via OptimizeModalService -->
   <app-optimize-modal />
 
-  <div class="drawer-side z-40" [class.hidden]="navbar.phoneDock()">
+  <!-- The gutter is always reserved: a scrollbar appearing as the menu grows would shift the page. -->
+  <div class="drawer-side z-40 [scrollbar-gutter:stable]" [class.hidden]="navbar.phoneDock()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
     <aside class="app-chrome-side w-64 min-h-full flex flex-col"
            [class.bg-base-100]="!background.url()"
