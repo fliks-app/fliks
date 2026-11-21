@@ -36,8 +36,8 @@ it is NOT the menu-bar server host under `macos/`.
      AppKit then moves, resizes and animates video and UI together. Full screen
      animates the window's own frame (`live_fullscreen.mm`), so the page and the
      video keep drawing instead of AppKit's cross-fade of two snapshots taken
-     before either redraws; on each resize the main thread waits (100 ms at
-     most) until a video frame at the new size is on screen.
+     before either redraws. A resize never waits for the video: its layer scales
+     the last frame until mpv renders one at the new size.
 
   `PlayerSession.createPlayer()` picks #2/#3 by platform; both implement
   `PlayerBackend` (`src/main/mpv/player-backend.ts`). All three share
