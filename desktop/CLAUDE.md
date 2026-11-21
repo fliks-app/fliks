@@ -25,12 +25,19 @@ it is NOT the menu-bar server host under `macos/`.
      JSON-IPC. **NOT used on Linux or macOS.**
   3. **macOS** — `MacMpvPlayer` (`src/main/mpv/mac-mpv-player.ts`) wraps the
      **in-process** libmpv addon `native/player_mac/addon.mm`, which renders into
-     a `CAOpenGLLayer` on the videoWin's NSView (render API, `vo=libmpv`,
-     `hwdec=videotoolbox`, EDR/HDR-capable). mpv's subprocess `--wid` doesn't
-     embed on macOS (0.41 ignores the handle and opens its own window), so it
-     CAN'T use backend #2; and the macOS window server composites
-     sibling windows correctly, so it doesn't need #1's self-compositor — it
-     reuses the Windows-style 3-window `PlayerSession` instead.
+     a `CAMetalLayer` (render API, `vo=libmpv`, `hwdec=videotoolbox`,
+     EDR/HDR-capable). mpv's subprocess `--wid` doesn't embed on macOS (0.41
+     ignores the handle and opens its own window), so it CAN'T use backend #2.
+     `PlayerSession` keeps it in **one window**: the layer's view sits right above
+     the window's vibrancy view, under Chromium's compositor view. `vibrancy` is
+     what makes the window translucent for Chromium (a page with alpha, cleared
+     every frame) while keeping its title bar; a clear `backgroundColor` alone
+     leaves Chromium treating its surface as opaque, so stale pixels pile up.
+     AppKit then moves, resizes and animates video and UI together. Full screen
+     animates the window's own frame (`live_fullscreen.mm`), so the page and the
+     video keep drawing instead of AppKit's cross-fade of two snapshots taken
+     before either redraws. A resize never waits for the video: its layer scales
+     the last frame until mpv renders one at the new size.
 
   `PlayerSession.createPlayer()` picks #2/#3 by platform; both implement
   `PlayerBackend` (`src/main/mpv/player-backend.ts`). All three share
@@ -44,7 +51,7 @@ it is NOT the menu-bar server host under `macos/`.
   uses `vo_gpu`, not gpu-next). Video plays; it just isn't true-HDR on screen.
   **Windows** spawns mpv as a subprocess with `--vo=gpu-next`, which reshapes
   Dolby Vision (and tonemaps HDR10/HLG) through libplacebo and outputs HDR10
-  when the display reports headroom. On **macOS** the CAOpenGLLayer uses an
+  when the display reports headroom. On **macOS** the CAMetalLayer uses an
   RGBA16F backing + a **content-adaptive color
   pipeline** (`ApplyLayerColorConfig` in `native/player_mac/addon.mm`): on each
   video-reconfig it classifies the stream from `video-params/gamma`+`primaries`

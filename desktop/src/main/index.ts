@@ -21,7 +21,7 @@ import type { PlayerBackend } from './mpv/player-backend';
 import { toElectronKey } from './keymap';
 import { watchRendererCrash } from './renderer-recovery';
 import { Notifier } from './notify';
-import { refreshMenu, setMenuLabels, setMenuPlayback, setMenuWindow } from './menu';
+import { refreshMenu, setMenuLabels, setMenuFullscreen, setMenuPlayback } from './menu';
 import { pressMediaKey, type MediaKey } from './menu-template';
 import { isTrustedServer, trustServer } from './trusted-servers';
 
@@ -217,12 +217,8 @@ function rendererUrl(haveApp: boolean): string {
   return haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>';
 }
 
-// Windows / macOS: a framed master window carries the native chrome; the video
-// embeds into a frameless transparent window pinned over its content area, with
-// the web UI in a second transparent window above that. Windows embeds an mpv
-// subprocess via --wid; macOS embeds in-process libmpv (CAOpenGLLayer on the
-// video window's NSView) — PlayerSession.createPlayer() picks the backend. See
-// PlayerSession for why the frame and the see-through video layer are separate.
+// Windows / macOS: PlayerSession owns the framed player window, with libmpv under the page on macOS
+// and an --wid mpv subprocess in overlay windows on Windows.
 async function startEmbedSession(haveApp: boolean): Promise<void> {
   const { PlayerSession } = await import('./window/player-session');
   const { registerPlayerIpc } = await import('./ipc');
@@ -232,7 +228,7 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
   registerPlayerIpc(session, ipcHooks);
   session.hideOnClose = () => notifier?.hideOnClose() ?? false;
   session.onFullscreenChange = refreshMenu;
-  setMenuWindow(session);
+  setMenuFullscreen(() => session.isFullscreen());
   setMenuPlayback((key) => pressMediaKey(session.uiContents, key));
   session.onActive = (active) => notifier?.setActive(active);
   raiseWindow = () => {
@@ -423,9 +419,7 @@ app.whenReady().then(async () => {
   const haveApp = fs.existsSync(path.join(dir, 'index.html'));
   if (haveApp) registerAppProtocol(dir);
 
-  // Windows embeds an mpv subprocess (--wid) into the video window; macOS embeds
-  // in-process libmpv (CAOpenGLLayer on the video window's NSView). Both use the
-  // 3-window PlayerSession + the platform player factory in createPlayer().
+  // Both use PlayerSession, which picks the platform's window model and player.
   if (process.platform === 'win32' || process.platform === 'darwin') {
     await startEmbedSession(haveApp).catch((e) => console.error('[main] embed session failed', e));
     return;

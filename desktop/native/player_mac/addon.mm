@@ -2,19 +2,16 @@
 //
 // Unlike Linux (a self-compositing SDL/GLES window) and Windows (an mpv
 // SUBPROCESS embedded via --wid), macOS embeds libmpv IN-PROCESS: mpv's
-// subprocess --wid crashes there ("--wid works only with libmpv"), and the
-// macOS window server already composites sibling windows correctly, so no
-// self-compositor is needed.
+// subprocess --wid crashes there ("--wid works only with libmpv").
 //
-// The Electron videoWin's content NSView (getNativeWindowHandle) hosts a
+// A view right above the player window's vibrancy view, under the page, hosts a
 // CAMetalLayer; mpv still renders through the OpenGL render API (the only GPU
 // backend in vendored libmpv) into an offscreen FBO backed by an IOSurface. A
 // dedicated render thread owns a headless CGL context end to end: it renders
 // each frame into the IOSurface-backed FBO, then Metal blit-copies that
 // IOSurface into the layer's next drawable. This indirection is what buys
 // CAEDRMetadata (HDR10/HLG tonemapping hints), which CAOpenGLLayer can't carry.
-// The sibling uiWin (a real Electron window owned by videoWin) draws the
-// controls above it.
+// Chromium's compositor view above it draws the page, transparent where the video shows.
 //
 // libmpv is dlopen'd (self-contained build: FFmpeg static + symbols hidden, so
 // no clash with Electron's bundled libffmpeg.dylib) — mirrors the Linux addon.
@@ -27,9 +24,9 @@
 
 void InitNowPlaying(Napi::Env env, Napi::Object exports);  // now_playing.mm
 void InitNotifyStatus(Napi::Env env, Napi::Object exports);  // notify_status.mm
+void InitLiveFullscreen(Napi::Env env, Napi::Object exports);  // live_fullscreen.mm
 
 #import <Cocoa/Cocoa.h>
-#import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 #import <OpenGL/OpenGL.h>
 #import <OpenGL/gl3.h>
@@ -56,6 +53,15 @@ void InitNotifyStatus(Napi::Env env, Napi::Object exports);  // notify_status.mm
 #include <string>
 #include <thread>
 #include <vector>
+
+// Under the page, which takes every event.
+@interface FliksVideoView : NSView
+@end
+@implementation FliksVideoView
+- (NSView*)hitTest:(NSPoint)point {
+  return nil;
+}
+@end
 
 namespace {
 
@@ -143,7 +149,6 @@ struct State {
   std::atomic<bool> hdrBacking{false};
   std::thread eventThread;
   std::thread renderThread;
-  std::atomic<uint64_t> desiredSize{0};  // packed w<<32|h, set by UpdateLayerGeometry
   std::mutex wakeMutex;
   std::condition_variable wakeCv;
   std::atomic<bool> wake{false};
@@ -203,13 +208,14 @@ struct SurfaceSlot {
   GLuint fbo = 0;
   id<MTLTexture> mtl = nil;
   std::atomic<bool> busy{false};  // set before commit, cleared in the completion handler
+  uint64_t gen = 0;  // bumped on release, so a retired slot's late completion leaves the new one busy
   int width = 0;
   int height = 0;
 };
 SurfaceSlot g_ring[2];
 
 CAMetalLayer* g_layer = nil;
-NSView* g_view = nil;  // not owned (Electron's content view)
+NSView* g_view = nil;  // FliksVideoView, in the player window's content view
 id<MTLDevice> g_device = nil;
 id<MTLCommandQueue> g_queue = nil;
 id g_backingObserver = nil;
@@ -272,7 +278,14 @@ void RenderThreadMain(State* s) {
     std::unique_lock<std::mutex> lk(s->wakeMutex);
     s->wakeCv.wait(lk, [&] { return !slot.busy.load() || !s->run.load(); });
   };
+  // An in-flight command buffer retains the Metal texture and its IOSurface, so a resize, one per
+  // step of the full-screen animation, frees a slot without waiting for the GPU.
   auto releaseSlot = [&](SurfaceSlot& slot) {
+    {
+      std::lock_guard<std::mutex> lk(s->wakeMutex);
+      slot.gen++;
+      slot.busy.store(false);
+    }
     if (slot.fbo) { glDeleteFramebuffers(1, &slot.fbo); slot.fbo = 0; }
     if (slot.tex) { glDeleteTextures(1, &slot.tex); slot.tex = 0; }
     slot.mtl = nil;
@@ -313,82 +326,81 @@ void RenderThreadMain(State* s) {
   };
 
   while (s->run.load()) {
-    {
-      std::unique_lock<std::mutex> lk(s->wakeMutex);
-      s->wakeCv.wait_for(lk, std::chrono::milliseconds(100),
-                         [s] { return s->wake.load() || s->dirty.load() || !s->run.load(); });
-      s->wake.store(false);
-    }
-    if (!s->run.load()) break;
-
-    uint64_t flags = M::rc_update(s->mpvGl);  // ADVANCED_CONTROL: required after every callback
-    if (!(flags & MPV_RENDER_UPDATE_FRAME) && !s->dirty.load()) continue;
-    s->dirty.store(false);
-
-    const uint64_t packed = s->desiredSize.load();
-    const int w = static_cast<int>(packed >> 32);
-    const int h = static_cast<int>(packed & 0xffffffffu);
-    if (w <= 0 || h <= 0) continue;
-
-    if (w != ringW || h != ringH) {
-      glFinish();
-      for (auto& slot : g_ring) waitUntilFree(slot);
-      for (auto& slot : g_ring) releaseSlot(slot);
-      for (auto& slot : g_ring) buildSlot(slot, w, h);
-      ringW = w;
-      ringH = h;
-    }
-
-    SurfaceSlot& slot = g_ring[frameIndex++ & 1];
-    if (slot.busy.load()) waitUntilFree(slot);  // never in practice at ring size 2
-
-    mpv_opengl_fbo mfbo{static_cast<int>(slot.fbo), w, h, g_pixelFormat.glInternalFormat};
-    // No FLIP_Y: mpv's render-API output is top-down, and so is an FBO texture
-    // (unlike the CAOpenGLLayer default framebuffer, which is bottom-up). If
-    // the first SDR frame renders upside down, re-add flip=1 here.
-    mpv_render_param render_params[] = {
-        {MPV_RENDER_PARAM_OPENGL_FBO, &mfbo},
-        {static_cast<mpv_render_param_type>(0), nullptr},
-    };
-    M::rc_render(s->mpvGl, render_params);
-    glFlush();  // ensure GL's IOSurface writes are visible before the Metal blit reads it
-
-    id<CAMetalDrawable> drawable = [g_layer nextDrawable];
-    if (!drawable) {
-      s->dirty.store(true);  // retry next wake instead of dropping the frame
-      continue;
-    }
-
-    id<MTLCommandBuffer> cb = [g_queue commandBuffer];
-    id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
-    // min() guards the one-frame race where a resize lands between the GL
-    // render above and this blit (drawable and slot briefly disagree in size).
-    MTLSize copySize = MTLSizeMake(
-        std::min<NSUInteger>(slot.width, drawable.texture.width),
-        std::min<NSUInteger>(slot.height, drawable.texture.height), 1);
-    [blit copyFromTexture:slot.mtl
-               sourceSlice:0
-               sourceLevel:0
-              sourceOrigin:MTLOriginMake(0, 0, 0)
-                sourceSize:copySize
-                 toTexture:drawable.texture
-          destinationSlice:0
-          destinationLevel:0
-         destinationOrigin:MTLOriginMake(0, 0, 0)];
-    [blit endEncoding];
-    [cb presentDrawable:drawable];
-    slot.busy.store(true);
-    [cb addCompletedHandler:^(id<MTLCommandBuffer>) {
-      // Clear under wakeMutex: an unlocked store can land between waitUntilFree's
-      // predicate check and its block, losing the wakeup and stalling the loop.
+    // nextDrawable and the command buffer are autoreleased, and this thread has no pool of its own.
+    @autoreleasepool {
       {
-        std::lock_guard<std::mutex> lk(s->wakeMutex);
-        slot.busy.store(false);
+        std::unique_lock<std::mutex> lk(s->wakeMutex);
+        s->wakeCv.wait_for(lk, std::chrono::milliseconds(100),
+                           [s] { return s->wake.load() || s->dirty.load() || !s->run.load(); });
+        s->wake.store(false);
       }
-      s->wakeCv.notify_one();
-    }];
-    [cb commit];
-    M::rc_report_swap(s->mpvGl);
+      if (!s->run.load()) break;
+
+      uint64_t flags = M::rc_update(s->mpvGl);  // ADVANCED_CONTROL: required after every callback
+      if (!(flags & MPV_RENDER_UPDATE_FRAME) && !s->dirty.load()) continue;
+      s->dirty.store(false);
+
+      // Render at the size of the drawable it lands in: a frame rendered for the previous size would
+      // be cropped into it.
+      const CGSize drawableSize = g_layer.drawableSize;
+      if (drawableSize.width < 1 || drawableSize.height < 1) continue;  // nextDrawable would fail at once
+      id<CAMetalDrawable> drawable = [g_layer nextDrawable];
+      if (!drawable) {
+        s->dirty.store(true);  // retry next wake instead of dropping the frame
+        continue;
+      }
+      const int w = static_cast<int>(drawable.texture.width);
+      const int h = static_cast<int>(drawable.texture.height);
+
+      if (w != ringW || h != ringH) {
+        glFinish();
+        for (auto& slot : g_ring) releaseSlot(slot);
+        for (auto& slot : g_ring) buildSlot(slot, w, h);
+        ringW = w;
+        ringH = h;
+      }
+
+      SurfaceSlot& slot = g_ring[frameIndex++ & 1];
+      if (slot.busy.load()) waitUntilFree(slot);  // never in practice at ring size 2
+
+      mpv_opengl_fbo mfbo{static_cast<int>(slot.fbo), w, h, g_pixelFormat.glInternalFormat};
+      // No FLIP_Y: mpv's render-API output is top-down, and so is an FBO texture
+      // (unlike the CAOpenGLLayer default framebuffer, which is bottom-up). If
+      // the first SDR frame renders upside down, re-add flip=1 here.
+      mpv_render_param render_params[] = {
+          {MPV_RENDER_PARAM_OPENGL_FBO, &mfbo},
+          {static_cast<mpv_render_param_type>(0), nullptr},
+      };
+      M::rc_render(s->mpvGl, render_params);
+      glFlush();  // ensure GL's IOSurface writes are visible before the Metal blit reads it
+
+      id<MTLCommandBuffer> cb = [g_queue commandBuffer];
+      id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
+      [blit copyFromTexture:slot.mtl
+                 sourceSlice:0
+                 sourceLevel:0
+                sourceOrigin:MTLOriginMake(0, 0, 0)
+                  sourceSize:MTLSizeMake(w, h, 1)
+                   toTexture:drawable.texture
+            destinationSlice:0
+            destinationLevel:0
+           destinationOrigin:MTLOriginMake(0, 0, 0)];
+      [blit endEncoding];
+      [cb presentDrawable:drawable];
+      slot.busy.store(true);
+      const uint64_t gen = slot.gen;
+      [cb addCompletedHandler:^(id<MTLCommandBuffer>) {
+        // Clear under wakeMutex: an unlocked store can land between waitUntilFree's
+        // predicate check and its block, losing the wakeup and stalling the loop.
+        {
+          std::lock_guard<std::mutex> lk(s->wakeMutex);
+          if (slot.gen == gen) slot.busy.store(false);
+        }
+        s->wakeCv.notify_one();
+      }];
+      [cb commit];
+      M::rc_report_swap(s->mpvGl);
+    }
   }
 
   if (s->mpvGl) {
@@ -436,13 +448,14 @@ void UpdateLayerGeometry() {
   if (!g_layer || !g_view) return;
   NSWindow* win = g_view.window;
   CGFloat scale = win ? win.backingScaleFactor : 2.0;
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];  // a standalone sublayer would animate its frame
   g_layer.contentsScale = scale;
   g_layer.frame = g_view.bounds;
   CGSize drawableSize =
       CGSizeMake(g_view.bounds.size.width * scale, g_view.bounds.size.height * scale);
   g_layer.drawableSize = drawableSize;
-  g_state.desiredSize.store((static_cast<uint64_t>(drawableSize.width) << 32) |
-                             static_cast<uint32_t>(drawableSize.height));
+  [CATransaction commit];
   RequestRedraw();
 }
 
@@ -797,7 +810,7 @@ void EventThreadMain(State* s) {
 
 // ── N-API surface ────────────────────────────────────────────────────────────
 
-// start({ wid: string(decimal NSView pointer), scale?: number })
+// start({ wid: string(decimal pointer to the player window's content NSView), scale?: number })
 Napi::Value Start(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (g_state.run.load()) return env.Undefined();
@@ -808,8 +821,8 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   Napi::Object o = info[0].As<Napi::Object>();
   std::string widStr = o.Has("wid") ? o.Get("wid").ToString().Utf8Value() : "0";
   uintptr_t ptr = static_cast<uintptr_t>(strtoull(widStr.c_str(), nullptr, 10));
-  g_view = (__bridge NSView*)reinterpret_cast<void*>(ptr);
-  if (!g_view) {
+  NSView* content = (__bridge NSView*)reinterpret_cast<void*>(ptr);
+  if (!content) {
     Napi::Error::New(env, "invalid NSView handle").ThrowAsJavaScriptException();
     return env.Undefined();
   }
@@ -861,10 +874,6 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
       getenv("FLIKS_MPV_LOGLEVEL") ? getenv("FLIKS_MPV_LOGLEVEL") : "v");
   fprintf(stderr, "[player-mac] mpv ready (hwdec=videotoolbox)\n");
 
-  // Attach the Metal layer to the videoWin's content view. N-API runs on the
-  // AppKit main thread, so CALayer/NSView mutation here is safe.
-  g_view.wantsLayer = YES;
-
   const char* forceSdr = getenv("FLIKS_HDR");
   const bool wantHdr = !(forceSdr && std::strcmp(forceSdr, "no") == 0);
   g_device = MTLCreateSystemDefaultDevice();
@@ -884,6 +893,17 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   }
   g_state.hdrBacking.store(wantHdr);
 
+  // N-API runs on the AppKit main thread, so NSView/CALayer mutation here is safe.
+  g_view = [[FliksVideoView alloc] initWithFrame:content.bounds];
+  g_view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  g_view.wantsLayer = YES;
+  // Right above the vibrancy view of a translucent window, under Chromium's compositor view and its page.
+  NSView* vibrancy = nil;
+  for (NSView* v in content.subviews)
+    if ([v isKindOfClass:[NSVisualEffectView class]]) vibrancy = v;
+  [content addSubview:g_view positioned:(vibrancy ? NSWindowAbove : NSWindowBelow) relativeTo:vibrancy];
+  if (!vibrancy) fprintf(stderr, "[player-mac] no vibrancy view: the video may be hidden under the page\n");
+
   g_layer = [CAMetalLayer layer];
   g_layer.device = g_device;
   g_layer.pixelFormat = g_pixelFormat.mtlFormat;
@@ -900,8 +920,6 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   CGSize drawableSize =
       CGSizeMake(g_view.bounds.size.width * scale, g_view.bounds.size.height * scale);
   g_layer.drawableSize = drawableSize;
-  g_state.desiredSize.store((static_cast<uint64_t>(drawableSize.width) << 32) |
-                             static_cast<uint32_t>(drawableSize.height));
   [g_view.layer addSublayer:g_layer];
 
   // Keep the layer glued to the view across resize + display (scale) changes.
@@ -909,7 +927,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   g_frameObserver = [[NSNotificationCenter defaultCenter]
       addObserverForName:NSViewFrameDidChangeNotification
                   object:g_view
-                   queue:[NSOperationQueue mainQueue]
+                   queue:nil  // synchronous: the drawable takes the new size in the resize's own pass
               usingBlock:^(NSNotification*) { UpdateLayerGeometry(); }];
   // Re-evaluate the colorspace/EDR config for the current content whenever the
   // display situation changes. Three notifications, because none covers every case:
@@ -1051,98 +1069,6 @@ Napi::Value SetProperty(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-// resize() — re-fit the layer to the view (PlayerSession resizes the NSWindow).
-// Autoresizing + the frame observer normally handle this; expose it so the TS
-// layer can force a re-fit (and contentsScale refresh) defensively.
-Napi::Value Resize(const Napi::CallbackInfo& info) {
-  UpdateLayerGeometry();
-  return info.Env().Undefined();
-}
-
-// Path for `r` with only the two corners on one Y-edge rounded. bottomIsMinY
-// selects which edge is "bottom" in the layer's geometry (a non-flipped AppKit
-// view has its bottom at minY; a flipped Chromium view at maxY).
-static CGPathRef CreateBottomRoundedPath(CGRect r, CGFloat radius, BOOL bottomIsMinY) {
-  CGFloat x0 = CGRectGetMinX(r), x1 = CGRectGetMaxX(r);
-  CGFloat y0 = CGRectGetMinY(r), y1 = CGRectGetMaxY(r);
-  CGFloat rad = MIN(radius, MIN(r.size.width, r.size.height) / 2.0);
-  CGMutablePathRef p = CGPathCreateMutable();
-  CGFloat sq = bottomIsMinY ? y1 : y0;  // square edge
-  CGFloat rd = bottomIsMinY ? y0 : y1;  // rounded edge
-  CGFloat dir = bottomIsMinY ? 1.0 : -1.0;
-  CGPathMoveToPoint(p, NULL, x0, sq);
-  CGPathAddLineToPoint(p, NULL, x1, sq);
-  CGPathAddLineToPoint(p, NULL, x1, rd + rad * dir);
-  CGPathAddArcToPoint(p, NULL, x1, rd, x1 - rad, rd, rad);
-  CGPathAddLineToPoint(p, NULL, x0 + rad, rd);
-  CGPathAddArcToPoint(p, NULL, x0, rd, x0, rd + rad * dir, rad);
-  CGPathCloseSubpath(p);
-  return p;
-}
-
-// setBottomCornerRadius(wid, radius) — clip any window's content view to a
-// square-top / rounded-bottom shape via a CAShapeLayer mask (works for the web
-// content AND the CAMetalLayer, which ignores an ancestor's cornerRadius). The
-// caller re-invokes on resize with the new bounds. N-API runs on the AppKit
-// main thread, so layer mutation here is safe.
-Napi::Value SetBottomCornerRadius(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  if (info.Length() < 2) return env.Undefined();
-  std::string widStr = info[0].ToString().Utf8Value();
-  double radius = info[1].As<Napi::Number>().DoubleValue();
-  uintptr_t ptr = static_cast<uintptr_t>(strtoull(widStr.c_str(), nullptr, 10));
-  NSView* view = (__bridge NSView*)reinterpret_cast<void*>(ptr);
-  if (!view) return env.Undefined();
-  view.wantsLayer = YES;
-  CALayer* layer = view.layer;
-  if (!layer) return env.Undefined();
-  CGPathRef path = CreateBottomRoundedPath(view.bounds, radius, !view.isFlipped);
-  CAShapeLayer* mask = [layer.mask isKindOfClass:[CAShapeLayer class]]
-                           ? (CAShapeLayer*)layer.mask
-                           : [CAShapeLayer layer];
-  [CATransaction begin];
-  [CATransaction setDisableActions:YES];  // no implicit animation on resize
-  mask.frame = view.bounds;
-  mask.path = path;
-  layer.mask = mask;
-  [CATransaction commit];
-  CGPathRelease(path);
-  return env.Undefined();
-}
-
-// keepOffMainWindow(wid): that view's window can no longer become main, so the framed window keeps
-// its active title bar and AXMain. Swizzles -canBecomeMainWindow once per class, read per window.
-static const char kOffMainKey = 0;
-static IMP g_canBecomeMain = nullptr;
-static BOOL CanBecomeMainOverride(id self, SEL cmd) {
-  if (objc_getAssociatedObject(self, &kOffMainKey)) return NO;
-  return g_canBecomeMain ? ((BOOL (*)(id, SEL))g_canBecomeMain)(self, cmd) : YES;
-}
-
-Napi::Value KeepOffMainWindow(const Napi::CallbackInfo& info) {
-  Napi::Env env = info.Env();
-  if (info.Length() < 1) return env.Undefined();
-  uintptr_t ptr = static_cast<uintptr_t>(strtoull(info[0].ToString().Utf8Value().c_str(), nullptr, 10));
-  NSView* view = (__bridge NSView*)reinterpret_cast<void*>(ptr);
-  NSWindow* window = view.window;
-  if (!window) return env.Undefined();
-  if (!g_canBecomeMain) {
-    Class cls = object_getClass(window);
-    Method m = class_getInstanceMethod(cls, @selector(canBecomeMainWindow));
-    g_canBecomeMain = method_getImplementation(m);
-    class_replaceMethod(cls, @selector(canBecomeMainWindow), (IMP)CanBecomeMainOverride,
-                        method_getTypeEncoding(m));
-  }
-  objc_setAssociatedObject(window, &kOffMainKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-  // A window shown before the flag is already main: hand that to the root of its parent chain.
-  if (window.isMainWindow) {
-    NSWindow* root = window;
-    while (root.parentWindow) root = root.parentWindow;
-    [root makeMainWindow];
-  }
-  return env.Undefined();
-}
-
 Napi::Value Stop(const Napi::CallbackInfo& info) {
   // run.store(false) MUST stay first: a still-queued ApplyLayerColorConfig block
   // (posted from the event thread) is only safe because it early-returns on
@@ -1160,7 +1086,7 @@ Napi::Value Stop(const Napi::CallbackInfo& info) {
   g_state.wakeCv.notify_all();
   if (g_state.renderThread.joinable()) g_state.renderThread.join();
 
-  if (g_layer) [g_layer removeFromSuperlayer];
+  [g_view removeFromSuperview];
   if (g_frameObserver) {
     [[NSNotificationCenter defaultCenter] removeObserver:g_frameObserver];
     g_frameObserver = nil;
@@ -1216,6 +1142,7 @@ Napi::Value ProbeLists(const Napi::CallbackInfo& info) {
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   InitNowPlaying(env, exports);
   InitNotifyStatus(env, exports);
+  InitLiveFullscreen(env, exports);
   exports.Set("start", Napi::Function::New(env, Start));
   exports.Set("onEvent", Napi::Function::New(env, OnEvent));
   exports.Set("load", Napi::Function::New(env, Load));
@@ -1223,9 +1150,6 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("getProperty", Napi::Function::New(env, GetProperty));
   exports.Set("probeLists", Napi::Function::New(env, ProbeLists));
   exports.Set("setProperty", Napi::Function::New(env, SetProperty));
-  exports.Set("resize", Napi::Function::New(env, Resize));
-  exports.Set("setBottomCornerRadius", Napi::Function::New(env, SetBottomCornerRadius));
-  exports.Set("keepOffMainWindow", Napi::Function::New(env, KeepOffMainWindow));
   exports.Set("stop", Napi::Function::New(env, Stop));
   return exports;
 }

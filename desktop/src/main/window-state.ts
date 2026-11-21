@@ -14,10 +14,13 @@ export function loadWindowState(): WindowState | null {
 /** Saves the window's bounds, maximized and full-screen state as they change. */
 export function trackWindowState(win: BrowserWindow): void {
   let timer: NodeJS.Timeout | undefined;
+  // In full screen, Electron's normal bounds miss a drag-resize made before the green button: keep the last windowed ones.
+  let windowed = win.getNormalBounds();
   const save = () => {
     clearTimeout(timer);
     if (win.isDestroyed()) return;
-    const { x, y, width, height } = win.getNormalBounds();
+    if (!win.isFullScreen()) windowed = win.getNormalBounds();
+    const { x, y, width, height } = windowed;
     const state: WindowState = { x, y, width, height, maximized: win.isMaximized(), fullscreen: win.isFullScreen() };
     try {
       writeJson(FILE, state);
