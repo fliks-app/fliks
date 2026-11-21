@@ -459,7 +459,7 @@ jobs:
   ios:
     needs: changes
     if: needs.changes.outputs.client == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 40
     defaults:
       run:
