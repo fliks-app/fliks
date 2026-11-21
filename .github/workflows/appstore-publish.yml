@@ -165,7 +165,7 @@ jobs:
           check() { codesign -d --entitlements - "$1" 2>&1 | tee /dev/stderr | grep -q "$2"; }
           app=ipa/Payload/App.app
           check $app com.apple.developer.carplay-audio
-          test "$(codesign -d --entitlements :- $app 2>/dev/null | /usr/libexec/PlistBuddy -c 'Print :aps-environment' /dev/stdin)" = production
+          test "$(codesign -d --xml --entitlements - $app 2>/dev/null | plutil -extract aps-environment raw -o - -)" = production
           check $app keychain-access-groups
           check $app/PlugIns/FliksNotificationService.appex keychain-access-groups
 
