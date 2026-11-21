@@ -39,7 +39,7 @@ jobs:
   build-and-publish:
     # Pre-releases never go to a store, and App Store Connect refuses a suffixed version.
     if: ${{ !(startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')) }}
-    runs-on: macos-15
+    runs-on: macos-26
     defaults:
       run:
         working-directory: client
@@ -57,13 +57,11 @@ jobs:
           cache: npm
           cache-dependency-path: client/package-lock.json
 
-      # Apple raised the minimum SDK to iOS 26 (Xcode 26.x) on the
-      # 2026 cutover — anything older fails altool validation with
-      # "SDK version issue". Pinned so a runner image bump
-      # can't change the SDK; raise it deliberately.
+      # App Store Connect requires the iOS 27 SDK from April 2027 (ITMS-90994).
+      # Pinned to the major so a runner image bump can't change the SDK.
       - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
         with:
-          xcode-version: '26.3'
+          xcode-version: '27'
 
       - name: Install client dependencies
         run: npm ci
