@@ -185,6 +185,7 @@
 
   @if (!inPipMode()) {
   <app-player-controls
+    [class.hidden]="windowTransition()"
     (interacted)="chrome.onInteraction()"
     [visible]="!!elsewhere() || (chrome.visible() && !subs.syncHidesControls())"
     [reactionsOnly]="chrome.reactionsOnly()"
