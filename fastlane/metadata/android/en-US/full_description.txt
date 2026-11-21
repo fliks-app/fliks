@@ -1,0 +1,5 @@
+Fliks turns a folder of video files into a streaming service for the household: covers, descriptions, seasons and episodes, one profile per person and resume points that follow you from screen to screen.
+
+This app is the client: it needs a Fliks server running on your own machine (Docker, Windows or macOS). There is no account to create and nothing leaves your network.
+
+The F-Droid build has no Google services: Chromecast and push notifications are not available there.
