@@ -40,6 +40,7 @@ export type MacAddon = NowPlayingAddon & {
   getProperty(name: string): string | null;
   setProperty(name: string, value: string): void;
   probeLists(): { 'decoder-list'?: string; 'demuxer-lavf-list'?: string };
+  useLiveFullscreen(wid: string): void;
   stop(): void;
 };
 

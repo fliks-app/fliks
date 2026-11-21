@@ -24,6 +24,7 @@
 
 void InitNowPlaying(Napi::Env env, Napi::Object exports);  // now_playing.mm
 void InitNotifyStatus(Napi::Env env, Napi::Object exports);  // notify_status.mm
+void InitLiveFullscreen(Napi::Env env, Napi::Object exports);  // live_fullscreen.mm
 
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/QuartzCore.h>
@@ -351,8 +352,8 @@ void RenderThreadMain(State* s) {
         syncFor = s->syncWanted;
       }
 
-      // Render at the size of the drawable it lands in: AppKit snapshots the first frame after a
-      // resize for its full-screen animation, so a frame cropped to a stale size would show.
+      // Render at the size of the drawable it lands in: a frame rendered for the previous size would
+      // be cropped into it.
       const CGSize drawableSize = g_layer.drawableSize;
       if (drawableSize.width < 1 || drawableSize.height < 1) continue;  // nextDrawable would fail at once
       id<CAMetalDrawable> drawable = [g_layer nextDrawable];
@@ -468,8 +469,8 @@ struct HdrMeta {
 };
 HdrMeta g_lastHdrMeta;  // main-thread only; reused when re-evaluating for a display change
 
-// Main thread, on a resize: wait until a frame at the new size is on screen, so AppKit's full-screen
-// animation snapshots it rather than the stale frame.
+// Main thread, on a resize: wait until a frame at the new size is on screen, so a resize (live, or
+// the full-screen animation) never shows the previous frame scaled into the new bounds.
 void PresentFrameAtNewSize() {
   if (!g_state.renderReady.load()) return RequestRedraw();
   std::unique_lock<std::mutex> lk(g_state.wakeMutex);
@@ -964,7 +965,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   g_frameObserver = [[NSNotificationCenter defaultCenter]
       addObserverForName:NSViewFrameDidChangeNotification
                   object:g_view
-                   queue:nil  // synchronous: the frame must be on screen before AppKit snapshots the window
+                   queue:nil  // synchronous: the new frame shows with the resize it belongs to
               usingBlock:^(NSNotification*) { UpdateLayerGeometry(); }];
   // Re-evaluate the colorspace/EDR config for the current content whenever the
   // display situation changes. Three notifications, because none covers every case:
@@ -1179,6 +1180,7 @@ Napi::Value ProbeLists(const Napi::CallbackInfo& info) {
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   InitNowPlaying(env, exports);
   InitNotifyStatus(env, exports);
+  InitLiveFullscreen(env, exports);
   exports.Set("start", Napi::Function::New(env, Start));
   exports.Set("onEvent", Napi::Function::New(env, OnEvent));
   exports.Set("load", Napi::Function::New(env, Load));

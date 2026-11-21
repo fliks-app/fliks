@@ -57,7 +57,8 @@
           "sources": [
             "player_mac/addon.mm",
             "player_mac/now_playing.mm",
-            "player_mac/notify_status.mm"
+            "player_mac/notify_status.mm",
+            "player_mac/live_fullscreen.mm"
           ],
           "include_dirs": [
             "<!@(node -p \"require('node-addon-api').include_dir\")",

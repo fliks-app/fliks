@@ -3,7 +3,7 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { MpvPlayer } from '../mpv/mpv-player';
-import { MacMpvPlayer } from '../mpv/mac-mpv-player';
+import { MacMpvPlayer, loadMacAddon } from '../mpv/mac-mpv-player';
 import type { PlayerBackend } from '../mpv/player-backend';
 import { createEmbedBackend } from './backends';
 import { setPlaybackKeepAwake } from '../power';
@@ -123,6 +123,8 @@ export class PlayerSession {
       ...(singleWindow ? { webPreferences: uiWebPreferences(preloadPath), show: false } : {}),
     });
     if (singleWindow) {
+      // The window animates its own frame into full screen, so the page and the video keep drawing.
+      loadMacAddon().useLiveFullscreen(this.frameWin.getNativeWindowHandle().readBigUInt64LE(0).toString());
       this.frameWin.on('page-title-updated', (e) => e.preventDefault());
       this.frameWin.once('ready-to-show', () => {
         this.frameWin.show();

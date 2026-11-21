@@ -96,8 +96,6 @@ interface AudioOption {
  *  controller still sees the change in about a frame's time. */
 const FORCED_SAVE_COALESCE_MS = 300;
 const RELOAD_NEGOTIATE_TIMEOUT_MS = 15_000;
-/** Outlasts the macOS full-screen animation, in case its `fullscreenChanged` never comes. */
-const WINDOW_TRANSITION_MAX_MS = 1500;
 
 
 interface PipPlugin {
@@ -361,8 +359,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   readonly isDesktopNative = this.device.desktopPlatform() === 'electron';
   /** The page or, on desktop, the native compositor window is fullscreen. */
   readonly fullscreen = signal(false);
-  /** The desktop window is switching full screen; its controls stay hidden meanwhile. */
-  readonly windowTransition = signal(false);
 
   /** Template binding — true when using native (ExoPlayer/AVPlayer) engine. */
   get nativeEngine(): boolean {
@@ -1683,20 +1679,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async createDesktopEngine(): Promise<void> {
     const { engine } = await this.createSurface('desktop');
     if (engine instanceof DesktopEngine) this.fullscreen.set(engine.fullscreen);
-    engine.on('fullscreenChanged', (e) => {
-      this.fullscreen.set(e.fullscreen);
-      this.windowTransition.set(false);
-    });
+    engine.on('fullscreenChanged', (e) => this.fullscreen.set(e.fullscreen));
     this.wireNativePlayerEngine(engine);
-  }
-
-  /** The macOS window animates full screen from a snapshot taken before the page repaints at its new size:
-   *  the controls are hidden, and that frame painted, first, or they fly across the animation. */
-  private async setDesktopFullscreen(engine: DesktopEngine, enabled: boolean): Promise<void> {
-    this.windowTransition.set(true);
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    await engine.setFullscreen(enabled);
-    setTimeout(() => this.windowTransition.set(false), WINDOW_TRANSITION_MAX_MS);
   }
 
   /** Engine plus the surface contract that goes with it; the wiring below is
@@ -2466,7 +2450,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Desktop compositor: the visible surface is the native (SDL) window owned
     // by the addon, not this offscreen WebView, so toggle fullscreen there.
     if (this.isDesktopNative && this.engine instanceof DesktopEngine) {
-      void this.setDesktopFullscreen(this.engine, !this.engine.fullscreen);
+      this.engine.setFullscreen(!this.engine.fullscreen);
       return;
     }
     // iOS Safari rejects the Fullscreen API on arbitrary elements; only the <video> tag's
@@ -3546,7 +3530,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.engine instanceof DesktopEngine &&
       this.engine.fullscreen
     ) {
-      void this.setDesktopFullscreen(this.engine, false);
+      this.engine.setFullscreen(false);
       return;
     }
     // TV remote Return and desktop Escape close a visible controls bar first, then exit on the next press;
