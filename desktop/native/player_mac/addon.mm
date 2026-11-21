@@ -4,7 +4,7 @@
 // SUBPROCESS embedded via --wid), macOS embeds libmpv IN-PROCESS: mpv's
 // subprocess --wid crashes there ("--wid works only with libmpv").
 //
-// A view at the bottom of the player window's content view hosts a
+// A view right above the player window's vibrancy view, under the page, hosts a
 // CAMetalLayer; mpv still renders through the OpenGL render API (the only GPU
 // backend in vendored libmpv) into an offscreen FBO backed by an IOSurface. A
 // dedicated render thread owns a headless CGL context end to end: it renders
@@ -278,8 +278,8 @@ void RenderThreadMain(State* s) {
     std::unique_lock<std::mutex> lk(s->wakeMutex);
     s->wakeCv.wait(lk, [&] { return !slot.busy.load() || !s->run.load(); });
   };
-  // An in-flight command buffer retains the Metal texture and its IOSurface, so a slot can go
-  // without waiting for it: during a full-screen transition that completion waits on the main thread.
+  // An in-flight command buffer retains the Metal texture and its IOSurface, so a resize, one per
+  // step of the full-screen animation, frees a slot without waiting for the GPU.
   auto releaseSlot = [&](SurfaceSlot& slot) {
     {
       std::lock_guard<std::mutex> lk(s->wakeMutex);
@@ -902,6 +902,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   for (NSView* v in content.subviews)
     if ([v isKindOfClass:[NSVisualEffectView class]]) vibrancy = v;
   [content addSubview:g_view positioned:(vibrancy ? NSWindowAbove : NSWindowBelow) relativeTo:vibrancy];
+  if (!vibrancy) fprintf(stderr, "[player-mac] no vibrancy view: the video may be hidden under the page\n");
 
   g_layer = [CAMetalLayer layer];
   g_layer.device = g_device;

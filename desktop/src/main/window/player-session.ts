@@ -119,7 +119,7 @@ export class PlayerSession {
       ...(singleWindow ? { vibrancy: 'window' as const } : { backgroundColor: '#1d232a' }),
       title: 'Fliks',
       ...(iconPath ? { icon: iconPath } : {}),
-      // macOS: shown once the page paints, since the clear background would show the system one until then.
+      // macOS: shown once the page paints, rather than the bare vibrancy material until then.
       ...(singleWindow ? { webPreferences: uiWebPreferences(preloadPath), show: false } : {}),
     });
     if (singleWindow) {
