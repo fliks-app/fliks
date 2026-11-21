@@ -1,5 +1,47 @@
 # Changelog
 
+## [7.1.0](https://github.com/fliks-app/fliks/compare/v7.0.1...v7.1.0) (2026-11-21)
+
+
+### Features
+
+* **android:** add a libre build flavor without Google services ([#2836](https://github.com/fliks-app/fliks/issues/2836)) ([fb3a118](https://github.com/fliks-app/fliks/commit/fb3a11897d8303809032d9f2b37c5841d009fcd0))
+* **android:** add native push through FCM and the relay ([#2812](https://github.com/fliks-app/fliks/issues/2812)) ([f257e95](https://github.com/fliks-app/fliks/commit/f257e95c8d9d12e6c55732f07e2e158b025d3057))
+* **appletv:** show the notification event as an in-app toast ([#2804](https://github.com/fliks-app/fliks/issues/2804)) ([7d5ea6b](https://github.com/fliks-app/fliks/commit/7d5ea6be26face550d7e8afe55177d616c24dcfe))
+* **desktop:** add background mode, tray, notifications and badge ([#2810](https://github.com/fliks-app/fliks/issues/2810)) ([cd0ecc9](https://github.com/fliks-app/fliks/commit/cd0ecc950c639e4c895c67246a82933635a38c99))
+* **desktop:** build the macOS libmpv from source as an LGPL static dylib ([#2832](https://github.com/fliks-app/fliks/issues/2832)) ([6a7ed71](https://github.com/fliks-app/fliks/commit/6a7ed71cd38bf11f8652c6a7a96926d8c9e707c6))
+* **desktop:** macOS shell and Mac App Store build ([#2835](https://github.com/fliks-app/fliks/issues/2835)) ([5abbd53](https://github.com/fliks-app/fliks/commit/5abbd5304846632b006d7499356cebd24570ad65))
+* **desktop:** ship the licences of the macOS media libraries ([#2838](https://github.com/fliks-app/fliks/issues/2838)) ([816fd84](https://github.com/fliks-app/fliks/commit/816fd84622b7ae34461d1fc7fe083a213e0d4f9a))
+* **desktop:** single-window macOS player with live full screen ([#2839](https://github.com/fliks-app/fliks/issues/2839)) ([45a419a](https://github.com/fliks-app/fliks/commit/45a419a1ce747466ddce0ce1abc433ccbb97bf35))
+* **ios:** add native push with a notification service extension ([#2813](https://github.com/fliks-app/fliks/issues/2813)) ([27eed93](https://github.com/fliks-app/fliks/commit/27eed9313090ef28a88bea8c6efb52063574d735))
+* **player:** aim TV direct-play seeks at a source keyframe ([#2827](https://github.com/fliks-app/fliks/issues/2827)) ([80eac44](https://github.com/fliks-app/fliks/commit/80eac44c8f9e87203a86501f7409e3826bc7c21a))
+* **plugins:** add the notify.users host import and the notify:users scope ([#2805](https://github.com/fliks-app/fliks/issues/2805)) ([87e06fc](https://github.com/fliks-app/fliks/commit/87e06fc456a53da3872fae46e0bb268d3107f9cb))
+* **push:** add the client side of push notifications ([#2806](https://github.com/fliks-app/fliks/issues/2806)) ([6c08338](https://github.com/fliks-app/fliks/commit/6c08338d995e4a8b29a95602c902ca64bd00aaae))
+* **push:** add the push notification pipeline and the Fliks Relay connection ([#2801](https://github.com/fliks-app/fliks/issues/2801)) ([bd4ace6](https://github.com/fliks-app/fliks/commit/bd4ace6fabf73f0ff8864017b65bad04d2a2a7ae))
+* **push:** ask the notification permission in context, not at launch ([#2821](https://github.com/fliks-app/fliks/issues/2821)) ([94fea6c](https://github.com/fliks-app/fliks/commit/94fea6c6e1dd3e2271d8a6865baf27ef99843bac))
+* **push:** say what an action button did once it succeeds ([#2834](https://github.com/fliks-app/fliks/issues/2834)) ([7b4d43f](https://github.com/fliks-app/fliks/commit/7b4d43f8232484c9a699c7aaf5008aa1a0c58edd))
+* **push:** version the relay api list and honour the plaintext version ([#2823](https://github.com/fliks-app/fliks/issues/2823)) ([371da36](https://github.com/fliks-app/fliks/commit/371da366fbb59fd4ff5088343aead49ba7c47110))
+
+
+### Bug Fixes
+
+* **android:** harden native push after review ([#2814](https://github.com/fliks-app/fliks/issues/2814)) ([7c78770](https://github.com/fliks-app/fliks/commit/7c7877068255959b5c314ae45dbe7387c14a6d30))
+* **android:** use the Fliks mark as the notification icon ([#2820](https://github.com/fliks-app/fliks/issues/2820)) ([a97e7ad](https://github.com/fliks-app/fliks/commit/a97e7ada43d73de5a1bad4272461b34d3cb36aad))
+* **appletv:** show the notification toast above covers and harden the stream ([#2807](https://github.com/fliks-app/fliks/issues/2807)) ([0cd7e56](https://github.com/fliks-app/fliks/commit/0cd7e56ef25f01ecf0c4121dfc5b403d9ae488ca))
+* **client:** show a not-found page for unknown in-app URLs ([#2822](https://github.com/fliks-app/fliks/issues/2822)) ([b2d8400](https://github.com/fliks-app/fliks/commit/b2d840067ee097276a1d7fbaf7c709364d7b007a))
+* **ios:** harden push actions, image download and replay checks ([#2815](https://github.com/fliks-app/fliks/issues/2815)) ([e346e5b](https://github.com/fliks-app/fliks/commit/e346e5b5c0d1a2824bc8848008a02e551ec474b7))
+* **ios:** keep the app as the notification center delegate ([#2833](https://github.com/fliks-app/fliks/issues/2833)) ([d92026c](https://github.com/fliks-app/fliks/commit/d92026c2f7e3b05b3f05f9ad7a18a6ae6100e102))
+* **layout:** reserve the sidebar scrollbar gutter ([#2842](https://github.com/fliks-app/fliks/issues/2842)) ([d0e08ce](https://github.com/fliks-app/fliks/commit/d0e08ce5d4cd20b1e7921458b5762e8280b6518a))
+* **player:** wake the hidden bar on the first arrow, seek on the next ([#2826](https://github.com/fliks-app/fliks/issues/2826)) ([f2bd260](https://github.com/fliks-app/fliks/commit/f2bd2606fc8288bbb0d78f0dae2bd333c4eb30bb))
+* **push:** accept web push endpoints of non-stable chromium builds ([#2840](https://github.com/fliks-app/fliks/issues/2840)) ([0dbad4b](https://github.com/fliks-app/fliks/commit/0dbad4bb9c8400ae96c53aa559b6be9b4f2d491b))
+* **push:** harden the push client and add the desktop notification seam ([#2808](https://github.com/fliks-app/fliks/issues/2808)) ([6811b60](https://github.com/fliks-app/fliks/commit/6811b60993dfa38ad6d5c465c558591a516a800c))
+* **push:** open a tapped notification on a cold start ([#2819](https://github.com/fliks-app/fliks/issues/2819)) ([d06265b](https://github.com/fliks-app/fliks/commit/d06265b3291b73862e7f5545b9a58d60860109db))
+* **push:** point the server and the apps at the deployed relay host ([#2818](https://github.com/fliks-app/fliks/issues/2818)) ([0aa3c81](https://github.com/fliks-app/fliks/commit/0aa3c81c99d0da2b11affea9de3050d330b4be80))
+* **release:** reject releases whose name opens with another title ([#2828](https://github.com/fliks-app/fliks/issues/2828)) ([13d2ad8](https://github.com/fliks-app/fliks/commit/13d2ad8f3f8d9aadf6d2e1f76c573b3e12176353))
+* **setup:** connect from one button that probes then switches ([#2825](https://github.com/fliks-app/fliks/issues/2825)) ([4c5cb72](https://github.com/fliks-app/fliks/commit/4c5cb72672e0d6f65e6da9abeb18c088b3123421))
+* **spatial-nav:** reach the episode row from the season controls on TV ([#2803](https://github.com/fliks-app/fliks/issues/2803)) ([764a959](https://github.com/fliks-app/fliks/commit/764a959630d313e352a52a0a951d686f32423a6d))
+* split plugin updates from the source refresh, fix admin texts and Shift+S ([#2811](https://github.com/fliks-app/fliks/issues/2811)) ([93f5254](https://github.com/fliks-app/fliks/commit/93f5254c96b2f385f5461a53e9154dfbf00462f8))
+
 ## [7.0.1](https://github.com/fliks-app/fliks/compare/v7.0.0...v7.0.1) (2026-11-19)
 
 
