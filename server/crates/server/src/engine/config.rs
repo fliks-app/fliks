@@ -96,6 +96,10 @@ pub fn streaming(raw: &HashMap<String, String>) -> StreamingConfig {
             .to_owned(),
         subtitle_prewarm: d.subtitle_prewarm,
         sprite_decode: d.sprite_decode,
+        // Engine defaults: not settings yet.
+        opencl_device: d.opencl_device,
+        ort_threads: d.ort_threads,
+        optimize_pause_restart: d.optimize_pause_restart,
         throttle_enabled: get("streaming_throttle_enabled") != Some("false"),
         throttle_threshold_seconds: jsnum::max(
             MIN_THROTTLE_THRESHOLD_SECONDS,
@@ -239,6 +243,8 @@ impl Engine {
             livetv,
             path_mappings,
             worker: true,
+            // Engine default: no Log events until the host reads them.
+            log_events: false,
         };
         let backoff = self.timing().conflict_backoff;
         for attempt in 1..=CONFLICT_ATTEMPTS {

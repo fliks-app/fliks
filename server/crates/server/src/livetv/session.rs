@@ -298,6 +298,8 @@ fn upstream(s: &HStream, at_capacity: bool) -> LiveUpstream {
         headers,
         probed_container: s.probed_container.clone(),
         probed_video_codec: s.probed_video_codec.clone(),
+        // The scan does not record the field order yet: the engine probes it.
+        probed_field_order: None,
         probed_audio_codec: s.probed_audio_codec.clone(),
         at_capacity,
         vetted: super::lineup::provider_chosen(&s.source.url, &s.url),
