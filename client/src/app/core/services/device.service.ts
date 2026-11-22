@@ -83,7 +83,7 @@ export function applyDeviceOverrideFromUrl(): void {
 /** Form factor, input modality and TV OS; module-scope so bootstrap-time providers can branch before the injector exists. */
 export function detectDevice(): DetectResult {
   if (typeof window === 'undefined') {
-    return { input: 'mouse', formFactor: 'desktop', tvPlatform: null, desktopPlatform: null, standalone: false };
+    return { input: 'mouse', formFactor: 'desktop', tvPlatform: null, desktopPlatform: null, standalone: false, chromium: false };
   }
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
   // Raw platform facts, never the QA override: a forced TV look in a browser must keep the cookie session.
@@ -93,7 +93,8 @@ export function detectDevice(): DetectResult {
     Capacitor.isNativePlatform() ||
     desktopPlatform !== null ||
     /AndroidTV\/\d|\bTizen\b|SMART-TV|Web0S|webOS|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV/i.test(ua);
-  const facts = { desktopPlatform, standalone };
+  const chromium = /Chrome\//.test(ua) && !/CriOS/.test(ua);
+  const facts = { desktopPlatform, standalone, chromium };
 
   const override = readOverride();
   if (override) return { ...override, ...facts };
@@ -165,6 +166,8 @@ interface DetectResult {
   desktopPlatform: DesktopPlatform;
   /** No backend serves the shell (Capacitor, Smart TV, Android TV, desktop): the API lives on the picked server with a Bearer token. */
   standalone: boolean;
+  /** Blink engine (iOS Chrome is WebKit): the only one the Cast sender runs in. */
+  chromium: boolean;
 }
 
 /** Single source of truth for input modality and form factor (two orthogonal axes), detected in decreasing confidence order;
