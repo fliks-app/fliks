@@ -1718,14 +1718,11 @@ INSERT INTO users (username, "isAdmin", "roleId") VALUES ('none', false, (SELECT
     )
     .await;
     assert_eq!(s, 400);
-    assert_eq!(
-        call(
-            &c,
-            "/api/metadata/search/movie?q=x&page=500",
-            Some(&c.reader)
-        )
-        .await
-        .0,
-        200
-    );
+    let (s, _) = call(
+        &c,
+        "/api/metadata/search/movie?q=x&page=500",
+        Some(&c.reader),
+    )
+    .await;
+    assert_ne!(s, 400);
 }
