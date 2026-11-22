@@ -698,10 +698,13 @@ impl PluginRt {
         .allow_ip_name_lookup(false)
         .socket_addr_check(|_, _| Box::pin(async { false }));
         let data = data_dir(&env.cfg.runtime_dir, &id);
-        if std::fs::create_dir_all(&data).is_ok() {
-            set_mode(&data, 0o700);
-            b.preopened_dir(&data, "/data", FsPerms::ReadWrite)
-                .map_err(|e| SpawnError::Failed(e.to_string()))?;
+        match std::fs::create_dir_all(&data) {
+            Ok(()) => {
+                set_mode(&data, 0o700);
+                b.preopened_dir(&data, "/data", FsPerms::ReadWrite)
+                    .map_err(|e| SpawnError::Failed(e.to_string()))?;
+            }
+            Err(e) => tracing::warn!("plugin \"{id}\" starts without /data: {e}"),
         }
         let ctx = Ctx {
             wasi: b.build(),
@@ -741,7 +744,10 @@ impl PluginRt {
         let hello = env.cfg.deadlines.hello;
         let config = super::imports::config_for(&env.core, &id, &self.sh.defaults, None)
             .await
-            .unwrap_or_default();
+            .unwrap_or_else(|e| {
+                tracing::warn!("plugin \"{id}\" starts with an empty config: {e}");
+                vec![]
+            });
         let fail = |e: String| SpawnError::Failed(e);
         let work = async {
             let (guest, prov, scene, lyrics) = match &self.provider_idx {

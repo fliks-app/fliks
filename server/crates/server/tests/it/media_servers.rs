@@ -781,7 +781,9 @@ async fn import_history_follows_the_resume_rules(pool: PgPool) {
             users: 2,
             users_created: 1,
             imported: 6,
-            skipped: 6
+            skipped: 6,
+            errors: vec![],
+            error_count: 0
         }
     );
     let row = |title: &'static str| {

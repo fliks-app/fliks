@@ -193,7 +193,11 @@ impl Plugins {
                 String::from_utf8_lossy(&res.body)
             )));
         }
-        Ok(serde_json::from_slice(&res.body).unwrap_or(Value::Null))
+        if res.body.is_empty() {
+            return Ok(Value::Null);
+        }
+        serde_json::from_slice(&res.body)
+            .map_err(|e| RouteError::Failed(format!("malformed JSON from {id}: {e}")))
     }
 
     /// A sweep's call to a provider, one of at most `CALLS_PER_PROVIDER` at a time.

@@ -171,6 +171,12 @@ pub async fn put(
             .or((status == Some("ReadyToRead")).then_some(0.0)),
     };
     let user = k.a.user.id;
+    if progression.is_none() {
+        tracing::info!(
+            "Kobo state of user #{user} not stored: no progress for item #{}",
+            b.item
+        );
+    }
     if let Some(p) = progression {
         let _one = serialise(user, b.item).await;
         let (family, last_chapter_start) = finish_context(&st.db, b.item, b.file).await?;

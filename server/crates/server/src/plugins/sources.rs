@@ -113,8 +113,12 @@ impl Plugins {
         if list.is_empty() || signed.is_none() {
             return;
         }
-        let Ok(pkgs) = packages::all(&self.db).await else {
-            return;
+        let pkgs = match packages::all(&self.db).await {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!("deny list not enforced: {e}");
+                return;
+            }
         };
         let sources = vec![(list, signed)];
         for p in pkgs {
@@ -231,12 +235,14 @@ impl Plugins {
         if off {
             return json!({"updated": updated, "skipped": skipped});
         }
-        let (Ok(installed), Ok(sources)) = (
-            packages::all(&self.db).await,
-            packages::sources(&self.db, true).await,
-        ) else {
-            return json!({"updated": updated, "skipped": skipped});
-        };
+        let (installed, sources) =
+            match tokio::try_join!(packages::all(&self.db), packages::sources(&self.db, true)) {
+                Ok(both) => both,
+                Err(e) => {
+                    tracing::warn!("auto-update skipped: {e}");
+                    return json!({"updated": updated, "skipped": skipped});
+                }
+            };
         for pkg in installed {
             if only.is_some_and(|o| !o.contains(&pkg.plugin_id)) {
                 continue;

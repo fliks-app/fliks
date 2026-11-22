@@ -58,6 +58,24 @@ pub struct Subject {
     pub quality: Option<String>,
 }
 
+/// The failures of an import run: the first `MAX` messages and the total, for the completion event.
+#[derive(Debug, Default)]
+pub struct ImportErrors {
+    pub first: Vec<String>,
+    pub total: i64,
+}
+
+impl ImportErrors {
+    const MAX: usize = 50;
+
+    pub fn push(&mut self, message: String) {
+        self.total += 1;
+        if self.first.len() < Self::MAX {
+            self.first.push(message);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DownloadState {
@@ -395,6 +413,8 @@ pub enum SseEvent {
         users_created: i64,
         imported: i64,
         skipped: i64,
+        errors: Vec<String>,
+        error_count: i64,
     },
     #[serde(rename = "watch-history.import.failed")]
     WatchHistoryImportFailed {
@@ -411,6 +431,8 @@ pub enum SseEvent {
         imported: i64,
         updated: i64,
         skipped: i64,
+        errors: Vec<String>,
+        error_count: i64,
     },
     #[serde(rename = "seerr.import.failed")]
     SeerrImportFailed { error: String },
