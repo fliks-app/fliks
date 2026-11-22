@@ -4575,7 +4575,7 @@ mod scene_import {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn an_ambiguous_number_is_a_plain_error_not_a_retry(pool: PgPool) {
+    async fn an_ambiguous_number_is_a_refusal_not_a_retry(pool: PgPool) {
         let c = ctx(pool).await;
         let m = series(&c, 375921, &[(1, 3), (2, 4), (3, 1)]).await;
         let map: fliks_domain::release::scene::SceneMap = serde_json::from_str(include_str!(
@@ -4589,10 +4589,10 @@ mod scene_import {
             .unwrap();
         let out = import(&c, m, "Show.S02E01.1080p.mkv", None).await;
         assert_eq!(
-            (out.imported.len(), out.errors.len(), out.retry.len()),
+            (out.imported.len(), out.refused.len(), out.retry.len()),
             (0, 1, 0)
         );
-        assert!(out.errors[0].contains("ambiguous"), "{:?}", out.errors);
+        assert!(out.refused[0].contains("ambiguous"), "{:?}", out.refused);
     }
 
     #[sqlx::test(migrations = false)]
