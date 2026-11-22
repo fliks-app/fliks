@@ -238,6 +238,14 @@ async fn the_track_text_filter_matches_track_album_and_artist(pool: PgPool) {
         let (status, rows) = call(&app, &t, "GET", &format!("/api/tracks?q={q}"), None).await;
         assert_eq!((status, rows.as_array().unwrap().len()), (200, n), "{q}");
     }
+    sqlx::query("UPDATE persons SET name = 'Aná' WHERE name = 'Ana'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for q in ["ana", "an%C3%A1", "AN%C3%81"] {
+        let (_, rows) = call(&app, &t, "GET", &format!("/api/tracks?q={q}"), None).await;
+        assert_eq!(rows.as_array().unwrap().len(), 1, "{q}");
+    }
 }
 
 #[sqlx::test(migrations = false)]

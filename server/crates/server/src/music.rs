@@ -120,7 +120,9 @@ WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
     }
     if let Some(t) = text.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
         let like = fliks_domain::media::search::contains_pattern(t);
-        qb.push(r#" AND td."searchText" ILIKE "#).push_bind(like);
+        qb.push(r#" AND td."searchText" ILIKE f_unaccent("#)
+            .push_bind(like)
+            .push(")");
     }
     if favourite {
         qb.push(r#" AND EXISTS (SELECT 1 FROM likes l WHERE l."userId" = "#)

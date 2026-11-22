@@ -130,7 +130,7 @@ pub async fn songs(
     // One ILIKE per word, so the trigram index on the stored text serves each.
     let search: String = match &f.patterns {
         Some(p) => (1..=p.len())
-            .map(|n| format!(r#" AND td."searchText" ILIKE ($8::text[])[{n}]"#))
+            .map(|n| format!(r#" AND td."searchText" ILIKE f_unaccent(($8::text[])[{n}])"#))
             .collect(),
         None => " AND $8::text[] IS NULL".to_owned(),
     };
@@ -273,7 +273,7 @@ pub async fn albums(
   WHERE {visible}
     AND ($3::text IS NULL OR {GENRE_OF_ALBUM})
     AND ($4::int IS NULL OR m.year >= $4) AND ($5::int IS NULL OR m.year <= $5)
-    AND ($8::text[] IS NULL OR (m.title || ' ' || {ALBUM_ARTISTS_TEXT}) ILIKE ALL ($8))
+    AND ($8::text[] IS NULL OR f_unaccent(m.title || ' ' || {ALBUM_ARTISTS_TEXT}) ILIKE ALL (ARRAY(SELECT f_unaccent(w) FROM unnest($8) w)))
     AND ($9::int[] IS NULL OR m.id = ANY($9))
     AND ($10::int IS NULL OR EXISTS (SELECT 1 FROM media_credits mc WHERE mc."mediaId" = m.id AND mc."personId" = $10 AND mc.role = 'artist'))
   ) a WHERE (NOT $11 OR starred IS NOT NULL) AND (NOT $12 OR played IS NOT NULL)
@@ -346,7 +346,7 @@ LEFT JOIN (SELECT mc."personId" AS id, count(DISTINCT mc."mediaId")::int AS albu
   WHERE mc.role = 'artist' AND ($3::int[] IS NULL OR mc."personId" = ANY($3)) AND {visible}
   GROUP BY mc."personId") a ON a.id = p.id
 WHERE ($3::int[] IS NULL OR p.id = ANY($3)) AND ($3::int[] IS NOT NULL OR a.albums > 0)
-  AND ($2::text[] IS NULL OR p.name ILIKE ALL ($2))
+  AND ($2::text[] IS NULL OR f_unaccent(p.name) ILIKE ALL (ARRAY(SELECT f_unaccent(w) FROM unnest($2) w)))
 ORDER BY lower(COALESCE(p."sortName", p.name)), p.name, p.id LIMIT $4 OFFSET $5"#
     );
     sqlx::query_as::<_, ArtistRow>(AssertSqlSafe(sql))

@@ -33,13 +33,14 @@ const FAKE_EDIT_ROW = {
 
 /** Approving a request imports the title with a server-side await that can
  *  outlive the page (e.g. the user navigates back to Discover first). */
-function createHarness() {
+function createHarness(allowed: string[] = []) {
   const navigate = vi.fn();
   const getDetails = vi.fn(async () => FAKE_DETAILS);
   const approve = vi.fn(async () => FAKE_APPROVED);
   const update = vi.fn(async () => FAKE_EDIT_ROW);
   const decline = vi.fn(async () => FAKE_APPROVED);
-  const list = vi.fn(async () => ({ data: [], total: 0 }));
+  const list = vi.fn(async (_params?: unknown, _opts?: unknown) => ({ data: [], total: 0 }));
+  const getTitleState = vi.fn(async () => ({}));
   const toast = { success: vi.fn() };
   const host = { setTitle: vi.fn(), setBackground: vi.fn() };
   const navbar = { markAsBackNavigation: vi.fn() };
@@ -57,14 +58,14 @@ function createHarness() {
       },
       { provide: Router, useValue: { url: '/discover', navigate } },
       { provide: MetadataService, useValue: { getDetails } },
-      { provide: ProfilesService, useValue: {} },
-      { provide: LibrariesApiService, useValue: {} },
-      { provide: RequestsService, useValue: { approve, update, decline, list } },
+      { provide: ProfilesService, useValue: { getQualityProfiles: async () => [], getLanguageProfiles: async () => [] } },
+      { provide: LibrariesApiService, useValue: { listMine: async () => [] } },
+      { provide: RequestsService, useValue: { approve, update, decline, list, getTitleState } },
       { provide: ToastService, useValue: toast },
       { provide: TvService, useValue: { isTv: () => false } },
       { provide: NavbarService, useValue: navbar },
       { provide: PREVIEW_HOST, useValue: host },
-      { provide: AuthService, useValue: { hasPermission: () => false } },
+      { provide: AuthService, useValue: { hasPermission: (p: string) => allowed.includes(p) } },
       { provide: DomSanitizer, useValue: { bypassSecurityTrustResourceUrl: (u: string) => u } },
     ],
   });
@@ -75,7 +76,7 @@ function createHarness() {
   fixture.componentRef.setInput('provider', 'tmdb');
   fixture.componentRef.setInput('externalId', '1');
 
-  return { fixture, navigate, approve, update, decline, list, toast, host };
+  return { fixture, navigate, approve, update, decline, list, getTitleState, getDetails, toast, host };
 }
 
 describe('VideoPreviewComponent.approveRequest', () => {
@@ -121,6 +122,26 @@ describe('VideoPreviewComponent.ngOnInit', () => {
     await fixture.componentInstance.ngOnInit();
 
     expect(host.setTitle).toHaveBeenCalledWith('Test Title', null);
+  });
+});
+
+describe('VideoPreviewComponent request state', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('loads the request state and the pending requests beside the details', async () => {
+    const { fixture, getDetails, getTitleState, list } = createHarness(['requests.create', 'requests.manage']);
+    let land!: (d: MetadataDetails) => void;
+    getDetails.mockImplementationOnce(() => new Promise<MetadataDetails>((r) => (land = r)));
+
+    const loading = fixture.componentInstance.ngOnInit();
+    await Promise.resolve();
+    expect(getTitleState).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(list.mock.calls[0]![0]).toMatchObject({ provider: 'tmdb', externalId: '1' });
+    land(FAKE_DETAILS);
+    await loading;
+    expect(getTitleState).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenCalledTimes(1);
   });
 });
 

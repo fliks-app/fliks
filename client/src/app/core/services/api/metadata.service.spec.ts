@@ -39,3 +39,18 @@ describe('MetadataService.search', () => {
     await done;
   });
 });
+
+describe('MetadataService providers', () => {
+  it('fetches /api/metadata/providers once for the callers of a minute', async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideHttpClient(), provideHttpClientTesting()] });
+    const svc = TestBed.inject(MetadataService);
+    const http = TestBed.inject(HttpTestingController);
+    const first = svc.isTmdbAvailable();
+    const second = svc.providersServing('movie');
+    http.expectOne('/api/metadata/providers').flush({ tmdb: true, serving: { movie: [] } });
+    expect(await first).toBe(true);
+    expect(await second).toEqual([]);
+    expect(await svc.isTmdbAvailable()).toBe(true);
+    http.expectNone('/api/metadata/providers');
+  });
+});

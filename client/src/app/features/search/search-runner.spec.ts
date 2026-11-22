@@ -19,10 +19,11 @@ function deferred<T>(signal?: AbortSignal) {
   return { promise, resolve, reject, signal };
 }
 
-function setup() {
+function setup(delay = 0) {
   TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   const state = TestBed.inject(SearchStateService);
   const asked: Record<string, ReturnType<typeof deferred<any>>[]> = {};
+  const queries: Record<string, [string, unknown]> = {};
   const ask = <T>(name: string, signal?: AbortSignal) => {
     const d = deferred<T>(signal);
     (asked[name] ??= []).push(d);
@@ -33,15 +34,17 @@ function setup() {
     state,
     media: { getAll } as never,
     metadata: {
-      search: (k: string, _q: string, _o: unknown, s?: AbortSignal) => ask(k, s),
+      search: (k: string, q: string, o: unknown, s?: AbortSignal) => ((queries[k] = [q, o]), ask(k, s)),
       searchArtists: (_q: string, _o: unknown, s?: AbortSignal) => ask('artist', s),
       searchRecordings: (_q: string, _o: unknown, s?: AbortSignal) => ask('recording', s),
     } as never,
     music: { tracks: (_q: unknown, s?: AbortSignal) => ask('tracks', s), people: (_r: string, _q: unknown, s?: AbortSignal) => ask('artists', s) } as never,
     books: { persons: (_q: unknown, s?: AbortSignal) => ask('authors', s), collections: (_q: unknown, s?: AbortSignal) => ask('series', s) } as never,
     social: { searchUsers: (_q: string, s?: AbortSignal) => ask('people', s) } as never,
+    persons: { search: (_q: string, s?: AbortSignal) => ask('persons', s) } as never,
+    providerDelayMs: delay,
   });
-  return { state, runner, asked, getAll };
+  return { state, runner, asked, getAll, queries };
 }
 
 describe('SearchRunner', () => {
@@ -50,16 +53,14 @@ describe('SearchRunner', () => {
   it('starts the library and the provider calls of the All chip together', () => {
     const { runner, asked } = setup();
     runner.run('matrix', 'all', { external: true, people: false, mediaParams: {} });
-    expect(Object.keys(asked).sort()).toEqual(['album', 'artist', 'artists', 'book', 'media', 'movie', 'recording', 'series', 'tracks']);
+    expect(Object.keys(asked).sort()).toEqual(['album', 'artist', 'artists', 'book', 'media', 'movie', 'persons', 'recording', 'series', 'tracks']);
   });
 
   it('lets each section land on its own while the others are pending', async () => {
     const { runner, asked, state } = setup();
     runner.run('matrix', 'all', { external: true, people: false, mediaParams: {} });
     asked['movie']![0]!.resolve([hit('1')]);
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(state.movieHits()).toHaveLength(1);
+    await vi.waitFor(() => expect(state.movieHits()).toHaveLength(1));
     expect(state.pending().has('movie')).toBe(false);
     expect(state.pending().has('book')).toBe(true);
     expect(state.localLoading()).toBe(true);
@@ -81,7 +82,7 @@ describe('SearchRunner', () => {
   it('asks the providers from two characters and never when external search is off', () => {
     const one = setup();
     one.runner.run('a', 'all', { external: true, people: false, mediaParams: {} });
-    expect(Object.keys(one.asked).sort()).toEqual(['artists', 'media', 'tracks']);
+    expect(Object.keys(one.asked).sort()).toEqual(['artists', 'media', 'persons', 'tracks']);
     TestBed.resetTestingModule();
     const off = setup();
     off.runner.run('matrix', 'movie', { external: false, people: false, mediaParams: {} });
@@ -121,7 +122,7 @@ describe('SearchRunner', () => {
     const { runner, asked } = setup();
     runner.run('matrix', 'movie', { external: true, people: false, mediaParams: {} });
     const movie = asked['movie']![0]!;
-    runner.runMedia('matrix', { yearMin: 2000 });
+    runner.runMedia('matrix', 'movie', { yearMin: 2000 });
     expect(asked['media']).toHaveLength(2);
     expect(asked['media']![0]!.signal!.aborted).toBe(true);
     expect(movie.signal!.aborted).toBe(false);
@@ -130,7 +131,7 @@ describe('SearchRunner', () => {
   it('asks each scope its own sources', () => {
     const video = setup();
     video.runner.run('matrix', 'video', { external: true, people: true, mediaParams: {} });
-    expect(Object.keys(video.asked).sort()).toEqual(['media', 'movie', 'series']);
+    expect(Object.keys(video.asked).sort()).toEqual(['media', 'movie', 'persons', 'series']);
     TestBed.resetTestingModule();
     const people = setup();
     people.runner.run('', 'people', { external: true, people: true, mediaParams: {} });
@@ -140,5 +141,53 @@ describe('SearchRunner', () => {
     all.runner.run('matrix', 'all', { external: true, people: true, mediaParams: {} });
     expect(Object.keys(all.asked)).toContain('people');
     expect(SOURCES.video.types).toEqual(['movie', 'series']);
+  });
+
+  it('searches the providers for the title and the library by release year when a year follows it', () => {
+    const { runner, getAll, queries } = setup();
+    runner.run('the matrix 1999', 'movie', { external: true, people: false, mediaParams: { type: 'movie' } });
+    expect(queries['movie']).toEqual(['the matrix', { year: 1999 }]);
+    expect(getAll.mock.calls[0]![0]).toMatchObject({ q: 'the matrix', year: 1999 });
+    runner.runMedia('the matrix 1999', 'movie', {});
+    expect(getAll.mock.calls[1]![0]).toMatchObject({ q: 'the matrix', year: 1999 });
+  });
+
+  it('asks again with the whole query when a year in the title finds nothing', async () => {
+    const { runner, asked, getAll, queries } = setup();
+    runner.run('blade runner 2049', 'movie', { external: true, people: false, mediaParams: {} });
+    asked['media']![0]!.resolve({ data: [] });
+    asked['movie']![0]!.resolve([]);
+    await vi.waitFor(() => expect(getAll).toHaveBeenCalledTimes(2));
+    expect(getAll.mock.calls[1]![0]).toMatchObject({ q: 'blade runner 2049' });
+    expect(getAll.mock.calls[1]![0]).not.toHaveProperty('year');
+    await vi.waitFor(() => expect(queries['movie']).toEqual(['blade runner 2049', {}]));
+  });
+
+  it('leaves the library query whole outside the video scopes and when the query is only a year', () => {
+    const { runner, getAll, queries } = setup();
+    runner.run('the matrix 1999', 'all', { external: true, people: false, mediaParams: {} });
+    expect(getAll.mock.calls[0]![0]).toMatchObject({ q: 'the matrix 1999' });
+    expect(getAll.mock.calls[0]![0]).not.toHaveProperty('year');
+    expect(queries['movie']).toEqual(['the matrix', { year: 1999 }]);
+    expect(queries['book']).toEqual(['the matrix 1999', {}]);
+    runner.run('1984', 'movie', { external: true, people: false, mediaParams: {} });
+    expect(queries['movie']).toEqual(['1984', {}]);
+  });
+
+  it('starts the provider calls after their own delay and drops them when a new query comes first', async () => {
+    vi.useFakeTimers();
+    try {
+      const { runner, asked } = setup(350);
+      runner.run('ma', 'movie', { external: true, people: false, mediaParams: {} });
+      expect(Object.keys(asked)).toEqual(['media']);
+      await vi.advanceTimersByTimeAsync(300);
+      runner.run('mat', 'movie', { external: true, people: false, mediaParams: {} });
+      await vi.advanceTimersByTimeAsync(300);
+      expect(asked['movie']).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(60);
+      expect(asked['movie']).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -58,6 +58,7 @@ import { MusicDownloadsService } from '../../core/services/music-downloads.servi
 import { HitStateComponent } from './hit-state/hit-state';
 import { musicItems, topResult, type MusicItem, type MusicItems, type RowState } from './music-rows';
 import { SearchRunner, SOURCES } from './search-runner';
+import { PersonsApiService } from '../../core/services/api/persons-api.service';
 import { canMarkWatched, kindOfListFilter, mediaDetailLink, kindOf } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
 
@@ -85,6 +86,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   protected readonly recent = inject(RecentSearchesService);
   private readonly auth = inject(AuthService);
   private readonly social = inject(SocialApiService);
+  private readonly personsApi = inject(PersonsApiService);
   protected readonly resultKey = searchResultKey;
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly injector = inject(Injector);
@@ -104,6 +106,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     music: this.musicApi,
     books: this.booksApi,
     social: this.social,
+    persons: this.personsApi,
   });
 
   readonly filterSheet = viewChild<ElementRef<HTMLDialogElement>>('filterSheet');
@@ -717,7 +720,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private async runLocalSearch(q: string, ct: SearchScope) {
     this.lastLocalSig = this.filterSig(q, ct);
     if (this.state.discoverSelectedGenres().size) await this.ensureDiscoverGenres();
-    this.runner.runMedia(q, this.mediaParams(ct));
+    this.runner.runMedia(q, ct, this.mediaParams(ct));
   }
 
   // ── Cards ──
@@ -738,7 +741,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** The filter panel (genre, year, rating, sort) narrows videos; books and music have none. */
   protected readonly showFilters = this.isVideo;
   protected readonly libraryCount = computed(
-    () => this.libraryMedia().length + this.videoHeld().length + this.booksHeld().length + this.state.localAuthors().length + this.state.localSeries().length,
+    () => this.libraryMedia().length + this.videoHeld().length + this.booksHeld().length + this.state.localAuthors().length + this.state.localSeries().length + this.state.localPersons().length,
   );
   protected readonly providerCount = computed(() => this.videoToAdd().length + this.booksToAdd().length);
 

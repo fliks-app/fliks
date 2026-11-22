@@ -124,6 +124,54 @@ async fn search_without_sort_ranks_by_relevance_then_title(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn search_folds_accents_in_every_library_language(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO media (id, title, "originalTitle", "alternativeTitles", overview, year, type, "libraryId", "folderName") VALUES
+          (10, 'Amélie', 'Le Fabuleux Destin d''Amélie Poulain', '["Amelie from Montmartre"]', 'Une jeune serveuse aide ses voisins', 2001, 'movie', 1, 'f10'),
+          (11, 'Café Society', NULL, '[]', 'A story of ambitious hearts', 2016, 'movie', 1, 'f11'),
+          (12, '100% Wolf', NULL, '[]', NULL, 2020, 'movie', 1, 'f12'),
+          (13, 'a_b Wolves', NULL, '[]', NULL, 2020, 'movie', 1, 'f13'),
+          (14, 'Œuvre', NULL, '[]', NULL, 2020, 'movie', 1, 'f14')"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let find = |q: &'static str| {
+        let c = &c;
+        async move {
+            let mut ids = ids(&c.get(&c.admin, &format!("/api/media?q={q}")).await.1);
+            ids.sort();
+            ids
+        }
+    };
+    for q in ["amelie", "AM%C3%89LIE", "am%C3%A9lie"] {
+        assert_eq!(find(q).await, [10], "{q}");
+    }
+    assert_eq!(find("cafe").await, [11]);
+    assert_eq!(find("caf%C3%A9").await, [11]);
+    assert_eq!(find("montmartre").await, [10], "an alternative title");
+    assert_eq!(
+        find("serveuses").await,
+        [10],
+        "the overview keeps its French stems"
+    );
+    assert_eq!(find("hearts").await, [11], "an English overview");
+    assert_eq!(find("oeuvre").await, [14]);
+    assert_eq!(find("%25").await, [12], "a percent sign is not a wildcard");
+    assert_eq!(find("_").await, [13], "an underscore is not a wildcard");
+    sqlx::query("UPDATE media SET title = 'Zoé' WHERE id = 11")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        find("zoe").await,
+        [11],
+        "a retitled row is re-indexed folded"
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn equal_sort_keys_page_by_id(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, p1) = c.get(&c.admin, "/api/media?sortBy=year&limit=2").await;

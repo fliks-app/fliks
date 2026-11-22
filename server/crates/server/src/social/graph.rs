@@ -104,7 +104,7 @@ async fn find_users(
     let pattern = param(q, "q")
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(|s| format!("%{s}%"));
+        .map(fliks_domain::media::search::contains_pattern);
     let users = sqlx::query_as!(
         Brief,
         r#"SELECT u.id, u.username, u.avatar, u.enabled, u."shareDisabled" AS share_disabled FROM users u

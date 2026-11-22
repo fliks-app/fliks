@@ -630,6 +630,40 @@ async fn lists_and_search_follow_the_filters_and_the_acl(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn search3_matches_without_accents(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::query("UPDATE persons SET name = 'Thé Bänd' WHERE name = 'The Band'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE media SET title = 'Première Album' WHERE title = 'First Album'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for q in [
+        "the%20band",
+        "th%C3%A9%20b%C3%A4nd",
+        "premiere",
+        "PREMI%C3%88RE",
+    ] {
+        let s = c.alice("search3", &format!("query={q}")).await["searchResult3"].clone();
+        assert!(
+            !s["song"].as_array().unwrap().is_empty() || !s["album"].as_array().unwrap().is_empty(),
+            "{q}"
+        );
+    }
+    let s = c.alice("search3", "query=the").await["searchResult3"].clone();
+    assert_eq!(names(&s["artist"], "name"), ["Thé Bänd"]);
+    let s = c.alice("search3", "query=premiere").await["searchResult3"].clone();
+    assert_eq!(names(&s["album"], "name"), ["Première Album"]);
+    assert_eq!(
+        names(&s["song"], "title"),
+        ["Closing", "Opening"],
+        "a song matches its album's folded title"
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn stars_ratings_and_scrobbles_land_on_likes_ratings_and_history(pool: PgPool) {
     let c = ctx(pool).await;
     assert_eq!(

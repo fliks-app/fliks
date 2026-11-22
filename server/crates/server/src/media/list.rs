@@ -258,33 +258,42 @@ fn push_book_filters(qb: &mut QueryBuilder<Postgres>, p: &Search, ids: &[i32], u
     }
 }
 
+/// Titles are indexed unstemmed and the overview stemmed, so a word is tried in both configs.
 fn push_tsquery(qb: &mut QueryBuilder<Postgres>, q: &str) {
     let tsq = prefix_tsquery(q);
-    if tsq.is_empty() {
-        qb.push("plainto_tsquery('french', ")
-            .push_bind(q.to_owned())
-            .push(")");
-    } else {
-        qb.push("to_tsquery('french', ").push_bind(tsq).push(")");
+    qb.push("(");
+    for (i, config) in ["simple", "french"].into_iter().enumerate() {
+        if i > 0 {
+            qb.push(" || ");
+        }
+        if tsq.is_empty() {
+            qb.push(format!("plainto_tsquery('{config}', f_unaccent("))
+                .push_bind(q.to_owned());
+        } else {
+            qb.push(format!("to_tsquery('{config}', f_unaccent("))
+                .push_bind(tsq.clone());
+        }
+        qb.push("))");
     }
+    qb.push(")");
 }
 
 fn push_search(qb: &mut QueryBuilder<Postgres>, q: &str) {
     qb.push(" AND (media.\"searchVector\" @@ ");
     push_tsquery(qb, q);
-    let like = format!(
-        "%{}%",
-        q.replace(fliks_domain::media::search::APOSTROPHES, "_")
-    );
-    qb.push(" OR media.title ILIKE ").push_bind(like.clone());
-    qb.push(" OR media.\"originalTitle\" ILIKE ")
-        .push_bind(like);
+    let like = fliks_domain::media::search::contains_pattern(q);
+    qb.push(" OR f_unaccent(media.title) ILIKE f_unaccent(")
+        .push_bind(like.clone())
+        .push(")");
+    qb.push(" OR f_unaccent(media.\"originalTitle\") ILIKE f_unaccent(")
+        .push_bind(like)
+        .push(")");
     // `%` (threshold 0.3) lets the trigram index serve the branch; the 0.8 cut stays exact.
-    qb.push(" OR (media.title % ")
+    qb.push(" OR (f_unaccent(media.title) % f_unaccent(")
         .push_bind(q.to_owned())
-        .push(" AND similarity(media.title, ")
+        .push(") AND similarity(f_unaccent(media.title), f_unaccent(")
         .push_bind(q.to_owned())
-        .push(") > 0.8))");
+        .push(")) > 0.8))");
 }
 
 /// Rule 26 in SQL: a media without a known cutoff never reaches here (inner join); a kind without seasons compares
