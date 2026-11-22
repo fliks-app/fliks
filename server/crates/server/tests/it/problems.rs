@@ -602,8 +602,8 @@ async fn auto_resolve_follows_the_replacement_of_the_reported_file(pool: PgPool)
            UPDATE media_files SET size = 999 WHERE id = 3;
            DELETE FROM media_files WHERE id = 1;
            UPDATE media_files SET size = 100 WHERE id = 4;
-           WITH f AS (INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality)
-                      VALUES (11, 1, 's/e3b.mkv', 100, 'q') RETURNING id)
+           WITH f AS (INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality)
+                      VALUES (21, 11, 1, 's/e3b.mkv', 100, 'q') RETURNING id)
              INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) SELECT 2, id, 11, 0, 0 FROM f;"#,
     )
     .execute(&c.pool)
@@ -644,7 +644,7 @@ async fn a_dropped_item_keeps_the_report_for_a_manager(pool: PgPool) {
     sqlx::raw_sql(
         r#"DELETE FROM items WHERE id = 3;
            DELETE FROM media_files WHERE id = 3;
-           INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality) VALUES (11, 1, 's/e5.mkv', 100, 'q');"#,
+           INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality) VALUES (20, 11, 1, 's/e5.mkv', 100, 'q');"#,
     )
     .execute(&c.pool)
     .await
