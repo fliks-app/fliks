@@ -272,7 +272,11 @@
       <a routerLink="/search"
          [state]="{ rootEntry: true }"
          data-chrome-fab
-         [routerLinkActive]="['dock-active', '!bg-primary', '!text-primary-content']"
+         routerLinkActive
+         #fabLink="routerLinkActive"
+         [class.dock-active]="fabLink.isActive && !librarySheetOpen()"
+         [class.!bg-primary]="fabLink.isActive && !librarySheetOpen()"
+         [class.!text-primary-content]="fabLink.isActive && !librarySheetOpen()"
          [routerLinkActiveOptions]="{ exact: false }"
          (click)="librarySheetOpen.set(false); onSearchNavClick()"
          class="fixed left-1/2 -translate-x-1/2 z-50 bg-white text-primary !rounded-full !p-0 shadow-lg flex items-center justify-center [&.dock-active]:before:hidden [&.dock-active]:after:hidden"
