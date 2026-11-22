@@ -189,6 +189,28 @@ describe('TizenEngine hide / show', () => {
     expect(restore).toHaveBeenCalledOnce();
   });
 
+  it('suspends on hidden and restores on visible once media is loaded', () => {
+    const suspend = vi.fn();
+    const restore = vi.fn();
+    stubAvplay({ suspend, restore });
+    const engine = new TizenEngine();
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+    const flip = (state: DocumentVisibilityState) => {
+      visibility.mockReturnValue(state);
+      (engine as unknown as { onVisibility: () => void }).onVisibility();
+    };
+    flip('hidden');
+    flip('visible');
+    expect(suspend).not.toHaveBeenCalled();
+    expect(restore).not.toHaveBeenCalled();
+    (engine as unknown as { _lastLoadedUrl: string })._lastLoadedUrl = 'u';
+    flip('hidden');
+    flip('visible');
+    expect(suspend).toHaveBeenCalledOnce();
+    expect(restore).toHaveBeenCalledOnce();
+    visibility.mockRestore();
+  });
+
   it('reports a failed restore as a playback error', () => {
     stubAvplay({ restore: () => { throw new Error('boom'); } });
     const engine = new TizenEngine();

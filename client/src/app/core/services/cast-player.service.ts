@@ -12,6 +12,7 @@ import { SubtitlesApiService, type SubtitleFileRow } from './api/subtitles-api.s
 import { AppSettingsService } from './app-settings.service';
 import { buildSubtitleTracks, burnsIn } from '../utils/subtitle-tracks';
 import { normalizeLangCode } from '../utils/language.utils';
+import { LatestWins } from '../utils/latest-wins';
 import { AuthService } from './auth.service';
 import { CodecCondition, DeviceProfile } from './browser-device-profile.service';
 import {
@@ -614,7 +615,7 @@ export class CastPlayerService {
   /** The receiver error and the native IDLE/ERROR poll fire for one failure; the second must not restart the reload. */
   private recovering = false;
   /** Latest reload wins: an older one aborts after its playback-info; `reloading` mutes the other recoveries. */
-  private reloadGen = 0;
+  private readonly reloads = new LatestWins();
   readonly reloading = signal(false);
 
   private async recoverFromCastError(position?: number): Promise<void> {
@@ -639,24 +640,23 @@ export class CastPlayerService {
     }
   }
 
-  /** Stops the old ffmpeg session once the new LOAD resolves; transcoding.service only auto-replaces on quality change. */
+  /** Opens the new session as the replacement of the old one; the receiver plays its buffered segments until the LOAD lands. */
   async reloadCastStream(positionOverride?: number, autoplay = true, snapQualityId?: string) {
-    const gen = ++this.reloadGen;
+    const token = this.reloads.begin();
     this.reloading.set(true);
     try {
-      await this.reload(gen, positionOverride, autoplay, snapQualityId);
+      await this.reload(token, positionOverride, autoplay, snapQualityId);
     } finally {
-      if (gen === this.reloadGen) this.reloading.set(false);
+      if (this.reloads.isCurrent(token)) this.reloading.set(false);
     }
   }
 
-  private async reload(gen: number, positionOverride: number | undefined, autoplay: boolean, snapQualityId?: string) {
+  private async reload(token: number, positionOverride: number | undefined, autoplay: boolean, snapQualityId?: string) {
     const mfId = this.mediaFileId();
     if (!mfId) return;
 
-    // Scope the stop to the Cast session's own sid so a concurrent local
-    // session on the same file (another profile/device) is not torn down too.
-    const oldSid = this.liveSessionId();
+    // Scoped to the Cast session's own sid so a concurrent local session on the same file is not torn down too.
+    const { replaces } = await this.streamingApi.retireSession(this.liveSessionId() ?? undefined);
 
     const currentPos = positionOverride ?? this.cast.currentTime();
     const audioIdx = this.activeAudioStreamIndex();
@@ -675,12 +675,12 @@ export class CastPlayerService {
     const [pi, castInfo] = await Promise.all([
       this.getCastPlaybackInfo(
         mfId, this.activeBurnInId ?? undefined, audioIdx,
-        transcodeQuality, Math.floor(currentPos),
+        transcodeQuality, Math.floor(currentPos), replaces,
       ),
       this.authService.getCastInfo(mfId),
     ]);
 
-    if (gen !== this.reloadGen) {
+    if (!this.reloads.isCurrent(token)) {
       if (pi.sessionId && pi.sessionId !== this.liveSessionId()) this.streamingApi.stopSession(pi.sessionId).catch(() => {});
       return;
     }
@@ -692,8 +692,7 @@ export class CastPlayerService {
       this.activeQualityId.set(transcodeQuality);
     }
 
-    const loaded = await this.dispatchLoad(mfId, pi, currentPos, transcodeQuality, castInfo, autoplay);
-    if (loaded && oldSid && oldSid !== pi.sessionId) this.streamingApi.stopSession(oldSid).catch(() => {});
+    await this.dispatchLoad(mfId, pi, currentPos, transcodeQuality, castInfo, autoplay);
   }
 
   /** Shared by quickStart and reloadCastStream; a refused LOAD is reported here and returns false. */
@@ -834,9 +833,10 @@ export class CastPlayerService {
     audioIdx: number | undefined,
     quality: string | undefined,
     startAt: number | undefined,
+    replaces?: string,
   ) {
-    const request = (profile: DeviceProfile) =>
-      this.streamingApi.getPlaybackInfo(mfId, profile, burnInId, audioIdx, quality, startAt);
+    const request = (profile: DeviceProfile, replacing?: string) =>
+      this.streamingApi.getPlaybackInfo(mfId, profile, burnInId, audioIdx, quality, startAt, undefined, { replaces: replacing });
     const profile = this.getCastDeviceProfile();
     const withoutDolby = (): DeviceProfile => ({
       ...profile,
@@ -848,8 +848,8 @@ export class CastPlayerService {
     const dolby = profile.directPlayProfiles.some((p) =>
       p.audioCodecs.some((c) => c === 'ac3' || c === 'eac3'),
     );
-    if (this.pcmForMutes.has(mfId) && dolby) return request(withoutDolby());
-    const pi = await request(profile);
+    if (this.pcmForMutes.has(mfId) && dolby) return request(withoutDolby(), replaces);
+    const pi = await request(profile, replaces);
     const dolbyOut = pi.outputAudioCodec === 'ac3' || pi.outputAudioCodec === 'eac3';
     if (!dolby || !dolbyOut || !pi.edl || !muteRangesOf(pi.edl).length) return pi;
     this.pcmForMutes.add(mfId);

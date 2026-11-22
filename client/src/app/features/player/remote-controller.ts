@@ -1,7 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import type { Subscription } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
-import { CastService } from '../../core/services/cast.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { SseService, type RemoteCommand, type SseEvent } from '../../core/services/sse.service';
 import { ControlsVisibilityService } from './controls/controls-visibility';
@@ -12,7 +11,6 @@ export interface RemoteHost {
   mediaFileId(): number;
   activeSessionId(): string | undefined;
   duration(): number;
-  onBack(): void;
   onTogglePlay(): void;
   onSeek(time: number): void;
   savePosition(force: boolean): Promise<void>;
@@ -25,7 +23,6 @@ export class RemoteController {
   private readonly sseService = inject(SseService);
   private readonly authService = inject(AuthService);
   private readonly remoteService = inject(RemoteService);
-  private readonly castService = inject(CastService);
   private readonly chrome = inject(ControlsVisibilityService);
   private readonly queueCtl = inject(QueueController);
   private readonly session = inject(PlaybackSession);
@@ -80,15 +77,12 @@ export class RemoteController {
     const output = this.session.output();
     if (cmd.action === 'pause') void output?.pause();
     else if (cmd.action === 'play') output?.play();
-    else if (cmd.action === 'stop') {
-      if (this.castService.isConnected()) this.castService.disconnect();
-      this.host.onBack();
-    }
+    else if (cmd.action === 'stop') this.session.stop();
   }
 
   async applyRemoteCommand(cmd: RemoteCommand): Promise<void> {
-    const casting = this.castService.isConnected();
     const output = this.session.output();
+    let refused: string | undefined;
     switch (cmd.action) {
       case 'play':
         output?.play();
@@ -106,40 +100,46 @@ export class RemoteController {
       case 'seek':
         if (cmd.positionSeconds === undefined) {
           console.warn('[remote] seek command missing positionSeconds', cmd.cmdId);
-          return;
+          refused = 'missing_position';
+          break;
         }
         if (this.session.command({ type: 'seek', at: cmd.positionSeconds })) break;
         if (!this.host.duration()) {
           console.warn('[remote] dropping seek received before duration is known', cmd.cmdId);
-          return;
+          refused = 'duration_unknown';
+          break;
         }
         this.host.onSeek(cmd.positionSeconds);
         break;
       case 'volume':
         if (cmd.level === undefined) {
           console.warn('[remote] volume command missing level', cmd.cmdId);
-          return;
+          refused = 'missing_level';
+          break;
         }
         output?.setVolume(cmd.level);
         break;
       case 'mute':
         if (cmd.muted === undefined) {
           console.warn('[remote] mute command missing muted flag', cmd.cmdId);
-          return;
+          refused = 'missing_muted';
+          break;
         }
         if (output && output.muted() !== cmd.muted) output.toggleMute();
         break;
       case 'next':
         if (!this.queueCtl.upNext()) {
           console.warn('[remote] next: no item to advance to', cmd.cmdId);
-          return;
+          refused = 'no_next';
+          break;
         }
         void this.queueCtl.advance();
         break;
       case 'audio':
         if (!cmd.trackId) {
           console.warn('[remote] audio command missing trackId', cmd.cmdId);
-          return;
+          refused = 'missing_track';
+          break;
         }
         await output?.selectAudioById(cmd.trackId);
         break;
@@ -149,21 +149,21 @@ export class RemoteController {
       case 'quality':
         if (!cmd.qualityId) {
           console.warn('[remote] quality without a qualityId', cmd.cmdId);
+          refused = 'missing_quality';
           break;
         }
         await output?.selectQualityById(cmd.qualityId);
         break;
       case 'stop':
-        if (casting) this.castService.disconnect();
         this.remoteService.markApplied(cmd.cmdId);
         void this.host.savePosition(true);
-        this.host.onBack();
+        this.session.stop();
         return;
       case 'load':
         // RemoteService owns 'load' end-to-end; never republished to this Subject.
         return;
     }
-    this.remoteService.markApplied(cmd.cmdId);
+    this.remoteService.markApplied(cmd.cmdId, refused);
     await this.host.savePosition(true);
   }
 

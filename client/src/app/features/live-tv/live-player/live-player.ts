@@ -260,6 +260,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     });
     void this.bootstrap();
     window.addEventListener('pagehide', this.releaseOnUnload);
+    if (this.isHideSuspendedTv) document.addEventListener('visibilitychange', this.onTvVisibility);
     window.addEventListener('app:playerBack', this.onPlayerBackEvent);
     this.refreshTimer = setInterval(() => void this.refreshChannels(), CHANNEL_REFRESH_MS);
     this.screen.open();
@@ -286,6 +287,22 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     if (id) this.api.stopSessionOnUnload(id);
   };
 
+  /** Tizen and webOS freeze JS while hidden, so heartbeats stop and the server reaps the session. */
+  private readonly isHideSuspendedTv = this.device.tvPlatform() === 'tizen' || this.device.tvPlatform() === 'webos';
+
+  /** Home, input switch and standby hide the app without unloading it: release the viewer, re-tune on return. */
+  private readonly onTvVisibility = (): void => {
+    if (document.visibilityState === 'hidden') {
+      this.tuneSeq++;
+      void this.engine?.pause();
+      this.releaseOnUnload();
+      this.currentSessionId = null;
+      this.session.set(null);
+    } else if (!this.destroyed && !this.currentSessionId) {
+      void this.tune(this.currentChannelId());
+    }
+  };
+
   ngOnDestroy(): void {
     // Supersede any in-flight tune(): its late session must release itself,
     // not land in a destroyed engine.
@@ -294,6 +311,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     this.unregisterSession();
     window.removeEventListener('keydown', this.onKeydownCapture, true);
     window.removeEventListener('pagehide', this.releaseOnUnload);
+    document.removeEventListener('visibilitychange', this.onTvVisibility);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
     if (this.refreshTimer) clearInterval(this.refreshTimer);
     if (this.numberBufferTimer) clearTimeout(this.numberBufferTimer);

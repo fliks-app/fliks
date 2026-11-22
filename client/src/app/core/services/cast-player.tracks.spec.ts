@@ -93,6 +93,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
       qualities: [{ id: '1080p', label: '1080p', height: 1080 }],
     })),
     stopSession: vi.fn(async () => {}),
+    retireSession: vi.fn(async () => ({})),
     buildAbsolutePlayUrl: vi.fn(() => ({ url: 'cast://x', contentType: 'application/x-mpegURL' })),
     getAbsoluteSubtitleUrl: vi.fn((mf: number, id: number) => `ext/${mf}/${id}`),
     getAbsoluteEmbeddedSubtitleUrl: vi.fn((mf: number, idx: number) => `emb/${mf}/${idx}`),

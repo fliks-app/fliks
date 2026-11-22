@@ -113,6 +113,8 @@ export class DesktopEngine extends AbstractPlaybackEngine implements PlaybackEng
   ): Promise<void> {
     if (this.dead) return;
     this.resetFirstFrame();
+    // mpv restarts at 1x on every load.
+    this._playbackRate = 1;
     // Fresh media → fresh tracks; drop the prior list/id map so a same-count
     // track emission for the new stream isn't swallowed as a no-op downstream.
     this._audioTracks = [];

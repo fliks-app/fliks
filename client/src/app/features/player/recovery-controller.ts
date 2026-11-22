@@ -25,7 +25,8 @@ export interface RecoveryHost {
   isLoading(): boolean;
   /** A user reload (switch, episode swap, far seek) owns the engine. */
   reloadInFlight(): boolean;
-  lastSeekAt(): number;
+  /** The last seek or settled reload: ffmpeg may still be respawning for either. */
+  lastSeekOrReloadAt(): number;
   /** Playhead to resume from: the engine's, else the last mirrored one. */
   resumePosition(): number;
   setRecovering(recovering: boolean): void;
@@ -218,7 +219,7 @@ export class RecoveryController {
       return;
     }
     const timeout =
-      Date.now() - this.host.lastSeekAt() < SEEK_STALL_GRACE_MS ? SEEK_STALL_GRACE_MS : STALL_TIMEOUT_MS;
+      Date.now() - this.host.lastSeekOrReloadAt() < SEEK_STALL_GRACE_MS ? SEEK_STALL_GRACE_MS : STALL_TIMEOUT_MS;
     if (Date.now() - this.lastProgressAt >= timeout) {
       const frozenSince = this.lastProgressAt;
       this.resetStallWatchdog();

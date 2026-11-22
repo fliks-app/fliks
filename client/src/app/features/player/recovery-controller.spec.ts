@@ -21,7 +21,7 @@ function setup(overrides: Record<string, unknown> = {}) {
     isHidden: () => false,
     isLoading: () => false,
     reloadInFlight: () => false,
-    lastSeekAt: () => 0,
+    lastSeekOrReloadAt: () => 0,
     resumePosition: () => 100,
     setRecovering: vi.fn(),
     hasError: () => carded,
@@ -81,8 +81,8 @@ describe('RecoveryController', () => {
     expect(host.reportRecovery).toHaveBeenCalledWith(100, expect.objectContaining({ reason: 'stall' }));
   });
 
-  it('a frozen playhead gets the longer window right after a seek', async () => {
-    const { ctl, host } = setup({ lastSeekAt: () => Date.now() });
+  it('a frozen playhead gets the longer window right after a seek or a reload', async () => {
+    const { ctl, host } = setup({ lastSeekOrReloadAt: () => Date.now() });
     ctl.resetStallWatchdog();
     vi.advanceTimersByTime(20_000);
     ctl.checkStall();

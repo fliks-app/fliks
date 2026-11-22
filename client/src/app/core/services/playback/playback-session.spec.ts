@@ -306,6 +306,25 @@ describe('PlaybackSession', () => {
     });
   });
 
+  describe('stop', () => {
+    it('leaves a receiver, then closes the local player', () => {
+      const { session, cast, local } = setup();
+      session.attachLocal(local);
+      cast.isConnected.set(true);
+      TestBed.tick();
+      session.stop();
+      expect(cast.disconnect).toHaveBeenCalled();
+      expect(local.disconnect).toHaveBeenCalled();
+    });
+
+    it('closes the local player once, with no other output', () => {
+      const { session, local } = setup();
+      session.attachLocal(local);
+      session.stop();
+      expect(local.disconnect).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('moveTo', () => {
     it('hands the local item to a connected receiver and keeps the player route', async () => {
       const { session, cast, local, castPlayer, streaming } = setup();

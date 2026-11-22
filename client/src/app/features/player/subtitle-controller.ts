@@ -6,7 +6,7 @@ import type { PlaybackMode } from '../../core/utils/player.utils';
 import { burnsIn, subtitleManifestRank } from '../../core/utils/subtitle-tracks';
 import { AuthService } from '../../core/services/auth.service';
 import { BrowserDeviceProfileService } from '../../core/services/browser-device-profile.service';
-import { CastService } from '../../core/services/cast.service';
+import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { SubtitleOption, TrackManagerService } from '../../core/services/track-manager.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ControlsVisibilityService } from './controls/controls-visibility';
@@ -29,7 +29,7 @@ export interface SubtitleHost {
  *  served as an HLS rendition, and the resync panel. */
 @Injectable()
 export class SubtitleController {
-  private readonly castService = inject(CastService);
+  private readonly session = inject(PlaybackSession);
   private readonly authService = inject(AuthService);
   private readonly deviceProfileService = inject(BrowserDeviceProfileService);
   private readonly trackManager = inject(TrackManagerService);
@@ -131,9 +131,9 @@ export class SubtitleController {
    *  not take effect: no engine, casting, a load failure, or a newer request. */
   async applySubtitle(sub: SubtitleOption | null): Promise<boolean> {
     if (!this.host.engine()) return false;
-    // Cast owns subtitle selection once connected (via CastPlayerService.selectSubtitle):
-    // an auto-select racing in from the local engine must not reload it instead.
-    if (this.castService.isConnected()) return false;
+    // Another output owns subtitle selection (Cast via CastPlayerService.selectSubtitle): an auto-select racing in
+    // from the local engine must not reload it instead.
+    if (!this.session.isLocal()) return false;
     const request = ++this.subtitleRequest;
     this.chrome.resetHideTimer();
 

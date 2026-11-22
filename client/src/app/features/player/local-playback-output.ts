@@ -10,6 +10,8 @@ const SEEK_SLACK_S = 0.25;
 /** What the player lends its local output. */
 export interface LocalOutputHost {
   engine(): PlaybackEngine | null;
+  sessionId(): string | undefined;
+  audioStreamIndex(): number | null;
   mediaId(): number;
   episodeId(): number | undefined;
   /** Locked seek that does not go through the user path, so nothing is re-emitted. */
@@ -55,6 +57,9 @@ export class LocalPlaybackOutput implements LocalOutput {
   };
 
   readonly isConnected = computed(() => true);
+  readonly sessionId = () => this.host.sessionId();
+  readonly reportsHere = () => !!this.host.engine();
+  readonly audioStreamIndex = () => this.host.audioStreamIndex();
   readonly hasMedia = computed(() => true);
   /** Not while reloading: a party applied to the old stream would be undone when the new one starts. */
   readonly ready = () => !!this.host.engine() && this.state.videoStarted() && !this.state.reloading();
@@ -62,7 +67,7 @@ export class LocalPlaybackOutput implements LocalOutput {
   readonly paused = () => this.host.engine()?.paused === true;
   readonly position = () => this.host.position();
   readonly snapshot = () => this.host.snapshot();
-  readonly canSetVolume = computed(() => true);
+  readonly canSetVolume = () => this.host.engine()?.supportsVolume ?? true;
   readonly isIdle = computed(() => false);
   readonly targetOffline = computed(() => false);
   readonly uiPaused: PlaybackOutput['uiPaused'];

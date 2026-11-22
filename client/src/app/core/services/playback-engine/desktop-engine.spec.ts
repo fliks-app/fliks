@@ -183,6 +183,12 @@ describe('DesktopEngine subtitle selection', () => {
     expect(lastSelected()).toBeNull();
   });
 
+  it('reports 1x after a load, as mpv restarts at normal speed', async () => {
+    (engine as unknown as { _playbackRate: number })._playbackRate = 1.05;
+    await engine.load('https://srv/next.m3u8');
+    expect(engine.playbackRate).toBe(1);
+  });
+
   it('does not carry the previous item track list into the next load', async () => {
     const old = sidecar(2);
     await pick({ id: 2 }, [old]);
