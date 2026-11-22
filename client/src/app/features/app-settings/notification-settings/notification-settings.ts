@@ -11,6 +11,9 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
 /** Categories every account can mute; the server owns the vocabulary (`fliks_domain::push`). */
 const CATEGORIES = ['requests', 'parties', 'social', 'episodes', 'account'] as const;
 
+/** Only for accounts that manage settings: the category carries the health checks. */
+const ADMIN_CATEGORIES = ['system'] as const;
+
 /** What reaches this account and this device: categories apply to every device, the switch to this one. */
 @Component({
   selector: 'app-notification-settings',
@@ -25,7 +28,9 @@ export class NotificationSettingsPageComponent {
   private readonly translate = inject(TranslateService);
   protected readonly isTv = inject(TvService).isTv;
 
-  protected readonly categories = CATEGORIES;
+  protected readonly categories = computed(() =>
+    this.auth.canAccessSettings() ? [...CATEGORIES, ...ADMIN_CATEGORIES] : CATEGORIES,
+  );
   protected readonly muted = computed(() => this.auth.user()?.pushMuted ?? []);
   protected readonly testing = signal(false);
   /** The switches show what reaches this device: on only while the system shows notifications. */

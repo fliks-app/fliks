@@ -41,6 +41,9 @@
     <a routerLink="/admin" class="dropdown-item text-white">
       <svg lucideShield class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'nav.administration' | translate }}</span>
+      @if (systemAttention() > 0) {
+        <span class="badge badge-xs badge-error" [attr.aria-label]="'nav.system_attention' | translate"></span>
+      }
     </a>
   }
   <a routerLink="/pending-requests" class="dropdown-item text-white">

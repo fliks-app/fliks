@@ -67,7 +67,7 @@
         <h2 class="text-lg font-semibold">{{ 'app_settings.notifications.categories_title' | translate }}</h2>
         <p class="text-base-content/60 mt-1">{{ 'app_settings.notifications.categories_hint' | translate }}</p>
       </div>
-      @for (cat of categories; track cat) {
+      @for (cat of categories(); track cat) {
         <app-toggle-field
           [value]="!muted().includes(cat)"
           (valueChange)="setCategory(cat, $event)"

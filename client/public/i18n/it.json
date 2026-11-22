@@ -475,7 +475,9 @@
       "pending_expired": "Accedi di nuovo per aprire questa notifica.",
       "tray_open": "Apri Fliks",
       "tray_quit": "Esci da Fliks",
-      "badge_label": "Notifiche"
+      "badge_label": "Notifiche",
+      "cat_system": "Sistema",
+      "cat_system_hint": "Controlli di integrità falliti su questo server."
     }
   },
   "update_settings": {
@@ -653,7 +655,8 @@
     "change_server": "Cambia server",
     "playlists": "Playlist",
     "account": "Il mio account",
-    "no_library": "Nessuna libreria"
+    "no_library": "Nessuna libreria",
+    "system_attention": "Problemi di sistema da controllare"
   },
   "history": {
     "title": "Cronologia",
@@ -6161,6 +6164,14 @@
     },
     "outcome_done": "Fatto.",
     "outcome_failed": "L'azione non è riuscita.",
-    "outcome_signin": "Apri Fliks per accedere di nuovo."
+    "outcome_signin": "Apri Fliks per accedere di nuovo.",
+    "health_broken": {
+      "title": "Problema di sistema",
+      "body": "{{message}}"
+    },
+    "health_fixed": {
+      "title": "Problema di sistema risolto",
+      "body": "{{message}}"
+    }
   }
 }

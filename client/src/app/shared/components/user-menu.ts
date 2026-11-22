@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
+import { CountsApiService } from '../../core/services/api/counts-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { TvService } from '../../core/services/tv.service';
@@ -29,6 +30,7 @@ import {
 export class UserMenuComponent {
   readonly auth = inject(AuthService);
   readonly tv = inject(TvService);
+  protected readonly systemAttention = inject(CountsApiService).systemAttention;
   private readonly router = inject(Router);
   private readonly serverConfig = inject(ServerConfigService);
   /** Only a standalone bundle can point elsewhere: web is served by the very

@@ -475,7 +475,9 @@
       "pending_expired": "Inicie sessão novamente para abrir esta notificação.",
       "tray_open": "Abrir o Fliks",
       "tray_quit": "Sair do Fliks",
-      "badge_label": "Notificações"
+      "badge_label": "Notificações",
+      "cat_system": "Sistema",
+      "cat_system_hint": "Verificações de saúde que falham neste servidor."
     }
   },
   "update_settings": {
@@ -653,7 +655,8 @@
     "change_server": "Mudar de servidor",
     "playlists": "Playlists",
     "account": "A minha conta",
-    "no_library": "Ainda sem bibliotecas"
+    "no_library": "Ainda sem bibliotecas",
+    "system_attention": "Há problemas do sistema que requerem atenção"
   },
   "history": {
     "title": "Histórico",
@@ -6161,6 +6164,14 @@
     },
     "outcome_done": "Feito.",
     "outcome_failed": "A ação falhou.",
-    "outcome_signin": "Abra o Fliks para iniciar sessão novamente."
+    "outcome_signin": "Abra o Fliks para iniciar sessão novamente.",
+    "health_broken": {
+      "title": "Problema do sistema",
+      "body": "{{message}}"
+    },
+    "health_fixed": {
+      "title": "Problema do sistema resolvido",
+      "body": "{{message}}"
+    }
   }
 }

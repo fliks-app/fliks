@@ -1,7 +1,9 @@
 //! Push notification vocabulary, English fallback text and plaintext sizing (`docs/spec/push.md`).
 use serde_json::{Map, Value};
 
-pub const CATEGORIES: [&str; 5] = ["requests", "parties", "social", "episodes", "account"];
+pub const CATEGORIES: [&str; 6] = [
+    "requests", "parties", "social", "episodes", "account", "system",
+];
 pub const PLUGIN_PREFIX: &str = "plugin.";
 /// The relay refuses a payload above 2700 bytes; the RFC 8291 record adds 103.
 pub const PLAINTEXT_MAX: usize = 2500;
@@ -59,6 +61,10 @@ pub fn english(path: &str) -> Option<&'static str> {
         "episodes_series.body" => "{{title}}: {{count}} new episodes",
         "pairing_requested.title" => "Sign-in request",
         "pairing_requested.body" => "{{device}} wants to sign in to your account",
+        "health_broken.title" => "System issue",
+        "health_broken.body" => "{{message}}",
+        "health_fixed.title" => "System issue resolved",
+        "health_fixed.body" => "{{message}}",
         "test.title" => "Test notification",
         "test.body" => "Notifications work on this device",
         "action.approve" => "Approve",

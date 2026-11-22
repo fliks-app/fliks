@@ -475,7 +475,9 @@
       "pending_expired": "Reconnectez-vous pour ouvrir cette notification.",
       "tray_open": "Ouvrir Fliks",
       "tray_quit": "Quitter Fliks",
-      "badge_label": "Notifications"
+      "badge_label": "Notifications",
+      "cat_system": "Système",
+      "cat_system_hint": "Contrôles de santé en échec sur ce serveur."
     }
   },
   "update_settings": {
@@ -653,7 +655,8 @@
     "change_server": "Changer de serveur",
     "playlists": "Playlists",
     "account": "Mon compte",
-    "no_library": "Aucune bibliothèque"
+    "no_library": "Aucune bibliothèque",
+    "system_attention": "Des problèmes système demandent votre attention"
   },
   "history": {
     "title": "Historique",
@@ -6161,6 +6164,14 @@
     },
     "outcome_done": "Fait.",
     "outcome_failed": "L'action a échoué.",
-    "outcome_signin": "Ouvrez Fliks pour vous reconnecter."
+    "outcome_signin": "Ouvrez Fliks pour vous reconnecter.",
+    "health_broken": {
+      "title": "Problème système",
+      "body": "{{message}}"
+    },
+    "health_fixed": {
+      "title": "Problème système résolu",
+      "body": "{{message}}"
+    }
   }
 }
