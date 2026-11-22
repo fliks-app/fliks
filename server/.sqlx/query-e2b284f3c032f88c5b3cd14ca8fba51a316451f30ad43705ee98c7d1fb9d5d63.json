@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT s.id, s.method, p.name AS \"provider_name?\", s.\"userAgent\" AS user_agent,\n                  s.\"createdAt\" AS created_at, s.\"lastSeenAt\" AS last_seen_at\n           FROM sessions s LEFT JOIN oidc_providers p ON p.id = s.\"providerId\"\n           WHERE s.\"userId\" = $1 AND s.\"revokedAt\" IS NULL\n             AND EXISTS (SELECT 1 FROM refresh_tokens t WHERE t.\"sessionId\" = s.id\n                         AND t.\"revokedAt\" IS NULL AND t.\"expiresAt\" > $2)\n           ORDER BY s.\"lastSeenAt\" DESC, s.id DESC",
+  "query": "SELECT s.id, s.method, p.name AS \"provider_name?\", s.\"userAgent\" AS user_agent,\n                  s.\"createdAt\" AS created_at, s.\"lastSeenAt\" AS last_seen_at\n           FROM sessions s LEFT JOIN oidc_providers p ON p.id = s.\"providerId\"\n           WHERE s.\"userId\" = $1 AND session_is_live(s.id, $2)\n           ORDER BY s.\"lastSeenAt\" DESC, s.id DESC",
   "describe": {
     "columns": [
       {
@@ -85,5 +85,5 @@
       false
     ]
   },
-  "hash": "29e9c015365076039e99c23866e9c007a3989db390a0cabd4129a8f131dd4993"
+  "hash": "e2b284f3c032f88c5b3cd14ca8fba51a316451f30ad43705ee98c7d1fb9d5d63"
 }

@@ -650,15 +650,12 @@ impl Push {
                     tracing::warn!("push notification too large for subscription {}", row.id);
                     continue;
                 };
-                // No queue: past the concurrent sends the device is skipped.
-                let Ok(slot) = self.sends.clone().try_acquire_owned() else {
-                    tracing::warn!("push sends are saturated: subscription {} skipped", row.id);
-                    continue;
-                };
                 let (st, n, nid, vapid_sub) =
                     (st.clone(), n.clone(), nid.clone(), vapid_sub.clone());
                 sends.push(tokio::spawn(async move {
-                    let _slot = slot;
+                    let Ok(_slot) = st.push.sends.clone().acquire_owned().await else {
+                        return;
+                    };
                     let sent = tokio::time::timeout(
                         SEND_TIMEOUT,
                         st.push.deliver(&st, &row, &nid, &n, &bytes, &vapid_sub),

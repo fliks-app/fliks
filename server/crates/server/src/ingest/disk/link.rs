@@ -199,6 +199,7 @@ async fn relink_in_place(
                             family: first.family,
                             season_number: None,
                             episode_number: None,
+                            episodes: vec![],
                             source: ImportSource::Disk,
                         });
                     }
@@ -208,6 +209,7 @@ async fn relink_in_place(
         }
         return Ok(linked);
     }
+    let mut file_ids = vec![];
     for f in &d.files {
         let abs = PathBuf::from(resolve(&f.path, "/"));
         let nums = caller_nums(f.season, f.episode, f.end);
@@ -215,6 +217,7 @@ async fn relink_in_place(
             Err(e) => errors.push(format!("{}: {e}", file_name(&abs))),
             Ok(l) => {
                 linked += 1;
+                file_ids.push(l.file_id);
                 *slot |= l.created;
                 st.ingest.queue.enqueue(st, l.file_id).await;
             }
@@ -226,12 +229,38 @@ async fn relink_in_place(
             family: Family::Video,
             season_number: None,
             episode_number: None,
+            episodes: episodes_of_files(st, &file_ids).await,
             source: ImportSource::Disk,
         });
         st.ingest.settle.schedule(st, media.id);
     }
 
     Ok(linked)
+}
+
+/// The episodes the given files hold; a lookup failure is logged and yields none.
+async fn episodes_of_files(st: &AppState, files: &[i32]) -> Vec<EpisodeRef> {
+    let rows: sqlx::Result<Vec<(i32, i32)>> = sqlx::query_as(
+        r#"SELECT DISTINCT g."number", e."number" FROM media_file_items fi
+           JOIN items e ON e.id = fi."episodeId" JOIN item_groups g ON g.id = e."groupId"
+           WHERE fi."mediaFileId" = ANY($1)"#,
+    )
+    .bind(files)
+    .fetch_all(&st.db)
+    .await;
+    match rows {
+        Ok(rows) => rows
+            .into_iter()
+            .map(|(s, e)| EpisodeRef {
+                season_number: i64::from(s),
+                episode_number: i64::from(e),
+            })
+            .collect(),
+        Err(e) => {
+            tracing::warn!("linked episodes lookup failed: {e}");
+            vec![]
+        }
+    }
 }
 
 /// An unmatched media nobody else holds and without a file is dropped again.

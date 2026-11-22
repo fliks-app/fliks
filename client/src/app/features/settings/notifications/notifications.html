@@ -29,6 +29,7 @@
             <th>{{ 'settings.notifications.col_name' | translate }}</th>
             <th>{{ 'settings.notifications.col_type' | translate }}</th>
             <th>{{ 'settings.notifications.col_events' | translate }}</th>
+            <th>{{ 'settings.notifications.col_status' | translate }}</th>
             <th class="text-center">{{ 'common.active' | translate }}</th>
             <th class="text-end w-40"></th>
           </tr>
@@ -50,6 +51,9 @@
                 } @else {
                   {{ 'settings.notifications.per_user' | translate }}
                 }
+              </td>
+              <td [class]="deliveryStatus(nc).failed ? 'text-sm text-error' : 'text-sm text-base-content/60'">
+                {{ deliveryStatus(nc).key | translate: deliveryStatus(nc).params }}
               </td>
               <td class="text-center">
                 <app-enabled-switch

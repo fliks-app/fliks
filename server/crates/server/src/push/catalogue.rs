@@ -244,7 +244,19 @@ pub fn request_event(st: &AppState, event: &'static str, payload: &Map<String, V
                         target: r.id,
                     },
                 ];
-                let mut to = approvers(&st, None).await;
+                let library =
+                    sqlx::query_scalar(r#"SELECT "libraryId" FROM requests WHERE id = $1"#)
+                        .bind(r.id)
+                        .fetch_optional(&st.db)
+                        .await
+                        .map(Option::flatten);
+                let mut to = match library {
+                    Ok(library) => approvers(&st, library).await,
+                    Err(e) => {
+                        tracing::warn!("request #{} approvers: {e}", r.id);
+                        vec![]
+                    }
+                };
                 to.retain(|u| Some(*u) != r.requester);
                 (to, n)
             }
@@ -395,27 +407,35 @@ fn listen(st: AppState) -> impl Future<Output = ()> {
         if let DomainEvent::MediaFilesImported {
             media_id,
             family: Family::Video,
-            season_number: Some(season),
-            episode_number: Some(episode),
+            episodes,
             ..
         } = &**ev
             && let Ok(media) = i32::try_from(*media_id)
-            && st.push.episodes.add(media, *season, *episode)
         {
-            let st = st.clone();
-            tokio::spawn(async move {
-                tokio::time::sleep(GROUP_WINDOW).await;
-                if let Err(e) = flush(&st, media).await {
-                    tracing::warn!("new-episode notification: {e}");
-                }
-            });
+            let mut fresh = false;
+            for e in episodes {
+                fresh |= st
+                    .push
+                    .episodes
+                    .add(media, e.season_number, e.episode_number);
+            }
+            if fresh {
+                let st = st.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(GROUP_WINDOW).await;
+                    if let Err(e) = flush(&st, media).await {
+                        tracing::warn!("new-episode notification: {e}");
+                    }
+                });
+            }
         }
     };
     crate::events::listen("new-episode listener", rx, on_event, || {})
 }
 
 /// Users who watch the series (a row not hidden from continue watching), still read its library and
-/// have no request for it and do not follow one: a requester or watcher gets the `requests` notifications instead.
+/// have no request for it, nor follow one, that is in flight or just made available: a requester or watcher
+/// gets the `requests` notifications instead.
 pub(super) async fn episode_recipients(
     st: &AppState,
     media: i32,
@@ -424,13 +444,17 @@ pub(super) async fn episode_recipients(
     let watchers: Vec<i32> = sqlx::query_scalar(
         r#"SELECT ps."userId" FROM playback_states ps JOIN items i ON i.id = ps."itemId"
            WHERE i."mediaId" = $1
-             AND NOT EXISTS (SELECT 1 FROM requests r WHERE r."mediaId" = $1 AND r."userId" = ps."userId")
+             AND NOT EXISTS (SELECT 1 FROM requests r WHERE r."mediaId" = $1 AND r."userId" = ps."userId"
+                             AND (r.status = ANY($2) OR r."updatedAt" > now() - make_interval(secs => $3)))
              AND NOT EXISTS (SELECT 1 FROM request_watchers w JOIN requests r ON r.id = w."requestId"
-                             WHERE r."mediaId" = $1 AND w."userId" = ps."userId")
+                             WHERE r."mediaId" = $1 AND w."userId" = ps."userId"
+                               AND (r.status = ANY($2) OR r."updatedAt" > now() - make_interval(secs => $3)))
            GROUP BY ps."userId" HAVING bool_or(NOT ps."hiddenFromContinueWatching")
            ORDER BY ps."userId""#,
     )
     .bind(media)
+    .bind(crate::requests::IN_FLIGHT.map(String::from).to_vec())
+    .bind(GROUP_WINDOW.as_secs_f64())
     .fetch_all(&st.db)
     .await?;
     let mut to = vec![];
@@ -665,6 +689,10 @@ mod tests {
             family: Family::Video,
             season_number: Some(1),
             episode_number: Some(2),
+            episodes: vec![crate::events::event::EpisodeRef {
+                season_number: 1,
+                episode_number: 2,
+            }],
             source: crate::events::event::ImportSource::Disk,
         });
         for _ in 0..50 {

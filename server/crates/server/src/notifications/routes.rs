@@ -183,7 +183,7 @@ pub async fn test(
     }
     let payload = json!({"test": true, "message": "Test notification from Fliks"});
     let payload = payload.as_object().cloned().unwrap_or_default();
-    let out = match send(&conn, "health.issue", &payload).await {
+    let out = match send(&st.db, &conn, "health.issue", &payload, false).await {
         Ok(()) => json!({"ok": true, "message": "Test notification sent"}),
         Err(message) => json!({"ok": false, "message": message}),
     };

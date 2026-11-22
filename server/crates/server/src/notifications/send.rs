@@ -1,4 +1,4 @@
-//! Senders and dispatch: one POST per matching connection, 10 s timeout, no retry.
+//! Senders and dispatch: one POST per matching connection, 10 s timeout, one retry after 5 s.
 use super::db::{self, Connection};
 use fliks_domain::notifications::{Body, build_request};
 use reqwest::header::CONTENT_TYPE;
@@ -7,6 +7,13 @@ use sqlx::PgPool;
 use std::time::Duration;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
+const RETRY_AFTER: Duration = Duration::from_secs(5);
+
+/// A failure and whether a second attempt can help: a timeout, a transport error or a 5xx, never a 4xx.
+struct Failure {
+    text: String,
+    transient: bool,
+}
 
 /// The `test` message names no host, port or resolver answer: it must not map the network behind a URL.
 fn describe(e: reqwest::Error) -> String {
@@ -18,16 +25,25 @@ fn describe(e: reqwest::Error) -> String {
     "Could not reach the endpoint".to_owned()
 }
 
-/// `send` of the spec (rule 14): the error is the `test` response message.
+/// `send` of the spec (rule 14): the error is the `test` response message. The outcome is stored on
+/// the connection; `retry` allows one more attempt after a transient failure.
 pub async fn send(
+    pool: &PgPool,
     conn: &Connection,
     event: &str,
     payload: &Map<String, Value>,
+    retry: bool,
 ) -> Result<(), String> {
-    let res = deliver(conn, event, payload).await;
+    let mut res = deliver(conn, event, payload).await;
+    if retry && res.as_ref().is_err_and(|f| f.transient) {
+        tokio::time::sleep(RETRY_AFTER).await;
+        res = deliver(conn, event, payload).await;
+    }
+    let res = res.map_err(|f| f.text);
     if let Err(e) = &res {
         tracing::warn!("Failed to send notification via {}: {e}", conn.name);
     }
+    db::record(pool, conn.id, res.as_ref().err().map(String::as_str)).await;
     res
 }
 
@@ -35,8 +51,13 @@ async fn deliver(
     conn: &Connection,
     event: &str,
     payload: &Map<String, Value>,
-) -> Result<(), String> {
-    let Some(req) = build_request(&conn.typ, &conn.settings, event, payload)? else {
+) -> Result<(), Failure> {
+    let permanent = |text| Failure {
+        text,
+        transient: false,
+    };
+    let Some(req) = build_request(&conn.typ, &conn.settings, event, payload).map_err(permanent)?
+    else {
         tracing::warn!("Unknown notification type: {}", conn.typ);
         return Ok(());
     };
@@ -51,10 +72,16 @@ async fn deliver(
             .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body(t),
     };
-    let res = r.send().await.map_err(describe)?;
+    let res = r.send().await.map_err(|e| Failure {
+        text: describe(e),
+        transient: true,
+    })?;
     match res.status() {
         s if s.is_success() => Ok(()),
-        s => Err(format!("Request failed with status code {}", s.as_u16())),
+        s => Err(Failure {
+            text: format!("Request failed with status code {}", s.as_u16()),
+            transient: s.is_server_error(),
+        }),
     }
 }
 
@@ -65,8 +92,10 @@ pub fn dispatch(pool: &PgPool, event: &str, payload: Map<String, Value>) {
     tokio::spawn(async move {
         match db::subscribed(&pool, &event).await {
             Ok(conns) => {
-                futures_util::future::join_all(conns.iter().map(|c| send(c, &event, &payload)))
-                    .await;
+                futures_util::future::join_all(
+                    conns.iter().map(|c| send(&pool, c, &event, &payload, true)),
+                )
+                .await;
             }
             Err(e) => tracing::warn!("notification {event} not sent: {e}"),
         }

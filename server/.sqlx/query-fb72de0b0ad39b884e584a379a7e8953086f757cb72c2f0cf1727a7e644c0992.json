@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notification_connections\n           SET \"lastSentAt\" = CASE WHEN $2::text IS NULL THEN now() ELSE \"lastSentAt\" END,\n               \"lastError\" = $2, \"lastErrorAt\" = CASE WHEN $2::text IS NULL THEN NULL ELSE now() END\n           WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fb72de0b0ad39b884e584a379a7e8953086f757cb72c2f0cf1727a7e644c0992"
+}

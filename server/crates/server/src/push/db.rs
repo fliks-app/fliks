@@ -46,7 +46,7 @@ pub async fn notifying_plugins(db: &PgPool) -> sqlx::Result<Vec<String>> {
 pub async fn live(db: &PgPool, users: &[i32]) -> sqlx::Result<Vec<Sub>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM push_subscriptions p
-           JOIN sessions s ON s.id = p."sessionId" AND s."revokedAt" IS NULL
+           JOIN sessions s ON s.id = p."sessionId" AND session_is_live(s.id, now())
            JOIN users u ON u.id = s."userId" AND u.enabled
            WHERE s."userId" = ANY($1) ORDER BY p.id"#
     )))
@@ -55,13 +55,13 @@ pub async fn live(db: &PgPool, users: &[i32]) -> sqlx::Result<Vec<Sub>> {
     .await
 }
 
-/// Rows of revoked sessions and disabled users.
+/// Rows of dead sessions (revoked or expired) and disabled users.
 pub async fn dead(db: &PgPool) -> sqlx::Result<Vec<Sub>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLS} FROM push_subscriptions p
            JOIN sessions s ON s.id = p."sessionId"
            JOIN users u ON u.id = s."userId"
-           WHERE s."revokedAt" IS NOT NULL OR NOT u.enabled ORDER BY p.id"#
+           WHERE NOT session_is_live(s.id, now()) OR NOT u.enabled ORDER BY p.id"#
     )))
     .fetch_all(db)
     .await
