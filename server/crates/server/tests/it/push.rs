@@ -403,8 +403,13 @@ async fn shutdown_sends_the_pending_episode_groups_before_returning(pool: PgPool
         }],
         source: ImportSource::Disk,
     });
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    push::flush_pending(&c.st).await;
+    for _ in 0..50 {
+        push::flush_pending(&c.st).await;
+        if !c.relay.seen("POST", "/v1/push").is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     assert_eq!(c.relay.seen("POST", "/v1/push").len(), 1);
 }
 
@@ -444,8 +449,13 @@ async fn a_season_pack_import_gives_one_grouped_push(pool: PgPool) {
             .collect(),
         source: ImportSource::Disk,
     });
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    push::flush_pending(&c.st).await;
+    for _ in 0..50 {
+        push::flush_pending(&c.st).await;
+        if !c.relay.seen("POST", "/v1/push").is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     assert_eq!(c.relay.seen("POST", "/v1/push").len(), 1);
 }
 
