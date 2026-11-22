@@ -10,6 +10,7 @@ import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { ControlsVisibilityService } from './controls/controls-visibility';
 import { QueueController } from './queue-controller';
 import { RemoteController } from './remote-controller';
+import { sseStub } from '../../testing/sse.stub';
 
 function setup() {
   const output = {
@@ -31,7 +32,7 @@ function setup() {
     providers: [
       provideZonelessChangeDetection(),
       RemoteController,
-      { provide: SseService, useValue: { lastEvent: signal(null) } },
+      { provide: SseService, useValue: sseStub() },
       { provide: AuthService, useValue: { user: () => ({ id: 1 }) } },
       { provide: RemoteService, useValue: remoteService },
       { provide: CastService, useValue: { isConnected: () => false, disconnect: vi.fn() } },

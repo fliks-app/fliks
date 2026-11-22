@@ -5,7 +5,7 @@ import { ComponentFixtureAutoDetect, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 import { Capacitor } from '@capacitor/core';
-import { of, Subject } from 'rxjs';
+import { EMPTY, of, Subject } from 'rxjs';
 import { vi, afterEach, describe, it, expect } from 'vitest';
 import { PlayerComponent } from './player';
 import { PlayerStateService } from '../../core/services/player-state.service';
@@ -229,7 +229,7 @@ function createHarness(opts: {
           engineTraits: () => ENGINE_TRAITS[EngineKind.WEB],
         },
       },
-      { provide: SseService, useValue: { connectionId: () => null, lastEvent: () => null, connected: () => false, targetId: () => null, partyEvents: new Subject(), likeEvents: new Subject() } },
+      { provide: SseService, useValue: { connectionId: () => null, on: () => EMPTY, connected: () => false, targetId: () => null, partyEvents: new Subject(), likeEvents: new Subject() } },
       {
         provide: RemoteService,
         useValue: {

@@ -7,6 +7,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { LucideCirclePlay } from '@lucide/angular';
@@ -43,15 +44,10 @@ export class SchedulersComponent implements OnInit {
   readonly triggerBusy = signal<string | null>(null);
 
   constructor() {
-    effect(() => {
-      const event = this.sse.lastEvent();
-      if (
-        event?.type === 'command.started' ||
-        event?.type === 'command.completed'
-      ) {
-        this.refreshList();
-      }
-    });
+    this.sse
+      .on('command.started', 'command.completed')
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => void this.refreshList());
     // A new connection id says the stream we were on is gone, so a "running"
     // pill may belong to a process that is not there any more.
     effect(() => {

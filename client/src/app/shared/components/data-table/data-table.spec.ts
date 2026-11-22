@@ -61,7 +61,7 @@ async function createComponent(opts: {
   refreshMs?: number;
   refreshOn?: string[];
   rowPatches?: Subject<readonly Record<string, unknown>[] | null>;
-  sseEvent?: WritableSignal<{ type: string } | null>;
+  sseEvent?: Subject<{ type: string }>;
   confirmation?: unknown;
   bulkSelect?: boolean;
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
@@ -85,7 +85,7 @@ async function createComponent(opts: {
       },
       {
         provide: SseService,
-        useValue: { lastEvent: opts.sseEvent ?? signal(null) } as unknown as SseService,
+        useValue: { events: opts.sseEvent ?? new Subject() } as unknown as SseService,
       },
       { provide: ToastService, useValue: opts.toast ?? { success: () => {}, error: () => {} } },
     ],
@@ -678,7 +678,7 @@ describe('DataTableComponent — refreshing', () => {
 
   it('coalesces a burst of events into one fetch, then catches up with the last', async () => {
     const get = vi.fn(() => of([{ id: 1 }]));
-    const event = signal<{ type: string } | null>(null);
+    const event = new Subject<{ type: string }>();
     // The component has to exist before the clock is frozen: creating it awaits a real timer.
     const fixture = await createComponent({
       http: { get },
@@ -689,14 +689,14 @@ describe('DataTableComponent — refreshing', () => {
     try {
       const before = get.mock.calls.length;
 
-      event.set({ type: 'queue.updated' });
+      event.next({ type: 'queue.updated' });
       fixture.detectChanges();
       expect(get.mock.calls.length).toBe(before + 1);
 
       // Same window: the second and third must not each cost a round trip...
-      event.set({ type: 'queue.updated', ...{ n: 2 } });
+      event.next({ type: 'queue.updated', ...{ n: 2 } });
       fixture.detectChanges();
-      event.set({ type: 'queue.updated', ...{ n: 3 } });
+      event.next({ type: 'queue.updated', ...{ n: 3 } });
       fixture.detectChanges();
       expect(get.mock.calls.length).toBe(before + 1);
 
@@ -710,21 +710,21 @@ describe('DataTableComponent — refreshing', () => {
 
   it('ignores an event type the page did not declare', async () => {
     const get = vi.fn(() => of([{ id: 1 }]));
-    const event = signal<{ type: string } | null>(null);
+    const event = new Subject<{ type: string }>();
     const fixture = await createComponent({
       http: { get },
       refreshOn: ['queue.updated'],
       sseEvent: event,
     });
     const before = get.mock.calls.length;
-    event.set({ type: 'something.else' });
+    event.next({ type: 'something.else' });
     fixture.detectChanges();
     expect(get.mock.calls.length).toBe(before);
   });
 
   it('refreshes nothing while nobody is looking at the page', async () => {
     const get = vi.fn(() => of([{ id: 1 }]));
-    const event = signal<{ type: string } | null>(null);
+    const event = new Subject<{ type: string }>();
     const fixture = await createComponent({
       http: { get },
       refreshOn: ['queue.updated'],
@@ -733,7 +733,7 @@ describe('DataTableComponent — refreshing', () => {
     const spy = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     try {
       const before = get.mock.calls.length;
-      event.set({ type: 'queue.updated' });
+      event.next({ type: 'queue.updated' });
       fixture.detectChanges();
       expect(get.mock.calls.length).toBe(before);
     } finally {

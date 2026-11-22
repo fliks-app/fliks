@@ -406,14 +406,7 @@ export class RemoteService {
   constructor() {
     this.sse.commands.subscribe((cmd) => this.onCommand(cmd));
 
-    effect(() => {
-      const event = this.sse.lastEvent();
-      if (!event) return;
-      if (event.type === 'remote.targets_changed') {
-        untracked(() => void this.refreshTargets());
-        return;
-      }
-    });
+    this.sse.on('remote.targets_changed').subscribe(() => void this.refreshTargets());
 
     // The server says which target stopped, so there is nothing to infer from
     // silence and nothing a trailing heartbeat can put back.

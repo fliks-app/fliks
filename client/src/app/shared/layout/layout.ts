@@ -54,7 +54,6 @@ import { AudioPlayerComponent } from '../audio-player/audio-player';
 import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
 import { WhatsNewModalComponent } from '../components/whats-new-modal/whats-new-modal';
 import { AppUpdateService } from '../../core/services/app-update.service';
-import { AppResumeService } from '../../core/services/app-resume.service';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../core/services/recommend.service';
 import { LucideIconComponent } from '../components/lucide-icon';
@@ -139,7 +138,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly push = inject(PushService);
   readonly serverConfig = inject(ServerConfigService);
   readonly sse = inject(SseService);
-  private readonly appResume = inject(AppResumeService);
   private readonly downloadManager = inject(DownloadManagerService);
   // Instantiate eagerly so it records the launching page BEFORE the player opens (the player injects it too late).
   private readonly navHistory = inject(NavigationHistoryService);
@@ -367,19 +365,11 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private sidebarCountsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Refresh counts when relevant SSE events arrive */
-  private readonly sseEffect = effect(() => {
-    const event = this.sse.lastEvent();
-    if (!event) return;
-    switch (event.type) {
-      // import.complete / import.failed reach only the requester, so library counts ride the broadcast queue.updated after each import.
-      case 'queue.updated':
-      case 'stalled.removed':
-      case 'request.approved':
-      case 'request.declined':
-        this.debouncedRefreshSidebarCounts();
-        break;
-    }
-  });
+  // import.complete / import.failed reach only the requester, so library counts ride the broadcast queue.updated after each import.
+  private readonly sseCounts = this.sse
+    .on('queue.updated', 'stalled.removed', 'request.approved', 'request.declined')
+    .pipe(takeUntilDestroyed(this.destroyRef))
+    .subscribe(() => this.debouncedRefreshSidebarCounts());
 
   /** The SSE channel isn't per-user: a foreign request would 403 on approve. */
   private onPairingEvent(event: SseEvent): void {
@@ -619,16 +609,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   /** Set by Retry, cleared by the next connection outcome or the dial timeout. */
   readonly retrying = signal(false);
-  private wasUnreachable = false;
 
   private readonly reconnectedEffect = effect(() => {
-    const unreachable = this.sse.serverUnreachable();
-    const connected = this.sse.connected();
-    untracked(() => {
-      if (connected) this.retrying.set(false);
-      if (connected && this.wasUnreachable && !unreachable) this.appResume.refresh();
-      this.wasUnreachable = unreachable;
-    });
+    if (this.sse.connected()) untracked(() => this.retrying.set(false));
   });
 
   retryConnection() {

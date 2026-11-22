@@ -7,6 +7,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
@@ -210,55 +211,53 @@ export class DataImportsSettingsComponent implements OnInit {
 
   readonly IGNORE_VALUE = IGNORE_VALUE;
 
-  private lastHandledEvent: unknown = null;
-
   // Listen for Seerr + Emby watch-history import SSE events. Toasts on
   // completion / failure and updates `importing` flags so buttons re-enable.
-  private readonly importEffect = effect(() => {
-    const event = this.sse.lastEvent();
-    if (!event || event === this.lastHandledEvent) return;
-    this.lastHandledEvent = event;
-    if (event.type === 'watch-history.import.completed') {
-      this.setEmbyImporting(Number(event['serverId']), false);
-      const users = Number(event['users'] ?? 0);
-      const created = Number(event['usersCreated'] ?? 0);
-      const imported = Number(event['imported'] ?? 0);
-      this.toast.success(
-        this.translate.instant('settings.data_imports.emby.import_completed', {
-          users: translatePlural(this.translate, 'settings.data_imports.users_created', users, { created }),
-          imported: translatePlural(this.translate, 'settings.data_imports.views_imported', imported),
+  private readonly importEvents = this.sse
+    .on('watch-history.import.completed', 'watch-history.import.failed', 'seerr.import.completed', 'seerr.import.failed')
+    .pipe(takeUntilDestroyed())
+    .subscribe((event) => {
+      if (event.type === 'watch-history.import.completed') {
+        this.setEmbyImporting(Number(event['serverId']), false);
+        const users = Number(event['users'] ?? 0);
+        const created = Number(event['usersCreated'] ?? 0);
+        const imported = Number(event['imported'] ?? 0);
+        this.toast.success(
+          this.translate.instant('settings.data_imports.emby.import_completed', {
+            users: translatePlural(this.translate, 'settings.data_imports.users_created', users, { created }),
+            imported: translatePlural(this.translate, 'settings.data_imports.views_imported', imported),
+            skipped: Number(event['skipped'] ?? 0),
+          }),
+        );
+        return;
+      }
+      if (event.type === 'watch-history.import.failed') {
+        this.setEmbyImporting(Number(event['serverId']), false);
+        const err = (event['error'] as string | undefined) ?? this.translate.instant('common.error');
+        this.toast.error(
+          this.translate.instant('settings.data_imports.emby.import_failed', { error: err }),
+        );
+        return;
+      }
+      if (event.type === 'seerr.import.completed') {
+        this.seerrImporting.set(false);
+        const summary: SeerrSummary = {
+          users: Number(event['users'] ?? 0),
+          usersCreated: Number(event['usersCreated'] ?? 0),
+          imported: Number(event['imported'] ?? 0),
+          updated: Number(event['updated'] ?? 0),
           skipped: Number(event['skipped'] ?? 0),
-        }),
-      );
-      return;
-    }
-    if (event.type === 'watch-history.import.failed') {
-      this.setEmbyImporting(Number(event['serverId']), false);
-      const err = (event['error'] as string | undefined) ?? this.translate.instant('common.error');
-      this.toast.error(
-        this.translate.instant('settings.data_imports.emby.import_failed', { error: err }),
-      );
-      return;
-    }
-    if (event.type === 'seerr.import.completed') {
-      this.seerrImporting.set(false);
-      const summary: SeerrSummary = {
-        users: Number(event['users'] ?? 0),
-        usersCreated: Number(event['usersCreated'] ?? 0),
-        imported: Number(event['imported'] ?? 0),
-        updated: Number(event['updated'] ?? 0),
-        skipped: Number(event['skipped'] ?? 0),
-      };
-      this.seerrLastSummary.set(summary);
-      this.toast.success(this.seerrSummaryText(summary));
-    } else if (event.type === 'seerr.import.failed') {
-      this.seerrImporting.set(false);
-      const err = (event['error'] as string | undefined) ?? this.translate.instant('common.error');
-      this.toast.error(
-        this.translate.instant('settings.data_imports.seerr.import_failed', { error: err }),
-      );
-    }
-  });
+        };
+        this.seerrLastSummary.set(summary);
+        this.toast.success(this.seerrSummaryText(summary));
+      } else if (event.type === 'seerr.import.failed') {
+        this.seerrImporting.set(false);
+        const err = (event['error'] as string | undefined) ?? this.translate.instant('common.error');
+        this.toast.error(
+          this.translate.instant('settings.data_imports.seerr.import_failed', { error: err }),
+        );
+      }
+    });
 
   async ngOnInit() {
     this.loading.set(true);

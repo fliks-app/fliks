@@ -189,6 +189,11 @@ describe('CastOverlayComponent', () => {
       expect(loading.el.textContent).not.toContain('Album A');
     });
 
+    it('renders an observed session of a kind this build lacks', () => {
+      const unknown = { ...accountSession().item, kind: 'podcast' as never, subtitle: 'S01E02: x' };
+      expect(() => setup({ local: true, account: accountSession({ item: unknown }) })).not.toThrow();
+    });
+
     it('plays a paused owner that has not reported since this device started following it', () => {
       const { el, target } = setup({ local: true, account: accountSession({ state: 'paused', playing: false }), live: false });
       el.querySelector<HTMLButtonElement>('[aria-label="player.play"]')!.click();

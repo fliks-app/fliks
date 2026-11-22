@@ -9,6 +9,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -628,8 +629,6 @@ export class SubtitlesModalComponent {
 
   // ── Auto-load subtitles ──
 
-  private lastSseEvent: any = null;
-
   private readonly loadEffect = effect(() => {
     const mediaId = this.mediaId();
     if (mediaId) void this.loadSubtitles(mediaId);
@@ -646,48 +645,47 @@ export class SubtitlesModalComponent {
   });
 
   /** SSE: reload subtitles on sync/download events */
-  private readonly sseEffect = effect(() => {
-    const event = this.sse.lastEvent();
-    const mediaId = this.mediaId();
-    if (!event || !mediaId) return;
-    if ((event['mediaId'] as number) !== mediaId) return;
-    if (event === this.lastSseEvent) return;
-    this.lastSseEvent = event;
+  private readonly subtitleEvents = this.sse
+    .on('subtitle.list_changed', 'subtitle.synced', 'subtitle.downloaded', 'subtitle.failed')
+    .pipe(takeUntilDestroyed())
+    .subscribe((event) => {
+      const mediaId = this.mediaId();
+      if (!mediaId || (event['mediaId'] as number) !== mediaId) return;
 
-    const automatic = event['automatic'] === true;
-    if (event.type === 'subtitle.list_changed') {
-      // Carries no outcome to announce — it says the list moved, nothing more.
-      void this.loadSubtitles(mediaId);
-    } else if (event.type === 'subtitle.synced') {
-      if (!automatic) this.toast.success(this.translate.instant('sse.subtitle_synced'));
-      void this.loadSubtitles(mediaId);
-    } else if (event.type === 'subtitle.downloaded') {
-      if (!automatic) {
-        this.toast.success(
-          this.translate.instant(
-            event['reason'] === 'translation'
-              ? 'sse.subtitle_translated'
-              : 'sse.subtitle_downloaded',
-            { title: event['title'] ?? '', lang: event['language'] ?? '' },
-          ),
-        );
+      const automatic = event['automatic'] === true;
+      if (event.type === 'subtitle.list_changed') {
+        // Carries no outcome to announce — it says the list moved, nothing more.
+        void this.loadSubtitles(mediaId);
+      } else if (event.type === 'subtitle.synced') {
+        if (!automatic) this.toast.success(this.translate.instant('sse.subtitle_synced'));
+        void this.loadSubtitles(mediaId);
+      } else if (event.type === 'subtitle.downloaded') {
+        if (!automatic) {
+          this.toast.success(
+            this.translate.instant(
+              event['reason'] === 'translation'
+                ? 'sse.subtitle_translated'
+                : 'sse.subtitle_downloaded',
+              { title: event['title'] ?? '', lang: event['language'] ?? '' },
+            ),
+          );
+        }
+        void this.loadSubtitles(mediaId);
+      } else if (event.type === 'subtitle.failed') {
+        if (!automatic) {
+          const key =
+            event['reason'] === 'rate_limit'
+              ? event['scope'] === 'daily'
+                ? 'media_detail.translation_rate_limited_daily'
+                : 'media_detail.translation_rate_limited'
+              : event['reason'] === 'translation'
+                ? 'sse.translation_failed'
+                : 'sse.subtitle_failed';
+          this.toast.error(this.translate.instant(key, { lang: event['language'] ?? '' }));
+        }
+        void this.loadSubtitles(mediaId);
       }
-      void this.loadSubtitles(mediaId);
-    } else if (event.type === 'subtitle.failed') {
-      if (!automatic) {
-        const key =
-          event['reason'] === 'rate_limit'
-            ? event['scope'] === 'daily'
-              ? 'media_detail.translation_rate_limited_daily'
-              : 'media_detail.translation_rate_limited'
-            : event['reason'] === 'translation'
-              ? 'sse.translation_failed'
-              : 'sse.subtitle_failed';
-        this.toast.error(this.translate.instant(key, { lang: event['language'] ?? '' }));
-      }
-      void this.loadSubtitles(mediaId);
-    }
-  });
+    });
 
   // ── Actions ──
 

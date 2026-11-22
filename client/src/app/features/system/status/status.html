@@ -37,10 +37,10 @@
       </div>
     </div>
   </div>
-  @if (!h.confPersistent) {
+  @if (h.confPersistent === false) {
     <div role="alert" class="alert alert-error mt-3 text-sm">{{ 'system.conf_not_persistent' | translate }}</div>
   }
-  @if (!h.dataPersistent) {
+  @if (h.dataPersistent === false) {
     <div role="alert" class="alert alert-error mt-3 text-sm">{{ 'system.data_not_persistent' | translate }}</div>
   }
 }

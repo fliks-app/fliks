@@ -94,8 +94,9 @@ export class MediaDetailReleasePickerService {
    *  server answers 202 and reports the outcome as an SSE event, awaited here; anything but a grab is toasted and thrown. */
   async grabBest(target: AcquisitionTarget): Promise<void> {
     const { groupId, itemId, family, language } = target;
+    const payloadOf = (e: Record<string, unknown>) => (e['payload'] ?? {}) as Record<string, unknown>;
     const mine = (e: Record<string, unknown>): boolean => {
-      const s = (e['scope'] ?? {}) as Record<string, unknown>;
+      const s = (payloadOf(e)['scope'] ?? {}) as Record<string, unknown>;
       return s['mediaId'] === target.mediaId && s['family'] === family && (s['groupId'] ?? null) === (groupId ?? null) && (s['itemId'] ?? null) === (itemId ?? null);
     };
     // Subscribed before the request: the outcome can land before the 202 does.
@@ -104,7 +105,8 @@ export class MediaDetailReleasePickerService {
     ).catch(() => null);
     const body = { groupId, itemId, family, language: language ?? null };
     await firstValueFrom(this.http.post<unknown>(`/api/media/${target.mediaId}/grab-best`, body));
-    const result = ((await outcome)?.['outcome'] as string | undefined) ?? 'timeout';
+    const found = await outcome;
+    const result = (found && (payloadOf(found)['outcome'] as string | undefined)) || 'timeout';
     if (result === 'grabbed') return;
     this.toast.error(this.translate.instant(`media_detail.grab_best_${result}`));
     throw new Error(`grab-best: ${result}`);

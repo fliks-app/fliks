@@ -25,6 +25,7 @@ import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../core/services/recommend.service';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
+import { sseStub } from '../../testing/sse.stub';
 
 const MEDIA_ID = 42;
 
@@ -77,7 +78,7 @@ function createHarness(downloadManager: object = {}) {
       { provide: BackgroundService, useValue: background },
       { provide: ConfirmationService, useValue: { confirm } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
-      { provide: SseService, useValue: { lastEvent: signal(null) } },
+      { provide: SseService, useValue: sseStub() },
       { provide: StreamingApiService, useValue: {} },
       { provide: MarkersApiService, useValue: {} },
       { provide: RequestsService, useValue: {} },

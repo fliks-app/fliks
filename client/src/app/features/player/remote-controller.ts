@@ -3,7 +3,7 @@ import type { Subscription } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { RemoteService } from '../../core/services/remote.service';
-import { SseService, type RemoteCommand } from '../../core/services/sse.service';
+import { SseService, type RemoteCommand, type SseEvent } from '../../core/services/sse.service';
 import { ControlsVisibilityService } from './controls/controls-visibility';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { QueueController } from './queue-controller';
@@ -31,6 +31,7 @@ export class RemoteController {
   private readonly session = inject(PlaybackSession);
   private host!: RemoteHost;
   private sub: Subscription | null = null;
+  private adminSub: Subscription | null = null;
 
   /** Admin message overlay, rendered inside the player container so it stays visible in
    *  browser fullscreen (the global toast layer sits outside the fullscreened element). */
@@ -42,10 +43,12 @@ export class RemoteController {
   attach(host: RemoteHost): void {
     this.host = host;
     this.sub = this.remoteService.validated.subscribe((cmd) => void this.applyRemoteCommand(cmd));
+    this.adminSub = this.sseService.on('player.command').subscribe((event) => this.onAdminCommand(event));
   }
 
   dispose(): void {
     this.sub?.unsubscribe();
+    this.adminSub?.unsubscribe();
     if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
   }
 
@@ -55,10 +58,8 @@ export class RemoteController {
     this.adminMessage.set(null);
   }
 
-  /** Handles the latest admin `player.command` SSE event. */
-  onAdminEvent(): void {
-    const event = this.sseService.lastEvent();
-    if (!event || event.type !== 'player.command') return;
+  /** Handles an admin `player.command` SSE event. */
+  private onAdminCommand(event: SseEvent): void {
     const cmd = event as any;
     const currentUserId = this.authService.user()?.id;
     if (cmd.mediaFileId !== this.host.mediaFileId() || cmd.userId !== currentUserId) return;

@@ -1,10 +1,11 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { PluginSettingsComponent } from './plugin-settings';
+import { AuthService } from '../../../../core/services/auth.service';
 import { ToastService } from '../../../../core/services/toast.service';
 
 /** Lets the promise chain inside the component advance between two flushes. */
@@ -16,7 +17,7 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
  * refreshing leaves the admin looking at the old, narrower list and no way to tell why.
  */
 describe('PluginSettingsComponent — disabling the compatibility check', () => {
-  function setup() {
+  function setup(isAdmin = true) {
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -27,6 +28,7 @@ describe('PluginSettingsComponent — disabling the compatibility check', () => 
           loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
         }),
         { provide: ToastService, useValue: { success: () => undefined } },
+        { provide: AuthService, useValue: { user: signal({ isAdmin }) } },
       ],
     });
     const http = TestBed.inject(HttpTestingController);
@@ -84,5 +86,50 @@ describe('PluginSettingsComponent — disabling the compatibility check', () => 
     expect(component.skipCompatibility()).toBe(true);
     expect(component.saving()).toBe(false);
     http.verify();
+  });
+});
+
+describe('PluginSettingsComponent: unsigned plugins switch', () => {
+  async function open(isAdmin: boolean) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
+        { provide: ToastService, useValue: { success: () => undefined } },
+        { provide: AuthService, useValue: { user: signal({ isAdmin }) } },
+      ],
+    });
+    const http = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(PluginSettingsComponent);
+    fixture.nativeElement.querySelector('dialog').showModal = () => undefined;
+    fixture.detectChanges();
+    const opened = fixture.componentInstance.open();
+    for (const key of ['plugins.auto_update', 'plugins.skip_compatibility_check', 'plugins.allow_older_versions']) {
+      http.expectOne({ url: `/api/settings/${key}`, method: 'GET' }).flush({ key, value: null });
+    }
+    return { fixture, http, opened };
+  }
+
+  it('hides the switch and never reads its admin-only key for a non-admin', async () => {
+    const { fixture, http, opened } = await open(false);
+    await opened;
+    fixture.detectChanges();
+
+    http.expectNone('/api/settings/plugins.allow_unsigned');
+    expect(fixture.nativeElement.querySelectorAll('app-toggle-field')).toHaveLength(3);
+  });
+
+  it('offers it to an admin', async () => {
+    const { fixture, http, opened } = await open(true);
+    http.expectOne({ url: '/api/settings/plugins.allow_unsigned', method: 'GET' }).flush({ key: 'plugins.allow_unsigned', value: 'false' });
+    await opened;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('app-toggle-field')).toHaveLength(4);
   });
 });

@@ -1,6 +1,7 @@
 import {
   Component, signal, inject, OnInit, OnDestroy, effect, computed, untracked,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DecimalPipe, NgClass } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
@@ -17,7 +18,7 @@ import { subjectEpisodeLine, subjectEpisodeLink, subjectMediaLink } from '../../
 
 export interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
 interface ServiceStatus { name: string; ok: boolean; message?: string; }
-interface HealthReport { version: string; uptimeSeconds: number; database: ServiceStatus; installedPlugins: number; runningPlugins: number; restartSupervisor: string | null; confPersistent: boolean; dataPersistent: boolean; }
+interface HealthReport { version: string; uptimeSeconds: number; database: ServiceStatus; installedPlugins: number; runningPlugins: number; restartSupervisor: string | null; confPersistent?: boolean; dataPersistent?: boolean; }
 /** Trimmed to what the manual-trigger button list needs. */
 interface SchedulerJob { name: string; triggerable: boolean; labelKey: string; }
 /** One row of the Activity table: running or queued work, from `ActivityRegistryService`. */
@@ -140,15 +141,14 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
   ]);
 
   constructor() {
-    effect(() => {
-      const event = this.sse.lastEvent();
-      if (event?.type === 'command.started' || event?.type === 'command.completed') {
-        this.loadCommands(this.commandsPage());
-      }
-      if (event?.type === 'activity.changed') {
-        this.scheduleActivityRefetch();
-      }
-    });
+    this.sse
+      .on('command.started', 'command.completed')
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.loadCommands(this.commandsPage()));
+    this.sse
+      .on('activity.changed')
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.scheduleActivityRefetch());
     // A new connection id says the stream we were on is gone, and the registry
     // behind these rows lives in the process that may have just restarted.
     effect(() => {

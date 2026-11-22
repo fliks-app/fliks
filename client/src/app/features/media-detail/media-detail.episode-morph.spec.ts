@@ -26,6 +26,7 @@ import { AddToPlaylistService } from '../../core/services/add-to-playlist.servic
 import { RecommendService } from '../../core/services/recommend.service';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
+import { sseStub } from '../../testing/sse.stub';
 
 /**
  * The poster morph out of an episode card pairs with the episode page's hero,
@@ -67,7 +68,7 @@ function createFixture(media: Promise<unknown> = new Promise(() => {})) {
       { provide: BackgroundService, useValue: { set: vi.fn(), release: vi.fn(), suspend: vi.fn(), url: signal(null) } },
       { provide: ConfirmationService, useValue: {} },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
-      { provide: SseService, useValue: { lastEvent: signal(null) } },
+      { provide: SseService, useValue: sseStub() },
       { provide: StreamingApiService, useValue: {} },
       { provide: MarkersApiService, useValue: {} },
       { provide: RequestsService, useValue: {} },

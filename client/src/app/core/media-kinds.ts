@@ -91,6 +91,11 @@ export function kindOf(type: string | null | undefined): KindDescriptor {
   return (isMediaKind(type) ? KIND_REGISTRY[type] : undefined) ?? KIND_REGISTRY[DEFAULT_LIST_KIND];
 }
 
+/** The video kind of an item whose media is not loaded: the one made of episodes for an episode, else the single-file one. */
+export function videoKindOf(isEpisode: boolean): MediaType {
+  return MEDIA_KINDS.find((k) => KIND_REGISTRY[k].families.includes('video') && KIND_REGISTRY[k].hasSeasons === isEpisode)!;
+}
+
 /** Whether an item of `kind` plays in the audio player: an audio family and no video one. */
 export function playsInAudioPlayer(kind: string | null | undefined): boolean {
   const families = isMediaKind(kind) ? KIND_REGISTRY[kind].families : [];

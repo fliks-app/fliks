@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, provideRouter } from '@angular/router';
 import { TranslateLoader, TranslatePipe, provideTranslateService } from '@ngx-translate/core';
-import { Subject, of } from 'rxjs';
+import { Subject, filter, of } from 'rxjs';
 import { vi } from 'vitest';
 import {
   LucideMenu,
@@ -68,9 +68,8 @@ interface Fixture {
   libraries: LibrarySummary[];
   pendingRequests: number;
   registry?: Partial<Record<SlotId, UiContribution[]>>;
-  /** Overrides the SSE `lastEvent` signal — a real writable signal, needed so
-   *  the component's `sseEffect` reacts to `.set()` calls made mid-test. */
-  sseLastEvent?: ReturnType<typeof signal<SseEvent | null>>;
+  /** The SSE frames the component listens to, for a test to push into mid-run. */
+  sseEvents?: Subject<SseEvent>;
   pairingEvents?: Subject<SseEvent>;
   /** Marks the active page as a hero (fanart) page. */
   isHeroPage?: boolean;
@@ -142,7 +141,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
       {
         provide: SseService,
         useValue: {
-          lastEvent: f.sseLastEvent ?? (() => null),
+          on: (...types: string[]) => (f.sseEvents ?? new Subject<SseEvent>()).pipe(filter((e) => types.includes(e.type))),
           pairingEvents: f.pairingEvents ?? new Subject<SseEvent>(),
           connectionId: f.connectionId ?? (() => null),
           connect: () => {},
@@ -550,29 +549,26 @@ describe('LayoutComponent sidebar counts — SSE debounce', () => {
   });
 
   it('collapses a burst of count-bearing SSE events into a single trailing refresh', async () => {
-    const lastEvent = signal<SseEvent | null>(null);
+    const events = new Subject<SseEvent>();
     const get = vi.fn(() =>
       Promise.resolve({ mediaByLibrary: {}, badgeCounts: {}, pendingRequests: 0 }),
     );
     const fixture = await createFixture({
       ...NON_ADMIN_NO_LIBRARIES,
-      sseLastEvent: lastEvent,
+      sseEvents: events,
       countsGet: get,
     });
     get.mockClear();
 
     vi.useFakeTimers();
     try {
-      lastEvent.set({ type: 'queue.updated' });
-      fixture.detectChanges();
+      events.next({ type: 'queue.updated' });
       await vi.advanceTimersByTimeAsync(100);
 
-      lastEvent.set({ type: 'queue.updated' });
-      fixture.detectChanges();
+      events.next({ type: 'queue.updated' });
       await vi.advanceTimersByTimeAsync(100);
 
-      lastEvent.set({ type: 'stalled.removed' });
-      fixture.detectChanges();
+      events.next({ type: 'stalled.removed' });
       await vi.advanceTimersByTimeAsync(100);
 
       // Still inside the debounce window re-armed by the last event: no request yet.

@@ -293,13 +293,10 @@ export class HomeComponent implements OnInit, OnDestroy {
       });
   });
 
-  /** When a download finishes, refresh the recent-requests row so a monitored
-   *  request flips to its downloaded badge without a manual reload. */
-  private readonly importEffect = effect(() => {
-    const ev = this.sse.lastEvent();
-    if (ev?.type !== 'import.complete') return;
-    this.loadRecentRequests({ force: true });
-  });
+  /** A request changed status for its owner: refresh the recent-requests row so its badge follows without a manual reload. */
+  private readonly requestNotified = this.sse.notifications
+    .pipe(filter((n) => n.cat === 'requests'), takeUntilDestroyed())
+    .subscribe(() => this.loadRecentRequests({ force: true }));
   /** Re-filters on the "only my requests" toggle; skips the first run since ngOnInit already loads. */
   private firstOnlyMyRequestsRun = true;
   private readonly onlyMyRequestsEffect = effect(() => {

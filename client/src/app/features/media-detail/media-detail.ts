@@ -1,5 +1,5 @@
 import { Component, ElementRef, Injector, afterNextRender, forwardRef, OnDestroy, OnInit, Type, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NgComponentOutlet } from '@angular/common';
 import { TrackingModalService } from '../../core/services/tracking-modal.service';
 import { MediaAdminService } from '../../core/services/media-admin.service';
@@ -23,7 +23,7 @@ import { AddDialogComponent } from '../../shared/components/add-dialog/add-dialo
 import { serverMessage } from '../../core/utils/server-message';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
-import { SseService, type SseEvent } from '../../core/services/sse.service';
+import { SseService } from '../../core/services/sse.service';
 import { MediaType } from '../../core/enums/media-type.enum';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
@@ -112,10 +112,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
       translate: this.translate,
     },
   );
-
-  /** Same SSE payload must run handlers once; `media` updates (e.g. after rescan) re-run this effect.
-   *  Seeded from the service so a re-created instance doesn't replay an event from before it existed. */
-  private lastHandledSseEvent: SseEvent | null = this.sse.lastEvent();
 
   /** Signal mirror of paramMap: the component is reused across episode URLs, so a snapshot misses changes. */
   private readonly routeParams = toSignal(this.route.paramMap);
@@ -211,28 +207,27 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
   });
 
   /** React to SSE rescan / import / metadata-refresh events for this media */
-  private readonly sseEffect = effect(() => {
-    const event = this.sse.lastEvent();
-    const m = this.media();
-    if (!event || !m) return;
-    if ((event['mediaId'] as number) !== m.id) return;
-    if (event === this.lastHandledSseEvent) return;
-    this.lastHandledSseEvent = event;
-    if (
-      event.type === 'rescan.completed' ||
-      event.type === 'import.complete' ||
-      event.type === 'media.move.completed'
-    ) {
-      void this.reload();
-    } else if (event.type === 'metadata.refreshed') {
-      void this.reload();
-      this.toast.success(this.translate.instant('media_detail.refresh_ok'));
-    } else if (event.type === 'metadata.failed') {
-      this.toast.error(
-        (event as { error?: string }).error ?? this.translate.instant('media_detail.refresh_error'),
-      );
-    }
-  });
+  private readonly mediaEvents = this.sse
+    .on('rescan.completed', 'import.complete', 'media.move.completed', 'metadata.refreshed', 'metadata.failed')
+    .pipe(takeUntilDestroyed())
+    .subscribe((event) => {
+      const m = this.media();
+      if (!m || (event['mediaId'] as number) !== m.id) return;
+      if (
+        event.type === 'rescan.completed' ||
+        event.type === 'import.complete' ||
+        event.type === 'media.move.completed'
+      ) {
+        void this.reload();
+      } else if (event.type === 'metadata.refreshed') {
+        void this.reload();
+        this.toast.success(this.translate.instant('media_detail.refresh_ok'));
+      } else if (event.type === 'metadata.failed') {
+        this.toast.error(
+          (event as { error?: string }).error ?? this.translate.instant('media_detail.refresh_error'),
+        );
+      }
+    });
 
   readonly media = signal<Media | null>(null);
   /** The page of the kind, loaded by the route's resolver before this component activates. */

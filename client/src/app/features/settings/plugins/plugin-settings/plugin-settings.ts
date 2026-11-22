@@ -2,6 +2,7 @@ import {
   Component,
   ElementRef,
   WritableSignal,
+  computed,
   inject,
   signal,
   viewChild,
@@ -11,6 +12,7 @@ import { LucideX } from '@lucide/angular';
 import { ToggleFieldComponent } from '../../../../shared/components/forms/toggle-field/toggle-field';
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
 import { PluginsApiService } from '../../../../core/services/api/plugins-api.service';
+import { AuthService } from '../../../../core/services/auth.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
@@ -34,6 +36,10 @@ export class PluginSettingsComponent {
   private readonly plugins = inject(PluginsApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
+  private readonly auth = inject(AuthService);
+
+  /** The unsigned-plugin switch is an admin-only key: reading or writing it is a 403 for anyone else. */
+  protected readonly isAdmin = computed(() => !!this.auth.user()?.isAdmin);
 
   private readonly dialogRef = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
@@ -55,7 +61,7 @@ export class PluginSettingsComponent {
         this.settings.get(AUTO_UPDATE_KEY),
         this.settings.get(SKIP_COMPATIBILITY_KEY),
         this.settings.get(ALLOW_OLDER_VERSIONS_KEY),
-        this.settings.get(ALLOW_UNSIGNED_KEY),
+        this.isAdmin() ? this.settings.get(ALLOW_UNSIGNED_KEY) : Promise.resolve(null),
       ]);
       this.autoUpdate.set(auto?.value !== 'false');
       this.skipCompatibility.set(skip?.value === 'true');

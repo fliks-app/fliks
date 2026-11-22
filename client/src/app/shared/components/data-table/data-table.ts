@@ -178,11 +178,11 @@ export class DataTableComponent implements OnInit {
 
   constructor() {
     const sse = inject(SseService);
-    effect(() => {
-      const event = sse.lastEvent();
-      if (!event || !this.refreshOn().includes(event.type)) return;
-      untracked(() => this.requestRefresh());
-    });
+    sse.events
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event) => {
+        if (this.refreshOn().includes(event.type)) this.requestRefresh();
+      });
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', this.onVisible);
     }

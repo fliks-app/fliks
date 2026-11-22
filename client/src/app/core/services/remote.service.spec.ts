@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter, Router } from '@angular/router';
-import { Subject } from 'rxjs';
+import { EMPTY, Subject } from 'rxjs';
 import { computed, signal } from '@angular/core';
 import { describe, expect, it, vi } from 'vitest';
 import { TranslateService } from '@ngx-translate/core';
@@ -60,7 +60,7 @@ function setup(opts: { selected?: string | null; held?: { targetId: string; medi
     stopped: new Subject<{ targetId: string; sessionId: string | null }>(),
     remoteState,
     remoteStates: new Subject<RemoteState>(),
-    lastEvent: signal(null),
+    on: () => EMPTY,
     connectionId,
     connected: computed(() => connectionId() !== null),
     targetId: signal<string | null>('phone#1'),
@@ -866,7 +866,7 @@ describe('RemoteService browse', () => {
 describe('RemoteService mirrors navigation to a target', () => {
   async function routerSetup() {
     const remoteState = signal<RemoteState | null>(null);
-    const sse = { commands: new Subject<RemoteCommand>(), stopped: new Subject<{ targetId: string; sessionId: string | null }>(), remoteState, remoteStates: new Subject<RemoteState>(), lastEvent: signal(null), connectionId: signal<string | null>(null), targetId: signal<string | null>('phone#1') };
+    const sse = { commands: new Subject<RemoteCommand>(), stopped: new Subject<{ targetId: string; sessionId: string | null }>(), remoteState, remoteStates: new Subject<RemoteState>(), on: () => EMPTY, connectionId: signal<string | null>(null), targetId: signal<string | null>('phone#1') };
     TestBed.configureTestingModule({
       providers: [
         RemoteService,

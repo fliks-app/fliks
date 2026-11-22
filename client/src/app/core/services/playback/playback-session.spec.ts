@@ -867,6 +867,14 @@ describe('PlaybackSession', () => {
       expect(router.navigate).toHaveBeenCalled();
     });
 
+    it('reads an episode without its media as a series for the session scope', () => {
+      const { session, remoteSvc } = setup();
+      remoteSvc.liveOwner.set('tv-1');
+      remoteSvc.scope.set(['series']);
+      expect(session.playsHere({ ...item, episodeId: 3, media: undefined })).toBe(false);
+      expect(session.playsHere({ ...item, episodeId: undefined, media: undefined })).toBe(true);
+    });
+
     it('plays a party item here while another device owns the session', async () => {
       const { session, remoteSvc, router, party } = setup();
       remoteSvc.liveOwner.set('tv-1');

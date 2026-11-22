@@ -1,4 +1,5 @@
 import { Component, effect, inject, untracked, OnInit, OnDestroy } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, take } from 'rxjs';
 import { Capacitor } from '@capacitor/core';
@@ -92,9 +93,10 @@ export class App implements OnInit, OnDestroy {
     });
   });
   /** A provider's sources changed: the buttons and the releases modal read them from the registry. */
-  private readonly sourcesRefresh = effect(() => {
-    if (this.sse.lastEvent()?.type === 'acquisition.sources') untracked(() => void this.pluginUi.load(true));
-  });
+  private readonly sourcesRefresh = this.sse
+    .on('acquisition.sources')
+    .pipe(takeUntilDestroyed())
+    .subscribe(() => void this.pluginUi.load(true));
   private resumeListener?: { remove: () => Promise<void> };
   private pauseListener?: { remove: () => Promise<void> };
   private tvBackKeyListener?: (e: KeyboardEvent) => void;

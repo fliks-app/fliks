@@ -711,7 +711,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     onSeek: (t) => this.onSeek(t),
     savePosition: (force) => this.savePosition(force),
   }), null);
-  private readonly remoteCommandEffect = effect(() => this.remote.onAdminEvent());
   protected readonly party = inject(PartyService);
   protected readonly reactions = inject(ReactionsService);
   /** The party reaction row exists: a party with reactions on, and the viewer kept the dock. */
