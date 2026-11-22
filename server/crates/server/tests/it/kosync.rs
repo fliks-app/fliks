@@ -407,6 +407,14 @@ async fn a_push_below_a_write_koreader_has_not_seen_keeps_the_state(pool: PgPool
     .unwrap();
     assert_eq!(c.put(&key, H_TEXT, json!("c"), 0.6).await.0, 200);
     assert_eq!(progression(&c).await, Some(0.6), "forward progress lands");
+    let seen: bool = sqlx::query_scalar(
+        r#"SELECT k."stateAt" = ps."updatedAt" FROM kosync_progress k, playback_states ps
+           WHERE k."userId" = 1 AND ps."userId" = 1 AND ps."itemId" = 1"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert!(seen, "the write the push made is the one KOReader has seen");
     assert_eq!(c.put(&key, H_TEXT, json!("d"), 0.55).await.0, 200);
     assert_eq!(
         progression(&c).await,

@@ -159,6 +159,7 @@ fn edition_entry(p: Namespace, r: &Value) -> Option<Value> {
 /// `GET /api/metadata/{provider}/book/{externalId}` (rule 20).
 #[utoipa::path(get, path = "/api/metadata/{provider}/book/{externalId}", responses((status = 200)))]
 pub async fn preview_book(State(st): State<AppState>, a: Authed, ids: Ids) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let PathParams((name, id)) = ids?;
     if Namespace::parse(&name) != Some(ANCHOR) || st.metadata.get(ANCHOR).is_none() {
         return Err(unknown_provider(&name));

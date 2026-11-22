@@ -43,6 +43,11 @@
         "type": "movie"
       },
       "expect": {
+        "body": {
+          "error": "Service Unavailable",
+          "message": "Metadata request failed on tmdb: HTTP 503 \u2014 scripted failure",
+          "statusCode": 503
+        },
         "status": 503
       },
       "ignore": [
@@ -72,7 +77,12 @@
         "type": "movie"
       },
       "expect": {
-        "status": 503
+        "body": {
+          "error": "Not Found",
+          "message": "not_found",
+          "statusCode": 404
+        },
+        "status": 404
       },
       "ignore": [
         "$.metadata",

@@ -361,15 +361,20 @@ fn m4b_versions(files: Vec<String>) -> Vec<Vec<String>> {
         groups.entry(m4b_key(p)).or_default().push(p.clone());
     }
     let mut out = vec![];
-    for (_, mut g) in groups {
+    for (_, g) in groups {
         let numbers: Vec<Option<(u32, u32)>> = g.iter().map(|p| m4b_part(p)).collect();
-        let distinct: BTreeSet<_> = numbers.iter().flatten().collect();
-        if g.len() > 1 && distinct.len() == g.len() && numbers.iter().all(Option::is_some) {
-            g.sort_by_key(|p| (m4b_part(p), natural(p)));
-            out.push(g);
+        let distinct = |p: &String| {
+            let n = m4b_part(p);
+            n.is_some() && numbers.iter().filter(|m| **m == n).count() == 1
+        };
+        let (mut parts, alone): (Vec<String>, Vec<String>) = g.iter().cloned().partition(distinct);
+        if parts.len() > 1 {
+            parts.sort_by_key(|p| (m4b_part(p), natural(p)));
+            out.push(parts);
         } else {
-            out.extend(g.into_iter().map(|p| vec![p]));
+            out.extend(parts.into_iter().map(|p| vec![p]));
         }
+        out.extend(alone.into_iter().map(|p| vec![p]));
     }
     out.sort_by_key(|g| natural(&g[0]));
     out

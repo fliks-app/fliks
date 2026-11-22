@@ -173,15 +173,15 @@ pub struct Lookup {
     pub library_id: i32,
 }
 
-/// 404 when the provider has no such title, else 503 naming the provider.
-fn fail(p: Namespace, e: Upstream) -> AppError {
+/// 404 only for `detail` (the title the caller asked for), else 503 naming the provider.
+fn fail(p: Namespace, e: Upstream, detail: bool) -> AppError {
     tracing::warn!("metadata request failed on {}: {e}", p.as_str());
-    super::routes::fail(p, &e, true)
+    super::routes::fail(p, &e, detail)
 }
 
-fn fail_meta(p: Namespace, e: MetaError) -> AppError {
+fn fail_meta(p: Namespace, e: MetaError, detail: bool) -> AppError {
     match e {
-        MetaError::Upstream(e) => fail(p, e),
+        MetaError::Upstream(e) => fail(p, e, detail),
         MetaError::Db(e) => e.into(),
     }
 }
@@ -241,6 +241,7 @@ async fn read_record(
     external_id: &str,
     lang: &Resolved,
     prio: Priority,
+    detail: bool,
 ) -> Result<Map<String, Value>, AppError> {
     if p.core().is_some() {
         ext_i64(external_id)?;
@@ -249,7 +250,7 @@ async fn read_record(
         .metadata
         .work(p, kind, external_id, lang, prio)
         .await
-        .map_err(|e| fail_meta(p, e))?;
+        .map_err(|e| fail_meta(p, e, detail))?;
     Ok(match v {
         Value::Object(o) => o,
         _ => Map::new(),
@@ -264,7 +265,7 @@ async fn read_details(
     lang: &Resolved,
     prio: Priority,
 ) -> Result<Details, AppError> {
-    let record = read_record(st, p, kind, external_id, lang, prio).await?;
+    let record = read_record(st, p, kind, external_id, lang, prio, false).await?;
     Ok(Details::from_value(&Value::Object(record)))
 }
 
@@ -283,7 +284,7 @@ async fn read_seasons(
         .metadata
         .children(p, MediaKind::Series, external_id, season, lang, prio)
         .await
-        .map_err(|e| fail_meta(p, e))?;
+        .map_err(|e| fail_meta(p, e, false))?;
     Ok(v.iter().map(SeasonDetails::from_value).collect())
 }
 
@@ -308,7 +309,7 @@ async fn cross_reference_id(
         .of(target)
         .find_by(Namespace::IMDB, imdb, lang, prio)
         .await
-        .map_err(|e| fail(target, e))?;
+        .map_err(|e| fail(target, e, false))?;
     Ok(found.map(|(id, _)| id))
 }
 
@@ -334,7 +335,7 @@ async fn read_for_library(
     prio: Priority,
 ) -> Result<(Namespace, String, Details, Provenance), AppError> {
     let external_id = &checked_id(&st.namespaces(), found, external_id)?;
-    let record = read_record(st, found, kind, external_id, lang, prio).await?;
+    let record = read_record(st, found, kind, external_id, lang, prio, true).await?;
     let details = Details::from_value(&Value::Object(record.clone()));
     let keep = |record| {
         let (d, p) = merged(kind, &[(found, record)], found, &[]);
@@ -368,7 +369,7 @@ async fn read_for_library(
         );
         return Ok(keep(record));
     };
-    let preferred = read_record(st, target, kind, &target_id, lang, prio).await?;
+    let preferred = read_record(st, target, kind, &target_id, lang, prio, false).await?;
     tracing::info!(
         "import: \"{}\" read from {pref} (id={target_id}) - library preference",
         details.title
@@ -416,7 +417,7 @@ pub async fn import(st: &AppState, l: Lookup, prio: Priority) -> Result<Found, A
             .of(Namespace::TMDB)
             .find_by(Namespace::TVDB, &tvdb.to_string(), &lang, prio)
             .await
-            .map_err(|e| fail(Namespace::TMDB, e))?;
+            .map_err(|e| fail(Namespace::TMDB, e, false))?;
         if let Some((tmdb, _)) = cross {
             details.tmdb_id = tmdb.parse().ok();
         }
@@ -527,7 +528,7 @@ async fn external_id_for(
             .of(via)
             .find_by(source, id, lang, prio)
             .await
-            .map_err(|e| fail(via, e))
+            .map_err(|e| fail(via, e, false))
     };
     let imdb = m.imdb_id.as_deref().filter(|i| !i.is_empty());
     match p {
@@ -768,7 +769,7 @@ pub async fn for_media(st: &AppState, media_id: i32, prio: Priority) -> Result<F
         media.0.as_str(),
         media.1
     );
-    let record = read_record(st, media.0, m.kind, &media.1, &lang, prio).await?;
+    let record = read_record(st, media.0, m.kind, &media.1, &lang, prio, true).await?;
     let locked = locked_fields(&st.db, m.id).await?;
     let mut records = vec![(media.0, record)];
     let files = crate::ingest::record::file_records(st, m.id).await;

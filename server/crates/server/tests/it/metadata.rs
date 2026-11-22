@@ -1706,8 +1706,12 @@ INSERT INTO users (username, "isAdmin", "roleId") VALUES ('none', false, (SELECT
         "/api/metadata/trending/movie",
         "/api/metadata/trending/album",
         "/api/metadata/genres/tv",
+        "/api/persons/1/provider-credits",
         "/api/metadata/tmdb/movie/1",
         "/api/metadata/movie/1",
+        "/api/metadata/metron/comic/1",
+        "/api/metadata/openlibrary/book/OL1W",
+        "/api/metadata/musicbrainz/album/1",
     ] {
         assert_eq!(call(&c, uri, Some(&tok)).await.0, 403, "{uri}");
     }

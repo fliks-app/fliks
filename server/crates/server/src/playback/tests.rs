@@ -98,7 +98,11 @@ async fn stale_replay_leaves_the_newer_row_alone(pool: PgPool) {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(out["positionSeconds"], 900.0);
+    assert_eq!(out.row["positionSeconds"], 900.0);
+    assert!(
+        out.written.is_none(),
+        "a replay older than the state writes nothing"
+    );
     assert_eq!(row(&pool, ids.0, ids.1).await, before);
 }
 

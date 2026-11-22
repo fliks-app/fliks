@@ -27,7 +27,7 @@ export function editionLabel(e: BookEdition): string {
 }
 
 /** A text edition of these formats opens in the comic page reader. */
-export const COMIC_ARCHIVES = ['cbz', 'cb7', 'cbr'];
+export const COMIC_ARCHIVES = ['cbz'];
 const READABLE = ['epub', 'pdf', ...COMIC_ARCHIVES];
 
 /** A text edition with a file the reader opens. */

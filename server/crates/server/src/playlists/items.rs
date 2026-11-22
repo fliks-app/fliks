@@ -559,7 +559,7 @@ pub async fn reorder(
     let wanted: HashSet<i32> = dto.item_ids.iter().copied().collect();
     if wanted.len() != dto.item_ids.len() || wanted != visible {
         return Err(AppError::bad_request(
-            "itemIds must list every item in the playlist exactly once",
+            "itemIds must list each item shown to the caller exactly once",
         ));
     }
     let mut next = dto.item_ids.iter();

@@ -28,6 +28,14 @@ fn album_visible(libs: &str) -> String {
     )
 }
 
+/// A track a caller reads: its album and edition in `libs` (a bound `int[]`) and a file (`i`, `e`, `m` are the aliases).
+pub(crate) fn track_visible(libs: &str) -> String {
+    format!(
+        r#"m."libraryId" = ANY({libs}) AND COALESCE(e."libraryId", m."libraryId") = ANY({libs})
+    AND track_file(i.id) IS NOT NULL"#
+    )
+}
+
 const ALBUM_ARTISTS_TEXT: &str = r#"COALESCE((SELECT string_agg(p.name, ' ' ORDER BY mc.position) FROM media_credits mc
   JOIN persons p ON p.id = mc."personId" WHERE mc."mediaId" = m.id AND mc.role = 'artist'), '')"#;
 
@@ -126,14 +134,14 @@ pub async fn songs(
             .collect(),
         None => " AND $8::text[] IS NULL".to_owned(),
     };
+    let visible = track_visible("$2");
     let sql = format!(
         r#"WITH page AS MATERIALIZED (SELECT id, row_number() OVER () AS n FROM (
   SELECT i.id FROM items i
   JOIN track_details td ON td."itemId" = i.id
   JOIN editions e ON e.id = i."editionId"
   JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
-  WHERE m."libraryId" = ANY($2) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-    AND track_file(i.id) IS NOT NULL
+  WHERE {visible}
     AND ($3::text IS NULL OR {GENRE_OF_ALBUM})
     AND ($4::int IS NULL OR m.year >= $4) AND ($5::int IS NULL OR m.year <= $5)
     {search}
@@ -859,12 +867,12 @@ pub async fn visible_tracks(
     libs: &[i32],
     items: &[i32],
 ) -> Result<Vec<(i32, i32)>, sqlx::Error> {
-    sqlx::query_as(
+    let visible = track_visible("$2");
+    sqlx::query_as(AssertSqlSafe(format!(
         r#"SELECT i.id, i."mediaId" FROM items i JOIN editions e ON e.id = i."editionId"
            JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
-           WHERE i.id = ANY($1) AND m."libraryId" = ANY($2) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-             AND track_file(i.id) IS NOT NULL"#,
-    )
+           WHERE i.id = ANY($1) AND {visible}"#
+    )))
     .bind(items)
     .bind(libs)
     .fetch_all(db)

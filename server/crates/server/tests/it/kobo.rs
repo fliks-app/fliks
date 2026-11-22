@@ -605,6 +605,33 @@ async fn a_state_older_than_the_servers_is_dropped_and_the_device_is_told_the_ne
 }
 
 #[sqlx::test(migrations = false)]
+async fn the_latest_last_modified_of_the_state_dates_it(pool: PgPool) {
+    let (c, _) = ctx(pool).await;
+    let path = format!("/v1/library/{}/state", book(1));
+    sqlx::query(
+        r#"INSERT INTO playback_states ("userId", "itemId", progression, completed) VALUES (1, 1, 1.0, true)"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    // The device marks the book unread: its bookmark is unchanged and old, the status is new.
+    let mut body = state_put_at(1, 0.0, "ReadyToRead", "kobo.1.1", "2026-11-03T10:00:00Z");
+    body["ReadingStates"][0]["StatusInfo"]["LastModified"] = json!(chrono::Utc::now().to_rfc3339());
+    assert_eq!(c.call("PUT", &path, Some(body)).await.status, 200);
+    let row: (f64, bool) = sqlx::query_as(
+        r#"SELECT progression, completed FROM playback_states WHERE "userId" = 1 AND "itemId" = 1"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        row,
+        (0.0, false),
+        "the newer status wins over the old bookmark"
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn progress_round_trips_and_feeds_the_shared_progression(pool: PgPool) {
     let (c, _) = ctx(pool).await;
     let path = format!("/v1/library/{}/state", book(1));

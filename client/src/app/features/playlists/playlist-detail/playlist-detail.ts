@@ -658,8 +658,7 @@ export class PlaylistDetailComponent {
         this.items().map((i) => i.itemId),
       )
       .catch(() => {
-        // Keep the shown order truthful if the server rejects it (e.g. a
-        // shared editor who only sees a library-filtered subset).
+        // Reload so the shown order is the stored one when the save fails.
         void this.load(id);
       });
   }

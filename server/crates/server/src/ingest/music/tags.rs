@@ -80,7 +80,13 @@ fn int(n: Option<u32>) -> Option<i32> {
 }
 
 /// Artists re-split on the separators; the ids go along only while they still match the names one to one.
-fn named(names: &[String], single: Option<&str>, ids: &[String], seps: &[String]) -> Vec<Named> {
+/// Also whether a "Various Artists" part (by name or id) was dropped: that is no credit.
+fn named(
+    names: &[String],
+    single: Option<&str>,
+    ids: &[String],
+    seps: &[String],
+) -> (Vec<Named>, bool) {
     let mut list: Vec<String> = names.to_vec();
     if list.is_empty() {
         list.extend(single.map(str::to_owned));
@@ -88,15 +94,17 @@ fn named(names: &[String], single: Option<&str>, ids: &[String], seps: &[String]
     let parts = split(&list, seps);
     let ids: Vec<Option<String>> = ids.iter().map(|i| mbid(Some(i))).collect();
     let aligned = ids.len() == parts.len();
-    parts
-        .into_iter()
-        .enumerate()
-        .filter(|(_, n)| !n.eq_ignore_ascii_case("various artists"))
-        .map(|(i, name)| Named {
-            name,
-            mbid: if aligned { ids[i].clone() } else { None }.filter(|i| i != VARIOUS_ARTISTS),
-        })
-        .collect()
+    let mut dropped = false;
+    let mut out = vec![];
+    for (i, name) in parts.into_iter().enumerate() {
+        let id = if aligned { ids[i].clone() } else { None };
+        if name.eq_ignore_ascii_case("various artists") || id.as_deref() == Some(VARIOUS_ARTISTS) {
+            dropped = true;
+        } else {
+            out.push(Named { name, mbid: id });
+        }
+    }
+    (out, dropped)
 }
 
 /// `01 - Title`, `1. Title`, `02_Title`: the number and the title of a file stem.
@@ -126,7 +134,7 @@ impl TrackTags {
 
     pub fn of(t: &MediaTags, duration: Option<f64>, seps: &Separators, stem: &str) -> Self {
         let (stem_number, stem_title) = stem_parts(stem);
-        let album_artists = named(
+        let (album_artists, various) = named(
             &t.album_artists,
             t.album_artist.as_deref(),
             &t.musicbrainz_album_artist_ids,
@@ -136,11 +144,6 @@ impl TrackTags {
         if genres.is_empty() {
             genres.extend(t.genre.clone());
         }
-        let various = t
-            .album_artists
-            .iter()
-            .chain(&t.album_artist)
-            .any(|n| n.eq_ignore_ascii_case("various artists"));
         let composer: Vec<String> = t.composer.iter().cloned().collect();
         let original = t.original_date.clone();
         Self {
@@ -154,7 +157,8 @@ impl TrackTags {
                 t.artist.as_deref(),
                 &t.musicbrainz_artist_ids,
                 &seps.artists,
-            ),
+            )
+            .0,
             album_artists,
             composers: split(&composer, &seps.artists),
             conductor: t.conductor.clone(),
@@ -243,7 +247,7 @@ pub struct AlbumTags {
     pub compilation: bool,
     /// The credited album artists: the tagged ones, else the first track's artists unless a compilation.
     pub artists: Vec<Named>,
-    /// The artist an identification searches for: none for a compilation.
+    /// The artist an identification searches for: none when no album artist is credited.
     pub artist: String,
 }
 
@@ -267,7 +271,7 @@ impl AlbumTags {
                 .map(|t| t.artists.clone())
                 .unwrap_or_default(),
         };
-        let artist = if compilation {
+        let artist = if artists.is_empty() {
             String::new()
         } else {
             super::most_common(
@@ -294,6 +298,15 @@ impl AlbumTags {
             artists,
             artist,
         }
+    }
+
+    /// The credited album artists as a line: empty for a compilation that names none.
+    pub fn credited_line(&self) -> String {
+        self.artists
+            .iter()
+            .map(|n| n.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     /// The key that tells the albums of a folder at the root apart: the release, else the album and its artist.
@@ -413,5 +426,33 @@ mod tests {
         let album = AlbumTags::of(&[plain]);
         assert!(!album.compilation);
         assert_eq!(album.artist, "Ana");
+    }
+
+    #[test]
+    fn a_compilation_with_a_credited_album_artist_keeps_it_for_the_search() {
+        let mut t = tags();
+        t.compilation = Some(true);
+        let t = TrackTags::of(&t, None, &Separators::default(), "x");
+        let album = AlbumTags::of(&[t]);
+        assert!(album.compilation);
+        assert_eq!(
+            (album.artist.as_str(), album.credited_line().as_str()),
+            ("Ana", "Ana")
+        );
+    }
+
+    #[test]
+    fn various_follows_what_the_split_dropped() {
+        let of = |names: &[&str], single: Option<&str>| {
+            let mut t = tags();
+            t.album_artists = names.iter().map(|n| (*n).into()).collect();
+            t.album_artist = single.map(Into::into);
+            TrackTags::of(&t, None, &Separators::default(), "x")
+        };
+        let t = of(&["Ana"], Some("Various Artists"));
+        assert!(!t.various && t.album_artists[0].name == "Ana");
+        let t = of(&[], Some("Various Artists; Ana"));
+        assert!(t.various && t.album_artists.len() == 1);
+        assert!(!of(&[], Some("Ana")).various);
     }
 }

@@ -421,7 +421,8 @@ pub async fn absorb_into(st: &AppState, from: i32, into: i32) -> sqlx::Result<bo
 async fn fold_person(c: &mut PgConnection, from: i32, into: i32, old: &str) -> sqlx::Result<()> {
     for sql in [
         r#"DELETE FROM media_credits d USING media_credits k WHERE d."personId" = $1 AND k."personId" = $2
-             AND k."mediaId" = d."mediaId" AND k.role = d.role AND k."editionId" IS NOT DISTINCT FROM d."editionId""#,
+             AND k."mediaId" = d."mediaId" AND k.role = d.role AND k."editionId" IS NOT DISTINCT FROM d."editionId"
+             AND k.character IS NOT DISTINCT FROM d.character AND k.job IS NOT DISTINCT FROM d.job"#,
         r#"UPDATE media_credits SET "personId" = $2 WHERE "personId" = $1"#,
         r#"DELETE FROM item_credits d USING item_credits k WHERE d."personId" = $1 AND k."personId" = $2
              AND k."itemId" = d."itemId" AND k.role = d.role AND k.instrument IS NOT DISTINCT FROM d.instrument"#,

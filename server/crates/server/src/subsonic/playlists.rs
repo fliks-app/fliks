@@ -82,10 +82,22 @@ async fn entries(st: &AppState, c: &Caller, id: i32) -> Result<Vec<Value>, SubEr
     Ok(order.iter().filter_map(|i| by_item.remove(i)).collect())
 }
 
-/// `id`, name, owner's username, visibility, created and changed of a `playlists` row.
-type Row = (i32, String, String, String, DateTime<Utc>, DateTime<Utc>);
+/// `id`, name, owner's username, visibility, created, changed and whether it is smart, of a `playlists` row.
+type Row = (
+    i32,
+    String,
+    String,
+    String,
+    DateTime<Utc>,
+    DateTime<Utc>,
+    bool,
+);
 
-fn header((id, name, owner, visibility, created, changed): &Row, count: i64, duration: i64) -> Obj {
+fn header(
+    (id, name, owner, visibility, created, changed, _): &Row,
+    count: i64,
+    duration: i64,
+) -> Obj {
     let mut o = Obj::new();
     o.insert("id".into(), ids::playlist(*id).into());
     o.insert("name".into(), name.clone().into());
@@ -98,7 +110,8 @@ fn header((id, name, owner, visibility, created, changed): &Row, count: i64, dur
     o
 }
 
-const ROW: &str = r#"SELECT p.id, p.name, u.username, p.visibility::text, p."createdAt", p."updatedAt"
+const ROW: &str = r#"SELECT p.id, p.name, u.username, p.visibility::text, p."createdAt", p."updatedAt",
+     p.rules IS NOT NULL
    FROM playlists p JOIN users u ON u.id = p."ownerId""#;
 
 fn sum(entries: &[Value]) -> (i64, i64) {
@@ -112,7 +125,8 @@ async fn totals(
     c: &Caller,
     ids: &[i32],
 ) -> Result<HashMap<i32, (i64, i64)>, sqlx::Error> {
-    let rows: Vec<(i32, i64, i64)> = sqlx::query_as(
+    let visible = catalog::track_visible("$2");
+    let rows: Vec<(i32, i64, i64)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT pl.id, count(f.id), COALESCE(sum(round(COALESCE(td."durationMs" / 1000.0,
              (f."streamInfo"->>'durationSeconds')::numeric, 0))), 0)::bigint
            FROM playlists pl
@@ -122,10 +136,9 @@ async fn totals(
            JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
            JOIN track_details td ON td."itemId" = i.id
            JOIN LATERAL (SELECT mf.id, mf."streamInfo" FROM media_files mf WHERE mf.id = track_file(i.id)) f ON true
-           WHERE pl.id = ANY($1) AND pl.rules IS NULL AND m."libraryId" = ANY($2)
-             AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-           GROUP BY pl.id"#,
-    )
+           WHERE pl.id = ANY($1) AND pl.rules IS NULL AND {visible}
+           GROUP BY pl.id"#
+    )))
     .bind(ids)
     .bind(&c.libraries)
     .fetch_all(&st.db)
@@ -143,14 +156,9 @@ pub async fn list(st: &AppState, c: &Caller) -> Answer {
     .await?;
     let ids: Vec<i32> = rows.iter().map(|r| r.0).collect();
     let mut totals = totals(st, c, &ids).await?;
-    let smart: Vec<i32> =
-        sqlx::query_scalar("SELECT id FROM playlists WHERE id = ANY($1) AND rules IS NOT NULL")
-            .bind(&ids)
-            .fetch_all(&st.db)
-            .await?;
     let mut out = vec![];
     for row in &rows {
-        let (count, duration) = if smart.contains(&row.0) {
+        let (count, duration) = if row.6 {
             sum(&entries(st, c, row.0).await?)
         } else {
             totals.remove(&row.0).unwrap_or((0, 0))
