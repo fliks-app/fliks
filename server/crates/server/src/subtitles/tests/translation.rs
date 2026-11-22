@@ -727,10 +727,7 @@ mod engines {
         else {
             panic!("a 500 is an error")
         };
-        assert!(
-            e.to_string().contains("***") && !e.to_string().contains("OKEY"),
-            "{e}"
-        );
+        assert_eq!(e.to_string(), "OpenAI-compatible API error 500");
         // A dead host never leaks the URL either.
         let sh = shared(&stub);
         let dead = json!({"baseUrl": "http://127.0.0.1:1/v1", "model": "m", "apiKey": "OKEY"});

@@ -49,6 +49,7 @@ impl Post for Scripted {
             status,
             retry_after: s["headers"]["retry-after"].as_str().map(str::to_owned),
             body: s["body"].as_str().unwrap_or("").to_owned(),
+            echo: s["echo"].as_bool().unwrap_or(true),
         })
     }
     async fn sleep(&mut self, ms: u64) {

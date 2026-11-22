@@ -575,6 +575,26 @@ async fn test_route_reports_results_never_errors(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn a_followed_redirect_keeps_the_token_and_the_body(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (base, mock) = spawn_mock().await;
+    let (_, b) = test_send(
+        &c,
+        "webhook",
+        json!({"url": format!("{base}/redirect"), "token": "tok"}),
+    )
+    .await;
+    assert_eq!(b["ok"], true);
+    let seen = mock.0.lock_clean();
+    assert_eq!(seen.len(), 2);
+    assert!(
+        seen.iter()
+            .all(|s| s.headers["authorization"] == "Bearer tok")
+    );
+    assert_eq!(seen[0].body, seen[1].body);
+}
+
+#[sqlx::test]
 async fn a_redirect_to_another_host_is_not_followed(pool: PgPool) {
     let c = ctx(pool).await;
     let (base, mock) = spawn_mock().await;

@@ -16,7 +16,7 @@ use fliks_domain::livetv::access::{
     restricted_view, write_vanished,
 };
 use serde_json::{Value, json};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::PgPool;
 use std::collections::HashSet;
 
 /// One in-process mutex over every read-modify-write of the three keys and the grants (rule 7).
@@ -56,22 +56,6 @@ async fn load(db: &PgPool) -> sqlx::Result<Groups> {
     })
 }
 
-async fn put_setting(
-    tx: &mut Transaction<'_, Postgres>,
-    key: &str,
-    value: &str,
-) -> sqlx::Result<()> {
-    sqlx::query(
-        r#"INSERT INTO app_settings ("key", "value") VALUES ($1, $2)
-           ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value", "updatedAt" = now()"#,
-    )
-    .bind(key)
-    .bind(value)
-    .execute(&mut **tx)
-    .await
-    .map(drop)
-}
-
 /// Writes what the operation changed: the settings it touched and the grants that differ, in one transaction.
 async fn save(st: &AppState, before: &Groups, after: &Groups) -> sqlx::Result<()> {
     let mut tx = st.db.begin().await?;
@@ -86,7 +70,7 @@ async fn save(st: &AppState, before: &Groups, after: &Groups) -> sqlx::Result<()
             EXEMPT_KEY => json!(after.exempt).to_string(),
             _ => write_vanished(&after.vanished),
         };
-        put_setting(&mut tx, k, &value).await?;
+        crate::settings::set_in(&mut tx, k, Some(&value)).await?;
     }
     let was: HashSet<_> = before.grants.iter().collect();
     let is: HashSet<_> = after.grants.iter().collect();

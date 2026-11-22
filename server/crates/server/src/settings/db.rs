@@ -242,4 +242,11 @@ mod tests {
         assert_eq!(number_of(Some("NaN"), 90.0), 90.0);
         assert_eq!(number_of(None, 90.0), 90.0);
     }
+
+    #[sqlx::test]
+    async fn try_flag_answers_a_database_failure_and_flag_reads_the_default(pool: sqlx::PgPool) {
+        pool.close().await;
+        assert!(super::try_flag(&pool, "k", true).await.is_err());
+        assert!(super::flag(&pool, "k", true).await);
+    }
 }

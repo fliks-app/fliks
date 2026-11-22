@@ -4,6 +4,7 @@ use super::Shared;
 use crate::http::AppError;
 use crate::sync::MutexExt;
 use axum::http::StatusCode;
+use fliks_domain::net::{Class, classify};
 use fliks_domain::translation::{
     Attempt, BATCH_SIZE, BatchError, Driver, Limits, MAX_OUTPUT_TOKENS, Pacer, Post,
     REGISTER_PROBE_MAX_OUTPUT_TOKENS, Reply, Request, TranslationError, build_payload,
@@ -116,9 +117,28 @@ fn trim_slashes(u: &str) -> &str {
     u.trim_end_matches('/')
 }
 
+/// A client pinned to the vetted addresses of an engine endpoint. `echo` is set for a public host
+/// only: the error body of a private one stays out of the answer.
+#[derive(Clone)]
+struct Target {
+    client: Client,
+    echo: bool,
+}
+
+/// The endpoint's host resolved once through the guard: metadata and this server's own ports are
+/// refused, a private address allowed (a LAN model server is a supported target).
+async fn target(sh: &Shared, url: &str) -> Result<Target, String> {
+    let url = Url::parse(url).map_err(|e| e.to_string())?;
+    let addrs = crate::vetted::pin(&url, true, &sh.own_ports).await?;
+    Ok(Target {
+        echo: addrs.iter().all(|a| classify(a.ip()) == Class::Public),
+        client: crate::vetted::client_from(&url, &addrs, crate::net::guard::open_builder())?,
+    })
+}
+
 /// One POST of an engine, retried by `post_with_retry`; secrets never reach an error text.
 struct HttpPost<'a> {
-    client: &'a Client,
+    target: &'a Target,
     url: String,
     headers: Vec<(&'static str, String)>,
     body: String,
@@ -128,6 +148,7 @@ struct HttpPost<'a> {
 impl HttpPost<'_> {
     fn request(&self) -> RequestBuilder {
         let mut r = self
+            .target
             .client
             .post(&self.url)
             .header("Content-Type", "application/json");
@@ -165,6 +186,7 @@ impl Post for HttpPost<'_> {
                     status,
                     retry_after,
                     body: self.redact(body),
+                    echo: self.target.echo,
                 })
             }
         }
@@ -213,12 +235,13 @@ fn merge(mut base: Value, extra: Value) -> Value {
 
 /// A model listing: one GET, no retry (rule 13).
 async fn listing(
-    client: &Client,
+    sh: &Shared,
     url: &str,
     headers: &[(&'static str, String)],
     label: &str,
 ) -> Result<Value, String> {
-    let mut r = client.get(url).timeout(LISTING_TIMEOUT);
+    let target = target(sh, url).await?;
+    let mut r = target.client.get(url).timeout(LISTING_TIMEOUT);
     for (k, v) in headers {
         r = r.header(*k, v);
     }
@@ -258,14 +281,9 @@ pub async fn list_models(sh: &Shared, engine: &str, s: &Value) -> Result<Vec<Str
                 )));
             }
             let url = format!("{}/models?pageSize=1000", sh.bases.gemini);
-            let data = listing(
-                &sh.plain,
-                &url,
-                &[("x-goog-api-key", c.api_key.clone())],
-                "Gemini",
-            )
-            .await
-            .map_err(|e| fail(&e, &c.api_key))?;
+            let data = listing(sh, &url, &[("x-goog-api-key", c.api_key.clone())], "Gemini")
+                .await
+                .map_err(|e| fail(&e, &c.api_key))?;
             let mut names: Vec<String> = data["models"]
                 .as_array()
                 .into_iter()
@@ -302,7 +320,7 @@ pub async fn list_models(sh: &Shared, engine: &str, s: &Value) -> Result<Vec<Str
                 .into_iter()
                 .collect();
             let data = listing(
-                &sh.plain,
+                sh,
                 &format!("{}/models", trim_slashes(&c.base_url)),
                 &headers,
                 "OpenAI-compatible",
@@ -330,6 +348,7 @@ struct Engine<'a> {
     kind: &'a str,
     system: String,
     url: String,
+    target: Target,
     on_progress: &'a mut (dyn FnMut(usize, usize) + Send + Sync),
 }
 
@@ -343,7 +362,7 @@ impl Engine<'_> {
             headers.push(("Authorization", format!("Bearer {label_key}")));
         }
         HttpPost {
-            client: &self.sh.plain,
+            target: &self.target,
             url: self.url.clone(),
             headers,
             body: body.to_string(),
@@ -465,6 +484,7 @@ pub async fn translate(
         format!("{}/chat/completions", trim_slashes(&cfg.base_url))
     };
     let kind = if gemini { "gemini" } else { "openai" };
+    let pinned = target(sh, &url).await.map_err(TranslationError::Other)?;
     // The register probe, then the batches with the register in the system prompt.
     let mut noop = |_: usize, _: usize| {};
     let probe = Engine {
@@ -473,6 +493,7 @@ pub async fn translate(
         kind,
         system: String::new(),
         url: url.clone(),
+        target: pinned.clone(),
         on_progress: &mut noop,
     };
     let label = probe.label();
@@ -531,6 +552,7 @@ pub async fn translate(
         kind,
         system: system.clone(),
         url,
+        target: pinned,
         on_progress,
     };
     translate_with_batching(&mut d, texts, limits, &system).await
@@ -544,6 +566,7 @@ async fn libre(
     on_progress: &mut (dyn FnMut(usize, usize) + Send + Sync),
 ) -> Result<Vec<String>, TranslationError> {
     let url = format!("{}/translate", trim_slashes(&cfg.url));
+    let pinned = target(sh, &url).await.map_err(TranslationError::Other)?;
     let source = if is_unknown_language(&req.source_language) {
         "auto"
     } else {
@@ -557,7 +580,7 @@ async fn libre(
             body["api_key"] = json!(cfg.api_key);
         }
         let mut p = HttpPost {
-            client: &sh.plain,
+            target: &pinned,
             url: url.clone(),
             headers: vec![],
             body: body.to_string(),
@@ -604,7 +627,72 @@ pub fn gateway(msg: String) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// Answers every request 403 with a body no caller may read.
+    async fn spawn_forbidden() -> std::net::SocketAddr {
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let (mut s, _) = l.accept().await.unwrap();
+                let _ = s.read(&mut [0u8; 4096]).await;
+                let body = "internal-service-secret";
+                let head = format!(
+                    "HTTP/1.1 403 Forbidden\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = s.write_all(format!("{head}{body}").as_bytes()).await;
+            }
+        });
+        addr
+    }
+
+    async fn run(sh: &Shared, engine: &str, settings: Value) -> String {
+        let texts = vec!["Hello.".to_owned()];
+        translate(
+            sh,
+            engine,
+            &texts,
+            Request::default(),
+            &settings,
+            &mut |_, _| {},
+        )
+        .await
+        .unwrap_err()
+        .to_string()
+    }
+
+    #[tokio::test]
+    async fn a_private_endpoints_error_body_never_reaches_the_caller() {
+        let addr = spawn_forbidden().await;
+        let sh = Shared::default();
+        let openai = json!({"baseUrl": format!("http://{addr}/v1"), "model": "m"});
+        assert_eq!(
+            run(&sh, "openai", openai).await,
+            "OpenAI-compatible API error 403"
+        );
+        let libre = json!({"url": format!("http://{addr}")});
+        assert_eq!(
+            run(&sh, "libretranslate", libre).await,
+            "LibreTranslate API error 403"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_endpoint_on_metadata_or_an_own_port_is_never_dialled() {
+        let addr = spawn_forbidden().await;
+        let sh = Shared::default().with_own_ports(Arc::from([addr.port()]));
+        let own = json!({"baseUrl": format!("http://{addr}/v1"), "model": "m"});
+        assert!(run(&sh, "openai", own).await.starts_with("Refused:"));
+        let metadata = json!({"url": "http://100.100.100.200"});
+        assert!(
+            run(&sh, "libretranslate", metadata)
+                .await
+                .starts_with("Refused:")
+        );
+    }
 
     #[tokio::test]
     async fn a_failed_model_listing_never_returns_the_upstream_body() {
@@ -622,8 +710,7 @@ mod tests {
                 .await
                 .unwrap();
         });
-        let client = crate::net::guard::open_builder().build().unwrap();
-        let err = listing(&client, &url, &[], "OpenAI-compatible")
+        let err = listing(&Shared::default(), &url, &[], "OpenAI-compatible")
             .await
             .unwrap_err();
         assert_eq!(err, "OpenAI-compatible model list failed (500)");

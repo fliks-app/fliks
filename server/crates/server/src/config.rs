@@ -51,6 +51,22 @@ pub struct Config {
 }
 
 impl Config {
+    /// The server's own listeners: its API, the engine's public gateway and control plane, and Postgres.
+    pub fn own_ports(&self) -> std::sync::Arc<[u16]> {
+        let engine = reqwest::Url::parse(&self.engine_url)
+            .ok()
+            .and_then(|u| u.port_or_known_default());
+        [
+            Some(self.port),
+            self.public_port,
+            engine,
+            Some(self.db.get_port()),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+
     pub fn from_env() -> Self {
         Self::from_lookup(|k| std::env::var(k).ok())
     }
@@ -187,6 +203,19 @@ mod tests {
             cfg(&[("FLIKS_PUBLIC_PORT", "4848")]).public_port,
             Some(4848)
         );
+    }
+
+    #[test]
+    fn the_engine_gateway_port_is_one_of_the_servers_own() {
+        let c = cfg(&[
+            ("PORT", "4849"),
+            ("FLIKS_PUBLIC_PORT", "4848"),
+            ("FLIKS_ENGINE_URL", "http://127.0.0.1:7400"),
+        ]);
+        let ports = c.own_ports();
+        for p in [4848, 4849, 7400, 5432] {
+            assert!(ports.contains(&p), "{p} in {ports:?}");
+        }
     }
 
     #[test]

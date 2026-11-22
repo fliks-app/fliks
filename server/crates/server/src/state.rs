@@ -92,7 +92,9 @@ impl AppState {
             system: Arc::default(),
             jobs,
             queue: Arc::default(),
-            subtitles: Arc::default(),
+            subtitles: Arc::new(
+                crate::subtitles::Shared::default().with_own_ports(cfg.own_ports()),
+            ),
             lyrics: Arc::default(),
             livetv: Arc::default(),
             plugins,
