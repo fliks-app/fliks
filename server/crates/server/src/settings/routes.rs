@@ -1,6 +1,6 @@
 use super::{
     db::{self, Setting},
-    secrets::{Incoming, Secrets, Write},
+    secrets::{Incoming, Secrets, Write, endpoint_changed, secret_of_endpoint},
 };
 use crate::{
     http::{
@@ -18,6 +18,7 @@ use axum::{
 use fliks_domain::acl::{Action, Subject};
 use serde::{Deserialize, Deserializer};
 use serde_json::{Value, json};
+use sqlx::{Postgres, Transaction};
 
 /// Keys with their own write path (`settings.md` rule 9) and that path's text.
 const PROTECTED: [(&str, &str); 7] = [
@@ -72,6 +73,26 @@ fn refuse_protected(key: &str) -> Result<(), AppError> {
     }
 }
 
+/// Clears the secret tied to `key` when `key` moves to another endpoint without a new secret
+/// beside it, so a test or send never carries the stored secret to the new host.
+async fn drop_stale_secret(
+    st: &AppState,
+    tx: &mut Transaction<'_, Postgres>,
+    key: &str,
+    new: Option<&str>,
+    secret_replaced: bool,
+) -> Result<Option<String>, AppError> {
+    let Some(secret) = secret_of_endpoint(key).filter(|_| !secret_replaced) else {
+        return Ok(None);
+    };
+    let old = db::value(&st.db, key).await.map_err(db_err)?;
+    if !endpoint_changed(old.as_deref(), new) {
+        return Ok(None);
+    }
+    db::set(tx, secret, None).await.map_err(db_err)?;
+    Ok(Some(secret.to_owned()))
+}
+
 pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>) {
     if keys.is_empty() {
         return;
@@ -93,19 +114,28 @@ pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>)
     }
 }
 
-/// The two keys that decide who can sign in: admins only (`settings.access` can be granted to a
-/// non-admin role), `password_login` and `oidc_auto_launch` against the providers that exist.
-async fn check_sso_key(
+/// Keys only an admin may write (`settings.access` can be granted to a non-admin role): who can
+/// sign in, and what code the host may run.
+const ADMIN_ONLY: [&str; 3] = [
+    "password_login",
+    "oidc_auto_launch",
+    "plugins.allow_unsigned",
+];
+
+/// `ADMIN_ONLY` keys need `manage:all`; `password_login` and `oidc_auto_launch` are also checked
+/// against the providers that exist.
+async fn check_admin_key(
     st: &AppState,
     authed: &Authed,
     key: &str,
     value: Option<&str>,
 ) -> Result<(), AppError> {
-    if key != "password_login" && key != "oidc_auto_launch" {
+    if !ADMIN_ONLY.contains(&key) {
         return Ok(());
     }
-    if !authed.user.is_admin {
-        return Err(AppError::forbidden("Forbidden resource"));
+    authed.require(Action::Manage, Subject::All)?;
+    if key == "plugins.allow_unsigned" {
+        return Ok(());
     }
     let Some(v) = value.map(str::trim).filter(|v| !v.is_empty()) else {
         return Ok(());
@@ -214,7 +244,7 @@ pub(crate) async fn put_one(
     if let Some(Some(v)) = &dto.value {
         validate(&key, v)?;
     }
-    check_sso_key(
+    check_admin_key(
         &st,
         &authed,
         &key,
@@ -231,14 +261,18 @@ pub(crate) async fn put_one(
         .map_err(db_err)?;
     let mut tx = st.db.begin().await.map_err(db_err)?;
     let stored = db::get(&st.db, &key).await.map_err(db_err)?;
+    let mut keys = vec![key.clone()];
     let mut saved = match (secrets.merge(&key, incoming), stored) {
         (Write::Keep, Some(row)) => row,
         (Write::Keep, None) => db::set(&mut tx, &key, None).await.map_err(db_err)?,
-        (Write::Set(v), _) => db::set(&mut tx, &key, v.as_deref()).await.map_err(db_err)?,
+        (Write::Set(v), _) => {
+            keys.extend(drop_stale_secret(&st, &mut tx, &key, v.as_deref(), false).await?);
+            db::set(&mut tx, &key, v.as_deref()).await.map_err(db_err)?
+        }
     };
     tx.commit().await.map_err(db_err)?;
     // Every PUT notifies, even when a secret kept its stored value (spec rule 8).
-    notify(&st, std::slice::from_ref(&key), None).await;
+    notify(&st, &keys, None).await;
     if secrets.is_secret(&key) {
         saved.value = None;
     }
@@ -262,22 +296,34 @@ pub(crate) async fn put_bulk(
             validate(key, &db::pg_text(value))?;
         }
         let text = (!value.is_null()).then(|| db::pg_text(value));
-        check_sso_key(&st, &authed, key, text.as_deref()).await?;
+        check_admin_key(&st, &authed, key, text.as_deref()).await?;
     }
     let secrets = Secrets::load(&st.db, data.keys().map(String::as_str))
         .await
         .map_err(db_err)?;
     let mut tx = st.db.begin().await.map_err(db_err)?;
     let mut keys = Vec::new();
+    let mut writes = Vec::new();
+    let mut replaced = Vec::new();
     for (key, value) in data {
         let incoming = match value {
             Value::Null => Incoming::Null,
             v => Incoming::Text(db::pg_text(&v)),
         };
         if let Write::Set(v) = secrets.merge(&key, incoming) {
-            db::set(&mut tx, &key, v.as_deref()).await.map_err(db_err)?;
+            if v.as_deref().is_some_and(|v| !v.is_empty()) {
+                replaced.push(key.clone());
+            }
+            writes.push((key.clone(), v));
         }
         keys.push(key);
+    }
+    for (key, v) in &writes {
+        let new_secret = secret_of_endpoint(key).is_some_and(|s| replaced.iter().any(|r| r == s));
+        keys.extend(drop_stale_secret(&st, &mut tx, key, v.as_deref(), new_secret).await?);
+    }
+    for (key, v) in writes {
+        db::set(&mut tx, &key, v.as_deref()).await.map_err(db_err)?;
     }
     tx.commit().await.map_err(db_err)?;
     notify(&st, &keys, None).await;

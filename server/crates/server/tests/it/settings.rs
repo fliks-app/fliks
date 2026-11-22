@@ -100,6 +100,165 @@ async fn authz_on_every_route(pool: PgPool) {
     }
 }
 
+/// A non-admin holding `settings.access` only.
+async fn limited_token(c: &Ctx) -> String {
+    let role: i32 = sqlx::query_scalar(
+        r#"INSERT INTO roles (name, permissions) VALUES ('limited', '["settings.access"]') RETURNING id"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    let id: i32 = sqlx::query_scalar(
+        r#"INSERT INTO users (username, "roleId") VALUES ('limited', $1) RETURNING id"#,
+    )
+    .bind(role)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    session::token(&c.st, id, "limited").await
+}
+
+/// `settings.access` alone reaches no key or route that decides who signs in or what code the host runs.
+#[sqlx::test(migrations = false)]
+async fn settings_access_alone_cannot_reach_the_host(pool: PgPool) {
+    let c = ctx(pool).await;
+    let l = Some(limited_token(&c).await);
+    let l = l.as_deref();
+    assert_eq!(
+        call(&c.app, "GET", "/api/settings", l, json!({})).await.0,
+        200
+    );
+    let a = Some(c.admin.as_str());
+    for key in [
+        "plugins.allow_unsigned",
+        "password_login",
+        "oidc_auto_launch",
+    ] {
+        let uri = format!("/api/settings/{key}");
+        assert_eq!(
+            call(&c.app, "PUT", &uri, l, json!({"value": "true"}))
+                .await
+                .0,
+            403,
+            "{key}"
+        );
+        let (s, _) = call(
+            &c.app,
+            "PUT",
+            "/api/settings",
+            l,
+            json!({"data": {key: "true", "plain": "x"}}),
+        )
+        .await;
+        assert_eq!(s, 403, "bulk {key}");
+    }
+    assert_eq!(
+        stored(&c.pool, "plain").await,
+        None,
+        "a refused bulk writes nothing"
+    );
+    let (s, _) = call(
+        &c.app,
+        "PUT",
+        "/api/settings/plugins.allow_unsigned",
+        a,
+        json!({"value": "true"}),
+    )
+    .await;
+    assert_eq!(s, 200);
+    for (m, uri) in [
+        ("POST", "/api/plugins/import/inspect"),
+        ("POST", "/api/plugins/import/confirm"),
+        ("POST", "/api/plugins/acme.x/enable"),
+        ("POST", "/api/plugins/acme.x/import"),
+        ("POST", "/api/plugins/sources"),
+        ("PUT", "/api/plugins/sources/1"),
+        ("DELETE", "/api/plugins/sources/1"),
+        ("POST", "/api/plugins/sources/1/refresh"),
+        ("POST", "/api/plugins/sources/1/inspect"),
+        ("PUT", "/api/engine/remote"),
+        ("POST", "/api/engine/remote/test"),
+    ] {
+        let (s, b) = call(&c.app, m, uri, l, json!({})).await;
+        assert_eq!(
+            (s, b["message"].as_str()),
+            (403, Some("Forbidden resource")),
+            "{m} {uri}"
+        );
+        assert_ne!(
+            call(&c.app, m, uri, a, json!({})).await.0,
+            403,
+            "admin {m} {uri}"
+        );
+    }
+}
+
+/// A host change drops the SMTP password unless the same write brings a new one.
+#[sqlx::test(migrations = false)]
+async fn smtp_password_does_not_follow_a_new_host(pool: PgPool) {
+    let c = ctx(pool).await;
+    let a = Some(c.admin.as_str());
+    let put = |body: Value| call(&c.app, "PUT", "/api/settings", a, json!({"data": body}));
+    assert_eq!(
+        put(json!({"smtp_host": "mail.example.com", "smtp_password": "pw"}))
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        stored(&c.pool, "smtp_password").await,
+        Some(Some("pw".into()))
+    );
+    assert_eq!(
+        put(json!({"smtp_host": "MAIL.example.com", "smtp_password": ""}))
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        stored(&c.pool, "smtp_password").await,
+        Some(Some("pw".into())),
+        "same host"
+    );
+    assert_eq!(
+        put(json!({"smtp_host": "other.example.com", "smtp_password": "pw2"}))
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        stored(&c.pool, "smtp_password").await,
+        Some(Some("pw2".into())),
+        "new host, new secret"
+    );
+    assert_eq!(
+        put(json!({"smtp_host": "third.example.com", "smtp_password": ""}))
+            .await
+            .0,
+        200
+    );
+    assert_eq!(
+        stored(&c.pool, "smtp_password").await,
+        Some(None),
+        "bulk, blank secret"
+    );
+    assert_eq!(put(json!({"smtp_password": "pw3"})).await.0, 200);
+    let (s, _) = call(
+        &c.app,
+        "PUT",
+        "/api/settings/smtp_host",
+        a,
+        json!({"value": "fourth.example.com"}),
+    )
+    .await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        stored(&c.pool, "smtp_password").await,
+        Some(None),
+        "single PUT"
+    );
+}
+
 #[sqlx::test(migrations = false)]
 async fn crud_and_redaction(pool: PgPool) {
     let c = ctx(pool).await;

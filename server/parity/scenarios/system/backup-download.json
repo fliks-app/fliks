@@ -23,7 +23,7 @@
       "expect": {
         "headers": {
           "accept-ranges": "bytes",
-          "cache-control": "public, max-age=0",
+          "cache-control": "private, no-store",
           "content-type": "application/sql"
         },
         "status": 200

@@ -9,7 +9,7 @@ mod subtitles;
 
 use crate::{
     http::{AppError, auth::Authed, validate::ValidJson},
-    outbound::{base_url, client},
+    outbound::{client, same_url},
     state::AppState,
 };
 use arr::Arr;
@@ -65,15 +65,6 @@ async fn fetch(
         .timeout(timeout)
         .send()
         .await
-}
-
-/// Both URLs compared without a trailing `/`, scheme and host case-insensitively.
-fn same_url(a: &str, b: &str) -> bool {
-    let norm = |u: &str| {
-        let base = base_url(u, true);
-        reqwest::Url::parse(&base).map_or_else(|_| base.to_lowercase(), String::from)
-    };
-    norm(a) == norm(b)
 }
 
 /// `resolveApiKey`: the key sent, else the stored one when the body URL is the stored URL.

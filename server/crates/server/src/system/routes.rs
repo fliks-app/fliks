@@ -249,7 +249,7 @@ pub async fn backup_download(
         format!("attachment; filename=\"{name}\""),
     );
     put(h, header::ETAG, format!("W/\"{:x}-{mtime:x}\"", meta.len()));
-    put(h, header::CACHE_CONTROL, "public, max-age=0".into());
+    put(h, header::CACHE_CONTROL, "private, no-store".into());
     Ok(res)
 }
 

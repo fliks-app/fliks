@@ -241,6 +241,39 @@ async fn add_server(c: &Ctx, mode: &str, events: &[&str], enabled: bool) -> i64 
     b["id"].as_i64().unwrap()
 }
 
+/// The write-only key stays with the URL it was set for.
+#[sqlx::test(migrations = false)]
+async fn the_key_does_not_follow_a_new_url(pool: PgPool) {
+    let c = ctx(pool).await;
+    let id = add_server(&c, "keep", &[], false).await;
+    let uri = format!("/api/media-servers/{id}");
+    let key_set = || async {
+        call(&c, "GET", &uri, &c.admin, None).await.1["apiKeySet"]
+            .as_bool()
+            .unwrap()
+    };
+    let put = |url: String, key: Option<&str>| {
+        let mut b = json!({"name": "n", "type": "emby", "url": url});
+        if let Some(k) = key {
+            b["apiKey"] = json!(k);
+        }
+        call(&c, "PUT", &uri, &c.admin, Some(b))
+    };
+    let same = format!("{}/keep", c.base);
+    assert_eq!(put(same.clone(), None).await.0, 200);
+    assert!(
+        key_set().await,
+        "same URL without a trailing slash keeps it"
+    );
+    assert_eq!(
+        put("http://elsewhere.example".into(), Some("new")).await.0,
+        200
+    );
+    assert!(key_set().await, "a new key goes with the new URL");
+    assert_eq!(put(same, Some("")).await.0, 200);
+    assert!(!key_set().await, "a new URL with a blank key clears it");
+}
+
 #[sqlx::test(migrations = false)]
 async fn crud_validation_and_acl(pool: PgPool) {
     let c = ctx(pool).await;

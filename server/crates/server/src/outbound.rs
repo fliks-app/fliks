@@ -51,9 +51,24 @@ pub fn base_url(raw: &str, all: bool) -> String {
     s
 }
 
+/// Both URLs compared without a trailing `/`, scheme and host case-insensitively.
+pub fn same_url(a: &str, b: &str) -> bool {
+    let norm = |u: &str| {
+        let base = base_url(u, true);
+        Url::parse(&base).map_or_else(|_| base.to_lowercase(), String::from)
+    };
+    norm(a) == norm(b)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_url_ignores_slash_and_case() {
+        assert!(same_url("HTTP://Host:80/", "http://host"));
+        assert!(!same_url("http://host", "http://other"));
+    }
 
     #[test]
     fn strips_slashes_and_keeps_userinfo() {
