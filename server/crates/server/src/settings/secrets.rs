@@ -22,6 +22,23 @@ pub enum Incoming {
     Text(String),
 }
 
+/// A secret and the endpoint key it was set for: the secret does not outlive a change of that endpoint.
+const ENDPOINT_SECRETS: [(&str, &str); 1] = [("smtp_host", "smtp_password")];
+
+/// The secret tied to `endpoint`, if any.
+pub fn secret_of_endpoint(endpoint: &str) -> Option<&'static str> {
+    ENDPOINT_SECRETS
+        .iter()
+        .find(|(e, _)| *e == endpoint)
+        .map(|(_, s)| *s)
+}
+
+/// Whether `new` is another endpoint than `old` (blank counts as none).
+pub fn endpoint_changed(old: Option<&str>, new: Option<&str>) -> bool {
+    let norm = |v: Option<&str>| v.map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty());
+    norm(old) != norm(new)
+}
+
 impl Secrets {
     /// Reads manifests only when a key is a plugin key.
     pub async fn load<'a>(
@@ -136,6 +153,21 @@ mod tests {
         assert!(!s.is_secret("plugin.p.nope") && !s.is_secret("plugin.q.token"));
         assert!(s.is_secret("subtitle_translation_gemini_api_key"));
         assert!(!s.is_secret("subtitle_translation_gemini_model"));
+    }
+
+    #[test]
+    fn endpoint_secret_pairs() {
+        assert_eq!(secret_of_endpoint("smtp_host"), Some("smtp_password"));
+        assert_eq!(secret_of_endpoint("smtp_port"), None);
+        assert!(!endpoint_changed(
+            Some("Mail.Example.com "),
+            Some("mail.example.com")
+        ));
+        assert!(endpoint_changed(
+            Some("a.example.com"),
+            Some("b.example.com")
+        ));
+        assert!(!endpoint_changed(None, Some("")));
     }
 
     #[test]

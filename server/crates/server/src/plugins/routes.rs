@@ -162,6 +162,11 @@ fn need(a: &Authed, action: Action) -> Result<(), Bail> {
     a.require(action, Subject::Settings).map_err(app)
 }
 
+/// Routes that put plugin code or its configuration in place run with host rights: `manage:all`.
+fn need_admin(a: &Authed) -> Result<(), Bail> {
+    a.require(Action::Manage, Subject::All).map_err(app)
+}
+
 #[utoipa::path(get, path = "/api/plugins", responses((status = 200)))]
 pub async fn list(State(st): State<AppState>, a: Authed) -> Res {
     need(&a, Action::Read)?;
@@ -212,7 +217,7 @@ pub async fn import_inspect(
     a: Authed,
     m: Result<Multipart, axum::extract::multipart::MultipartRejection>,
 ) -> Res {
-    need(&a, Action::Manage)?;
+    need_admin(&a)?;
     let mut file: Option<Vec<u8>> = None;
     if let Ok(mut m) = m {
         let mut parts = 0;
@@ -302,7 +307,7 @@ pub async fn import_confirm(
     headers: HeaderMap,
     body: Bytes,
 ) -> Res {
-    need(&a, Action::Manage)?;
+    need_admin(&a)?;
     let v = json_body(&headers, &body).await?;
     let (sid, sha) = confirm_dto(&v)?;
     let r = st.plugins.confirm(&sid, &sha).await.map_err(inst)?;
@@ -329,7 +334,7 @@ pub async fn import_discard(State(st): State<AppState>, a: Authed, Path(id): Pat
 
 #[utoipa::path(post, path = "/api/plugins/{pluginId}/enable", responses((status = 201)))]
 pub async fn enable(State(st): State<AppState>, a: Authed, Path(id): Path<String>) -> Res {
-    need(&a, Action::Manage)?;
+    need_admin(&a)?;
     let s = st.plugins.enable(&id).await.map_err(inst)?;
     Ok((StatusCode::CREATED, Json(s)).into_response())
 }
@@ -474,7 +479,7 @@ pub async fn import(
     headers: HeaderMap,
     body: axum::body::Body,
 ) -> Res {
-    need(&a, Action::Manage)?;
+    need_admin(&a)?;
     let body = axum::body::to_bytes(body, IMPORT_LIMIT)
         .await
         .map_err(|_| app(AppError::payload_too_large("request entity too large")))?;

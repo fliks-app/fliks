@@ -46,7 +46,7 @@
       "expect": {
         "body": {
           "apiKey": "",
-          "apiKeySet": true,
+          "apiKeySet": false,
           "enabled": false,
           "events": [],
           "id": 2,
@@ -117,7 +117,7 @@
           },
           {
             "apiKey": "",
-            "apiKeySet": true,
+            "apiKeySet": false,
             "enabled": false,
             "events": [],
             "id": 2,

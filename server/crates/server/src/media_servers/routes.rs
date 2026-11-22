@@ -10,6 +10,7 @@ use crate::{
         validate::{PathParams, ValidJson, from_value, int_param},
     },
     jobs::{Trigger, run_audited},
+    outbound::same_url,
     state::AppState,
 };
 use axum::{
@@ -264,11 +265,12 @@ pub async fn update(
     dto.reject_nulls()?;
     let cur = one(&st, id).await?;
     validate(&dto, Some(&cur))?;
-    // Absent or "" keeps the stored key, null clears it.
+    // Absent or "" keeps the stored key on the same URL; null, or a new URL without a new key, clears it.
     let api_key = match dto.api_key.as_ref() {
         Some(None) => None,
         Some(Some(k)) if !k.is_empty() => Some(k.as_str()),
-        _ => cur.api_key.as_deref(),
+        _ if same_url(&dto.url, &cur.url) => cur.api_key.as_deref(),
+        _ => None,
     };
     let events = dto.events.flatten().unwrap_or(cur.events.0);
     db::update(

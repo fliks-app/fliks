@@ -149,7 +149,7 @@ pub async fn put_remote(
     authed: Authed,
     ValidJson(body): ValidJson<Value>,
 ) -> Result<Json<Value>, AppError> {
-    authed.require(Action::Manage, Subject::Settings)?;
+    authed.require(Action::Manage, Subject::All)?;
     let dto = parse_put(&body).map_err(AppError::bad_request)?;
     let mappings = store::sanitize(dto.path_mappings);
     let keys = store::write_engine_settings(&st.db, &dto.url, dto.token, &mappings).await?;
@@ -164,7 +164,7 @@ pub async fn test_remote(
     authed: Authed,
     ValidJson(body): ValidJson<Value>,
 ) -> Result<(StatusCode, Json<super::ConnectionTest>), AppError> {
-    authed.require(Action::Manage, Subject::Settings)?;
+    authed.require(Action::Manage, Subject::All)?;
     let mut c = Check::new(&body, &["url", "token", "probePath"], "");
     let url = c.text("url", "", false);
     let token = c.text("token", "", true);

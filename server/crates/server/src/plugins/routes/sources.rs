@@ -133,7 +133,7 @@ pub async fn sources_create(
     headers: HeaderMap,
     body: Bytes,
 ) -> Res {
-    need(&a, Action::Manage)?;
+    need_admin(&a)?;
     let v = json_body(&headers, &body).await?;
     source_dto(&v, true)?;
     let url = v["url"].as_str().unwrap_or_default();
@@ -173,7 +173,7 @@ pub async fn sources_update(
     headers: HeaderMap,
     body: Bytes,
 ) -> Res {
-    need(&a, Action::Manage)?;
+    need_admin(&a)?;
     let id = int_param(&id).map_err(app)?;
     let v = json_body(&headers, &body).await?;
     source_dto(&v, false)?;
@@ -219,7 +219,7 @@ pub async fn sources_update(
 
 #[utoipa::path(delete, path = "/api/plugins/sources/{id}", responses((status = 204)))]
 pub async fn sources_delete(State(st): State<AppState>, a: Authed, Path(id): Path<String>) -> Res {
-    need(&a, Action::Manage)?;
+    need_admin(&a)?;
     let id = int_param(&id).map_err(app)?;
     source_or_404(&st, id).await?;
     sqlx::query("DELETE FROM plugin_sources WHERE id = $1")
@@ -317,7 +317,7 @@ pub async fn sources_catalog_logo(
 
 #[utoipa::path(post, path = "/api/plugins/sources/{id}/refresh", responses((status = 201)))]
 pub async fn sources_refresh(State(st): State<AppState>, a: Authed, Path(id): Path<String>) -> Res {
-    need(&a, Action::Manage)?;
+    need_admin(&a)?;
     let id = int_param(&id).map_err(app)?;
     let s = source_or_404(&st, id).await?;
     let r = st.plugins.refresh_source(&s).await.map_err(db)?;
@@ -332,7 +332,7 @@ pub async fn sources_inspect(
     headers: HeaderMap,
     body: Bytes,
 ) -> Res {
-    need(&a, Action::Manage)?;
+    need_admin(&a)?;
     let id = int_param(&id).map_err(app)?;
     let v = json_body(&headers, &body).await?;
     let mut errs: Vec<String> = vec![];
