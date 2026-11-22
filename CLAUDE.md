@@ -33,6 +33,7 @@ The `TRUNCATE` clears rows seeded by migrations (e.g. `plugin_sources`). Expect 
 ## Migrations
 
 - Keep the number of files in `server/migrations/` low: one migration per PR, grouping every schema change of that PR (tables, columns, constraints, backfills), never one file per table or per step.
+- Never reuse a migration version number: a version that shipped in a release stays taken, even if its file was consolidated or deleted.
 - A change to something your own PR introduced goes into that PR's migration, not a follow-up file. A migration already in a release is never edited; the unreleased ones of a large plan are consolidated before its verification.
 
 ## Cast dev app ID
