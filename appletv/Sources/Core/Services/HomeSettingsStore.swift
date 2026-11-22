@@ -41,9 +41,9 @@ struct ResolvedHomeSection: Identifiable {
     var id: String { key }
 }
 
-/// Per-user, per-device home personalization (zone visibility + order and
-/// the "recently added" ranking mode), persisted to UserDefaults — the
-/// tvOS counterpart of the Angular `HomeSettingsService`. No backend
+/// Per-account home personalization (zone visibility + order and the
+/// "recently added" ranking mode), persisted to UserDefaults under the account's
+/// scope — the tvOS counterpart of the Angular `HomeSettingsService`. No backend
 /// involvement, same as the web client.
 @Observable final class HomeSettingsStore {
     static let shared = HomeSettingsStore()
@@ -59,17 +59,23 @@ struct ResolvedHomeSection: Identifiable {
         recentlyAddedMode: .file
     )
 
-    var settings: HomeSettings {
+    var settings: HomeSettings = HomeSettingsStore.defaultSettings {
         didSet { persist() }
     }
 
-    private init() {
-        if let data = UserDefaults.standard.data(forKey: Self.storageKey),
-           let decoded = try? JSONDecoder().decode(HomeSettings.self, from: data) {
-            settings = decoded
-        } else {
-            settings = Self.defaultSettings
-        }
+    @ObservationIgnored private var loading = false
+
+    private init() { load() }
+
+    /// Reloads the layout of the account now signed in; one that never saved its own starts from the unscoped one.
+    func rescope() { load() }
+
+    private func load() {
+        let d = UserDefaults.standard
+        let data = d.data(forKey: AppSettingsStore.scoped(Self.storageKey)) ?? d.data(forKey: Self.storageKey)
+        loading = true
+        defer { loading = false }
+        settings = data.flatMap { try? JSONDecoder().decode(HomeSettings.self, from: $0) } ?? Self.defaultSettings
     }
 
     func setOrder(_ order: [HomeSectionPref]) {
@@ -150,8 +156,9 @@ struct ResolvedHomeSection: Identifiable {
     }
 
     private func persist() {
+        guard !loading else { return }
         if let data = try? JSONEncoder().encode(settings) {
-            UserDefaults.standard.set(data, forKey: Self.storageKey)
+            UserDefaults.standard.set(data, forKey: AppSettingsStore.scoped(Self.storageKey))
         }
     }
 }

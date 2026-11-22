@@ -77,8 +77,8 @@ struct User: Codable, Identifiable, Hashable {
     let permissions: [String]
     let avatar: String?
     let requirePasswordChange: Bool
-    let libraryOrder: [Int]
-    let hiddenLibraryIds: [Int]
+    var libraryOrder: [Int]
+    var hiddenLibraryIds: [Int]
     /// "public" | "private" — ProfileVisibility enum, kept as raw string.
     let profileVisibility: String
     let shareTastes: Bool
@@ -95,6 +95,18 @@ struct User: Codable, Identifiable, Hashable {
     let libraryIds: [Int]?
     /// Capability flags of the server build; present on live responses only.
     let features: [String]?
+}
+
+extension User {
+    /// The profile a stored session kept, standing in until the next `/auth/me` answers.
+    init(restoring profile: StoredProfile) {
+        self.init(id: profile.id, username: profile.username, email: nil, role: nil, roleId: nil,
+                  isAdmin: profile.isAdmin, permissions: profile.permissions, avatar: profile.avatar,
+                  requirePasswordChange: false, libraryOrder: profile.libraryOrder,
+                  hiddenLibraryIds: profile.hiddenLibraryIds, profileVisibility: "private",
+                  shareTastes: false, shareRecommendations: false, shareWatchHistory: false, shareLikes: false,
+                  shareStats: false, shareDisabled: false, edlAutoSkipCommercials: nil, libraryIds: nil, features: nil)
+    }
 }
 
 /// GET /auth/users-public — pre-login picker. Deliberately thin: no email,

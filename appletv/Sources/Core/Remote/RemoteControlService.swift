@@ -51,6 +51,12 @@ import UIKit
         }
     }
 
+    /// The account is gone: its target registration and acked command belong to it.
+    func reset() {
+        targetId = nil
+        lastAppliedCmdId = nil
+    }
+
     // MARK: - Registration
 
     private func register() async {

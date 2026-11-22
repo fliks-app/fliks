@@ -24,11 +24,12 @@ struct LibraryView: View {
     @State private var sortBy = "title"
     @State private var sortOrder = "ASC"
     @State private var typeFilter: MediaKind?
-    @State private var library: Library?
+    @Environment(LibraryStore.self) private var libraries
     @Environment(Backdrop.self) private var backdrop
 
     private let pageSize = 60
 
+    private var library: Library? { libraries.library(libraryId) }
     private var isMusic: Bool { library?.mediaTypes == [.album] }
 
     var body: some View {
@@ -48,7 +49,7 @@ struct LibraryView: View {
             }
         }
         .task {
-            await loadLibrary()
+            await libraries.load()
             guard !isMusic else { return }
             await load(reset: true)
         }
@@ -117,11 +118,6 @@ struct LibraryView: View {
             .buttonStyle(.bordered)
         }
         .focusSection()
-    }
-
-    private func loadLibrary() async {
-        let libs: [Library] = (try? await APIClient.shared.get("/api/libraries/mine")) ?? []
-        library = libs.first { $0.id == libraryId }
     }
 
     private func load(reset: Bool, page start: Int = 1) async {

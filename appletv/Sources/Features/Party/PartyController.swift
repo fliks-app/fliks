@@ -65,8 +65,11 @@ final class PartyController {
         player.onTimeJump = nil
         player.onItemEnded = nil
         player.partyMenus = []
-        party.onLive = nil
-        party.onRejoined = nil
+        // The music driver installed its own hooks during the handoff and keeps them.
+        if !handedToMusic {
+            party.onLive = nil
+            party.onRejoined = nil
+        }
         // Closing the player is leaving the party.
         if party.active, !handedToMusic { Task { await party.leave() } }
     }

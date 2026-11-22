@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Session state + quick-connect pairing + token lifecycle. Every request goes
 /// through the generic `APIClient` (no per-endpoint client methods) — this
@@ -37,9 +38,9 @@ import Foundation
     private var sessionEpoch = 0
 
     private var refreshTask: Task<Void, Error>?
-    private var streamToken: String?
-    private var streamTokenExpiresAt: Date = .distantPast
-    private var streamTokenTask: Task<String?, Never>?
+    /// Stream tokens, one per media file: a leaked playback URL opens that file only.
+    private var streamTokens: [Int: (token: String, expiresAt: Date)] = [:]
+    private var streamTokenTasks: [Int: Task<String?, Never>] = [:]
 
     private init() {
         api.refreshTokens = { [weak self] in try await self?.refresh() }
@@ -47,6 +48,12 @@ import Foundation
 
     /// Accounts on the active server that can be signed into without a password.
     var resumableSessions: [StoredSession] { sessions.forServer(ServerStore.shared.url) }
+
+    /// Storage scope of the signed-in account, the key `SessionStore` files its session under.
+    var scope: String? { currentUser.map { SessionStore.key(ServerStore.shared.url, $0.id) } }
+
+    /// A refusal of the credentials themselves; a proxy's 404, 408 or 429 during an upgrade is not one.
+    private static func refused(_ code: Int) -> Bool { code == 401 || code == 403 }
 
     // MARK: - Launch hydrate
 
@@ -76,10 +83,13 @@ import Foundation
             guard sessionEpoch == epoch, let active = sessions.active else { return }
             currentUser = user
             sessions.updateUser(active.serverUrl, active.user.id, user)
-        } catch APIError.badStatus(let code, _) where (400..<500).contains(code) {
+        } catch APIError.badStatus(let code, _) where Self.refused(code) {
             guard sessionEpoch == epoch else { return }
+            Log.auth.notice("stored session refused (\(code, privacy: .public)), signing out")
             dropActiveSession()
-        } catch {}
+        } catch {
+            Log.auth.error("session check failed, keeping the stored profile: \(String(describing: error), privacy: .public)")
+        }
     }
 
     func fetchMe() async throws -> User {
@@ -109,24 +119,59 @@ import Foundation
     @MainActor
     func loginWithToken(access: String, refresh: String?, refreshExpiresAt: Int? = nil) async throws {
         tokens.adopt(access: access, refresh: refresh)
-        let user = try await fetchMe()
+        let user: User
+        do {
+            user = try await fetchMeRetrying()
+        } catch {
+            tokens.clear()
+            throw error
+        }
         startSession(user: user, access: access, refresh: refresh,
                      refreshExpiresAt: Self.msFromSeconds(refreshExpiresAt))
         ServerStore.shared.touchKnownServer(ServerStore.shared.url, username: user.username)
     }
 
-    /// Per-user display preference: libraries kept out of Home and the sidebar.
-    /// `User` is immutable, so the profile is re-read rather than patched.
-    @MainActor
-    func setHiddenLibraries(_ ids: [Int]) async {
-        guard let userId = currentUser?.id else { return }
-        struct Body: Encodable { let hiddenLibraryIds: [Int] }
-        try? await api.put("/api/users/\(userId)", body: Body(hiddenLibraryIds: ids))
-        guard let user = try? await fetchMe() else { return }
-        currentUser = user
-        if let active = sessions.active {
-            sessions.updateUser(active.serverUrl, active.user.id, user)
+    /// The server hands an approved pairing's tokens out once, so a transient failure of the first
+    /// `/auth/me` must not lose them: only a refusal of the token itself ends the retries.
+    private func fetchMeRetrying(attempts: Int = 3) async throws -> User {
+        for _ in 1..<attempts {
+            do {
+                return try await fetchMe()
+            } catch APIError.badStatus(let code, let message) where (400..<500).contains(code) {
+                throw APIError.badStatus(code, message: message)
+            } catch {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            }
         }
+        return try await fetchMe()
+    }
+
+    /// Per-user display preference: libraries kept out of Home and the sidebar. The profile changes at once,
+    /// so every screen follows; the server's answer either confirms it or puts the previous list back.
+    @MainActor
+    func setHiddenLibraries(_ ids: [Int]) {
+        guard let user = currentUser else { return }
+        let previous = user.hiddenLibraryIds
+        let epoch = sessionEpoch
+        patchCurrentUser { $0.hiddenLibraryIds = ids }
+        Task { @MainActor in
+            struct Body: Encodable { let hiddenLibraryIds: [Int] }
+            do {
+                try await api.put("/api/users/\(user.id)", body: Body(hiddenLibraryIds: ids))
+            } catch {
+                Log.library.error("saving the hidden libraries failed: \(String(describing: error), privacy: .public)")
+                guard sessionEpoch == epoch, currentUser?.hiddenLibraryIds == ids else { return }
+                patchCurrentUser { $0.hiddenLibraryIds = previous }
+            }
+        }
+    }
+
+    @MainActor
+    private func patchCurrentUser(_ change: (inout User) -> Void) {
+        guard var user = currentUser else { return }
+        change(&user)
+        currentUser = user
+        if let active = sessions.active { sessions.updateUser(active.serverUrl, active.user.id, user) }
     }
 
     // MARK: - Switching account
@@ -158,11 +203,12 @@ import Foundation
             currentUser = user
             sessions.updateUser(serverUrl, userId, user)
             return .resumed
-        } catch APIError.badStatus(let code, _) where (400..<500).contains(code) {
+        } catch APIError.badStatus(let code, _) where Self.refused(code) {
             sessions.remove(serverUrl, userId)
             clearInMemorySession()
             return .expired
         } catch {
+            Log.auth.error("resuming a session failed: \(String(describing: error), privacy: .public)")
             clearInMemorySession()
             return .unreachable
         }
@@ -200,8 +246,15 @@ import Foundation
         guard let refreshToken = tokens.refreshToken else { throw APIError.badStatus(401) }
         let target = sessions.active
         let epoch = sessionEpoch
-        // Sending this token would hand one server's credential to another host.
-        if let target, target.serverUrl != ServerStore.shared.url { throw APIError.badStatus(401) }
+        // Sending this token would hand one server's credential to another host: leave the account instead.
+        if let target, target.serverUrl != ServerStore.shared.url {
+            Log.auth.error("the active session belongs to another server, signing out")
+            if sessionEpoch == epoch {
+                sessions.clearActive()
+                clearInMemorySession()
+            }
+            throw APIError.badStatus(401)
+        }
 
         struct Body: Encodable { let refreshToken: String }
         let pair: TokenPair
@@ -251,31 +304,42 @@ import Foundation
         )
     }
 
-    // MARK: - Stream token (12h TTL, refetch once < 30min remain)
+    // MARK: - Stream token (bound to one file, refetched once < 30min remain)
 
-    func ensureStreamToken() async -> String? {
+    @MainActor
+    func ensureStreamToken(mediaFileId: Int) async -> String? {
         let minRemaining: TimeInterval = 30 * 60
-        if let token = streamToken, streamTokenExpiresAt.timeIntervalSinceNow > minRemaining {
-            return token
+        if let known = streamTokens[mediaFileId], known.expiresAt.timeIntervalSinceNow > minRemaining {
+            return known.token
         }
-        if let task = streamTokenTask { return await task.value }
-        let task = Task<String?, Never> { await self.fetchStreamToken() }
-        streamTokenTask = task
-        let result = await task.value
-        streamTokenTask = nil
-        return result
+        if let task = streamTokenTasks[mediaFileId] { return await task.value }
+        let epoch = sessionEpoch
+        let task = Task<String?, Never> { @MainActor in await self.mintStreamToken(mediaFileId: mediaFileId, epoch: epoch) }
+        streamTokenTasks[mediaFileId] = task
+        return await task.value
     }
 
-    private func fetchStreamToken() async -> String? {
+    /// Forgets a file's token, for a stream URL the server refused.
+    @MainActor
+    func discardStreamToken(mediaFileId: Int) {
+        streamTokens[mediaFileId] = nil
+    }
+
+    /// A mint that finishes after the account changed belongs to the account left, and is dropped.
+    @MainActor
+    private func mintStreamToken(mediaFileId: Int, epoch: Int) async -> String? {
+        struct Body: Encodable { let mediaFileId: Int }
         struct Response: Decodable { let streamToken: String; let expiresAt: Double }
+        defer { if sessionEpoch == epoch { streamTokenTasks[mediaFileId] = nil } }
         do {
-            let res: Response = try await api.post("/api/auth/stream-token")
-            streamToken = res.streamToken
+            let res: Response = try await api.post("/api/auth/stream-token", body: Body(mediaFileId: mediaFileId))
+            guard sessionEpoch == epoch else { return nil }
             // expiresAt is a JS millisecond epoch (Date.now() + ttlMs) — everything
             // else in this file works in UNIX seconds.
-            streamTokenExpiresAt = Date(timeIntervalSince1970: res.expiresAt / 1000)
+            streamTokens[mediaFileId] = (res.streamToken, Date(timeIntervalSince1970: res.expiresAt / 1000))
             return res.streamToken
         } catch {
+            Log.auth.error("stream token for file \(mediaFileId, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             return nil
         }
     }
@@ -297,7 +361,6 @@ import Foundation
     @MainActor
     func resetForServerSwitch() {
         refreshTask = nil
-        streamTokenTask = nil
         sessions.clearActive()
         clearInMemorySession()
     }
@@ -309,8 +372,9 @@ import Foundation
         let serverUrl = ServerStore.shared.url
         tokens.adopt(access: access, refresh: refresh)
         currentUser = user
+        rescopeStores()
         if let refresh, !refresh.isEmpty {
-            sessions.save(StoredSession(serverUrl: serverUrl, user: user, accessToken: access,
+            sessions.save(StoredSession(serverUrl: serverUrl, user: StoredProfile(user), accessToken: access,
                                         refreshToken: refresh, refreshExpiresAt: refreshExpiresAt,
                                         lastUsedAt: SessionStore.nowMs()))
             sessions.setActive(serverUrl, user.id)
@@ -323,9 +387,11 @@ import Foundation
         bumpEpoch()
     }
 
+    @MainActor
     private func adopt(_ session: StoredSession) {
         tokens.adopt(access: session.accessToken, refresh: session.refreshToken)
-        currentUser = session.user
+        currentUser = User(restoring: session.user)
+        rescopeStores()
         resetStreamToken()
     }
 
@@ -337,23 +403,36 @@ import Foundation
         clearInMemorySession()
     }
 
-    /// Drop everything session-bound from memory, leaving stored sessions alone.
+    /// The one reset point of everything bound to the signed-in account, leaving stored sessions alone:
+    /// what plays, the party, the remote target and every per-account store.
     @MainActor
     private func clearInMemorySession() {
+        MusicPlayer.shared.stop()
+        PartyService.shared.resetForSignOut()
+        RemoteControlService.shared.reset()
         currentUser = nil
         tokens.clear()
         WatchedStore.shared.clear()
+        LibraryStore.shared.clear()
+        rescopeStores()
         resetStreamToken()
         state = .signedOut
         bumpEpoch()
     }
 
-    /// The stream token authenticates playback URLs as one account — it must
-    /// never outlive the session that minted it.
+    /// The preference stores follow the account that is signed in.
+    @MainActor
+    private func rescopeStores() {
+        AppSettingsStore.shared.rescope()
+        HomeSettingsStore.shared.rescope()
+    }
+
+    /// Stream tokens authenticate playback URLs as one account — they must
+    /// never outlive the session that minted them.
+    @MainActor
     private func resetStreamToken() {
-        streamToken = nil
-        streamTokenExpiresAt = .distantPast
-        streamTokenTask = nil
+        streamTokens = [:]
+        streamTokenTasks = [:]
     }
 
     private func bumpEpoch() { sessionEpoch &+= 1 }

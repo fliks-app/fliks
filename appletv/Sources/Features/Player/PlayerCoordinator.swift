@@ -109,13 +109,12 @@ import UIKit
               prerollPaused: Bool = false, launch: LaunchTracks? = nil) async throws {
         prerollOnReady = prerollPaused
         launchTracks = launch
+        launchAudioApplied = false
         self.mediaFileId = mediaFileId
         self.mediaId = mediaId
         self.episodeId = episodeId
         // Before the profile is built: the output channel count is only reported under an active session.
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .moviePlayback)
-        try? session.setActive(true)
+        AppAudioSession.acquire(.video)
         let fetchedMedia: Media? = try? await APIClient.shared.get("/api/media/\(mediaId)")
         media = fetchedMedia
         let subtitleRows: [SubtitleFileRow]? = try? await APIClient.shared.get("/api/media/\(mediaId)/subtitles")
@@ -237,8 +236,7 @@ import UIKit
         rateObservation = nil
         player?.pause()
         player = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        SoundManager.useAmbientSession()
+        AppAudioSession.release(.video)
         if RemoteControlService.shared.activeCoordinator === self { RemoteControlService.shared.activeCoordinator = nil }
     }
 
@@ -277,6 +275,8 @@ import UIKit
     private var prerollOnReady = false
     /// A remote handoff's picks: they win over the preferences for this item's first selection.
     private var launchTracks: LaunchTracks?
+    /// The handoff's audio pick applies to the first item only: a reload keeps what the viewer chose since.
+    private var launchAudioApplied = false
     private var initialSeekPending = false
     private func prerollIfOpenedPaused() {
         guard prerollOnReady, !initialSeekPending, player?.currentItem?.status == .readyToPlay else { return }
@@ -368,12 +368,18 @@ import UIKit
     private func advance(to next: (mediaFileId: Int, episodeId: Int)) async {
         let duration = player?.currentItem?.duration.seconds ?? 0
         if duration.isFinite, duration > 0 { playback.markComplete(duration: duration) }
-        _ = await openItem(mediaFileId: next.mediaFileId, mediaId: mediaId, episodeId: next.episodeId, play: true)
+        let started = await openItem(mediaFileId: next.mediaFileId, mediaId: mediaId, episodeId: next.episodeId, play: true)
+        // `player` is nil once the viewer left: that start was cancelled, not failed.
+        if !started, player != nil {
+            Log.player.error("the next episode could not start")
+            fatalError = true
+        }
     }
 
     /// Switches to another file, of another media when a party moves on; false when it cannot start.
     func openItem(mediaFileId: Int, mediaId newMediaId: Int, episodeId: Int?, play: Bool) async -> Bool {
         playback.stop()
+        launchTracks = nil
         self.mediaFileId = mediaFileId
         self.episodeId = episodeId
         autoSkippedIntro = false
@@ -465,9 +471,10 @@ import UIKit
             let group = try? await item.asset.loadMediaSelectionGroup(for: .audible)
             guard player?.currentItem === item else { return }
             audibleGroup = group
-            if let id = launchTracks?.audioId, let group, let option = matchOption(id, in: group) {
+            if !launchAudioApplied, let id = launchTracks?.audioId, let group, let option = matchOption(id, in: group) {
                 item.select(option, in: group)
                 lastAudio = currentAudioTrackIndex()
+                launchAudioApplied = true
             }
         }
         if let timeJumpObserver { NotificationCenter.default.removeObserver(timeJumpObserver) }

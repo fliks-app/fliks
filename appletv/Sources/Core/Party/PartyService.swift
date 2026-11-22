@@ -214,6 +214,14 @@ import os
         onGoHome?()
     }
 
+    /// The account is gone: leave the room locally and close the events stream, there is no session to tell the server with.
+    func resetForSignOut() {
+        reset()
+        stream.stop()
+        homeParties = []
+        preview = nil
+    }
+
     func leave() async {
         let id = party?.id
         reset()

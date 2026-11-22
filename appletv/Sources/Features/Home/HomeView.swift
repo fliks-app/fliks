@@ -24,7 +24,7 @@ struct HomeView: View {
     @Environment(HomeSettingsStore.self) private var homeSettings
     @Environment(PartyService.self) private var party
     @Environment(HomeRefresh.self) private var refresh
-    @State private var librariesState: ZoneState<Library> = .loading
+    @Environment(LibraryStore.self) private var libraries
 
     private var requestsAllowed: Bool {
         let perms = auth.currentUser?.permissions ?? []
@@ -32,7 +32,7 @@ struct HomeView: View {
     }
 
     private var sections: [ResolvedHomeSection] {
-        homeSettings.resolve(libraries: librariesState.items, requestsAllowed: requestsAllowed,
+        homeSettings.resolve(libraries: libraries.visible, requestsAllowed: requestsAllowed,
                              partiesSupported: party.partiesSupported)
     }
 
@@ -44,8 +44,8 @@ struct HomeView: View {
                 ForEach(sections.filter(\.visible)) { section in
                     HomeRow(
                         section: section,
-                        librariesState: librariesState,
-                        onRetryLibraries: { Task { await loadLibraries() } },
+                        librariesState: libraries.visibleState,
+                        onRetryLibraries: { Task { await libraries.load() } },
                         onSelectMedia: onSelectMedia,
                         onSelectEpisode: onSelectEpisode,
                         onSelectLibrary: onSelectLibrary,
@@ -57,7 +57,7 @@ struct HomeView: View {
             .padding(.horizontal, 60)
             .padding(.vertical, 48)
         }
-        .task { await loadLibraries() }
+        .task(id: refresh.tick) { await libraries.load() }
         .task { await ServerVersion.shared.refresh() }
         // Fetched here, not in the row: an empty rail renders nothing, so a task on it would never run. The
         // stream is only open inside a party, hence the timer instead of `party.updated`.
@@ -66,16 +66,6 @@ struct HomeView: View {
                 await party.refreshHomeParties()
                 try? await Task.sleep(for: .seconds(15))
             }
-        }
-    }
-
-    private func loadLibraries() async {
-        // `hiddenLibraryIds` is a display preference the clients apply
-        // themselves — the endpoint returns everything the ACL allows.
-        let hidden = Set(auth.currentUser?.hiddenLibraryIds ?? [])
-        await revalidateZone("libraries", apply: { librariesState = $0 }) {
-            let libraries: [Library] = try await APIClient.shared.get("/api/libraries/mine")
-            return libraries.filter { !hidden.contains($0.id) && $0.isPlayable }
         }
     }
 }

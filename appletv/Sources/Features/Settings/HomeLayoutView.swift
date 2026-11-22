@@ -10,10 +10,12 @@ struct HomeLayoutView: View {
     @Environment(HomeSettingsStore.self) private var homeSettings
     @Environment(AuthService.self) private var auth
     @Environment(PartyService.self) private var party
-    @State private var libraries: [Library] = []
-    @State private var hiddenLibraryIds: Set<Int> = []
+    @Environment(LibraryStore.self) private var libraryStore
     @State private var rows: [ResolvedHomeSection] = []
     @State private var confirmReset = false
+
+    private var libraries: [Library] { libraryStore.all }
+    private var hiddenLibraryIds: Set<Int> { Set(auth.currentUser?.hiddenLibraryIds ?? []) }
 
     private var requestsAllowed: Bool {
         let perms = auth.currentUser?.permissions ?? []
@@ -77,11 +79,10 @@ struct HomeLayoutView: View {
             Text(tr("home_settings.reset_confirm"))
         }
         .task {
-            hiddenLibraryIds = Set(auth.currentUser?.hiddenLibraryIds ?? [])
-            let all: [Library] = (try? await APIClient.shared.get("/api/libraries/mine")) ?? []
-            libraries = all.filter(\.isPlayable)
+            await libraryStore.load()
             rebuild()
         }
+        .onChange(of: auth.currentUser?.hiddenLibraryIds) { _, _ in rebuild() }
     }
 
     @ViewBuilder
@@ -124,9 +125,9 @@ struct HomeLayoutView: View {
     }
 
     private func setLibraryVisible(_ id: Int, _ visible: Bool) {
-        if visible { hiddenLibraryIds.remove(id) } else { hiddenLibraryIds.insert(id) }
-        rebuild()
-        Task { await auth.setHiddenLibraries(Array(hiddenLibraryIds)) }
+        var hidden = hiddenLibraryIds
+        if visible { hidden.remove(id) } else { hidden.insert(id) }
+        auth.setHiddenLibraries(hidden.sorted())
     }
 
     private func persist() {
