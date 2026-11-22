@@ -3,6 +3,7 @@ use super::rejection::*;
 use super::sizes::*;
 use super::sort::{Sortable, sort_releases_by_relevance};
 use crate::language::AppLanguage;
+use crate::release::parsing::attributes::parse_revision;
 use crate::release::parsing::language::{parse_release_language, resolve_unknown_languages};
 use crate::release::parsing::quality::parse_release_quality;
 use crate::release::parsing::season_episode::{
@@ -64,6 +65,9 @@ impl Sortable for ScoredRelease {
     }
     fn custom_format_score(&self) -> i64 {
         self.custom_format_score
+    }
+    fn revision(&self) -> u32 {
+        parse_revision(&self.candidate.title)
     }
     fn seeders(&self) -> i64 {
         self.candidate.seeders

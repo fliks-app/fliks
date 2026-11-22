@@ -15,6 +15,10 @@ pub trait Sortable {
     fn size_deviation(&self) -> Option<f64>;
     fn is_full_season(&self) -> bool;
     fn seasons(&self) -> Option<Span>;
+    /// A PROPER or REPACK is 2; it wins a tie on rank and score.
+    fn revision(&self) -> u32 {
+        1
+    }
     /// Only text releases set it; a retail one wins a tie on rank and score.
     fn retail(&self) -> bool {
         false
@@ -76,6 +80,9 @@ fn compare<T: Sortable>(a: &T, b: &T, prefer_full_season: bool) -> f64 {
     }
     if a.custom_format_score() != b.custom_format_score() {
         return (b.custom_format_score() - a.custom_format_score()) as f64;
+    }
+    if a.revision() != b.revision() {
+        return f64::from(b.revision()) - f64::from(a.revision());
     }
     let step = flag_first(a.retail(), b.retail());
     if step != 0.0 {

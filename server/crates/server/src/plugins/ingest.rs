@@ -246,8 +246,8 @@ pub async fn run(
     if !out.retry.is_empty() {
         return Err(host_err("ERR_RETRY_LATER", out.retry.join("; ")));
     }
-    if out.imported.is_empty() && !out.errors.is_empty() {
-        return Err(host_err("ERR", out.errors.join("; ")));
+    if let Some(e) = refusals(&out) {
+        return Err(e);
     }
     drop(guard);
     if r.transfer == t::TransferMode::Move {
@@ -300,6 +300,20 @@ pub async fn run(
         already_present: out.already_present.clone(),
         unit: single.and_then(|i| units::unit_ref(i.season_number, i.episode_number)),
     })
+}
+
+/// A file the ingest turned away fails the call: `ERR_REFUSED` for a verdict on the release, else `ERR`.
+fn refusals(out: &library::Outcome) -> Option<HostError> {
+    if out.refused.is_empty() && out.errors.is_empty() {
+        return None;
+    }
+    let why = [out.refused.as_slice(), out.errors.as_slice()].concat();
+    let code = if out.refused.is_empty() {
+        "ERR"
+    } else {
+        "ERR_REFUSED"
+    };
+    Some(host_err(code, why.join("; ")))
 }
 
 /// The `/data` files whose staged copy the ingest took or already held; a rejected one stays.
@@ -997,10 +1011,25 @@ mod tests {
             imported: vec![imported("a")],
             already_present: vec![p("b").to_string_lossy().into_owned()],
             errors: vec!["c.epub: not a book file".into()],
+            refused: vec![],
             retry: vec![],
             skipped: vec![],
         };
         assert_eq!(ingested(&sources, &out), ["a.epub", "b.epub"]);
+    }
+
+    #[test]
+    fn a_refusal_fails_the_call_even_when_other_files_landed() {
+        let mut out = library::Outcome::default();
+        assert!(refusals(&out).is_none());
+        out.errors.push("a: no free name".into());
+        assert_eq!(refusals(&out).unwrap().code, "ERR");
+        out.refused.push("b: truncated file".into());
+        let e = refusals(&out).unwrap();
+        assert_eq!(
+            (e.code.as_str(), e.message.as_str()),
+            ("ERR_REFUSED", "b: truncated file; a: no free name")
+        );
     }
 
     #[test]

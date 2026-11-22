@@ -63,6 +63,8 @@ pub struct Outcome {
     pub imported: Vec<Imported>,
     pub already_present: Vec<String>,
     pub errors: Vec<String>,
+    /// Files whose release is at fault (truncated, not a regular file, no episode to map): a verdict, not core state.
+    pub refused: Vec<String>,
     /// Files refused for now (a series' scene mapping not known yet): the caller retries them.
     pub retry: Vec<String>,
     /// Album files left out because they are tracks nobody asked for (`music.unrequested_tracks`).
@@ -210,6 +212,7 @@ pub async fn ingest(
                     .already_present
                     .push(f.path.to_string_lossy().into_owned()),
                 Placed::Error(e) => out.errors.push(e),
+                Placed::Refused(e) => out.refused.push(e),
                 Placed::Retry(e) => out.retry.push(e),
                 Placed::Imported(_) => {}
             }
@@ -222,6 +225,7 @@ pub async fn ingest(
                 .already_present
                 .push(f.path.to_string_lossy().into_owned()),
             Placed::Error(e) => out.errors.push(e),
+            Placed::Refused(e) => out.refused.push(e),
             Placed::Retry(e) => out.retry.push(e),
         }
     }
@@ -361,6 +365,7 @@ enum Placed {
     Book(books::Placed),
     Present,
     Error(String),
+    Refused(String),
     Retry(String),
 }
 
@@ -465,13 +470,13 @@ impl Ctx<'_> {
     ) -> Result<Placed, String> {
         let name = file_name(&f.path);
         let Ok((src, _)) = fsx::regular_source(&f.path) else {
-            return Ok(Placed::Error(format!(
+            return Ok(Placed::Refused(format!(
                 "{name}: source is not a regular file"
             )));
         };
         if !books::owns(self.media.media_type, &name) {
             let why = super::not_owned_message(self.media.media_type);
-            return Ok(Placed::Error(format!("{name}: {why}")));
+            return Ok(Placed::Refused(format!("{name}: {why}")));
         }
         let m = self.media;
         let ext = transfer::split_ext(&name).1.to_owned();
@@ -609,7 +614,7 @@ impl Ctx<'_> {
     async fn one(&self, f: &File) -> Result<Placed, String> {
         let name = file_name(&f.path);
         let Ok((src, _)) = fsx::regular_source(&f.path) else {
-            return Ok(Placed::Error(format!(
+            return Ok(Placed::Refused(format!(
                 "{name}: source is not a regular file"
             )));
         };
@@ -617,7 +622,7 @@ impl Ctx<'_> {
             match self.episode(f).await {
                 Ok(ep) => ep,
                 Err(Refusal::Retry(why)) => return Ok(Placed::Retry(format!("{name}: {why}"))),
-                Err(Refusal::Refused(why)) => return Ok(Placed::Error(format!("{name}: {why}"))),
+                Err(Refusal::Refused(why)) => return Ok(Placed::Refused(format!("{name}: {why}"))),
                 Err(Refusal::Failed(e)) => return Err(e),
             }
         } else {
@@ -649,11 +654,14 @@ impl Ctx<'_> {
         let src_size = tokio::fs::metadata(&src).await.map_or(0, |m| m.len());
         let mut unchanged_scan = None;
         if !at_dest {
+            // A same-size file is a finished import only when a row of this media tracks it.
+            let at = dir.join(&file);
             let same_size = self.req.replace_existing
                 && !self.req.force
-                && tokio::fs::metadata(dir.join(&file))
+                && tokio::fs::metadata(&at)
                     .await
-                    .is_ok_and(|m| m.len() == src_size);
+                    .is_ok_and(|m| m.len() == src_size)
+                && self.owner(&at).await? == Some(self.media.id);
             let overwrite = self.req.force || (self.req.replace_existing && !same_size);
             if !overwrite && self.collides(&dir, &file).await? {
                 if !self.req.uniquify_on_collision {
@@ -683,7 +691,7 @@ impl Ctx<'_> {
                     "Refusing \"{}\": data ends at {end:.0}s of {declared:.0}s",
                     src.display()
                 );
-                return Ok(Placed::Error(format!(
+                return Ok(Placed::Refused(format!(
                     "{name}: truncated file, its data ends at {} of the {} its container declares",
                     clock(end),
                     clock(declared)

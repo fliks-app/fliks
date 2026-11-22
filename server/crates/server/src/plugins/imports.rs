@@ -171,6 +171,15 @@ macro_rules! call {
     }};
 }
 
+/// Runs `work` as a task of its own: the caller's deadline only stops waiting, never the placement.
+async fn detached<T: Send + 'static>(
+    work: impl Future<Output = Result<T, HostError>> + Send + 'static,
+) -> Result<T, HostError> {
+    tokio::spawn(work)
+        .await
+        .map_err(|e| host_err("ERR", e.to_string()))?
+}
+
 const HOST_CALL: std::time::Duration = std::time::Duration::from_secs(8);
 const CREATE_CALL: std::time::Duration = std::time::Duration::from_secs(60);
 const INGEST_CALL: std::time::Duration = std::time::Duration::from_secs(1800);
@@ -404,10 +413,10 @@ impl host::Host for Ctx {
             "library.ingest",
             ["ingest:write"],
             INGEST_CALL,
-            async {
+            detached(async move {
                 let app = app?;
                 super::ingest::run(&app, &id, &runtime, r).await
-            }
+            })
         )
     }
     async fn events_publish(&mut self, events: Vec<t::AcquisitionEvent>) -> Result<(), HostError> {
@@ -806,6 +815,8 @@ impl log::Host for Ctx {
 mod tests {
     use super::*;
     use fliks_domain::media::kind::MediaKind;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
 
     #[sqlx::test(migrations = false)]
     async fn resolve_names_groups_and_items_with_their_units(db: PgPool) {
@@ -890,5 +901,24 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
         let big = "x".repeat(64 * 1024 + 1);
         assert_eq!(code("a", Some(&big)).as_deref(), Some("ERR_VALIDATION"));
         assert_eq!(code("a", Some(&big[1..])), None);
+    }
+
+    #[tokio::test]
+    async fn a_deadline_stops_the_wait_not_the_work() {
+        let done = Arc::new(AtomicBool::new(false));
+        let flag = done.clone();
+        let work = detached(async move {
+            tokio::time::sleep(Duration::from_millis(80)).await;
+            flag.store(true, Ordering::SeqCst);
+            Ok(())
+        });
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), work)
+                .await
+                .is_err()
+        );
+        assert!(!done.load(Ordering::SeqCst));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(done.load(Ordering::SeqCst));
     }
 }
