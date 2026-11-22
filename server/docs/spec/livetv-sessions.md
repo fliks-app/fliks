@@ -22,7 +22,7 @@ Status codes: a 409 or 503 refusal with an object body sends that object verbati
 
 ### State
 
-1. Process-wide state in Rust, one `std::sync::Mutex` (never held across an `.await`): `viewers: sid -> Viewer{channelId, channelName, userId: Option<i32>, device: Option<String>, startedAt: ms, capacityToken}`, `holds: capacityToken -> Hold{sourceId, channelId, streams: Vec<Stream+Source>, fed: Option<u32>, pending: bool, openedAt: ms, mode: Option<LiveMode>}`, `recentReleases: sourceId -> Vec<Instant>`, `segmentSeconds: i32` (2 until the first config read). All except `recentReleases` are rebuilt from `GET /v1/live` after a restart (rule 24).
+1. Process-wide state in Rust, one `std::sync::Mutex` (never held across an `.await`): `viewers: sid -> Viewer{channelId, channelName, userId: Option<i32>, device: Option<String>, startedAt: ms, capacityToken}`, `holds: capacityToken -> Hold{sourceId, channelId, streams: Vec<Stream+Source>, fed: Option<u32>, pending: bool, openedAt: ms (set at the hold's creation and again when the open completes), mode: Option<LiveMode>}`, `recentReleases: sourceId -> Vec<Instant>`, `segmentSeconds: i32` (2 until the first config read). All except `recentReleases` are rebuilt from `GET /v1/live` after a restart (rule 24).
 2. `recentReleases` uses a monotonic clock; entries older than the grace are pruned on insert as well as on read.
 3. A hold is a session's reservation of one provider connection, keyed by the `capacityToken` (a UUID v4 minted per open). Viewers of a shared upstream share one token (the joined session's).
 

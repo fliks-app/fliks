@@ -248,7 +248,12 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
       if (seq !== this.loadSeq) return;
       if (!reset) this.page = requestedPage;
       const newRows: GuideRow[] = (res.channels ?? []).map((channel) =>
-        this.buildRow(channel, res.programs?.[channel.id] ?? []),
+        this.buildRow(
+          channel,
+          res.channelPrograms?.[channel.id] ??
+            (channel.guideChannelId ? res.programs?.[channel.guideChannelId] : undefined) ??
+            [],
+        ),
       );
       this.rows.update((r) => (reset ? newRows : [...r, ...newRows]));
       this.total.set(res.total ?? 0);

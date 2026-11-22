@@ -155,6 +155,12 @@ export class LiveTvComponent implements OnInit, OnDestroy {
       // the list stays as it was; the next tick tries again
     } finally {
       this.refreshing = false;
+      // A sentinel still in view fires no event of its own: observe it again for the current state.
+      const el = this.sentinel()?.nativeElement;
+      if (el && this.observer) {
+        this.observer.unobserve(el);
+        this.observer.observe(el);
+      }
     }
   }
 

@@ -212,9 +212,8 @@ impl Plan {
     }
 }
 
-/// The upsert of rule 38: match on `externalId`, else fold onto the first same-named channel
-/// without a stream of this source, else create (or re-key the one same-named stream the pass left unseen);
-/// then drop streams unseen for `stale_days`.
+/// The upsert of rule 38: match on `externalId`, else fold onto a same-named channel, else create or re-key
+/// the one same-named stream the pass left unseen; then drop streams unseen for `stale_days`.
 pub fn plan_upsert(
     entries: &[Entry],
     existing: &[StreamRow],

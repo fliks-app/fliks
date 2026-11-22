@@ -184,7 +184,10 @@ describe('LiveTvGuideComponent — now/next follows the clock', () => {
     TestBed.inject(HttpTestingController).verify();
   });
 
-  it('drops a finished program from "now" once the clock ticks past it, without a new fetch', async () => {
+  it.each([
+    ['channelPrograms', '1'],
+    ['programs', 'ch1'],
+  ] as const)('drops a finished program from "now" once the clock ticks past it (%s)', async (field, key) => {
     vi.useFakeTimers();
     const now = new Date(2026, 8, 22, 10, 0, 0, 0); // local minute 0, so roundToHalfHour is a no-op
     vi.setSystemTime(now);
@@ -210,7 +213,7 @@ describe('LiveTvGuideComponent — now/next follows the clock', () => {
       .expectOne((r) => r.url === '/api/livetv/guide' && r.params.get('page') === '1')
       .flush({
         channels: [channel],
-        programs: { 1: [current, upcoming] },
+        [field]: { [key]: [current, upcoming] },
         page: 1,
         pageSize: 50,
         total: 1,
