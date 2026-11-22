@@ -104,7 +104,7 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
-    proprietaryImplementation 'com.google.android.gms:play-services-cast-framework:22.0.0'
+    proprietaryImplementation 'com.google.android.gms:play-services-cast-framework:23.0.0'
     proprietaryImplementation 'androidx.mediarouter:mediarouter:1.7.0'
     // FCM only: no analytics library, auto-init is off in the manifest.
     proprietaryImplementation 'com.google.firebase:firebase-messaging:24.1.2'
