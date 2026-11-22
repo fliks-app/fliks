@@ -2,6 +2,7 @@
      [class.lg:drawer-open]="navbar.sidebarDocked()"
      [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()"
      [style.--chrome-top]="chromeTop()"
+     [style.--dock-h]="dockHeight()"
      [style.--chrome-bottom]="chromeBottom()"
      [style.--chrome-bottom-total]="chromeBottomTotal()">
   <input #sidebarToggle id="sidebar" type="checkbox" class="drawer-toggle" tabindex="-1" aria-hidden="true" />
@@ -246,7 +247,7 @@
             <span class="dock-label truncate max-w-full">{{ 'nav.section_library' | translate }}</span>
           </a>
         } @else {
-          <button type="button" (click)="librarySheetOpen.set(true)" [class.dock-active]="isLibraryRoute() || librarySheetOpen()">
+          <button type="button" (click)="librarySheetOpen.set(!librarySheetOpen())" [class.dock-active]="isLibraryRoute() || librarySheetOpen()">
             <app-nav-icon name="library" class="h-5 w-5" />
             <span class="dock-label truncate max-w-full">{{ 'nav.section_library' | translate }}</span>
           </button>
@@ -279,7 +280,7 @@
          [attr.aria-label]="'search.title' | translate">
         <svg lucideSearch class="h-5 w-5"></svg>
       </a>
-        <app-bottom-sheet [open]="librarySheetOpen()" [heading]="'home.libraries' | translate" (closed)="librarySheetOpen.set(false)">
+        <app-bottom-sheet [aboveDock]="true" [open]="librarySheetOpen()" [heading]="'home.libraries' | translate" (closed)="librarySheetOpen.set(false)">
           <ul class="menu w-full p-2 gap-0.5">
             @for (lib of displayLibraries(); track lib.id) {
               <li>
@@ -316,7 +317,7 @@
           <div class="fixed inset-0 z-40" (click)="bottomMenuOpen.set(false)"></div>
           <div animate.leave="popover-pop-leaving"
                class="popover-pop-in fixed bottom-20 right-2 mb-2 bg-base-100/70 backdrop-blur-sm rounded-box shadow-xl border border-base-200 min-w-48 z-50"
-               style="bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 0.5rem); transform-origin: bottom right">
+               style="bottom: calc(var(--dock-h) + 0.5rem); transform-origin: bottom right">
             <ul class="menu w-full p-2 gap-0.5">
               @for (item of sheetMainItems(); track item.id) {
                 <li>

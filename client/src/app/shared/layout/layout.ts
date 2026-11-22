@@ -227,10 +227,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
   /** Published as a CSS var so content still scrolls under the fixed navbar. */
   readonly chromeTop = computed(() => `calc(${this.navbarSpacerHeight()} + ${this.contentGapTop()})`);
   /** The native phone dock is daisyUI's 4rem plus the bottom safe area it pads itself with. */
-  readonly chromeBottom = computed(() => {
-    const dock = this.navbar.phoneDock() ? '4rem + env(safe-area-inset-bottom, 0px)' : '0px';
-    return `calc(${dock} + 1rem)`;
-  });
+  readonly dockHeight = computed(() => (this.navbar.phoneDock() ? 'calc(4rem + env(safe-area-inset-bottom, 0px))' : '0px'));
+  readonly chromeBottom = computed(() => `calc(${this.dockHeight()} + 1rem)`);
   /** `chromeBottom` plus the cast and audio mini-bars (3.5rem, borders, 0.5rem gap each) while they show: what content and sticky bars clear. */
   readonly chromeBottomTotal = computed(() => {
     // The bar of another device's session and the audio mini-player share one slot.

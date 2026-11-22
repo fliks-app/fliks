@@ -3,6 +3,7 @@ import {
   input,
   output,
   signal,
+  computed,
   ElementRef,
   viewChild,
   effect,
@@ -36,6 +37,15 @@ export class BottomSheetComponent {
   readonly rightAligned = input(false);
   /** Covers the whole viewport instead of the usual bottom card: a full page that slides up and is dismissed by dragging it down. */
   readonly fullHeight = input(false);
+  /** Leaves the phone dock uncovered: the scrim and the sheet stack under it and the sheet rests on top of it. */
+  readonly aboveDock = input(false);
+  protected readonly layers = computed(() =>
+    this.aboveDock()
+      ? { backdrop: 'z-[38]', sheet: 'z-[39]' }
+      : this.fullHeight()
+        ? { backdrop: 'z-[94]', sheet: 'z-[95]' }
+        : { backdrop: 'z-[100]', sheet: 'z-[101]' },
+  );
   readonly closed = output<void>();
 
   readonly sheet = viewChild<ElementRef<HTMLElement>>('sheet');

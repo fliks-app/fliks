@@ -2,7 +2,7 @@
   <!-- Backdrop: CSS @starting-style fades it in. Preventing the pointerdown default keeps the tap from blurring the opener (its ring flickered). -->
   <div
     [class]="
-      'bottom-sheet-backdrop fixed inset-0 transition-opacity duration-150 ' + (fullHeight() ? 'z-[94] ' : 'z-[100] ') +
+      'bottom-sheet-backdrop fixed inset-0 transition-opacity duration-150 ' + layers().backdrop + ' ' +
       (showBackdrop() ? 'bg-black/60' : '')
     "
     [class.opacity-0]="dismissing()"
@@ -15,7 +15,7 @@
     data-tv-modal
     [class]="
       'fixed bottom-0 shadow-2xl overflow-y-auto overscroll-contain ' +
-      (fullHeight() ? 'z-[95] ' : 'z-[101] ') +
+      layers().sheet + ' ' +
       (fullHeight()
         ? 'inset-x-0 top-0 flex flex-col bg-base-100 text-base-content'
         : 'bg-neutral/95 rounded-t-2xl max-h-[70vh] portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
@@ -24,7 +24,8 @@
     [class.animate-slide-up]="!dismissing()"
     [style.transform]="sheetTransform()"
     [style.transition]="dragging() ? 'none' : 'transform 0.18s ease-out'"
-    [style.padding-bottom]="'env(safe-area-inset-bottom)'"
+    [style.bottom]="aboveDock() ? 'var(--dock-h, 0px)' : null"
+    [style.padding-bottom]="aboveDock() ? null : 'env(safe-area-inset-bottom)'"
     (touchstart)="onTouchStart($event)"
     (touchmove)="onTouchMove($event)"
     (touchend)="onTouchEnd()"
