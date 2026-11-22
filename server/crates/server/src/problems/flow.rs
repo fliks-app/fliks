@@ -134,7 +134,7 @@ pub fn announce(st: &AppState, row: &Row, event: Event) {
         notifications::dispatch(
             &st.db,
             admin,
-            json!({
+            notifications::payload!({
                 "title": row.title, "mediaType": row.media_type, "kind": row.kind,
                 "seasonNumber": row.season_number, "episodeNumber": row.episode_number,
             }),
