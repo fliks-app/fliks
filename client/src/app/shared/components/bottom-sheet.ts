@@ -49,7 +49,7 @@ export class BottomSheetComponent {
       ? { backdrop: 'z-[38]', sheet: 'z-[39]', bg: DOCK_BG, handleBg: 'bg-transparent' }
       : this.fullHeight()
         ? { backdrop: 'z-[94]', sheet: 'z-[95]', bg: 'bg-base-100', handleBg: 'bg-base-100' }
-        : { backdrop: 'z-[100]', sheet: 'z-[101]', bg: 'bg-neutral/95', handleBg: 'bg-neutral' },
+        : { backdrop: 'z-[100]', sheet: 'z-[101]', bg: 'bg-neutral', handleBg: 'bg-neutral' },
   );
   readonly closed = output<void>();
 
