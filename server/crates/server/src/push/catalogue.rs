@@ -298,8 +298,10 @@ impl Episodes {
 
 /// The in-process subscriber of `media.files.imported` (`push.md` rule 35). Lossy by contract: a lagged
 /// feed loses the import it missed, and no marker says which notification that was.
-async fn listen(st: AppState) {
-    let on_event = |ev: &Arc<DomainEvent>| {
+/// Subscribes when called, so no event between the call and the first poll is lost.
+fn listen(st: AppState) -> impl Future<Output = ()> {
+    let rx = st.hub.subscribe_domain();
+    let on_event = move |ev: &Arc<DomainEvent>| {
         if let DomainEvent::MediaFilesImported {
             media_id,
             family: Family::Video,
@@ -319,13 +321,7 @@ async fn listen(st: AppState) {
             });
         }
     };
-    crate::events::listen(
-        "new-episode listener",
-        st.hub.subscribe_domain(),
-        on_event,
-        || {},
-    )
-    .await;
+    crate::events::listen("new-episode listener", rx, on_event, || {})
 }
 
 /// Users who watch the series (a row not hidden from continue watching), still read its library and
