@@ -1,3 +1,4 @@
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { InputFieldComponent } from '../../../shared/components/forms/input-field/input-field';
@@ -11,7 +12,7 @@ const DEFAULT_MAX_MB = '50';
 /** The SMTP account books are mailed from; the password is write-only. */
 @Component({
   selector: 'app-email-settings',
-  imports: [TranslatePipe, InputFieldComponent, SelectFieldComponent],
+  imports: [LoadFailedComponent, TranslatePipe, InputFieldComponent, SelectFieldComponent],
   templateUrl: './email.html',
 })
 export class EmailSettingsComponent implements OnInit {
@@ -21,6 +22,7 @@ export class EmailSettingsComponent implements OnInit {
   private readonly translate = inject(TranslateService);
 
   readonly loading = signal(true);
+  readonly loadFailed = signal(false);
   readonly busy = signal(false);
   readonly host = signal('');
   readonly port = signal('');
@@ -33,9 +35,15 @@ export class EmailSettingsComponent implements OnInit {
   readonly testTo = signal('');
   readonly testResult = signal<{ ok: boolean; message: string } | null>(null);
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit(): void {
+    void this.load();
+  }
+
+  async load(): Promise<void> {
+    this.loading.set(true);
+    this.loadFailed.set(false);
     try {
-      const all = await this.settings.getAll();
+      const all = await this.settings.getAll(true);
       this.host.set(all['smtp_host'] ?? '');
       this.port.set(all['smtp_port'] ?? '');
       this.security.set(all['smtp_security'] || 'starttls');
@@ -44,7 +52,7 @@ export class EmailSettingsComponent implements OnInit {
       this.maxMb.set(all['smtp_max_attachment_mb'] || DEFAULT_MAX_MB);
       this.passwordStored.set(settingsSecretsSet(all).includes('smtp_password'));
     } catch {
-      this.toast.error(this.translate.instant('settings.email.load_error'));
+      this.loadFailed.set(true);
     } finally {
       this.loading.set(false);
     }

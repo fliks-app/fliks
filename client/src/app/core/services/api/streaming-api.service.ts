@@ -12,6 +12,7 @@ import {
   DeviceProfile,
 } from '../browser-device-profile.service';
 import { SseService } from '../sse.service';
+import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import type { MediaType } from '../../enums/media-type.enum';
 import type { EdlRange } from '../../utils/edl-policy';
 import type { PreRollItem } from '@fliks/plugin-ui';
@@ -272,6 +273,7 @@ export class StreamingApiService {
   private readonly castService = inject(CastService);
   private readonly deviceProfileService = inject(BrowserDeviceProfileService);
   private readonly sse = inject(SseService);
+  private readonly serverVersion = inject(ServerVersionService);
 
   private sseConnectionHeaders(): Record<string, string> | undefined {
     const id = this.sse.connectionId();
@@ -561,8 +563,11 @@ export class StreamingApiService {
 
   /** `.edl` ranges on the container timeline (original-file downloads). */
   async getKeyframes(mediaFileId: number): Promise<number[]> {
+    if (!(await this.serverVersion.supportsWhenKnown(SERVER_SINCE.keyframes))) return [];
     const res = await firstValueFrom(
-      this.http.get<{ keyframes: number[] }>(`/api/stream/${mediaFileId}/keyframes`),
+      this.http.get<{ keyframes: number[] }>(`/api/stream/${mediaFileId}/keyframes`, {
+        context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+      }),
     );
     return res.keyframes ?? [];
   }

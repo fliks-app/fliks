@@ -1618,6 +1618,8 @@
     "empty": "Nothing to display"
   },
   "calendar": {
+    "prev_month": "Previous month",
+    "next_month": "Next month",
     "title": "Calendar",
     "load_error": "Unable to load the calendar.",
     "empty": "No releases this month.",
@@ -2351,6 +2353,7 @@
       "test_probe_failed": "Probe failed: {{error}}"
     },
     "streaming": {
+      "load_error": "Unable to load the settings.",
       "title": "Streaming",
       "description": "Configuration of the HLS segment format and size. Affects startup speed and quality switching.",
       "auto_quality_mode": "\"Auto\" quality behavior",

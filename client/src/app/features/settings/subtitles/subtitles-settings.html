@@ -3,6 +3,8 @@
     <div class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg"></span>
     </div>
+  } @else if (loadFailed()) {
+    <app-load-failed [message]="'settings.subtitles.load_error' | translate" (retry)="load()" />
   } @else {
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body gap-5">

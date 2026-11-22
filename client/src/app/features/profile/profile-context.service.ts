@@ -17,12 +17,13 @@ export class ProfileContextService {
     this.userId.set(id);
     this.loading.set(true);
     try {
-      this.profile.set(await this.api.getProfile(id, { force: true }));
+      const profile = await this.api.getProfile(id, { force: true });
+      if (this.userId() === id) this.profile.set(profile);
     } catch {
       // Global interceptor surfaces the error (404 for a hidden profile).
-      this.profile.set(null);
+      if (this.userId() === id) this.profile.set(null);
     } finally {
-      this.loading.set(false);
+      if (this.userId() === id) this.loading.set(false);
     }
   }
 

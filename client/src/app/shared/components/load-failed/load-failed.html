@@ -1,0 +1,4 @@
+<div role="alert" class="alert alert-error text-sm flex-wrap">
+  <span class="flex-1">{{ message() }}</span>
+  <button type="button" class="btn btn-sm" (click)="retry.emit()">{{ 'common.retry' | translate }}</button>
+</div>

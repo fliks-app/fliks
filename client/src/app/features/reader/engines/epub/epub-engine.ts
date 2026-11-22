@@ -151,13 +151,17 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
       this.pages.setOrder(publication.readingOrder.items.map((l) => l.href));
       void this.notes.load();
       this.watchSize(container);
+      const start =
+        parseLocator(saved?.locator) ??
+        (typeof saved?.progression === 'number' ? this.positionAt(saved.progression) : undefined);
+      this.start = start ?? positions[0];
       const nav = new EpubNavigator(
         container,
         publication,
         // The toolkit fills in the listeners left out.
         this.listeners() as EpubNavigatorListeners,
         positions,
-        parseLocator(saved?.locator),
+        start,
         {
           preferences: toReaderPreferences(this.session.settings(), this.session.colors(), this.session.compact()),
           defaults: {},
@@ -237,6 +241,8 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
     this.landing.set(null);
     this.book.locator.set(locator);
     this.selectionBar().dismiss();
+    if (!this.moved && this.atStart(locator)) return;
+    this.moved = true;
     this.progress.report(this.target(), { progression: total, locator: locator.serialize() as Record<string, unknown> });
   }
 
@@ -276,6 +282,15 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
       default:
         return false;
     }
+  }
+
+  /** The position restored on open; nothing is reported until the reader leaves it. */
+  private start: Locator | undefined;
+  private moved = false;
+
+  private atStart(locator: Locator): boolean {
+    const s = this.start;
+    return !!s && s.href === locator.href.split('#')[0] && Math.abs((s.locations.progression ?? 0) - (locator.locations.progression ?? 0)) < 1e-3;
   }
 
   private positionAt(at: number): Locator | undefined {

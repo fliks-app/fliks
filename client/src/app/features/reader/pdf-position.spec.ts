@@ -13,6 +13,9 @@ describe('pdf position', () => {
     expect(pdfPageOf({ page: 0 }, 10)).toBe(1);
     expect(pdfPageOf({ page: '4' }, 10)).toBe(1);
     expect(pdfPageOf(null, 10)).toBe(1);
+    expect(pdfPageOf(undefined, 10, 0.5)).toBe(6);
+    expect(pdfPageOf({ cfi: 'x' }, 10, 1)).toBe(10);
+    expect(pdfPageOf({ page: 4 }, 10, 1)).toBe(4);
   });
 
   it('finds the page back from its progression', () => {

@@ -1,3 +1,4 @@
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -61,7 +62,7 @@ export function listJson(text: string, split: RegExp): string {
 @Component({
   selector: 'app-lyrics-settings',
   imports: [
-    FormsModule,
+    LoadFailedComponent, FormsModule,
     TranslatePipe,
     ToggleFieldComponent,
     CdkDropList,
@@ -83,6 +84,7 @@ export class LyricsSettingsComponent implements OnInit {
   readonly tv = inject(TvService);
 
   readonly loading = signal(true);
+  readonly loadFailed = signal(false);
   readonly saving = signal(false);
 
   readonly autoFetch = signal(true);
@@ -106,16 +108,22 @@ export class LyricsSettingsComponent implements OnInit {
     })),
   );
 
-  async ngOnInit() {
+  ngOnInit(): void {
+    void this.load();
+  }
+
+  async load(): Promise<void> {
+    this.loading.set(true);
+    this.loadFailed.set(false);
     try {
-      const map = await this.api.getAll();
+      const map = await this.api.getAll(true);
       this.autoFetch.set(map[KEYS.autoFetch] !== 'false');
       this.writeBack.set(map[KEYS.writeBack] === 'true');
       this.order.set(listOf(map[KEYS.order]));
       this.disabled.set(new Set(listOf(map[KEYS.disabled])));
       this.sidecars.set(listText(map[KEYS.sidecars], ', '));
     } catch {
-      this.toast.error(this.translate.instant('settings.lyrics.load_error'));
+      this.loadFailed.set(true);
     } finally {
       this.loading.set(false);
     }

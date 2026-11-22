@@ -32,6 +32,8 @@ export const SERVER_SINCE = {
   karaoke: '7.0.0',
   sessionSync: '7.0.0',
   push: '7.1.0',
+  // Release that carries the engine keyframes-route fix; filled once the engine bump ships.
+  keyframes: '7.1.1',
 } as const;
 
 /** A failed version read is retried this many times, each after twice the previous delay. */

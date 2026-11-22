@@ -1,3 +1,4 @@
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import {
   Component,
   signal,
@@ -12,7 +13,7 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
 
 @Component({
   selector: 'app-subtitles-settings',
-  imports: [FormsModule, TranslatePipe, ToggleFieldComponent],
+  imports: [LoadFailedComponent, FormsModule, TranslatePipe, ToggleFieldComponent],
   templateUrl: './subtitles-settings.html',
 })
 export class SubtitlesSettingsComponent implements OnInit {
@@ -21,6 +22,7 @@ export class SubtitlesSettingsComponent implements OnInit {
   private readonly toast = inject(ToastService);
 
   readonly loading = signal(true);
+  readonly loadFailed = signal(false);
   readonly saving = signal(false);
 
   readonly autoSearch = signal('true');
@@ -34,9 +36,15 @@ export class SubtitlesSettingsComponent implements OnInit {
   readonly ocrBurnInAuto = signal('false');
   readonly customExclusions = signal('');
 
-  async ngOnInit() {
+  ngOnInit(): void {
+    void this.load();
+  }
+
+  async load(): Promise<void> {
+    this.loading.set(true);
+    this.loadFailed.set(false);
     try {
-      const map = await this.api.getAll();
+      const map = await this.api.getAll(true);
       this.autoSearch.set(map['subtitle_auto_search'] ?? 'true');
       this.searchInterval.set(map['subtitle_search_interval'] ?? '360');
       this.upgradeInterval.set(map['subtitle_upgrade_interval'] ?? '720');
@@ -48,7 +56,7 @@ export class SubtitlesSettingsComponent implements OnInit {
       this.ocrBurnInAuto.set(map['subtitle_ocr_burn_in_auto'] ?? 'false');
       this.customExclusions.set(map['subtitle_custom_exclusions'] ?? '');
     } catch {
-      this.toast.error(this.translate.instant('settings.subtitles.load_error'));
+      this.loadFailed.set(true);
     } finally {
       this.loading.set(false);
     }

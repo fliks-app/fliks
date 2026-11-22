@@ -11,19 +11,19 @@
   } @else if (stats(); as s) {
     <!-- Stat cards -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <a routerLink="/movies" class="card bg-base-100 border border-base-200 hover:border-primary transition-colors cursor-pointer">
+      <div class="card bg-base-100 border border-base-200">
         <div class="card-body py-5 px-5 gap-1">
           <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'dashboard.stat_movies' | translate }}</p>
           <p class="text-3xl font-bold tabular-nums">{{ s.movies }}</p>
         </div>
-      </a>
+      </div>
 
-      <a routerLink="/series" class="card bg-base-100 border border-base-200 hover:border-primary transition-colors cursor-pointer">
+      <div class="card bg-base-100 border border-base-200">
         <div class="card-body py-5 px-5 gap-1">
           <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'dashboard.stat_series' | translate }}</p>
           <p class="text-3xl font-bold tabular-nums">{{ s.series }}</p>
         </div>
-      </a>
+      </div>
 
       <a
         routerLink="/requests"

@@ -6,8 +6,8 @@
     </div>
     <div class="flex gap-2">
       <a routerLink="/wanted" class="btn btn-ghost btn-sm" data-testid="calendar-wanted">{{ 'wanted.title' | translate }}</a>
-      <button type="button" class="btn btn-ghost btn-sm" (click)="prevMonth()">«</button>
-      <button type="button" class="btn btn-ghost btn-sm" (click)="nextMonth()">»</button>
+      <button type="button" class="btn btn-ghost btn-sm" [attr.aria-label]="'calendar.prev_month' | translate" (click)="prevMonth()">«</button>
+      <button type="button" class="btn btn-ghost btn-sm" [attr.aria-label]="'calendar.next_month' | translate" (click)="nextMonth()">»</button>
     </div>
   </div>
 

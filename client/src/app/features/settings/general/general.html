@@ -10,6 +10,8 @@
     <div class="flex justify-center py-16">
       <span class="loading loading-spinner loading-lg"></span>
     </div>
+  } @else if (loadFailed()) {
+    <app-load-failed [message]="'settings.general.load_error' | translate" (retry)="load()" />
   } @else {
 
     <!-- Server -->
@@ -204,9 +206,5 @@
         </div>
       </div>
     </div>
-
-    @if (error()) {
-      <div role="alert" class="alert alert-error text-sm">{{ error() }}</div>
-    }
   }
 </div>
