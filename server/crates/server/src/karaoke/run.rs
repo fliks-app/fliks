@@ -126,6 +126,7 @@ pub(super) const MIN_MATCHED: f64 = 0.17;
 pub enum Refusal {
     Busy,
     Full,
+    Unavailable,
 }
 
 pub enum Start {
@@ -356,7 +357,7 @@ pub async fn start(
             Ok(true) => return Start::Idle,
             Err(e) => {
                 tracing::warn!("karaoke of track #{item} not started: {e}");
-                return Start::Idle;
+                return Start::Refused(Refusal::Unavailable);
             }
         }
     }
@@ -368,7 +369,7 @@ pub async fn start(
             Ok(_) => {}
             Err(e) => {
                 tracing::warn!("karaoke of track #{item} not started: {e}");
-                return Start::Idle;
+                return Start::Refused(Refusal::Unavailable);
             }
         }
     }
@@ -869,6 +870,24 @@ async fn melody(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_database_error_during_admission_is_a_refusal_not_idle() {
+        let pool = sqlx::PgPool::connect_lazy("postgres://unused@localhost/unused").unwrap();
+        pool.close().await;
+        let st = AppState::new(
+            pool,
+            crate::config::Config::from_lookup(|_| None),
+            "0123456789abcdef0123456789abcdef",
+        );
+        let opts = Opts {
+            align: true,
+            melody: true,
+            force: false,
+        };
+        let start = start(&st, 1, opts, JobPriority::Normal, Some(1)).await;
+        assert!(matches!(start, Start::Refused(Refusal::Unavailable)));
+    }
 
     fn row(id: i32, source: &str, sync: &str, reviewed: bool) -> lstore::Row {
         lstore::Row {

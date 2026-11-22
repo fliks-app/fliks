@@ -305,7 +305,6 @@ pub async fn delete_media_file(
                         return Err(invalid_path());
                     }
                     Err(e) => {
-                        tracing::error!("unlink of {} failed: {e}", full.display());
                         return Err(AppError::internal(e.to_string()));
                     }
                 }

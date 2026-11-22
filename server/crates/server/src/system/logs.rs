@@ -96,7 +96,13 @@ pub fn log_panics() {
             .unwrap_or("non-string payload");
         let at = info.location().map(ToString::to_string).unwrap_or_default();
         let thread = std::thread::current();
-        tracing::error!(thread = thread.name().unwrap_or("?"), at, "panic: {text}");
+        let backtrace = std::backtrace::Backtrace::capture().to_string();
+        tracing::error!(
+            thread = thread.name().unwrap_or("?"),
+            at,
+            backtrace,
+            "panic: {text}"
+        );
     }));
 }
 

@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 #[test]
 fn release_quality_reproduces_expected() {
-    replay("release-quality", 746, |i| {
+    replay("release-quality", 748, |i| {
         match i["fn"].as_str().unwrap() {
             "parseReleaseQuality" => {
                 json!(parse_release_quality(i["title"].as_str().unwrap()))

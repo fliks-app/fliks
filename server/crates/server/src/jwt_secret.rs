@@ -5,7 +5,7 @@ use std::io::{ErrorKind, Read as _, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Same candidates as the engine's token store, in the same order, so both agree on the directory.
+/// The configured dir, then a private temp dir.
 fn conf_dirs(cfg: &Config) -> [PathBuf; 2] {
     [
         cfg.conf_dir.clone().unwrap_or_else(|| "/app/conf".into()),
@@ -77,6 +77,21 @@ fn dir_usable(_: &Path, _: bool) -> bool {
     true
 }
 
+/// A permission error names the path and the `chown` that fixes it; anything else is logged as is.
+fn denied(path: &Path, e: &std::io::Error) {
+    if e.kind() == ErrorKind::PermissionDenied {
+        let dir = path.parent().unwrap_or(path);
+        tracing::error!(
+            "cannot access {}: {e}: run chown -R {}:0 {} on the host",
+            path.display(),
+            euid(),
+            dir.display()
+        );
+    } else {
+        tracing::error!("cannot open {}: {e}", path.display());
+    }
+}
+
 /// Opened without following a symlink and checked on the descriptor: a regular file with no other
 /// link, owned by us. A group or other bit is dropped and the file adopted.
 #[cfg(unix)]
@@ -90,7 +105,7 @@ fn read_secret(file: &Path) -> Read {
         Ok(f) => f,
         Err(e) if e.kind() == ErrorKind::NotFound => return Read::Absent,
         Err(e) => {
-            tracing::error!("cannot open {}: {e}", file.display());
+            denied(file, &e);
             return Read::Refused;
         }
     };
@@ -170,7 +185,8 @@ pub fn resolve_engine_token(cfg: &Config) -> String {
     }
 }
 
-/// Written 0600 with `create_new`, so the first writer wins; `None` when the dir is not usable,
+/// Written 0600 through a synced temp file hard-linked into place, so the first writer wins and no
+/// reader sees a partial file; `None` when the dir is not usable,
 /// not writable, or the file is refused (a shared `/tmp` entry is never adopted).
 fn persist(dir: &Path, name: &str, fresh: &str, temp: bool) -> Option<String> {
     let file = dir.join(name);
@@ -184,23 +200,19 @@ fn persist(dir: &Path, name: &str, fresh: &str, temp: bool) -> Option<String> {
     }
     let mut b = DirBuilder::new();
     b.recursive(true);
-    let mut open = OpenOptions::new();
-    open.write(true).create_new(true);
     #[cfg(unix)]
-    {
-        std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
-        std::os::unix::fs::OpenOptionsExt::mode(&mut open, 0o600);
-    }
-    let written = b.create(dir).and_then(|()| {
-        open.open(&file)
-            .and_then(|mut f| f.write_all(fresh.as_bytes()))
-    });
+    std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+    let written = b.create(dir).and_then(|()| publish(dir, &file, fresh));
     match written {
         Ok(()) => Some(fresh.to_owned()),
         Err(e) if e.kind() == ErrorKind::AlreadyExists => match read_secret(&file) {
             Read::Found(s) => Some(s),
             _ => None,
         },
+        Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+            denied(&file, &e);
+            None
+        }
         Err(e) => {
             tracing::warn!("cannot persist {name} in {}: {e}", dir.display());
             None
@@ -208,13 +220,27 @@ fn persist(dir: &Path, name: &str, fresh: &str, temp: bool) -> Option<String> {
     }
 }
 
+fn publish(dir: &Path, file: &Path, content: &str) -> std::io::Result<()> {
+    let tmp = dir.join(format!(".tmp-{}", random_hex(8)));
+    let mut open = OpenOptions::new();
+    open.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut open, 0o600);
+    let written = open.open(&tmp).and_then(|mut f| {
+        f.write_all(content.as_bytes())?;
+        f.sync_all()
+    });
+    let linked = written.and_then(|()| fs::hard_link(&tmp, file));
+    let _ = fs::remove_file(&tmp);
+    linked
+}
+
 fn resolve_file(cfg: &Config, name: &str) -> String {
     resolve_state(cfg, name, random_hex(32)).0
 }
 
-/// The content of `<conf>/<name>` (`fresh` is written 0600 when absent) and the path to rewrite it at;
-/// `None` for the path when no conf dir is usable, then the content is process-local.
-/// A copy left in the temp dir by an earlier start moves to the configured dir.
+/// `<conf>/<name>` (`fresh` is written 0600 when absent) and the path to rewrite it at, `None` when no
+/// conf dir is usable (process-local). A copy left in the temp dir moves to the configured dir.
 pub fn resolve_state(cfg: &Config, name: &str, fresh: String) -> (String, Option<PathBuf>) {
     let [conf, tmp] = conf_dirs(cfg);
     resolve_in(&conf, &tmp, name, fresh)
@@ -298,6 +324,23 @@ mod tests {
         assert_eq!(fs::read_to_string(conf.join(".engine-token")).unwrap(), t);
         assert_eq!(resolve_engine_token(&c), t);
         assert_ne!(resolve(&c), t);
+        fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn a_new_file_is_published_whole_and_leaves_no_temp_file() {
+        let base = std::env::temp_dir().join(format!("fliks-jwt-{}", random_hex(4)));
+        let conf = base.join("conf");
+        resolve(&cfg_in(&conf, None));
+        let names: Vec<_> = fs::read_dir(&conf)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(names, [std::ffi::OsString::from(".jwt-secret")]);
+        let file = conf.join(".jwt-secret");
+        let err = publish(&conf, &file, "other").unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::AlreadyExists);
+        assert_eq!(fs::read_dir(&conf).unwrap().count(), 1);
         fs::remove_dir_all(&base).unwrap();
     }
 

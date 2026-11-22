@@ -161,6 +161,7 @@ pub async fn before_migration(
     cfg: &Config,
     pool: &PgPool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    sweep_partials(&dir()).await;
     let skip = std::env::var("FLIKS_SKIP_PRE_MIGRATION_BACKUP")
         .is_ok_and(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"));
     if skip {

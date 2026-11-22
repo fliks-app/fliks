@@ -82,6 +82,7 @@ pub async fn import_server(db: &PgPool, server: &Server) -> Result<Stats, String
         let name = user.name.as_deref().unwrap_or_default();
         if name.trim().is_empty() {
             tracing::warn!("watch-history import: user \"\": missing name");
+            stats.errors.push("user \"\": missing name".into());
             continue;
         }
         match import_user(db, &conn, &user.id, name, &mut caches, &mut stats.errors).await {

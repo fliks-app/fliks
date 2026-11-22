@@ -96,9 +96,10 @@ pub async fn review_new(st: &AppState, after: i32) -> sqlx::Result<(usize, Optio
     let mut cache = enqueue::Cache::new();
     let mut queued = 0;
     for id in ids {
-        if enqueue::queue_new_cached(st, id, &mut cache).await?.outcome == enqueue::Outcome::Queued
-        {
-            queued += 1;
+        match enqueue::queue_new_cached(st, id, &mut cache).await {
+            Ok(r) if r.outcome == enqueue::Outcome::Queued => queued += 1,
+            Ok(_) => {}
+            Err(e) => tracing::warn!("auto-queue of file #{id}: {e}"),
         }
     }
     Ok((queued, last))

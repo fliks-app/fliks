@@ -611,10 +611,17 @@ impl Push {
         }
     }
 
-    async fn run(&self, st: &AppState, recipients: Vec<i32>, n: Notification) -> sqlx::Result<()> {
+    /// Spawns one send per device; each is bounded by `SEND_TIMEOUT`, so awaiting the handles is too.
+    async fn run(
+        &self,
+        st: &AppState,
+        recipients: Vec<i32>,
+        n: Notification,
+    ) -> sqlx::Result<Vec<tokio::task::JoinHandle<()>>> {
+        let mut sends = vec![];
         let users = db::recipients(&st.db, &recipients, &n.category).await?;
         if users.is_empty() {
-            return Ok(());
+            return Ok(sends);
         }
         self.texts.warm().await;
         let rows = db::live(&st.db, &users).await?;
@@ -647,7 +654,7 @@ impl Push {
                 };
                 let (st, n, nid, vapid_sub) =
                     (st.clone(), n.clone(), nid.clone(), vapid_sub.clone());
-                tokio::spawn(async move {
+                sends.push(tokio::spawn(async move {
                     let _slot = slot;
                     let sent = tokio::time::timeout(
                         SEND_TIMEOUT,
@@ -661,10 +668,10 @@ impl Push {
                         }
                         Err(_) => tracing::warn!("push to subscription {} timed out", row.id),
                     }
-                });
+                }));
             }
         }
-        Ok(())
+        Ok(sends)
     }
 
     /// The `GET /api/push/status` body.

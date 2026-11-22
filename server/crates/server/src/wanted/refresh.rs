@@ -238,10 +238,12 @@ async fn discover_albums(
 }
 
 /// Writes the repaired wants back to the follow, inside the creation's transaction.
+/// Compare-and-set on the wants read: committed at once, so no row lock outlives it and a concurrent edit wins.
 async fn store_wants(
-    tx: &mut sqlx::PgConnection,
+    db: &sqlx::PgPool,
     source: &Source,
     user: i32,
+    read: &Value,
     specs: &[fliks_domain::media::wants::WantSpec],
 ) -> sqlx::Result<()> {
     let wants = Jsonb(serde_json::json!(specs));
@@ -253,21 +255,23 @@ async fn store_wants(
                 "author"
             };
             sqlx::query(
-                r#"UPDATE person_follows SET wants = $4 WHERE "userId" = $1 AND "personId" = $2 AND role = $3"#,
+                r#"UPDATE person_follows SET wants = $4 WHERE "userId" = $1 AND "personId" = $2 AND role = $3 AND wants = $5"#,
             )
             .bind(user)
             .bind(person)
             .bind(role)
             .bind(wants)
-            .execute(tx)
+            .bind(Jsonb(read))
+            .execute(db)
             .await?;
         }
         Source::Series { collection, .. } => {
-            sqlx::query(r#"UPDATE series_watches SET wants = $3 WHERE "userId" = $1 AND "collectionId" = $2"#)
+            sqlx::query(r#"UPDATE series_watches SET wants = $3 WHERE "userId" = $1 AND "collectionId" = $2 AND wants = $4"#)
                 .bind(user)
                 .bind(collection)
                 .bind(wants)
-                .execute(tx)
+                .bind(Jsonb(read))
+                .execute(db)
                 .await?;
         }
     }
@@ -345,6 +349,7 @@ pub(super) async fn add(st: &AppState, job: &Job, work: &str) -> Result<bool, Ap
         return Ok(false);
     }
     let target = resolve_target_in(st, &[library], kind, Some(library), None).await?;
+    let read = specs.0.clone();
     let mut specs = parse_wants(&specs.0, kind).unwrap_or_else(|e| {
         let follow = match &job.source {
             Source::Artist { person, .. } => format!("artist person {person}"),
@@ -361,7 +366,7 @@ pub(super) async fn add(st: &AppState, job: &Job, work: &str) -> Result<bool, Ap
         .await?
         .is_empty()
     {
-        store_wants(&mut lock, &job.source, job.user, &specs).await?;
+        store_wants(&st.db, &job.source, job.user, &read, &specs).await?;
     }
     if kind == MediaKind::Album {
         add_album(st, job, &target, work, &specs).await?;
