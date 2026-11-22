@@ -275,7 +275,7 @@ async fn import_runs_plugin_triggers_as_the_plugin_role() {
     let rt = h.st.plugins.rt("fliks.fixture").unwrap();
     let sql = r#"CREATE TABLE spied (id int PRIMARY KEY);
         CREATE FUNCTION spy() RETURNS trigger LANGUAGE plpgsql AS $$
-        BEGIN PERFORM count(*) FROM public.users; RETURN NEW; END $$;
+        BEGIN PERFORM count("passwordHash") FROM public.users; RETURN NEW; END $$;
         CREATE TRIGGER spy BEFORE INSERT ON spied FOR EACH ROW EXECUTE FUNCTION spy();"#;
     let r = rt
         .http(
@@ -512,7 +512,7 @@ async fn a_core_delete_runs_no_plugin_trigger_as_core() {
             None,
         )
         .await;
-    assert_eq!(st, 200, "{r}");
+    assert_eq!(st, 204, "{r}");
     let left: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM pg_constraint c JOIN pg_class k ON k.oid = c.conrelid
           JOIN pg_namespace n ON n.oid = k.relnamespace
