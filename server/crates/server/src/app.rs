@@ -28,6 +28,8 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         system::backup_download,
         system::backup_delete,
         system::log_list,
+        crate::health::list,
+        crate::health::run_now,
         jobs::schedulers,
         jobs::list,
         jobs::trigger,
@@ -614,6 +616,7 @@ fn api() -> Router<AppState> {
         .merge(crate::karaoke::router())
         .merge(crate::wanted::router())
         .merge(system::api())
+        .merge(crate::health::api())
         .merge(jobs::router())
         .merge(crate::queue::router())
         .merge(requests::router())

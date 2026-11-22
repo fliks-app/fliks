@@ -10,6 +10,7 @@ use axum::{
     routing::{delete, get, post},
 };
 
+pub use db::insert_system as open_system;
 pub use resolve::{auto_resolve, reconcile, spawn};
 pub use routes::*;
 

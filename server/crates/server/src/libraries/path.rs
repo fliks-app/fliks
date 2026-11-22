@@ -49,6 +49,57 @@ fn space(path: String) -> Option<(i64, i64)> {
     (ok != 0).then_some((free as i64, total as i64))
 }
 
+/// What the health checks read of a folder; `fs` identifies the filesystem where the platform can.
+pub struct Probe {
+    pub avail: i64,
+    pub writable: bool,
+    pub empty: bool,
+    pub fs: Option<u64>,
+}
+
+/// `None` when the path is not a readable directory (an unmounted share, a removed folder).
+#[cfg(unix)]
+fn probe_blocking(path: String) -> Option<Probe> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = std::fs::metadata(&path).ok().filter(|m| m.is_dir())?;
+    let empty = std::fs::read_dir(&path).ok()?.next().is_none();
+    let c = std::ffi::CString::new(path).ok()?;
+    // SAFETY: `s` is fully written by a successful `statvfs`, which is checked before it is read.
+    let mut s: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(c.as_ptr(), &mut s) } != 0 {
+        return None;
+    }
+    // SAFETY: `c` is a valid NUL-terminated path.
+    let writable = unsafe { libc::access(c.as_ptr(), libc::W_OK) } == 0;
+    Some(Probe {
+        avail: s.f_bavail as i64 * s.f_frsize as i64,
+        writable,
+        empty,
+        fs: Some(meta.dev()),
+    })
+}
+
+#[cfg(windows)]
+fn probe_blocking(path: String) -> Option<Probe> {
+    let meta = std::fs::metadata(&path).ok().filter(|m| m.is_dir())?;
+    let empty = std::fs::read_dir(&path).ok()?.next().is_none();
+    Some(Probe {
+        avail: space(path)?.0,
+        writable: !meta.permissions().readonly(),
+        empty,
+        fs: None,
+    })
+}
+
+/// Free space for the user (`f_bavail`), writability and emptiness of `path`, off the async runtime.
+pub async fn probe(path: &str) -> Option<Probe> {
+    let path = path.to_owned();
+    tokio::task::spawn_blocking(move || probe_blocking(path))
+        .await
+        .ok()
+        .flatten()
+}
+
 /// Disk space of `path`, off the async runtime.
 pub async fn disk(path: &str) -> Disk {
     let path = path.to_owned();

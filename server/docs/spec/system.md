@@ -2,7 +2,7 @@
 
 Auth, CASL and error-body rules are in `auth.md` (cited as "auth rule N"); jobs and the `commands` table are in `scheduler.md`.
 
-Scope: the 11 routes of the system controller: health, restart, version, update, stats, backup create/list/restore/download/delete, logs. Specified elsewhere and not repeated: `/api/system/liveness`, `/api/system/events` and `/api/system/activity` (`events-hub.md`), `/api/system/streams*` and `/api/system/transcode-cache*` (`playback-info.md`), `/api/system/qoe/*` (`qoe.md`). The routers own disjoint paths, so no 405 can arise.
+Scope: the 13 routes of the system controller: health, restart, version, update, stats, backup create/list/restore/download/delete, logs, checks, run checks. Specified elsewhere and not repeated: `/api/system/liveness`, `/api/system/events` and `/api/system/activity` (`events-hub.md`), `/api/system/streams*` and `/api/system/transcode-cache*` (`playback-info.md`), `/api/system/qoe/*` (`qoe.md`). The routers own disjoint paths, so no 405 can arise.
 
 ## Routes
 
@@ -15,6 +15,8 @@ Every route needs authentication (JWT or API key). The backup routes need `manag
 | `GET /api/system/version` | any authenticated user (`() => true`) | none | 200 `{version: string}`, suffixed `-dev` in a debug build | 401 | none |
 | `GET /api/system/update` | `Read Settings` | none | 200 `UpdateStatus` (rule 10) | 401, 403 | outbound HTTPS to GitHub (cached 6 h) |
 | `GET /api/system/stats` | `Read Settings` | none | 200 `{movies: int, series: int, pendingRequests: int, diskSpace: {path: string, label: string, freeSpace: number, totalSpace: number}[]}` | 401, 403 | `statfs` per folder |
+| `GET /api/system/checks` | `Read Settings` | none | 200 `{checkedAt: string\|null, checks: {key, state: 'warn'\|'error', code, params, link: string\|null, since}[]}`, errors first then the oldest (rule 44) | 401, 403 | none |
+| `POST /api/system/checks/run` | `Manage Settings` | none | 201 same body, after one evaluation | 401, 403 | evaluates the checks, may notify (rule 47) |
 | `POST /api/system/backup` | `manage:all` | none | 201 `{filename: string, size: int, pluginsSkipped?: string[]}` (rule 17) | 500 tool message (rule 18) | writes a file, runs `pg_dump` |
 | `GET /api/system/backups` | `manage:all` | none | 200 `{filename: string, size: int, date: string}[]`, newest first | 401, 403 | none |
 | `POST /api/system/restore` | `manage:all` | body `{filename: string}`, no DTO (rule 22) | 201 `{pluginsNotRestored: {schema: string, message: string}[], restarting: bool}` (rules 25, 38) | 400 `Invalid backup name "<name>"`, 400 `This backup comes from a newer Fliks ...` (rule 39), 404 `Backup "<name>" not found`, 409 `A command is running` (rule 25), 409 `BACKUP_HAS_PLUGIN_DATA: ...` (rule 23), 500 tool message | replaces the database content |
@@ -85,6 +87,15 @@ Client use: status page, restart, backups page, download link (an `<a href targe
 
 31. A `pg_dump` newer than the server major, or a server newer than the client tools, makes `pg_dump` abort; the Dockerfile installs PGDG `postgresql-client` and the tool's message surfaces as the 500 text.
 
+### H. Health checks
+
+43. One job evaluates every check at boot and every 5 minutes (`FLIKS_DISABLE_CRON=1` starts none; `POST /checks/run` still works). Evaluations never overlap. It is the only producer of `health.issue`.
+44. The open checks are the rows of `health_checks` (`key`, `state` warn or error, `code`, `params`, `link`, `since`, `checkedAt`): a restart keeps them and their `since`; a check that passes is deleted; `since` restarts when the state changes. `checkedAt` of the body is the end of the last evaluation of this process, null before the first. `code` and `params` are worded by the client; `link` is a client route or null.
+45. Checks, `key` then `code`: `plugin:<id>` `plugin_failed` (error: registration failed or breaker tripped) or `plugin_degraded` (warn: `degraded`, `backoff`, `crashed`; the plugin ladder is the only debounce); `folder:<folderId>` `library_unmounted` (error: the folder is not a readable directory, or is empty while a media file belongs to it) or `library_read_only` (warn: not writable, a read-only share can still stream); `space:folder:<folderId>` and `space:data` `space_low` (error: `f_bavail` below `queue.trash_min_free_gb`, the one floor; 0 turns it off; one check per filesystem); `storage:conf` `conf_volatile` (error) and `storage:data` `data_volatile` (warn) when the directory fell back to the temp dir; `job:<name>` `job_failed` (warn: the newest finished run of a core job is `failed`, link `/admin/system`).
+46. `params` per code: `plugin_*` `{plugin}`, `library_*` `{library, folder}`, `space_low` `{label, freeGb, floorGb}`, `job_failed` `{job}`, `*_volatile` `{}`.
+47. After each evaluation, in the same transaction as the rows, an error that was not an error before is a transition `broken` and an error that is gone or only a warning is `fixed`; each dispatches one `health.issue {check: key, state: 'broken'|'fixed', message}` after the commit. A warning notifies nobody; a stored error is not announced again after a restart.
+48. A check that cannot be evaluated (a database error while reading its inputs) aborts the evaluation and leaves the stored rows as they were.
+
 ### G. Pre-migration backup
 
 31. At boot (`serve` and the `migrate` subcommand), before any migration runs, the server checks for pending migrations: some embedded sqlx migration is absent from `_sqlx_migrations` (or, on a 4.x database not yet adopted, from the TypeORM ledger). With none pending, or on an empty database (no table in `public`), nothing is dumped. Tests and `restore` call `db::migrate` directly and never dump.
@@ -95,7 +106,7 @@ Client use: status page, restart, backups page, download link (an `<a href targe
 
 ## SQL
 
-- `SELECT 1` (health).
+- `SELECT 1` (health). Checks: `health_checks` upsert, `DELETE ... <> ALL`, and the inputs of rule 45 (`plugin_packages`, `libraries` with `library_folders`, `media_files`, the newest `commands` row per name).
 - `SELECT count(*) FROM plugin_packages` and `... WHERE enabled = true`.
 - `SELECT count(*)::int FROM media WHERE type = 'movie'` (and `'series'`); `SELECT count(*)::int FROM requests WHERE status = 'pending'`.
 - `SELECT l.id, l.name, df.path FROM libraries l JOIN library_default_folders df ON df."libraryId" = l.id ORDER BY l.name ASC, l.id ASC`.
@@ -113,6 +124,7 @@ None in the `settings` table. Environment (`config.md`): `DB_HOST`, `DB_PORT`, `
 ## Jobs/timers
 
 - Backup 02:00 and the retention prune: `scheduler.md` rules 22, 26 (the file operations of this spec).
+- Health checks: boot and `*/5 * * * *` (rule 43).
 - Update-check cache TTL 6 h (in memory, lost on restart); restart delay 300 ms; log ring 2 000 entries (per-level budgets, rule 26). No other timer.
 
 ## Vectors/parity

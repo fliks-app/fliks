@@ -43,14 +43,14 @@ Bodies reject unknown keys (400). Text fields are at most 2000 characters; a bla
 
 ### D. Wire
 
-12. A row is `{id, createdAt, updatedAt, status, kind, itemId, seasonNumber, episodeNumber, fileSize, autoResolved, resolvedAt, media: {id, type, title, posterUrl}, file: {id, name, quality, size} | null, user, resolvedBy | null, commentCount, lastReply | null}`. `user` and `resolvedBy` are `{id, username, avatar}`; `file.name` is the last path segment; `lastReply` is the latest comment by someone other than the reporter. The detail adds `comments` (oldest first) and, for a manager, `playback`: the reporter's latest QoE session of the pinned file started before the report, or null.
+12. A row is `{id, createdAt, updatedAt, status, kind, itemId, seasonNumber, episodeNumber, fileSize, autoResolved, resolvedAt, media: {id, type, title, posterUrl}, file: {id, name, quality, size} | null, user, resolvedBy | null, commentCount, lastReply | null, source}`. `user` (null for a `health` row) and `resolvedBy` are `{id, username, avatar}`; `file.name` is the last path segment; `lastReply` is the latest comment by someone other than the reporter. The detail adds `comments` (oldest first) and, for a manager, `playback`: the reporter's latest QoE session of the pinned file started before the report, or null.
 13. A comment is `{id, createdAt, updatedAt, issueId, userId, user | null, message}`.
 
 ### E. Notifications, counts
 
 20. Admin events `problem.created` (a create or a reopen) and `problem.resolved` (manual or auto) through `notifications::dispatch`, payload `{title, mediaType, kind, seasonNumber, episodeNumber}`. Push, category `requests` (`push.md` rule 32): `problem_created` to the managers who read the library, minus the reporter, opening `/requests?view=problems&status=active`; `problem_resolved`, `problem_replied`, `problem_closed` to the reporter. No `request.*` event or push is emitted.
 21. `GET /api/counts` gains `openProblems`: a manager's open (not acknowledged) reports in their libraries and declared kinds, else 0.
-22. Reserved for the health checks: `media_issues."source"` with `"userId"` nullable only for health rows; today `userId` is NOT NULL with CASCADE.
+22. `media_issues."source"` is `user` or `health`; `"userId"` is NULL only for `health` (CHECK), CASCADE kept for reporters, so a deleted reporter removes their reports and never makes a system one. The first `health.corrupt` of a file opens a `health` row (kind `other`, pinned to the file) unless one is active for it; it resolves as rule 8-11 and is read and managed by managers only. It sends no admin event and no push, `health.corrupt` already did. The wire row carries `source` and `user: null`.
 
 ## Tests
 

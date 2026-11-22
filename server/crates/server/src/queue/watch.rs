@@ -105,8 +105,12 @@ async fn sweep(
                 "optimize.completed"
             }
             "failed" if matches!(class, "corrupt" | "damaged") => {
-                if !first_corrupt(st, id, r.get("file")).await? {
+                let file: Option<i32> = r.get("file");
+                if !first_corrupt(st, id, file).await? {
                     continue;
+                }
+                if let Some(file) = file {
+                    crate::problems::open_system(&st.db, file).await?;
                 }
                 "health.corrupt"
             }
