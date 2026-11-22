@@ -29,7 +29,11 @@ services:
     # Kubernetes runAsNonRoot, OpenShift arbitrary uid): any uid works as long
     # as gid 0 is in the group list. A volume made by an older image (root) or
     # owned by another uid needs `chown -R 568:0` (the log names it).
-    # user: '99:100'
+    # Imports, hardlinks, subtitles next to a file and deletes write into /medias
+    # and /downloads: run as the owner of those folders (for example user: '1000:0',
+    # gid 0 keeps the named volumes writable), or chown the folders to 568. The log
+    # names every library folder the server cannot write at start.
+    # user: '1000:0'
     # group_add: ['0']
     # The server flushes its buffers and stops its plugins after the last request
     # drains; Docker's default 10 s cuts that short.
@@ -104,6 +108,11 @@ services:
   # ---- Intel QSV / VAAPI ---- add to the fliks service:
   #   devices:
   #     - /dev/dri:/dev/dri
+  #   group_add:
+  #     - '0'
+  #     - '${FLIKS_RENDER_GID:-993}'   # `getent group render | cut -d: -f3` on the host
+  # The render node is root:render 0660 and the container user is 568:0, so without the
+  # render group the probe fails and transcodes fall back to the CPU.
   # Every render node under /dev/dri becomes a GPU (gpu0, gpu1...) shared by playback and
   # optimization jobs. To expose only some, list them: - /dev/dri/renderD128 - /dev/dri/renderD129
   # The same device runs the karaoke lyrics alignment on Vulkan (Intel and AMD, about 2x faster than

@@ -4004,6 +4004,7 @@
   },
   "errors": {
     "network": "Impossible de contacter le serveur",
+    "starting": "Le serveur démarre, réessayez dans un instant",
     "400": "Requête invalide",
     "401": "Non autorisé : veuillez vous reconnecter",
     "403": "Accès interdit",

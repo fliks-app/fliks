@@ -14,13 +14,13 @@ fn conf_dirs(cfg: &Config) -> [PathBuf; 2] {
 }
 
 #[cfg(unix)]
-fn euid() -> u32 {
+pub(crate) fn euid() -> u32 {
     // SAFETY: geteuid has no preconditions.
     unsafe { libc::geteuid() }
 }
 
 #[cfg(not(unix))]
-fn euid() -> u32 {
+pub(crate) fn euid() -> u32 {
     0
 }
 

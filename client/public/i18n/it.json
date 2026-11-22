@@ -4004,6 +4004,7 @@
   },
   "errors": {
     "network": "Impossibile contattare il server",
+    "starting": "Il server si sta avviando, riprova tra un momento",
     "400": "Richiesta non valida",
     "401": "Non autorizzato: effettua di nuovo l'accesso",
     "403": "Accesso negato",

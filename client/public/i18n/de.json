@@ -4004,6 +4004,7 @@
   },
   "errors": {
     "network": "Der Server konnte nicht erreicht werden",
+    "starting": "Der Server startet, bitte gleich noch einmal versuchen",
     "400": "Ungültige Anfrage",
     "401": "Nicht autorisiert: bitte melden Sie sich erneut an",
     "403": "Zugriff verweigert",

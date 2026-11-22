@@ -189,17 +189,34 @@ async fn named_schema(pool: &PgPool, stderr: &str, excluded: &[String]) -> Optio
         .find(|s| !excluded.contains(s) && stderr.contains(&format!("{s}.")))
 }
 
+/// A volume made by an image that ran as root keeps root-owned directories: name the fix.
+fn chown_hint(e: &std::io::Error) -> String {
+    if e.kind() != std::io::ErrorKind::PermissionDenied {
+        return String::new();
+    }
+    format!(
+        ": run chown -R {}:0 {} on the host",
+        crate::jwt_secret::euid(),
+        paths::data_dir().display()
+    )
+}
+
 async fn dump(cfg: &Config, pool: &PgPool, dir: &Path, filename: String) -> Result<Made, AppError> {
     tracing::info!("Creating backup: {filename}");
-    mkdir_private(dir).map_err(|e| internal(format!("cannot create the backup directory: {e}")))?;
+    mkdir_private(dir).map_err(|e| {
+        internal(format!(
+            "cannot create the backup directory: {e}{}",
+            chown_hint(&e)
+        ))
+    })?;
     let path = dir.join(&filename);
     let tmp = dir.join(format!("{filename}{PARTIAL}"));
     let mut partial = Partial(Some(&tmp));
     let mut skipped = unreadable_schemas(pool).await?;
     let mut retried = false;
     loop {
-        let file =
-            create_private(&tmp).map_err(|e| internal(format!("cannot write the backup: {e}")))?;
+        let file = create_private(&tmp)
+            .map_err(|e| internal(format!("cannot write the backup: {e}{}", chown_hint(&e))))?;
         let mut args = conn_args(cfg);
         args.push("-Fc".to_owned());
         args.extend(skipped.iter().map(|s| format!("--exclude-schema={s}")));

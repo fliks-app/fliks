@@ -98,7 +98,9 @@ ENV FLIKS_TRANSCODE_DIR=/app/transcode
 ENV FLIKS_DATA_DIR=/app/data
 
 # Persistent dirs owned by 568:0 with g=u: a fresh named volume inherits it, and an arbitrary uid
-# with gid 0 (`--user <uid>`) still writes. A volume made by an older image needs `chown -R 568:0`.
+# with gid 0 (`--user <uid>`) writes there. Files the server made earlier are 644/755 or private
+# (0600/0700), so a volume that another uid has written needs `chown -R <uid>:0`; so does one made by an
+# older image (root).
 RUN mkdir -p /app/conf /app/data /app/transcode \
  && chown -R 568:0 /app/conf /app/data /app/transcode \
  && chmod -R g=u /app/conf /app/data /app/transcode

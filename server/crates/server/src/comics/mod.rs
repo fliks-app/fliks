@@ -3,6 +3,8 @@
 mod ar;
 pub mod archive;
 pub(crate) mod cache;
+#[cfg(all(target_os = "linux", feature = "libarchive"))]
+mod confine;
 mod pages;
 #[cfg(all(target_os = "linux", feature = "libarchive"))]
 pub mod sandbox;

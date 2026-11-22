@@ -75,6 +75,9 @@ fn error_of(c: u8) -> Error {
 /// The hidden subcommand: `comic-archive <list|count|page|page-at|info|probe> <n>`, the archive on stdin, the
 /// answer on stdout.
 pub fn child_main() -> ExitCode {
+    if !super::confine::enter() {
+        return ExitCode::from(2);
+    }
     let args: Vec<OsString> = std::env::args_os().skip(2).collect();
     let [op, n] = args.as_slice() else {
         return ExitCode::from(2);
@@ -163,11 +166,9 @@ fn limits() -> io::Result<()> {
     set(libc::RLIMIT_CPU, CHILD_CPU_SECS);
     set(libc::RLIMIT_CORE, 0);
     set(libc::RLIMIT_FSIZE, 0);
-    // SAFETY: unshare, prctl and close_range are plain syscalls; a failure leaves the shared
-    // network (a seccomp profile may refuse it), the close-on-exec descriptors and the default
-    // death signal.
+    // SAFETY: prctl and close_range are plain syscalls; a failure leaves the default death signal
+    // and the close-on-exec descriptors.
     unsafe {
-        libc::unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWNET);
         libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
         libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
         // CLOEXEC rather than close: std's exec-error pipe survives, so a failed exec is reported.
@@ -185,9 +186,12 @@ fn call<T>(
     limit: u64,
     parse: impl FnOnce(&mut dyn Read) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    static LOCALE: std::sync::Once = std::sync::Once::new();
-    // The child has no log subscriber: the parent reports a missing C.UTF-8 once.
-    LOCALE.call_once(super::ar::probe_locale);
+    static PROBES: std::sync::Once = std::sync::Once::new();
+    // The child has no log subscriber: the parent reports a missing C.UTF-8 and Landlock once.
+    PROBES.call_once(|| {
+        super::ar::probe_locale();
+        super::confine::probe();
+    });
     let archive = File::open(path).map_err(|_| Error::Missing)?;
     let mut cmd = Command::new(exe());
     cmd.arg(SUBCOMMAND)

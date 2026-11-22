@@ -1,7 +1,7 @@
 //! The listener answers from the first instant: liveness 200 and 503 "starting" elsewhere until
 //! the app router is published, so a healthcheck never fails during a long pre-migration dump.
 use axum::{
-    Router,
+    Json, Router,
     extract::{Request, State},
     http::{StatusCode, header},
     response::{IntoResponse, Response},
@@ -12,6 +12,8 @@ use tower::ServiceExt;
 pub type Slot = Arc<OnceLock<Router>>;
 
 const LIVENESS: &str = "/api/system/liveness";
+/// The `message` of the boot 503; the client treats it as an unreachable server.
+pub const STARTING: &str = "errors.starting";
 
 pub fn gate(slot: Slot) -> Router {
     Router::new().fallback(forward).with_state(slot)
@@ -27,7 +29,7 @@ async fn forward(State(slot): State<Slot>, req: Request) -> Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,
         [(header::RETRY_AFTER, "5")],
-        "starting",
+        Json(serde_json::json!({ "message": STARTING })),
     )
         .into_response()
 }
