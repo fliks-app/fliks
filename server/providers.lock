@@ -5,8 +5,8 @@ fliks.openlibrary 0.3.2 7257ebeb0045e19b5802cb80aee60a487ba4e6dc56476b08d95eea68
 fliks.bnf 0.3.1 da2ee39cb23a822b2f73d7e9e67d78962144056db5b0e9e16cd9cb5ffc8489be https://github.com/fliks-app/plugins/releases/download/bnf-v0.3.1/fliks.bnf-0.3.1.fkplugin
 fliks.googlebooks 0.3.1 a20d7c368e80dda6a69ebb032c8f061d24deb4f3081d3948cfbcf41f93668a13 https://github.com/fliks-app/plugins/releases/download/googlebooks-v0.3.1/fliks.googlebooks-0.3.1.fkplugin
 fliks.audible 0.3.1 94beefcb0c3135d96c35a4cdfc88551f0a0cd7ec1f7a1b031840a9821b6e0afd https://github.com/fliks-app/plugins/releases/download/audible-v0.3.1/fliks.audible-0.3.1.fkplugin
-fliks.audnexus 0.3.1 e296ed22dd4f76db2ecdaf7e32fb500c8a5906a65d544773230b8de334381af1 https://github.com/fliks-app/plugins/releases/download/audnexus-v0.3.1/fliks.audnexus-0.3.1.fkplugin
+fliks.audnexus 1.0.1 67f15273a794b860bbed9da2bb233ba0326c151815f3f8df55ce337a2fa04bae https://github.com/fliks-app/plugins/releases/download/audnexus-v1.0.1/fliks.audnexus-1.0.1.fkplugin
 fliks.thexem 0.2.2 66a684962fe7387561b74564afcfd4c73b869542fd4a9042d1c89e8b1adc1c6a https://github.com/fliks-app/plugins/releases/download/thexem-v0.2.2/fliks.thexem-0.2.2.fkplugin
-fliks.musicbrainz 0.7.2 b83c40cedb472d96ba2db786abb83669b45765cd9653982e59c6f5e9588a9c79 https://github.com/fliks-app/plugins/releases/download/musicbrainz-v0.7.2/fliks.musicbrainz-0.7.2.fkplugin
-fliks.fanarttv 0.2.1 42fdac58a4d11e25b48a07ec37dc7c4b38314a69918394678b05a6aaaf21ebc1 https://github.com/fliks-app/plugins/releases/download/fanarttv-v0.2.1/fliks.fanarttv-0.2.1.fkplugin
+fliks.musicbrainz 1.0.1 544cba4b07d414fa8657acf523c0d26a258a0389c98c06e28c18ee264000c7bf https://github.com/fliks-app/plugins/releases/download/musicbrainz-v1.0.1/fliks.musicbrainz-1.0.1.fkplugin
+fliks.fanarttv 1.0.1 d179520eda65ba43bf35e4706848c22bf156418158ef165d6ee45a5003a75194 https://github.com/fliks-app/plugins/releases/download/fanarttv-v1.0.1/fliks.fanarttv-1.0.1.fkplugin
 fliks.lrclib 0.2.1 313413eed52af97425aaed751a62d0491dcbdece416b008985fc61eb09236a28 https://github.com/fliks-app/plugins/releases/download/lrclib-v0.2.1/fliks.lrclib-0.2.1.fkplugin
