@@ -43,7 +43,7 @@ struct ResolvedHomeSection: Identifiable {
 
 /// Per-account home personalization (zone visibility + order and the
 /// "recently added" ranking mode), persisted to UserDefaults under the account's
-/// scope — the tvOS counterpart of the Angular `HomeSettingsService`. No backend
+/// scope, the tvOS counterpart of the Angular `HomeSettingsService`. No backend
 /// involvement, same as the web client.
 @Observable final class HomeSettingsStore {
     static let shared = HomeSettingsStore()

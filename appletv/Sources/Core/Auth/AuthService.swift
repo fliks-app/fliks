@@ -427,7 +427,7 @@ import os
         HomeSettingsStore.shared.rescope()
     }
 
-    /// Stream tokens authenticate playback URLs as one account — they must
+    /// Stream tokens authenticate playback URLs as one account: they must
     /// never outlive the session that minted them.
     @MainActor
     private func resetStreamToken() {
