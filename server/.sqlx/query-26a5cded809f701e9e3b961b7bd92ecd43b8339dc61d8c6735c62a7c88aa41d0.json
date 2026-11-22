@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"createdAt\" AS created_at, \"deviceId\" AS device_id, \"ownerUserId\" AS owner_user_id,\n                  \"granteeUserId\" AS grantee_user_id, \"deviceName\" AS device_name, \"codeExpiresAt\" AS code_expires_at\n           FROM remote_control_grants WHERE \"deviceId\" = $1 AND \"granteeUserId\" = $2 LIMIT 1",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"deviceId\" AS device_id, \"ownerUserId\" AS owner_user_id,\n                  \"granteeUserId\" AS grantee_user_id, \"deviceName\" AS device_name, \"codeExpiresAt\" AS code_expires_at\n           FROM remote_control_grants\n           WHERE \"ownerUserId\" = $1 AND \"deviceId\" = $2 AND \"granteeUserId\" = $3 LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -83,6 +83,7 @@
     ],
     "parameters": {
       "Left": [
+        "Int4",
         "Text",
         "Int4"
       ]
@@ -97,5 +98,5 @@
       false
     ]
   },
-  "hash": "7444070e7e529ab6a71d092a1250b158853311385f0f8b25e8adf4f640c65446"
+  "hash": "26a5cded809f701e9e3b961b7bd92ecd43b8339dc61d8c6735c62a7c88aa41d0"
 }

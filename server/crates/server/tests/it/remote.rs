@@ -397,6 +397,58 @@ async fn a_claim_that_finds_its_code_is_not_counted_as_a_failure(pool: PgPool) {
     }
 }
 
+#[sqlx::test(migrations = false)]
+async fn a_device_id_shared_by_two_owners_keeps_their_grants_apart(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = c.user("a", false).await;
+    let (_, b) = c.user("b", false).await;
+    let (_, g) = c.user("g", false).await;
+    c.register(&a, "d1").await;
+    c.register(&b, "d1").await;
+    c.register(&b, "d2").await;
+    for (token, device) in [(&a, "d1"), (&b, "d2")] {
+        let code = c.mint(token, device).await;
+        assert_eq!(c.claim(&g, &code).await, 201);
+    }
+    let (_, list) = c.call("GET", "/api/remote/targets", &g, None).await;
+    let mut seen: Vec<_> = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| (t["ownerUsername"].as_str(), t["targetId"].as_str()))
+        .collect();
+    seen.sort();
+    assert_eq!(
+        seen,
+        [
+            (Some("a"), Some("d1#native")),
+            (Some("b"), Some("d2#native"))
+        ]
+    );
+    let url = "/api/remote/d1%23native/command";
+    let play = Some(json!({"action": "play"}));
+    assert_eq!(c.call("POST", url, &g, play).await.0, 202);
+
+    let code = c.mint(&b, "d1").await;
+    assert_eq!(c.claim(&g, &code).await, 201);
+    let (_, held) = c.call("GET", "/api/remote/grants", &g, None).await;
+    assert_eq!(held["held"].as_array().map(Vec::len), Some(3));
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_code_quota_of_a_device_id_is_per_owner(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = c.user("a", false).await;
+    let (_, b) = c.user("b", false).await;
+    for _ in 0..3 {
+        c.mint(&a, "x").await;
+    }
+    c.mint(&b, "x").await;
+    let body = Some(json!({"deviceId": "x", "deviceName": "TV"}));
+    let (s, _) = c.call("POST", "/api/remote/grants/code", &a, body).await;
+    assert_eq!(s, 400);
+}
+
 fn state(target_id: &str) -> SseEvent {
     serde_json::from_value(
         json!({"type":"remote.state","targetId":target_id,"sessionId":"s",
