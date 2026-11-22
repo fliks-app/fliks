@@ -25,6 +25,8 @@ const RECONNECT =
   'reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_on_http_error=%7%4xx,5xx,reconnect_delay_max=5';
 
 export const MPV_STREAM_OPTIONS: readonly (readonly [name: string, value: string])[] = [
+  // mpv 0.41 defaults to off; a pinned server whose certificate FFmpeg cannot check opts out per file.
+  ['tls-verify', 'yes'],
   ['cache', 'yes'],
   ['cache-secs', '30'],
   ['demuxer-readahead-secs', '30'],

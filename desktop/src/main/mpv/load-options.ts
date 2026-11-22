@@ -1,4 +1,5 @@
 import type { DesktopLoadOptions } from '../../shared/contract';
+import { mpvVerifies } from '../trusted-servers.ts';
 
 /** The payload the libmpv addons receive: the renderer's options plus the
  *  per-file mpv options built by {@link mpvLoadFileOptions}. */
@@ -12,6 +13,7 @@ export function mpvLoadFileOptions(opts: DesktopLoadOptions): string[] {
   if (opts.startTime && opts.startTime > 0) fileOptions.push(`start=+${opts.startTime.toFixed(3)}`);
   // Keeps the matching audio rendition across reconfigs instead of the manifest default.
   if (opts.audioLanguage) fileOptions.push(`alang=${opts.audioLanguage}`);
+  if (!mpvVerifies(opts.url)) fileOptions.push('tls-verify=no');
   return fileOptions;
 }
 
