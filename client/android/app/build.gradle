@@ -107,7 +107,7 @@ dependencies {
     proprietaryImplementation 'com.google.android.gms:play-services-cast-framework:22.0.0'
     proprietaryImplementation 'androidx.mediarouter:mediarouter:1.7.0'
     // FCM only: no analytics library, auto-init is off in the manifest.
-    proprietaryImplementation 'com.google.firebase:firebase-messaging:24.1.2'
+    proprietaryImplementation 'com.google.firebase:firebase-messaging:26.0.2'
     // ExoPlayer (Media3) for native HLS playback
     implementation 'androidx.media3:media3-exoplayer:1.10.1'
     implementation 'androidx.media3:media3-exoplayer-hls:1.10.1'
