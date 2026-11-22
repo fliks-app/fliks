@@ -9,7 +9,7 @@ import { ProfilesService } from '../../../../core/services/api/profiles.service'
 import { LibrariesApiService, LibrarySummary } from '../../../../core/services/api/libraries-api.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import { NavbarService } from '../../../../core/services/navbar.service';
-import { RequestsService, TitleKey, TitleRequestState, FliksRequestRow, VideoMediaType } from '../../../../core/services/api/requests.service';
+import { RequestsService, TitleKey, titleRef, TitleRequestState, FliksRequestRow, VideoMediaType } from '../../../../core/services/api/requests.service';
 import { RequestDeclineModalComponent } from '../../../requests/request-decline-modal/request-decline-modal.component';
 import { RequestRequestersComponent } from '../../../requests/request-requesters/request-requesters.component';
 import { RequestWatchComponent } from '../../../requests/request-watch/request-watch.component';
@@ -228,6 +228,10 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
     // loads its own data on open.
     if (this.canRequest() || this.canManageRequests()) void this.loadProfiles();
 
+    // The route names the title, so the request state loads beside the details.
+    const routeKey: TitleKey = { provider: this.provider(), externalId: this.externalId() };
+    const state = this.canRequest() ? this.loadTitleState(routeKey) : null;
+    const pending = this.canManageRequests() ? this.loadPendingRequests(routeKey) : null;
     try {
       const details = await this.metadata.getDetails(this.provider(), this.type(), this.externalId());
       if (this.destroyed) return;
@@ -236,14 +240,12 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
       this.tmdbReady =
         this.provider() === 'tmdb' ||
         (!!details.tmdbId && (await this.metadata.isTmdbAvailable().catch(() => false)));
-      // Only relevant when the Request button could show: admins who can
-      // import never see the "déjà demandé" badge anyway.
-      if (this.canRequest()) {
-        await this.loadTitleState(this.titleKey(details));
-      }
-      if (this.canManageRequests()) {
-        await this.loadPendingRequests(this.titleKey(details));
-      }
+      // A TMDB id the details add names another title key: those two loads run again under it.
+      const key = this.titleKey(details);
+      const moved = titleRef(key).join(':') !== titleRef(routeKey).join(':');
+      await Promise.all([state, pending]);
+      if (moved && this.canRequest()) await this.loadTitleState(key);
+      if (moved && this.canManageRequests()) await this.loadPendingRequests(key);
     } catch {
       this.error.set(this.translate.instant('discover.preview_error'));
     }

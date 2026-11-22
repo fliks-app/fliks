@@ -3,6 +3,7 @@ import { Media } from './api/media.service';
 import { ArtistHit, MetadataSearchResult, RecordingHit, SearchHit, TmdbGenre } from './api/metadata.service';
 import type { MusicPersonRow, TrackRow } from './api/music.models';
 import type { CollectionSummary, PersonListItem } from './api/books.models';
+import type { Person } from './api/persons-api.service';
 import { RecommendationItem } from './api/streaming-api.service';
 import { SocialUser } from './api/social-api.service';
 import { DEFAULT_SORT, filtersEngaged } from '../../shared/components/search-filters/search-filters.model';
@@ -17,10 +18,10 @@ const SCOPE_KEY = 'fliks-search-scope';
 
 /** What one search asks: the library and the providers, each of its own kinds. */
 export type SearchSource =
-  | 'media' | 'tracks' | 'artists' | 'authors' | 'series' | 'people'
+  | 'media' | 'tracks' | 'artists' | 'authors' | 'series' | 'persons' | 'people'
   | 'movie' | 'tv' | 'book' | 'album' | 'artist' | 'recording';
 
-export const LOCAL_SOURCES: SearchSource[] = ['media', 'tracks', 'artists', 'authors', 'series'];
+export const LOCAL_SOURCES: SearchSource[] = ['media', 'tracks', 'artists', 'authors', 'series', 'persons'];
 export const PROVIDER_SOURCES: SearchSource[] = ['movie', 'tv', 'book', 'album', 'artist', 'recording'];
 
 @Injectable({ providedIn: 'root' })
@@ -39,6 +40,8 @@ export class SearchStateService {
   readonly localArtists = signal<MusicPersonRow[]>([]);
   readonly localAuthors = signal<PersonListItem[]>([]);
   readonly localSeries = signal<CollectionSummary[]>([]);
+  /** Cast and crew of the library. */
+  readonly localPersons = signal<Person[]>([]);
   /** The provider zone, one list per source so each lands on its own. */
   readonly movieHits = signal<SearchHit[]>([]);
   readonly seriesHits = signal<SearchHit[]>([]);
@@ -177,7 +180,7 @@ export class SearchStateService {
 
   /** Empties every zone and its pending marks. */
   clearResults() {
-    for (const l of [this.localResults, this.localTracks, this.localArtists, this.localAuthors, this.localSeries, this.peopleResults]) (l as WritableSignal<unknown[]>).set([]);
+    for (const l of [this.localResults, this.localTracks, this.localArtists, this.localAuthors, this.localSeries, this.localPersons, this.peopleResults]) (l as WritableSignal<unknown[]>).set([]);
     for (const l of [this.movieHits, this.seriesHits, this.bookHits, this.albumHits, this.artistHits, this.recordingHits]) (l as WritableSignal<unknown[]>).set([]);
     this.pending.set(new Set());
     this.failed.set(new Set());

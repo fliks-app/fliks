@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { abortable } from '../../utils/abortable';
 import { Media } from './media.service';
 import type { MediaType } from '../../enums/media-type.enum';
 
@@ -58,9 +59,10 @@ export interface PersonProviderCredits {
 export class PersonsApiService {
   private readonly http = inject(HttpClient);
 
-  search(q: string) {
-    return firstValueFrom(
+  search(q: string, signal?: AbortSignal) {
+    return abortable(
       this.http.get<Person[]>('/api/persons/search', { params: { q } }),
+      signal,
     );
   }
 

@@ -224,6 +224,22 @@
             </div>
           }
 
+          @if (state.localPersons().length) {
+            <div>
+              <h3 class="text-lg font-semibold mb-3">{{ 'persons.title' | translate }}</h3>
+              <ul class="flex flex-col gap-1 max-w-xl">
+                @for (p of state.localPersons().slice(0, 12); track p.id) {
+                  <li>
+                    <a class="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-base-200" data-card-link [routerLink]="['/persons', p.id]">
+                      <span class="min-w-0 truncate font-medium">{{ p.name }}</span>
+                      <span class="min-w-0 truncate text-sm text-base-content/60">{{ p.departments.join(', ') }}</span>
+                    </a>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+
           @if (!state.localLoading() && libraryCount() === 0 && !(state.scope() === 'all' && !musicEmpty())) {
             <p class="text-base-content/60" data-testid="library-empty">{{ 'search.no_results' | translate }}</p>
           }

@@ -339,8 +339,15 @@ export class MetadataService {
     }
   }
 
+  private providersCache: { at: number; info: Promise<ProvidersInfo> } | null = null;
+
+  /** One fetch serves the callers of the next minute: the answer moves only when an admin edits the providers. */
   private providers() {
-    return firstValueFrom(this.http.get<ProvidersInfo>('/api/metadata/providers'));
+    if (this.providersCache && Date.now() - this.providersCache.at < 60_000) return this.providersCache.info;
+    const info = firstValueFrom(this.http.get<ProvidersInfo>('/api/metadata/providers'));
+    const entry = (this.providersCache = { at: Date.now(), info });
+    info.catch(() => { if (this.providersCache === entry) this.providersCache = null; });
+    return info;
   }
 
   /** Whether TMDB answers: a request is keyed by `tmdbId` only then. */
