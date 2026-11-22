@@ -47,13 +47,14 @@
           </button>
         }
       </div>
-      <div class="flex-1 min-w-0 tv:flex-initial">
+      <div class="flex-1 min-w-0">
         @if (tv.isTv()) {
           <!-- 10-foot primary nav: the drawer never opens on a TV, so the main
                entries live here, one ↑ away from the first rail. -->
           <div class="flex min-w-0 items-center gap-6 pl-2">
             <img src="fliks-logo-ondark.svg" [alt]="'app.name' | translate" class="h-7 w-auto shrink-0 object-contain" />
-            <div class="scroll-ring-safe ml-3 flex min-w-0 items-center gap-2 overflow-x-auto px-3 -mx-1">
+            <div #tvTabsRow (scroll)="updateTvTabsEdges()" [style.mask-image]="tvTabsMask()" [style.-webkit-mask-image]="tvTabsMask()"
+                 class="scroll-ring-safe scrollbar-none ml-3 flex min-w-0 items-center gap-2 overflow-x-auto px-3 -mx-1">
               @for (item of tvTabs(); track item.id) {
                 <a
                   [routerLink]="item.route"
@@ -99,8 +100,8 @@
           }
         }
       </div>
-      <!-- TV: the tabs keep their width and the now-playing bar takes what is left. -->
-      <div class="flex-none flex items-center gap-1 md:gap-1.5 tv:min-w-0 tv:flex-1 tv:basis-48 tv:justify-end tv:pl-2">
+      <!-- TV: the now-playing bar keeps its width and the tabs scroll in what is left. -->
+      <div class="flex-none flex items-center gap-1 md:gap-1.5 tv:pl-2">
         @if (appUpdate.available()) {
           <button class="btn btn-ghost btn-circle" (click)="openUpdateModal()"
                   [attr.aria-label]="'update.title' | translate">

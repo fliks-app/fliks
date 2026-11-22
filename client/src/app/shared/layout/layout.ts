@@ -318,6 +318,30 @@ export class LayoutComponent implements OnInit, OnDestroy {
     ...this.displayLibraries().map((l) => ({ id: `library:${l.id}`, route: this.libraryUrl(l), exact: false, icon: this.libraryIcon(l), label: l.name, isLibrary: true })),
     ...this.mainItemsAfterLibraries().map((i) => ({ id: i.id, route: i.route, exact: i.exact, icon: i.icon, labelKey: i.labelKey })),
   ]);
+  private readonly tvTabsRow = viewChild<ElementRef<HTMLElement>>('tvTabsRow');
+  private readonly tvTabsEdges = signal({ start: true, end: true });
+  /** Fades the row's cut edges so a tab half out of view reads as scrollable. */
+  protected readonly tvTabsMask = computed(() => {
+    const { start, end } = this.tvTabsEdges();
+    return `linear-gradient(to right, ${start ? '#000' : 'transparent'} 0, #000 2.5rem, #000 calc(100% - 2.5rem), ${end ? '#000' : 'transparent'} 100%)`;
+  });
+  private readonly tvTabsObserver = effect((onCleanup) => {
+    const el = this.tvTabsRow()?.nativeElement;
+    this.tvTabs();
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => this.updateTvTabsEdges());
+    ro.observe(el);
+    const raf = requestAnimationFrame(() => this.updateTvTabsEdges());
+    onCleanup(() => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    });
+  });
+  protected updateTvTabsEdges(): void {
+    const el = this.tvTabsRow()?.nativeElement;
+    if (!el) return;
+    this.tvTabsEdges.set({ start: el.scrollLeft <= 1, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 1 });
+  }
   readonly librarySheetOpen = signal(false);
   readonly isLibraryRoute = signal(this.router.url.startsWith('/libraries/'));
   /** The dock's Library cell opens the library itself when there is only one, else a sheet. */

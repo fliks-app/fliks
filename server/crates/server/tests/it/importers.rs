@@ -246,7 +246,10 @@ async fn connection_tests_report_ok_false_without_the_url(pool: PgPool) {
         json!({"url": format!("{}/seerr/ok/", c.stub), "apiKey": KEY}),
     )
     .await;
-    assert_eq!(b, json!({"ok": true, "message": "Connected to Parity Seerr"}));
+    assert_eq!(
+        b,
+        json!({"ok": true, "message": "Connected to Parity Seerr"})
+    );
 }
 
 #[sqlx::test(migrations = false)]

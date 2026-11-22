@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatMbps, qoeDotClass } from './qoe-health';
 
-const f = { t: (k: string, p?: Record<string, string>) => `${k}:${p?.['value']}`, n: (v: number, d = 1) => v.toFixed(d).replace('.', ',') };
+const f = { t: (k: string, p?: Record<string, string>) => `${k}:${p?.['value']}`, n: (v: number, d = 1) => v.toFixed(d).replace('.', ','), plural: (k: string) => k };
 
 describe('qoeDotClass', () => {
   it('follows the verdict alone, stalls or confidence never tint it', () => {
