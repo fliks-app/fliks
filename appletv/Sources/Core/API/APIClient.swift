@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 enum APIError: Error, CustomStringConvertible {
     case badURL
@@ -64,8 +65,8 @@ private final class RedirectKeeper: NSObject, URLSessionTaskDelegate {
                     newRequest request: URLRequest) async -> URLRequest? {
         guard let original = task.originalRequest,
               let from = original.url, let to = request.url,
-              // Credentials follow the redirect only within the same host.
-              from.host == to.host else { return request }
+              // Credentials follow the redirect only within the same host, never down to clear text.
+              from.host == to.host, to.scheme == "https" || to.scheme == from.scheme else { return request }
 
         if from.scheme == "http", to.scheme == "https" {
             await ServerStore.shared.upgradeToHTTPS(redirectedTo: to)
@@ -107,6 +108,12 @@ final class APIClient {
 
     func get<T: Decodable>(_ path: String, query: [String: String] = [:], headers: [String: String] = [:]) async throws -> T {
         try await request(path, method: "GET", query: query, body: nil, headers: headers)
+    }
+
+    /// A list endpoint: rows that fail to decode are dropped and logged, the others survive.
+    func list<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> [T] {
+        let rows: LossyArray<T> = try await get(path, query: query)
+        return rows.elements
     }
 
     func post<T: Decodable, B: Encodable>(_ path: String, body: B, headers: [String: String] = [:]) async throws -> T {
@@ -159,6 +166,7 @@ final class APIClient {
         do {
             return try JSONDecoder.fliks.decode(T.self, from: data)
         } catch {
+            Log.api.error("decode \(method, privacy: .public) \(Self.loggable(path), privacy: .public) as \(String(describing: T.self), privacy: .public): \(String(describing: error), privacy: .public)")
             throw APIError.decoding("\(T.self): \(error)")
         }
     }
@@ -205,9 +213,11 @@ final class APIClient {
         do {
             (data, response) = try await session.data(for: req)
         } catch {
+            Log.api.error("transport \(method, privacy: .public) \(Self.loggable(path), privacy: .public): \(error.localizedDescription, privacy: .public)")
             throw APIError.transport(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else {
+            Log.api.error("non-HTTP response \(method, privacy: .public) \(Self.loggable(path), privacy: .public)")
             throw APIError.transport("non-HTTP response")
         }
 
@@ -220,9 +230,15 @@ final class APIClient {
             // Validation errors answer a list of messages.
             let rawMessage = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"]
             let message = (rawMessage as? String) ?? (rawMessage as? [String])?.joined(separator: "; ")
+            Log.api.error("\(method, privacy: .public) \(Self.loggable(path), privacy: .public) answered \(http.statusCode, privacy: .public)")
             throw APIError.badStatus(http.statusCode, message: message)
         }
         return (data, http)
+    }
+
+    /// The path without its query: a query can carry a token.
+    private static func loggable(_ path: String) -> String {
+        String(path.prefix { $0 != "?" })
     }
 
     /// Concurrent 401s share one in-flight refresh so the server only rotates once.

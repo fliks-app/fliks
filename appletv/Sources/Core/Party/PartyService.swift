@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Party-wide state: join, leave, the member list, chat and the server's `party.*` events. The player's
 /// `PartyController` drives the engine from `live`.
@@ -408,7 +409,7 @@ import Foundation
         do {
             homeParties = try await APIClient.shared.get("/api/parties")
         } catch {
-            print("party: home rail fetch failed: \(error)")
+            Log.party.error("home rail fetch failed: \(String(describing: error), privacy: .public)")
         }
     }
 

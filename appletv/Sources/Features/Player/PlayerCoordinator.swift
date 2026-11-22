@@ -1,4 +1,5 @@
 import Foundation
+import os
 import AVFoundation
 import AVKit
 import UIKit
@@ -919,7 +920,7 @@ import UIKit
     /// then forces an ack heartbeat so the controller sees `lastCmdId`.
     func applyRemoteCommand(_ cmd: RemoteCommand) {
         guard let player, let item = player.currentItem else {
-            print("remote: no player loaded yet, dropping \(cmd.action) (\(cmd.cmdId))")
+            Log.remote.notice("no player loaded yet, dropping \(cmd.action, privacy: .public) (\(cmd.cmdId, privacy: .public))")
             return
         }
         switch cmd.action {
@@ -929,19 +930,19 @@ import UIKit
             if player.timeControlStatus == .playing { player.pause() } else { player.play() }
         case "seek":
             guard let seconds = cmd.positionSeconds else {
-                print("remote: seek without positionSeconds (\(cmd.cmdId)), ignoring")
+                Log.remote.notice("seek without positionSeconds (\(cmd.cmdId, privacy: .public)), ignoring")
                 return
             }
             player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
         case "volume":
             guard let level = cmd.level else {
-                print("remote: volume without level (\(cmd.cmdId)), ignoring")
+                Log.remote.notice("volume without level (\(cmd.cmdId, privacy: .public)), ignoring")
                 return
             }
             player.volume = Float(level)
         case "mute":
             guard let muted = cmd.muted else {
-                print("remote: mute without a muted flag (\(cmd.cmdId)), ignoring")
+                Log.remote.notice("mute without a muted flag (\(cmd.cmdId, privacy: .public)), ignoring")
                 return
             }
             userMuted = muted
@@ -950,25 +951,25 @@ import UIKit
             onStopRequested?()
         case "next":
             guard let next = nextEpisode else {
-                print("remote: next with no next episode available, ignoring")
+                Log.remote.notice("next with no next episode available, ignoring")
                 return
             }
             Task { await advance(to: next) }
         case "audio":
             guard let group = audibleGroup, let option = matchOption(cmd.trackId, in: group) else {
-                print("remote: audio track \(cmd.trackId ?? "nil") not found (\(cmd.cmdId)), ignoring")
+                Log.remote.notice("audio track \(cmd.trackId ?? "nil", privacy: .public) not found (\(cmd.cmdId, privacy: .public)), ignoring")
                 return
             }
             item.select(option, in: group)
             selectionDidChange()
         case "subtitle":
             guard let group = legibleGroup else {
-                print("remote: no subtitle group loaded yet, dropping \(cmd.cmdId)")
+                Log.remote.notice("no subtitle group loaded yet, dropping \(cmd.cmdId, privacy: .public)")
                 return
             }
             if let subtitleId = cmd.subtitleId {
                 guard let option = matchOption(subtitleId, in: group) else {
-                    print("remote: subtitle track \(subtitleId) not found (\(cmd.cmdId)), ignoring")
+                    Log.remote.notice("subtitle track \(subtitleId, privacy: .public) not found (\(cmd.cmdId, privacy: .public)), ignoring")
                     return
                 }
                 item.select(option, in: group)
@@ -978,12 +979,12 @@ import UIKit
             selectionDidChange()
         case "quality":
             guard let id = cmd.qualityId, playback.qualityOptions.contains(where: { $0.id == id }) else {
-                print("remote: quality \(cmd.qualityId ?? "nil") not offered (\(cmd.cmdId)), ignoring")
+                Log.remote.notice("quality \(cmd.qualityId ?? "nil", privacy: .public) not offered (\(cmd.cmdId, privacy: .public)), ignoring")
                 return
             }
             selectQuality(id)
         default:
-            print("remote: unknown action \(cmd.action) (\(cmd.cmdId)), ignoring")
+            Log.remote.notice("unknown action \(cmd.action, privacy: .public) (\(cmd.cmdId, privacy: .public)), ignoring")
             return
         }
         RemoteControlService.shared.lastAppliedCmdId = cmd.cmdId

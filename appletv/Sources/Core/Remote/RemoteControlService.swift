@@ -1,4 +1,5 @@
 import Foundation
+import os
 import UIKit
 
 /// Makes this tvOS app a remote-controllable playback target. `APIClient` has
@@ -63,7 +64,7 @@ import UIKit
         } catch {
             // Transient (network, server restart) or the route isn't live yet -
             // the next poll tick retries registration.
-            print("remote: registration failed, not controllable yet: \(error)")
+            Log.remote.error("registration failed, not controllable yet: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -84,10 +85,10 @@ import UIKit
         } catch APIError.badStatus(404, _) {
             // The registry has forgotten this target (backend restart) - only a
             // fresh register() can make us controllable again.
-            print("remote: target \(targetId) unknown to server (404), re-registering")
+            Log.remote.notice("target \(targetId, privacy: .public) unknown to server (404), re-registering")
             self.targetId = nil
         } catch {
-            print("remote: command poll failed, will retry: \(error)")
+            Log.remote.error("command poll failed, will retry: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -106,7 +107,7 @@ import UIKit
     @MainActor
     private func loadAudio(_ cmd: RemoteCommand, kind: String) {
         guard kind == "album", let mediaId = cmd.mediaId else {
-            print("remote: no tvOS player for a \(kind) load (\(cmd.cmdId)), ignoring")
+            Log.remote.notice("no tvOS player for a \(kind, privacy: .public) load (\(cmd.cmdId, privacy: .public)), ignoring")
             return
         }
         Task { @MainActor in
@@ -120,7 +121,7 @@ import UIKit
                                           repeatMode: cmd.repeatMode.flatMap(RepeatMode.init(rawValue:)) ?? .off,
                                           position: cmd.positionSeconds ?? 0, autoplay: !(cmd.paused ?? false))
             } catch {
-                print("remote: audio load \(cmd.cmdId) failed: \(error)")
+                Log.remote.error("audio load \(cmd.cmdId, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             }
         }
     }
@@ -146,7 +147,7 @@ import UIKit
     @MainActor
     private func apply(_ cmd: RemoteCommand) {
         guard Date(timeIntervalSince1970: cmd.expiresAt / 1000) > Date() else {
-            print("remote: dropping expired command \(cmd.cmdId) (\(cmd.action))")
+            Log.remote.notice("dropping expired command \(cmd.cmdId, privacy: .public) (\(cmd.action, privacy: .public))")
             return
         }
         if cmd.action == "load" {
@@ -155,7 +156,7 @@ import UIKit
                 return
             }
             guard let mediaFileId = cmd.mediaFileId, let mediaId = cmd.mediaId else {
-                print("remote: load command \(cmd.cmdId) missing mediaFileId/mediaId, ignoring")
+                Log.remote.notice("load command \(cmd.cmdId, privacy: .public) missing mediaFileId/mediaId, ignoring")
                 return
             }
             lastAppliedCmdId = cmd.cmdId
@@ -165,7 +166,7 @@ import UIKit
         }
         guard let coordinator = activeCoordinator else {
             if MusicPlayer.shared.current != nil { return applyMusic(cmd) }
-            print("remote: no active player for \(cmd.action) (\(cmd.cmdId)), ignoring")
+            Log.remote.notice("no active player for \(cmd.action, privacy: .public) (\(cmd.cmdId, privacy: .public)), ignoring")
             return
         }
         coordinator.applyRemoteCommand(cmd)
@@ -206,7 +207,7 @@ import UIKit
             player.setRepeat(cmd.repeatMode.flatMap(RepeatMode.init(rawValue:)) ?? player.repeatMode.next)
             player.acknowledge()
         default:
-            print("remote: the music player ignores \(cmd.action) (\(cmd.cmdId))")
+            Log.remote.notice("the music player ignores \(cmd.action, privacy: .public) (\(cmd.cmdId, privacy: .public))")
             player.acknowledge()
         }
     }

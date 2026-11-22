@@ -1,12 +1,47 @@
 import Foundation
+import os
 
 // MARK: - Paging
 
 /// Matches the backend's `{ data, total }` list envelope (MediaService.getAll
 /// and friends) — NOT `{ items, ... }` like some other Fliks list endpoints.
-struct Paginated<T: Codable>: Codable {
+struct Paginated<T: Decodable>: Decodable {
     let data: [T]
     let total: Int
+
+    private enum CodingKeys: String, CodingKey { case data, total }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        data = try c.decode(LossyArray<T>.self, forKey: .data).elements
+        total = try c.decode(Int.self, forKey: .total)
+    }
+}
+
+/// A list where one row that no longer fits its model is dropped and logged instead of emptying the whole list.
+struct LossyArray<T: Decodable>: Decodable {
+    let elements: [T]
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var rows: [T] = []
+        var dropped = 0
+        while !container.isAtEnd {
+            do {
+                rows.append(try container.decode(T.self))
+            } catch {
+                dropped += 1
+                Log.api.error("dropped a \(String(describing: T.self), privacy: .public) row: \(String(describing: error), privacy: .public)")
+                _ = try container.decode(AnyRow.self)
+            }
+        }
+        elements = rows
+    }
+
+    /// Consumes one element of any shape, so the container moves past a failed row.
+    private struct AnyRow: Decodable {
+        init(from decoder: Decoder) throws {}
+    }
 }
 
 // MARK: - Auth
@@ -331,7 +366,8 @@ struct ContinueWatchingItem: Codable, Identifiable {
     let mediaFileId: Int?
     let episodeId: Int?
     let positionSeconds: Double
-    let durationSeconds: Double
+    /// The server types it nullable: a null row must not empty the rail.
+    let durationSeconds: Double?
     let progressPercent: Double
     let lastPlayedAt: Date
     let mediaTitle: String

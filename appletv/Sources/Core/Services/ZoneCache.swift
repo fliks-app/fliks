@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Last successful payload of each home zone, on disk. A cold start paints the
 /// previous content instead of skeletons, and a refresh that fails keeps
@@ -16,12 +17,20 @@ enum ZoneCache {
 
     static func read<T: Decodable>(_ key: String) -> [T]? {
         guard let data = try? Data(contentsOf: url(for: key)) else { return nil }
-        return try? JSONDecoder.fliks.decode([T].self, from: data)
+        do {
+            return try JSONDecoder.fliks.decode([T].self, from: data)
+        } catch {
+            Log.zones.error("unreadable cache for \(key, privacy: .public): \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     static func write<T: Encodable>(_ key: String, _ value: [T]) {
-        guard let data = try? JSONEncoder.fliks.encode(value) else { return }
-        try? data.write(to: url(for: key), options: .atomic)
+        do {
+            try JSONEncoder.fliks.encode(value).write(to: url(for: key), options: .atomic)
+        } catch {
+            Log.zones.error("cache write for \(key, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     private static func url(for key: String) -> URL {
@@ -61,6 +70,7 @@ func revalidateZone<T: Codable>(
         apply(.loaded(items))
         ZoneCache.write(key, items)
     } catch {
+        Log.zones.error("\(key, privacy: .public) refresh failed (cache painted: \(painted, privacy: .public)): \(String(describing: error), privacy: .public)")
         if !painted { apply(.failed) }
     }
 }
