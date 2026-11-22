@@ -46,6 +46,9 @@ pub struct Health {
     restart_supervisor: Option<&'static str>,
     conf_persistent: bool,
     data_persistent: bool,
+    db_superuser: bool,
+    db_limited: bool,
+    db_gaps: Vec<&'static str>,
 }
 
 #[utoipa::path(get, path = "/api/system/health", responses((status = 200)))]
@@ -61,6 +64,11 @@ pub async fn health(State(st): State<AppState>, a: Authed) -> Result<Json<Health
             0
         }
     };
+    let role = if ok {
+        crate::db::role::status(db).await.unwrap_or_default()
+    } else {
+        Default::default()
+    };
     Ok(Json(Health {
         version: env!("CARGO_PKG_VERSION"),
         uptime_seconds: st.system.started.elapsed().as_secs(),
@@ -74,6 +82,9 @@ pub async fn health(State(st): State<AppState>, a: Authed) -> Result<Json<Health
         restart_supervisor: st.system.supervisor(),
         conf_persistent: crate::jwt_secret::conf_persistent(),
         data_persistent: crate::paths::data_persistent(),
+        db_superuser: role.superuser,
+        db_limited: role.limited(),
+        db_gaps: role.gaps(),
     }))
 }
 

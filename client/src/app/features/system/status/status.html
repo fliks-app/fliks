@@ -43,6 +43,27 @@
   @if (h.dataPersistent === false) {
     <div role="alert" class="alert alert-error mt-3 text-sm">{{ 'system.data_not_persistent' | translate }}</div>
   }
+  @if (h.dbSuperuser) {
+    <p class="mt-3 text-sm text-base-content/60">
+      {{ 'system.db_superuser' | translate }}
+      <a class="link" href="https://docs.fliks.media/install/environment-variables#db-role" target="_blank" rel="noopener noreferrer">{{ 'system.db_docs' | translate }}</a>
+    </p>
+  }
+  @if (h.dbLimited) {
+    <p class="mt-3 text-sm text-base-content/60">{{ 'system.db_limited' | translate }}</p>
+  }
+  @if (h.dbGaps?.length) {
+    <div role="alert" class="alert alert-error mt-3 text-sm">
+      <div>
+        <ul class="list-disc pl-5">
+          @for (gap of h.dbGaps; track gap) {
+            <li>{{ 'system.db_gap_' + gap | translate }}</li>
+          }
+        </ul>
+        <p class="mt-2">{{ 'system.db_gaps_fix' | translate }} <code class="font-mono">fliks-server db-role</code></p>
+      </div>
+    </div>
+  }
 }
 
 <!-- Activity: running + queued tasks, live over SSE -->

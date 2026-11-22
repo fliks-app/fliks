@@ -660,10 +660,45 @@ jobs:
           xcodebuild -project Fliks.xcodeproj -scheme Fliks -configuration Debug \
             -derivedDataPath build ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
 
+  # The tests the application role must keep passing, run as `fliks_app` the way a production install connects:
+  # the only per-PR proof that a migration needs no superuser. The full suite runs under it nightly.
+  test-app-role:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres: *postgres
+    defaults:
+      run:
+        working-directory: server
+    env:
+      DATABASE_URL: postgres://fliks_app:fliks-app-test@localhost:5432/fliks
+      SQLX_OFFLINE: 'true'
+      S8_PG_ADMIN_URL: postgres://fliks:fliks@localhost:5432/postgres
+      FLIKS_HARNESS_PG_URL: postgres://fliks:fliks@localhost:5432/postgres
+      ARCHIVE_DIR: ${{ github.workspace }}/nextest-archive
+      FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/nextest-archive
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: nextest-archive
+          path: ${{ env.ARCHIVE_DIR }}
+      - name: PostgreSQL 18 client tools
+        run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
+      - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
+      - uses: ./.github/actions/app-role-db
+        with:
+          archive: ${{ env.ARCHIVE_DIR }}
+      # The filterset is the `app-role` profile of .config/nextest.toml.
+      - run: >-
+          cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
+          --no-fail-fast --profile app-role
+
   # The only required check: a skipped job (area untouched) counts as passed.
   ci-ok:
     if: always()
-    needs: [changes, no-em-dash, lint, build, test-shard, restore-pg17, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos, macos]
+    needs: [changes, no-em-dash, lint, build, test-shard, restore-pg17, test-app-role, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos, macos]
     runs-on: ubuntu-latest
     steps:
       - env:

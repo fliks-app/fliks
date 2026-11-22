@@ -23,8 +23,14 @@ enum Paths {
     static let pgLogFile  = appSupport.appendingPathComponent("postgresql/pg.log")
     /// JWT secret and other auto-generated config (maps to FLIKS_CONF_DIR).
     static let confDir    = appSupport.appendingPathComponent("conf")
-    /// Generated password of the bundled Postgres role; read by the tray only.
+    /// Tray-private files, never passed to the server (0700).
+    static let privateDir = appSupport.appendingPathComponent("private")
+    /// Password of the `fliks` superuser; read by the tray only.
+    static let dbAdminPasswordFile = privateDir.appendingPathComponent(".db-admin-password")
+    /// Password of the `fliks_app` role, handed to the server.
     static let dbPasswordFile = confDir.appendingPathComponent(".db-password")
+    /// App role password not yet in effect (`db-role` ran, `.db-password` not replaced).
+    static let dbPasswordNextFile = confDir.appendingPathComponent(".db-password.next")
     /// Working directory of the server — `images/` and `backups/` of
     /// existing installs live here.
     static let dataDir    = appSupport.appendingPathComponent("data")
@@ -44,6 +50,9 @@ enum Paths {
         let bundled = resources.appendingPathComponent("bin/fliks-engine")
         return isExecutable(bundled) ? bundled : nil
     }()
+
+    /// Server binary shipped in `bin/` (nil only when it is missing).
+    static let serverBinary: URL? = engineBinary?.deletingLastPathComponent().appendingPathComponent("fliks-server")
 
     // MARK: - PostgreSQL
 
@@ -135,9 +144,10 @@ enum Paths {
 
     /// Create all required Application Support subdirectories on first launch.
     static func ensureAppSupportStructure() throws {
-        for dir in [appSupport, pgDataDir.deletingLastPathComponent(), confDir, dataDir, logsDir] {
+        for dir in [appSupport, pgDataDir.deletingLastPathComponent(), confDir, privateDir, dataDir, logsDir] {
             try ensureDirectory(dir)
         }
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: privateDir.path)
     }
 
     /// Delete `*.log` files of `logsDir` not written for `days` days (server, Postgres).

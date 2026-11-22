@@ -18,10 +18,11 @@ actor PostgresManager {
     private let logFile: URL
     private let port: UInt16
 
-    /// Password of the `fliks` role, generated once into `Paths.dbPasswordFile`.
+    /// Password of the `fliks` superuser, kept in the tray-private `Paths.dbAdminPasswordFile`.
     private var password = ""
     private var passwordUnsaved = false
-    var dbPassword: String { password }
+    /// Password of the `fliks_app` role the server connects with (`Paths.dbPasswordFile`), set by `provisionAppRole`.
+    private(set) var dbPassword = ""
 
     private var hbaFile: URL { dataDir.appendingPathComponent("pg_hba.conf") }
 
@@ -52,11 +53,12 @@ actor PostgresManager {
     /// First-launch initialization: runs `initdb` if the data directory
     /// doesn't contain a `PG_VERSION` file yet.
     func initialize() async throws {
-        try loadPassword()
         let pgVersion = dataDir.appendingPathComponent("PG_VERSION")
-        guard !FileManager.default.fileExists(atPath: pgVersion.path) else {
+        let clusterExists = FileManager.default.fileExists(atPath: pgVersion.path)
+        try loadPassword(clusterExists: clusterExists)
+        guard !clusterExists else {
             logger.info("PostgreSQL data directory already initialized")
-            // A cluster already on scram lost its password file: only single-user mode can reset it.
+            // A cluster already on scram lost its admin password file: only single-user mode can reset it.
             if passwordUnsaved && !hbaTrusts() {
                 try await resetPasswordSingleUser()
                 try savePassword()
@@ -83,7 +85,7 @@ actor PostgresManager {
             arguments: [
                 "-D", dataDir.path,
                 "--auth=scram-sha-256",
-                "--pwfile=\(Paths.dbPasswordFile.path)",
+                "--pwfile=\(Paths.dbAdminPasswordFile.path)",
                 "--username=fliks",
                 "--encoding=UTF-8",
                 "--locale=C",
@@ -121,7 +123,7 @@ actor PostgresManager {
         logger.info("PostgreSQL is ready")
     }
 
-    /// Create the `fliks` database if it doesn't exist yet.
+    /// Create the `fliks` database if it doesn't exist yet, then hand it to the `fliks_app` role.
     func createDatabaseIfNeeded() async throws {
         logger.info("Ensuring 'fliks' database exists...")
 
@@ -157,23 +159,7 @@ actor PostgresManager {
             }
         }
 
-        // Ensure pg_trgm extension (the server also does this, but belt-and-suspenders).
-        let extResult = try await ProcessRunner.run(
-            executable: binDir.appendingPathComponent("psql"),
-            arguments: [
-                "-w", "-h", "localhost",
-                "-p", String(port),
-                "-U", "fliks",
-                "-d", "fliks",
-                "-c", "CREATE EXTENSION IF NOT EXISTS pg_trgm",
-            ],
-            environment: pgEnv,
-            timeout: 10
-        )
-
-        if !extResult.succeeded {
-            logger.warning("pg_trgm extension creation failed: \(extResult.stderr)")
-        }
+        try await provisionAppRole()
     }
 
     /// Gracefully stop PostgreSQL.
@@ -248,41 +234,101 @@ actor PostgresManager {
         guard result.succeeded else { throw PostgresError.startFailed("pg_ctl reload: \(result.stderr)") }
     }
 
-    /// Read `.db-password`, or generate a password in memory (64 hex characters): the file is written
-    /// by `savePassword` once the role has it, so a failed reset is retried at the next launch.
-    private func loadPassword() throws {
-        if let existing = try? String(contentsOf: Paths.dbPasswordFile, encoding: .utf8) {
-            let trimmed = existing.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil {
-                password = trimmed
-                passwordUnsaved = false
-                return
-            }
-            logger.warning("The database password file is not 64 hex characters: it is replaced")
+    /// Read the admin password file, or generate a password in memory (64 hex characters): the file is
+    /// written by `savePassword` once the role has it, so a failed reset is retried at the next launch.
+    private func loadPassword(clusterExists: Bool) throws {
+        if let stored = Self.readPassword(Paths.dbAdminPasswordFile) {
+            password = stored
+            passwordUnsaved = false
+            return
         }
 
+        // A cluster from before the app role: `.db-password` still holds the superuser password.
+        if clusterExists,
+           !FileManager.default.fileExists(atPath: Paths.dbPasswordNextFile.path),
+           let legacy = Self.readPassword(Paths.dbPasswordFile) {
+            try writeSecret(legacy, to: Paths.dbAdminPasswordFile)
+            password = legacy
+            passwordUnsaved = false
+            return
+        }
+
+        password = try Self.randomPassword()
+        passwordUnsaved = true
+    }
+
+    /// Writes the admin password file when `loadPassword` generated it.
+    private func savePassword() throws {
+        guard passwordUnsaved else { return }
+        try writeSecret(password, to: Paths.dbAdminPasswordFile)
+        passwordUnsaved = false
+    }
+
+    /// Temp file + rename, mode 0600.
+    private func writeSecret(_ value: String, to file: URL) throws {
+        try Paths.ensureDirectory(file.deletingLastPathComponent())
+        let temp = file.path + ".tmp"
+        let fd = open(temp, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
+        guard fd >= 0 else { throw PostgresError.initFailed("cannot write \(file.path)") }
+        let written = write(fd, value, value.utf8.count)
+        close(fd)
+        guard written == value.utf8.count, rename(temp, file.path) == 0 else {
+            throw PostgresError.initFailed("cannot write \(file.path)")
+        }
+    }
+
+    private static func readPassword(_ file: URL) -> String? {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.range(of: "^[0-9a-f]{64}$", options: .regularExpression) == nil ? nil : trimmed
+    }
+
+    private static func randomPassword() throws -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
             throw PostgresError.initFailed("no random bytes for the database password")
         }
-        password = bytes.map { String(format: "%02x", $0) }.joined()
-        passwordUnsaved = true
+        return bytes.map { String(format: "%02x", $0) }.joined()
     }
 
-    /// Writes `.db-password` (mode 0600) when `loadPassword` generated it.
-    private func savePassword() throws {
-        guard passwordUnsaved else { return }
-        let file = Paths.dbPasswordFile
-        try Paths.ensureDirectory(Paths.confDir)
-        let temp = file.path + ".tmp"
-        let fd = open(temp, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
-        guard fd >= 0 else { throw PostgresError.initFailed("cannot write \(file.path)") }
-        let written = write(fd, password, password.utf8.count)
-        close(fd)
-        guard written == password.utf8.count, rename(temp, file.path) == 0 else {
-            throw PostgresError.initFailed("cannot write \(file.path)")
+    /// Runs the bundled `fliks-server db-role` so the server connects as `fliks_app`, never as the superuser.
+    /// `.db-password` is replaced only by the final rename of `.db-password.next`, so a crash redoes the steps.
+    private func provisionAppRole() async throws {
+        guard let server = Paths.serverBinary else { throw PostgresError.roleFailed("fliks-server is missing from the app bundle") }
+
+        let next = Paths.dbPasswordNextFile
+        let candidate: String
+        var pendingRename = true
+        if let pending = Self.readPassword(next) {
+            candidate = pending
+        } else if let current = Self.readPassword(Paths.dbPasswordFile), current != password {
+            candidate = current
+            pendingRename = false
+        } else {
+            candidate = try Self.randomPassword()
+            try writeSecret(candidate, to: next)
         }
-        passwordUnsaved = false
+
+        let result = try await ProcessRunner.run(
+            executable: server,
+            arguments: ["db-role"],
+            environment: [
+                "DB_HOST": "localhost",
+                "DB_PORT": String(port),
+                "DB_NAME": "fliks",
+                "DB_USERNAME": "fliks_app",
+                "DB_PASSWORD": candidate,
+                "DB_ADMIN_USERNAME": "fliks",
+                "DB_ADMIN_PASSWORD": password,
+            ],
+            timeout: 90
+        )
+        guard result.succeeded else { throw PostgresError.roleFailed(result.stderr) }
+
+        if pendingRename, rename(next.path, Paths.dbPasswordFile.path) != 0 {
+            throw PostgresError.roleFailed("cannot replace \(Paths.dbPasswordFile.path)")
+        }
+        dbPassword = candidate
     }
 
     /// Whether any line of `pg_hba.conf` still uses the `trust` method.
@@ -328,7 +374,7 @@ actor PostgresManager {
         try await reload()
     }
 
-    /// `.db-password` is gone while the cluster is already on scram: stop, reset the role
+    /// The admin password file is gone while the cluster is already on scram: stop, reset the role
     /// password in single-user mode (statement on stdin, never logged), the caller starts again.
     private func resetPasswordSingleUser() async throws {
         logger.warning("The database password file is missing: resetting the role password")
@@ -377,6 +423,7 @@ enum PostgresError: LocalizedError {
     case startFailed(String)
     case createDBFailed(String)
     case authFailed(String)
+    case roleFailed(String)
     case timeout
 
     var errorDescription: String? {
@@ -385,6 +432,7 @@ enum PostgresError: LocalizedError {
         case .startFailed(let msg):   return "PostgreSQL start failed: \(msg)"
         case .createDBFailed(let msg): return "Database creation failed: \(msg)"
         case .authFailed(let msg):    return "PostgreSQL password reset failed: \(msg)"
+        case .roleFailed(let msg):    return "Database role setup failed: \(msg)"
         case .timeout:                return "PostgreSQL did not become ready in time"
         }
     }

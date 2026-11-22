@@ -7,6 +7,12 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 [profile.ci.junit]
 path = "junit.xml"
 
+# What `fliks_app` must keep passing: db-role, plugin provisioning, backup and restore, migrations.
+[profile.app-role]
+default-filter = "test(/^(db_role|plugins|backup_restore|migrations)::/) | test(/^(system::(backup|restore)|db::migrate)::/)"
+test-threads = 8
+slow-timeout = { period = "60s", terminate-after = 5 }
+
 # Longest tests first, so a shard does not end on one 30 s test.
 [[profile.default.overrides]]
 filter = "test(/^plugins::/) | test(/^backup_restore::/) | test(/^kobo::sync_/)"

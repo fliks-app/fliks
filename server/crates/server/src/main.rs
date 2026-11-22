@@ -44,6 +44,10 @@ async fn run() -> ExitCode {
     let result = match std::env::args().nth(1).as_deref() {
         None => fliks_server::serve(cfg).await,
         Some("migrate") => fliks_server::migrate(&cfg).await,
+        Some("db-role") => {
+            let print = std::env::args().nth(2).as_deref() == Some("--print");
+            fliks_server::db::role::run(&cfg, print).await
+        }
         Some("restore") => match std::env::args().nth(2) {
             Some(file) => fliks_server::restore(&cfg, std::path::Path::new(&file)).await,
             None => {
@@ -64,7 +68,7 @@ async fn run() -> ExitCode {
         }
         Some(other) => {
             eprintln!(
-                "unknown command {other:?}; expected migrate, restore, healthcheck or openapi"
+                "unknown command {other:?}; expected migrate, db-role, restore, healthcheck or openapi"
             );
             return ExitCode::from(2);
         }

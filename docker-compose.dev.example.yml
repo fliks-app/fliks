@@ -73,6 +73,7 @@ services:
       FLIKS_ENGINE_TOKEN: dev-engine-token
       DB_HOST: postgres
       DB_PORT: 5432
+      # The dev stack keeps the bootstrap superuser; only the production example uses `fliks_app`.
       DB_USERNAME: fliks
       DB_PASSWORD: password
       DB_NAME: fliks

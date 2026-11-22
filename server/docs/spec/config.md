@@ -11,6 +11,7 @@ Environment variables read by `fliks-server`, with defaults and parsing rules.
 | `DB_USERNAME` | `'fliks'` | string as-is |
 | `DB_PASSWORD` | `'fliks'` for the connection; **`''` in the backup spawn env** (`PGPASSWORD`) | string as-is |
 | `DB_NAME` | `'fliks'` | string as-is |
+| `DB_ADMIN_USERNAME`, `DB_ADMIN_PASSWORD` | unset; read by `fliks-server db-role` only (`system.md` rule 41), never by the server | string as-is |
 
 ## Auth
 

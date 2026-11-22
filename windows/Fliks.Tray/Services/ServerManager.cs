@@ -20,7 +20,7 @@ internal sealed record ServerEnvironment(ushort Port, ushort DbPort, string DbPa
             ["FLIKS_BIND"] = "127.0.0.1",
             ["DB_HOST"] = "127.0.0.1",
             ["DB_PORT"] = DbPort.ToString(),
-            ["DB_USERNAME"] = "fliks",
+            ["DB_USERNAME"] = "fliks_app",
             ["DB_PASSWORD"] = DbPassword,
             ["DB_NAME"] = "fliks",
             ["SERVE_STATIC_PATH"] = AppPaths.ClientDir,
@@ -63,7 +63,7 @@ internal sealed class ServerManager
         // The engine owns the public port; fliks-server listens on port + 1 behind it.
         foreach (var a in new[] { "--supervise", "--public-listen", $"0.0.0.0:{config.Port}",
                      "--upstream", $"http://127.0.0.1:{config.Port + 1}", "--",
-                     Path.Combine(AppPaths.BinDir, "fliks-server.exe") })
+                     AppPaths.ServerExe })
             proc.StartInfo.ArgumentList.Add(a);
         proc.StartInfo.WorkingDirectory = AppPaths.DataDir;
         proc.StartInfo.UseShellExecute = false;

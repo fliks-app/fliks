@@ -59,4 +59,12 @@ describe('SystemStatusComponent: persistence alerts', () => {
     const el = await render({ ...health, confPersistent: false, dataPersistent: false });
     expect(el.querySelectorAll('.alert-error')).toHaveLength(2);
   });
+
+  it('shows the role notes and one alert listing each gap', async () => {
+    const el = await render({ ...health, dbSuperuser: true, dbLimited: true, dbGaps: ['create_role', 'plugin_roles'] });
+    expect(el.querySelectorAll('.alert-error')).toHaveLength(1);
+    expect(el.querySelectorAll('.alert-error li')).toHaveLength(2);
+    expect(el.textContent).toContain('fliks-server db-role');
+    expect(el.querySelector('a[href$="#db-role"]')).not.toBeNull();
+  });
 });

@@ -3,6 +3,16 @@
 # Pin a release by replacing `:latest`:
 # https://github.com/fliks-app/fliks/pkgs/container/fliks
 
+# Fliks connects as `fliks_app`, not as the Postgres superuser `fliks`. Its password is not the
+# postgres one: a shared password would let a leaked DB_PASSWORD log in as the superuser. A second
+# Fliks on the same Postgres cluster needs its own DB_USERNAME.
+x-db: &db
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_NAME: fliks
+  DB_USERNAME: fliks_app
+  DB_PASSWORD: change-me-too
+
 services:
   postgres:
     image: postgres:18.3
@@ -14,17 +24,32 @@ services:
     volumes:
       - fliks_pgdata:/var/lib/postgresql/18/docker
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U fliks']
+      # Over TCP: the first-init server only listens on the unix socket.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U fliks']
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Creates `fliks_app` and hands it the database. It exits 0 at once when that is already done, so
+  # only a real failure blocks `fliks`. The admin password stays here and in postgres, never in `fliks`.
+  fliks-db-role:
+    image: ghcr.io/fliks-app/fliks:latest
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['fliks-server', 'db-role']
+    environment:
+      <<: *db
+      DB_ADMIN_USERNAME: fliks
+      DB_ADMIN_PASSWORD: changeme
 
   fliks:
     image: ghcr.io/fliks-app/fliks:latest
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      fliks-db-role:
+        condition: service_completed_successfully
     # The image runs as 568:0. Uncomment to pin another uid (unraid 99:100,
     # Kubernetes runAsNonRoot, OpenShift arbitrary uid): any uid works as long
     # as gid 0 is in the group list. A volume made by an older image (root) or
@@ -49,12 +74,8 @@ services:
     # mem_limit: 4g
     # cpus: '4'
     environment:
+      <<: *db
       PORT: 4848
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USERNAME: fliks
-      DB_PASSWORD: changeme
-      DB_NAME: fliks
       # Extracted subtitles and seek-preview sprites. Regenerable, safe to
       # delete. Defaults to cache/ inside /app/data; point it elsewhere to keep
       # it out of your data backups.
