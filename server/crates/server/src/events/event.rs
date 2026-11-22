@@ -76,6 +76,31 @@ impl ImportErrors {
     }
 }
 
+/// An external user an import skipped because a Fliks account holds its name: the admin maps it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnmappedUser {
+    pub provider: String,
+    pub external_id: String,
+    pub username: String,
+}
+
+/// The first `ImportErrors::MAX` unmapped users of an import run and the total.
+#[derive(Debug, Default)]
+pub struct ImportUnmapped {
+    pub first: Vec<UnmappedUser>,
+    pub total: i64,
+}
+
+impl ImportUnmapped {
+    pub fn push(&mut self, user: UnmappedUser) {
+        self.total += 1;
+        if self.first.len() < ImportErrors::MAX {
+            self.first.push(user);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DownloadState {
@@ -443,6 +468,8 @@ pub enum SseEvent {
         skipped: i64,
         errors: Vec<String>,
         error_count: i64,
+        unmapped: Vec<UnmappedUser>,
+        unmapped_count: i64,
     },
     #[serde(rename = "watch-history.import.failed")]
     WatchHistoryImportFailed {
@@ -461,6 +488,8 @@ pub enum SseEvent {
         skipped: i64,
         errors: Vec<String>,
         error_count: i64,
+        unmapped: Vec<UnmappedUser>,
+        unmapped_count: i64,
     },
     #[serde(rename = "seerr.import.failed")]
     SeerrImportFailed { error: String },
@@ -905,10 +934,10 @@ mod tests {
             MetadataRefreshed => json!({"type":"metadata.refreshed","mediaId":1,"title":"t"}),
             MetadataFailed => json!({"type":"metadata.failed","mediaId":1,"title":"t","error":"e"}),
             WatchHistoryImportStarted => json!({"type":"watch-history.import.started","serverId":1,"serverName":"s"}),
-            WatchHistoryImportCompleted => json!({"type":"watch-history.import.completed","serverId":1,"serverName":"s","users":1,"usersCreated":0,"imported":2,"skipped":3,"errors":["e"],"errorCount":1}),
+            WatchHistoryImportCompleted => json!({"type":"watch-history.import.completed","serverId":1,"serverName":"s","users":1,"usersCreated":0,"imported":2,"skipped":3,"errors":["e"],"errorCount":1,"unmapped":[{"provider":"emby:1","externalId":"x","username":"u"}],"unmappedCount":1}),
             WatchHistoryImportFailed => json!({"type":"watch-history.import.failed","serverId":1,"serverName":"s","error":""}),
             SeerrImportStarted => json!({"type":"seerr.import.started"}),
-            SeerrImportCompleted => json!({"type":"seerr.import.completed","users":1,"usersCreated":0,"imported":2,"updated":3,"skipped":4,"errors":[],"errorCount":0}),
+            SeerrImportCompleted => json!({"type":"seerr.import.completed","users":1,"usersCreated":0,"imported":2,"updated":3,"skipped":4,"errors":[],"errorCount":0,"unmapped":[],"unmappedCount":0}),
             SeerrImportFailed => json!({"type":"seerr.import.failed","error":"e"}),
             PairingRequested => json!({"type":"pairing.requested","userId":1,"pairingId":"p","deviceName":"n","deviceId":"d","legacyClient":false}),
             PairingCancelled => json!({"type":"pairing.cancelled","userId":1,"pairingId":"p"}),

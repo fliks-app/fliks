@@ -682,6 +682,18 @@ async fn seerr_import_creates_users_requests_and_refuses_a_second_run(pool: PgPo
         r#"SELECT u.username, (SELECT count(*) FROM library_user_access a WHERE a."userId" = u.id) FROM users u WHERE u.username LIKE 'seerr_%' ORDER BY 1"#,
     ).fetch_all(&c.pool).await.unwrap();
     assert_eq!(users, [("seerr_alice".into(), 2), ("seerr_bob".into(), 2)]);
+    let provenance: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM user_external_ids e JOIN users u ON u.id = e."userId"
+           WHERE e.provider = 'seerr' AND (e."externalId", u.username) IN
+             (('1', 'seerr_alice'), ('2', 'seerr_bob'), ('3', 'Carol Display'))"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        provenance, 3,
+        "each created user is recorded under its Seerr id"
+    );
     let reqs: Vec<(i32, String, String)> =
         sqlx::query_as(
             r#"SELECT "externalId"::int, status::text, title FROM requests WHERE provider = 'tmdb' ORDER BY 1"#,
@@ -717,6 +729,110 @@ async fn seerr_import_creates_users_requests_and_refuses_a_second_run(pool: PgPo
         .await
         .unwrap();
     assert_eq!(n, 5, "a re-run updates in place");
+    let users: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM users WHERE username <> 'admin' AND username <> 'ro'",
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(users, 3, "a re-run reuses the users by Seerr id");
+}
+
+async fn run_seerr(c: &Ctx) -> Value {
+    let mut rx = c.st.hub.subscribe();
+    let (s, _) = post(c, "/api/imports/seerr/import-requests", &c.admin, json!({})).await;
+    assert_eq!(s, 201);
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            if let Ok(b) = rx.recv().await
+                && let fliks_server::events::Bus::Sse(e) = &*b
+            {
+                let v = serde_json::to_value(e).unwrap();
+                if v["type"] == "seerr.import.completed" {
+                    return v;
+                }
+            }
+        }
+    })
+    .await
+    .expect("seerr import completed")
+}
+
+#[sqlx::test(migrations = false)]
+async fn seerr_import_never_merges_into_a_same_name_local_account(pool: PgPool) {
+    let c = ctx(pool).await;
+    setting(&c, "seerr_api_key", KEY).await;
+    setting(&c, "seerr_url", &format!("{}/seerr/ok", c.stub)).await;
+    let local: i32 =
+        sqlx::query_scalar(r#"INSERT INTO users (username) VALUES ('SEERR_ALICE') RETURNING id"#)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    let done = run_seerr(&c).await;
+    assert_eq!(done["usersCreated"], 2, "{done}");
+    assert_eq!(done["unmappedCount"], 1);
+    assert_eq!(
+        done["unmapped"],
+        json!([{"provider": "seerr", "externalId": "1", "username": "seerr_alice"}])
+    );
+    let owned: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM requests WHERE "userId" = $1"#)
+        .bind(local)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(owned, 0, "the local account receives nothing");
+    let alikes: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM users WHERE lower(username) = 'seerr_alice'")
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(alikes, 1, "Bob and bob stay one user");
+    let (s, _) = post(
+        &c,
+        "/api/imports/user-mappings",
+        &c.admin,
+        json!({"provider": "seerr", "externalId": "1", "userId": local}),
+    )
+    .await;
+    assert_eq!(s, 201);
+    let done = run_seerr(&c).await;
+    assert_eq!(
+        (&done["unmappedCount"], &done["usersCreated"]),
+        (&json!(0), &json!(0))
+    );
+    let owned: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM requests WHERE "userId" = $1"#)
+        .bind(local)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        owned, 2,
+        "the mapped account now owns Seerr user 1's requests"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn user_mapping_is_admin_only_and_needs_a_known_provider_and_user(pool: PgPool) {
+    let c = ctx(pool).await;
+    let body = json!({"provider": "seerr", "externalId": "1", "userId": 1});
+    let (s, _) = post(&c, "/api/imports/user-mappings", &c.readonly, body.clone()).await;
+    assert_eq!(s, 403);
+    let (s, _) = post(
+        &c,
+        "/api/imports/user-mappings",
+        &c.admin,
+        json!({"provider": "plex", "externalId": "1", "userId": 1}),
+    )
+    .await;
+    assert_eq!(s, 400);
+    let (s, _) = post(
+        &c,
+        "/api/imports/user-mappings",
+        &c.admin,
+        json!({"provider": "seerr", "externalId": "1", "userId": 99999}),
+    )
+    .await;
+    assert_eq!(s, 404);
 }
 
 #[sqlx::test(migrations = false)]

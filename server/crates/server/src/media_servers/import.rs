@@ -3,7 +3,10 @@ use super::{
     db::Server,
     emby::{Conn, Item, Mode},
 };
-use crate::{events::event::ImportErrors, users::imported_user};
+use crate::{
+    events::event::{ImportErrors, ImportUnmapped, UnmappedUser},
+    users::{Imported, imported_user},
+};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
 use sqlx::PgPool;
@@ -18,6 +21,7 @@ pub struct Stats {
     pub imported: i64,
     pub skipped: i64,
     pub errors: ImportErrors,
+    pub unmapped: ImportUnmapped,
 }
 
 #[derive(Default)]
@@ -85,9 +89,27 @@ pub async fn import_server(db: &PgPool, server: &Server) -> Result<Stats, String
             stats.errors.push("user \"\": missing name".into());
             continue;
         }
-        match import_user(db, &conn, &user.id, name, &mut caches, &mut stats.errors).await {
-            Ok((created, imported, skipped)) => {
-                stats.users_created += i64::from(created);
+        let provider = format!("emby:{}", server.id);
+        let (user_id, created) = match imported_user(db, &provider, &user.id, name, "emby").await {
+            Ok(Imported::Known(id)) => (id, false),
+            Ok(Imported::Created(id)) => (id, true),
+            Ok(Imported::NameTaken) => {
+                stats.unmapped.push(UnmappedUser {
+                    provider,
+                    external_id: user.id.clone(),
+                    username: name.to_owned(),
+                });
+                continue;
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "watch-history import: user \"{name}\"");
+                stats.errors.push(format!("user \"{name}\": {e}"));
+                continue;
+            }
+        };
+        stats.users_created += i64::from(created);
+        match import_user(db, &conn, &user.id, user_id, &mut caches, &mut stats.errors).await {
+            Ok((imported, skipped)) => {
                 stats.imported += imported;
                 stats.skipped += skipped;
             }
@@ -121,13 +143,10 @@ async fn import_user(
     db: &PgPool,
     conn: &Conn,
     emby_id: &str,
-    name: &str,
+    user_id: i32,
     caches: &mut Caches,
     errors: &mut ImportErrors,
-) -> Result<(bool, i64, i64), String> {
-    let (user_id, created) = imported_user(db, name, "emby")
-        .await
-        .map_err(|e| e.to_string())?;
+) -> Result<(i64, i64), String> {
     let resume = fetch_all(conn, emby_id, Mode::Resume).await?;
     let resume_ids: HashSet<String> = resume.iter().map(|i| i.id.clone()).collect();
     let played = fetch_all(conn, emby_id, Mode::Played).await?;
@@ -151,7 +170,7 @@ async fn import_user(
             }
         }
     }
-    Ok((created, imported, skipped))
+    Ok((imported, skipped))
 }
 
 fn tmdb_of(raw: Option<&str>) -> Option<i32> {

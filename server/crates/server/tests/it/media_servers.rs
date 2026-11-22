@@ -754,6 +754,15 @@ async fn import_history_follows_the_resume_rules(pool: PgPool) {
     sqlx::query(r#"INSERT INTO playback_states ("userId","itemId","positionSeconds","lastPlayedAt") SELECT $1, id, 5, '2026-01-03' FROM items WHERE "mediaId" = (SELECT "mediaId" FROM media_external_ids WHERE provider = 'tmdb' AND value = '1002')"#)
         .bind(existing).execute(&pool).await.unwrap();
     let id = add_server(&c, "ok", &[], true).await;
+    let (s, _) = call(
+        &c,
+        "POST",
+        "/api/imports/user-mappings",
+        &c.admin,
+        Some(json!({"provider": format!("emby:{id}"), "externalId": "u1", "userId": existing})),
+    )
+    .await;
+    assert_eq!(s, 201);
     let ev = run_import(&c, id).await;
     let kinds: Vec<&str> = ev
         .iter()
@@ -784,7 +793,9 @@ async fn import_history_follows_the_resume_rules(pool: PgPool) {
             imported: 6,
             skipped: 6,
             errors: vec![],
-            error_count: 0
+            error_count: 0,
+            unmapped: vec![],
+            unmapped_count: 0
         }
     );
     let row = |title: &'static str| {
@@ -842,6 +853,61 @@ async fn import_history_follows_the_resume_rules(pool: PgPool) {
             ..
         }
     ));
+}
+
+#[sqlx::test(migrations = false)]
+async fn import_leaves_a_same_name_local_account_alone(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    seed_library(&pool).await;
+    let local: i32 =
+        sqlx::query_scalar(r#"INSERT INTO users (username) VALUES ('USER') RETURNING id"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let id = add_server(&c, "ok", &[], true).await;
+    let ev = run_import(&c, id).await;
+    let SseEvent::WatchHistoryImportCompleted {
+        users_created,
+        unmapped,
+        unmapped_count,
+        ..
+    } = &ev[2]
+    else {
+        panic!("{ev:?}")
+    };
+    assert_eq!((*users_created, *unmapped_count), (1, 1));
+    assert_eq!(
+        (
+            &unmapped[0].provider,
+            &unmapped[0].external_id,
+            &unmapped[0].username
+        ),
+        (&format!("emby:{id}"), &"u1".to_owned(), &"user".to_owned())
+    );
+    let states: i64 =
+        sqlx::query_scalar(r#"SELECT count(*) FROM playback_states WHERE "userId" = $1"#)
+            .bind(local)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(states, 0, "the local account's playback is not written");
+    let users: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM users WHERE lower(username) = 'user'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(users, 1);
+    let mapped: Vec<(String, String, i32)> = sqlx::query_as(
+        r#"SELECT provider, "externalId", "userId" FROM user_external_ids ORDER BY 2"#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(mapped.len(), 1);
+    assert_eq!(
+        mapped[0].1, "u2",
+        "only the created account carries provenance"
+    );
 }
 
 #[sqlx::test(migrations = false)]

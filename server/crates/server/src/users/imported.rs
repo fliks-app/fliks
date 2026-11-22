@@ -1,18 +1,44 @@
-//! Accounts created by the Seerr and Emby importers (`importers.md` rule 33).
+//! Accounts created by the Seerr and Emby importers, reached through `user_external_ids` only.
 use super::db::add_library_access;
-use sqlx::PgPool;
+use sqlx::{PgExecutor, PgPool};
 
-/// The user named `username` (exact match) or a new one with the default role and its default libraries
-/// in one transaction; `true` when created. A concurrent writer's insert is re-read, not failed on.
+pub enum Imported {
+    /// Imported or mapped before under this provider and external id.
+    Known(i32),
+    Created(i32),
+    /// An account already holds the name (any case) and no mapping points at it: nothing is created.
+    NameTaken,
+}
+
+/// The user recorded for `(provider, external_id)`, else a new one with the default role and its default
+/// libraries, recorded in one transaction. A name held by another account is `NameTaken`, never merged.
 pub async fn imported_user(
     db: &PgPool,
+    provider: &str,
+    external_id: &str,
     username: &str,
     media_server_type: &str,
-) -> Result<(i32, bool), sqlx::Error> {
-    if let Some(id) = find(db, username).await? {
-        return Ok((id, false));
+) -> Result<Imported, sqlx::Error> {
+    let known = sqlx::query_scalar!(
+        r#"SELECT "userId" FROM user_external_ids WHERE provider = $1 AND "externalId" = $2"#,
+        provider,
+        external_id
+    )
+    .fetch_optional(db)
+    .await?;
+    if let Some(id) = known {
+        return Ok(Imported::Known(id));
     }
     let mut tx = db.begin().await?;
+    let taken = sqlx::query_scalar!(
+        r#"SELECT EXISTS(SELECT 1 FROM users WHERE lower(username) = lower($1)) AS "taken!""#,
+        username
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if taken {
+        return Ok(Imported::NameTaken);
+    }
     let rows = sqlx::query!(
         r#"SELECT r.id, rdl."libraryId" AS "library_id?" FROM roles r
            LEFT JOIN role_default_libraries rdl ON rdl."roleId" = r.id
@@ -38,17 +64,29 @@ pub async fn imported_user(
     .fetch_optional(&mut *tx)
     .await?;
     let Some(id) = inserted else {
-        tx.rollback().await?;
-        let id = find(db, username).await?.ok_or(sqlx::Error::RowNotFound)?;
-        return Ok((id, false));
+        return Ok(Imported::NameTaken);
     };
     add_library_access(&mut tx, id, &libraries).await?;
+    map_external(&mut *tx, provider, external_id, id).await?;
     tx.commit().await?;
-    Ok((id, true))
+    Ok(Imported::Created(id))
 }
 
-async fn find(db: &PgPool, username: &str) -> Result<Option<i32>, sqlx::Error> {
-    sqlx::query_scalar!("SELECT id FROM users WHERE username = $1", username)
-        .fetch_optional(db)
-        .await
+/// Records that this external user is that Fliks user, replacing an earlier mapping (the admin's choice).
+pub async fn map_external<'e>(
+    db: impl PgExecutor<'e>,
+    provider: &str,
+    external_id: &str,
+    user_id: i32,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"INSERT INTO user_external_ids (provider, "externalId", "userId") VALUES ($1, $2, $3)
+           ON CONFLICT (provider, "externalId") DO UPDATE SET "userId" = EXCLUDED."userId""#,
+        provider,
+        external_id,
+        user_id
+    )
+    .execute(db)
+    .await?;
+    Ok(())
 }

@@ -359,6 +359,8 @@ pub async fn import_watch_history(
                         skipped: s.skipped,
                         errors: s.errors.first,
                         error_count: s.errors.total,
+                        unmapped: s.unmapped.first,
+                        unmapped_count: s.unmapped.total,
                     });
                     Ok(())
                 }

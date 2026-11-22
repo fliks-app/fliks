@@ -14,7 +14,9 @@ use crate::{
 };
 use arr::Arr;
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
-use serde_json::Value;
+use fliks_domain::acl::{Action, Subject};
+use serde::Deserialize;
+use serde_json::{Value, json};
 use std::time::Duration;
 use utoipa::OpenApi;
 
@@ -31,7 +33,8 @@ use utoipa::OpenApi;
     lidarr_preview,
     lidarr_import,
     seerr_test,
-    seerr_import_requests
+    seerr_import_requests,
+    map_user
 ))]
 pub struct Doc;
 
@@ -51,6 +54,7 @@ pub fn router() -> Router<AppState> {
             "/api/imports/seerr/import-requests",
             post(seerr_import_requests),
         )
+        .route("/api/imports/user-mappings", post(map_user))
 }
 
 /// `GET` with the key header and the call's own timeout.
@@ -189,4 +193,37 @@ pub(crate) async fn seerr_import_requests(
     a: Authed,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     seerr::start(st, a).await
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub(crate) struct UserMapping {
+    provider: String,
+    external_id: String,
+    user_id: i32,
+}
+
+/// `POST /api/imports/user-mappings`: the admin's answer to an import's `unmapped` entries.
+#[utoipa::path(post, path = "/api/imports/user-mappings", responses((status = 201)))]
+pub(crate) async fn map_user(
+    State(st): State<AppState>,
+    a: Authed,
+    ValidJson(body): ValidJson<UserMapping>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    a.require(Action::Manage, Subject::Settings)?;
+    let known = body.provider == "seerr"
+        || body
+            .provider
+            .strip_prefix("emby:")
+            .is_some_and(|id| id.parse::<i32>().is_ok());
+    if !known || body.external_id.trim().is_empty() {
+        return Err(AppError::bad_request("provider or externalId is invalid"));
+    }
+    crate::users::map_external(&st.db, &body.provider, &body.external_id, body.user_id)
+        .await
+        .map_err(|e| match e.as_database_error() {
+            Some(d) if d.is_foreign_key_violation() => AppError::not_found("User not found"),
+            _ => e.into(),
+        })?;
+    Ok((StatusCode::CREATED, Json(json!({"ok": true}))))
 }
