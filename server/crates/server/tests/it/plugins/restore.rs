@@ -247,6 +247,10 @@ async fn plugin_schemas_restore_under_their_own_logins() {
     assert_eq!(plugin_rows(&s, "t").await, 2);
 
     // A refused file stops nothing: the same plugin host is still running after the 409.
+    until("plugin running", Duration::from_secs(60), async || {
+        h.st.plugins.rt("fliks.fixture").is_some()
+    })
+    .await;
     let before = h.st.plugins.rt("fliks.fixture").expect("running");
     let plain = legacy_sql(&s, "refused.sql");
     let err = restore::restore(

@@ -276,15 +276,14 @@ jobs:
           cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
           --partition count:${{ matrix.shard }}/3 --no-fail-fast --profile ci
 
-  # The shipped tools are PostgreSQL 18's and run against user servers 15 to 17: one pairing the shards do not cover.
-  # No `initdb -c` here: Postgres 15 predates it, so the default 100 connections stay and the run uses two threads.
-  restore-pg15:
+  # The shipped tools are PostgreSQL 18's: the restore tests also run them against an older server than the shards'.
+  restore-pg17:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
       postgres:
-        image: postgres:15
+        image: postgres:17
         env:
           POSTGRES_USER: fliks
           POSTGRES_PASSWORD: fliks
@@ -641,7 +640,7 @@ jobs:
   # The only required check: a skipped job (area untouched) counts as passed.
   ci-ok:
     if: always()
-    needs: [changes, no-em-dash, lint, build, test-shard, restore-pg15, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos]
+    needs: [changes, no-em-dash, lint, build, test-shard, restore-pg17, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos]
     runs-on: ubuntu-latest
     steps:
       - env:
