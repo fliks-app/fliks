@@ -4,26 +4,28 @@
     <p class="text-sm text-base-content/60 mt-1">{{ 'dashboard.subtitle' | translate }}</p>
   </div>
 
+  <app-needs-attention />
+
   @if (loading()) {
-    <div class="flex justify-center py-16">
-      <span class="loading loading-spinner loading-lg"></span>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      @for (i of skeletonTiles; track i) {
+        <div class="h-24 rounded-box bg-base-200 animate-pulse"></div>
+      }
     </div>
   } @else if (stats(); as s) {
-    <!-- Stat cards -->
+    <!-- Stat tiles -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <div class="card bg-base-100 border border-base-200">
-        <div class="card-body py-5 px-5 gap-1">
-          <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'dashboard.stat_movies' | translate }}</p>
-          <p class="text-3xl font-bold tabular-nums">{{ s.movies }}</p>
-        </div>
-      </div>
-
-      <div class="card bg-base-100 border border-base-200">
-        <div class="card-body py-5 px-5 gap-1">
-          <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'dashboard.stat_series' | translate }}</p>
-          <p class="text-3xl font-bold tabular-nums">{{ s.series }}</p>
-        </div>
-      </div>
+      @for (lib of libraryTiles(); track lib.id) {
+        <a
+          [routerLink]="['/libraries', lib.name]"
+          class="card bg-base-100 border border-base-200 hover:border-primary transition-colors"
+        >
+          <div class="card-body py-5 px-5 gap-1">
+            <p class="text-sm text-base-content/60 uppercase tracking-wide truncate" [title]="lib.name">{{ lib.name }}</p>
+            <p class="text-3xl font-bold tabular-nums">{{ lib.count }}</p>
+          </div>
+        </a>
+      }
 
       <a
         routerLink="/requests"
@@ -38,13 +40,6 @@
           <p class="text-3xl font-bold tabular-nums" [class.text-warning]="s.pendingRequests > 0">{{ s.pendingRequests }}</p>
         </div>
       </a>
-
-      <div class="card bg-base-100 border border-base-200">
-        <div class="card-body py-5 px-5 gap-1">
-          <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'dashboard.stat_total' | translate }}</p>
-          <p class="text-3xl font-bold tabular-nums">{{ s.movies + s.series }}</p>
-        </div>
-      </div>
     </div>
 
     <!-- Disk space -->

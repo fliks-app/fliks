@@ -848,12 +848,9 @@
     "count": "{{current}}/{{total}}"
   },
   "dashboard": {
-    "title": "Dashboard",
-    "subtitle": "Überblick über die Bibliothek.",
-    "stat_movies": "Filme",
-    "stat_series": "Serien",
+    "title": "Übersicht",
+    "subtitle": "Bibliotheken, Anfragen und Speicherplatz.",
     "stat_pending": "Ausstehende Anfragen",
-    "stat_total": "Gesamt",
     "disk_title": "Speicherplatz",
     "disk_free": "Frei",
     "disk_unavailable": "Ordner nicht zugänglich",
@@ -1806,7 +1803,24 @@
     "cmd_follow_refresh": "Neuerscheinungen verfolgen",
     "logs_level_info": "Info",
     "logs_level_warn": "Warnung",
-    "logs_level_error": "Fehler"
+    "logs_level_error": "Fehler",
+    "checks": {
+      "title": "Handlungsbedarf",
+      "all_good": "Alles in Ordnung",
+      "last_checked": "Zuletzt geprüft: {{date}}",
+      "since": "Seit {{date}}",
+      "run": "Erneut prüfen",
+      "open": "Öffnen",
+      "plugin_failed": "Das Plugin {{plugin}} konnte nicht gestartet werden.",
+      "plugin_degraded": "Das Plugin {{plugin}} läuft mit Problemen.",
+      "library_unmounted": "Der Ordner {{folder}} der Bibliothek {{library}} ist nicht eingebunden.",
+      "library_read_only": "Der Ordner {{folder}} der Bibliothek {{library}} ist schreibgeschützt.",
+      "space_low": "{{label}} hat {{freeGb}} GB frei, unter dem Minimum von {{floorGb}} GB.",
+      "conf_volatile": "Der Konfigurationsordner ist nicht dauerhaft: Geheimnisse gehen verloren, wenn der Container neu erstellt wird.",
+      "data_volatile": "Der Datenordner ist nicht dauerhaft: Daten gehen verloren, wenn der Container neu erstellt wird.",
+      "job_failed": "Die Aufgabe {{job}} ist beim letzten Lauf fehlgeschlagen.",
+      "unknown": "Eine Prüfung meldet ein Problem."
+    }
   },
   "qoe": {
     "title": "Wiedergabequalität",

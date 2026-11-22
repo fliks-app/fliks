@@ -1,0 +1,44 @@
+<section class="card bg-base-100 border border-base-200">
+  <div class="card-body py-4 px-5 gap-3">
+    <div class="flex items-center justify-between gap-2">
+      <h2 class="text-lg font-semibold">{{ 'system.checks.title' | translate }}</h2>
+      <button type="button" class="btn btn-ghost btn-sm" (click)="run()" [disabled]="running()">
+        @if (running()) { <span class="loading loading-spinner loading-xs"></span> }
+        {{ 'system.checks.run' | translate }}
+      </button>
+    </div>
+
+    @if (report(); as r) {
+      @if (r.checks.length === 0) {
+        <p class="flex items-center gap-2 text-sm">
+          <svg lucideCircleCheck class="h-4 w-4 shrink-0 text-success"></svg>
+          <span>{{ 'system.checks.all_good' | translate }}</span>
+          @if (r.checkedAt) {
+            <span class="text-base-content/60">{{ 'system.checks.last_checked' | translate: { date: (r.checkedAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' }) } }}</span>
+          }
+        </p>
+      } @else {
+        <ul class="flex flex-col divide-y divide-base-200">
+          @for (c of r.checks; track c.key) {
+            <li class="flex items-center gap-3 py-2">
+              @if (c.state === 'error') {
+                <svg lucideCircleAlert class="h-5 w-5 shrink-0 text-error"></svg>
+              } @else {
+                <svg lucideTriangleAlert class="h-5 w-5 shrink-0 text-warning"></svg>
+              }
+              <div class="min-w-0 flex-1">
+                <p class="text-sm">{{ textKey(c.code) | translate: c.params }}</p>
+                <p class="text-sm text-base-content/60">{{ 'system.checks.since' | translate: { date: (c.since | localeDate:{ dateStyle: 'medium', timeStyle: 'short' }) } }}</p>
+              </div>
+              @if (c.link) {
+                <a [routerLink]="c.link" class="btn btn-outline btn-sm shrink-0">{{ 'system.checks.open' | translate }}</a>
+              }
+            </li>
+          }
+        </ul>
+      }
+    } @else {
+      <div class="h-5 w-48 rounded bg-base-200 animate-pulse"></div>
+    }
+  </div>
+</section>

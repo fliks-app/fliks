@@ -848,12 +848,9 @@
     "count": "{{current}}/{{total}}"
   },
   "dashboard": {
-    "title": "Bacheca",
-    "subtitle": "Panoramica della libreria.",
-    "stat_movies": "Film",
-    "stat_series": "Serie",
+    "title": "Panoramica",
+    "subtitle": "Raccolte, richieste e spazio su disco.",
     "stat_pending": "Richieste in attesa",
-    "stat_total": "Totale",
     "disk_title": "Spazio su disco",
     "disk_free": "Libero",
     "disk_unavailable": "Cartella non accessibile",
@@ -1806,7 +1803,24 @@
     "cmd_follow_refresh": "Segui le novità",
     "logs_level_info": "Info",
     "logs_level_warn": "Avviso",
-    "logs_level_error": "Errore"
+    "logs_level_error": "Errore",
+    "checks": {
+      "title": "Richiede attenzione",
+      "all_good": "Tutto a posto",
+      "last_checked": "Ultimo controllo: {{date}}",
+      "since": "Dal {{date}}",
+      "run": "Ricontrolla",
+      "open": "Apri",
+      "plugin_failed": "Il plugin {{plugin}} non è riuscito ad avviarsi.",
+      "plugin_degraded": "Il plugin {{plugin}} funziona con problemi.",
+      "library_unmounted": "La cartella {{folder}} della libreria {{library}} non è montata.",
+      "library_read_only": "La cartella {{folder}} della libreria {{library}} è di sola lettura.",
+      "space_low": "{{label}} ha {{freeGb}} GB liberi, sotto il minimo di {{floorGb}} GB.",
+      "conf_volatile": "La cartella di configurazione non è persistente: i segreti si perdono quando il container viene ricreato.",
+      "data_volatile": "La cartella dei dati non è persistente: i dati si perdono quando il container viene ricreato.",
+      "job_failed": "L'attività {{job}} è fallita all'ultima esecuzione.",
+      "unknown": "Un controllo segnala un problema."
+    }
   },
   "qoe": {
     "title": "Qualità di riproduzione",

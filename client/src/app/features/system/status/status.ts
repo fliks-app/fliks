@@ -11,6 +11,7 @@ import { firstValueFrom } from 'rxjs';
 import { LucideTrash2 } from '@lucide/angular';
 import { SseService, type MediaProgressSubject } from '../../../core/services/sse.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { NeedsAttentionComponent } from '../../../shared/components/needs-attention/needs-attention';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
@@ -41,7 +42,7 @@ const MAX_VISIBLE_CHILDREN = 5;
 
 @Component({
   selector: 'app-system-status',
-  imports: [TranslatePipe, TranslatePluralPipe, LocaleDatePipe, DecimalPipe, NgClass, RouterLink, LucideTrash2, PaginationComponent, DropdownMenuComponent],
+  imports: [TranslatePipe, TranslatePluralPipe, LocaleDatePipe, DecimalPipe, NgClass, RouterLink, LucideTrash2, PaginationComponent, DropdownMenuComponent, NeedsAttentionComponent],
   templateUrl: './status.html',
 })
 export class SystemStatusComponent implements OnInit, OnDestroy {

@@ -848,12 +848,9 @@
     "count": "{{current}}/{{total}}"
   },
   "dashboard": {
-    "title": "Dashboard",
-    "subtitle": "Library overview.",
-    "stat_movies": "Movies",
-    "stat_series": "Series",
+    "title": "Overview",
+    "subtitle": "Libraries, requests and disk space.",
     "stat_pending": "Pending requests",
-    "stat_total": "Total",
     "disk_title": "Disk space",
     "disk_free": "Free",
     "disk_unavailable": "Folder inaccessible",
@@ -1806,7 +1803,24 @@
     "cmd_follow_refresh": "Follow new releases",
     "logs_level_info": "Info",
     "logs_level_warn": "Warning",
-    "logs_level_error": "Error"
+    "logs_level_error": "Error",
+    "checks": {
+      "title": "Needs attention",
+      "all_good": "All good",
+      "last_checked": "Last checked {{date}}",
+      "since": "Since {{date}}",
+      "run": "Check again",
+      "open": "Open",
+      "plugin_failed": "The plugin {{plugin}} failed to start.",
+      "plugin_degraded": "The plugin {{plugin}} is running with problems.",
+      "library_unmounted": "The folder {{folder}} of the library {{library}} is not mounted.",
+      "library_read_only": "The folder {{folder}} of the library {{library}} is read-only.",
+      "space_low": "{{label}} has {{freeGb}} GB free, below the {{floorGb}} GB minimum.",
+      "conf_volatile": "The config folder is not persistent: secrets are lost when the container is recreated.",
+      "data_volatile": "The data folder is not persistent: data is lost when the container is recreated.",
+      "job_failed": "The task {{job}} failed on its last run.",
+      "unknown": "A check reports a problem."
+    }
   },
   "qoe": {
     "title": "Playback quality",
