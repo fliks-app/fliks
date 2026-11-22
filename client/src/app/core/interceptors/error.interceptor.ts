@@ -31,7 +31,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
     retry({
       count: req.method === 'GET' ? GET_RETRIES : 0,
       delay: (err: unknown, attempt) =>
-        err instanceof HttpErrorResponse && err.status === 0 && network.isOnline()
+        err instanceof HttpErrorResponse && (isStarting(err) || (err.status === 0 && network.isOnline()))
           ? timer(attempt * GET_RETRY_BACKOFF_MS)
           : throwError(() => err),
     }),
@@ -52,7 +52,7 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         unreachable ||
         (err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 401) ||
         err.status === 500 ||
-        err.status === 503;
+        (err.status === 503 && !isStarting(err));
       // Discover/search/browse GETs degrade in place, and one open fires several parallel metadata calls, so a 500 there must not spray toasts.
       const softMetadataGet =
         req.method === 'GET' && req.url.includes('/api/metadata') && err.status === 500;
@@ -80,13 +80,21 @@ function isFrameworkNotFound(status: number, message: unknown): boolean {
   return status === 404 && typeof message === 'string' && /^Cannot [A-Z]+ /.test(message);
 }
 
+/** The boot gate of the server answers every route but liveness with this 503 until it has migrated. */
+export const isStarting = (err: HttpErrorResponse): boolean =>
+  err.status === 503 && err.error?.message === 'errors.starting';
+
 /** No answer from the server: the link is down, or the front door has no upstream while it restarts. */
-export const isUnreachable = (err: HttpErrorResponse): boolean => [0, 502, 504].includes(err.status);
+export const isUnreachable = (err: HttpErrorResponse): boolean =>
+  [0, 502, 504].includes(err.status) || isStarting(err);
 
 export function extractMessage(
   err: HttpErrorResponse,
   translate: TranslateService,
 ): string {
+  if (isStarting(err)) {
+    return translate.instant('errors.starting');
+  }
   if (isUnreachable(err)) {
     return translate.instant('errors.network');
   }

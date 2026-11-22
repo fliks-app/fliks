@@ -4004,6 +4004,7 @@
   },
   "errors": {
     "network": "No se puede contactar con el servidor",
+    "starting": "El servidor se está iniciando, inténtalo de nuevo en un momento",
     "400": "Petición no válida",
     "401": "No autorizado: vuelva a iniciar sesión",
     "403": "Acceso denegado",

@@ -22,6 +22,7 @@ const EN_ERRORS: TranslationObject = {
     '404': 'Resource not found',
     '500': 'Internal server error',
     '503': 'Service temporarily unavailable',
+    starting: 'The server is starting',
     unknown: 'Error {{code}}',
     '409': 'Conflict - the resource already exists',
   },
@@ -230,6 +231,27 @@ describe('errorInterceptor', () => {
     client.post('/api/a', {}).subscribe({ error: () => {} });
     http.expectOne('/api/a').flush(null, { status: 0, statusText: 'x' });
     expect(toast.toasts()).toEqual([]);
+  });
+
+  it('keeps a GET silent and retries it through the boot 503', () => {
+    vi.useFakeTimers();
+    try {
+      let body: unknown;
+      client.get('/api/media').subscribe((b) => (body = b));
+      http.expectOne('/api/media').flush({ message: 'errors.starting' }, { status: 503, statusText: 'x' });
+      expect(toast.toasts()).toEqual([]);
+      vi.advanceTimersByTime(300);
+      http.expectOne('/api/media').flush({ ok: true });
+      expect(body).toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('toasts a mutation answered by the boot 503 with the starting message', () => {
+    client.post('/api/a', {}).subscribe({ error: () => {} });
+    http.expectOne('/api/a').flush({ message: 'errors.starting' }, { status: 503, statusText: 'x' });
+    expect(toast.toasts().map((t) => t.message)).toEqual(['The server is starting']);
   });
 
   it('keeps a GET silent when the server is unreachable', () => {

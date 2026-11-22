@@ -93,8 +93,9 @@ pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
     Ok(())
 }
 
-/// Longest wait for open connections after a stop signal; under Docker's `stop_grace_period`.
-const DRAIN: Duration = Duration::from_secs(20);
+/// Longest wait for open connections after a stop signal; the engine waits 25 s before it kills the
+/// server, and the QoE, push and plugin flushes run after the drain.
+const DRAIN: Duration = Duration::from_secs(15);
 
 /// `fliks-server restore <file>` (`system.md` rule 40): the server is stopped, and nothing migrates.
 pub async fn restore(cfg: &Config, file: &std::path::Path) -> Result<(), BoxError> {

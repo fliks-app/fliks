@@ -172,17 +172,18 @@ internal sealed class ServerManager
         }
     });
 
+    /// <summary>Waits for the app: <c>/api/system/health</c> is 503 while the server boots, then 401 or 200.</summary>
     private static async Task WaitForHttpReadyAsync(ushort port, TimeSpan timeout, CancellationToken ct)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-        var url = $"http://127.0.0.1:{port}/api/system/liveness";
+        var url = $"http://127.0.0.1:{port}/api/system/health";
         var deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
             try
             {
                 var response = await http.GetAsync(url, ct);
-                if ((int)response.StatusCode < 500) return;
+                if (response.StatusCode != System.Net.HttpStatusCode.ServiceUnavailable) return;
             }
             catch when (!ct.IsCancellationRequested)
             {

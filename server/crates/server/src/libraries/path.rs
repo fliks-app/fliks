@@ -91,7 +91,8 @@ pub fn normalize(path: &str) -> String {
 }
 
 /// Boot check: warns for every pair of folders of different libraries that name one directory
-/// (case, symlink or bind-mount variants); nothing is changed. The filesystem work runs on a
+/// (case, symlink or bind-mount variants) and for every folder this process cannot write (imports,
+/// hardlinks and deletes fail there); nothing is changed. The filesystem work runs on a
 /// blocking thread so a hung mount stalls only this check.
 pub async fn warn_overlapping_folders(db: &sqlx::PgPool) -> sqlx::Result<()> {
     let folders =
@@ -99,6 +100,9 @@ pub async fn warn_overlapping_folders(db: &sqlx::PgPool) -> sqlx::Result<()> {
             .fetch_all(db)
             .await?;
     let _ = tokio::task::spawn_blocking(move || {
+        for f in &folders {
+            warn_unwritable(Path::new(&f.path));
+        }
         for (i, a) in folders.iter().enumerate() {
             for b in &folders[i + 1..] {
                 if a.library_id != b.library_id
@@ -118,6 +122,27 @@ pub async fn warn_overlapping_folders(db: &sqlx::PgPool) -> sqlx::Result<()> {
     .await;
     Ok(())
 }
+
+#[cfg(unix)]
+fn warn_unwritable(dir: &Path) {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c) = std::ffi::CString::new(dir.as_os_str().as_bytes()) else {
+        return;
+    };
+    // SAFETY: access reads a NUL-terminated path.
+    let denied = unsafe { libc::access(c.as_ptr(), libc::W_OK | libc::X_OK) } != 0;
+    if denied && dir.is_dir() {
+        tracing::warn!(
+            "library folder {} is not writable by uid {}: run the container as the owner of the media \
+             (`user: \"<uid>:0\"` in the compose file, group 0 keeps the data volumes writable) or chown it",
+            dir.display(),
+            crate::jwt_secret::euid()
+        );
+    }
+}
+
+#[cfg(not(unix))]
+fn warn_unwritable(_: &Path) {}
 
 /// `assignPath` (rule 13): the directory is created last, right before the write.
 pub async fn assign(c: &mut PgConnection, id: i32, raw: &str) -> Result<(), AppError> {

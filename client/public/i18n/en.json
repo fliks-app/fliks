@@ -4004,6 +4004,7 @@
   },
   "errors": {
     "network": "Unable to reach the server",
+    "starting": "The server is starting, try again in a moment",
     "400": "Invalid request",
     "401": "Unauthorized: please log in again",
     "403": "Access forbidden",

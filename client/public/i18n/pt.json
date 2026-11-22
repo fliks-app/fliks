@@ -4004,6 +4004,7 @@
   },
   "errors": {
     "network": "Não foi possível contactar o servidor",
+    "starting": "O servidor está a iniciar, tente novamente dentro de instantes",
     "400": "Pedido inválido",
     "401": "Não autorizado: por favor, inicie sessão novamente",
     "403": "Acesso proibido",

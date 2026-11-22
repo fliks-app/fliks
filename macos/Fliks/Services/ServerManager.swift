@@ -157,15 +157,15 @@ actor ServerManager {
         }
     }
 
-    /// Poll the server's HTTP endpoint until it responds.
+    /// Poll `/api/system/health` until the app answers: during boot it is 503, then 401 or 200.
     private func waitForHTTPReady(port: UInt16, timeout: TimeInterval) async throws {
         let deadline = Date().addingTimeInterval(timeout)
-        let url = URL(string: "http://localhost:\(port)/api/system/liveness")!
+        let url = URL(string: "http://localhost:\(port)/api/system/health")!
 
         while Date() < deadline {
             do {
                 let (_, response) = try await URLSession.shared.data(from: url)
-                if let http = response as? HTTPURLResponse, http.statusCode < 500 {
+                if let http = response as? HTTPURLResponse, http.statusCode != 503 {
                     return
                 }
             } catch {
