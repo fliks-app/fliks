@@ -24,9 +24,9 @@ import { FolderPickerService } from '../../../../../core/services/folder-picker.
 import { ToastService } from '../../../../../core/services/toast.service';
 import { formatBytes } from '../../../../../core/utils/format-bytes';
 import { serverMessage } from '../../../../../core/utils/server-message';
-import { ModalFooterComponent } from '../../../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../../../shared/components/modal-header';
 import { LibraryDetailState } from '../library-detail.state';
+import { ModalComponent } from '../../../../../shared/components/modal';
 
 const isFolderInUse = (err: unknown): boolean => {
   const body = (err as { error?: { code?: string; message?: string } })?.error;
@@ -37,6 +37,7 @@ const isFolderInUse = (err: unknown): boolean => {
 @Component({
   selector: 'app-library-folders',
   imports: [
+    ModalComponent,
     FormsModule,
     TranslatePipe,
     CdkDropList,
@@ -48,7 +49,6 @@ const isFolderInUse = (err: unknown): boolean => {
     LucideGripVertical,
     LucidePencil,
     LucideTrash2,
-    ModalFooterComponent,
     ModalHeaderComponent,
   ],
   templateUrl: './library-folders.html',
@@ -61,7 +61,7 @@ export class LibraryFoldersComponent {
   private readonly translate = inject(TranslateService);
   readonly state = inject(LibraryDetailState);
 
-  private readonly inUseDialog = viewChild<ElementRef<HTMLDialogElement>>('inUseDialog');
+  private readonly inUseDialog = viewChild<string, ElementRef<HTMLDialogElement>>('inUseDialog', { read: ElementRef });
 
   protected readonly formatBytes = formatBytes;
   readonly folders = computed(() => this.state.library()?.folders ?? []);

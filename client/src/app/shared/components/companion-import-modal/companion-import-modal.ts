@@ -17,11 +17,13 @@ import { SelectFieldComponent } from '../forms/select-field/select-field';
 import { ToggleFieldComponent } from '../forms/toggle-field/toggle-field';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
+import { ModalComponent } from '../modal';
 
 /** Imports a subtitle or an EDL picked on this device next to a media file. */
 @Component({
   selector: 'app-companion-import-modal',
   imports: [
+    ModalComponent,
     FormsModule,
     TranslatePipe,
     LocalizeLanguagePipe,
@@ -33,7 +35,7 @@ import { ModalFooterComponent } from '../modal-footer';
   templateUrl: './companion-import-modal.html',
 })
 export class CompanionImportModalComponent {
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
   private readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');
   private readonly device = inject(DeviceService);
   private readonly mediaApi = inject(MediaService);

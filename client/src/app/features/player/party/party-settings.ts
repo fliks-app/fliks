@@ -10,11 +10,12 @@ import { PartyService } from '../../../core/services/party/party.service';
 import { PartySync } from '../../../core/services/party/party-sync';
 import type { PartySwitches } from '../../../core/services/api/party-api.service';
 import { PartyHostSwitchesComponent, switchesPatch } from './party-host-switches';
+import { ModalComponent } from '../../../shared/components/modal';
 
 /** Party settings, opened from the party panel; lives in the player so it shows in fullscreen. */
 @Component({
   selector: 'app-party-settings',
-  imports: [TranslatePipe, LucideRefreshCw, ModalHeaderComponent, TvSectionDirective, PartyHostSwitchesComponent, ToggleFieldComponent],
+  imports: [ModalComponent, TranslatePipe, LucideRefreshCw, ModalHeaderComponent, TvSectionDirective, PartyHostSwitchesComponent, ToggleFieldComponent],
   templateUrl: './party-settings.html',
 })
 export class PartySettingsComponent {
@@ -22,7 +23,7 @@ export class PartySettingsComponent {
   protected readonly voice = inject(VoiceService);
   protected readonly keyboard = inject(KeyboardOverlayService);
   private readonly controller = inject(PartySync);
-  private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild.required<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
   /** The player mounts the dialog to open it and drops it on close. */
   readonly closed = output<void>();
   /** The host's unsaved switches; null until one is touched. */

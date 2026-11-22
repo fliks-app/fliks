@@ -20,6 +20,7 @@ import {
 } from '../../../core/services/api/profiles.service';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../shared/components/modal';
 
 interface LangDef {
   id: number;
@@ -41,7 +42,7 @@ const subKey = (isoCode: string, forced: boolean) =>
 
 @Component({
   selector: 'app-language-profiles',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
+  imports: [ModalComponent, TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   templateUrl: './language-profiles.html',
 })
 export class LanguageProfilesComponent implements OnInit {
@@ -50,7 +51,7 @@ export class LanguageProfilesComponent implements OnInit {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
 
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
 
   readonly profiles = signal<LanguageProfile[]>([]);
   readonly definitions = signal<LangDef[]>([]);

@@ -1,231 +1,260 @@
-<dialog #modal class="modal">
-  <div class="modal-box w-11/12 max-w-5xl">
-    <app-modal-header [title]="'media_detail.edit_subtitles' | translate" />
+<dialog #modal appModal boxClass="w-11/12 max-w-5xl">
+  <app-modal-header [title]="'media_detail.edit_subtitles' | translate" />
 
-    <!-- On a phone the table band runs into the footer, whose own top border
-         closes it; -mb-6 cancels the footer bar's 1.5rem top margin. -->
-    <section class="space-y-3 -mb-6 sm:mb-0">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        @if (canManage()) {
-          <!-- The labels don't fit one phone-width line; `min-w-0` keeps the overflow scrolling inside this row, not the dialog. -->
-          <div class="flex gap-2 ml-auto min-w-0 max-w-full overflow-x-auto py-0.5">
-            @if (hasMissing()) {
-              <button
-                type="button"
-                class="btn btn-ghost btn-sm shrink-0"
-                [disabled]="searchDisabled() || subtitleActionBusy()"
-                [attr.title]="
-                  searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
-                "
-                (click)="searchMissing()"
-              >
-                @if (subtitleActionBusy()) {
-                  <span class="loading loading-spinner loading-xs"></span>
-                }
-                {{ 'media_detail.search_missing_subtitles' | translate }}
-              </button>
-            }
-            @if (canPickFiles()) {
-              <button
-                type="button"
-                class="btn btn-ghost btn-sm shrink-0"
-                [disabled]="searchDisabled() || subtitleActionBusy()"
-                [attr.title]="
-                  searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
-                "
-                (click)="openImport()"
-              >
-                <svg lucideUpload class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
-                {{ 'media_detail.subtitles_import' | translate }}
-              </button>
-            }
+  <section class="space-y-3">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      @if (canManage()) {
+        <!-- The labels don't fit one phone-width line; `min-w-0` keeps the overflow scrolling inside this row, not the dialog. -->
+        <div class="flex gap-2 ml-auto min-w-0 max-w-full overflow-x-auto py-0.5">
+          @if (hasMissing()) {
             <button
               type="button"
-              class="btn btn-primary btn-sm shrink-0"
+              class="btn btn-ghost btn-sm shrink-0"
               [disabled]="searchDisabled() || subtitleActionBusy()"
               [attr.title]="
                 searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
               "
-              (click)="openSubtitleSearch()"
+              (click)="searchMissing()"
             >
-              {{ 'media_detail.subtitles_search' | translate }}
-            </button>
-          </div>
-        }
-      </div>
-
-      @if (subtitlesLoading()) {
-        <div class="flex justify-center py-4">
-          <span class="loading loading-spinner loading-md"></span>
-        </div>
-      } @else if (rows().length === 0) {
-        <p class="text-sm text-base-content/60">{{ 'media_detail.no_subtitles' | translate }}</p>
-      } @else {
-        <!-- Phone only: -mx-6 cancels the modal-box padding so the table reaches both edges; from sm it is an inset, rounded card. -->
-        <div class="-mx-6 overflow-x-auto sm:mx-0 sm:rounded-lg sm:border sm:border-base-200">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>{{ 'media_detail.col_sub_language' | translate }}</th>
-                <th>{{ 'media_detail.col_sub_path' | translate }}</th>
-                <th>{{ 'media_detail.col_sub_provider' | translate }}</th>
-                <th class="text-center">{{ 'media_detail.col_sub_score' | translate }}</th>
-                <th class="text-center">{{ 'media_detail.col_sub_flags' | translate }}</th>
-                <th class="text-end w-32"></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (row of pagedRows(); track row.missing ? row.language : row.sub!.id) {
-                @if (row.missing) {
-                  <tr class="opacity-40">
-                    <td class="font-medium">{{ row.language | localizeLanguage }}</td>
-                    <td class="text-sm">-</td>
-                    <td class="text-sm">-</td>
-                    <td class="text-center">-</td>
-                    <td></td>
-                    <td></td>
-                  </tr>
-                } @else {
-                  @let sub = row.sub!;
-                  <tr>
-                    <td class="font-medium">{{ sub.language | localizeLanguage }}</td>
-                    <td
-                      class="text-sm text-base-content/60 truncate max-w-48"
-                      [title]="sub.relativePath ?? ''"
-                    >
-                      @if (sub.relativePath) {
-                        {{ sub.relativePath | subtitleFilename }}
-                      } @else if (sub.providerType === 'embedded') {
-                        <span class="text-base-content/60">{{
-                          'media_detail.embedded' | translate
-                        }}</span>
-                      } @else {
-                        -
-                      }
-                    </td>
-                    <td class="text-sm">
-                      @if (sub.providerType === 'embedded') {
-                        <span class="badge badge-sm badge-neutral">embedded</span>
-                      } @else if (sub.providerType === 'translated') {
-                        <span [title]="sub.translationModel ?? ''">{{
-                          translationServiceLabel(sub)
-                        }}</span>
-                      } @else {
-                        {{ sub.providerType }}
-                      }
-                    </td>
-                    <td class="text-center tabular-nums">
-                      @if (sub.providerType === 'embedded') {
-                        <span class="text-base-content/60">-</span>
-                      } @else {
-                        {{ sub.score }}
-                      }
-                    </td>
-                    <td class="text-center text-sm">
-                      @if (sub.status === 'processing') {
-                        @let percent = translationPercent(sub);
-                        @if (sub.providerType === 'translated' && percent !== null) {
-                          <span class="inline-flex items-center gap-1 align-middle">
-                            <progress
-                              class="progress progress-warning w-16 h-1.5 align-middle"
-                              [value]="percent"
-                              max="100"
-                            ></progress>
-                            <span class="tabular-nums text-[10px]">{{ percent }}%</span>
-                          </span>
-                        } @else {
-                          <span class="badge badge-sm badge-warning gap-1">
-                            <span class="loading loading-spinner loading-xs"></span>
-                            {{
-                              (sub.providerType === 'translated'
-                                ? 'media_detail.translate_processing'
-                                : 'media_detail.ocr_processing'
-                              ) | translate
-                            }}
-                          </span>
-                        }
-                      }
-                      @if (isSyncing(sub)) {
-                        <span class="badge badge-sm badge-warning gap-1">
-                          <span class="loading loading-spinner loading-xs"></span>
-                          {{ 'media_detail.sync_processing' | translate }}
-                        </span>
-                      }
-                      @if (sub.status === 'failed') {
-                        <app-error-badge
-                          class="mr-1"
-                          [error]="sub.errorMessage ?? null"
-                          [label]="'media_detail.subtitle_failed' | translate"
-                        />
-                      }
-                      @if (sub.forced) {
-                        <span class="badge badge-sm badge-outline mr-1">F</span>
-                      }
-                      @if (sub.hearingImpaired) {
-                        <span class="badge badge-sm badge-outline">HI</span>
-                      }
-                      @if (sub.synced) {
-                        <span class="badge badge-sm badge-info ml-1">{{
-                          'activity.status_synced' | translate
-                        }}</span>
-                      }
-                      @if (sub.syncFailed) {
-                        <app-error-badge
-                          class="ml-1"
-                          [error]="sub.errorMessage ?? null"
-                          [label]="'media_detail.subtitle_sync_failed' | translate"
-                          badgeClass="badge-warning"
-                        />
-                      }
-                      @if (sub.codec) {
-                        <span class="badge badge-sm badge-ghost ml-1">{{ sub.codec }}</span>
-                      }
-                    </td>
-                    <td class="text-end">
-                      @if (
-                        canManage() &&
-                        rowHasActions(sub) &&
-                        (sub.status !== 'processing' || sub.providerType === 'translated')
-                      ) {
-                        <button
-                          #actionsTrigger
-                          type="button"
-                          class="btn btn-ghost btn-xs"
-                          [disabled]="subtitleActionBusy()"
-                          (click)="openSubActions(sub, actionsTrigger)"
-                        >
-                          {{ 'media_detail.subtitle_actions' | translate }}
-                          <svg lucideChevronDown class="h-3 w-3"></svg>
-                        </button>
-                      }
-                    </td>
-                  </tr>
-                }
+              @if (subtitleActionBusy()) {
+                <span class="loading loading-spinner loading-xs"></span>
               }
-            </tbody>
-          </table>
+              {{ 'media_detail.search_missing_subtitles' | translate }}
+            </button>
+          }
+          @if (canPickFiles()) {
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm shrink-0"
+              [disabled]="searchDisabled() || subtitleActionBusy()"
+              [attr.title]="
+                searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
+              "
+              (click)="openImport()"
+            >
+              <svg lucideUpload class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
+              {{ 'media_detail.subtitles_import' | translate }}
+            </button>
+          }
+          <button
+            type="button"
+            class="btn btn-primary btn-sm shrink-0"
+            [disabled]="searchDisabled() || subtitleActionBusy()"
+            [attr.title]="
+              searchDisabled() ? ('media_detail.subtitles_need_episode_file' | translate) : null
+            "
+            (click)="openSubtitleSearch()"
+          >
+            {{ 'media_detail.subtitles_search' | translate }}
+          </button>
         </div>
-        @if (totalPages() > 1) {
-          <app-pagination
-            class="mt-2"
-            [current]="currentPage() + 1"
-            [total]="totalPages()"
-            (pageChange)="goToPage($event - 1)"
+      }
+    </div>
+
+    @if (subtitlesLoading()) {
+      <div class="flex justify-center py-4">
+        <span class="loading loading-spinner loading-md"></span>
+      </div>
+    } @else if (rows().length === 0) {
+      <p class="text-sm text-base-content/60">{{ 'media_detail.no_subtitles' | translate }}</p>
+    } @else {
+      <!-- Cells shared by the table (sm and up) and the phone list. -->
+      <ng-template #fileName let-sub>
+        @if (sub.relativePath) {
+          {{ sub.relativePath | subtitleFilename }}
+        } @else if (sub.providerType === 'embedded') {
+          {{ 'media_detail.embedded' | translate }}
+        } @else {
+          -
+        }
+      </ng-template>
+      <ng-template #providerCell let-sub>
+        @if (sub.providerType === 'embedded') {
+          <span class="badge badge-sm badge-neutral">embedded</span>
+        } @else if (sub.providerType === 'translated') {
+          <span [title]="sub.translationModel ?? ''">{{
+            translationServiceLabel(sub)
+          }}</span>
+        } @else {
+          {{ sub.providerType }}
+        }
+      </ng-template>
+      <ng-template #flagBadges let-sub>
+        @if (sub.status === 'processing') {
+          @let percent = translationPercent(sub);
+          @if (sub.providerType === 'translated' && percent !== null) {
+            <span class="inline-flex items-center gap-1 align-middle">
+              <progress
+                class="progress progress-warning w-16 h-1.5 align-middle"
+                [value]="percent"
+                max="100"
+              ></progress>
+              <span class="tabular-nums text-sm">{{ percent }}%</span>
+            </span>
+          } @else {
+            <span class="badge badge-sm badge-warning gap-1">
+              <span class="loading loading-spinner loading-xs"></span>
+              {{
+                (sub.providerType === 'translated'
+                  ? 'media_detail.translate_processing'
+                  : 'media_detail.ocr_processing'
+                ) | translate
+              }}
+            </span>
+          }
+        }
+        @if (isSyncing(sub)) {
+          <span class="badge badge-sm badge-warning gap-1">
+            <span class="loading loading-spinner loading-xs"></span>
+            {{ 'media_detail.sync_processing' | translate }}
+          </span>
+        }
+        @if (sub.status === 'failed') {
+          <app-error-badge
+            class="mr-1"
+            [error]="sub.errorMessage ?? null"
+            [label]="'media_detail.subtitle_failed' | translate"
           />
         }
+        @if (sub.forced) {
+          <span class="badge badge-sm badge-outline mr-1">F</span>
+        }
+        @if (sub.hearingImpaired) {
+          <span class="badge badge-sm badge-outline">HI</span>
+        }
+        @if (sub.synced) {
+          <span class="badge badge-sm badge-info ml-1">{{
+            'activity.status_synced' | translate
+          }}</span>
+        }
+        @if (sub.syncFailed) {
+          <app-error-badge
+            class="ml-1"
+            [error]="sub.errorMessage ?? null"
+            [label]="'media_detail.subtitle_sync_failed' | translate"
+            badgeClass="badge-warning"
+          />
+        }
+        @if (sub.codec) {
+          <span class="badge badge-sm badge-ghost ml-1">{{ sub.codec }}</span>
+        }
+      </ng-template>
+      <ng-template #actionsButton let-sub let-compact="compact">
+        @if (
+          canManage() &&
+          rowHasActions(sub) &&
+          (sub.status !== 'processing' || sub.providerType === 'translated')
+        ) {
+          <button
+            #actionsTrigger
+            type="button"
+            class="btn btn-ghost"
+            [class.btn-xs]="!compact"
+            [class.btn-sm]="compact"
+            [class.btn-square]="compact"
+            [disabled]="subtitleActionBusy()"
+            [attr.aria-label]="'media_detail.subtitle_actions' | translate"
+            (click)="openSubActions(sub, actionsTrigger)"
+          >
+            @if (compact) {
+              <svg lucideEllipsisVertical class="h-4 w-4"></svg>
+            } @else {
+              {{ 'media_detail.subtitle_actions' | translate }}
+              <svg lucideChevronDown class="h-3 w-3"></svg>
+            }
+          </button>
+        }
+      </ng-template>
+
+      <ul class="sm:hidden divide-y divide-base-content/10 rounded-2xl border border-base-content/10">
+        @for (row of pagedRows(); track row.missing ? row.language : row.sub!.id) {
+          @if (row.missing) {
+            <li class="px-4 py-3 font-medium opacity-40">{{ row.language | localizeLanguage }}</li>
+          } @else {
+            @let sub = row.sub!;
+            <li class="flex items-center gap-2 py-2.5 ps-4 pe-2">
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-1">
+                  <span class="me-1 font-medium">{{ sub.language | localizeLanguage }}</span>
+                  <ng-container *ngTemplateOutlet="flagBadges; context: { $implicit: sub }" />
+                </div>
+                <div class="truncate text-sm text-base-content/60" [title]="sub.relativePath ?? ''">
+                  <ng-container *ngTemplateOutlet="fileName; context: { $implicit: sub }" />
+                  @if (sub.providerType !== 'embedded') {
+                    · <ng-container *ngTemplateOutlet="providerCell; context: { $implicit: sub }" />
+                    · {{ sub.score }}
+                  }
+                </div>
+              </div>
+              <ng-container *ngTemplateOutlet="actionsButton; context: { $implicit: sub, compact: true }" />
+            </li>
+          }
+        }
+      </ul>
+
+      <div class="hidden sm:block overflow-x-auto rounded-2xl border border-base-content/10">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>{{ 'media_detail.col_sub_language' | translate }}</th>
+              <th>{{ 'media_detail.col_sub_path' | translate }}</th>
+              <th>{{ 'media_detail.col_sub_provider' | translate }}</th>
+              <th class="text-center">{{ 'media_detail.col_sub_score' | translate }}</th>
+              <th class="text-center">{{ 'media_detail.col_sub_flags' | translate }}</th>
+              <th class="text-end w-32"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of pagedRows(); track row.missing ? row.language : row.sub!.id) {
+              @if (row.missing) {
+                <tr class="opacity-40">
+                  <td class="font-medium">{{ row.language | localizeLanguage }}</td>
+                  <td class="text-sm">-</td>
+                  <td class="text-sm">-</td>
+                  <td class="text-center">-</td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              } @else {
+                @let sub = row.sub!;
+                <tr>
+                  <td class="font-medium">{{ sub.language | localizeLanguage }}</td>
+                  <td class="text-sm text-base-content/60 truncate max-w-48" [title]="sub.relativePath ?? ''">
+                    <ng-container *ngTemplateOutlet="fileName; context: { $implicit: sub }" />
+                  </td>
+                  <td class="text-sm">
+                    <ng-container *ngTemplateOutlet="providerCell; context: { $implicit: sub }" />
+                  </td>
+                  <td class="text-center tabular-nums">
+                    @if (sub.providerType === 'embedded') {
+                      <span class="text-base-content/60">-</span>
+                    } @else {
+                      {{ sub.score }}
+                    }
+                  </td>
+                  <td class="text-center text-sm">
+                    <ng-container *ngTemplateOutlet="flagBadges; context: { $implicit: sub }" />
+                  </td>
+                  <td class="text-end">
+                    <ng-container *ngTemplateOutlet="actionsButton; context: { $implicit: sub, compact: false }" />
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+      @if (totalPages() > 1) {
+        <app-pagination
+          class="mt-2"
+          [current]="currentPage() + 1"
+          [total]="totalPages()"
+          (pageChange)="goToPage($event - 1)"
+        />
       }
-    </section>
+    }
+  </section>
 
-    <app-modal-footer>
-      <form method="dialog">
-        <button class="btn">{{ 'common.close' | translate }}</button>
-      </form>
-    </app-modal-footer>
-  </div>
-
-  <form method="dialog" class="modal-backdrop">
-    <button tabindex="-1">close</button>
-  </form>
 </dialog>
 
 <!-- Search modal -->
@@ -241,283 +270,263 @@
 />
 
 <!-- Sync options modal -->
-<dialog #syncDialog class="modal" [attr.aria-label]="'media_detail.sync_modal_title' | translate">
-  <div class="modal-box max-w-2xl w-11/12">
-    <app-modal-header>
-      <div>
-        <h3 class="text-lg font-bold">{{ 'media_detail.sync_modal_title' | translate }}</h3>
-        <p class="text-sm text-base-content/60 mt-1">
-          {{ 'media_detail.sync_modal_subtitle' | translate }}
-        </p>
-      </div>
-    </app-modal-header>
-
-    <div class="flex flex-col gap-4 mt-4">
-      <app-sync-reference-select
-        [(value)]="syncReference"
-        [audioStreams]="audioStreams()"
-        [subtitleStreams]="subtitleStreams()"
-        [externalRefs]="externalSubtitleRefs()"
-      />
-
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'media_detail.sync_max_offset' | translate }}</span>
-        <input
-          type="number"
-          class="input input-bordered input-sm w-full"
-          min="0"
-          placeholder="60"
-          [ngModel]="syncMaxOffset()"
-          (ngModelChange)="syncMaxOffset.set($event)"
-        />
-        <div class="label">
-          <span class="label-text-alt text-base-content/60">{{
-            'media_detail.sync_max_offset_hint' | translate
-          }}</span>
-        </div>
-      </label>
-
-      <label class="label cursor-pointer justify-start gap-3">
-        <input
-          type="checkbox"
-          class="checkbox checkbox-sm"
-          [ngModel]="syncNoFixFramerate()"
-          (ngModelChange)="syncNoFixFramerate.set($event)"
-        />
-        <span class="label-text">{{ 'media_detail.sync_no_fix_framerate' | translate }}</span>
-      </label>
-
-      <label class="label cursor-pointer justify-start gap-3">
-        <input
-          type="checkbox"
-          class="checkbox checkbox-sm"
-          [ngModel]="syncGoldenSection()"
-          (ngModelChange)="syncGoldenSection.set($event)"
-        />
-        <span class="label-text">{{ 'media_detail.sync_golden_section' | translate }}</span>
-      </label>
+<dialog #syncDialog appModal boxClass="max-w-2xl w-11/12" [attr.aria-label]="'media_detail.sync_modal_title' | translate">
+  <app-modal-header>
+    <div>
+      <h3 class="text-lg font-bold">{{ 'media_detail.sync_modal_title' | translate }}</h3>
+      <p class="text-base text-base-content/60 mt-1">
+        {{ 'media_detail.sync_modal_subtitle' | translate }}
+      </p>
     </div>
+  </app-modal-header>
 
-    <app-modal-footer>
-      <button type="button" class="btn btn-ghost" (click)="closeSyncModal()">
-        {{ 'common.cancel' | translate }}
-      </button>
-      <button type="button" class="btn btn-primary" (click)="confirmSync()">
-        {{ 'media_detail.action_sync' | translate }}
-      </button>
-    </app-modal-footer>
+  <div class="flex flex-col gap-4 mt-4">
+    <app-sync-reference-select
+      [(value)]="syncReference"
+      [audioStreams]="audioStreams()"
+      [subtitleStreams]="subtitleStreams()"
+      [externalRefs]="externalSubtitleRefs()"
+    />
+
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'media_detail.sync_max_offset' | translate }}</span>
+      <input
+        type="number"
+        class="input input-bordered input-sm w-full"
+        min="0"
+        placeholder="60"
+        [ngModel]="syncMaxOffset()"
+        (ngModelChange)="syncMaxOffset.set($event)"
+      />
+      <div class="label">
+        <span class="label-text-alt text-base-content/60">{{
+          'media_detail.sync_max_offset_hint' | translate
+        }}</span>
+      </div>
+    </label>
+
+    <label class="label cursor-pointer justify-start gap-3">
+      <input
+        type="checkbox"
+        class="checkbox checkbox-sm"
+        [ngModel]="syncNoFixFramerate()"
+        (ngModelChange)="syncNoFixFramerate.set($event)"
+      />
+      <span class="label-text">{{ 'media_detail.sync_no_fix_framerate' | translate }}</span>
+    </label>
+
+    <label class="label cursor-pointer justify-start gap-3">
+      <input
+        type="checkbox"
+        class="checkbox checkbox-sm"
+        [ngModel]="syncGoldenSection()"
+        (ngModelChange)="syncGoldenSection.set($event)"
+      />
+      <span class="label-text">{{ 'media_detail.sync_golden_section' | translate }}</span>
+    </label>
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" tabindex="-1" (click)="closeSyncModal()">close</button>
-  </form>
+
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="closeSyncModal()">
+      {{ 'common.cancel' | translate }}
+    </button>
+    <button type="button" class="btn btn-primary" (click)="confirmSync()">
+      {{ 'media_detail.action_sync' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>
 
 <!-- Adjust Times modal -->
-<dialog #adjustDialog class="modal" [attr.aria-label]="'media_detail.adjust_times_title' | translate">
-  <div class="modal-box max-w-md">
-    <app-modal-header>
-      <div>
-        <h3 class="text-lg font-bold">{{ 'media_detail.adjust_times_title' | translate }}</h3>
-        <p class="text-sm text-base-content/60 mt-1">
-          {{ 'media_detail.adjust_times_subtitle' | translate }}
-        </p>
-      </div>
-    </app-modal-header>
-
-    <div class="flex gap-3 mt-4">
-      <label class="form-control flex-1">
-        <span class="label-text">{{ 'media_detail.adjust_minutes' | translate }}</span>
-        <input
-          type="number"
-          class="input input-bordered input-sm w-full"
-          [ngModel]="adjustMinutes()"
-          (ngModelChange)="adjustMinutes.set($event)"
-        />
-      </label>
-      <label class="form-control flex-1">
-        <span class="label-text">{{ 'media_detail.adjust_seconds' | translate }}</span>
-        <input
-          type="number"
-          class="input input-bordered input-sm w-full"
-          [ngModel]="adjustSeconds()"
-          (ngModelChange)="adjustSeconds.set($event)"
-        />
-      </label>
-      <label class="form-control flex-1">
-        <span class="label-text">{{ 'media_detail.adjust_millis' | translate }}</span>
-        <input
-          type="number"
-          class="input input-bordered input-sm w-full"
-          [ngModel]="adjustMillis()"
-          (ngModelChange)="adjustMillis.set($event)"
-        />
-      </label>
+<dialog #adjustDialog appModal boxClass="max-w-md" [attr.aria-label]="'media_detail.adjust_times_title' | translate">
+  <app-modal-header>
+    <div>
+      <h3 class="text-lg font-bold">{{ 'media_detail.adjust_times_title' | translate }}</h3>
+      <p class="text-base text-base-content/60 mt-1">
+        {{ 'media_detail.adjust_times_subtitle' | translate }}
+      </p>
     </div>
-    <div class="label">
-      <span class="label-text-alt text-base-content/60">{{
-        'media_detail.adjust_offset_hint' | translate
-      }}</span>
-    </div>
+  </app-modal-header>
 
-    <app-modal-footer>
-      <button type="button" class="btn btn-ghost" (click)="closeAdjustModal()">
-        {{ 'common.cancel' | translate }}
-      </button>
-      <button type="button" class="btn btn-primary" (click)="confirmAdjust()">
-        {{ 'media_detail.action_adjust_times' | translate }}
-      </button>
-    </app-modal-footer>
+  <div class="flex gap-3 mt-4">
+    <label class="form-control flex-1">
+      <span class="label-text">{{ 'media_detail.adjust_minutes' | translate }}</span>
+      <input
+        type="number"
+        class="input input-bordered input-sm w-full"
+        [ngModel]="adjustMinutes()"
+        (ngModelChange)="adjustMinutes.set($event)"
+      />
+    </label>
+    <label class="form-control flex-1">
+      <span class="label-text">{{ 'media_detail.adjust_seconds' | translate }}</span>
+      <input
+        type="number"
+        class="input input-bordered input-sm w-full"
+        [ngModel]="adjustSeconds()"
+        (ngModelChange)="adjustSeconds.set($event)"
+      />
+    </label>
+    <label class="form-control flex-1">
+      <span class="label-text">{{ 'media_detail.adjust_millis' | translate }}</span>
+      <input
+        type="number"
+        class="input input-bordered input-sm w-full"
+        [ngModel]="adjustMillis()"
+        (ngModelChange)="adjustMillis.set($event)"
+      />
+    </label>
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" tabindex="-1" (click)="closeAdjustModal()">close</button>
-  </form>
+  <div class="label">
+    <span class="label-text-alt text-base-content/60">{{
+      'media_detail.adjust_offset_hint' | translate
+    }}</span>
+  </div>
+
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="closeAdjustModal()">
+      {{ 'common.cancel' | translate }}
+    </button>
+    <button type="button" class="btn btn-primary" (click)="confirmAdjust()">
+      {{ 'media_detail.action_adjust_times' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>
 
 <!-- Change Frame Rate modal -->
-<dialog #fpsDialog class="modal" [attr.aria-label]="'media_detail.change_fps_title' | translate">
-  <div class="modal-box max-w-md">
-    <app-modal-header>
-      <div>
-        <h3 class="text-lg font-bold">{{ 'media_detail.change_fps_title' | translate }}</h3>
-        <p class="text-sm text-base-content/60 mt-1">
-          {{ 'media_detail.change_fps_subtitle' | translate }}
-        </p>
-      </div>
-    </app-modal-header>
-
-    <div class="flex gap-4 mt-4">
-      <label class="form-control flex-1">
-        <span class="label-text">{{ 'media_detail.fps_from' | translate }}</span>
-        <select
-    appTvSelect
-          class="select select-bordered select-sm w-full"
-          [ngModel]="fpsFrom()"
-          (ngModelChange)="fpsFrom.set($event)"
-        >
-          <option value="23.976">23.976</option>
-          <option value="24">24</option>
-          <option value="25">25</option>
-          <option value="29.97">29.97</option>
-          <option value="30">30</option>
-        </select>
-      </label>
-      <label class="form-control flex-1">
-        <span class="label-text">{{ 'media_detail.fps_to' | translate }}</span>
-        <select
-    appTvSelect
-          class="select select-bordered select-sm w-full"
-          [ngModel]="fpsTo()"
-          (ngModelChange)="fpsTo.set($event)"
-        >
-          <option value="23.976">23.976</option>
-          <option value="24">24</option>
-          <option value="25">25</option>
-          <option value="29.97">29.97</option>
-          <option value="30">30</option>
-        </select>
-      </label>
+<dialog #fpsDialog appModal boxClass="max-w-md" [attr.aria-label]="'media_detail.change_fps_title' | translate">
+  <app-modal-header>
+    <div>
+      <h3 class="text-lg font-bold">{{ 'media_detail.change_fps_title' | translate }}</h3>
+      <p class="text-base text-base-content/60 mt-1">
+        {{ 'media_detail.change_fps_subtitle' | translate }}
+      </p>
     </div>
+  </app-modal-header>
 
-    <app-modal-footer>
-      <button type="button" class="btn btn-ghost" (click)="closeFpsModal()">
-        {{ 'common.cancel' | translate }}
-      </button>
-      <button
-        type="button"
-        class="btn btn-primary"
-        [disabled]="fpsFrom() === fpsTo()"
-        (click)="confirmFps()"
+  <div class="flex gap-4 mt-4">
+    <label class="form-control flex-1">
+      <span class="label-text">{{ 'media_detail.fps_from' | translate }}</span>
+      <select
+  appTvSelect
+        class="select select-bordered select-sm w-full"
+        [ngModel]="fpsFrom()"
+        (ngModelChange)="fpsFrom.set($event)"
       >
-        {{ 'media_detail.action_change_fps' | translate }}
-      </button>
-    </app-modal-footer>
+        <option value="23.976">23.976</option>
+        <option value="24">24</option>
+        <option value="25">25</option>
+        <option value="29.97">29.97</option>
+        <option value="30">30</option>
+      </select>
+    </label>
+    <label class="form-control flex-1">
+      <span class="label-text">{{ 'media_detail.fps_to' | translate }}</span>
+      <select
+  appTvSelect
+        class="select select-bordered select-sm w-full"
+        [ngModel]="fpsTo()"
+        (ngModelChange)="fpsTo.set($event)"
+      >
+        <option value="23.976">23.976</option>
+        <option value="24">24</option>
+        <option value="25">25</option>
+        <option value="29.97">29.97</option>
+        <option value="30">30</option>
+      </select>
+    </label>
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" tabindex="-1" (click)="closeFpsModal()">close</button>
-  </form>
+
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="closeFpsModal()">
+      {{ 'common.cancel' | translate }}
+    </button>
+    <button
+      type="button"
+      class="btn btn-primary"
+      [disabled]="fpsFrom() === fpsTo()"
+      (click)="confirmFps()"
+    >
+      {{ 'media_detail.action_change_fps' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>
 
-<dialog #ocrLangDialog class="modal" [attr.aria-label]="'media_detail.change_language_title' | translate">
-  <div class="modal-box max-w-sm">
-    <app-modal-header>
-      <div class="min-w-0">
-        @if (langDialogMode() === 'relabel') {
-          <h3 class="text-lg font-bold">{{ 'media_detail.change_language_title' | translate }}</h3>
-          <p class="py-2 text-sm text-base-content/70">
-            {{ 'media_detail.change_language_hint' | translate }}
-          </p>
-        } @else if (langDialogMode() === 'translate') {
-          <h3 class="text-lg font-bold">
-            {{ 'media_detail.translate_target_language' | translate }}
-          </h3>
-          <p class="py-2 text-sm text-base-content/70">
-            {{ 'media_detail.translate_hint' | translate }}
-          </p>
-        } @else {
-          <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
-          <p class="py-2 text-sm text-base-content/70">
-            {{ 'media_detail.ocr_language_hint' | translate }}
-          </p>
-        }
-      </div>
-    </app-modal-header>
-    <div class="mt-2 space-y-4">
-      <select
-    appTvSelect
-        class="select select-bordered w-full"
-        [ngModel]="ocrLang()"
-        (ngModelChange)="ocrLang.set($event)"
-      >
-        @for (code of langDialogCodes(); track code) {
-          <option [value]="code">{{ code | localizeLanguage }}</option>
-        }
-      </select>
-      @if (langDialogMode() === 'translate' && translationProviders().length > 1) {
-        <label class="form-control w-full">
-          <span class="label-text mb-1">{{ 'media_detail.translate_provider' | translate }}</span>
-          <select
-    appTvSelect
-            class="select select-bordered w-full"
-            [ngModel]="selectedTranslationProviderId()"
-            (ngModelChange)="selectedTranslationProviderId.set($event)"
-          >
-            @for (p of translationProviders(); track p.id) {
-              <option [ngValue]="p.id">{{ p.name }}</option>
-            }
-          </select>
-        </label>
-      }
-      @if (langDialogMode() === 'translate' && translateSourceHi()) {
-        <label class="flex mt-4 cursor-pointer items-center gap-3">
-          <input
-            type="checkbox"
-            class="toggle toggle-sm"
-            [ngModel]="translateRemoveHi()"
-            (ngModelChange)="setTranslateRemoveHi($event)"
-          />
-          <span class="label-text">{{ 'media_detail.translate_remove_hi' | translate }}</span>
-        </label>
+<dialog #ocrLangDialog appModal boxClass="max-w-sm" [attr.aria-label]="'media_detail.change_language_title' | translate">
+  <app-modal-header>
+    <div class="min-w-0">
+      @if (langDialogMode() === 'relabel') {
+        <h3 class="text-lg font-bold">{{ 'media_detail.change_language_title' | translate }}</h3>
+        <p class="py-2 text-base text-base-content/70">
+          {{ 'media_detail.change_language_hint' | translate }}
+        </p>
+      } @else if (langDialogMode() === 'translate') {
+        <h3 class="text-lg font-bold">
+          {{ 'media_detail.translate_target_language' | translate }}
+        </h3>
+        <p class="py-2 text-base text-base-content/70">
+          {{ 'media_detail.translate_hint' | translate }}
+        </p>
+      } @else {
+        <h3 class="text-lg font-bold">{{ 'media_detail.ocr_language_title' | translate }}</h3>
+        <p class="py-2 text-base text-base-content/70">
+          {{ 'media_detail.ocr_language_hint' | translate }}
+        </p>
       }
     </div>
-    <app-modal-footer>
-      <button type="button" class="btn" (click)="closeOcrLangModal()">
-        {{ 'common.cancel' | translate }}
-      </button>
-      <button type="button" class="btn btn-primary" (click)="confirmLanguage()">
-        {{
-          (langDialogMode() === 'relabel'
-            ? 'common.save'
-            : langDialogMode() === 'translate'
-              ? 'media_detail.translate'
-              : 'media_detail.action_ocr_extract'
-          ) | translate
-        }}
-      </button>
-    </app-modal-footer>
+  </app-modal-header>
+  <div class="mt-2 space-y-4">
+    <select
+  appTvSelect
+      class="select select-bordered w-full"
+      [ngModel]="ocrLang()"
+      (ngModelChange)="ocrLang.set($event)"
+    >
+      @for (code of langDialogCodes(); track code) {
+        <option [value]="code">{{ code | localizeLanguage }}</option>
+      }
+    </select>
+    @if (langDialogMode() === 'translate' && translationProviders().length > 1) {
+      <label class="form-control w-full">
+        <span class="label-text mb-1">{{ 'media_detail.translate_provider' | translate }}</span>
+        <select
+  appTvSelect
+          class="select select-bordered w-full"
+          [ngModel]="selectedTranslationProviderId()"
+          (ngModelChange)="selectedTranslationProviderId.set($event)"
+        >
+          @for (p of translationProviders(); track p.id) {
+            <option [ngValue]="p.id">{{ p.name }}</option>
+          }
+        </select>
+      </label>
+    }
+    @if (langDialogMode() === 'translate' && translateSourceHi()) {
+      <label class="flex mt-4 cursor-pointer items-center gap-3">
+        <input
+          type="checkbox"
+          class="toggle toggle-sm"
+          [ngModel]="translateRemoveHi()"
+          (ngModelChange)="setTranslateRemoveHi($event)"
+        />
+        <span class="label-text">{{ 'media_detail.translate_remove_hi' | translate }}</span>
+      </label>
+    }
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" tabindex="-1" (click)="closeOcrLangModal()">close</button>
-  </form>
+  <app-modal-footer>
+    <button type="button" class="btn" (click)="closeOcrLangModal()">
+      {{ 'common.cancel' | translate }}
+    </button>
+    <button type="button" class="btn btn-primary" (click)="confirmLanguage()">
+      {{
+        (langDialogMode() === 'relabel'
+          ? 'common.save'
+          : langDialogMode() === 'translate'
+            ? 'media_detail.translate'
+            : 'media_detail.action_ocr_extract'
+        ) | translate
+      }}
+    </button>
+  </app-modal-footer>
 </dialog>
 
 <!-- Cue list for the "view" action. Sibling of the modals above so it opens on

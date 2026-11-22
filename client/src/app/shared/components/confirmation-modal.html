@@ -1,51 +1,40 @@
-<dialog #dialog class="modal" role="dialog" aria-modal="true" (close)="onDialogClose()">
-  <div class="modal-box" [class.max-w-2xl]="monospace()">
-    <app-modal-header [title]="title()" />
-    @if (monospace()) {
-      <pre
-        class="text-sm whitespace-pre-wrap break-words bg-base-200 rounded p-3 max-h-[60vh] overflow-auto"
-        >{{ message() }}</pre
-      >
-    } @else {
-      <p class="py-4 whitespace-pre-line text-pretty">{{ message() }}</p>
-    }
-    @if (toggleLabel(); as tl) {
-      <label class="label cursor-pointer items-start justify-start gap-3 pb-4">
-        <input
-          type="checkbox"
-          class="checkbox checkbox-sm mt-0.5 shrink-0"
-          [checked]="confirmService.toggle()"
-          (change)="confirmService.toggle.set($any($event.target).checked)"
-        />
-        <span class="flex flex-col gap-0.5">
-          <span class="label-text">{{ tl }}</span>
-          @if (toggleHint(); as th) {
-            <span class="text-sm text-base-content/60">{{ th }}</span>
-          }
-        </span>
-      </label>
-    }
-    <app-modal-footer>
-      @if (dismissLabel(); as dl) {
-        <button class="btn btn-ghost" (click)="confirmService.dismiss()">{{ dl }}</button>
-      }
-      @if (!alertOnly()) {
-        <button class="btn" (click)="confirmService.cancel()">
-          {{ cancelLabel() }}
-        </button>
-      }
-      <button autofocus class="btn" [class]="confirmBtnClass()" (click)="confirmService.accept()">
-        {{ alertOnly() ? ('common.ok' | translate) : confirmLabel() }}
-      </button>
-    </app-modal-footer>
-  </div>
-  <form method="dialog" class="modal-backdrop">
-    <button
-      type="button"
-      (click)="dismissLabel() ? confirmService.dismiss() : confirmService.cancel()"
-      [attr.aria-label]="'common.close' | translate"
+<dialog #dialog appModal [boxClass]="monospace() ? 'max-w-2xl' : ''" role="dialog" aria-modal="true" (close)="onDialogClose()">
+  <app-modal-header [title]="title()" />
+  @if (monospace()) {
+    <pre
+      class="text-sm whitespace-pre-wrap break-words bg-base-200 rounded p-3 max-h-[60vh] overflow-auto"
+      >{{ message() }}</pre
     >
-      {{ 'common.close' | translate }}
+  } @else {
+    <p class="py-4 whitespace-pre-line text-pretty">{{ message() }}</p>
+  }
+  @if (toggleLabel(); as tl) {
+    <label class="label cursor-pointer items-start justify-start gap-3 pb-4">
+      <input
+        type="checkbox"
+        class="checkbox checkbox-sm mt-0.5 shrink-0"
+        [checked]="confirmService.toggle()"
+        (change)="confirmService.toggle.set($any($event.target).checked)"
+      />
+      <span class="flex flex-col gap-0.5">
+        <span class="label-text">{{ tl }}</span>
+        @if (toggleHint(); as th) {
+          <span class="text-sm text-base-content/60">{{ th }}</span>
+        }
+      </span>
+    </label>
+  }
+  <app-modal-footer>
+    @if (dismissLabel(); as dl) {
+      <button class="btn btn-ghost" (click)="confirmService.dismiss()">{{ dl }}</button>
+    }
+    @if (!alertOnly()) {
+      <button class="btn" (click)="confirmService.cancel()">
+        {{ cancelLabel() }}
+      </button>
+    }
+    <button autofocus class="btn" [class]="confirmBtnClass()" (click)="confirmService.accept()">
+      {{ alertOnly() ? ('common.ok' | translate) : confirmLabel() }}
     </button>
-  </form>
+  </app-modal-footer>
 </dialog>

@@ -23,6 +23,7 @@ import {
   restoreOpenerFocus,
   scrollSelectedIntoView,
 } from '../../core/services/focusable.constants';
+import { SheetDrag, sheetDurationMs } from './sheet-drag';
 
 /** The phone dock's own surface, so a sheet resting on it reads as one piece. */
 const DOCK_BG = 'bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95';
@@ -54,9 +55,10 @@ export class BottomSheetComponent {
   readonly closed = output<void>();
 
   readonly sheet = viewChild<ElementRef<HTMLElement>>('sheet');
-  readonly dragging = signal(false);
+  private readonly drag = new SheetDrag();
+  readonly dragging = this.drag.dragging;
   readonly dismissing = signal(false);
-  readonly dragOffset = signal(0);
+  readonly dragOffset = this.drag.offset;
   /** Drives the DOM `@if`, decoupled from `open` so the sheet can play its
    *  slide-down exit before it is removed. */
   readonly visible = signal(false);
@@ -66,16 +68,6 @@ export class BottomSheetComponent {
   private readonly tv = inject(TvService);
   private readonly injector = inject(Injector);
   private readonly dismissCallback = () => this.dismiss();
-  private startX = 0;
-  private startY = 0;
-  /** True when the touch began with the sheet scrolled to the top; only then can a downward drag dismiss, so a scroll never chains into the close. */
-  private startedAtTop = false;
-  /** A drag from the handle/title always dismisses: it sits above the list, so
-   *  it never scrolls it, however far the list is scrolled. */
-  private fromHandle = false;
-  /** Y of the previous touchmove and the last move's direction; release dismisses only if still heading down. */
-  private prevY = 0;
-  private movingDown = true;
   private scrollLocked = false;
   private registered = false;
   private focusTrapActive = false;
@@ -109,7 +101,7 @@ export class BottomSheetComponent {
           }
           this.visible.set(true);
           this.dismissing.set(false);
-          this.dragOffset.set(0);
+          this.drag.reset();
           if (!this.scrollLocked && typeof document !== 'undefined') {
             lockPageScroll(this.tv.isTv());
             this.scrollLocked = true;
@@ -165,56 +157,16 @@ export class BottomSheetComponent {
   onTouchStart(e: TouchEvent) {
     const el = this.sheet()?.nativeElement;
     if (!el) return;
-    this.startX = e.touches[0].clientX;
-    this.startY = e.touches[0].clientY;
-    this.prevY = this.startY;
-    this.movingDown = true;
-    this.startedAtTop = !scrolledBetween(e.target, el);
-    this.fromHandle = e.target instanceof Element && !!e.target.closest('[data-sheet-handle]');
-    // A slider or a list drag handle owns its gesture and must never pull the sheet down.
-    if (e.target instanceof Element && e.target.closest('input[type="range"], [cdkDragHandle]')) {
-      this.startedAtTop = false;
-      this.fromHandle = false;
-    }
+    this.drag.start(e, el, e.target instanceof Element && !!e.target.closest('[data-sheet-handle]'));
   }
 
   onTouchMove(e: TouchEvent) {
     const el = this.sheet()?.nativeElement;
-    if (!el) return;
-    const y = e.touches[0].clientY;
-    const deltaY = y - this.startY;
-    // A mostly horizontal move (a row swipe) is not a dismiss drag.
-    if (!this.dragging() && Math.abs(e.touches[0].clientX - this.startX) > Math.abs(deltaY)) return;
-
-    // Only a pull that began at the top becomes a dismiss-drag; scrolling up to the top must not chain into the close.
-    const canDrag = this.fromHandle || (this.startedAtTop && !scrolledBetween(e.target, el));
-    if (canDrag && deltaY > 0) {
-      e.preventDefault();
-      this.dragging.set(true);
-      this.dragOffset.set(deltaY);
-      // Remember the last meaningful direction (2px deadzone ignores jitter),
-      // so the release can tell an eased-back pull from a committed swipe.
-      const dy = y - this.prevY;
-      if (Math.abs(dy) >= 2) this.movingDown = dy > 0;
-    } else if (this.dragging() && deltaY <= 0) {
-      // User reversed all the way past the start — cancel drag
-      this.dragging.set(false);
-      this.dragOffset.set(0);
-    }
-    this.prevY = y;
+    if (el) this.drag.move(e, el);
   }
 
   onTouchEnd() {
-    if (!this.dragging()) return;
-    this.dragging.set(false);
-
-    // Dismiss only when pulled past the threshold AND still heading down at
-    // release — easing back up after over-pulling snaps the sheet open again.
-    if (this.dragOffset() > 80 && this.movingDown) {
-      this.dismiss();
-    } else {
-      this.dragOffset.set(0);
-    }
+    if (this.drag.end()) this.dismiss();
   }
 
   dismiss() {
@@ -226,13 +178,13 @@ export class BottomSheetComponent {
     if (this.exitTimer || !this.visible()) return;
     this.releaseOpenState();
     this.dismissing.set(true);
-    this.dragOffset.set(0);
+    this.drag.reset();
     this.exitTimer = setTimeout(() => {
       this.exitTimer = null;
       this.visible.set(false);
       this.dismissing.set(false);
       this.closed.emit();
-    }, 180);
+    }, sheetDurationMs(document.documentElement));
   }
 
   /** Undo the open-time side effects: restore page scroll, leave the dismiss
@@ -284,14 +236,4 @@ function unlockPageScroll(): void {
   document.body.style.overflow = savedOverflow.body;
   document.documentElement.style.overflow = savedOverflow.html;
   savedOverflow = null;
-}
-
-/** Whether anything from the touched element up to the sheet is scrolled away
- *  from its top: content may scroll in an inner box (a list under a sticky title). */
-export function scrolledBetween(target: EventTarget | null, sheet: HTMLElement): boolean {
-  for (let n = target instanceof Element ? target : null; n; n = n.parentElement) {
-    if (n.scrollTop > 0) return true;
-    if (n === sheet) return false;
-  }
-  return false;
 }

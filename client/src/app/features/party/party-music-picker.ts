@@ -7,20 +7,21 @@ import { PlaylistsApiService, type Playlist } from '../../core/services/api/play
 import { KeyboardOverlayService } from '../../core/services/keyboard-overlay.service';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { playlistRows, trackRow, type NewRow } from './party-programme-items';
+import { ModalComponent } from '../../shared/components/modal';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
 /** Dialog for the music side of a programme: tracks by search, or a playlist (smart ones included) as its tracks. */
 @Component({
   selector: 'app-party-music-picker',
-  imports: [FormsModule, TranslatePipe, ModalHeaderComponent],
+  imports: [ModalComponent, FormsModule, TranslatePipe, ModalHeaderComponent],
   templateUrl: './party-music-picker.html',
 })
 export class PartyMusicPickerComponent implements OnDestroy {
   private readonly music = inject(MusicApiService);
   private readonly playlistsApi = inject(PlaylistsApiService);
   protected readonly keyboard = inject(KeyboardOverlayService);
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly picked = output<NewRow[]>();
 

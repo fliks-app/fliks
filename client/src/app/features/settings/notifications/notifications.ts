@@ -21,6 +21,7 @@ import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form'
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
+import { ModalComponent } from '../../../shared/components/modal';
 
 /** The types this editor knows how to render fields for — adding one server-side is not enough,
  *  each needs its own field set below. */
@@ -77,6 +78,7 @@ interface CreateNotificationBody {
 @Component({
   selector: 'app-notifications-settings',
   imports: [
+    ModalComponent,
     TvSelectDirective,
     ModalFooterComponent,
     ModalHeaderComponent,
@@ -90,7 +92,7 @@ export class NotificationsSettingsComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
 
   readonly rows = signal<NotificationConnection[]>([]);
   readonly loading = signal(true);

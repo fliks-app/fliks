@@ -12,6 +12,7 @@ import { firstValueFrom } from 'rxjs';
 import { FolderPickerService } from '../../../core/services/folder-picker.service';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
+import { ModalComponent } from '../modal';
 
 interface FsEntry {
   name: string;
@@ -26,14 +27,14 @@ interface FsListing {
 
 @Component({
   selector: 'app-folder-picker-modal',
-  imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
+  imports: [ModalComponent, ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
   templateUrl: './folder-picker-modal.html',
 })
 export class FolderPickerModalComponent {
   private readonly picker = inject(FolderPickerService);
   private readonly http = inject(HttpClient);
 
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly listing = signal<FsListing | null>(null);
   readonly loading = signal(false);

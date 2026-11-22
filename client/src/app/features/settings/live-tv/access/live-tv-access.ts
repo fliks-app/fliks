@@ -11,6 +11,7 @@ import { ModalHeaderComponent } from '../../../../shared/components/modal-header
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 import { LiveTvGroupLabelPipe } from '../../../../core/pipes/live-tv-group-label.pipe';
+import { ModalComponent } from '../../../../shared/components/modal';
 
 interface GroupFacet {
   name: string;
@@ -26,6 +27,7 @@ interface DisplayGroupFacet extends GroupFacet {
 @Component({
   selector: 'app-live-tv-access',
   imports: [
+    ModalComponent,
     TranslatePipe,
     LocaleDatePipe,
     EnabledSwitchComponent,
@@ -39,7 +41,7 @@ export class LiveTvAccessComponent implements OnInit {
   private readonly api = inject(LiveTvApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
-  private readonly grantsDialog = viewChild<ElementRef<HTMLDialogElement>>('grantsDialog');
+  private readonly grantsDialog = viewChild<string, ElementRef<HTMLDialogElement>>('grantsDialog', { read: ElementRef });
 
   readonly loading = signal(true);
   readonly loadError = signal(false);

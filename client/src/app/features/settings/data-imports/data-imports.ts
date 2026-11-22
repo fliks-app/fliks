@@ -30,6 +30,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalComponent } from '../../../shared/components/modal';
 
 const SETTING_SEERR_URL = 'seerr_url';
 const SETTING_SEERR_API_KEY = 'seerr_api_key';
@@ -111,7 +112,7 @@ const ARR_SETTINGS: Record<Provider, { url: string; apiKey: string }> = {
 
 @Component({
   selector: 'app-data-imports-settings',
-  imports: [TvSelectDirective, 
+  imports: [ModalComponent, TvSelectDirective, 
     ModalHeaderComponent,
     ModalFooterComponent,
     FormsModule,

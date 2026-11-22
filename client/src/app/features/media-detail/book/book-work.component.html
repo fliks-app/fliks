@@ -142,37 +142,28 @@
 }
 
 @if (canEdit() && b) {
-  <dialog #wantsDialog class="modal" data-testid="wants-dialog" (close)="wantsOpen.set(false)">
-    <div class="modal-box max-w-lg">
-      <app-modal-header [title]="'wants.title' | translate" />
-      @if (wantsOpen()) {
-        <app-media-wants [mediaId]="m.id" />
-      }
-    </div>
-    <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
+  <dialog #wantsDialog appModal boxClass="max-w-lg" data-testid="wants-dialog" (close)="wantsOpen.set(false)">
+    <app-modal-header [title]="'wants.title' | translate" />
+    @if (wantsOpen()) {
+      <app-media-wants [mediaId]="m.id" />
+    }
   </dialog>
-  <dialog #sourcesDialog class="modal" data-testid="sources-dialog" (close)="sourcesOpen.set(false)">
-    <div class="modal-box max-w-2xl">
-      <app-modal-header [title]="'books_work.sources' | translate" />
-      @if (sourcesOpen()) {
-        <app-book-sources [mediaId]="m.id" [editions]="b.editions" />
-      }
-    </div>
-    <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
+  <dialog #sourcesDialog appModal boxClass="max-w-2xl" data-testid="sources-dialog" (close)="sourcesOpen.set(false)">
+    <app-modal-header [title]="'books_work.sources' | translate" />
+    @if (sourcesOpen()) {
+      <app-book-sources [mediaId]="m.id" [editions]="b.editions" />
+    }
   </dialog>
-  <dialog #seriesDialog class="modal" data-testid="series-dialog" (close)="seriesOpen.set(false)">
-    <div class="modal-box max-w-md">
-      <app-modal-header [title]="'books_work.series_edit' | translate" />
-      @if (seriesOpen()) {
-        <app-book-series-form
-          [mediaId]="m.id"
-          [series]="b.series[0] ?? null"
-          [authorIds]="authorIds()"
-          [locked]="seriesLocked()"
-          (done)="closeSeries(); reload()"
-        />
-      }
-    </div>
-    <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
+  <dialog #seriesDialog appModal boxClass="max-w-md" data-testid="series-dialog" (close)="seriesOpen.set(false)">
+    <app-modal-header [title]="'books_work.series_edit' | translate" />
+    @if (seriesOpen()) {
+      <app-book-series-form
+        [mediaId]="m.id"
+        [series]="b.series[0] ?? null"
+        [authorIds]="authorIds()"
+        [locked]="seriesLocked()"
+        (done)="closeSeries(); reload()"
+      />
+    }
   </dialog>
 }

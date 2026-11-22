@@ -1,96 +1,89 @@
-<dialog #dialog class="modal" [attr.aria-label]="'update.title' | translate">
-  <div class="modal-box max-w-lg">
-    <app-modal-header>
-      <div class="flex items-center gap-2">
-        <svg lucideRocket class="h-5 w-5 text-primary"></svg>
-        <h3 class="text-lg font-bold">{{ 'update.title' | translate }}</h3>
-      </div>
-    </app-modal-header>
+<dialog #dialog appModal boxClass="max-w-lg" [attr.aria-label]="'update.title' | translate">
+  <app-modal-header>
+    <div class="flex items-center gap-2">
+      <svg lucideRocket class="h-5 w-5 text-primary"></svg>
+      <h3 class="text-lg font-bold">{{ 'update.title' | translate }}</h3>
+    </div>
+  </app-modal-header>
 
-    @if (update.info(); as info) {
-      <p class="text-sm opacity-70 mb-3">
-        @if (update.currentVersion(); as current) {
-          {{ 'update.version_transition' | translate: { current: current, next: info.version } }}
-        } @else {
-          {{ 'update.version_available' | translate: { version: info.version } }}
-        }
-        @if (info.releaseDate) {
-          · {{ info.releaseDate | localeDate: { dateStyle: 'medium' } }}
-        }
-      </p>
+  @if (update.info(); as info) {
+    <p class="text-sm opacity-70 mb-3">
+      @if (update.currentVersion(); as current) {
+        {{ 'update.version_transition' | translate: { current: current, next: info.version } }}
+      } @else {
+        {{ 'update.version_available' | translate: { version: info.version } }}
+      }
+      @if (info.releaseDate) {
+        · {{ info.releaseDate | localeDate: { dateStyle: 'medium' } }}
+      }
+    </p>
 
-      @if (update.aheadOfServer()) {
-        <div role="alert" class="rounded-box border border-warning/50 bg-warning/10 p-3 mb-3">
-          <div class="flex items-start gap-2">
-            <svg lucideTriangleAlert class="h-5 w-5 shrink-0 text-warning"></svg>
-            <div class="flex flex-col items-start gap-2">
-              <p class="text-sm">
-                {{ 'update.ahead_of_server' | translate: { server: update.serverVersion() } }}
-              </p>
-              <button class="btn btn-xs btn-outline btn-warning" (click)="hideUntilServerUpdates()">
-                {{ 'update.hide_until_server' | translate }}
-              </button>
-            </div>
+    @if (update.aheadOfServer()) {
+      <div role="alert" class="rounded-box border border-warning/50 bg-warning/10 p-3 mb-3">
+        <div class="flex items-start gap-2">
+          <svg lucideTriangleAlert class="h-5 w-5 shrink-0 text-warning"></svg>
+          <div class="flex flex-col items-start gap-2">
+            <p class="text-sm">
+              {{ 'update.ahead_of_server' | translate: { server: update.serverVersion() } }}
+            </p>
+            <button class="btn btn-xs btn-outline btn-warning" (click)="hideUntilServerUpdates()">
+              {{ 'update.hide_until_server' | translate }}
+            </button>
           </div>
         </div>
-      }
-
-      <div class="rounded-box bg-base-200 p-3 max-h-72 overflow-y-auto mb-4">
-        @if (info.releaseNotes) {
-          <div
-            class="changelog-md text-sm break-words"
-            [innerHTML]="info.releaseNotes | markdown"
-          ></div>
-        } @else {
-          <p class="text-sm opacity-60">{{ 'update.no_notes' | translate }}</p>
-        }
       </div>
-
-      @if (downloading()) {
-        <div class="mb-4">
-          <progress
-            class="progress progress-primary w-full"
-            [attr.value]="update.progress()"
-            max="100"
-          ></progress>
-          <p class="text-xs opacity-70 mt-1 text-center">
-            @if (update.progress() === null) {
-              {{ 'update.preparing' | translate }}
-            } @else {
-              {{ 'update.downloading' | translate: { percent: update.progress() } }}
-            }
-          </p>
-          <p class="text-xs opacity-70 text-center">{{ 'update.restart_notice' | translate }}</p>
-        </div>
-      } @else if (update.errorMessage(); as err) {
-        <p class="text-sm text-error mb-3">{{ 'update.error' | translate }}: {{ err }}</p>
-      }
-
-      <app-modal-footer>
-        <form method="dialog">
-          <button class="btn btn-ghost">{{ 'common.close' | translate }}</button>
-        </form>
-
-        @if (installing()) {
-          <button class="btn btn-primary" disabled>
-            <span class="loading loading-spinner loading-sm"></span>
-            {{ 'update.installing' | translate }}
-          </button>
-        } @else if (canInstallInApp()) {
-          <button class="btn btn-primary" [disabled]="downloading()" (click)="onAction()">
-            <svg lucideDownload class="h-4 w-4"></svg>
-            {{ 'update.install' | translate }}
-          </button>
-        } @else {
-          <button class="btn btn-primary" (click)="onAction()">
-            <svg lucideExternalLink class="h-4 w-4"></svg>
-            {{ 'update.open_release' | translate }}
-          </button>
-        }
-      </app-modal-footer>
     }
-  </div>
-  <form method="dialog" class="modal-backdrop">
-    <button>{{ 'common.close' | translate }}</button>
-  </form>
+
+    <div class="rounded-box bg-base-200 p-3 max-h-72 overflow-y-auto mb-4">
+      @if (info.releaseNotes) {
+        <div
+          class="changelog-md text-sm break-words"
+          [innerHTML]="info.releaseNotes | markdown"
+        ></div>
+      } @else {
+        <p class="text-sm opacity-60">{{ 'update.no_notes' | translate }}</p>
+      }
+    </div>
+
+    @if (downloading()) {
+      <div class="mb-4">
+        <progress
+          class="progress progress-primary w-full"
+          [attr.value]="update.progress()"
+          max="100"
+        ></progress>
+        <p class="text-sm opacity-70 mt-1 text-center">
+          @if (update.progress() === null) {
+            {{ 'update.preparing' | translate }}
+          } @else {
+            {{ 'update.downloading' | translate: { percent: update.progress() } }}
+          }
+        </p>
+        <p class="text-sm opacity-70 text-center">{{ 'update.restart_notice' | translate }}</p>
+      </div>
+    } @else if (update.errorMessage(); as err) {
+      <p class="text-sm text-error mb-3">{{ 'update.error' | translate }}: {{ err }}</p>
+    }
+  }
+
+  @if (update.info()) {
+    <app-modal-footer>
+      @if (installing()) {
+        <button class="btn btn-primary" disabled>
+          <span class="loading loading-spinner loading-sm"></span>
+          {{ 'update.installing' | translate }}
+        </button>
+      } @else if (canInstallInApp()) {
+        <button class="btn btn-primary" [disabled]="downloading()" (click)="onAction()">
+          <svg lucideDownload class="h-4 w-4"></svg>
+          {{ 'update.install' | translate }}
+        </button>
+      } @else {
+        <button class="btn btn-primary" (click)="onAction()">
+          <svg lucideExternalLink class="h-4 w-4"></svg>
+          {{ 'update.open_release' | translate }}
+        </button>
+      }
+    </app-modal-footer>
+  }
 </dialog>

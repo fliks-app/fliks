@@ -45,6 +45,7 @@ import { QOE_VERDICTS, QOE_VERDICT_BAR_CLASS, formatMbps, qoeDotClass } from '..
 import { mergeDevices } from '../qoe-devices';
 import { saveFile } from '../../../core/plugins/save-file.plugin';
 import { subjectEpisodeLine, subjectEpisodeLink, subjectMediaLink } from '../../../shared/utils/media-subject';
+import { ModalComponent } from '../../../shared/components/modal';
 
 const PAGE_SIZE = 25;
 
@@ -60,6 +61,7 @@ type Tab = (typeof TABS)[number];
 @Component({
   selector: 'app-system-playback-quality',
   imports: [
+    ModalComponent,
     FormsModule,
     InputFieldComponent,
     TranslatePipe,
@@ -126,7 +128,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
     return [...map].filter(([, raw]) => raw.length > 0).map(([label, raw]) => ({ label, raw }));
   });
   readonly detail = signal<QoeSessionDetail | null>(null);
-  private readonly detailDialog = viewChild<ElementRef<HTMLDialogElement>>('detailDialog');
+  private readonly detailDialog = viewChild<string, ElementRef<HTMLDialogElement>>('detailDialog', { read: ElementRef });
 
   readonly timeline = computed(() => {
     const d = this.detail();

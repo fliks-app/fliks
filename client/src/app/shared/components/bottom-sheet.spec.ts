@@ -1,7 +1,8 @@
 import { Component, ElementRef, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
-import { BottomSheetComponent, scrolledBetween } from './bottom-sheet';
+import { BottomSheetComponent } from './bottom-sheet';
+import { scrolledBetween } from './sheet-drag';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 import { TvService } from '../../core/services/tv.service';
 

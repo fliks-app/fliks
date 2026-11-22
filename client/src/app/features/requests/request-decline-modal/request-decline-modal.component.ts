@@ -11,13 +11,14 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../shared/components/modal';
 
 /** Canned declines; a chip fills the reason, which stays editable. */
 const REASON_KEYS = ['in_library', 'not_available', 'not_suitable', 'no_space'] as const;
 
 @Component({
   selector: 'app-request-decline-modal',
-  imports: [TvRowDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
+  imports: [ModalComponent, TvRowDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   templateUrl: './request-decline-modal.component.html',
 })
 export class RequestDeclineModalComponent {
@@ -32,7 +33,7 @@ export class RequestDeclineModalComponent {
   readonly dismissed = output<void>();
   readonly submitted = output<void>();
 
-  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogEl = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   protected pick(key: string) {
     this.reasonTextChange.emit(this.translate.instant(key));

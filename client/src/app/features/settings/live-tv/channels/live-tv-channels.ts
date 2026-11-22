@@ -16,6 +16,7 @@ import { ModalFooterComponent } from '../../../../shared/components/modal-footer
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { EnabledSwitchComponent } from '../../../../shared/components/enabled-switch';
 import { LiveTvGroupLabelPipe } from '../../../../core/pipes/live-tv-group-label.pipe';
+import { ModalComponent } from '../../../../shared/components/modal';
 
 const PAGE_SIZE = 25;
 /** Same debounce as the on-now search field (live-tv.ts). */
@@ -42,6 +43,7 @@ function normalizeChannelName(name: string): string {
 @Component({
   selector: 'app-live-tv-channels',
   imports: [
+    ModalComponent,
     FormsModule,
     TranslatePipe,
     PaginationComponent,
@@ -58,8 +60,8 @@ export class LiveTvChannelsComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
   private readonly confirmation = inject(ConfirmationService);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
-  private readonly mergeDialog = viewChild<ElementRef<HTMLDialogElement>>('mergeDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
+  private readonly mergeDialog = viewChild<string, ElementRef<HTMLDialogElement>>('mergeDialog', { read: ElementRef });
   private loadSeq = 0;
   private queryDebounce: ReturnType<typeof setTimeout> | null = null;
 

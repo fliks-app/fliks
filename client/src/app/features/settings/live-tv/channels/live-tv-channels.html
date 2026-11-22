@@ -191,74 +191,64 @@
   </div>
 </div>
 
-<dialog #editorDialog class="modal">
-  <div class="modal-box max-w-md p-0 gap-0 overflow-hidden">
-    <app-modal-header flush [title]="'liveTv.admin.channels.editor_title' | translate" />
-    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+<dialog #editorDialog appModal boxClass="max-w-md">
+  <app-modal-header [title]="'liveTv.admin.channels.editor_title' | translate" />
+  <div class="flex flex-col gap-4">
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'liveTv.admin.channels.field_name' | translate }}</span>
+      <input type="text" class="input input-bordered input-sm w-full" [ngModel]="editName()" (ngModelChange)="editName.set($event)" />
+    </label>
+    <div class="grid grid-cols-2 gap-3">
       <label class="form-control w-full">
-        <span class="label-text">{{ 'liveTv.admin.channels.field_name' | translate }}</span>
-        <input type="text" class="input input-bordered input-sm w-full" [ngModel]="editName()" (ngModelChange)="editName.set($event)" />
+        <span class="label-text">{{ 'liveTv.admin.channels.field_number' | translate }}</span>
+        <input type="number" class="input input-bordered input-sm w-full" [ngModel]="editNumber()" (ngModelChange)="editNumber.set($event)" />
       </label>
-      <div class="grid grid-cols-2 gap-3">
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'liveTv.admin.channels.field_number' | translate }}</span>
-          <input type="number" class="input input-bordered input-sm w-full" [ngModel]="editNumber()" (ngModelChange)="editNumber.set($event)" />
-        </label>
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'liveTv.admin.channels.field_group' | translate }}</span>
-          <input type="text" class="input input-bordered input-sm w-full" [ngModel]="editGroup()" (ngModelChange)="editGroup.set($event)" />
-        </label>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'liveTv.admin.channels.field_guide_id' | translate }}</span>
-          <input type="text" class="input input-bordered input-sm w-full" [ngModel]="editGuideId()" (ngModelChange)="editGuideId.set($event)" />
-        </label>
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'liveTv.admin.channels.field_guide_shift' | translate }}</span>
-          <input type="number" class="input input-bordered input-sm w-full" [ngModel]="editShiftMinutes()" (ngModelChange)="editShiftMinutes.set($event)" />
-        </label>
-      </div>
-      <label class="label cursor-pointer justify-start gap-3">
-        <input type="checkbox" class="toggle toggle-sm" [ngModel]="editEnabled()" (ngModelChange)="editEnabled.set($event)" />
-        <span class="label-text">{{ 'common.active' | translate }}</span>
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'liveTv.admin.channels.field_group' | translate }}</span>
+        <input type="text" class="input input-bordered input-sm w-full" [ngModel]="editGroup()" (ngModelChange)="editGroup.set($event)" />
       </label>
     </div>
-    <app-modal-footer flush>
-      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">{{ 'common.cancel' | translate }}</button>
-      <button type="button" class="btn btn-primary" (click)="saveEdit()" [disabled]="saving()">
-        @if (saving()) {
-          <span class="loading loading-spinner loading-sm"></span>
-        }
-        {{ 'common.save' | translate }}
-      </button>
-    </app-modal-footer>
+    <div class="grid grid-cols-2 gap-3">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'liveTv.admin.channels.field_guide_id' | translate }}</span>
+        <input type="text" class="input input-bordered input-sm w-full" [ngModel]="editGuideId()" (ngModelChange)="editGuideId.set($event)" />
+      </label>
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'liveTv.admin.channels.field_guide_shift' | translate }}</span>
+        <input type="number" class="input input-bordered input-sm w-full" [ngModel]="editShiftMinutes()" (ngModelChange)="editShiftMinutes.set($event)" />
+      </label>
+    </div>
+    <label class="label cursor-pointer justify-start gap-3">
+      <input type="checkbox" class="toggle toggle-sm" [ngModel]="editEnabled()" (ngModelChange)="editEnabled.set($event)" />
+      <span class="label-text">{{ 'common.active' | translate }}</span>
+    </label>
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
-  </form>
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">{{ 'common.cancel' | translate }}</button>
+    <button type="button" class="btn btn-primary" (click)="saveEdit()" [disabled]="saving()">
+      @if (saving()) {
+        <span class="loading loading-spinner loading-sm"></span>
+      }
+      {{ 'common.save' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>
 
-<dialog #mergeDialog class="modal">
-  <div class="modal-box max-w-sm p-0 gap-0 overflow-hidden">
-    <app-modal-header flush [title]="'liveTv.admin.channels.merge_title' | translate" />
-    <div class="px-5 sm:px-6 py-4 flex flex-col gap-2 bg-base-100">
-      <p class="text-sm text-base-content/60">{{ 'liveTv.admin.channels.merge_hint' | translate }}</p>
-      @for (row of mergeCandidates(); track row.id) {
-        <label class="label cursor-pointer justify-start gap-3">
-          <input type="radio" name="mergeTarget" class="radio radio-sm" [checked]="mergeTargetId() === row.id" (change)="mergeTargetId.set(row.id)" />
-          <span class="label-text">{{ row.name }} ({{ row.number }})</span>
-        </label>
-      }
-    </div>
-    <app-modal-footer flush>
-      <button type="button" class="btn btn-ghost" (click)="closeMerge()">{{ 'common.cancel' | translate }}</button>
-      <button type="button" class="btn btn-primary" [disabled]="bulkBusy()" (click)="confirmMerge()">
-        {{ 'liveTv.admin.channels.merge' | translate }}
-      </button>
-    </app-modal-footer>
+<dialog #mergeDialog appModal boxClass="max-w-sm">
+  <app-modal-header [title]="'liveTv.admin.channels.merge_title' | translate" />
+  <div class="flex flex-col gap-2">
+    <p class="text-sm text-base-content/60">{{ 'liveTv.admin.channels.merge_hint' | translate }}</p>
+    @for (row of mergeCandidates(); track row.id) {
+      <label class="label cursor-pointer justify-start gap-3">
+        <input type="radio" name="mergeTarget" class="radio radio-sm" [checked]="mergeTargetId() === row.id" (change)="mergeTargetId.set(row.id)" />
+        <span class="label-text">{{ row.name }} ({{ row.number }})</span>
+      </label>
+    }
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeMerge()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
-  </form>
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="closeMerge()">{{ 'common.cancel' | translate }}</button>
+    <button type="button" class="btn btn-primary" [disabled]="bulkBusy()" (click)="confirmMerge()">
+      {{ 'liveTv.admin.channels.merge' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>

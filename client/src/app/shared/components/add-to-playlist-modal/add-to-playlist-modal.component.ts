@@ -17,13 +17,13 @@ import {
 import { ToastService } from '../../../core/services/toast.service';
 import { AutoDownloadService } from '../../../core/services/auto-download.service';
 import { ModalHeaderComponent } from '../modal-header';
-import { ModalFooterComponent } from '../modal-footer';
+import { ModalComponent } from '../modal';
 
 /** Dialog to add media to a playlist or create one, mounted once in the layout and opened via {@link AddToPlaylistService}; viewer-only playlists are filtered out. */
 @Component({
   selector: 'app-add-to-playlist-modal',
   imports: [
-    ModalFooterComponent,
+    ModalComponent,
     FormsModule,
     TranslatePipe,
     LucideListPlus,
@@ -38,7 +38,7 @@ export class AddToPlaylistModalComponent {
   private readonly translate = inject(TranslateService);
   private readonly autoDownload = inject(AutoDownloadService);
 
-  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogEl = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly added = output<void>();
 

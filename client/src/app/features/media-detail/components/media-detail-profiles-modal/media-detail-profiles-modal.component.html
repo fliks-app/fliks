@@ -1,61 +1,57 @@
-<dialog #dialog class="modal">
-  <div class="modal-box max-w-md">
-    <app-modal-header [title]="'media_detail.profiles_section' | translate" />
-    @if (profilesOptionsLoading()) {
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-lg"></span>
-      </div>
-    } @else {
-      <form class="flex flex-col gap-4" (ngSubmit)="save.emit()">
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'media_detail.quality_profile_label' | translate }}</span>
-          <select
-            class="select select-bordered select-sm w-full"
-            name="qualityProfile"
-            appTvSelect
-            [ngModel]="draftQualityProfileId()"
-            (ngModelChange)="draftQualityProfileIdChange.emit($event)"
-          >
-            <option [ngValue]="null">{{ 'media_detail.profile_none' | translate }}</option>
-            @for (p of qualityProfileOptions(); track p.id) {
-              <option [ngValue]="p.id">{{ p.name }}</option>
-            }
-          </select>
-        </label>
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'media_detail.language_profile_label' | translate }}</span>
-          <select
-            class="select select-bordered select-sm w-full"
-            name="languageProfile"
-            appTvSelect
-            [ngModel]="draftLanguageProfileId()"
-            (ngModelChange)="draftLanguageProfileIdChange.emit($event)"
-          >
-            <option [ngValue]="null">{{ 'media_detail.profile_none' | translate }}</option>
-            @for (p of languageProfileOptions(); track p.id) {
-              <option [ngValue]="p.id">{{ p.name }}</option>
-            }
-          </select>
-        </label>
-        @if (profilesOk()) {
-          <div role="alert" class="alert alert-success text-sm py-2">{{ profilesOk() }}</div>
+<dialog #dialog appModal boxClass="max-w-md">
+  <app-modal-header [title]="'media_detail.profiles_section' | translate" />
+  @if (profilesOptionsLoading()) {
+    <div class="flex justify-center py-8">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else {
+    <form id="profiles-form" class="flex flex-col gap-4" (ngSubmit)="save.emit()">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'media_detail.quality_profile_label' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          name="qualityProfile"
+          appTvSelect
+          [ngModel]="draftQualityProfileId()"
+          (ngModelChange)="draftQualityProfileIdChange.emit($event)"
+        >
+          <option [ngValue]="null">{{ 'media_detail.profile_none' | translate }}</option>
+          @for (p of qualityProfileOptions(); track p.id) {
+            <option [ngValue]="p.id">{{ p.name }}</option>
+          }
+        </select>
+      </label>
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'media_detail.language_profile_label' | translate }}</span>
+        <select
+          class="select select-bordered select-sm w-full"
+          name="languageProfile"
+          appTvSelect
+          [ngModel]="draftLanguageProfileId()"
+          (ngModelChange)="draftLanguageProfileIdChange.emit($event)"
+        >
+          <option [ngValue]="null">{{ 'media_detail.profile_none' | translate }}</option>
+          @for (p of languageProfileOptions(); track p.id) {
+            <option [ngValue]="p.id">{{ p.name }}</option>
+          }
+        </select>
+      </label>
+      @if (profilesOk()) {
+        <div role="alert" class="alert alert-success text-sm py-2">{{ profilesOk() }}</div>
+      }
+      @if (profilesErr()) {
+        <div role="alert" class="alert alert-error text-sm py-2">{{ profilesErr() }}</div>
+      }
+    </form>
+  }
+  @if (!profilesOptionsLoading()) {
+    <app-modal-footer>
+      <button type="submit" form="profiles-form" class="btn btn-primary" [disabled]="profilesSaveLoading()">
+        @if (profilesSaveLoading()) {
+          <span class="loading loading-spinner loading-xs"></span>
         }
-        @if (profilesErr()) {
-          <div role="alert" class="alert alert-error text-sm py-2">{{ profilesErr() }}</div>
-        }
-        <app-modal-footer>
-          <button type="button" class="btn btn-ghost" (click)="close()">
-            {{ 'common.close' | translate }}
-          </button>
-          <button type="submit" class="btn btn-primary" [disabled]="profilesSaveLoading()">
-            @if (profilesSaveLoading()) {
-              <span class="loading loading-spinner loading-xs"></span>
-            }
-            {{ 'media_detail.save_profiles' | translate }}
-          </button>
-        </app-modal-footer>
-      </form>
-    }
-  </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+        {{ 'media_detail.save_profiles' | translate }}
+      </button>
+    </app-modal-footer>
+  }
 </dialog>

@@ -19,10 +19,11 @@ import { ModalFooterComponent } from '../../shared/components/modal-footer';
 import { SmartPlaylistEditorComponent } from './smart-playlist-editor/smart-playlist-editor';
 import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state';
+import { ModalComponent } from '../../shared/components/modal';
 
 @Component({
   selector: 'app-playlists',
-  imports: [EmptyStateComponent, CardSkeletonComponent,
+  imports: [ModalComponent, EmptyStateComponent, CardSkeletonComponent,
     ModalFooterComponent,
     MosaicCardComponent,
     TranslatePipe,
@@ -41,8 +42,8 @@ export class PlaylistsComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
 
-  private readonly importDialog = viewChild<ElementRef<HTMLDialogElement>>('importDialog');
-  private readonly createDialog = viewChild<ElementRef<HTMLDialogElement>>('createDialog');
+  private readonly importDialog = viewChild<string, ElementRef<HTMLDialogElement>>('importDialog', { read: ElementRef });
+  private readonly createDialog = viewChild<string, ElementRef<HTMLDialogElement>>('createDialog', { read: ElementRef });
 
   readonly playlists = signal<Playlist[]>([]);
   readonly loading = signal(false);

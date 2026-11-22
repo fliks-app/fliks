@@ -9,6 +9,7 @@ import {
 import { TranslatePipe } from '@ngx-translate/core';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../shared/components/modal';
 
 /** On-screen size of the circular crop viewport. */
 const VIEWPORT = 256;
@@ -19,11 +20,11 @@ const OUTPUT = 512;
  *  the exported file stays square (the circle's bounding box). */
 @Component({
   selector: 'app-avatar-editor',
-  imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
+  imports: [ModalComponent, ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
   templateUrl: './avatar-editor.html',
 })
 export class AvatarEditorComponent {
-  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogEl = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly cropped = output<Blob>();
 

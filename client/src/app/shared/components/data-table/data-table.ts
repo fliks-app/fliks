@@ -48,8 +48,8 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import { ModalHeaderComponent } from '../modal-header';
 import { PopoverMenuComponent } from '../popover-menu';
-import { ModalFooterComponent } from '../modal-footer';
 import { ErrorBadgeComponent } from '../error-badge';
+import { ModalComponent } from '../modal';
 
 /** Keystroke-to-request debounce for a `search` filter — see `onSearchInput`. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -76,13 +76,13 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
 @Component({
   selector: 'app-data-table',
   imports: [
+    ModalComponent,
     TvSelectDirective,
     PopoverMenuComponent,
     NgTemplateOutlet,
     LucideEllipsisVertical,
     LucideChevronRight,
     LucideArrowLeft,
-    ModalFooterComponent,
     ModalHeaderComponent,
     TranslatePipe,
     LocaleDatePipe,
@@ -149,7 +149,7 @@ export class DataTableComponent implements OnInit {
 
   /** Stays mounted and is driven by `showModal()`/`close()`: an `@if` around the element
    *  unmounts it on close, and daisyUI animates the exit on the element that remains. */
-  private readonly rowDetailDialog = viewChild<ElementRef<HTMLDialogElement>>('rowDetailDialog');
+  private readonly rowDetailDialog = viewChild<string, ElementRef<HTMLDialogElement>>('rowDetailDialog', { read: ElementRef });
 
   /** The `detail` row action's dialog: its title and the lines that had a value. */
   readonly rowDetail = signal<{

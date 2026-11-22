@@ -15,6 +15,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { formatEta, formatSpeed } from '../../../shared/utils/download-format';
+import { ModalComponent } from '../../../shared/components/modal';
 
 type Group = 'separation' | 'alignment' | 'melody' | 'recognition';
 
@@ -28,7 +29,7 @@ const GROUPS: { key: Group; kind: KaraokeModelKind; whisper: boolean }[] = [
 /** The model manager: disk usage, the models by group, the library's languages, orphans and the re-sync. */
 @Component({
   selector: 'app-karaoke-models',
-  imports: [TranslatePipe, TranslatePluralPipe, SelectFieldComponent, ModalHeaderComponent, ModalFooterComponent, KaraokeStaleDetailsComponent],
+  imports: [ModalComponent, TranslatePipe, TranslatePluralPipe, SelectFieldComponent, ModalHeaderComponent, ModalFooterComponent, KaraokeStaleDetailsComponent],
   templateUrl: './karaoke-models.html',
   host: { class: 'flex flex-col gap-5' },
 })
@@ -38,7 +39,7 @@ export class KaraokeModelsComponent {
   private readonly confirm = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('licence');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('licence', { read: ElementRef });
 
   readonly catalogue = input.required<KaraokeModels>();
   /** The admin's `karaoke.aligners` choices, language to model id; the parent read them with the settings. */
@@ -48,6 +49,10 @@ export class KaraokeModelsComponent {
 
   protected readonly busy = signal<string | null>(null);
   protected readonly reviewing = signal<KaraokeModel | null>(null);
+  protected readonly downloadable = computed(() => {
+    const m = this.reviewing();
+    return m && this.canDownload(m) && !m.licence.clear ? m : null;
+  });
   protected readonly accepted = signal(false);
   protected readonly languages = signal<KaraokeLanguage[]>([]);
   protected readonly stale = signal(0);

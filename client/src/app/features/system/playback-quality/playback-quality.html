@@ -239,216 +239,213 @@
   }
 </div>
 
-<dialog #detailDialog class="modal" (close)="detail.set(null)" aria-labelledby="qoe-detail-title">
-  <div class="modal-box w-11/12 max-w-6xl p-0 gap-0 overflow-hidden flex flex-col">
-    @if (detail(); as d) {
-      <app-modal-header flush>
-        <div class="min-w-0">
-          <h3 id="qoe-detail-title" class="text-lg font-bold">{{ d.media?.title ?? d.mediaTitle ?? d.sessionId }}</h3>
-          @if (d.media && episodeLine(d.media); as ep) {
-            <p class="text-sm">{{ ep }}</p>
-          }
-          <p class="text-sm text-base-content/60">{{ userName(d.userId) }} · {{ deviceText(d) }}</p>
-        </div>
-      </app-modal-header>
-      <div class="px-5 sm:px-6 py-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
-      <div class="mt-3 rounded-lg border border-base-200 p-3 text-sm">
-        <div class="flex flex-wrap items-center gap-2" [title]="'qoe.hint.verdict' | translate">
-          <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="dotClass(d)"></span>
-          <span class="font-semibold">{{ verdictText(d) }}</span>
-          @if (d.confidence === 'low') {
-            <span class="text-base-content/60">({{ 'qoe.confidence_low' | translate }})</span>
-          }
-        </div>
-        @for (r of d.reasons; track r) {
-          <div class="mt-1 italic text-base-content/70">{{ reasonText(r) }}</div>
+<dialog #detailDialog appModal boxClass="w-11/12 max-w-6xl" (close)="detail.set(null)" aria-labelledby="qoe-detail-title">
+  @if (detail(); as d) {
+    <app-modal-header>
+      <div class="min-w-0">
+        <h3 id="qoe-detail-title" class="text-lg font-bold">{{ d.media?.title ?? d.mediaTitle ?? d.sessionId }}</h3>
+        @if (d.media && episodeLine(d.media); as ep) {
+          <p class="text-base">{{ ep }}</p>
         }
-        <dl class="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
-          @if (d.media; as m) {
-            <dt class="text-base-content/60">{{ 'qoe.col_media' | translate }}</dt>
-            <dd class="min-w-0 break-words">
-              @if (mediaLink(m); as link) {
-                <a class="link link-hover" [routerLink]="link" (click)="closeDetail()">{{ m.title }}</a>
-              } @else {
-                {{ m.title }}
-              }
-              @if (episodeLine(m); as ep) {
-                <span class="text-base-content/60"> · </span>
-                @if (episodeLink(m); as link) {
-                  <a class="link link-hover" [routerLink]="link" (click)="closeDetail()">{{ ep }}</a>
-                } @else {
-                  {{ ep }}
-                }
-              }
-            </dd>
-          }
-          @for (row of summaryRows(d); track row.label) {
-            <dt class="text-base-content/60" [title]="row.hint ?? ''">{{ row.label }}</dt>
-            <dd class="min-w-0 break-words">{{ row.value }}</dd>
-          }
-        </dl>
+        <p class="text-base text-base-content/60">{{ userName(d.userId) }} · {{ deviceText(d) }}</p>
       </div>
-
-      @if (stallCauses().length > 0) {
-        <h4 class="font-semibold mt-4 mb-2">{{ 'qoe.stalls_by_cause' | translate }}</h4>
-        <div class="overflow-x-auto">
-          <table class="table">
-            <thead>
-              <tr>
-                <th [title]="'qoe.hint.cause' | translate">{{ 'qoe.col_cause' | translate }}</th>
-                <th class="text-right">{{ 'qoe.col_count' | translate }}</th>
-                <th class="text-right">{{ 'qoe.col_duration' | translate }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (c of stallCauses(); track c.cause) {
-                <tr>
-                  <td>
-                    <span class="inline-block h-2.5 w-2.5 rounded-full mr-2" [class]="causeDot[c.cause]"></span>{{ 'qoe.cause.' + c.cause | translate }}
-                  </td>
-                  <td class="text-right tabular-nums">{{ c.count }}</td>
-                  <td class="text-right tabular-nums">{{ seconds(c.ms) }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
+    </app-modal-header>
+  }
+  @if (detail(); as d) {
+    <div class="rounded-lg border border-base-200 p-3 text-sm">
+      <div class="flex flex-wrap items-center gap-2" [title]="'qoe.hint.verdict' | translate">
+        <span class="inline-block h-2.5 w-2.5 rounded-full shrink-0" [class]="dotClass(d)"></span>
+        <span class="font-semibold">{{ verdictText(d) }}</span>
+        @if (d.confidence === 'low') {
+          <span class="text-base-content/60">({{ 'qoe.confidence_low' | translate }})</span>
+        }
+      </div>
+      @for (r of d.reasons; track r) {
+        <div class="mt-1 italic text-base-content/70">{{ reasonText(r) }}</div>
       }
+      <dl class="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+        @if (d.media; as m) {
+          <dt class="text-base-content/60">{{ 'qoe.col_media' | translate }}</dt>
+          <dd class="min-w-0 break-words">
+            @if (mediaLink(m); as link) {
+              <a class="link link-hover" [routerLink]="link" (click)="closeDetail()">{{ m.title }}</a>
+            } @else {
+              {{ m.title }}
+            }
+            @if (episodeLine(m); as ep) {
+              <span class="text-base-content/60"> · </span>
+              @if (episodeLink(m); as link) {
+                <a class="link link-hover" [routerLink]="link" (click)="closeDetail()">{{ ep }}</a>
+              } @else {
+                {{ ep }}
+              }
+            }
+          </dd>
+        }
+        @for (row of summaryRows(d); track row.label) {
+          <dt class="text-base-content/60" [title]="row.hint ?? ''">{{ row.label }}</dt>
+          <dd class="min-w-0 break-words">{{ row.value }}</dd>
+        }
+      </dl>
+    </div>
 
-      <h4 class="font-semibold mt-4">{{ 'qoe.timeline' | translate }}</h4>
-      <p class="text-sm text-base-content/60 mb-3">{{ timelineHeader(d) }}</p>
-      <!-- One grid for every step (marker, time, content) so the rail, the times and the text line up. -->
-      <div class="relative text-sm">
-        <span class="absolute left-2.5 top-2.5 bottom-2.5 w-px -translate-x-1/2 bg-base-300" aria-hidden="true"></span>
-        <ol class="relative space-y-4">
-          @for (step of steps(); track $index) {
-            <li class="grid grid-cols-[1.25rem_4.75rem_minmax(0,1fr)] gap-x-3 leading-5">
-              <span class="flex h-5 items-center justify-center" aria-hidden="true">
-                @switch (step.kind) {
-                  @case ('session') {
-                    <span class="h-3 w-3 rounded-full ring-4 ring-base-100" [class]="dotClass(step.block.session)"></span>
-                  }
-                  @case ('event') {
-                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
-                      @if (step.event.type === 'stall') {
-                        <svg lucideTriangleAlert class="h-4 w-4" [class]="causeTextClass(step.event)"></svg>
-                      } @else if (step.event.type === 'error') {
-                        <svg lucideCircleX class="h-4 w-4 text-error"></svg>
-                      } @else {
-                        @switch (changeIcon(step.event.type, step.event.data?.reason)) {
-                        @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4 text-base-content/50"></svg> }
-                        @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4 text-base-content/50"></svg> }
-                        @case ('audio') { <svg lucideAudioLines class="h-4 w-4 text-base-content/50"></svg> }
-                        @case ('subtitles') { <svg lucideCaptions class="h-4 w-4 text-base-content/50"></svg> }
-                        @case ('reload') { <svg lucideRefreshCw class="h-4 w-4 text-base-content/50"></svg> }
-                        @case ('fallback') { <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg> }
-                        @case ('cast') { <svg lucideCast class="h-4 w-4 text-base-content/50"></svg> }
-                        @case ('start') { <svg lucidePlay class="h-4 w-4 text-base-content/50"></svg> }
-                        @default { <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg> }
-                      }
-                      }
-                    </span>
-                  }
-                  @case ('end') {
-                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
-                      <svg lucideCircleStop class="h-4 w-4 text-base-content/50"></svg>
-                    </span>
-                  }
-                }
-              </span>
-              <span class="tabular-nums text-base-content/60">{{ step.at == null ? '' : clock(step.at, d) }}</span>
-              <div class="min-w-0">
-                @switch (step.kind) {
-                  @case ('session') {
-                    @let change = step.incoming ? transitionLines(step.incoming) : null;
-                    <div class="flex flex-wrap items-center gap-x-3" [title]="step.block.session.sessionId">
-                      <span class="inline-flex items-center gap-1.5 font-semibold">
-                        @if (step.incoming; as incoming) {
-                          <span class="inline-flex shrink-0" aria-hidden="true">
-                            @switch (transitionIcon(incoming)) {
-                              @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4"></svg> }
-                              @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4"></svg> }
-                              @case ('audio') { <svg lucideAudioLines class="h-4 w-4"></svg> }
-                              @case ('subtitles') { <svg lucideCaptions class="h-4 w-4"></svg> }
-                              @case ('reload') { <svg lucideRefreshCw class="h-4 w-4"></svg> }
-                              @case ('fallback') { <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg> }
-                              @case ('cast') { <svg lucideCast class="h-4 w-4"></svg> }
-                              @default { <svg lucideArrowRightLeft class="h-4 w-4"></svg> }
-                            }
-                          </span>
-                        }
-                        {{ change?.title ?? blockTitle(step.block) }}
-                      </span>
-                      <span class="ml-auto inline-flex items-center gap-1.5 text-base-content/70" [title]="'qoe.hint.verdict' | translate">
-                        <span class="h-2 w-2 rounded-full" [class]="dotClass(step.block.session)"></span>
-                        {{ verdictText(step.block.session) }}
-                      </span>
-                    </div>
-                    @if (change?.detail; as detail) {
-                      <p class="text-base-content/70">{{ detail }}</p>
-                    }
-                    <p class="text-base-content/60">{{ blockSummary(step.block, step.incoming) }}</p>
-                    @if (unreportedText(step.block, step.incoming); as unreported) {
-                      <p class="text-base-content/60">{{ unreported }}</p>
-                    }
-                    @if (detailRows(step.block.session, step.spanMs); as rows) {
-                      @if (rows.length > 0) {
-                        <details class="mt-1" [attr.open]="detailsOpen(step.block.session.verdict) ? '' : null">
-                          <summary class="cursor-pointer text-base-content/60">{{ 'qoe.block.details' | translate }}</summary>
-                          <dl class="mt-1 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
-                            @for (row of rows; track row.label) {
-                              <dt class="text-base-content/60">{{ row.label }}</dt>
-                              <dd class="min-w-0 break-words">{{ row.value }}</dd>
-                            }
-                          </dl>
-                        </details>
-                      }
-                    }
-                  }
-                  @case ('event') {
-                    @if (step.event.type === 'stall') {
-                      <p class="font-medium">{{ frozenTitle(step.event) }}</p>
-                      <p class="text-base-content/70">{{ causeSentence(step.event) }}</p>
-                      @if (step.event.data?.cause === 'server') {
-                        @if (stallHints(step.event); as hints) {
-                          <p class="text-base-content/60">{{ hints }}</p>
-                        }
-                        @if (stallPipeline(d, step.event); as pipe) {
-                          <p class="text-base-content/60">{{ pipe }}</p>
-                        }
-                        @if (stallLoad(step.event); as load) {
-                          <p class="text-base-content/60">{{ load }}</p>
-                        }
-                      }
-                    } @else if (step.event.type === 'error') {
-                      <p class="font-medium">{{ errorTitle(step.event) }}</p>
-                      @if (errorDetail(step.event); as detail) {
-                        <p class="text-base-content/60">{{ detail }}</p>
-                      }
-                    } @else {
-                      @let other = otherEventLines(step.event);
-                      <p class="font-medium">{{ other.title }}</p>
-                      @if (other.detail) {
-                        <p class="text-base-content/70">{{ other.detail }}</p>
-                      }
-                    }
-                  }
-                  @case ('end') {
-                    <p class="font-medium">{{ (step.at == null ? 'qoe.summary.ongoing' : 'qoe.block.end') | translate }}</p>
-                  }
-                }
-              </div>
-            </li>
-          }
-        </ol>
+    @if (stallCauses().length > 0) {
+      <h4 class="font-semibold mt-4 mb-2">{{ 'qoe.stalls_by_cause' | translate }}</h4>
+      <div class="overflow-x-auto">
+        <table class="table">
+          <thead>
+            <tr>
+              <th [title]="'qoe.hint.cause' | translate">{{ 'qoe.col_cause' | translate }}</th>
+              <th class="text-right">{{ 'qoe.col_count' | translate }}</th>
+              <th class="text-right">{{ 'qoe.col_duration' | translate }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of stallCauses(); track c.cause) {
+              <tr>
+                <td>
+                  <span class="inline-block h-2.5 w-2.5 rounded-full mr-2" [class]="causeDot[c.cause]"></span>{{ 'qoe.cause.' + c.cause | translate }}
+                </td>
+                <td class="text-right tabular-nums">{{ c.count }}</td>
+                <td class="text-right tabular-nums">{{ seconds(c.ms) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
       </div>
-      </div>
-      <app-modal-footer flush>
-        <button type="button" class="btn btn-ghost" (click)="exportJson(d)">{{ 'qoe.export_json' | translate }}</button>
-      </app-modal-footer>
     }
-  </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeDetail()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
-  </form>
+
+    <h4 class="font-semibold mt-4">{{ 'qoe.timeline' | translate }}</h4>
+    <p class="text-sm text-base-content/60 mb-3">{{ timelineHeader(d) }}</p>
+    <!-- One grid for every step (marker, time, content) so the rail, the times and the text line up. -->
+    <div class="relative text-sm">
+      <span class="absolute left-2.5 top-2.5 bottom-2.5 w-px -translate-x-1/2 bg-base-300" aria-hidden="true"></span>
+      <ol class="relative space-y-4">
+        @for (step of steps(); track $index) {
+          <li class="grid grid-cols-[1.25rem_4.75rem_minmax(0,1fr)] gap-x-3 leading-5">
+            <span class="flex h-5 items-center justify-center" aria-hidden="true">
+              @switch (step.kind) {
+                @case ('session') {
+                  <span class="h-3 w-3 rounded-full ring-4 ring-base-100" [class]="dotClass(step.block.session)"></span>
+                }
+                @case ('event') {
+                  <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
+                    @if (step.event.type === 'stall') {
+                      <svg lucideTriangleAlert class="h-4 w-4" [class]="causeTextClass(step.event)"></svg>
+                    } @else if (step.event.type === 'error') {
+                      <svg lucideCircleX class="h-4 w-4 text-error"></svg>
+                    } @else {
+                      @switch (changeIcon(step.event.type, step.event.data?.reason)) {
+                      @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('audio') { <svg lucideAudioLines class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('subtitles') { <svg lucideCaptions class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('reload') { <svg lucideRefreshCw class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('fallback') { <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg> }
+                      @case ('cast') { <svg lucideCast class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('start') { <svg lucidePlay class="h-4 w-4 text-base-content/50"></svg> }
+                      @default { <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg> }
+                    }
+                    }
+                  </span>
+                }
+                @case ('end') {
+                  <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
+                    <svg lucideCircleStop class="h-4 w-4 text-base-content/50"></svg>
+                  </span>
+                }
+              }
+            </span>
+            <span class="tabular-nums text-base-content/60">{{ step.at == null ? '' : clock(step.at, d) }}</span>
+            <div class="min-w-0">
+              @switch (step.kind) {
+                @case ('session') {
+                  @let change = step.incoming ? transitionLines(step.incoming) : null;
+                  <div class="flex flex-wrap items-center gap-x-3" [title]="step.block.session.sessionId">
+                    <span class="inline-flex items-center gap-1.5 font-semibold">
+                      @if (step.incoming; as incoming) {
+                        <span class="inline-flex shrink-0" aria-hidden="true">
+                          @switch (transitionIcon(incoming)) {
+                            @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4"></svg> }
+                            @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4"></svg> }
+                            @case ('audio') { <svg lucideAudioLines class="h-4 w-4"></svg> }
+                            @case ('subtitles') { <svg lucideCaptions class="h-4 w-4"></svg> }
+                            @case ('reload') { <svg lucideRefreshCw class="h-4 w-4"></svg> }
+                            @case ('fallback') { <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg> }
+                            @case ('cast') { <svg lucideCast class="h-4 w-4"></svg> }
+                            @default { <svg lucideArrowRightLeft class="h-4 w-4"></svg> }
+                          }
+                        </span>
+                      }
+                      {{ change?.title ?? blockTitle(step.block) }}
+                    </span>
+                    <span class="ml-auto inline-flex items-center gap-1.5 text-base-content/70" [title]="'qoe.hint.verdict' | translate">
+                      <span class="h-2 w-2 rounded-full" [class]="dotClass(step.block.session)"></span>
+                      {{ verdictText(step.block.session) }}
+                    </span>
+                  </div>
+                  @if (change?.detail; as detail) {
+                    <p class="text-base-content/70">{{ detail }}</p>
+                  }
+                  <p class="text-base-content/60">{{ blockSummary(step.block, step.incoming) }}</p>
+                  @if (unreportedText(step.block, step.incoming); as unreported) {
+                    <p class="text-base-content/60">{{ unreported }}</p>
+                  }
+                  @if (detailRows(step.block.session, step.spanMs); as rows) {
+                    @if (rows.length > 0) {
+                      <details class="mt-1" [attr.open]="detailsOpen(step.block.session.verdict) ? '' : null">
+                        <summary class="cursor-pointer text-base-content/60">{{ 'qoe.block.details' | translate }}</summary>
+                        <dl class="mt-1 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+                          @for (row of rows; track row.label) {
+                            <dt class="text-base-content/60">{{ row.label }}</dt>
+                            <dd class="min-w-0 break-words">{{ row.value }}</dd>
+                          }
+                        </dl>
+                      </details>
+                    }
+                  }
+                }
+                @case ('event') {
+                  @if (step.event.type === 'stall') {
+                    <p class="font-medium">{{ frozenTitle(step.event) }}</p>
+                    <p class="text-base-content/70">{{ causeSentence(step.event) }}</p>
+                    @if (step.event.data?.cause === 'server') {
+                      @if (stallHints(step.event); as hints) {
+                        <p class="text-base-content/60">{{ hints }}</p>
+                      }
+                      @if (stallPipeline(d, step.event); as pipe) {
+                        <p class="text-base-content/60">{{ pipe }}</p>
+                      }
+                      @if (stallLoad(step.event); as load) {
+                        <p class="text-base-content/60">{{ load }}</p>
+                      }
+                    }
+                  } @else if (step.event.type === 'error') {
+                    <p class="font-medium">{{ errorTitle(step.event) }}</p>
+                    @if (errorDetail(step.event); as detail) {
+                      <p class="text-base-content/60">{{ detail }}</p>
+                    }
+                  } @else {
+                    @let other = otherEventLines(step.event);
+                    <p class="font-medium">{{ other.title }}</p>
+                    @if (other.detail) {
+                      <p class="text-base-content/70">{{ other.detail }}</p>
+                    }
+                  }
+                }
+                @case ('end') {
+                  <p class="font-medium">{{ (step.at == null ? 'qoe.summary.ongoing' : 'qoe.block.end') | translate }}</p>
+                }
+              }
+            </div>
+          </li>
+        }
+      </ol>
+    </div>
+  }
+  @if (detail(); as d) {
+    <app-modal-footer>
+      <button type="button" class="btn btn-ghost" (click)="exportJson(d)">{{ 'qoe.export_json' | translate }}</button>
+    </app-modal-footer>
+  }
 </dialog>

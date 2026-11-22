@@ -20,7 +20,7 @@ import { MediaService } from '../../../../core/services/api/media.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import type { MediaType } from '../../../../core/enums/media-type.enum';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
-import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../../shared/components/modal';
 
 /** What the caller knows about the media, used to prefill the criteria. */
 export interface IdentifyModalConfig {
@@ -44,7 +44,7 @@ const IDS_KINDS: MediaType[] = ['movie', 'series'];
 @Component({
   selector: 'app-media-detail-identify-modal',
   imports: [
-    ModalFooterComponent,
+    ModalComponent,
     ModalHeaderComponent,
     TranslatePipe,
     FormsModule,
@@ -61,7 +61,7 @@ export class MediaDetailIdentifyModalComponent {
   /** Emitted after a successful re-identification so the page can reload. */
   readonly identified = output<void>();
 
-  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogEl = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly config = signal<IdentifyModalConfig | null>(null);
   readonly formTitle = signal('');

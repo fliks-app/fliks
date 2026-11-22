@@ -24,10 +24,12 @@ import { formatRelativeTime } from '../../../core/utils/relative-time';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
+import { ModalComponent } from '../../../shared/components/modal';
 
 @Component({
   selector: 'app-users-settings',
   imports: [
+    ModalComponent,
     TvSelectDirective,
     ModalFooterComponent,
     ModalHeaderComponent,
@@ -45,7 +47,7 @@ export class UsersSettingsComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
 
   readonly rows = signal<UserRow[]>([]);
   readonly roles = signal<RoleRow[]>([]);

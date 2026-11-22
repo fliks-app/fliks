@@ -24,6 +24,7 @@ import type { MediaType } from '../../../core/enums/media-type.enum';
 import { kindOf } from '../../../core/media-kinds';
 import type { WantFamily } from '../../../core/services/api/wants-api.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
+import { ModalComponent } from '../../../shared/components/modal';
 
 type RuleMediaType = '' | MediaType;
 
@@ -33,6 +34,7 @@ const LANGUAGES = ['fr', 'en', 'de', 'es', 'it', 'pt'];
 @Component({
   selector: 'app-auto-approval',
   imports: [
+    ModalComponent,
     TvSelectDirective,
     ModalFooterComponent,
     ModalHeaderComponent,
@@ -63,7 +65,7 @@ export class AutoApprovalSettingsComponent implements OnInit {
   private readonly movieGenres = signal<TmdbGenre[]>([]);
   private readonly tvGenres = signal<TmdbGenre[]>([]);
 
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
   readonly saving = signal(false);
   readonly togglingId = signal<number | null>(null);
   readonly editingId = signal<number | null>(null);

@@ -17,11 +17,13 @@ import { MarkdownPipe } from '../../pipes/markdown.pipe';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
+import { ModalComponent } from '../modal';
 
 /** Changelog + install dialog for the topbar update button, reading AppUpdateService; install is in-app on desktop, a release link on web/.deb. */
 @Component({
   selector: 'app-update-modal',
   imports: [
+    ModalComponent,
     ModalFooterComponent,
     LocaleDatePipe,
     TranslatePipe,
@@ -37,7 +39,7 @@ import { ModalFooterComponent } from '../modal-footer';
 export class AppUpdateModalComponent {
   readonly update = inject(AppUpdateService);
 
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   /** True while the desktop app is downloading the update. */
   readonly downloading = computed(() => this.update.state() === 'downloading');

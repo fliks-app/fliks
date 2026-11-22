@@ -26,6 +26,7 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { LucideChevronLeft, LucideChevronRight, LucidePlay } from '@lucide/angular';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../../core/utils/viewport';
+import { ModalComponent } from '../../../shared/components/modal';
 
 /** Visible span of the grid, in hours. */
 const TIMELINE_HOURS = 4;
@@ -57,7 +58,7 @@ interface DisplayRow extends GuideRow {
 
 @Component({
   selector: 'app-live-tv-guide',
-  imports: [TvSelectDirective, 
+  imports: [ModalComponent, TvSelectDirective, 
     FormsModule,
     TranslatePipe,
     LocaleDatePipe,
@@ -77,7 +78,7 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
 
   private readonly scrollEl = viewChild<ElementRef<HTMLElement>>('scrollArea');
   private readonly sentinelEl = viewChild<ElementRef<HTMLElement>>('sentinel');
-  private readonly sheetDialog = viewChild<ElementRef<HTMLDialogElement>>('sheetDialog');
+  private readonly sheetDialog = viewChild<string, ElementRef<HTMLDialogElement>>('sheetDialog', { read: ElementRef });
 
   /** The time grid from `md` up, the now/next list below: a grid is unreadable at phone width. */
   readonly isGrid = mediaQuerySignal(MD_BREAKPOINT_QUERY);

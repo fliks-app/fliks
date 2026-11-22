@@ -14,10 +14,11 @@ import type { WantSpec } from '../../../core/services/api/wants-api.service';
 import { WantsEditorComponent } from '../../../shared/components/wants-editor/wants-editor';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../shared/components/modal';
 
 @Component({
   selector: 'app-request-edit-modal',
-  imports: [TvSelectDirective, WantsEditorComponent, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
+  imports: [ModalComponent, TvSelectDirective, WantsEditorComponent, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   templateUrl: './request-edit-modal.component.html',
 })
 export class RequestEditModalComponent {
@@ -40,7 +41,7 @@ export class RequestEditModalComponent {
   readonly dismissed = output<void>();
   readonly save = output<void>();
 
-  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogEl = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   showModal() {
     this.dialogEl()?.nativeElement.showModal();

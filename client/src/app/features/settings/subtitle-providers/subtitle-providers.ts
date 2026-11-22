@@ -37,6 +37,7 @@ import {
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
+import { ModalComponent } from '../../../shared/components/modal';
 
 const DEFAULT_TRANSLATION_MODEL = 'gemini-3.5-flash-lite';
 
@@ -102,7 +103,7 @@ const LABELS: ProviderListLabels = {
 
 @Component({
   selector: 'app-subtitle-providers-settings',
-  imports: [TvSelectDirective,
+  imports: [ModalComponent, TvSelectDirective,
     NgTemplateOutlet,
     ModalFooterComponent,
     ModalHeaderComponent,
@@ -122,8 +123,8 @@ export class SubtitleProvidersSettingsComponent implements OnInit {
   private readonly confirmation = inject(ConfirmationService);
 
   private readonly translationEditorDialog =
-    viewChild<ElementRef<HTMLDialogElement>>('translationEditorDialog');
-  private readonly statsDialog = viewChild<ElementRef<HTMLDialogElement>>('statsDialog');
+    viewChild<string, ElementRef<HTMLDialogElement>>('translationEditorDialog', { read: ElementRef });
+  private readonly statsDialog = viewChild<string, ElementRef<HTMLDialogElement>>('statsDialog', { read: ElementRef });
 
   readonly listUrl = '/api/subtitles/providers';
   readonly implementations = IMPLEMENTATIONS;

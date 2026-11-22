@@ -16,6 +16,7 @@ import { albumRows, type NewRow } from './party-programme-items';
 import { reducedMotion, rowTops, slideRows } from './party-flip';
 import { itemThumb } from './party-thumb';
 import { episodeLabel } from '../../shared/utils/episode-label';
+import { ModalComponent } from '../../shared/components/modal';
 
 /** Most votes for first, then fewest against; a tie keeps its place in `shown`, else the oldest (lowest id) first. */
 export function sortProposals(list: readonly PartyProposal[], shown: readonly PartyProposal[] = []): PartyProposal[] {
@@ -55,7 +56,7 @@ const bump = (value: 1 | -1, cast: boolean): Keyframe[] => [
 /** The party's film proposals: propose, vote, remove, and for the host pick one. */
 @Component({
   selector: 'app-party-proposals',
-  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, ModalHeaderComponent, UserAvatarComponent, LucideLightbulb, LucideThumbsDown, LucideThumbsUp, LucideTrash2],
+  imports: [ModalComponent, TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, ModalHeaderComponent, UserAvatarComponent, LucideLightbulb, LucideThumbsDown, LucideThumbsUp, LucideTrash2],
   templateUrl: './party-proposals.html',
 })
 export class PartyProposalsComponent {
@@ -176,7 +177,7 @@ export class PartyProposalsComponent {
   }
 
   protected readonly voters = signal<PartyProposal | null>(null);
-  private readonly votersDialog = viewChild.required<ElementRef<HTMLDialogElement>>('votersDialog');
+  private readonly votersDialog = viewChild.required<string, ElementRef<HTMLDialogElement>>('votersDialog', { read: ElementRef });
   private pressTimer: ReturnType<typeof setTimeout> | null = null;
   /** A long press opened the list: the click that may follow must not also vote. */
   private longPressed = false;

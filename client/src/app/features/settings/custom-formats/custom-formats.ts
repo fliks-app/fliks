@@ -23,6 +23,7 @@ import { ProfilesService } from '../../../core/services/api/profiles.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../shared/components/modal';
 
 /** Condition values from a closed vocabulary the backend matches against the parsed release attribute; other types take free text. */
 const VALUE_OPTIONS: Partial<Record<CustomFormatSpecType, readonly string[]>> = {
@@ -44,7 +45,7 @@ const VALUE_OPTIONS: Partial<Record<CustomFormatSpecType, readonly string[]>> = 
 
 @Component({
   selector: 'app-custom-formats-settings',
-  imports: [TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe, TranslatePluralPipe],
+  imports: [ModalComponent, TvSelectDirective, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe, TranslatePluralPipe],
   templateUrl: './custom-formats.html',
 })
 export class CustomFormatsSettingsComponent implements OnInit {
@@ -52,7 +53,7 @@ export class CustomFormatsSettingsComponent implements OnInit {
   private readonly profilesApi = inject(ProfilesService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
 
   readonly rows = signal<CustomFormat[]>([]);
   readonly languages = signal<{ isoCode: string; name: string }[]>([]);

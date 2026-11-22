@@ -1,0 +1,21 @@
+<div
+  #box
+  class="modal-box"
+  [class]="boxClass()"
+  [class.modal-sheet-fill]="fill()"
+  [style.transform]="drag.offset() ? 'translateY(' + drag.offset() + 'px)' : null"
+  [style.transition]="drag.dragging() ? 'none' : null"
+  (touchstart)="onTouchStart($event, box)"
+  (touchmove)="onTouchMove($event, box)"
+  (touchend)="onTouchEnd()"
+>
+  <div class="modal-sheet-handle" data-sheet-handle data-no-focus-ring tabindex="-1" autofocus aria-hidden="true"></div>
+  <ng-content select="app-modal-header" />
+  <div class="modal-sheet-body">
+    <ng-content />
+  </div>
+  <ng-content select="app-modal-footer" />
+</div>
+<form method="dialog" class="modal-backdrop">
+  <button tabindex="-1" [attr.aria-label]="'common.close' | translate"></button>
+</form>

@@ -16,7 +16,7 @@ import {
   formatEta,
   ProgressVariant,
 } from '../../utils/download-format';
-import { ModalFooterComponent } from '../modal-footer';
+import { ModalComponent } from '../modal';
 
 interface LeafRow {
   key: string;
@@ -43,13 +43,13 @@ interface SeasonRow {
  *  A movie has a single download, so it keeps one headline; the parent passes live `progress` so SSE updates continue. */
 @Component({
   selector: 'app-download-detail-modal',
-  imports: [ModalFooterComponent, TranslatePipe, ProgressBarComponent, ModalHeaderComponent],
+  imports: [ModalComponent, TranslatePipe, ProgressBarComponent, ModalHeaderComponent],
   templateUrl: './download-detail-modal.html',
 })
 export class DownloadDetailModalComponent {
   readonly progress = input<MediaDownloadProgress | null>(null);
 
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   /** A movie's single download: no season to group under, so it is its own row. */
   readonly isSingleDownload = computed(() => !this.progress()?.seasons);

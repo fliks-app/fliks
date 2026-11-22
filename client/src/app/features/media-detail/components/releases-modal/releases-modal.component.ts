@@ -19,7 +19,7 @@ import { IndexerRosterEntry, sourceKey } from '../../release-search-stream.servi
 import { ReleasesTableComponent } from '../releases-table/releases-table.component';
 import { DismissableStackService } from '../../../../core/services/dismissable-stack.service';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
-import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../../shared/components/modal';
 
 /** `null` is the "Tous" tab; anything else is one source key (`pluginId:sourceId`). */
 export type ReleaseTab = string | null;
@@ -38,7 +38,7 @@ type IndexerSearchStateOrAll = IndexerRosterEntry['state'] | 'all';
 @Component({
   selector: 'app-releases-modal',
   imports: [
-    ModalFooterComponent,
+    ModalComponent,
     ModalHeaderComponent,
     FormsModule,
     TranslatePipe,
@@ -85,7 +85,7 @@ export class ReleasesModalComponent {
   }
 
   private readonly dismissStack = inject(DismissableStackService);
-  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogEl = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
   private readonly closeCallback = () => this.dialogEl()?.nativeElement.close();
 
   readonly activeTab = signal<ReleaseTab>(null);

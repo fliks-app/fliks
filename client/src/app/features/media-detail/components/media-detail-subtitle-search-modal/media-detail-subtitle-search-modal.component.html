@@ -1,124 +1,116 @@
-<dialog #dialog class="modal">
-  <div class="modal-box max-w-5xl flex flex-col">
-    <app-modal-header [title]="'media_detail.search_subtitles' | translate" />
-    <div class="flex gap-2 mb-4">
-      <select
-        class="select select-bordered select-sm"
-        appTvSelect
-        [ngModel]="subSearchLang()"
-        (ngModelChange)="subSearchLangChange.emit($event)"
-      >
-        @for (code of languageCodes; track code) {
-          <option [value]="code">{{ code | localizeLanguage }}</option>
-        }
-      </select>
-      <button
-        type="button"
-        class="btn btn-primary btn-sm"
-        (click)="search.emit()"
-        [disabled]="subSearchLoading()"
-      >
-        @if (subSearchLoading()) {
-          <span class="loading loading-spinner loading-xs"></span>
-        }
-        {{ 'media_detail.search' | translate }}
-      </button>
-    </div>
-    @if (subSearchResults().length > 0) {
-      <div class="overflow-y-auto flex-1 min-h-0">
-        <table class="table">
-          <thead>
+<dialog #dialog appModal boxClass="max-w-5xl flex flex-col">
+  <app-modal-header [title]="'media_detail.search_subtitles' | translate" />
+  <div class="flex gap-2 mb-4">
+    <select
+      class="select select-bordered select-sm"
+      appTvSelect
+      [ngModel]="subSearchLang()"
+      (ngModelChange)="subSearchLangChange.emit($event)"
+    >
+      @for (code of languageCodes; track code) {
+        <option [value]="code">{{ code | localizeLanguage }}</option>
+      }
+    </select>
+    <button
+      type="button"
+      class="btn btn-primary btn-sm"
+      (click)="search.emit()"
+      [disabled]="subSearchLoading()"
+    >
+      @if (subSearchLoading()) {
+        <span class="loading loading-spinner loading-xs"></span>
+      }
+      {{ 'media_detail.search' | translate }}
+    </button>
+  </div>
+  @if (subSearchResults().length > 0) {
+    <div class="overflow-y-auto flex-1 min-h-0">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>{{ 'media_detail.col_sub_title' | translate }}</th>
+            <th class="text-center hidden sm:table-cell">
+              {{ 'media_detail.col_sub_score' | translate }}
+            </th>
+            <th class="text-center hidden sm:table-cell">
+              {{ 'media_detail.col_sub_flags' | translate }}
+            </th>
+            <th>{{ 'media_detail.col_sub_provider' | translate }}</th>
+            <th class="w-32"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of subSearchResults(); track r.providerFileId) {
             <tr>
-              <th>{{ 'media_detail.col_sub_title' | translate }}</th>
-              <th class="text-center hidden sm:table-cell">
-                {{ 'media_detail.col_sub_score' | translate }}
-              </th>
-              <th class="text-center hidden sm:table-cell">
-                {{ 'media_detail.col_sub_flags' | translate }}
-              </th>
-              <th>{{ 'media_detail.col_sub_provider' | translate }}</th>
-              <th class="w-32"></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (r of subSearchResults(); track r.providerFileId) {
-              <tr>
-                <td class="text-sm">
-                  <div class="max-w-[13rem] sm:max-w-[20rem] truncate" [title]="r.title">
-                    {{ r.title }}
-                  </div>
-                  <div class="sm:hidden mt-1 flex items-center gap-2 text-sm">
-                    <progress
-                      class="progress w-14 h-1.5"
-                      [class.progress-success]="r.score >= 80"
-                      [class.progress-warning]="r.score >= 40 && r.score < 80"
-                      [class.progress-error]="r.score < 40"
-                      [value]="r.score"
-                      max="100"
-                    ></progress>
-                    <span class="tabular-nums">{{ r.score }}%</span>
-                    @if (r.forced) {
-                      <span class="badge badge-sm badge-outline">F</span>
-                    }
-                    @if (r.hearingImpaired) {
-                      <span class="badge badge-sm badge-outline">HI</span>
-                    }
-                  </div>
-                </td>
-                <td class="hidden sm:table-cell">
-                  <div class="flex items-center gap-2 justify-center">
-                    <progress
-                      class="progress w-14 h-1.5"
-                      [class.progress-success]="r.score >= 80"
-                      [class.progress-warning]="r.score >= 40 && r.score < 80"
-                      [class.progress-error]="r.score < 40"
-                      [value]="r.score"
-                      max="100"
-                    ></progress>
-                    <span class="tabular-nums text-sm w-9 text-right">{{ r.score }}%</span>
-                  </div>
-                </td>
-                <td class="text-center text-sm hidden sm:table-cell">
+              <td class="text-sm">
+                <div class="max-w-[13rem] sm:max-w-[20rem] truncate" [title]="r.title">
+                  {{ r.title }}
+                </div>
+                <div class="sm:hidden mt-1 flex items-center gap-2 text-sm">
+                  <progress
+                    class="progress w-14 h-1.5"
+                    [class.progress-success]="r.score >= 80"
+                    [class.progress-warning]="r.score >= 40 && r.score < 80"
+                    [class.progress-error]="r.score < 40"
+                    [value]="r.score"
+                    max="100"
+                  ></progress>
+                  <span class="tabular-nums">{{ r.score }}%</span>
                   @if (r.forced) {
-                    <span class="badge badge-sm badge-outline mr-1">F</span>
+                    <span class="badge badge-sm badge-outline">F</span>
                   }
                   @if (r.hearingImpaired) {
                     <span class="badge badge-sm badge-outline">HI</span>
                   }
-                </td>
-                <td class="text-sm">
-                  {{ r.providerName }}
-                  @if (r.downloadCount) {
-                    <span class="block text-sm text-base-content/60 whitespace-nowrap">{{
-                      'media_detail.subtitle_downloads' | translate: { count: r.downloadCount }
-                    }}</span>
-                  }
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    class="btn btn-primary btn-sm"
-                    (click)="download.emit(r)"
-                    [disabled]="subtitleActionBusy()"
-                  >
-                    {{ 'common.download' | translate }}
-                  </button>
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    } @else if (subSearchSearched() && !subSearchLoading()) {
-      <p class="text-sm text-base-content/60 py-4 text-center">
-        {{ 'media_detail.no_subtitle_results' | translate }}
-      </p>
-    }
-    <app-modal-footer>
-      <form method="dialog">
-        <button class="btn btn-ghost">{{ 'common.close' | translate }}</button>
-      </form>
-    </app-modal-footer>
-  </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+                </div>
+              </td>
+              <td class="hidden sm:table-cell">
+                <div class="flex items-center gap-2 justify-center">
+                  <progress
+                    class="progress w-14 h-1.5"
+                    [class.progress-success]="r.score >= 80"
+                    [class.progress-warning]="r.score >= 40 && r.score < 80"
+                    [class.progress-error]="r.score < 40"
+                    [value]="r.score"
+                    max="100"
+                  ></progress>
+                  <span class="tabular-nums text-sm w-9 text-right">{{ r.score }}%</span>
+                </div>
+              </td>
+              <td class="text-center text-sm hidden sm:table-cell">
+                @if (r.forced) {
+                  <span class="badge badge-sm badge-outline mr-1">F</span>
+                }
+                @if (r.hearingImpaired) {
+                  <span class="badge badge-sm badge-outline">HI</span>
+                }
+              </td>
+              <td class="text-sm">
+                {{ r.providerName }}
+                @if (r.downloadCount) {
+                  <span class="block text-sm text-base-content/60 whitespace-nowrap">{{
+                    'media_detail.subtitle_downloads' | translate: { count: r.downloadCount }
+                  }}</span>
+                }
+              </td>
+              <td>
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm"
+                  (click)="download.emit(r)"
+                  [disabled]="subtitleActionBusy()"
+                >
+                  {{ 'common.download' | translate }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else if (subSearchSearched() && !subSearchLoading()) {
+    <p class="text-sm text-base-content/60 py-4 text-center">
+      {{ 'media_detail.no_subtitle_results' | translate }}
+    </p>
+  }
 </dialog>

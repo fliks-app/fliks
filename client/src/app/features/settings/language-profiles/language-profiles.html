@@ -61,125 +61,118 @@
   }
 </div>
 
-<dialog #editorDialog class="modal" aria-labelledby="language-profiles-title-1">
-  <div class="modal-box max-w-2xl flex flex-col">
-    <app-modal-header class="shrink-0">
-      <h3 id="language-profiles-title-1" class="text-lg font-bold">
-        @if (editingId() === null) {
-          {{ 'settings.language_profiles.editor_create_title' | translate }}
-        } @else {
-          {{ 'settings.language_profiles.editor_edit_title' | translate }}
+<dialog #editorDialog appModal boxClass="max-w-2xl flex flex-col" aria-labelledby="language-profiles-title-1">
+  <app-modal-header class="shrink-0">
+    <h3 id="language-profiles-title-1" class="text-lg font-bold">
+      @if (editingId() === null) {
+        {{ 'settings.language_profiles.editor_create_title' | translate }}
+      } @else {
+        {{ 'settings.language_profiles.editor_edit_title' | translate }}
+      }
+    </h3>
+  </app-modal-header>
+  <div class="py-4 flex flex-col gap-6 overflow-y-auto flex-1 min-h-0 scroll-ring-safe">
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'settings.language_profiles.field_name' | translate }}</span>
+      <input
+        type="text"
+        class="input input-bordered input-sm w-full"
+        [ngModel]="formName()"
+        (ngModelChange)="formName.set($event)"
+      />
+    </label>
+
+    <!-- Audio Languages -->
+    <div>
+      <p class="text-sm font-medium mb-2">
+        {{ 'settings.language_profiles.audio_languages' | translate }}
+      </p>
+      <p class="text-sm text-base-content/60 mb-2">
+        {{ 'settings.language_profiles.audio_languages_hint' | translate }}
+      </p>
+      <div
+        class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[14rem] overflow-y-auto"
+      >
+        @for (l of definitions(); track l.id) {
+          <div class="px-3 py-2 hover:bg-base-200/50">
+            <div class="flex items-center gap-3">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                [checked]="isAudioSelected(l.isoCode)"
+                (change)="toggleAudio(l.isoCode, $event)"
+              />
+              <span class="text-sm flex-1">{{ l.name }}</span>
+              <span class="text-sm text-base-content/60 font-mono">{{ l.isoCode }}</span>
+            </div>
+          </div>
         }
-      </h3>
-    </app-modal-header>
-    <div class="py-4 flex flex-col gap-6 overflow-y-auto flex-1 min-h-0 scroll-ring-safe">
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.language_profiles.field_name' | translate }}</span>
-        <input
-          type="text"
-          class="input input-bordered input-sm w-full"
-          [ngModel]="formName()"
-          (ngModelChange)="formName.set($event)"
-        />
-      </label>
-
-      <!-- Audio Languages -->
-      <div>
-        <p class="text-sm font-medium mb-2">
-          {{ 'settings.language_profiles.audio_languages' | translate }}
-        </p>
-        <p class="text-sm text-base-content/60 mb-2">
-          {{ 'settings.language_profiles.audio_languages_hint' | translate }}
-        </p>
-        <div
-          class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[14rem] overflow-y-auto"
-        >
-          @for (l of definitions(); track l.id) {
-            <div class="px-3 py-2 hover:bg-base-200/50">
-              <div class="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  class="checkbox checkbox-sm"
-                  [checked]="isAudioSelected(l.isoCode)"
-                  (change)="toggleAudio(l.isoCode, $event)"
-                />
-                <span class="text-sm flex-1">{{ l.name }}</span>
-                <span class="text-sm text-base-content/60 font-mono">{{ l.isoCode }}</span>
-              </div>
-            </div>
-          }
-        </div>
-      </div>
-
-      <!-- Subtitle Languages -->
-      <div>
-        <p class="text-sm font-medium mb-2">
-          {{ 'settings.language_profiles.subtitle_languages' | translate }}
-        </p>
-        <p class="text-sm text-base-content/60 mb-2">
-          {{ 'settings.language_profiles.subtitle_languages_hint' | translate }}
-        </p>
-        <div
-          class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[14rem] overflow-y-auto"
-        >
-          @for (l of definitions(); track l.id) {
-            <div class="px-3 py-2 hover:bg-base-200/50">
-              <div class="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  class="checkbox checkbox-sm"
-                  [checked]="isSubtitleSelected(l.isoCode)"
-                  (change)="toggleSubtitle(l.isoCode, $event)"
-                />
-                <span class="text-sm flex-1">{{ l.name }}</span>
-                <span class="text-sm text-base-content/60 font-mono mr-2">{{ l.isoCode }}</span>
-                <label class="flex items-center gap-1 text-xs">
-                  <input
-                    type="checkbox"
-                    class="checkbox checkbox-xs"
-                    [checked]="isSubForced(l.isoCode)"
-                    (change)="toggleSubForced(l.isoCode, $event)"
-                  />
-                  {{ 'settings.language_profiles.forced_label' | translate }}
-                </label>
-                @if (isSubtitleSelected(l.isoCode)) {
-                  <label class="flex items-center gap-1 text-xs">
-                    <span>{{ 'settings.language_profiles.hi_label' | translate }}</span>
-                    <select
-    appTvSelect
-                      class="select select-bordered select-xs"
-                      [ngModel]="subHiMode(l.isoCode)"
-                      (ngModelChange)="setSubHiMode(l.isoCode, $event)"
-                    >
-                      @for (m of hiModes; track m) {
-                        <option [value]="m">
-                          {{ 'settings.language_profiles.hi_mode.' + m | translate }}
-                        </option>
-                      }
-                    </select>
-                  </label>
-                }
-              </div>
-            </div>
-          }
-        </div>
       </div>
     </div>
-    <app-modal-footer>
-      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
-        {{ 'settings.language_profiles.cancel' | translate }}
-      </button>
-      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
-        @if (saving()) {
-          <span class="loading loading-spinner loading-sm"></span>
+
+    <!-- Subtitle Languages -->
+    <div>
+      <p class="text-sm font-medium mb-2">
+        {{ 'settings.language_profiles.subtitle_languages' | translate }}
+      </p>
+      <p class="text-sm text-base-content/60 mb-2">
+        {{ 'settings.language_profiles.subtitle_languages_hint' | translate }}
+      </p>
+      <div
+        class="rounded-lg border border-base-200 divide-y divide-base-200 max-h-[14rem] overflow-y-auto"
+      >
+        @for (l of definitions(); track l.id) {
+          <div class="px-3 py-2 hover:bg-base-200/50">
+            <div class="flex items-center gap-3">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                [checked]="isSubtitleSelected(l.isoCode)"
+                (change)="toggleSubtitle(l.isoCode, $event)"
+              />
+              <span class="text-sm flex-1">{{ l.name }}</span>
+              <span class="text-sm text-base-content/60 font-mono mr-2">{{ l.isoCode }}</span>
+              <label class="flex items-center gap-1 text-sm">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-xs"
+                  [checked]="isSubForced(l.isoCode)"
+                  (change)="toggleSubForced(l.isoCode, $event)"
+                />
+                {{ 'settings.language_profiles.forced_label' | translate }}
+              </label>
+              @if (isSubtitleSelected(l.isoCode)) {
+                <label class="flex items-center gap-1 text-xs">
+                  <span>{{ 'settings.language_profiles.hi_label' | translate }}</span>
+                  <select
+  appTvSelect
+                    class="select select-bordered select-xs"
+                    [ngModel]="subHiMode(l.isoCode)"
+                    (ngModelChange)="setSubHiMode(l.isoCode, $event)"
+                  >
+                    @for (m of hiModes; track m) {
+                      <option [value]="m">
+                        {{ 'settings.language_profiles.hi_mode.' + m | translate }}
+                      </option>
+                    }
+                  </select>
+                </label>
+              }
+            </div>
+          </div>
         }
-        {{ 'settings.language_profiles.save' | translate }}
-      </button>
-    </app-modal-footer>
+      </div>
+    </div>
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">
-      {{ 'common.close' | translate }}
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+      {{ 'settings.language_profiles.cancel' | translate }}
     </button>
-  </form>
+    <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+      @if (saving()) {
+        <span class="loading loading-spinner loading-sm"></span>
+      }
+      {{ 'settings.language_profiles.save' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>

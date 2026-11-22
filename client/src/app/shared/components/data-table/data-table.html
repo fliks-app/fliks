@@ -490,36 +490,26 @@
   </button>
 </ng-template>
 
-<dialog #rowDetailDialog class="modal">
+<dialog #rowDetailDialog appModal boxClass="max-w-lg">
   @if (rowDetail(); as open) {
-    <div class="modal-box max-w-lg">
-      <app-modal-header [title]="open.titleKey | translate" (closed)="closeRowDetail()" />
-      <dl class="flex flex-col gap-3 py-2">
-        @for (line of open.lines; track line.labelKey) {
-          <div class="flex flex-col gap-0.5">
-            <dt class="text-sm text-base-content/60">{{ line.labelKey | translate }}</dt>
-            <dd class="break-words">
-              @if (line.href) {
-                <a class="link" [href]="line.href" target="_blank" rel="noopener noreferrer">{{
-                  line.text
-                }}</a>
-              } @else {
-                {{ line.text }}
-              }
-            </dd>
-          </div>
-        }
-      </dl>
-      <app-modal-footer>
-        <button type="button" class="btn btn-ghost" (click)="closeRowDetail()">
-          {{ 'common.close' | translate }}
-        </button>
-      </app-modal-footer>
-    </div>
+    <app-modal-header [title]="open.titleKey | translate" (closed)="closeRowDetail()" />
   }
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeRowDetail()" [attr.aria-label]="'common.close' | translate">
-      close
-    </button>
-  </form>
+  @if (rowDetail(); as open) {
+    <dl class="flex flex-col gap-3 py-2">
+      @for (line of open.lines; track line.labelKey) {
+        <div class="flex flex-col gap-0.5">
+          <dt class="text-sm text-base-content/60">{{ line.labelKey | translate }}</dt>
+          <dd class="break-words">
+            @if (line.href) {
+              <a class="link" [href]="line.href" target="_blank" rel="noopener noreferrer">{{
+                line.text
+              }}</a>
+            } @else {
+              {{ line.text }}
+            }
+          </dd>
+        </div>
+      }
+    </dl>
+  }
 </dialog>

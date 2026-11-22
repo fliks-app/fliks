@@ -72,138 +72,130 @@
   }
 </div>
 
-<dialog #editorDialog class="modal">
-  <div class="modal-box max-w-lg flex flex-col p-0 gap-0 overflow-hidden">
-    <app-modal-header
-      flush
-      [title]="
-        (editingId() === null
-          ? 'settings.media_servers.editor_create'
-          : 'settings.media_servers.editor_edit'
-        ) | translate
-      "
-    />
+<dialog #editorDialog appModal boxClass="max-w-lg">
+  <app-modal-header
+    [title]="
+      (editingId() === null
+        ? 'settings.media_servers.editor_create'
+        : 'settings.media_servers.editor_edit'
+      ) | translate
+    "
+  />
 
-    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.media_servers.field_name' | translate }}</span>
-        <input
-          type="text"
-          class="input input-bordered input-sm w-full"
-          [ngModel]="formName()"
-          (ngModelChange)="formName.set($event)"
-        />
-      </label>
+  <div class="flex flex-col gap-4">
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'settings.media_servers.field_name' | translate }}</span>
+      <input
+        type="text"
+        class="input input-bordered input-sm w-full"
+        [ngModel]="formName()"
+        (ngModelChange)="formName.set($event)"
+      />
+    </label>
 
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.media_servers.field_type' | translate }}</span>
-        <select
-    appTvSelect
-          class="select select-bordered select-sm w-full"
-          [ngModel]="formType()"
-          (ngModelChange)="onTypeChange($event)"
-        >
-          @for (t of serverTypes(); track t.type) {
-            <option [value]="t.type">{{ t.label }}</option>
-          }
-        </select>
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.media_servers.field_url' | translate }}</span>
-        <input
-          type="url"
-          class="input input-bordered input-sm w-full"
-          [ngModel]="formUrl()"
-          (ngModelChange)="formUrl.set($event)"
-          placeholder="http://emby:8096"
-        />
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.media_servers.field_api_key' | translate }}</span>
-        <input
-          type="password"
-          class="input input-bordered input-sm w-full"
-          [ngModel]="formApiKey()"
-          (ngModelChange)="formApiKey.set($event)"
-        />
-        @if (editingId() !== null && formApiKeySet()) {
-          <span class="label-text-alt text-base-content/60 mt-1">{{
-            'settings.media_servers.field_api_key_unchanged' | translate
-          }}</span>
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'settings.media_servers.field_type' | translate }}</span>
+      <select
+  appTvSelect
+        class="select select-bordered select-sm w-full"
+        [ngModel]="formType()"
+        (ngModelChange)="onTypeChange($event)"
+      >
+        @for (t of serverTypes(); track t.type) {
+          <option [value]="t.type">{{ t.label }}</option>
         }
-      </label>
+      </select>
+    </label>
 
-      <div>
-        <p class="label-text mb-2">{{ 'settings.media_servers.field_events' | translate }}</p>
-        <div class="flex flex-wrap gap-2">
-          @for (event of currentSupportedEvents(); track event) {
-            <label class="label cursor-pointer gap-2 justify-start">
-              <input
-                type="checkbox"
-                class="checkbox checkbox-xs"
-                [ngModel]="formEvents().includes(event)"
-                (ngModelChange)="toggleEvent(event)"
-              />
-              <span class="label-text text-sm font-mono">{{ event }}</span>
-            </label>
-          }
-        </div>
-      </div>
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'settings.media_servers.field_url' | translate }}</span>
+      <input
+        type="url"
+        class="input input-bordered input-sm w-full"
+        [ngModel]="formUrl()"
+        (ngModelChange)="formUrl.set($event)"
+        placeholder="http://emby:8096"
+      />
+    </label>
 
-      <label class="label cursor-pointer justify-start gap-3">
-        <input
-          type="checkbox"
-          class="toggle toggle-sm"
-          [ngModel]="formEnabled()"
-          (ngModelChange)="formEnabled.set($event)"
-        />
-        <span class="label-text">{{ 'settings.media_servers.field_enabled' | translate }}</span>
-      </label>
-
-      @if (editingId() !== null) {
-        <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
-          <button
-            type="button"
-            class="btn btn-outline btn-sm w-fit"
-            (click)="testConnection()"
-            [disabled]="testLoading()"
-          >
-            @if (testLoading()) {
-              <span class="loading loading-spinner loading-xs"></span>
-            }
-            {{ 'settings.media_servers.test_connection' | translate }}
-          </button>
-          @if (testResult(); as tr) {
-            <div
-              role="alert"
-              class="alert text-sm py-2"
-              [class.alert-success]="tr.ok"
-              [class.alert-error]="!tr.ok"
-            >
-              {{ tr.message }}
-            </div>
-          }
-        </div>
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'settings.media_servers.field_api_key' | translate }}</span>
+      <input
+        type="password"
+        class="input input-bordered input-sm w-full"
+        [ngModel]="formApiKey()"
+        (ngModelChange)="formApiKey.set($event)"
+      />
+      @if (editingId() !== null && formApiKeySet()) {
+        <span class="label-text-alt text-base-content/60 mt-1">{{
+          'settings.media_servers.field_api_key_unchanged' | translate
+        }}</span>
       }
+    </label>
+
+    <div>
+      <p class="label-text mb-2">{{ 'settings.media_servers.field_events' | translate }}</p>
+      <div class="flex flex-wrap gap-2">
+        @for (event of currentSupportedEvents(); track event) {
+          <label class="label cursor-pointer gap-2 justify-start">
+            <input
+              type="checkbox"
+              class="checkbox checkbox-xs"
+              [ngModel]="formEvents().includes(event)"
+              (ngModelChange)="toggleEvent(event)"
+            />
+            <span class="label-text text-sm font-mono">{{ event }}</span>
+          </label>
+        }
+      </div>
     </div>
 
-    <app-modal-footer flush>
-      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
-        {{ 'settings.media_servers.cancel' | translate }}
-      </button>
-      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
-        @if (saving()) {
-          <span class="loading loading-spinner loading-sm"></span>
+    <label class="label cursor-pointer justify-start gap-3">
+      <input
+        type="checkbox"
+        class="toggle toggle-sm"
+        [ngModel]="formEnabled()"
+        (ngModelChange)="formEnabled.set($event)"
+      />
+      <span class="label-text">{{ 'settings.media_servers.field_enabled' | translate }}</span>
+    </label>
+
+    @if (editingId() !== null) {
+      <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
+        <button
+          type="button"
+          class="btn btn-outline btn-sm w-fit"
+          (click)="testConnection()"
+          [disabled]="testLoading()"
+        >
+          @if (testLoading()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'settings.media_servers.test_connection' | translate }}
+        </button>
+        @if (testResult(); as tr) {
+          <div
+            role="alert"
+            class="alert text-sm py-2"
+            [class.alert-success]="tr.ok"
+            [class.alert-error]="!tr.ok"
+          >
+            {{ tr.message }}
+          </div>
         }
-        {{ 'settings.media_servers.save' | translate }}
-      </button>
-    </app-modal-footer>
+      </div>
+    }
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">
-      {{ 'common.close' | translate }}
+
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+      {{ 'settings.media_servers.cancel' | translate }}
     </button>
-  </form>
+    <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+      @if (saving()) {
+        <span class="loading loading-spinner loading-sm"></span>
+      }
+      {{ 'settings.media_servers.save' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>

@@ -77,255 +77,249 @@
   }
 </div>
 
-<dialog #editorDialog class="modal" [attr.aria-label]="'settings.auto_approval.who' | translate">
-  <div class="modal-box max-w-4xl">
-    <app-modal-header
-      [title]="
-        (editingId() != null
-          ? 'settings.auto_approval.editor_edit'
-          : 'settings.auto_approval.editor_create'
-        ) | translate
-      "
-    />
-    <div class="flex flex-col gap-5">
-      <div class="flex flex-col sm:flex-row gap-4 sm:items-end">
-        <label class="form-control flex-1">
-          <span class="label-text">{{ 'settings.auto_approval.field_name' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formName()"
-            (ngModelChange)="formName.set($event)"
-          />
-        </label>
-        <label class="label cursor-pointer justify-start gap-2">
-          <input
-            type="checkbox"
-            class="toggle toggle-sm toggle-primary"
-            [ngModel]="formEnabled()"
-            (ngModelChange)="formEnabled.set($event)"
-          />
-          <span class="label-text">{{ 'settings.auto_approval.field_enabled' | translate }}</span>
-        </label>
+<dialog #editorDialog appModal boxClass="max-w-4xl" [attr.aria-label]="'settings.auto_approval.who' | translate">
+  <app-modal-header
+    [title]="
+      (editingId() != null
+        ? 'settings.auto_approval.editor_edit'
+        : 'settings.auto_approval.editor_create'
+      ) | translate
+    "
+  />
+  <div class="flex flex-col gap-5">
+    <div class="flex flex-col sm:flex-row gap-4 sm:items-end">
+      <label class="form-control flex-1">
+        <span class="label-text">{{ 'settings.auto_approval.field_name' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formName()"
+          (ngModelChange)="formName.set($event)"
+        />
+      </label>
+      <label class="label cursor-pointer justify-start gap-2">
+        <input
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary"
+          [ngModel]="formEnabled()"
+          (ngModelChange)="formEnabled.set($event)"
+        />
+        <span class="label-text">{{ 'settings.auto_approval.field_enabled' | translate }}</span>
+      </label>
+    </div>
+
+    <p class="text-sm rounded-box border border-base-300 bg-base-200/60 px-3 py-2">
+      {{ recap() }}
+    </p>
+
+    @if (matchesEverything()) {
+      <div role="alert" class="alert alert-warning text-sm py-2">
+        {{ 'settings.auto_approval.warn_matches_everything' | translate }}
       </div>
+    }
 
-      <p class="text-sm rounded-box border border-base-300 bg-base-200/60 px-3 py-2">
-        {{ recap() }}
-      </p>
-
-      @if (matchesEverything()) {
-        <div role="alert" class="alert alert-warning text-sm py-2">
-          {{ 'settings.auto_approval.warn_matches_everything' | translate }}
+    <div class="flex flex-col md:flex-row md:gap-2">
+      @if (canPickWho) {
+      <section class="flex flex-col gap-3 flex-1 min-w-0">
+        <div>
+          <h3 class="font-semibold">{{ 'settings.auto_approval.who' | translate }}</h3>
+          <p class="text-sm leading-tight text-base-content/60">
+            {{ 'settings.auto_approval.who_hint' | translate }}
+          </p>
         </div>
-      }
 
-      <div class="flex flex-col md:flex-row md:gap-2">
-        @if (canPickWho) {
-        <section class="flex flex-col gap-3 flex-1 min-w-0">
-          <div>
-            <h3 class="font-semibold">{{ 'settings.auto_approval.who' | translate }}</h3>
-            <p class="text-sm leading-tight text-base-content/60">
-              {{ 'settings.auto_approval.who_hint' | translate }}
-            </p>
-          </div>
+        @if (canPickUsers) {
+        <div class="form-control">
+          <span class="label-text">{{ 'settings.auto_approval.users' | translate }}</span>
+          <app-multi-select
+            class="mt-1"
+            [options]="userOptions()"
+            [(value)]="formUserIds"
+            [placeholder]="'settings.auto_approval.any_user' | translate"
+          />
+        </div>
 
-          @if (canPickUsers) {
-          <div class="form-control">
-            <span class="label-text">{{ 'settings.auto_approval.users' | translate }}</span>
-            <app-multi-select
-              class="mt-1"
-              [options]="userOptions()"
-              [(value)]="formUserIds"
-              [placeholder]="'settings.auto_approval.any_user' | translate"
-            />
-          </div>
-
-          <div class="divider my-0 text-sm text-base-content/60">
-            {{ 'settings.auto_approval.or' | translate }}
-          </div>
-          }
-
-          @if (canPickRoles) {
-          <div class="form-control">
-            <span class="label-text">{{ 'settings.auto_approval.roles' | translate }}</span>
-            <app-multi-select
-              class="mt-1"
-              [options]="roleOptions()"
-              [(value)]="formRoleIds"
-              [placeholder]="'settings.auto_approval.any_role' | translate"
-            />
-          </div>
-          }
-        </section>
-
-        <div class="divider md:divider-horizontal my-2 md:my-0"></div>
+        <div class="divider my-0 text-sm text-base-content/60">
+          {{ 'settings.auto_approval.or' | translate }}
+        </div>
         }
 
-        <section class="flex flex-col gap-3 flex-1 min-w-0">
-          <div>
-            <h3 class="font-semibold">{{ 'settings.auto_approval.what' | translate }}</h3>
-            <p class="text-sm leading-tight text-base-content/60">
-              {{ 'settings.auto_approval.what_hint' | translate }}
-            </p>
-          </div>
+        @if (canPickRoles) {
+        <div class="form-control">
+          <span class="label-text">{{ 'settings.auto_approval.roles' | translate }}</span>
+          <app-multi-select
+            class="mt-1"
+            [options]="roleOptions()"
+            [(value)]="formRoleIds"
+            [placeholder]="'settings.auto_approval.any_role' | translate"
+          />
+        </div>
+        }
+      </section>
 
-          <label class="form-control">
-            <span class="label-text">{{
-              'settings.auto_approval.field_media_type' | translate
-            }}</span>
-            <select
-    appTvSelect
-              class="select select-bordered select-sm w-full"
-              [ngModel]="formMediaType()"
-              (ngModelChange)="setMediaType($event)"
-            >
-              <option value="">{{ 'settings.auto_approval.media_type_any' | translate }}</option>
-              <option value="movie">
-                {{ 'settings.auto_approval.media_type_movie' | translate }}
-              </option>
-              <option value="series">
-                {{ 'settings.auto_approval.media_type_series' | translate }}
-              </option>
-              <option value="book">
-                {{ 'settings.auto_approval.media_type_book' | translate }}
-              </option>
-            </select>
-          </label>
+      <div class="divider md:divider-horizontal my-2 md:my-0"></div>
+      }
 
-          <div class="form-control">
-            <span class="label-text">{{ 'settings.auto_approval.libraries' | translate }}</span>
-            <app-multi-select
-              class="mt-1"
-              [options]="libraryOptions()"
-              [(value)]="formLibraryIds"
-              [placeholder]="'settings.auto_approval.any_library' | translate"
-            />
-          </div>
-
-          <div class="form-control">
-            <span class="label-text">{{ 'settings.auto_approval.genres' | translate }}</span>
-            <app-multi-select
-              class="mt-1"
-              [options]="genreOptions()"
-              [value]="formGenreIds()"
-              (valueChange)="setGenres('included', $event)"
-              [placeholder]="'settings.auto_approval.any_genre' | translate"
-            />
-          </div>
-
-          @if (showBookCriteria()) {
-            <div class="form-control">
-              <span class="label-text">{{ 'settings.auto_approval.families' | translate }}</span>
-              <app-multi-select
-                class="mt-1"
-                [options]="familyOptions()"
-                [(value)]="formFamilies"
-                [placeholder]="'settings.auto_approval.any_family' | translate"
-              />
-            </div>
-            <div class="form-control">
-              <span class="label-text">{{ 'settings.auto_approval.languages' | translate }}</span>
-              <app-multi-select
-                class="mt-1"
-                [options]="languageOptions()"
-                [(value)]="formLanguages"
-                [placeholder]="'settings.auto_approval.any_language' | translate"
-              />
-              <span class="block text-sm leading-tight text-base-content/60 mt-1">
-                {{ 'settings.auto_approval.book_criteria_hint' | translate }}
-              </span>
-            </div>
-          }
-
-          @if (showMaxSeasons()) {
-            <label class="form-control">
-              <span class="label-text">{{
-                'settings.auto_approval.field_max_seasons' | translate
-              }}</span>
-              <input
-                type="number"
-                min="1"
-                class="input input-bordered input-sm w-full mt-1"
-                [placeholder]="'settings.auto_approval.no_limit' | translate"
-                [ngModel]="formMaxSeasons()"
-                (ngModelChange)="setNumber('maxSeasons', $event)"
-              />
-              <span class="block text-sm leading-tight text-base-content/60 mt-1">
-                {{ 'settings.auto_approval.max_seasons_hint' | translate }}
-              </span>
-            </label>
-          }
-
-          <div class="flex gap-2">
-            <label class="form-control flex-1">
-              <span class="label-text">{{
-                'settings.auto_approval.field_year_from' | translate
-              }}</span>
-              <input
-                type="number"
-                class="input input-bordered input-sm w-full"
-                [placeholder]="'settings.auto_approval.no_limit' | translate"
-                [ngModel]="formYearFrom()"
-                (ngModelChange)="setNumber('yearFrom', $event)"
-              />
-            </label>
-            <label class="form-control flex-1">
-              <span class="label-text">{{
-                'settings.auto_approval.field_year_to' | translate
-              }}</span>
-              <input
-                type="number"
-                class="input input-bordered input-sm w-full"
-                [placeholder]="'settings.auto_approval.no_limit' | translate"
-                [ngModel]="formYearTo()"
-                (ngModelChange)="setNumber('yearTo', $event)"
-              />
-            </label>
-          </div>
-          <p class="text-sm leading-tight text-base-content/60 -mt-2">
-            {{ 'settings.auto_approval.year_hint' | translate }}
-          </p>
-        </section>
-      </div>
-
-      <section class="flex flex-col gap-3 rounded-box border border-error/40 bg-error/5 p-4">
+      <section class="flex flex-col gap-3 flex-1 min-w-0">
         <div>
-          <h3 class="font-semibold text-error">{{ 'settings.auto_approval.except' | translate }}</h3>
+          <h3 class="font-semibold">{{ 'settings.auto_approval.what' | translate }}</h3>
           <p class="text-sm leading-tight text-base-content/60">
-            {{ 'settings.auto_approval.except_hint' | translate }}
+            {{ 'settings.auto_approval.what_hint' | translate }}
           </p>
         </div>
+
+        <label class="form-control">
+          <span class="label-text">{{
+            'settings.auto_approval.field_media_type' | translate
+          }}</span>
+          <select
+  appTvSelect
+            class="select select-bordered select-sm w-full"
+            [ngModel]="formMediaType()"
+            (ngModelChange)="setMediaType($event)"
+          >
+            <option value="">{{ 'settings.auto_approval.media_type_any' | translate }}</option>
+            <option value="movie">
+              {{ 'settings.auto_approval.media_type_movie' | translate }}
+            </option>
+            <option value="series">
+              {{ 'settings.auto_approval.media_type_series' | translate }}
+            </option>
+            <option value="book">
+              {{ 'settings.auto_approval.media_type_book' | translate }}
+            </option>
+          </select>
+        </label>
+
         <div class="form-control">
-          <span class="label-text">{{ 'settings.auto_approval.excluded_genres' | translate }}</span>
+          <span class="label-text">{{ 'settings.auto_approval.libraries' | translate }}</span>
+          <app-multi-select
+            class="mt-1"
+            [options]="libraryOptions()"
+            [(value)]="formLibraryIds"
+            [placeholder]="'settings.auto_approval.any_library' | translate"
+          />
+        </div>
+
+        <div class="form-control">
+          <span class="label-text">{{ 'settings.auto_approval.genres' | translate }}</span>
           <app-multi-select
             class="mt-1"
             [options]="genreOptions()"
-            [value]="formExcludedGenreIds()"
-            (valueChange)="setGenres('excluded', $event)"
-            [placeholder]="'settings.auto_approval.no_excluded_genre' | translate"
+            [value]="formGenreIds()"
+            (valueChange)="setGenres('included', $event)"
+            [placeholder]="'settings.auto_approval.any_genre' | translate"
           />
         </div>
-      </section>
 
-      <app-modal-footer>
-        <button type="button" class="btn btn-ghost" (click)="closeEditor()">
-          {{ 'common.cancel' | translate }}
-        </button>
-        <button
-          type="button"
-          class="btn btn-primary"
-          [disabled]="saving() || !formName().trim()"
-          (click)="save()"
-        >
-          @if (saving()) {
-            <span class="loading loading-spinner loading-xs"></span>
-          }
-          {{ 'common.save' | translate }}
-        </button>
-      </app-modal-footer>
+        @if (showBookCriteria()) {
+          <div class="form-control">
+            <span class="label-text">{{ 'settings.auto_approval.families' | translate }}</span>
+            <app-multi-select
+              class="mt-1"
+              [options]="familyOptions()"
+              [(value)]="formFamilies"
+              [placeholder]="'settings.auto_approval.any_family' | translate"
+            />
+          </div>
+          <div class="form-control">
+            <span class="label-text">{{ 'settings.auto_approval.languages' | translate }}</span>
+            <app-multi-select
+              class="mt-1"
+              [options]="languageOptions()"
+              [(value)]="formLanguages"
+              [placeholder]="'settings.auto_approval.any_language' | translate"
+            />
+            <span class="block text-sm leading-tight text-base-content/60 mt-1">
+              {{ 'settings.auto_approval.book_criteria_hint' | translate }}
+            </span>
+          </div>
+        }
+
+        @if (showMaxSeasons()) {
+          <label class="form-control">
+            <span class="label-text">{{
+              'settings.auto_approval.field_max_seasons' | translate
+            }}</span>
+            <input
+              type="number"
+              min="1"
+              class="input input-bordered input-sm w-full mt-1"
+              [placeholder]="'settings.auto_approval.no_limit' | translate"
+              [ngModel]="formMaxSeasons()"
+              (ngModelChange)="setNumber('maxSeasons', $event)"
+            />
+            <span class="block text-sm leading-tight text-base-content/60 mt-1">
+              {{ 'settings.auto_approval.max_seasons_hint' | translate }}
+            </span>
+          </label>
+        }
+
+        <div class="flex gap-2">
+          <label class="form-control flex-1">
+            <span class="label-text">{{
+              'settings.auto_approval.field_year_from' | translate
+            }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [placeholder]="'settings.auto_approval.no_limit' | translate"
+              [ngModel]="formYearFrom()"
+              (ngModelChange)="setNumber('yearFrom', $event)"
+            />
+          </label>
+          <label class="form-control flex-1">
+            <span class="label-text">{{
+              'settings.auto_approval.field_year_to' | translate
+            }}</span>
+            <input
+              type="number"
+              class="input input-bordered input-sm w-full"
+              [placeholder]="'settings.auto_approval.no_limit' | translate"
+              [ngModel]="formYearTo()"
+              (ngModelChange)="setNumber('yearTo', $event)"
+            />
+          </label>
+        </div>
+        <p class="text-sm leading-tight text-base-content/60 -mt-2">
+          {{ 'settings.auto_approval.year_hint' | translate }}
+        </p>
+      </section>
     </div>
+
+    <section class="flex flex-col gap-3 rounded-box border border-error/40 bg-error/5 p-4">
+      <div>
+        <h3 class="font-semibold text-error">{{ 'settings.auto_approval.except' | translate }}</h3>
+        <p class="text-sm leading-tight text-base-content/60">
+          {{ 'settings.auto_approval.except_hint' | translate }}
+        </p>
+      </div>
+      <div class="form-control">
+        <span class="label-text">{{ 'settings.auto_approval.excluded_genres' | translate }}</span>
+        <app-multi-select
+          class="mt-1"
+          [options]="genreOptions()"
+          [value]="formExcludedGenreIds()"
+          (valueChange)="setGenres('excluded', $event)"
+          [placeholder]="'settings.auto_approval.no_excluded_genre' | translate"
+        />
+      </div>
+    </section>
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeEditor()">close</button>
-  </form>
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="closeEditor()">
+      {{ 'common.cancel' | translate }}
+    </button>
+    <button
+      type="button"
+      class="btn btn-primary"
+      [disabled]="saving() || !formName().trim()"
+      (click)="save()"
+    >
+      @if (saving()) {
+        <span class="loading loading-spinner loading-xs"></span>
+      }
+      {{ 'common.save' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>

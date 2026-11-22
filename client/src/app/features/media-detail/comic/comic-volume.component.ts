@@ -25,12 +25,14 @@ import { asComicMedia, nextIssue } from './comic-media';
 import { issuePatch, issueReset, volumePatch, volumeReset } from './comic-edit';
 import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
 import { isWanted } from '../media-wanted';
+import { ModalComponent } from '../../../shared/components/modal';
 
 /** The page of a comic volume, rendered by the media detail page for the `comic` kind. */
 @Component({
   selector: 'app-comic-volume',
   imports: [
     LastSearchComponent,
+    ModalComponent,
     RouterLink,
     DatePipe,
     NgTemplateOutlet,
@@ -58,8 +60,8 @@ export class ComicVolumeComponent {
   );
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
-  private readonly volumeDialog = viewChild<ElementRef<HTMLDialogElement>>('volumeDialog');
-  private readonly issueDialog = viewChild<ElementRef<HTMLDialogElement>>('issueDialog');
+  private readonly volumeDialog = viewChild<string, ElementRef<HTMLDialogElement>>('volumeDialog', { read: ElementRef });
+  private readonly issueDialog = viewChild<string, ElementRef<HTMLDialogElement>>('issueDialog', { read: ElementRef });
   /** What the last edit answered: the volume as saved, over the input until the page reloads. */
   private readonly saved = linkedSignal<Media, { comic: ComicDetail; title: string; overview: string | null } | null>({
     source: this.media,

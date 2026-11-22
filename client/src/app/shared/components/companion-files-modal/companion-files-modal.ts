@@ -20,7 +20,7 @@ import { CompanionImportType } from '../../../core/constants/companion-import';
 import { CompanionImportModalComponent } from '../companion-import-modal/companion-import-modal';
 import { SelectFieldComponent } from '../forms/select-field/select-field';
 import { ModalHeaderComponent } from '../modal-header';
-import { ModalFooterComponent } from '../modal-footer';
+import { ModalComponent } from '../modal';
 
 const KIND_ORDER: CompanionFile['kind'][] = ['subtitle', 'edl', 'nfo', 'image', 'other'];
 
@@ -28,10 +28,10 @@ const KIND_ORDER: CompanionFile['kind'][] = ['subtitle', 'edl', 'nfo', 'image', 
 @Component({
   selector: 'app-companion-files-modal',
   imports: [
+    ModalComponent,
     TranslatePipe,
     NgTemplateOutlet,
     ModalHeaderComponent,
-    ModalFooterComponent,
     LucideCaptions,
     LucideDownload,
     LucideFile,
@@ -46,7 +46,7 @@ const KIND_ORDER: CompanionFile['kind'][] = ['subtitle', 'edl', 'nfo', 'image', 
   templateUrl: './companion-files-modal.html',
 })
 export class CompanionFilesModalComponent {
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
   private readonly api = inject(MediaService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);

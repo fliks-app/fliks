@@ -19,6 +19,7 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { PERMISSION_GROUPS, PERMISSION_INCLUDES, includedBy } from '../../../core/permissions';
 import { parsePluginGrant } from '../../../core/utils/plugin-grant';
+import { ModalComponent } from '../../../shared/components/modal';
 
 /** `read:plugin:fliks.download:queue`, or the bare subject, split for display. */
 function parseGrant(value: string): { action?: string; pluginId: string; name: string } | null {
@@ -30,7 +31,7 @@ function parseGrant(value: string): { action?: string; pluginId: string; name: s
 
 @Component({
   selector: 'app-roles-settings',
-  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
+  imports: [ModalComponent, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   templateUrl: './roles.html',
 })
 export class RolesSettingsComponent implements OnInit {
@@ -40,7 +41,7 @@ export class RolesSettingsComponent implements OnInit {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly plugins = inject(PluginUiRegistryService);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
 
   readonly rows = signal<RoleRow[]>([]);
   readonly availablePermissions = signal<string[]>([]);

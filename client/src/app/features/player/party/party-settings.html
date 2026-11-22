@@ -1,31 +1,28 @@
-<dialog #dialog class="modal" (close)="closed.emit()" [style.padding-bottom.px]="keyboard.height()" [attr.aria-label]="'party.settings_for_everyone' | translate">
-  <div appTvSection class="modal-box max-w-md" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
-    <app-modal-header [title]="'party.settings' | translate" />
-    <div appTvSection class="flex flex-col gap-4 pt-2">
-      @if (party.isHost() && party.party(); as p) {
-        <h3 class="text-sm font-medium opacity-70">{{ 'party.settings_for_everyone' | translate }}</h3>
-        <app-party-host-switches [value]="draft() ?? p" (changed)="draft.set({ ...(draft() ?? p), ...$event })" />
-        <button type="button" class="btn btn-primary btn-sm self-end" [disabled]="!dirty()" (click)="save()">{{ 'common.save' | translate }}</button>
-        <h3 class="text-sm font-medium opacity-70">{{ 'party.settings_for_me' | translate }}</h3>
-      }
-      <!-- Laid out like app-toggle-field below: the icon takes the switch's column. -->
-      <button type="button" class="group flex w-full cursor-pointer items-start gap-4 text-left" (click)="resync()">
-        <span class="btn btn-sm btn-circle shrink-0 group-hover:btn-active"><svg lucideRefreshCw class="h-4 w-4"></svg></span>
-        <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span class="font-medium">{{ 'party.resync' | translate }}</span>
-          <span class="text-sm text-base-content/60">{{ 'party.resync_hint' | translate }}</span>
-        </span>
-      </button>
-      @if (voice.supported) {
-        <app-toggle-field [label]="'party.voice_duck' | translate" [value]="voice.duck()" (valueChange)="voice.setDuck($event)" />
-      }
-      <!-- The host does not leave a party: ending it is the way out. -->
-      @if (party.isHost()) {
-        <button type="button" class="btn btn-error btn-outline" (click)="end()">{{ 'party.end' | translate }}</button>
-      } @else {
-        <button type="button" class="btn btn-outline" (click)="leave()">{{ 'party.leave' | translate }}</button>
-      }
-    </div>
+<dialog #dialog appModal appTvSection [boxClass]="keyboard.height() ? 'max-w-md max-h-[calc(100%-1rem)]' : 'max-w-md'" (close)="closed.emit()" [style.padding-bottom.px]="keyboard.height()" [attr.aria-label]="'party.settings_for_everyone' | translate">
+  <app-modal-header [title]="'party.settings' | translate" />
+  <div appTvSection class="flex flex-col gap-4 pt-2">
+    @if (party.isHost() && party.party(); as p) {
+      <h3 class="text-sm font-medium opacity-70">{{ 'party.settings_for_everyone' | translate }}</h3>
+      <app-party-host-switches [value]="draft() ?? p" (changed)="draft.set({ ...(draft() ?? p), ...$event })" />
+      <button type="button" class="btn btn-primary btn-sm self-end" [disabled]="!dirty()" (click)="save()">{{ 'common.save' | translate }}</button>
+      <h3 class="text-sm font-medium opacity-70">{{ 'party.settings_for_me' | translate }}</h3>
+    }
+    <!-- Laid out like app-toggle-field below: the icon takes the switch's column. -->
+    <button type="button" class="group flex w-full cursor-pointer items-start gap-4 text-left" (click)="resync()">
+      <span class="btn btn-sm btn-circle shrink-0 group-hover:btn-active"><svg lucideRefreshCw class="h-4 w-4"></svg></span>
+      <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span class="font-medium">{{ 'party.resync' | translate }}</span>
+        <span class="text-sm text-base-content/60">{{ 'party.resync_hint' | translate }}</span>
+      </span>
+    </button>
+    @if (voice.supported) {
+      <app-toggle-field [label]="'party.voice_duck' | translate" [value]="voice.duck()" (valueChange)="voice.setDuck($event)" />
+    }
+    <!-- The host does not leave a party: ending it is the way out. -->
+    @if (party.isHost()) {
+      <button type="button" class="btn btn-error btn-outline" (click)="end()">{{ 'party.end' | translate }}</button>
+    } @else {
+      <button type="button" class="btn btn-outline" (click)="leave()">{{ 'party.leave' | translate }}</button>
+    }
   </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>

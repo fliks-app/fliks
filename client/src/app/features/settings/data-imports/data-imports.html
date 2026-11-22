@@ -358,85 +358,80 @@
     </div>
   }
 
-  <!-- Path mapping wizards (one per provider). Rendered outside the cards so
-       the modal backdrop covers the whole page. -->
+  <!-- Path mapping wizards, one per provider. -->
   @for (p of providers; track p) {
     @let st = arr[p];
-    @if (st.showWizard()) {
-      <div class="modal modal-open">
-        <div class="modal-box max-w-2xl">
-          <app-modal-header (closed)="cancelWizard(p)">
+    <dialog appModal boxClass="max-w-2xl" [shown]="st.showWizard()" (close)="cancelWizard(p)">
+      <app-modal-header>
+        <div>
+          <h3 class="text-lg font-bold">{{ 'import.path_wizard.title' | translate }}</h3>
+          <p class="text-base text-base-content/60 mt-1">
+            {{ 'import.path_wizard.description' | translate }}
+          </p>
+        </div>
+      </app-modal-header>
+
+      @if (st.preview(); as preview) {
+        @if (eligibleLocalLibraries(p).length === 0) {
+          <div role="alert" class="alert alert-warning mt-4 text-sm">
             <div>
-              <h3 class="text-lg font-bold">{{ 'import.path_wizard.title' | translate }}</h3>
-              <p class="text-sm text-base-content/60 mt-1">
-                {{ 'import.path_wizard.description' | translate }}
-              </p>
-            </div>
-          </app-modal-header>
-
-          @if (st.preview(); as preview) {
-            @if (eligibleLocalLibraries(p).length === 0) {
-              <div role="alert" class="alert alert-warning mt-4 text-sm">
-                <div>
-                  <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-primary mt-3"
-                    (click)="goToLibraries(p)"
-                  >
-                    {{ 'import.path_wizard.go_to_root_folders' | translate }}
-                  </button>
-                </div>
-              </div>
-            } @else {
-              <div class="flex flex-col gap-3 mt-4">
-                @for (m of st.mappings(); track m.remotePath) {
-                  <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{
-                      m.remotePath
-                    }}</code>
-                    <span class="text-base-content/60 hidden sm:inline">→</span>
-                    <select
-      appTvSelect
-                      class="select select-bordered select-sm sm:flex-1"
-                      [ngModel]="m.ignore ? IGNORE_VALUE : m.localLibraryId"
-                      (ngModelChange)="setMapping(p, m.remotePath, $event)"
-                    >
-                      <option [ngValue]="null">-</option>
-                      @for (lib of eligibleLocalLibraries(p); track lib.id) {
-                        <option [ngValue]="lib.id">{{ lib.name }} ({{ lib.path }})</option>
-                      }
-                      <option [ngValue]="IGNORE_VALUE">
-                        {{ 'import.path_wizard.option_ignore' | translate }}
-                      </option>
-                    </select>
-                  </div>
-                }
-              </div>
-            }
-          }
-
-          <app-modal-footer>
-            <button type="button" class="btn btn-ghost" (click)="cancelWizard(p)">
-              {{ 'import.path_wizard.cancel' | translate }}
-            </button>
-            @if (eligibleLocalLibraries(p).length > 0) {
+              <p>{{ 'import.path_wizard.no_root_folders' | translate }}</p>
               <button
                 type="button"
-                class="btn btn-primary"
-                [disabled]="!st.canConfirm() || st.loading()"
-                (click)="confirmArrImport(p)"
+                class="btn btn-sm btn-primary mt-3"
+                (click)="goToLibraries(p)"
               >
-                @if (st.loading()) {
-                  <span class="loading loading-spinner loading-xs"></span>
-                }
-                {{ 'import.path_wizard.confirm' | translate }}
+                {{ 'import.path_wizard.go_to_root_folders' | translate }}
               </button>
+            </div>
+          </div>
+        } @else {
+          <div class="flex flex-col gap-3 mt-4">
+            @for (m of st.mappings(); track m.remotePath) {
+              <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{
+                  m.remotePath
+                }}</code>
+                <span class="text-base-content/60 hidden sm:inline">→</span>
+                <select
+  appTvSelect
+                  class="select select-bordered select-sm sm:flex-1"
+                  [ngModel]="m.ignore ? IGNORE_VALUE : m.localLibraryId"
+                  (ngModelChange)="setMapping(p, m.remotePath, $event)"
+                >
+                  <option [ngValue]="null">-</option>
+                  @for (lib of eligibleLocalLibraries(p); track lib.id) {
+                    <option [ngValue]="lib.id">{{ lib.name }} ({{ lib.path }})</option>
+                  }
+                  <option [ngValue]="IGNORE_VALUE">
+                    {{ 'import.path_wizard.option_ignore' | translate }}
+                  </option>
+                </select>
+              </div>
             }
-          </app-modal-footer>
-        </div>
-      </div>
-    }
+          </div>
+        }
+      }
+
+      <app-modal-footer>
+        <button type="button" class="btn btn-ghost" (click)="cancelWizard(p)">
+          {{ 'import.path_wizard.cancel' | translate }}
+        </button>
+        @if (eligibleLocalLibraries(p).length > 0) {
+          <button
+            type="button"
+            class="btn btn-primary"
+            [disabled]="!st.canConfirm() || st.loading()"
+            (click)="confirmArrImport(p)"
+          >
+            @if (st.loading()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'import.path_wizard.confirm' | translate }}
+          </button>
+        }
+      </app-modal-footer>
+    </dialog>
   }
 </div>
 

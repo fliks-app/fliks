@@ -15,12 +15,14 @@ import { ToastService } from '../../../core/services/toast.service';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
+import { ModalComponent } from '../../../shared/components/modal';
 
 const lines = (v: string): string[] => v.split('\n').map((s) => s.trim()).filter(Boolean);
 
 @Component({
   selector: 'app-sso-provider-editor',
   imports: [
+    ModalComponent,
     FormsModule,
     TranslatePipe,
     TvSelectDirective,
@@ -37,7 +39,7 @@ export class SsoProviderEditorComponent {
   private readonly api = inject(OidcApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
-  private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild.required<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly roles = input.required<RoleRow[]>();
   readonly publicUrl = input('');

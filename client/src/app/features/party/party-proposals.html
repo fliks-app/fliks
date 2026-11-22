@@ -83,39 +83,36 @@
     <p class="text-base-content/60">{{ 'party.proposals_empty' | translate }}</p>
   }
   <app-media-picker multiple verb="propose" [taken]="taken()" (picked)="propose($event)" />
-  <dialog #votersDialog class="modal" (close)="voters.set(null)" aria-labelledby="party-proposals-title-1">
-    <div class="modal-box max-w-sm">
-      <app-modal-header [title]="'party.voters_title' | translate" />
-      @if (voters(); as v) {
-        <div class="flex flex-col gap-4 pt-1">
-          @for (side of [{ key: 'party.voters_up', ids: v.upvoterIds, up: true }, { key: 'party.voters_down', ids: v.downvoterIds, up: false }]; track side.key) {
-            <section class="flex flex-col gap-2">
-              <h3 id="party-proposals-title-1" class="flex items-center gap-2 text-base font-semibold" [class.text-primary]="side.up" [class.text-error]="!side.up">
-                @if (side.up) {
-                  <svg lucideThumbsUp class="h-5 w-5"></svg>
-                } @else {
-                  <svg lucideThumbsDown class="h-5 w-5"></svg>
-                }
-                <span class="text-base-content">{{ side.key | translate }}</span>
-                <span class="badge badge-sm" [class.badge-primary]="side.up && side.ids.length" [class.badge-error]="!side.up && side.ids.length">{{ side.ids.length }}</span>
-              </h3>
-              @if (side.ids.length) {
-                <ul class="flex flex-col gap-1 rounded-box bg-base-200 p-2">
-                  @for (id of side.ids; track id) {
-                    <li class="flex items-center gap-3 rounded-lg px-2 py-1.5">
-                      <app-user-avatar [username]="name(id)" size="w-8 h-8 text-sm" />
-                      <span class="truncate font-medium">{{ name(id) }}</span>
-                    </li>
-                  }
-                </ul>
+  <dialog #votersDialog appModal boxClass="max-w-sm" (close)="voters.set(null)" aria-labelledby="party-proposals-title-1">
+    <app-modal-header [title]="'party.voters_title' | translate" />
+    @if (voters(); as v) {
+      <div class="flex flex-col gap-4 pt-1">
+        @for (side of [{ key: 'party.voters_up', ids: v.upvoterIds, up: true }, { key: 'party.voters_down', ids: v.downvoterIds, up: false }]; track side.key) {
+          <section class="flex flex-col gap-2">
+            <h3 id="party-proposals-title-1" class="flex items-center gap-2 text-base font-semibold" [class.text-primary]="side.up" [class.text-error]="!side.up">
+              @if (side.up) {
+                <svg lucideThumbsUp class="h-5 w-5"></svg>
               } @else {
-                <p class="rounded-box bg-base-200 px-4 py-3 text-sm text-base-content/60">{{ 'party.voters_none' | translate }}</p>
+                <svg lucideThumbsDown class="h-5 w-5"></svg>
               }
-            </section>
-          }
-        </div>
-      }
-    </div>
-    <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+              <span class="text-base-content">{{ side.key | translate }}</span>
+              <span class="badge badge-sm" [class.badge-primary]="side.up && side.ids.length" [class.badge-error]="!side.up && side.ids.length">{{ side.ids.length }}</span>
+            </h3>
+            @if (side.ids.length) {
+              <ul class="flex flex-col gap-1 rounded-box bg-base-200 p-2">
+                @for (id of side.ids; track id) {
+                  <li class="flex items-center gap-3 rounded-lg px-2 py-1.5">
+                    <app-user-avatar [username]="name(id)" size="w-8 h-8 text-sm" />
+                    <span class="truncate font-medium">{{ name(id) }}</span>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="rounded-box bg-base-200 px-4 py-3 text-sm text-base-content/60">{{ 'party.voters_none' | translate }}</p>
+            }
+          </section>
+        }
+      </div>
+    }
   </dialog>
 </section>

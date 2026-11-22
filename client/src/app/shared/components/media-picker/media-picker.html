@@ -1,69 +1,69 @@
-<dialog #dialog class="modal" (close)="onClosed()" [attr.aria-label]="'search.discover_suggestions' | translate">
-  <div class="modal-box flex h-[90dvh] w-11/12 max-w-6xl flex-col gap-0 overflow-hidden p-0">
-    <app-modal-header flush [title]="'media_picker.title_' + verb() | translate" (closed)="close()" />
+<dialog #dialog appModal fill boxClass="h-[90dvh] w-11/12 max-w-6xl" (close)="onClosed()" [attr.aria-label]="'search.discover_suggestions' | translate">
+  <app-modal-header [title]="'media_picker.title_' + verb() | translate" (closed)="close()" />
 
-    <div class="flex min-h-0 flex-1 flex-col gap-3 px-5 py-3 sm:px-6">
-      <div class="flex shrink-0 items-center gap-2">
-        <input
-          type="search"
-          class="input input-bordered w-full"
-          autofocus
-          [placeholder]="'media_picker.search_placeholder' | translate"
-          [attr.aria-label]="'media_picker.search_placeholder' | translate"
-          [ngModel]="query()"
-          (ngModelChange)="query.set($event)"
-        />
-        <button type="button" class="btn btn-square btn-ghost lg:hidden" [class.btn-active]="filtersOpen()" [attr.aria-expanded]="filtersOpen()" [attr.aria-label]="'search.filters' | translate" (click)="filtersOpen.set(!filtersOpen())">
-          <svg lucideSettings class="h-5 w-5"></svg>
-        </button>
-      </div>
-      <app-content-type-toggle class="w-full shrink-0 lg:w-56" [(value)]="contentType" />
+  <div class="flex min-h-0 flex-1 flex-col gap-3 px-5 py-3 sm:px-6">
+    <div class="flex shrink-0 items-center gap-2">
+      <input
+        type="search"
+        class="input input-bordered w-full"
+        autofocus
+        [placeholder]="'media_picker.search_placeholder' | translate"
+        [attr.aria-label]="'media_picker.search_placeholder' | translate"
+        [ngModel]="query()"
+        (ngModelChange)="query.set($event)"
+      />
+      <button type="button" class="btn btn-square btn-ghost relative lg:hidden" [class.bg-primary/15]="filtersOpen()" [class.text-primary]="filtersOpen()" [attr.aria-expanded]="filtersOpen()" [attr.aria-label]="'search.filters' | translate" (click)="filtersOpen.set(!filtersOpen())">
+        <svg lucideSlidersHorizontal class="h-5 w-5"></svg>
+        @if (engaged()) {
+          <span class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-primary" animate.enter="animate-fade-enter" animate.leave="animate-fade-leave"></span>
+        }
+      </button>
+    </div>
+    <app-content-type-toggle class="w-full shrink-0 lg:w-56" [(value)]="contentType" />
 
-      <div class="flex min-h-0 flex-1 gap-6">
-        <aside class="scroll-ring-safe hidden w-56 shrink-0 overflow-y-auto lg:block">
-          <ng-container *ngTemplateOutlet="filters" />
-        </aside>
-        <div class="min-h-0 flex-1 overflow-y-auto scroll-ring-safe" [style.padding-bottom.px]="keyboard.height()">
-          @if (filtersOpen()) {
-            <div class="mb-4 rounded-box bg-base-200 p-3 lg:hidden">
-              <ng-container *ngTemplateOutlet="filters" />
-            </div>
-          }
-          @if (browsing()) {
-            @if (suggestions().length) {
-              <h3 class="mb-3 font-semibold">{{ 'search.discover_suggestions' | translate }}</h3>
-              <div data-picker-grid class="grid grid-cols-3 gap-3 p-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6">
-                @for (r of suggestions(); track r.media.id) {
-                  @if (selected()?.id === r.media.id) {
-                    <ng-container *ngTemplateOutlet="detail" />
-                  } @else if (!selected()) {
-                    <app-media-card [attr.data-id]="r.media.id" [imageUrl]="r.media.posterUrl" [title]="r.media.title" [subtitle]="'' + (r.media.year ?? '')" selectOnly [hideStatusBar]="true" [posterMorph]="false" [badge]="!kinds[r.media.type].hasSeasons && isTaken(r.media.id, null) ? 'added' : null" (clicked)="choose(r.media)" />
-                  }
-                }
-              </div>
-            } @else {
-              <p class="py-12 text-center text-sm text-base-content/60">{{ 'media_picker.hint' | translate }}</p>
-            }
-          } @else if (loading() && !results().length) {
-            <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
-          } @else if (results().length) {
+    <div class="flex min-h-0 flex-1 gap-6">
+      <aside class="scroll-ring-safe hidden w-56 shrink-0 overflow-y-auto lg:block">
+        <ng-container *ngTemplateOutlet="filters" />
+      </aside>
+      <div class="min-h-0 flex-1 overflow-y-auto scroll-ring-safe" [style.padding-bottom.px]="keyboard.height()">
+        @if (filtersOpen()) {
+          <div class="mb-4 rounded-box bg-base-200 p-3 lg:hidden">
+            <ng-container *ngTemplateOutlet="filters" />
+          </div>
+        }
+        @if (browsing()) {
+          @if (suggestions().length) {
+            <h3 class="mb-3 font-semibold">{{ 'search.discover_suggestions' | translate }}</h3>
             <div data-picker-grid class="grid grid-cols-3 gap-3 p-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6">
-              @for (r of results(); track r.id) {
-                @if (selected()?.id === r.id) {
+              @for (r of suggestions(); track r.media.id) {
+                @if (selected()?.id === r.media.id) {
                   <ng-container *ngTemplateOutlet="detail" />
                 } @else if (!selected()) {
-                  <app-media-card [attr.data-id]="r.id" [media]="r" selectOnly [hideStatusBar]="true" [posterMorph]="false" [status]="r.watched ? 'watched' : null" [badge]="!kinds[r.type].hasSeasons && isTaken(r.id, null) ? 'added' : null" (clicked)="choose(r)" />
+                  <app-media-card [attr.data-id]="r.media.id" [imageUrl]="r.media.posterUrl" [title]="r.media.title" [subtitle]="'' + (r.media.year ?? '')" selectOnly [hideStatusBar]="true" [posterMorph]="false" [badge]="!kinds[r.media.type].hasSeasons && isTaken(r.media.id, null) ? 'added' : null" (clicked)="choose(r.media)" />
                 }
               }
             </div>
-          } @else if (searched()) {
-            <p class="py-12 text-center text-sm text-base-content/60">{{ 'media_picker.no_results' | translate }}</p>
+          } @else {
+            <p class="py-12 text-center text-sm text-base-content/60">{{ 'media_picker.hint' | translate }}</p>
           }
-        </div>
+        } @else if (loading() && !results().length) {
+          <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
+        } @else if (results().length) {
+          <div data-picker-grid class="grid grid-cols-3 gap-3 p-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6">
+            @for (r of results(); track r.id) {
+              @if (selected()?.id === r.id) {
+                <ng-container *ngTemplateOutlet="detail" />
+              } @else if (!selected()) {
+                <app-media-card [attr.data-id]="r.id" [media]="r" selectOnly [hideStatusBar]="true" [posterMorph]="false" [status]="r.watched ? 'watched' : null" [badge]="!kinds[r.type].hasSeasons && isTaken(r.id, null) ? 'added' : null" (clicked)="choose(r)" />
+              }
+            }
+          </div>
+        } @else if (searched()) {
+          <p class="py-12 text-center text-sm text-base-content/60">{{ 'media_picker.no_results' | translate }}</p>
+        }
       </div>
     </div>
   </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>
 
 <ng-template #filters>
@@ -72,16 +72,17 @@
 
 <ng-template #detail>
   @if (selected(); as m) {
-    <section data-picker-detail [attr.data-id]="m.id" class="col-span-full flex gap-4 rounded-box bg-base-200 p-3 sm:p-4">
-      <button type="button" data-picker-poster class="w-24 shrink-0 self-start sm:w-32 md:w-40" [attr.aria-label]="'common.close' | translate" (click)="collapse()">
+    <!-- Phone: small poster beside the title, everything else full width below (the info column becomes grid items). -->
+    <section data-picker-detail [attr.data-id]="m.id" class="col-span-full flex gap-4 rounded-box bg-base-200 p-3 max-sm:grid max-sm:grid-cols-[4.5rem_minmax(0,1fr)] max-sm:grid-rows-[auto_1fr] max-sm:gap-x-3 sm:p-4">
+      <button type="button" data-picker-poster class="w-24 shrink-0 self-start max-sm:row-span-2 max-sm:w-full sm:w-32 md:w-40" [attr.aria-label]="'common.close' | translate" (click)="collapse()">
         @if (m.posterUrl) {
           <img [src]="m.posterUrl | resolveUrl: 'thumb'" [alt]="m.title" class="aspect-[2/3] w-full rounded-box bg-base-300 object-cover" />
         } @else {
           <div class="aspect-[2/3] w-full rounded-box bg-base-300"></div>
         }
       </button>
-      <div data-picker-info class="flex min-w-0 flex-1 flex-col gap-3">
-      <div class="flex items-start gap-2">
+      <div data-picker-info class="flex min-w-0 flex-1 flex-col gap-3 max-sm:contents max-sm:[&>*:not([data-picker-head])]:col-span-2">
+      <div data-picker-head class="flex items-start gap-2">
         <div class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 class="text-lg font-bold">{{ m.title }}</h3>
         <p class="text-sm text-base-content/60">
@@ -101,11 +102,7 @@
         </button>
       </div>
       @if (m.genres?.length) {
-        <div class="flex flex-wrap gap-1">
-          @for (g of m.genres; track g) {
-            <span class="badge badge-ghost badge-sm">{{ g }}</span>
-          }
-        </div>
+        <p data-picker-head class="text-sm text-base-content/60">{{ m.genres!.join(' · ') }}</p>
       }
       @if (m.overview) {
         <app-synopsis [text]="m.overview" [lines]="4" textClass="text-sm" />
@@ -118,7 +115,7 @@
           @if (isTaken(m.id, null)) {
             <button type="button" class="btn btn-primary btn-sm" data-picker-focus disabled>{{ 'media_picker.taken_' + verb() | translate }}</button>
           } @else {
-            <button type="button" class="btn btn-primary btn-sm" data-picker-focus (click)="addMovie()">{{ 'media_picker.' + verb() | translate }}</button>
+            <button type="button" class="btn btn-primary btn-sm max-sm:btn-block" data-picker-focus (click)="addMovie()">{{ 'media_picker.' + verb() | translate }}</button>
           }
         </div>
       } @else if (detailLoading()) {
@@ -138,7 +135,7 @@
         }
 
         @if (modes().length > 1) {
-          <div class="flex flex-wrap gap-2" role="group" [attr.aria-label]="'media_picker.mode_label' | translate">
+          <div class="flex flex-wrap gap-2 max-sm:grid max-sm:grid-cols-2" role="group" [attr.aria-label]="'media_picker.mode_label' | translate">
             @for (mo of modes(); track mo; let first = $first) {
               <button type="button" class="btn btn-sm" [attr.data-picker-focus]="first ? '' : null" [class.btn-primary]="mode() === mo" [attr.aria-pressed]="mode() === mo" (click)="setMode(mo)">
                 {{ 'media_picker.mode_' + modeKey(mo) | translate }}
@@ -155,7 +152,7 @@
             @for (ep of episodes(); track ep.id; let first = $first) {
               @let taken = isTaken(m.id, ep.id);
               <li>
-                <button type="button" class="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-base-300" [attr.data-picker-focus]="first && modes().length === 1 ? '' : null" [class.bg-primary/10]="chosen().has(ep.id)" [disabled]="taken || mode() === 'season'" [attr.aria-pressed]="mode() === 'season' ? null : chosen().has(ep.id)" (click)="onEpisode(ep)">
+                <button type="button" class="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors duration-fade hover:bg-base-300" [attr.data-picker-focus]="first && modes().length === 1 ? '' : null" [class.bg-primary/10]="chosen().has(ep.id)" [disabled]="taken || mode() === 'season'" [attr.aria-pressed]="mode() === 'season' ? null : chosen().has(ep.id)" (click)="onEpisode(ep)">
                   <span class="badge badge-ghost badge-sm shrink-0">{{ badge(ep) }}</span>
                   <span class="min-w-0 flex-1 truncate">{{ ep.title || ('media_picker.episode_number' | translate: { number: ep.episodeNumber }) }}</span>
                   @if (watchedEpisodes().has(ep.id)) {
@@ -175,7 +172,7 @@
         }
 
         <div class="flex justify-end">
-          <button type="button" class="btn btn-primary btn-sm" [disabled]="confirmCount() === 0" (click)="confirm()">
+          <button type="button" class="btn btn-primary btn-sm max-sm:btn-block" [disabled]="confirmCount() === 0" (click)="confirm()">
             {{ 'media_picker.' + verb() + '_count' | translatePlural: confirmCount() }}
           </button>
         </div>

@@ -5,19 +5,19 @@ import { KaraokeApiService } from '../../../core/services/api/karaoke-api.servic
 import { failureText } from '../../../core/services/karaoke/karaoke-failure';
 import type { KaraokeFailure, KaraokeModel, KaraokeStaleTrack } from '../../../core/services/api/karaoke.models';
 import { localizeLanguage } from '../../../core/utils/language.utils';
-import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalComponent } from '../../../shared/components/modal';
 
 /** The tracks the re-sync would redo, with the outcome of their last attempt; the server pages them. */
 @Component({
   selector: 'app-karaoke-stale-details',
-  imports: [TranslatePipe, DatePipe, ModalHeaderComponent, ModalFooterComponent],
+  imports: [ModalComponent, TranslatePipe, DatePipe, ModalHeaderComponent],
   templateUrl: './karaoke-stale-details.html',
 })
 export class KaraokeStaleDetailsComponent {
   private readonly api = inject(KaraokeApiService);
   private readonly translate = inject(TranslateService);
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
   private readonly sentinel = viewChild<ElementRef<HTMLElement>>('sentinel');
   private observer?: IntersectionObserver;
   private loading = false;

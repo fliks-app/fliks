@@ -6,12 +6,13 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { OptimizeService } from '../../../core/services/api/optimize.service';
 import { formatChoice, type OptimizeProfile, type PresetKey } from '../../../core/models/optimize';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalComponent } from '../../../shared/components/modal';
 
 const PRESETS: PresetKey[] = ['balanced', 'cleanup_only', 'direct_playback'];
 
 @Component({
   selector: 'app-optimize-profiles',
-  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, ModalHeaderComponent],
+  imports: [ModalComponent, RouterLink, TranslatePipe, TranslatePluralPipe, ModalHeaderComponent],
   templateUrl: './optimize-profiles.html',
 })
 export class OptimizeProfilesComponent implements OnInit {
@@ -20,7 +21,7 @@ export class OptimizeProfilesComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
 
-  private readonly presetDialog = viewChild<ElementRef<HTMLDialogElement>>('presetDialog');
+  private readonly presetDialog = viewChild<string, ElementRef<HTMLDialogElement>>('presetDialog', { read: ElementRef });
 
   readonly presets = PRESETS;
   readonly profiles = signal<OptimizeProfile[]>([]);
