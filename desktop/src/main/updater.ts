@@ -11,8 +11,8 @@ import {
 
 const { autoUpdater } = electronUpdater;
 
-// Public repo (no token); overridable for forks / test repos.
-const GITHUB_REPO = process.env.FLIKS_GITHUB_REPO ?? 'fliks-app/fliks';
+// Public repo (no token); an unpackaged run can point at a fork or test repo.
+const GITHUB_REPO = (!app.isPackaged && process.env.FLIKS_GITHUB_REPO) || 'fliks-app/fliks';
 const RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases`;
 
 const INITIAL_CHECK_DELAY_MS = 10_000;
@@ -120,14 +120,13 @@ function velopackUpdater(broadcast: (s: DesktopUpdateStatus) => void): Updater |
   return { check, install };
 }
 
-/** An AppImage self-replaces; a distro package is reinstalled through the
- *  package manager under pkexec. electron-updater keys its Linux updater on
- *  the marker above, and only these three have one. */
+/** An AppImage self-replaces; an rpm or pacman package is reinstalled through the package manager
+ *  under pkexec. A .deb is updated by apt, whose signed source the package installs. */
 function canSelfInstall(): boolean {
   if (!app.isPackaged) return false;
   if (process.platform === 'win32') return velopack !== null;
   if (process.platform !== 'linux') return true;
-  return !!process.env.APPIMAGE || ['deb', 'rpm', 'pacman'].includes(packageType());
+  return !!process.env.APPIMAGE || ['rpm', 'pacman'].includes(packageType());
 }
 
 function capability(): DesktopUpdateCapability {

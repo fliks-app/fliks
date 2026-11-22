@@ -11,8 +11,10 @@ export type MpvLoadRequest = DesktopLoadOptions & { fileOptions: string[] };
 export function mpvLoadFileOptions(opts: DesktopLoadOptions): string[] {
   const fileOptions = ['sid=no'];
   if (opts.startTime && opts.startTime > 0) fileOptions.push(`start=+${opts.startTime.toFixed(3)}`);
-  // Keeps the matching audio rendition across reconfigs instead of the manifest default.
-  if (opts.audioLanguage) fileOptions.push(`alang=${opts.audioLanguage}`);
+  // Keeps the matching audio rendition across reconfigs instead of the manifest default. The value joins a
+  // comma-separated option list, so only a language code goes through.
+  const alang = opts.audioLanguage?.toLowerCase();
+  if (alang && /^[a-z]{2,3}$/.test(alang)) fileOptions.push(`alang=${alang}`);
   if (!mpvVerifies(opts.url)) fileOptions.push('tls-verify=no');
   return fileOptions;
 }

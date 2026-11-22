@@ -66,13 +66,6 @@ export interface DesktopMediaMetadata {
   artworkUrl?: string;
 }
 
-export interface DesktopRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export type DesktopPlayerState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
 
 /** Playback-quality properties read from mpv; null = mpv can't report it right now. */
@@ -161,8 +154,6 @@ export const IPC = {
   setSubtitleStyle: 'player:setSubtitleStyle',
   setFillScreen: 'player:setFillScreen',
   setCursorVisible: 'player:setCursorVisible',
-  resize: 'player:resize',
-  destroy: 'player:destroy',
   /** Host OS identity (name + version), resolved natively. */
   getSystemInfo: 'system:info',
   /** Opens an ICS in the OS default calendar handler. */
@@ -427,8 +418,6 @@ export interface FliksDesktopApi {
   /** Show or hide the pointer over the native window, which the page's CSS
    *  cursor cannot reach where the visible surface is not the page. */
   setCursorVisible(visible: boolean): Promise<void>;
-  resize(rect: DesktopRect): Promise<void>;
-  destroy(): Promise<void>;
   /** Native host OS identity (e.g. { systemName: "macOS 26" }). */
   getSystemInfo(): Promise<DesktopSystemInfo>;
   openCalendarEvent(ics: string, fileName: string): Promise<void>;

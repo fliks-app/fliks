@@ -90,9 +90,19 @@ const exists = (p: string): Promise<boolean> =>
     () => false,
   );
 
-/** Last path component of a URI, query stripped (e.g. `seg-0001.m4s`). */
-function basename(uri: string): string {
-  return uri.split('?')[0].split('/').pop() || 'seg';
+const MEDIA_EXTENSIONS = new Set(['.m4s', '.mp4', '.m4a', '.m4v', '.ts', '.aac', '.vtt', '.webvtt', '.srt']);
+
+/** The server's file extension when it is a media one, else none: no other part of its name is reused locally. */
+function extensionOf(uri: string): string {
+  const ext = path.posix.extname(uri.split('?')[0]).toLowerCase();
+  return MEDIA_EXTENSIONS.has(ext) ? ext : '';
+}
+
+/** `dir/name`, refusing a name that would land outside `dir` (`pathApi` lets tests use win32 rules). */
+export function localPath(dir: string, name: string, pathApi: typeof path = path): string {
+  const full = pathApi.resolve(dir, name);
+  if (!full.startsWith(pathApi.resolve(dir) + pathApi.sep)) throw new Error(`unsafe local name: ${name}`);
+  return full;
 }
 
 interface MirrorOpts {
@@ -196,19 +206,21 @@ export async function mirrorHls(opts: MirrorOpts): Promise<string> {
     const cdir = path.join(destDir, p.child.dir);
     await fsp.mkdir(cdir, { recursive: true });
 
-    let initName: string | undefined;
-    if (p.init) {
-      initName = basename(p.init);
-      await fetchOnce(resolveFrom(p.child.url, p.init), path.join(cdir, initName));
+    // Local names come from the position in the playlist, never from the server's text.
+    const initName = p.init ? `init${extensionOf(p.init)}` : undefined;
+    const segNames = p.segs.map((seg, i) => `seg-${String(i + 1).padStart(5, '0')}${extensionOf(seg)}`);
+    if (p.init && initName) {
+      await fetchOnce(resolveFrom(p.child.url, p.init), localPath(cdir, initName));
       onProgress(++received, total);
     }
-    for (const seg of p.segs) {
+    for (const [i, seg] of p.segs.entries()) {
       if (cancelled()) throw new Error('cancelled');
-      await fetchOnce(resolveFrom(p.child.url, seg), path.join(cdir, basename(seg)));
+      await fetchOnce(resolveFrom(p.child.url, seg), localPath(cdir, segNames[i]));
       onProgress(++received, total);
     }
 
-    // Rewrite the playlist so init + segments point at the local basenames.
+    // Rewrite the playlist so init + segments point at the local files.
+    let n = 0;
     const rewritten = p.text
       .split(/\r?\n/)
       .map((l) => {
@@ -216,7 +228,7 @@ export async function mirrorHls(opts: MirrorOpts): Promise<string> {
         if (t.startsWith('#EXT-X-MAP:URI=') && initName) {
           return l.replace(/URI="[^"]+"/, `URI="${initName}"`);
         }
-        if (t && !t.startsWith('#')) return basename(t);
+        if (t && !t.startsWith('#')) return segNames[n++];
         return l;
       })
       .join('\n');
