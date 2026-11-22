@@ -923,15 +923,10 @@ pub async fn settled(st: &AppState, media: i32) {
     if let Err(e) = crate::media::write::fields::merge_unmatched(st, media).await {
         tracing::warn!("Post-import[album #{media}]: file merge failed: {e}");
     }
-    let has_poster: bool =
-        sqlx::query_scalar(r#"SELECT "posterUrl" IS NOT NULL FROM media WHERE id = $1"#)
-            .bind(media)
-            .fetch_optional(&st.db)
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or(true);
-    if !has_poster && let Some(bytes) = folder_cover(st, media).await {
+    super::books::embedded_cover(st, media).await;
+    if !super::books::has_poster(&st.db, media).await
+        && let Some(bytes) = folder_cover(st, media).await
+    {
         super::books::store_cover(st, media, &bytes).await;
     }
     match identify::identify_media(st, media).await {

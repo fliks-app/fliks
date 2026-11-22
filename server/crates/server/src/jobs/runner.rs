@@ -68,8 +68,9 @@ pub fn spawn(st: &AppState) {
     }
     let st = st.clone();
     cron::spawn(names::PRUNE_CRON, tz, chrono::Utc::now, move || {
-        let (db, qoe) = (st.db.clone(), st.qoe.clone());
+        let (db, qoe, st) = (st.db.clone(), st.qoe.clone(), st.clone());
         tokio::spawn(async move {
+            crate::ingest::post_import::recover(&st).await;
             if let Err(e) = audit::prune(&db).await {
                 tracing::error!("PruneOldCommands: {e}");
             }

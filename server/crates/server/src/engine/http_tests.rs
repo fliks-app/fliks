@@ -1209,11 +1209,7 @@ mod resolve {
         let (_, b) = ask(json!({"purpose": "download"})).await;
         assert_eq!(b["path"], path_of(&w, "a.mkv"));
         let (_, b) = ask(json!({"purpose": "sprite"})).await;
-        let sprite = b["path"].as_str().unwrap();
-        assert!(
-            sprite.ends_with(&format!("thumbnails/{}/sprite.jpg", w.file)),
-            "{sprite}"
-        );
+        assert!(b["allow"].as_bool().unwrap() && b["path"].is_null(), "{b}");
         let (_, b) = ask(json!({"purpose": "subtitle", "subtitleId": w.subtitle})).await;
         assert_eq!(
             (b["format"].clone(), b["path"].clone()),

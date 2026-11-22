@@ -277,20 +277,10 @@ pub fn is_media(name: &str) -> bool {
     is_video(name) || music::is_music_file(name)
 }
 
-/// W11 `thumbnails.deleteForFile`, detached: engine invalidate then the sprite cache dir.
+/// Drops the engine's jobs, cache entries and sprite of a file, detached.
 pub fn drop_thumbnails(st: &AppState, file_id: i32) {
     let st = st.clone();
-    tokio::spawn(async move {
-        st.engine.invalidate(file_id as u32).await;
-        let dir = crate::paths::cache_dir()
-            .join("thumbnails")
-            .join(file_id.to_string());
-        if let Err(e) = tokio::fs::remove_dir_all(&dir).await
-            && e.kind() != std::io::ErrorKind::NotFound
-        {
-            tracing::warn!("could not remove thumbnails of file #{file_id}: {e}");
-        }
-    });
+    tokio::spawn(async move { st.engine.invalidate(file_id as u32).await });
 }
 
 /// Whether `kind` registers its files in one batch through `register_files`.

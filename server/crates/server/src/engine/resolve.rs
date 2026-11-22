@@ -479,13 +479,7 @@ async fn locate(
                 ..found(Some(file), format)
             })
         }
-        ResolvePurpose::Sprite => {
-            let sprite = crate::paths::cache_dir()
-                .join("thumbnails")
-                .join(id.to_string())
-                .join("sprite.jpg");
-            Ok(found(Some(sprite.to_string_lossy().into_owned()), None))
-        }
+        ResolvePurpose::Sprite => Ok(found(None, None)),
         ResolvePurpose::Subtitle if req.stream_index.is_none() => Err(Fail::Denied),
         ResolvePurpose::Subtitle => Ok(found(Some(file), Some("embedded"))),
         _ => Ok(found(Some(file), None)),

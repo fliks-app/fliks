@@ -14,7 +14,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 
-const BOOT_DELAY: Duration = Duration::from_secs(5 * 60);
+pub(super) const BOOT_DELAY: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Default)]
 pub struct Scans {

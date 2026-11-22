@@ -328,6 +328,7 @@ pub async fn delete_media_file(
     sqlx::query!("DELETE FROM media_files WHERE id = $1", file_id)
         .execute(&st.db)
         .await?;
+    crate::party::clear_files(st, &[file_id]).await?;
     drop_thumbnails(st, file_id);
     crate::media_servers::dispatch_detached(st, "file.deleted");
     Ok(())
@@ -399,6 +400,7 @@ pub async fn unlink_folder_files(
     )
     .fetch_all(&st.db)
     .await?;
+    crate::party::clear_files(st, &files).await?;
     for f in files {
         drop_thumbnails(st, f);
     }

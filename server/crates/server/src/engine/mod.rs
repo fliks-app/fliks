@@ -125,6 +125,8 @@ struct Inner {
     adoptions: watch::Sender<u64>,
     resyncs: watch::Sender<u64>,
     jobs: jobs::Waiters,
+    /// Epoch ms of this process: a job the engine created earlier belongs to a previous host.
+    boot_ms: f64,
 }
 
 /// The one engine of the process: cheap to clone, every clone shares the state machine.
@@ -168,6 +170,7 @@ impl Engine {
                 adoptions: watch::channel(0).0,
                 resyncs: watch::channel(0).0,
                 jobs: jobs::Waiters::default(),
+                boot_ms: crate::presence::now_ms(),
             }),
         }
     }

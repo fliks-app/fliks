@@ -37,6 +37,9 @@ impl Waiters {
     }
 }
 
+/// Kinds a worker leases from the host's queue.
+const LEASED: [&str; 2] = ["Optimize", "Verify"];
+
 fn state_name(s: BgJobState) -> &'static str {
     match s {
         BgJobState::Queued => "queued",
@@ -119,6 +122,29 @@ impl Engine {
                 result: result.clone(),
                 error: error.clone(),
             }));
+        }
+    }
+
+    /// On adoption: cancels the open jobs a previous host left behind. Its results have no reader and
+    /// its work is requeued from the host's markers. Leased kinds belong to the worker protocol.
+    pub(super) async fn cancel_orphans(&self) {
+        let jobs = match self.list_jobs().await {
+            Ok(jobs) => jobs,
+            Err(e) => return tracing::warn!("engine jobs not listed on adoption: {e}"),
+        };
+        let owned = self.inner.jobs.pending();
+        for j in jobs {
+            if j.state.ended()
+                || j.created_ms >= self.inner.boot_ms
+                || LEASED.contains(&j.kind.as_str())
+                || owned.contains(&j.job_id)
+            {
+                continue;
+            }
+            tracing::info!("Cancelling orphan engine job {} ({})", j.job_id, j.kind);
+            if let Err(e) = self.cancel_job(&j.job_id).await {
+                tracing::warn!("orphan engine job {} not cancelled: {e}", j.job_id);
+            }
         }
     }
 

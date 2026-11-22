@@ -76,6 +76,45 @@ pub async fn generate(st: &AppState, job: SpriteJob<'_>) -> Option<SpriteMeta> {
     }
 }
 
+/// One file per minute past the cursor, asked for its sprite: the engine answers a cached sheet at once.
+/// Only while nobody watches and the import setting allows generation.
+pub(super) fn spawn_backfill(st: AppState) {
+    tokio::spawn(async move {
+        let mut cursor = 0;
+        loop {
+            tokio::time::sleep(super::BACKFILL_EVERY).await;
+            if st.stream.booted.elapsed() < super::scan::BOOT_DELAY || st.presence.size() > 0 {
+                continue;
+            }
+            if !crate::ingest::setting_on(&st.db, "sprites_auto_generate_on_import")
+                .await
+                .unwrap_or(true)
+            {
+                continue;
+            }
+            let next = sqlx::query_scalar!(
+                r#"SELECT id FROM media_files
+                   WHERE id > $1 AND "streamInfo" -> 'video' -> 0 IS NOT NULL
+                   ORDER BY id LIMIT 1"#,
+                cursor
+            )
+            .fetch_optional(&st.db)
+            .await;
+            match next {
+                Ok(Some(id)) => {
+                    cursor = id;
+                    if let Err(e) = super::sprite_file(&st, id, false, JobPriority::Low, None).await
+                    {
+                        tracing::warn!("Sprite backfill: file #{id} skipped: {e:?}");
+                    }
+                }
+                Ok(None) => return,
+                Err(e) => tracing::warn!("Sprite backfill: {e}"),
+            }
+        }
+    });
+}
+
 /// Sprites used to sit directly in the data dir, next to the avatars.
 pub(super) fn spawn_legacy_cleanup() {
     if crate::paths::cache_dir() == crate::paths::data_dir() {

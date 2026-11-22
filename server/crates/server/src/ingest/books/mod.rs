@@ -23,7 +23,7 @@ use fliks_domain::{
     media::{family::Family, kind::MediaKind},
     metadata::limiter::Priority,
 };
-use fliks_engine_core::api::MediaTags;
+use fliks_engine_core::api::{JobKind, JobPriority, JobRequest, MediaFamily, MediaRef, MediaTags};
 use serde_json::{Map, Value};
 use sqlx::{PgConnection, PgPool};
 use std::{
@@ -1005,14 +1005,17 @@ pub async fn backfill_unmatched(st: &AppState) {
     });
 }
 
-/// Settles a book once its post-import work is done (`post_import::settled`).
-pub async fn settled(st: &AppState, media: i32) {
+/// Settles a book once its post-import work is done (`post_import::settled`); false when it asked to run again.
+pub async fn settled(st: &AppState, media: i32) -> bool {
+    embedded_cover(st, media).await;
+    let mut complete = true;
     let media = match identify_media(st, media).await {
         Ok(m) => m,
         Err(e) => {
             tracing::warn!("Post-import[book #{media}]: {}", e.cause);
             if e.retry {
                 st.ingest.settle.schedule(st, e.media);
+                complete = false;
             }
             e.media
         }
@@ -1020,6 +1023,57 @@ pub async fn settled(st: &AppState, media: i32) {
     if let Err(e) = merge::settle(st, media).await {
         tracing::warn!("Post-import[book #{media}]: m4b merge: {e}");
     }
+    complete
+}
+
+/// The embedded picture of the first audio file of the media that has one becomes its poster.
+pub(crate) async fn embedded_cover(st: &AppState, media: i32) {
+    if has_poster(&st.db, media).await {
+        return;
+    }
+    let id = sqlx::query_scalar!(
+        r#"SELECT id FROM media_files
+           WHERE "mediaId" = $1 AND jsonb_typeof("streamInfo" -> 'cover') = 'object'
+             AND "streamInfo" -> 'audio' -> 0 IS NOT NULL AND "streamInfo" -> 'video' -> 0 IS NULL
+           ORDER BY id LIMIT 1"#,
+        media
+    )
+    .fetch_optional(&st.db)
+    .await;
+    let id = match id {
+        Ok(Some(id)) => id,
+        Ok(None) => return,
+        Err(e) => return tracing::warn!("cover of media #{media}: {e}"),
+    };
+    if let Err(e) = store_embedded_cover(st, media, id).await {
+        tracing::warn!("Embedded cover of media #{media} not stored: {e}");
+    }
+}
+
+async fn store_embedded_cover(st: &AppState, media: i32, file: i32) -> Result<(), String> {
+    if !st.engine.job_applies("Cover", MediaFamily::Audio).await {
+        return Ok(());
+    }
+    let Some((path, Some(info))) = file_path(st, file).await.map_err(|e| e.to_string())? else {
+        return Ok(());
+    };
+    let req = JobRequest {
+        kind: JobKind::Cover { info },
+        media: MediaRef {
+            media_file_id: file as u32,
+            path: path.to_string_lossy().into_owned(),
+        },
+        priority: Some(JobPriority::Low),
+        force: false,
+    };
+    st.engine
+        .run_job(&req, None)
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some(bytes) = st.engine.cover(file).await.map_err(|e| e.to_string())? {
+        store_cover(st, media, &bytes).await;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

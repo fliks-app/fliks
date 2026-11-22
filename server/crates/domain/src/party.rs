@@ -1085,6 +1085,14 @@ impl Live {
         self.room.transfer(to_user, by, now)
     }
 
+    /// The owner takes the host role back; unlike `transfer` it needs no present member.
+    pub fn hand_back(&mut self, owner: i32) -> Vec<Effect> {
+        self.room.host_id = owner;
+        let mut out = vec![];
+        self.room.members_effect(&mut out);
+        out
+    }
+
     /// The host edited the programme: `head` is its first item, which the start plays. Once
     /// started, only the queue changes.
     pub fn programme(&mut self, head: Option<Item>) -> Vec<Effect> {

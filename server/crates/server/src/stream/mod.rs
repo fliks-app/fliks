@@ -113,11 +113,12 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-/// Background work of the plane: hardware (re)detection on each engine adoption, the scan backfill.
+/// Background work of the plane: hardware (re)detection on each engine adoption, the scan and sprite backfills.
 pub fn spawn(st: &AppState) {
     hardware::spawn(st.clone());
     qoe::spawn(st);
     scan::spawn_backfill(st.clone());
+    sprite::spawn_backfill(st.clone());
     sprite::spawn_legacy_cleanup();
 }
 

@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT \"mediaId\" FROM media_files WHERE id = $1",
+  "query": "SELECT id FROM media_files\n                   WHERE id > $1 AND \"streamInfo\" -> 'video' -> 0 IS NOT NULL\n                   ORDER BY id LIMIT 1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "mediaId",
+        "name": "id",
         "type_info": "Int4",
         "origin": {
           "Table": {
             "table": "media_files",
-            "name": "mediaId"
+            "name": "id"
           }
         }
       }
@@ -21,8 +21,8 @@
       ]
     },
     "nullable": [
-      true
+      false
     ]
   },
-  "hash": "c533b230d1062fb34942838800a9305d019a599c1411830858c055d1dc117766"
+  "hash": "84c8e9c53f05eca0a480353c68e953282a16a2a4d9eb589eaaf254d848928ff4"
 }
