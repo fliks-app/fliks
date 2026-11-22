@@ -1128,7 +1128,13 @@ async fn publish(
         .await
         .map_err(sticky)?;
     if done.files.len() != 1 {
-        return Err(sticky(done.conflicts.join("; ")));
+        return Err(sticky(
+            done.conflicts
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("; "),
+        ));
     }
     // The m4b is committed: whatever happens to the parts no longer fails the merge.
     if options(st, parts[0].edition).await.is_ok_and(|o| o.1) {

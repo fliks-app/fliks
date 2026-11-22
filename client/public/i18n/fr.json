@@ -1484,6 +1484,7 @@
       "size": "Écartée : taille",
       "language": "Écartée : autre langue",
       "full_season": "Écartée : saison complète",
+      "order": "Écartée : à égalité, classée après",
       "other": "Écartée"
     },
     "downloads_title": "Téléchargements",

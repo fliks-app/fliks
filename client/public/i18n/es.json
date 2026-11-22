@@ -1484,6 +1484,7 @@
       "size": "Descartada: tamaño",
       "language": "Descartada: otro idioma",
       "full_season": "Descartada: temporada completa",
+      "order": "Descartada: empate, ordenada después",
       "other": "Descartada"
     },
     "downloads_title": "Descargas",

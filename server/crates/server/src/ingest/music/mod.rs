@@ -8,6 +8,7 @@ pub mod tags;
 pub mod tagwrite;
 
 use super::{
+    Turned,
     books::{KnownFile, Placed, Registered, Registration},
     library::file_name,
     probe,
@@ -192,14 +193,14 @@ pub async fn register_with(
         let meta = match tokio::fs::metadata(&f.abs).await {
             Ok(m) => m,
             Err(e) => {
-                conflicts.push(format!("{name}: {e}"));
+                conflicts.push(Turned::new(&name, e));
                 continue;
             }
         };
         let p = match probe(st, &f.abs, false).await {
             Ok(p) => p,
             Err(e) => {
-                conflicts.push(format!("{name}: {e}"));
+                conflicts.push(Turned::new(&name, e));
                 continue;
             }
         };
@@ -225,7 +226,7 @@ pub async fn register_with(
         .await
         .map_err(|e| e.to_string())?;
         let Some(id) = id else {
-            conflicts.push(format!("{name}: file already linked to another media"));
+            conflicts.push(Turned::new(&name, "file already linked to another media"));
             continue;
         };
         found.push((id, f.abs.clone(), Some(embedded(&p.info))));

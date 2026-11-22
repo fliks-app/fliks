@@ -116,6 +116,9 @@ interface types {
     size-deviation: option<f64>,
     video-codec: option<string>,
     rejections: list<rejection>,
+    /// `best`, `passed_over`, `rejected` or `blocked`; `lost-on` is the key of the first comparator step a passed-over release lost on.
+    label: string,
+    lost-on: option<string>,
   }
 
   record release-title { id: string, title: string, publish-date: string }
@@ -165,9 +168,9 @@ interface types {
     unit-title: option<string>,
   }
 
-  enum transfer-mode { copy, move }
+  /// `link` hard-links a file on the same device and copies across devices; the source stays.
+  enum transfer-mode { copy, move, link }
   record ingest-request {
-    idempotency-key: string,
     media-id: u32,
     family: family,
     language: option<string>,
@@ -183,9 +186,16 @@ interface types {
     edition-id: u32,
     item-ids: list<u32>,
   }
+  /// `release`: the file is at fault (truncated, not a regular file, no episode to map to).
+  /// `library`: the library or the host is (no free name, a full disk, an I/O error).
+  /// `retry`: not yet, the same call may succeed later.
+  enum refusal-class { release, library, retry }
+  /// `file` is the name of the refused file, `reason` says why without repeating it.
+  record refusal { file: string, class: refusal-class, reason: string }
   record ingest-result {
     imported: list<imported-file>,
     already-present: list<string>,
+    refused: list<refusal>,
     unit: option<unit-ref>,
   }
 

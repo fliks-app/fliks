@@ -1,7 +1,7 @@
 //! `LibraryIngestService.ingest` (`ingest.md` rules 17-33): files into a media's folder, never
 //! replacing what is there unless asked, then the rows, the event and the post-import queue.
 use super::{
-    MediaRow, Probed, books, fsx, load_media, naming_formats, probe,
+    MediaRow, Probed, Turned, books, fsx, load_media, naming_formats, probe,
     transfer::{self, Method},
 };
 use crate::scene::Mapping;
@@ -64,11 +64,11 @@ pub struct Imported {
 pub struct Outcome {
     pub imported: Vec<Imported>,
     pub already_present: Vec<String>,
-    pub errors: Vec<String>,
+    pub errors: Vec<Turned>,
     /// Files whose release is at fault (truncated, not a regular file, no episode to map): a verdict, not core state.
-    pub refused: Vec<String>,
+    pub refused: Vec<Turned>,
     /// Files refused for now (a series' scene mapping not known yet): the caller retries them.
-    pub retry: Vec<String>,
+    pub retry: Vec<Turned>,
     /// Album files left out because they are tracks nobody asked for (`music.unrequested_tracks`).
     pub skipped: Vec<PathBuf>,
 }
@@ -179,9 +179,9 @@ pub async fn ingest(
             && let Ok((src, _)) = fsx::regular_source(&f.path)
             && let Some(o) = linked_to_other(&st.db, media.id, &src).await?
         {
-            out.errors.push(format!(
-                "{}: source is linked to media #{o}",
-                file_name(&f.path)
+            out.errors.push(Turned::new(
+                &f.path,
+                format!("source is linked to media #{o}"),
             ));
             continue;
         }
@@ -200,7 +200,7 @@ pub async fn ingest(
             && books::classify(&file_name(&f.path)).is_some_and(|c| c.0 == Family::Audio)
             && let Err(e) = probe(st, &f.path, false).await
         {
-            out.retry.push(format!("{}: {e}", file_name(&f.path)));
+            out.retry.push(Turned::new(&f.path, e));
             continue;
         }
         if book {
@@ -213,9 +213,9 @@ pub async fn ingest(
                 Placed::Present => out
                     .already_present
                     .push(f.path.to_string_lossy().into_owned()),
-                Placed::Error(e) => out.errors.push(e),
-                Placed::Refused(e) => out.refused.push(e),
-                Placed::Retry(e) => out.retry.push(e),
+                Placed::Error(e) => out.errors.push(Turned::new(&f.path, e)),
+                Placed::Refused(e) => out.refused.push(Turned::new(&f.path, e)),
+                Placed::Retry(e) => out.retry.push(Turned::new(&f.path, e)),
                 Placed::Imported(_) => {}
             }
             continue;
@@ -226,9 +226,9 @@ pub async fn ingest(
             Placed::Present => out
                 .already_present
                 .push(f.path.to_string_lossy().into_owned()),
-            Placed::Error(e) => out.errors.push(e),
-            Placed::Refused(e) => out.refused.push(e),
-            Placed::Retry(e) => out.retry.push(e),
+            Placed::Error(e) => out.errors.push(Turned::new(&f.path, e)),
+            Placed::Refused(e) => out.refused.push(Turned::new(&f.path, e)),
+            Placed::Retry(e) => out.retry.push(Turned::new(&f.path, e)),
         }
     }
     let mut family = Family::Video;
@@ -492,13 +492,11 @@ impl Ctx<'_> {
     ) -> Result<Placed, String> {
         let name = file_name(&f.path);
         let Ok((src, _)) = fsx::regular_source(&f.path) else {
-            return Ok(Placed::Refused(format!(
-                "{name}: source is not a regular file"
-            )));
+            return Ok(Placed::Refused("source is not a regular file".to_owned()));
         };
         if !books::owns(self.media.media_type, &name) {
             let why = super::not_owned_message(self.media.media_type);
-            return Ok(Placed::Refused(format!("{name}: {why}")));
+            return Ok(Placed::Refused(why.to_string()));
         }
         let m = self.media;
         let ext = transfer::split_ext(&name).1.to_owned();
@@ -519,7 +517,7 @@ impl Ctx<'_> {
                     disc_dir = disc;
                     named.unwrap_or_else(|| transfer::split_ext(&name).0.to_owned())
                 }
-                Err(e) => return Ok(Placed::Retry(format!("{name}: {e}"))),
+                Err(e) => return Ok(Placed::Retry(e.to_string())),
             }
         } else {
             naming::apply_book_format(
@@ -546,7 +544,7 @@ impl Ctx<'_> {
         }
         let mut file = match component(&base, &ext) {
             Ok(n) => n,
-            Err(e) => return Ok(Placed::Error(format!("{name}: {e}"))),
+            Err(e) => return Ok(Placed::Error(e.to_string())),
         };
         let dir = match disc_dir.as_deref().map(|d| component(d, "")) {
             Some(Ok(d)) => self.mdir.join(d),
@@ -565,18 +563,18 @@ impl Ctx<'_> {
                 }
                 match self.free_name(&dir, &base, &ext).await? {
                     Some(n) => file = n,
-                    None => return Ok(Placed::Error(format!("{name}: no free name up to (99)"))),
+                    None => return Ok(Placed::Error("no free name up to (99)".to_owned())),
                 }
             }
             let dest = dir.join(&file);
             if !self.root.contains(&dir, false) || !dir.starts_with(self.mdir) {
-                return Ok(Placed::Error(format!(
-                    "{name}: destination outside the library root"
-                )));
+                return Ok(Placed::Error(
+                    "destination outside the library root".to_owned(),
+                ));
             }
             if let Some(other) = self.owner(&dest).await?.filter(|o| *o != m.id) {
                 return Ok(Placed::Error(format!(
-                    "{name}: destination belongs to media #{other}"
+                    "destination belongs to media #{other}"
                 )));
             }
             if let Some(rel) = fsx::rel_under(self.root.path(), &dest)
@@ -586,9 +584,9 @@ impl Ctx<'_> {
                     .await
                     .map_err(|e| e.to_string())?
             {
-                return Ok(Placed::Error(format!(
-                    "{name}: belongs to another work of the folder"
-                )));
+                return Ok(Placed::Error(
+                    "belongs to another work of the folder".to_owned(),
+                ));
             }
             tokio::fs::create_dir_all(&dir)
                 .await
@@ -636,15 +634,13 @@ impl Ctx<'_> {
     async fn one(&self, f: &File) -> Result<Placed, String> {
         let name = file_name(&f.path);
         let Ok((src, _)) = fsx::regular_source(&f.path) else {
-            return Ok(Placed::Refused(format!(
-                "{name}: source is not a regular file"
-            )));
+            return Ok(Placed::Refused("source is not a regular file".to_owned()));
         };
         let ep = if self.media.has_seasons() {
             match self.episode(f).await {
                 Ok(ep) => ep,
-                Err(Refusal::Retry(why)) => return Ok(Placed::Retry(format!("{name}: {why}"))),
-                Err(Refusal::Refused(why)) => return Ok(Placed::Refused(format!("{name}: {why}"))),
+                Err(Refusal::Retry(why)) => return Ok(Placed::Retry(why)),
+                Err(Refusal::Refused(why)) => return Ok(Placed::Refused(why)),
                 Err(Refusal::Failed(e)) => return Err(e),
             }
         } else {
@@ -660,11 +656,11 @@ impl Ctx<'_> {
         let (dir, base) = self.layout(ep.as_ref(), &quality, group);
         let dir = match dir {
             Ok(d) => d,
-            Err(e) => return Ok(Placed::Error(format!("{name}: {e}"))),
+            Err(e) => return Ok(Placed::Error(e.to_string())),
         };
         let mut file = match file_component(&base, &ext) {
             Ok(n) => n,
-            Err(e) => return Ok(Placed::Error(format!("{name}: {e}"))),
+            Err(e) => return Ok(Placed::Error(e.to_string())),
         };
         // Rule 13: a file already at its layout path is linked where it is.
         let (dest_at, src_at) = (dir.join(&file), src.clone());
@@ -691,18 +687,18 @@ impl Ctx<'_> {
                 }
                 match self.free_name(&dir, &base, &ext).await? {
                     Some(n) => file = n,
-                    None => return Ok(Placed::Error(format!("{name}: no free name up to (99)"))),
+                    None => return Ok(Placed::Error("no free name up to (99)".to_owned())),
                 }
             }
             let dest = dir.join(&file);
             if !self.root.contains(&dir, false) || !dir.starts_with(self.mdir) {
-                return Ok(Placed::Error(format!(
-                    "{name}: destination outside the library root"
-                )));
+                return Ok(Placed::Error(
+                    "destination outside the library root".to_owned(),
+                ));
             }
             if let Some(other) = self.owner(&dest).await?.filter(|o| *o != self.media.id) {
                 return Ok(Placed::Error(format!(
-                    "{name}: destination belongs to media #{other}"
+                    "destination belongs to media #{other}"
                 )));
             }
             let scanned = scan_source(self.st, &src, &probed.info).await;
@@ -714,7 +710,7 @@ impl Ctx<'_> {
                     src.display()
                 );
                 return Ok(Placed::Refused(format!(
-                    "{name}: truncated file, its data ends at {} of the {} its container declares",
+                    "truncated file, its data ends at {} of the {} its container declares",
                     clock(end),
                     clock(declared)
                 )));

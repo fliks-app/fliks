@@ -11,6 +11,8 @@ use std::{
 pub enum Method {
     Copy,
     Move,
+    /// A hard link on the same device, a copy across devices; the source stays.
+    Link,
 }
 
 const DEFAULT_COMPANIONS: &str =
@@ -42,6 +44,7 @@ pub fn transfer_file(src: &Path, dest: &Path, method: Method, replace: bool) -> 
         (Method::Copy, false) => fsx::copy_noreplace(src, dest),
         (Method::Copy, true) => fsx::copy_replace(src, dest).map(|()| true),
         (Method::Move, r) => fsx::move_file(src, dest, r),
+        (Method::Link, r) => fsx::link_file(src, dest, r),
     }
 }
 

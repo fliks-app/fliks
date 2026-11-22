@@ -2887,7 +2887,13 @@ mod book_ingest {
             replace_existing: false,
             language: language.map(str::to_owned),
         };
-        library::ingest(&c.st, &guard, req).await.unwrap().errors
+        library::ingest(&c.st, &guard, req)
+            .await
+            .unwrap()
+            .errors
+            .iter()
+            .map(ToString::to_string)
+            .collect()
     }
 
     async fn names(c: &Ctx, m: i32) -> Vec<String> {
@@ -4641,7 +4647,11 @@ mod scene_import {
         let m = unknown(&c).await;
         let out = import(&c, m, "Show.S04E01.1080p.mkv", None).await;
         assert!(out.imported.is_empty() && out.errors.is_empty());
-        assert!(out.retry[0].contains("scene mapping"), "{:?}", out.retry);
+        assert!(
+            out.retry[0].why.contains("scene mapping"),
+            "{:?}",
+            out.retry
+        );
     }
 
     #[sqlx::test(migrations = false)]
@@ -4679,7 +4689,11 @@ mod scene_import {
             (out.imported.len(), out.refused.len(), out.retry.len()),
             (0, 1, 0)
         );
-        assert!(out.refused[0].contains("ambiguous"), "{:?}", out.refused);
+        assert!(
+            out.refused[0].why.contains("ambiguous"),
+            "{:?}",
+            out.refused
+        );
     }
 
     #[sqlx::test(migrations = false)]

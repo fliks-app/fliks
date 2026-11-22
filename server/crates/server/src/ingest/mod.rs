@@ -49,6 +49,33 @@ use std::{
 };
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 
+/// A file the ingest left alone: its name and why; `Display` is `name: why`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Turned {
+    pub file: String,
+    pub why: String,
+}
+
+impl Turned {
+    pub fn new(file: impl AsRef<Path>, why: impl std::fmt::Display) -> Self {
+        let file = file.as_ref();
+        Self {
+            file: file
+                .file_name()
+                .unwrap_or(file.as_os_str())
+                .to_string_lossy()
+                .into_owned(),
+            why: why.to_string(),
+        }
+    }
+}
+
+impl std::fmt::Display for Turned {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.file, self.why)
+    }
+}
+
 /// In-process locks keyed by id; entries nobody holds are pruned on the next lock.
 pub struct KeyedLocks<K>(Mutex<HashMap<K, Arc<AsyncMutex<()>>>>);
 

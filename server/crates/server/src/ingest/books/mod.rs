@@ -7,7 +7,7 @@ pub mod parts;
 pub mod plan;
 pub mod tags;
 
-use super::{library::file_name, post_import::file_path, probe, rescan::PROBE_VERSION};
+use super::{Turned, library::file_name, post_import::file_path, probe, rescan::PROBE_VERSION};
 use crate::{
     books::koreader,
     images::paths::{Target, Variant},
@@ -66,7 +66,7 @@ pub struct Registered {
 #[derive(Default)]
 pub struct Registration {
     pub files: Vec<Registered>,
-    pub conflicts: Vec<String>,
+    pub conflicts: Vec<Turned>,
 }
 
 /// The folder a new file of `family` goes to: the media's want of that `language`, else its first
@@ -292,7 +292,7 @@ async fn own_work<'a>(
     db: &PgPool,
     media: i32,
     files: &'a [Placed],
-    conflicts: &mut Vec<String>,
+    conflicts: &mut Vec<Turned>,
 ) -> sqlx::Result<Vec<&'a Placed>> {
     let new: Vec<String> = files.iter().map(|f| f.rel.replace('\\', "/")).collect();
     let mine = own_paths(&known_paths(db, media).await?, &new);
@@ -302,7 +302,7 @@ async fn own_work<'a>(
         if classify(&name).is_none() || mine.contains(rel) {
             out.push(f);
         } else {
-            conflicts.push(format!("{name}: belongs to another work of the folder"));
+            conflicts.push(Turned::new(&name, "belongs to another work of the folder"));
         }
     }
     Ok(out)
@@ -354,7 +354,7 @@ pub async fn register_to(
         let meta = match tokio::fs::metadata(&f.abs).await {
             Ok(m) => m,
             Err(e) => {
-                conflicts.push(format!("{name}: {e}"));
+                conflicts.push(Turned::new(&name, e));
                 continue;
             }
         };
@@ -365,7 +365,7 @@ pub async fn register_to(
             let p = match probe(st, &f.abs, false).await {
                 Ok(p) => p,
                 Err(e) => {
-                    conflicts.push(format!("{name}: {e}"));
+                    conflicts.push(Turned::new(&name, e));
                     continue;
                 }
             };
@@ -419,7 +419,7 @@ pub async fn register_to(
         .await
         .map_err(|e| e.to_string())?
         else {
-            conflicts.push(format!("{name}: file already linked to another media"));
+            conflicts.push(Turned::new(&name, "file already linked to another media"));
             continue;
         };
         facts.extend(found.map(|x| (family, f.rel.replace('\\', "/"), x)));

@@ -1,6 +1,7 @@
 //! Comic ingest (`docs/spec/comics.md`, ingest rules): files, the `image` edition, issues and parts of
 //! a comic volume. One archive or PDF is one issue; a variant of a number is another version of it.
 use super::{
+    Turned,
     books::{Placed, Registered, Registration},
     library::file_name,
 };
@@ -104,7 +105,7 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
         let meta = match tokio::fs::metadata(&f.abs).await {
             Ok(m) => m,
             Err(e) => {
-                conflicts.push(format!("{n}: {e}"));
+                conflicts.push(Turned::new(&n, e));
                 continue;
             }
         };
@@ -126,7 +127,7 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
         .await
         .map_err(|e| e.to_string())?
         else {
-            conflicts.push(format!("{n}: file already linked to another media"));
+            conflicts.push(Turned::new(&n, "file already linked to another media"));
             continue;
         };
         let key = name::parse_path(&n)
