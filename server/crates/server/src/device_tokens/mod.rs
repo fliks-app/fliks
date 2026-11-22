@@ -3,6 +3,7 @@ mod reject;
 mod routes;
 mod sealed;
 
+use fliks_domain::media::family::Family;
 use fliks_engine_core::api::{ResolveCredentialSource as Source, ResolvePurpose as Purpose};
 use md5::{Digest as _, Md5};
 use sha2::Sha256;
@@ -11,6 +12,9 @@ use sqlx::PgPool;
 pub use reject::Reject;
 pub use routes::*;
 pub use sealed::{open, seal};
+
+/// The SELECT column that says `lastUsedAt` is due a stamp (`touch` writes at most once a minute).
+const STALE: &str = r#"("lastUsedAt" IS NULL OR "lastUsedAt" < now() - interval '1 minute')"#;
 
 const PREFIX: &str = "fkd_";
 const TOKEN_LEN: usize = PREFIX.len() + 64;
@@ -60,6 +64,16 @@ impl Kind {
         }
     }
 
+    /// The families of content this kind may read: its token travels in URLs, so it opens the files of its
+    /// catalogue only. `None` is no confinement.
+    pub fn families(self) -> Option<&'static [Family]> {
+        match self {
+            Self::Kobo => Some(&[Family::Text]),
+            Self::Opds => Some(&[Family::Text, Family::Image]),
+            Self::Kosync | Self::Subsonic => None,
+        }
+    }
+
     /// What is hashed: a kosync client sends MD5(password), the password being the token.
     fn secret(self, token: &str) -> String {
         match self {
@@ -93,7 +107,8 @@ pub fn well_formed(s: &str) -> bool {
         })
 }
 
-/// The owner and kind of the token `secret` when its kind opens the data plane through `source`; a hit stamps `lastUsedAt`.
+/// The owner and kind of the token `secret` when its kind opens the data plane through `source`; a hit stamps
+/// `lastUsedAt` at most once a minute.
 pub async fn lookup(
     db: &PgPool,
     secret: &str,
@@ -104,34 +119,46 @@ pub async fn lookup(
         .filter(|k| k.sources().contains(&source))
         .map(Kind::as_str)
         .collect();
-    let row: Option<(i32, String)> = sqlx::query_as(
-        r#"UPDATE device_tokens SET "lastUsedAt" = now()
-           WHERE "hash" = $1 AND "kind"::text = ANY($2) RETURNING "userId", "kind"::text"#,
-    )
+    let row: Option<(i32, i32, String, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        r#"SELECT id, "userId", "kind"::text, {STALE} FROM device_tokens
+           WHERE "hash" = $1 AND "kind"::text = ANY($2)"#
+    )))
     .bind(hash(secret))
     .bind(&kinds)
     .fetch_optional(db)
     .await?;
-    Ok(row.and_then(|(owner, k)| Some((owner, Kind::parse(&k)?))))
+    let Some((id, owner, kind, stale)) = row else {
+        return Ok(None);
+    };
+    if stale {
+        touch(db, id).await?;
+    }
+    Ok(Kind::parse(&kind).map(|k| (owner, k)))
 }
 
-/// The owner of the `kosync` row whose token has the MD5 `key` (`kosync.md` rule 3); a hit stamps `lastUsedAt`.
+/// The owner of the `kosync` row whose token has the MD5 `key` (`kosync.md` rule 3); a hit stamps `lastUsedAt`
+/// at most once a minute.
 pub async fn kosync_owner(db: &PgPool, key: &str) -> Result<Option<i32>, sqlx::Error> {
-    sqlx::query_scalar(
-        r#"UPDATE device_tokens SET "lastUsedAt" = now()
-           WHERE "hash" = $1 AND "kind" = 'kosync' RETURNING "userId""#,
-    )
+    let row: Option<(i32, i32, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        r#"SELECT id, "userId", {STALE} FROM device_tokens WHERE "hash" = $1 AND "kind" = 'kosync'"#
+    )))
     .bind(hash(key))
     .fetch_optional(db)
-    .await
+    .await?;
+    let Some((id, owner, stale)) = row else {
+        return Ok(None);
+    };
+    if stale {
+        touch(db, id).await?;
+    }
+    Ok(Some(owner))
 }
 
 /// `(row id, owner)` of the `kobo` token `token` (`kobo.md` rule 1); `lastUsedAt` is stamped at most once a minute.
 pub async fn kobo_owner(db: &PgPool, token: &str) -> Result<Option<(i32, i32)>, sqlx::Error> {
-    let row: Option<(i32, i32, bool)> = sqlx::query_as(
-        r#"SELECT id, "userId", ("lastUsedAt" IS NULL OR "lastUsedAt" < now() - interval '1 minute')
-           FROM device_tokens WHERE "hash" = $1 AND "kind" = 'kobo'"#,
-    )
+    let row: Option<(i32, i32, bool)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        r#"SELECT id, "userId", {STALE} FROM device_tokens WHERE "hash" = $1 AND "kind" = 'kobo'"#
+    )))
     .bind(hash(token))
     .fetch_optional(db)
     .await?;
@@ -139,10 +166,7 @@ pub async fn kobo_owner(db: &PgPool, token: &str) -> Result<Option<(i32, i32)>, 
         return Ok(None);
     };
     if stale {
-        sqlx::query(r#"UPDATE device_tokens SET "lastUsedAt" = now() WHERE id = $1"#)
-            .bind(id)
-            .execute(db)
-            .await?;
+        touch(db, id).await?;
     }
     Ok(Some((id, owner)))
 }
