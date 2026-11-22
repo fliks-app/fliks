@@ -101,7 +101,8 @@ describe('LiveTvComponent — on-now search', () => {
     component.entries.set([lapsed, entry(2, 'BBC')]);
     component.page.set(2);
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    component['onClockTick']();
+    await vi.advanceTimersByTimeAsync(0);
     http
       .expectOne((r) => r.url === '/api/livetv/channels/on-now' && r.params.get('page') === '1')
       .flush(onNowPage([entry(1, 'CNN')], 2));
