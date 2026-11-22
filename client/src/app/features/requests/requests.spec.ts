@@ -115,16 +115,15 @@ describe('RequestsComponent', () => {
     ];
     const pendingSetup = async (opts: SetupOpts) => {
       const h = setup({ rows, ...opts });
-      h.cmp.statusFilter.set('pending');
-      h.cmp.reload();
+      h.query.next(convertToParamMap({ status: 'pending' }));
       await vi.waitFor(() => expect(h.cmp.rows().length).toBe(3));
       return h;
     };
 
     it('counts the pending rows, on the Pending filter only', async () => {
-      const { cmp } = await pendingSetup({});
+      const { cmp, query } = await pendingSetup({});
       expect(cmp.approvableRows().map((r) => r.id)).toEqual([1, 2]);
-      cmp.statusFilter.set('');
+      query.next(convertToParamMap({}));
       expect(cmp.approvableRows()).toEqual([]);
     });
 
