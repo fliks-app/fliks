@@ -284,7 +284,7 @@
           <ul class="menu w-full p-2 gap-0.5">
             @for (lib of displayLibraries(); track lib.id) {
               <li>
-                <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" #libLink="routerLinkActive" class="h-14 justify-between" [state]="{ rootEntry: true }">
+                <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" #libLink="routerLinkActive" class="h-14 content-center justify-between" [state]="{ rootEntry: true }">
                   <span class="flex min-w-0 items-center gap-3">
                     <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-base-content/10"
                           [style.color]="libraryColor(lib)"
