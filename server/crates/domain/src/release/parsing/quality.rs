@@ -96,38 +96,35 @@ pub fn parse_release_quality(title: &str) -> ParsedReleaseQuality {
 
     let is_remux = rx!(r"\bremux\b").is_match(&t);
     let is_bluray = rx!(r"\b(bluray|blu-?ray|bdrip|brrip|bdr)\b").is_match(&t);
-    let is_web_dl = rx!(r"\bweb-?dl\b").is_match(&t);
-    let is_web_rip = rx!(r"\bweb-?rip\b").is_match(&t);
+    let is_web_rip = rx!(r"\bweb[ -]?rip\b").is_match(&t);
+    let is_web_dl =
+        rx!(r"\bweb[ -]?dl\b").is_match(&t) || (rx!(r"\bweb\b").is_match(&t) && !is_web_rip);
     let is_hdtv = rx!(r"\bhdtv\b").is_match(&t);
     let is_dvd = rx!(r"\b(dvd|dvdrip|dvd-?r)\b").is_match(&t);
+    let is_dvdr = rx!(r"\bdvd-?r\b").is_match(&t);
     let is_sdtv = rx!(r"\bsdtv\b").is_match(&t);
 
-    let low_res = rx!(r"\b(576|480|360)p?\b");
-    let resolution: u32 = if rx!(r"\b(4320p?|8k)\b").is_match(&t) {
-        4320
-    } else if rx!(r"\b(2160p?|4k|uhd)\b").is_match(&t) {
+    let resolution: u32 = if rx!(r"\b(4320p?|8k|2160p?|4k|uhd)\b").is_match(&t) {
         2160
     } else if rx!(r"\b1080[ip]?\b").is_match(&t) {
         1080
     } else if rx!(r"\b720[ip]?\b").is_match(&t) {
         720
-    } else if let Some(m) = low_res.captures(&t) {
-        m[1].parse().unwrap_or(480)
     } else {
-        0
+        480
     };
 
-    if rx!(r"\bcam\b").is_match(&t) {
+    if rx!(r"\b(hd-?cam|cam)\b").is_match(&t) {
         return named(2);
     }
-    if rx!(r"\b(ts|telesync)\b").is_match(&t) {
+    if rx!(r"\b(hd-?ts|ts|telesync)\b").is_match(&t) {
         return named(3);
     }
     if rx!(r"\btc\b|telecine").is_match(&t) {
         return named(4);
     }
 
-    let source = if is_remux {
+    let mut source = if is_remux {
         "remux"
     } else if is_bluray {
         "bluray"
@@ -145,6 +142,10 @@ pub fn parse_release_quality(title: &str) -> ParsedReleaseQuality {
         "hdtv"
     };
 
+    if resolution == 480 && source == "hdtv" {
+        source = "sdtv";
+    }
+
     let candidates: Vec<&'static AppQuality> = APP_QUALITIES
         .iter()
         .filter(|q| q.resolution == resolution && q.source == source)
@@ -160,39 +161,20 @@ pub fn parse_release_quality(title: &str) -> ParsedReleaseQuality {
                 candidates.iter().find(|c| c.name.contains("WEBDL"))
             } else if is_web_rip {
                 candidates.iter().find(|c| c.name.contains("WEBRip"))
+            } else if is_dvdr {
+                Some(last)
             } else {
-                return pick(last);
+                Some(first)
             };
             return pick(wanted.copied().unwrap_or(*first));
         }
         [] => {}
     }
 
-    let fuzzy: Vec<&'static AppQuality> = APP_QUALITIES
+    let fallback = APP_QUALITIES
         .iter()
-        .filter(|q| {
-            !(resolution > 0 && q.resolution != resolution || resolution == 0 && q.resolution > 480)
-        })
-        .collect();
-    let fallback = fuzzy
-        .iter()
-        .find(|q| q.source == source)
-        .or(fuzzy.last())
-        .copied()
+        .rfind(|q| q.resolution == resolution)
         .unwrap_or(&APP_QUALITIES[0]);
-    if resolution > 0 && fuzzy.is_empty() {
-        let nearest = APP_QUALITIES.iter().fold(&APP_QUALITIES[0], |best, q| {
-            if q.resolution > best.resolution && q.resolution <= resolution {
-                q
-            } else {
-                best
-            }
-        });
-        return ParsedReleaseQuality {
-            quality: fallback,
-            label: format!("{resolution}p ({})", nearest.name),
-        };
-    }
     pick(fallback)
 }
 
@@ -209,19 +191,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn eight_k_keeps_a_label_but_not_a_bucket() {
-        let p = parse_release_quality("Show.S01E01.4320p.WEB-DL.x265");
-        assert_eq!(p.quality.id, 1);
-        assert_eq!(p.label, "4320p (HDTV-2160p)");
-        assert_eq!(
-            parse_release_quality("Show.576p.DVDRip").label,
-            "576p (DVD)"
-        );
+    fn resolutions_bucket_to_table_rows() {
+        let name = |t| parse_release_quality(t).quality.name;
+        assert_eq!(name("Show.S01E01.4320p.WEB-DL.x265"), "WEBDL-2160p");
+        assert_eq!(name("Show.576p.HDTV"), "SDTV");
+        assert_eq!(name("Movie.2019.360p.WEB-DL"), "WEBDL-480p");
     }
 
     #[test]
-    fn empty_quality_parses_to_480_bluray_but_ranks_zero() {
+    fn web_tags_and_cam_variants() {
+        let name = |t| parse_release_quality(t).quality.name;
+        assert_eq!(name("Show.S01E01.1080p.WEB.h264-GRP"), "WEBDL-1080p");
+        assert_eq!(name("Show.S02E03.WEB.DL.1080p.AAC"), "WEBDL-1080p");
+        assert_eq!(name("Show.S02E03.WEB.Rip.1080p"), "WEBRip-1080p");
+        assert_eq!(name("Movie.2019.HDCAM.XviD"), "CAM");
+        assert_eq!(name("Movie.2019.HDTS.XviD"), "TELESYNC");
+    }
+
+    #[test]
+    fn empty_quality_parses_to_sdtv_but_ranks_zero() {
         assert_eq!(rank_from_quality_string(Some("")), 0);
-        assert_eq!(parse_release_quality("").quality.name, "Bluray-480p");
+        assert_eq!(parse_release_quality("").quality.name, "SDTV");
     }
 }

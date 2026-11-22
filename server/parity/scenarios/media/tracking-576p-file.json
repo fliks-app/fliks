@@ -1,5 +1,5 @@
 {
-  "name": "media-tracking-8k-file",
+  "name": "media-tracking-576p-file",
   "seed": "media-query",
   "steps": [
     {
@@ -8,7 +8,7 @@
         "body": {
           "hasProfile": true,
           "movie": {
-            "currentQuality": "WORKPRINT",
+            "currentQuality": "480p",
             "monitored": true,
             "state": "below",
             "targetQuality": "1080p"

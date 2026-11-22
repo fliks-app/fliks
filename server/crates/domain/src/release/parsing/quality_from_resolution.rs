@@ -33,7 +33,7 @@ pub fn quality_from_resolution(
         "remux"
     } else if rx!(r"\b(bluray|blu-?ray|bdrip|brrip)\b").is_match(&t) {
         "bluray"
-    } else if rx!(r"\bweb-?dl\b").is_match(&t) || rx!(r"\bweb-?rip\b").is_match(&t) {
+    } else if rx!(r"\bweb([ -]?(dl|rip))?\b").is_match(&t) {
         "web"
     } else if rx!(r"\b(dvd|dvdrip)\b").is_match(&t) {
         "dvd"
