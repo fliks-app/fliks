@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import type { MediaType } from '../../enums/media-type.enum';
 import type { MediaFamily } from '../../media-kinds';
 
@@ -80,8 +81,9 @@ export class WantsApiService {
     return r.wants;
   }
 
-  wanted(params: Record<string, string | number>) {
-    return firstValueFrom(this.http.get<WantedPage>('/api/wanted', { params }));
+  /** `quiet` suppresses the error toast for a caller that renders its own failed state. */
+  wanted(params: Record<string, string | number>, quiet = false) {
+    return firstValueFrom(this.http.get<WantedPage>('/api/wanted', { params, context: new HttpContext().set(SKIP_ERROR_TOAST, quiet) }));
   }
 
   personFollow(id: number, role?: 'author' | 'artist') {

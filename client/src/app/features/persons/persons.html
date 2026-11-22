@@ -31,15 +31,9 @@
   </div>
 
   @if (loading()) {
-    <div class="flex justify-center py-12">
-      <span class="loading loading-spinner loading-lg"></span>
-    </div>
+    <app-row-skeleton />
   } @else if (list.total() === 0) {
-    <div class="text-center py-12 text-base-content/60">
-      <svg lucideUsers class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
-      <p class="text-lg">{{ 'persons.empty' | translate }}</p>
-      <p class="text-sm mt-2">{{ 'persons.empty_hint' | translate }}</p>
-    </div>
+    <app-empty-state icon="users" [title]="'persons.empty' | translate" [hint]="'persons.empty_hint' | translate" />
   } @else {
     <div class="flex gap-2">
       <cdk-virtual-scroll-viewport

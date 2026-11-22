@@ -687,7 +687,14 @@
     "cw_remove_message": "Remove \"{{title}}\" from the list?",
     "customize": "Customize home",
     "customize_hint": "Add, remove and reorder the home sections",
-    "leaving_soon": "Leaving soon"
+    "leaving_soon": "Leaving soon",
+    "empty": {
+      "title": "Your libraries appear here",
+      "admin_hint": "Fliks lists what it finds in your media folders.",
+      "admin_tv_hint": "Finish setup from a browser at {{address}}",
+      "member_hint": "No library is shared with you yet.",
+      "add_library": "Add a library"
+    }
   },
   "playback_settings": {
     "cast_hdr": "HDR",
@@ -1061,8 +1068,6 @@
     "status_deleted": "Deleted"
   },
   "library": {
-    "empty": "No media in this library",
-    "empty_hint": "Movies and series you add appear here",
     "filter_monitored": "Monitored",
     "filter_unmonitored": "Not monitored",
     "filter_downloaded": "Downloaded",
@@ -1100,7 +1105,13 @@
     "collections_count_other": "{{count}} collections",
     "collections_empty": "No TMDB collections found in this library",
     "collection": "Collection",
-    "clear_collection": "Clear collection filter"
+    "clear_collection": "Clear collection filter",
+    "no_match": "Nothing matches “{{query}}”",
+    "no_match_filters": "Nothing matches these filters",
+    "clear_filters": "Clear filters",
+    "empty_title": "Nothing here yet",
+    "import_existing": "Import existing files",
+    "library_settings": "Library settings"
   },
   "series": {
     "title": "TV Series"
@@ -2215,7 +2226,7 @@
     "remove_from_device": "Remove from this device"
   },
   "setup_checklist": {
-    "title": "Setup",
+    "title": "Set up Fliks",
     "configure": "Configure",
     "dismiss": "Dismiss",
     "undismiss": "Re-enable",
@@ -2224,8 +2235,8 @@
     "status_recommended": "Recommended",
     "items": {
       "library": {
-        "label": "Add at least one library",
-        "hint": "Specify the path of at least one movie or series folder so they appear in Fliks."
+        "label": "Add a library",
+        "hint": "Folders of movies, series, music, books or comics."
       },
       "quality-profile": {
         "label": "Create a quality profile",
@@ -2235,23 +2246,32 @@
         "label": "Create a language profile",
         "hint": "Determines the preferred audio and subtitle languages for downloaded releases."
       },
+      "download-provider": {
+        "label": "Add a download provider",
+        "hint": "A download provider lets Fliks fetch what people request."
+      },
       "subtitle-provider": {
         "label": "Enable a subtitle provider",
-        "hint": "Enables automatic subtitle search (OpenSubtitles, Subdl…)."
+        "hint": "Subtitles are searched automatically once a provider is on."
       },
       "notification": {
         "label": "Configure notifications",
-        "hint": "Receive events (downloads, errors…) on Discord, Telegram or others."
+        "hint": "Requests, imports and errors reach Discord, Telegram and others."
       },
       "non-admin-user": {
         "label": "Create a non-administrator user",
-        "hint": "Give your family access to Fliks without granting them admin rights."
+        "hint": "Family and friends sign in without admin rights."
       },
       "auto-approval-rule": {
         "label": "Configure an auto-approval rule",
-        "hint": "Requests matching the rule are approved without manual intervention."
+        "hint": "Requests that match a rule are approved without review."
+      },
+      "data-import": {
+        "label": "Bring your watch history and requests",
+        "hint": "Import watch history from a media server and requests from a request app."
       }
-    }
+    },
+    "progress": "{{done}} of {{total}}"
   },
   "settings": {
     "nav": {
@@ -3954,7 +3974,8 @@
       "sweep_interval": "Search interval (minutes)",
       "sweep_interval_hint": "How often missing and upgradable titles are searched for (default: 360 = 6h).",
       "load_error": "Unable to load the settings.",
-      "saved": "Settings saved."
+      "saved": "Settings saved.",
+      "providers_empty_link": "Open the plugin catalogue"
     },
     "lyrics": {
       "title": "Lyrics",

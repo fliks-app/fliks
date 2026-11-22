@@ -66,12 +66,9 @@ export class SetupChecklistComponent implements OnInit {
         (i) => i.severity === 'required' && !i.done && !i.dismissed,
       ).length,
   );
-  readonly pendingRecommendedCount = computed(
-    () =>
-      this.items().filter(
-        (i) => i.severity === 'recommended' && !i.done && !i.dismissed,
-      ).length,
-  );
+  /** Rows not dismissed, and how many of them are done. */
+  readonly openCount = computed(() => this.items().filter((i) => !i.dismissed).length);
+  readonly doneCount = computed(() => this.items().filter((i) => !i.dismissed && i.done).length);
 
   padding = input(false);
 

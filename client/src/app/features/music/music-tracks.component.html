@@ -13,7 +13,7 @@
   </div>
   @if (!list.rows().length) {
     @if (list.loading()) {
-      <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+      <app-row-skeleton />
     } @else {
       <p class="text-center py-12 text-base-content/60">{{ 'music.no_tracks' | translate }}</p>
     }

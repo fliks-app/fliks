@@ -1,7 +1,7 @@
 import { Component, inject, signal, computed, Injector, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical } from '@lucide/angular';
+import { LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { PlaybackState, StreamingApiService, WatchHistoryItem } from '../../core/services/api/streaming-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
@@ -12,12 +12,14 @@ import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
+import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-skeleton';
+import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state';
 
 @Component({
   selector: 'app-watch-history',
-  imports: [
+  imports: [EmptyStateComponent, RowSkeletonComponent, 
     CachedSrcDirective,
-    TranslatePipe, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, LucideHistory, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical, DefaultFocusDirective],
+    TranslatePipe, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical, DefaultFocusDirective],
   templateUrl: './watch-history.html',
 })
 export class WatchHistoryComponent implements OnInit, OnDestroy {

@@ -50,10 +50,12 @@ import { DownloadDetailModalComponent } from '../../shared/components/download-d
 import { LucideCheck, LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { KIND_REGISTRY, kindOf } from '../../core/media-kinds';
+import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-skeleton';
+import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state';
 
 @Component({
   selector: 'app-requests',
-  imports: [TvSelectDirective, 
+  imports: [EmptyStateComponent, RowSkeletonComponent, TvSelectDirective, 
     FormsModule,
     LocaleDatePipe,
     TranslatePipe,

@@ -1,7 +1,5 @@
 @if (loading() && !playlist()) {
-  <div class="flex justify-center py-12">
-    <span class="loading loading-spinner loading-lg"></span>
-  </div>
+  <app-row-skeleton [rows]="3" [tall]="true" />
 } @else if (playlist(); as pl) {
   <app-hero-base [title]="pl.name" mediaType="album" [posterUrl]="pl.posters[0] ?? null" [posters]="pl.posters">
     <div heroMeta class="text-base-content/70">

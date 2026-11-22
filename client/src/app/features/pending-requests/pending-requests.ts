@@ -11,12 +11,14 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService, PairingLookup, PendingRequest } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { SseService } from '../../core/services/sse.service';
+import { LoadFailedComponent } from '../../shared/components/load-failed/load-failed';
 import { LucideMonitor, LucideTablet, LucideSmartphone, LucideTv, LucideMonitorSmartphone } from '@lucide/angular';
 
 @Component({
   selector: 'app-pending-requests',
   imports: [
     TranslatePipe,
+    LoadFailedComponent,
     LucideMonitor,
     LucideTablet,
     LucideSmartphone,

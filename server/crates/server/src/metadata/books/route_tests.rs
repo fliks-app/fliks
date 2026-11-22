@@ -41,7 +41,7 @@ async fn ctx(pool: PgPool, fakes: Vec<Fake>) -> (Ctx, AppState) {
         INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Books', '["book"]'), (2, 'Other', '["book"]');
         INSERT INTO library_folders ("libraryId", path) VALUES (1, '/b/one'), (2, '/b/two');
         INSERT INTO quality_profiles (id, name, family, cutoff, items)
-          VALUES (1, 'Text', 'text', 1, '[]'), (2, 'Audio', 'audio', 1, '[]');
+          VALUES (1, 'Text', 'text', 1, '[]'), (2, 'Audio', 'audio', 1, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items;
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2);
         "#,
     )

@@ -23,22 +23,23 @@ import { BooksApiService } from '../../core/services/api/books-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
-import { LucideSearch, LucideUsers } from '@lucide/angular';
+import { LucideSearch } from '@lucide/angular';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { PersonAvatarCardComponent } from '../../shared/components/person-avatar-card/person-avatar-card';
+import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-skeleton';
+import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 @Component({
   selector: 'app-persons',
-  imports: [
+  imports: [EmptyStateComponent, RowSkeletonComponent, 
     TranslatePluralPipe,
     TvSelectDirective,
     FormsModule,
     TranslatePipe,
     PersonAvatarCardComponent,
     LucideSearch,
-    LucideUsers,
     CdkVirtualScrollViewport,
     CdkFixedSizeVirtualScroll,
     CdkVirtualForOf,

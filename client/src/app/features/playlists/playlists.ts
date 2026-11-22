@@ -17,10 +17,12 @@ import { ToastService } from '../../core/services/toast.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { ModalFooterComponent } from '../../shared/components/modal-footer';
 import { SmartPlaylistEditorComponent } from './smart-playlist-editor/smart-playlist-editor';
+import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
+import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state';
 
 @Component({
   selector: 'app-playlists',
-  imports: [
+  imports: [EmptyStateComponent, CardSkeletonComponent, 
     ModalFooterComponent,
     MosaicCardComponent,
     TranslatePipe,

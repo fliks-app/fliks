@@ -2,6 +2,7 @@
 -- Writes only under /tmp/fliks-parity/s5-ingest/work (scenario `fs` rebuilds it): never the base media tree.
 -- readonly becomes an editor of library 1 and the work movies library only.
 UPDATE roles SET permissions = '["media.read","media.create","media.edit","media.delete","livetv.read"]' WHERE id = 3;
+DELETE FROM quality_profiles;
 INSERT INTO quality_profiles (id, "createdAt", "updatedAt", name, cutoff, items) VALUES
  (1, '2026-01-01', '2026-01-01', 'Parity HD', 18, '[]');
 INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes") VALUES

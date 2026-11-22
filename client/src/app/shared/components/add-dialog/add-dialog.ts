@@ -85,12 +85,14 @@ export class AddDialogComponent {
   protected readonly alreadyRequested = computed(() => new Set(this.req()?.alreadyRequestedSeasons ?? []));
   protected readonly locked = computed(() => !!this.req()?.profilesLocked);
   protected readonly qualityLocked = computed(() => this.locked() && this.req()?.lockedQualityProfileId != null);
+  /** Folder and profile pickers are for who adds or manages; a member's request takes the library defaults. */
+  protected readonly canChoose = computed(() => this.mode() === 'import' || this.auth.hasPermission('requests.manage'));
   protected readonly noLibrary = computed(() => !this.loading() && this.libraries().length === 0);
   protected readonly nothingPicked = computed(() => this.hasSeasons() && !this.seasonsFailed() && this.selectedSeasons().size === 0);
   protected readonly wantsReady = computed(() => this.wants().every((w) => w.qualityProfileId != null));
   protected readonly canSubmit = computed(() => {
     if (this.busy() || this.loading() || this.noLibrary() || this.seasonsLoading() || this.nothingPicked()) return false;
-    if (this.isVideo()) return this.qualityId() != null;
+    if (this.isVideo()) return !this.canChoose() || this.qualityId() != null;
     if (this.kind() === 'book') return this.wantsReady();
     return this.mode() === 'import' || this.audioQualityId() != null;
   });
@@ -326,8 +328,7 @@ export class AddDialogComponent {
         mediaType: r.kind as 'movie' | 'series',
         ...(r.titleKey ?? (r.provider === 'tmdb' ? { tmdbId: Number(r.externalId) } : { provider: r.provider, externalId: r.externalId })),
         title: r.title,
-        qualityProfileId: this.qualityId() ?? undefined,
-        languageProfileId: this.languageId() ?? undefined,
+        ...(this.canChoose() ? { qualityProfileId: this.qualityId() ?? undefined, languageProfileId: this.languageId() ?? undefined } : {}),
         ...place,
         ...(this.hasSeasons() && this.selectedSeasons().size > 0 ? { seasons: [...this.selectedSeasons()].sort((a, b) => a - b) } : {}),
       };

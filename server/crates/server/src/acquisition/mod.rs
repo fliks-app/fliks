@@ -491,7 +491,7 @@ mod tests {
     async fn candidates_page_by_keyset_across_media_batches(db: PgPool) {
         crate::db::migrate(&db).await.unwrap();
         sqlx::raw_sql(
-            r#"INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
+            r#"INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items;
                INSERT INTO libraries (id, name) VALUES (1, 'L');
 INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
                INSERT INTO media (title, year, type, status, "libraryId", "folderName", monitored)
@@ -565,7 +565,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
 
     async fn series_with_episodes(db: &PgPool) -> (i32, Vec<i32>) {
         sqlx::raw_sql(
-            r#"INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
+            r#"INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items;
                INSERT INTO libraries (id, name) VALUES (1, 'L');
 INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m');
                INSERT INTO media (id, title, type, "libraryId", monitored) VALUES (1, 'Show', 'series', 1, true);

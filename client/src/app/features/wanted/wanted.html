@@ -29,7 +29,7 @@
   </div>
 
   @if (failed()) {
-    <div role="alert" class="alert alert-error">{{ 'wanted.load_error' | translate }}</div>
+    <app-load-failed [message]="'wanted.load_error' | translate" (retry)="retry()" />
   }
 
   @if (rows().length === 0 && !loading() && !failed()) {

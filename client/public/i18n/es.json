@@ -687,7 +687,14 @@
     "cw_remove_message": "¿Quitar «{{title}}» de la lista?",
     "customize": "Personalizar el inicio",
     "customize_hint": "Añada, quite y reorganice las zonas del inicio",
-    "leaving_soon": "Se retira pronto"
+    "leaving_soon": "Se retira pronto",
+    "empty": {
+      "title": "Tus bibliotecas aparecen aquí",
+      "admin_hint": "Fliks muestra lo que encuentra en tus carpetas multimedia.",
+      "admin_tv_hint": "Termina la configuración desde un navegador en {{address}}",
+      "member_hint": "Todavía no se ha compartido ninguna biblioteca contigo.",
+      "add_library": "Añadir una biblioteca"
+    }
   },
   "playback_settings": {
     "cast_hdr": "HDR",
@@ -1061,8 +1068,6 @@
     "request_album": "Solicitar el álbum"
   },
   "library": {
-    "empty": "No hay medios en esta biblioteca",
-    "empty_hint": "Las películas y series añadidas aparecen aquí",
     "filter_monitored": "Vigilados",
     "filter_unmonitored": "No vigilados",
     "filter_downloaded": "Descargados",
@@ -1100,7 +1105,13 @@
     "collections_count_other": "{{count}} colecciones",
     "collections_empty": "No se encontró ninguna colección TMDB en esta biblioteca",
     "collection": "Colección",
-    "clear_collection": "Borrar el filtro de colección"
+    "clear_collection": "Borrar el filtro de colección",
+    "no_match": "Nada coincide con «{{query}}»",
+    "no_match_filters": "Nada coincide con estos filtros",
+    "clear_filters": "Borrar filtros",
+    "empty_title": "Aún no hay nada aquí",
+    "import_existing": "Importar archivos existentes",
+    "library_settings": "Ajustes de la biblioteca"
   },
   "series": {
     "title": "Series de TV"
@@ -2215,7 +2226,7 @@
     "remove_from_device": "Quitar de este dispositivo"
   },
   "setup_checklist": {
-    "title": "Configuración",
+    "title": "Configurar Fliks",
     "configure": "Configurar",
     "dismiss": "Ocultar",
     "undismiss": "Reactivar",
@@ -2224,8 +2235,8 @@
     "status_recommended": "Recomendado",
     "items": {
       "library": {
-        "label": "Añadir al menos una biblioteca",
-        "hint": "Indique la ruta de al menos una carpeta de películas o series para que aparezcan en Fliks."
+        "label": "Añadir una biblioteca",
+        "hint": "Carpetas de películas, series, música, libros o cómics."
       },
       "quality-profile": {
         "label": "Crear un perfil de calidad",
@@ -2235,23 +2246,32 @@
         "label": "Crear un perfil de idioma",
         "hint": "Determina los idiomas de audio y subtítulos preferidos para las releases descargadas."
       },
+      "download-provider": {
+        "label": "Añadir un proveedor de descargas",
+        "hint": "Un proveedor de descargas permite a Fliks conseguir lo que la gente pide."
+      },
       "subtitle-provider": {
         "label": "Activar un proveedor de subtítulos",
-        "hint": "Activa la búsqueda automática de subtítulos (OpenSubtitles, Subdl…)."
+        "hint": "Los subtítulos se buscan automáticamente cuando hay un proveedor activo."
       },
       "notification": {
         "label": "Configurar las notificaciones",
-        "hint": "Reciba los eventos (descargas, errores…) en Discord, Telegram u otro."
+        "hint": "Las solicitudes, importaciones y errores llegan a Discord, Telegram y otros."
       },
       "non-admin-user": {
         "label": "Crear un usuario no administrador",
-        "hint": "Dé acceso a Fliks a sus allegados sin concederles los permisos de admin."
+        "hint": "Familia y amigos inician sesión sin derechos de administrador."
       },
       "auto-approval-rule": {
         "label": "Configurar una regla de aprobación automática",
-        "hint": "Las solicitudes que coincidan con la regla se aprueban sin intervención manual."
+        "hint": "Las solicitudes que cumplen una regla se aprueban sin revisión."
+      },
+      "data-import": {
+        "label": "Traer tu historial y tus solicitudes",
+        "hint": "Importa el historial de reproducción de un servidor multimedia y las solicitudes de una aplicación de solicitudes."
       }
-    }
+    },
+    "progress": "{{done}} de {{total}}"
   },
   "settings": {
     "nav": {
@@ -3954,7 +3974,8 @@
       "unrequested_tracks": "Pistas que nadie ha solicitado",
       "unrequested_tracks_hint": "Las demás pistas de un álbum descargado.",
       "unrequested_skip": "No importar",
-      "unrequested_keep": "Importar sin supervisión"
+      "unrequested_keep": "Importar sin supervisión",
+      "providers_empty_link": "Abrir el catálogo de plugins"
     },
     "lyrics": {
       "title": "Letras",

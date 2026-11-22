@@ -590,7 +590,7 @@ async fn folder_of_another_library_is_refused_on_a_request(pool: PgPool) {
     }
     let body = json!({"path": dir(&c, "b")});
     let (_, f) = call(&c, "POST", "/api/libraries/2/folders", &c.admin, body).await;
-    sqlx::query("INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 1, '[]')")
+    sqlx::query("INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 1, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items")
         .execute(&pool)
         .await
         .unwrap();

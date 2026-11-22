@@ -687,7 +687,14 @@
     "cw_remove_message": "Retirer « {{title}} » de la liste ?",
     "customize": "Personnaliser l'accueil",
     "customize_hint": "Ajoutez, retirez et réorganisez les zones de l'accueil",
-    "leaving_soon": "Bientôt supprimé"
+    "leaving_soon": "Bientôt supprimé",
+    "empty": {
+      "title": "Vos bibliothèques apparaissent ici",
+      "admin_hint": "Fliks liste ce qu'il trouve dans vos dossiers multimédias.",
+      "admin_tv_hint": "Terminez la configuration depuis un navigateur à l'adresse {{address}}",
+      "member_hint": "Aucune bibliothèque n'est partagée avec vous pour l'instant.",
+      "add_library": "Ajouter une bibliothèque"
+    }
   },
   "playback_settings": {
     "cast_hdr": "HDR",
@@ -1061,8 +1068,6 @@
     "status_deleted": "Supprimé"
   },
   "library": {
-    "empty": "Aucun média dans cette bibliothèque",
-    "empty_hint": "Les films et séries ajoutés apparaissent ici",
     "filter_monitored": "Surveillés",
     "filter_unmonitored": "Non surveillés",
     "filter_downloaded": "Téléchargés",
@@ -1100,7 +1105,13 @@
     "collections_count_other": "{{count}} collections",
     "collections_empty": "Aucune collection TMDB trouvée dans cette bibliothèque",
     "collection": "Collection",
-    "clear_collection": "Effacer le filtre collection"
+    "clear_collection": "Effacer le filtre collection",
+    "no_match": "Rien ne correspond à « {{query}} »",
+    "no_match_filters": "Rien ne correspond à ces filtres",
+    "clear_filters": "Effacer les filtres",
+    "empty_title": "Rien ici pour l'instant",
+    "import_existing": "Importer les fichiers existants",
+    "library_settings": "Réglages de la bibliothèque"
   },
   "series": {
     "title": "Séries TV"
@@ -2215,7 +2226,7 @@
     "remove_from_device": "Retirer de cet appareil"
   },
   "setup_checklist": {
-    "title": "Configuration",
+    "title": "Configurer Fliks",
     "configure": "Configurer",
     "dismiss": "Masquer",
     "undismiss": "Réactiver",
@@ -2224,8 +2235,8 @@
     "status_recommended": "Recommandé",
     "items": {
       "library": {
-        "label": "Ajouter au moins une bibliothèque",
-        "hint": "Indiquez le chemin d'au moins un dossier de films ou de séries pour qu'ils apparaissent dans Fliks."
+        "label": "Ajouter une bibliothèque",
+        "hint": "Des dossiers de films, séries, musique, livres ou BD."
       },
       "quality-profile": {
         "label": "Créer un profil de qualité",
@@ -2235,23 +2246,32 @@
         "label": "Créer un profil de langue",
         "hint": "Détermine les langues audio et de sous-titres préférées pour les releases téléchargées."
       },
+      "download-provider": {
+        "label": "Ajouter un fournisseur de téléchargement",
+        "hint": "Un fournisseur de téléchargement permet à Fliks de récupérer ce que les gens demandent."
+      },
       "subtitle-provider": {
         "label": "Activer un fournisseur de sous-titres",
-        "hint": "Active la recherche automatique de sous-titres (OpenSubtitles, Subdl…)."
+        "hint": "Les sous-titres sont cherchés automatiquement dès qu'un fournisseur est activé."
       },
       "notification": {
         "label": "Configurer les notifications",
-        "hint": "Recevez les évènements (téléchargements, erreurs…) sur Discord, Telegram ou autre."
+        "hint": "Les demandes, imports et erreurs arrivent sur Discord, Telegram et d'autres."
       },
       "non-admin-user": {
         "label": "Créer un utilisateur non-administrateur",
-        "hint": "Donnez accès à Fliks à vos proches sans leur accorder les droits admin."
+        "hint": "La famille et les amis se connectent sans droits d'administration."
       },
       "auto-approval-rule": {
         "label": "Configurer une règle d'approbation automatique",
-        "hint": "Les demandes correspondant à la règle sont approuvées sans intervention manuelle."
+        "hint": "Les demandes qui correspondent à une règle sont approuvées sans validation."
+      },
+      "data-import": {
+        "label": "Importer votre historique et vos demandes",
+        "hint": "Importez l'historique de lecture d'un serveur multimédia et les demandes d'une application de demandes."
       }
-    }
+    },
+    "progress": "{{done}} sur {{total}}"
   },
   "settings": {
     "nav": {
@@ -3954,7 +3974,8 @@
       "sweep_interval": "Intervalle de recherche (minutes)",
       "sweep_interval_hint": "Fréquence de recherche des titres manquants ou améliorables (par défaut : 360 = 6 h).",
       "load_error": "Impossible de charger les réglages.",
-      "saved": "Réglages enregistrés."
+      "saved": "Réglages enregistrés.",
+      "providers_empty_link": "Ouvrir le catalogue de plugins"
     },
     "lyrics": {
       "title": "Paroles",

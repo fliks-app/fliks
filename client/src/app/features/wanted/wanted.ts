@@ -7,6 +7,7 @@ import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { WantsApiService, type WantedRow } from '../../core/services/api/wants-api.service';
 import { localizeLanguage } from '../../core/utils/language.utils';
+import { LoadFailedComponent } from '../../shared/components/load-failed/load-failed';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
 const PAGE = 25;
@@ -14,7 +15,7 @@ const PAGE = 25;
 /** What the library still wants: each unsatisfied want of a monitored title, of any kind. */
 @Component({
   selector: 'app-wanted',
-  imports: [RouterLink, TranslatePipe, LocaleDatePipe, ResolveUrlPipe, CachedSrcDirective],
+  imports: [RouterLink, LoadFailedComponent, TranslatePipe, LocaleDatePipe, ResolveUrlPipe, CachedSrcDirective],
   templateUrl: './wanted.html',
 })
 export class WantedComponent {
@@ -61,6 +62,10 @@ export class WantedComponent {
     void this.load(true);
   }
 
+  protected retry() {
+    void this.load(false);
+  }
+
   private async load(append: boolean) {
     const gen = ++this.generation;
     this.loading.set(true);
@@ -72,13 +77,13 @@ export class WantedComponent {
     if (kind) params['type'] = kind;
     if (released !== null) params['released'] = String(released);
     try {
-      const answer = await this.api.wanted(params);
+      const answer = await this.api.wanted(params, !append);
       if (gen !== this.generation) return;
       this.page = page;
       this.rows.update((r) => (append ? [...r, ...answer.data] : answer.data));
       this.total.set(answer.total);
     } catch {
-      if (gen === this.generation) this.failed.set(true);
+      if (gen === this.generation && !append) this.failed.set(true);
     } finally {
       if (gen === this.generation) this.loading.set(false);
     }

@@ -2,7 +2,7 @@
   <input type="search" class="input input-bordered input-sm w-full max-w-sm" [placeholder]="'common.search' | translate" [attr.aria-label]="'common.search' | translate" [ngModel]="query()" (ngModelChange)="query.set($event)" />
   @if (!list.rows().length) {
     @if (list.loading()) {
-      <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
+      <app-row-skeleton />
     } @else {
       <p class="text-center py-12 text-base-content/60">{{ (role() === 'artist' ? 'music.no_artists' : 'music.no_composers') | translate }}</p>
     }

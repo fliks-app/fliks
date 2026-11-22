@@ -26,6 +26,7 @@ import {
   LucideListMusic,
   LucideGuitar,
   LucidePiano,
+  LucideSearch,
 } from '@lucide/angular';
 
 /** Renders a Lucide icon by name from a curated list, falling back to LucideLibrary. */
@@ -36,7 +37,7 @@ import {
     LucideBook, LucideGamepad2, LucideMusic, LucideHeart,
     LucideStar, LucideGlobe, LucideMonitor, LucidePopcorn,
     LucideClapperboard, LucideUsers, LucideFolder, LucideSwords,
-    LucideBookOpen, LucideBookMarked, LucideLibraryBig, LucideBookHeadphones, LucideBookAudio, LucideHeadphones, LucideDisc3, LucideListMusic, LucideGuitar, LucidePiano,
+    LucideBookOpen, LucideBookMarked, LucideLibraryBig, LucideBookHeadphones, LucideBookAudio, LucideHeadphones, LucideDisc3, LucideListMusic, LucideGuitar, LucidePiano, LucideSearch,
   ],
   templateUrl: './lucide-icon.html',
   styles: [`:host { display: inline-flex; } svg { width: 100%; height: 100%; }`],

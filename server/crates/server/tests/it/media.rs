@@ -25,7 +25,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         INSERT INTO libraries (id, name) VALUES (1, 'L1'), (2, 'L2');
 INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m/one'), (2, '/m/two');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2);
-        INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
+        INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items;
         INSERT INTO media (id, title, "originalTitle", overview, year, type, "libraryId", "folderName") VALUES
           (1, 'Alpha Alpha', NULL, NULL, 2000, 'movie', 1, 'a'),
           (2, 'Beta', 'Alpha', NULL, 2000, 'movie', 1, 'b'),

@@ -148,7 +148,7 @@ async fn ctx_with_key(pool: PgPool, tmdb_key: bool) -> Ctx {
     .execute(&pool)
     .await
     .unwrap();
-    sqlx::query("INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'HD', 1, '[]')")
+    sqlx::query("INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'HD', 1, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items")
         .execute(&pool)
         .await
         .unwrap();
@@ -413,7 +413,7 @@ async fn a_video_request_needs_a_quality_profile(pool: PgPool) {
         assert_eq!(s, 400, "{r}");
         assert_eq!(r["message"], json!(["A quality profile is required"]));
     }
-    q(&c.pool(), "INSERT INTO quality_profiles (id, name, family, cutoff, items) VALUES (3, 'T', 'text', 1, '[]')").await;
+    q(&c.pool(), "INSERT INTO quality_profiles (id, name, family, cutoff, items) VALUES (3, 'T', 'text', 1, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items").await;
     let mut body = movie(10);
     body["qualityProfileId"] = json!(3);
     let (s, r) = call(&c, "POST", "/api/requests", &c.user, body).await;
@@ -692,7 +692,7 @@ async fn duplicates_series_seasons_and_profile_lock(pool: PgPool) {
     let c = ctx(pool).await;
     q(
         &c.pool(),
-        "INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (2, 'SD', 1, '[]')",
+        "INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (2, 'SD', 1, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items",
     )
     .await;
     let mut first = series(60, json!([1, 2]));
