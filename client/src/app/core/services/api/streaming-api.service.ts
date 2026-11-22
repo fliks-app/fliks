@@ -579,16 +579,6 @@ export class StreamingApiService {
     return res.ranges ?? [];
   }
 
-  /** URL for stopping one session (used with fetch(keepalive) on unload). */
-  getStopSessionUrl(sessionId: string): string {
-    const path = `/api/stream/sessions/${encodeURIComponent(sessionId)}`;
-    const base = this.serverConfig.isNative
-      ? this.serverConfig.resolveUrl(path)
-      : path;
-    const token = this.playbackToken;
-    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
-  }
-
   postQoeEvents(sessionId: string, events: QoeEvent[], playbackId?: string) {
     return firstValueFrom(
       this.http.post<void>(`/api/playback/sessions/${encodeURIComponent(sessionId)}/events`, { events, playbackId, sentAt: Date.now() }),

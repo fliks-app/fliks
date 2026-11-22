@@ -136,6 +136,18 @@ describe('WebOsEngine load failures', () => {
       vi.useRealTimers();
     }
   });
+
+  it('settles a pending load as cancelled on unload, with no second attempt and no listener left', async () => {
+    const removed: string[] = [];
+    const v = { ...loading(), removeEventListener: (e: string) => removed.push(e) };
+    const engine = new WebOsEngine();
+    (engine as unknown as { video: unknown }).video = v;
+    const pending = engine.load('/api/stream/1/direct', 0).then(() => null, (err) => err);
+    await engine.unload();
+    expect(await pending).toMatchObject({ name: 'WebOsLoadCancelled' });
+    expect(v.load).toHaveBeenCalledTimes(1);
+    expect(removed).toEqual(expect.arrayContaining(['loadedmetadata', 'error']));
+  });
 });
 
 describe('WebOsEngine audio tracks', () => {
