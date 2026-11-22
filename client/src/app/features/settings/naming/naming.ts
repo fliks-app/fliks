@@ -1,3 +1,4 @@
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import {
   Component,
   signal,
@@ -100,7 +101,7 @@ type AlbumField = 'artistFolder' | 'albumFolder' | 'track' | 'multiDiscTrack';
 
 @Component({
   selector: 'app-naming-settings',
-  imports: [FormsModule, TranslatePipe],
+  imports: [LoadFailedComponent, FormsModule, TranslatePipe],
   templateUrl: './naming.html',
 })
 export class NamingSettingsComponent implements OnInit {
@@ -110,7 +111,7 @@ export class NamingSettingsComponent implements OnInit {
 
   readonly loading = signal(true);
   readonly saving = signal(false);
-  readonly error = signal('');
+  readonly loadFailed = signal(false);
 
   readonly movieFormat = signal('{Movie Title} ({Release Year}) {Quality Full}');
   readonly seriesFolderFormat = signal('{Series Title}');
@@ -185,9 +186,15 @@ export class NamingSettingsComponent implements OnInit {
     '{MediaInfo VideoCodec}', '{Release Group}', '{Air Date}',
   ];
 
-  async ngOnInit() {
+  ngOnInit(): void {
+    void this.load();
+  }
+
+  async load(): Promise<void> {
+    this.loading.set(true);
+    this.loadFailed.set(false);
     try {
-      const map = await this.api.getAll();
+      const map = await this.api.getAll(true);
       if (map['naming_movie_format']) this.movieFormat.set(map['naming_movie_format']);
       if (map['naming_series_folder_format']) this.seriesFolderFormat.set(map['naming_series_folder_format']);
       if (map['naming_season_folder_format']) this.seasonFolderFormat.set(map['naming_season_folder_format']);
@@ -204,7 +211,7 @@ export class NamingSettingsComponent implements OnInit {
         if (map[key]) this.albumFormats[field as AlbumField].set(map[key]);
       }
     } catch {
-      this.error.set(this.translate.instant('settings.naming.load_error'));
+      this.loadFailed.set(true);
     } finally {
       this.loading.set(false);
     }
@@ -227,7 +234,6 @@ export class NamingSettingsComponent implements OnInit {
 
   async save() {
     this.saving.set(true);
-    this.error.set('');
     try {
       await this.api.setBulk({
         naming_movie_format: this.movieFormat(),

@@ -1,3 +1,4 @@
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -31,7 +32,7 @@ export type UnrequestedTracks = 'import_unmonitored' | 'skip';
 @Component({
   selector: 'app-acquisition-settings',
   imports: [
-    TranslatePipe,
+    LoadFailedComponent, TranslatePipe,
     FormsModule,
     CdkDropList,
     DropListSettleDirective,
@@ -52,6 +53,7 @@ export class AcquisitionSettingsComponent implements OnInit {
   readonly tv = inject(TvService);
 
   readonly loading = signal(true);
+  readonly loadFailed = signal(false);
   readonly saving = signal(false);
   readonly interval = signal('360');
   readonly unrequested = signal<UnrequestedTracks>('import_unmonitored');
@@ -64,14 +66,20 @@ export class AcquisitionSettingsComponent implements OnInit {
     return ranked(ids, this.order()).map((id) => ({ id, name: names.get(id)! }));
   });
 
-  async ngOnInit() {
+  ngOnInit(): void {
+    void this.load();
+  }
+
+  async load(): Promise<void> {
+    this.loading.set(true);
+    this.loadFailed.set(false);
     try {
-      const map = await this.api.getAll();
+      const map = await this.api.getAll(true);
       this.order.set(listOf(map[KEYS.order]));
       this.interval.set(map[KEYS.interval] ?? '360');
       this.unrequested.set(map[KEYS.unrequested] === 'skip' ? 'skip' : 'import_unmonitored');
     } catch {
-      this.toast.error(this.translate.instant('settings.acquisition.load_error'));
+      this.loadFailed.set(true);
     } finally {
       this.loading.set(false);
     }

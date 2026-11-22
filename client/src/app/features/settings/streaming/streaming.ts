@@ -1,3 +1,4 @@
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import { RouterLink } from '@angular/router';
 import { Component, computed, inject, signal, OnInit } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
@@ -13,7 +14,7 @@ import { ToastService } from '../../../core/services/toast.service';
 
 @Component({
   selector: 'app-streaming-settings',
-  imports: [TvSelectDirective, FormsModule, RouterLink, TranslatePipe, ToggleFieldComponent],
+  imports: [LoadFailedComponent, TvSelectDirective, FormsModule, RouterLink, TranslatePipe, ToggleFieldComponent],
   templateUrl: './streaming.html',
 })
 export class StreamingSettingsComponent implements OnInit {
@@ -27,6 +28,7 @@ export class StreamingSettingsComponent implements OnInit {
   protected readonly optimize = computed(() => this.versions.supports(SERVER_SINCE.optimize));
 
   readonly loading = signal(true);
+  readonly loadFailed = signal(false);
   readonly saving = signal(false);
 
   readonly cacheBytes = signal(0);
@@ -73,10 +75,16 @@ export class StreamingSettingsComponent implements OnInit {
   /** The device-picker row shows only with more than one GPU. */
   readonly gpus = signal<{ renderNode: string; label: string; kind: string; accel: string }[]>([]);
 
-  async ngOnInit() {
+  ngOnInit(): void {
+    void this.load();
+  }
+
+  async load(): Promise<void> {
+    this.loading.set(true);
+    this.loadFailed.set(false);
     try {
       const [all, algos, gpusResp, effective] = await Promise.all([
-        this.api.getAll(),
+        this.api.getAll(true),
         this.streamingApi.getTonemapAlgos().catch(() => ({ available: ['auto'] })),
         this.streamingApi.getGpus().catch(() => ({ gpus: [], defaultNode: '' })),
         this.streamingApi.getEffectiveSettings().catch(() => null),
@@ -109,8 +117,11 @@ export class StreamingSettingsComponent implements OnInit {
         this.ffmpegSlotsAuto.set(effective.ffmpegSlotsAuto);
         this.throttleAvailable.set(effective.pauseCapability !== 'none');
       }
-    } catch { /* interceptor */ }
-    this.loading.set(false);
+    } catch {
+      this.loadFailed.set(true);
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   async save() {

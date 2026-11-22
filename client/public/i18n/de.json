@@ -1618,6 +1618,8 @@
     "empty": "Nichts anzuzeigen"
   },
   "calendar": {
+    "prev_month": "Vorheriger Monat",
+    "next_month": "Nächster Monat",
     "title": "Kalender",
     "load_error": "Der Kalender konnte nicht geladen werden.",
     "empty": "Keine Veröffentlichung in diesem Monat.",
@@ -2351,6 +2353,7 @@
       "test_probe_failed": "Sonde fehlgeschlagen: {{error}}"
     },
     "streaming": {
+      "load_error": "Die Einstellungen konnten nicht geladen werden.",
       "title": "Streaming",
       "description": "Konfiguration von Format und Größe der HLS-Segmente. Beeinflusst die Startgeschwindigkeit und den Qualitätswechsel.",
       "auto_quality_mode": "Verhalten der Qualität „Auto“",

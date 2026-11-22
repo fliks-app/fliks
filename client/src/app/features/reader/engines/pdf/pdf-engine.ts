@@ -145,7 +145,7 @@ export class PdfEngineComponent implements ReaderEngine, OnDestroy {
           }),
         { root, rootMargin: RENDER_MARGIN },
       );
-      const resumeAt = pdfPageOf(saved?.locator, doc.numPages);
+      const resumeAt = pdfPageOf(saved?.locator, doc.numPages, saved?.progression);
       this.page.set(resumeAt);
       this.pages.set(Array.from({ length: doc.numPages }, (_, i) => i + 1));
       this.loading.set(false);

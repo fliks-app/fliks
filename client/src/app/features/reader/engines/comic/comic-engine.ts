@@ -138,7 +138,8 @@ export class ComicEngineComponent implements ReaderEngine, OnDestroy {
       if (!this.ready() || this.webtoon() || !view.w) return;
       untracked(() => {
         this.resetZoom();
-        this.report(reportedPage(spreads[at] ?? [1]));
+        if (this.opened) this.report(reportedPage(spreads[at] ?? [1]));
+        this.opened = true;
         this.preload(spreads, at);
       });
     });
@@ -157,13 +158,16 @@ export class ComicEngineComponent implements ReaderEngine, OnDestroy {
     if (el) this.view.set({ w: el.clientWidth, h: el.clientHeight });
   }
 
+  /** The first screen after open restores the saved position: nothing to report until the reader moves. */
+  private opened = false;
+
   private async open(): Promise<void> {
     const t = this.target();
     this.prefs.set(this.settings.comicPrefs(t.mediaId));
     const [saved] = await Promise.all([this.readerApi.loadProgress(t).catch(() => null), this.api.prepare(t.fileId).catch(() => undefined)]);
     if (this.destroyed) return;
     this.measure();
-    const at = pdfPageOf(saved?.locator, this.total());
+    const at = pdfPageOf(saved?.locator, this.total(), saved?.progression);
     this.page.set(at);
     this.index.set(spreadIndexOf(this.spreads(), at));
     this.ready.set(true);

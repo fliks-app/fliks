@@ -1,3 +1,4 @@
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import {
   Component,
   signal,
@@ -18,7 +19,7 @@ import {
 
 @Component({
   selector: 'app-general-settings',
-  imports: [TvSelectDirective, FormsModule, TranslatePipe, SetupChecklistComponent],
+  imports: [LoadFailedComponent, TvSelectDirective, FormsModule, TranslatePipe, SetupChecklistComponent],
   templateUrl: './general.html',
 })
 export class GeneralSettingsComponent implements OnInit {
@@ -27,7 +28,7 @@ export class GeneralSettingsComponent implements OnInit {
   private readonly toast = inject(ToastService);
 
   readonly loading = signal(true);
-  readonly error = signal('');
+  readonly loadFailed = signal(false);
 
   // Server
   readonly serverName = signal('');
@@ -52,9 +53,15 @@ export class GeneralSettingsComponent implements OnInit {
   readonly koboStoreProxy = signal('false');
   readonly savingKobo = signal(false);
 
-  async ngOnInit() {
+  ngOnInit(): void {
+    void this.load();
+  }
+
+  async load(): Promise<void> {
+    this.loading.set(true);
+    this.loadFailed.set(false);
     try {
-      const map = await this.api.getAll();
+      const map = await this.api.getAll(true);
       this.serverName.set(map['server_name'] ?? '');
       this.publicUrl.set(map['public_url'] ?? '');
       this.usersPublicMode.set(map['users_public_mode'] ?? 'everyone');
@@ -68,7 +75,7 @@ export class GeneralSettingsComponent implements OnInit {
         '.nfo,.srt,.ass,.ssa,.sub,.idx,.vtt,.sup,.txt,.jpg,.jpeg,.png,.tbn,.nfo-orig,.edl',
       );
     } catch {
-      this.error.set(this.translate.instant('settings.general.load_error'));
+      this.loadFailed.set(true);
     } finally {
       this.loading.set(false);
     }

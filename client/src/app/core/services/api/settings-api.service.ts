@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
+import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { firstValueFrom } from 'rxjs';
 import { SECRETS_SET_KEY } from '@fliks/plugin-ui';
 
@@ -18,8 +19,13 @@ export function settingsSecretsSet(all: Record<string, unknown>): string[] {
 export class SettingsApiService {
   private readonly http = inject(HttpClient);
 
-  getAll() {
-    return firstValueFrom(this.http.get<Record<string, string | null>>('/api/settings'));
+  /** `quiet` suppresses the error toast for a caller that renders its own failed state. */
+  getAll(quiet = false) {
+    return firstValueFrom(
+      this.http.get<Record<string, string | null>>('/api/settings', {
+        context: new HttpContext().set(SKIP_ERROR_TOAST, quiet),
+      }),
+    );
   }
 
   get(key: string) {

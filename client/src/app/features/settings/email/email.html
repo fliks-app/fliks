@@ -1,5 +1,7 @@
 @if (loading()) {
   <div class="flex justify-center py-16"><span class="loading loading-spinner loading-lg"></span></div>
+} @else if (loadFailed()) {
+  <app-load-failed [message]="'settings.email.load_error' | translate" (retry)="load()" />
 } @else {
   <div class="max-w-2xl flex flex-col gap-6">
     <div>
