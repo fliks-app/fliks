@@ -644,7 +644,7 @@ async fn a_stale_person_is_refreshed_with_its_avatar(pool: PgPool) {
     c.stub
         .ok("person/5", tmdb_person("New Name", Some("/face.jpg")));
     let src = crate::fakes::jpeg();
-    c.img.put("/t/p/original/face.jpg", src.clone());
+    c.img.put("/t/p/h632/face.jpg", src.clone());
     let (s, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
     assert_eq!(s, 200);
     let p = &d["person"];
@@ -736,7 +736,7 @@ async fn a_musicbrainz_artist_is_read_from_its_provider_and_filled_from_the_next
         &format!("person/{MBID}"),
         json!({"biography": "from fanart", "avatarUrl": "http://image.tmdb.org/t/p/w500/f.jpg"}),
     );
-    c.img.put("/t/p/original/f.jpg", crate::fakes::jpeg());
+    c.img.put("/t/p/h632/f.jpg", crate::fakes::jpeg());
     let (s, d) = call(&c, "/api/persons/1", Some(&c.reader)).await;
     let p = &d["person"];
     assert_eq!(
