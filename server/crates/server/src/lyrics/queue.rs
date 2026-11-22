@@ -50,7 +50,29 @@ pub fn enqueue(st: &AppState, items: impl IntoIterator<Item = i32>) {
     }
 }
 
+/// A panic in `providers::fetch` would leak the worker slot and leave the track `queued`.
+struct FreeOnPanic<'a> {
+    queue: &'a Queue,
+    item: Option<i32>,
+}
+
+impl Drop for FreeOnPanic<'_> {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            let mut g = self.queue.0.lock().unwrap_or_else(|e| e.into_inner());
+            g.workers -= 1;
+            if let Some(i) = self.item {
+                g.queued.remove(&i);
+            }
+        }
+    }
+}
+
 async fn work(st: AppState) {
+    let mut slot = FreeOnPanic {
+        queue: &st.lyrics,
+        item: None,
+    };
     loop {
         let next = {
             let mut g = st.lyrics.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -61,6 +83,7 @@ async fn work(st: AppState) {
             next
         };
         let Some(item) = next else { return };
+        slot.item = Some(item);
         if let Err(e) = providers::fetch(&st, item, false, Priority::Background).await {
             tracing::warn!("lyrics of track #{item} not fetched: {e}");
         }
@@ -70,6 +93,7 @@ async fn work(st: AppState) {
             .unwrap_or_else(|e| e.into_inner())
             .queued
             .remove(&item);
+        slot.item = None;
     }
 }
 

@@ -58,7 +58,9 @@ impl AppError {
         Self::with_message(StatusCode::PAYLOAD_TOO_LARGE, message)
     }
     pub fn internal(message: impl Into<Value>) -> Self {
-        Self::with_message(StatusCode::INTERNAL_SERVER_ERROR, message)
+        let e = Self::with_message(StatusCode::INTERNAL_SERVER_ERROR, message);
+        tracing::error!(error = %e.text(), "internal error");
+        e
     }
 }
 

@@ -9,6 +9,7 @@ use axum::http::{Method, StatusCode};
 use axum::middleware::{Next, from_fn, from_fn_with_state};
 use axum::response::{IntoResponse, Response};
 use sha1::{Digest, Sha1};
+use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::compression::CompressionLayer;
 use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 use tower_http::cors::{AllowHeaders, AllowOrigin, CorsLayer};
@@ -105,6 +106,11 @@ async fn json_etag(req: Request, next: Next) -> Response {
     Response::from_parts(parts, Body::from(bytes))
 }
 
+/// The panic itself is logged by `system::logs::log_panics`; the client gets the generic 500.
+fn panic_response(_: Box<dyn std::any::Any + Send>) -> Response {
+    AppError::plain(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
+}
+
 /// A path whose handler reads and bounds its own body.
 pub type Exempt = fn(&str) -> bool;
 
@@ -191,6 +197,7 @@ pub fn apply(
         .and(NotForContentType::const_new("application/zip"))
         .and(NotForContentType::const_new("application/epub"));
     router
+        .layer(CatchPanicLayer::custom(panic_response))
         .layer(from_fn_with_state((body_limit_bytes, exempt), body_limit))
         .layer(from_fn(json_etag))
         .layer(from_fn(no_store_on_error))
@@ -208,11 +215,17 @@ mod tests {
     use axum::http::Request;
     use axum::routing::{get, post};
     use tower::ServiceExt;
+    use tracing_subscriber::prelude::*;
+
+    async fn boom() -> &'static str {
+        panic!("boom-route-test")
+    }
 
     fn app(cors: Option<&str>) -> Router {
         let r = Router::new()
             .route("/ok", get(|| async { "ok" }))
             .route("/err", get(|| async { StatusCode::NOT_FOUND }))
+            .route("/panic", get(boom))
             .route("/list", get(|| async { axum::Json(vec!["title"; 64]) }))
             .route(
                 "/video",
@@ -257,6 +270,27 @@ mod tests {
         assert_eq!(
             err.headers()[CACHE_CONTROL],
             "no-store, no-cache, must-revalidate"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_panicking_handler_answers_the_generic_500_and_is_logged() {
+        crate::system::logs::log_panics();
+        let sub = tracing_subscriber::registry().with(crate::system::logs::RingLayer);
+        let _guard = tracing::subscriber::set_default(sub);
+        let res = app(None)
+            .oneshot(Request::get("/panic").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+            serde_json::json!({"statusCode": 500, "message": "Internal server error"})
+        );
+        assert_eq!(
+            crate::system::logs::query("error", "boom-route-test", None).len(),
+            1
         );
     }
 

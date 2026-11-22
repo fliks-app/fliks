@@ -32,9 +32,14 @@ async fn run() -> ExitCode {
                 .with_default_directive(tracing::Level::INFO.into())
                 .from_env_lossy(),
         )
-        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr())),
+        )
         .with(fliks_server::system::logs::RingLayer)
         .init();
+    fliks_server::system::logs::log_panics();
     let cfg = Config::from_env();
     let result = match std::env::args().nth(1).as_deref() {
         None => fliks_server::serve(cfg).await,

@@ -185,6 +185,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     })
     .await;
     qoe.flush_all().await;
+    push::flush_pending(&state).await;
     state.plugins.shutdown().await;
     // Non-zero so the parent supervisor (or `Restart=on-failure`) starts us again.
     if system.restarting() {

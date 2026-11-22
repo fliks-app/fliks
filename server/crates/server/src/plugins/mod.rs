@@ -516,7 +516,9 @@ impl Plugins {
                             me.domain_event(&st2, ev);
                         }
                     }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!("plugin event feed lagged {n} events");
+                    }
                     Err(_) => return,
                 }
             }

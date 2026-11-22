@@ -68,9 +68,9 @@ Client use: status page, restart, backups page, download link (an `<a href targe
 
 ### F. Logs
 
-26. Ring buffer: capacity 2 000 entries `{timestamp: ISO-8601 ms Z at push, level, context, message}`, oldest dropped first; `level` in `log|warn|error|debug`; `error(message, trace, context)` stores `message + "\n" + trace` when a trace is given. Memory only, lost on restart.
+26. Ring buffer: capacity 2 000 entries, split by level (error 500, warn 500, log 750, debug 250), so a flood of one level never evicts another `{timestamp: ISO-8601 ms Z at push, level, context, message}`, oldest of the same level dropped first; `level` in `log|warn|error|debug`; `error(message, trace, context)` stores `message + "\n" + trace` when a trace is given. Memory only, lost on restart.
 27. `GET /logs`: copy the buffer, filter `level` (exact, case-sensitive; an unknown value → `[]`; empty string = no filter), filter `q` (lower-cased substring of `message` or `context`; empty = none), reverse (newest first), then cut to `limit`: absent or empty → 200; else `parseInt(limit, 10)` (leading whitespace and sign, digit prefix); a result that is NaN, 0 or negative means no cut (up to 2 000). A `limit` that is not a canonical integer → 400 (shared with `scheduler.md` rule 20); `0` and negative integers keep "no cut".
-28. Feed, `tracing`: a subscriber layer of `fliks-server` pushes every event at ERROR/WARN/INFO/DEBUG (`error`/`warn`/`log`/`debug`; TRACE is dropped) with `context` = the event target without the `fliks_server::` prefix and `message` = the `message` field followed by ` key=value` for each other field. Debug events exist only when `RUST_LOG` enables them (default INFO). The layer is installed beside the stderr writer of `main.rs`, which keeps printing.
+28. Feed, `tracing`: a subscriber layer of `fliks-server` pushes every event at ERROR/WARN/INFO/DEBUG (`error`/`warn`/`log`/`debug`; TRACE is dropped) with `context` = the event target without the `fliks_server::` prefix and `message` = the `message` field followed by ` key=value` for each other field. Debug events exist only when `RUST_LOG` enables them (default INFO). The layer is installed beside the stderr writer of `main.rs`, which keeps printing (ANSI colours only on a terminal). A panic hook logs every panic at ERROR (`panic: <text>`, thread and location), and a panic in a handler answers 500 `{statusCode: 500, message: "Internal server error"}`; `AppError::internal` logs its message at ERROR.
 29. Output of child processes (plugins) is not in the ring; it goes to the container's stdout/stderr, inherited through `fliks_engine::supervise`.
 30. Hygiene: the ring is readable with `settings.access` and mirrored on stderr, so no entry may carry a credential. HTTP trace events log the method and path only, never the query string (stream tokens and API keys travel there); an error from `reqwest` is logged with its URL removed (`reqwest::Error::without_url`); the `Authorization`, cookie and `PGPASSWORD` values are never fields.
 
@@ -104,7 +104,7 @@ None in the `settings` table. Environment (`config.md`): `DB_HOST`, `DB_PORT`, `
 ## Jobs/timers
 
 - Backup 02:00 and the retention prune: `scheduler.md` rules 22, 26 (the file operations of this spec).
-- Update-check cache TTL 6 h (in memory, lost on restart); restart delay 300 ms; log ring 2 000 entries. No other timer.
+- Update-check cache TTL 6 h (in memory, lost on restart); restart delay 300 ms; log ring 2 000 entries (per-level budgets, rule 26). No other timer.
 
 ## Vectors/parity
 
