@@ -5741,6 +5741,41 @@ mod music_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_tagged_various_artists_album_is_a_compilation_even_with_one_track_artist(
+        pool: PgPool,
+    ) {
+        let c = ctx_music(pool, None).await;
+        let l = album_lib(&c).await;
+        let m = album(&c, l, "Mix").await;
+        let by = |t: &str, n: u32| {
+            track(
+                t,
+                n,
+                1,
+                json!({"artist": "Ana", "albumArtist": "Various Artists", "lyrics": null}),
+            )
+        };
+        c.fake
+            .script("POST", "/v1/probe", vec![by("One", 1), by("Two", 2)]);
+        music::register(&c.st, m, &place(&c, &["Mix/1.flac", "Mix/2.flac"]))
+            .await
+            .unwrap();
+        let (compilation, names): (bool, Vec<String>) = sqlx::query_as(
+            r#"SELECT ad."isCompilation", COALESCE(array_agg(p.name) FILTER (WHERE p.name IS NOT NULL), '{}')
+               FROM album_details ad LEFT JOIN media_credits mc ON mc."mediaId" = ad."mediaId" AND mc.role = 'artist'
+               LEFT JOIN persons p ON p.id = mc."personId" WHERE ad."mediaId" = $1 GROUP BY ad."isCompilation""#,
+        )
+        .bind(m)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        assert_eq!(
+            (compilation, names),
+            (true, vec!["Various Artists".to_owned()])
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_missing_release_group_a_shrunk_tracklist_and_a_merged_id_never_delete(pool: PgPool) {
         let f = provider();
         let c = ctx_music(pool, Some(f.clone())).await;
@@ -6310,6 +6345,22 @@ mod music_ingest {
                 .await
                 .unwrap(),
             meta::aliases::Moved::Folded(q)
+        );
+        assert_eq!(
+            count(&c, &format!("SELECT count(*) FROM persons WHERE id = {p}")).await,
+            0,
+            "the folded person is gone"
+        );
+        assert_eq!(
+            count(
+                &c,
+                &format!(
+                    "SELECT count(*) FROM person_external_id_aliases WHERE \"personId\" = {q}"
+                )
+            )
+            .await,
+            1,
+            "its old id is an alias of the survivor"
         );
         // The search finds a person by its sort name.
         sqlx::query(r#"UPDATE persons SET "sortName" = 'Zzyzx, Ana' WHERE id = $1"#)

@@ -58,6 +58,8 @@ pub struct TrackTags {
     pub release_type: Option<String>,
     pub release_status: Option<String>,
     pub compilation: bool,
+    /// The album artist tag names "Various Artists", which is no credit.
+    pub various: bool,
     pub media: Option<String>,
     pub barcode: Option<String>,
     pub catalog: Option<String>,
@@ -134,6 +136,11 @@ impl TrackTags {
         if genres.is_empty() {
             genres.extend(t.genre.clone());
         }
+        let various = t
+            .album_artists
+            .iter()
+            .chain(&t.album_artist)
+            .any(|n| n.eq_ignore_ascii_case("various artists"));
         let composer: Vec<String> = t.composer.iter().cloned().collect();
         let original = t.original_date.clone();
         Self {
@@ -178,6 +185,7 @@ impl TrackTags {
             release_type: t.release_type.clone(),
             release_status: t.release_status.clone(),
             compilation: t.compilation.unwrap_or(false),
+            various,
             media: t.media.clone(),
             barcode: t.barcode.clone(),
             catalog: t.catalog_number.clone(),
@@ -207,13 +215,7 @@ impl TrackTags {
 
     /// The key that tells the albums of a folder at the root apart: the release, else album and artist.
     pub fn album_key(&self) -> Option<String> {
-        self.release.clone().or_else(|| {
-            let album = fliks_domain::music::matcher::normalize(self.album.as_deref()?);
-            Some(format!(
-                "{album}|{}",
-                fliks_domain::music::matcher::normalize(&self.artist_line())
-            ))
-        })
+        AlbumTags::of(std::slice::from_ref(self)).key()
     }
 
     /// The disc of the folder a file sits in, when the tags name none.
@@ -226,6 +228,84 @@ impl TrackTags {
 
     pub fn disc_number(&self) -> i32 {
         self.disc.filter(|d| (1..=999).contains(d)).unwrap_or(1)
+    }
+}
+
+/// What the tags of an album's files say about the album, read by one rule everywhere: the record, the
+/// identification, the grouping at a library root and the settle.
+#[derive(Debug, Clone, Default)]
+pub struct AlbumTags {
+    pub album: Option<String>,
+    pub year: Option<i32>,
+    /// Most frequent first, at most 20.
+    pub genres: Vec<String>,
+    pub release: Option<String>,
+    pub compilation: bool,
+    /// The credited album artists: the tagged ones, else the first track's artists unless a compilation.
+    pub artists: Vec<Named>,
+    /// The artist an identification searches for: none for a compilation.
+    pub artist: String,
+}
+
+impl AlbumTags {
+    pub fn of(tags: &[TrackTags]) -> Self {
+        let tagged = tags.iter().find(|t| !t.album_artists.is_empty());
+        let mut firsts: Vec<String> = tags
+            .iter()
+            .filter_map(|t| Some(t.artists.first()?.name.to_lowercase()))
+            .collect();
+        firsts.sort();
+        firsts.dedup();
+        let compilation = tags.iter().any(|t| t.compilation || t.various)
+            || (tagged.is_none() && firsts.len() > 1);
+        let artists = match tagged {
+            Some(t) => t.album_artists.clone(),
+            None if compilation => vec![],
+            None => tags
+                .iter()
+                .find(|t| !t.artists.is_empty())
+                .map(|t| t.artists.clone())
+                .unwrap_or_default(),
+        };
+        let artist = if compilation {
+            String::new()
+        } else {
+            super::most_common(
+                tags.iter()
+                    .map(TrackTags::artist_line)
+                    .filter(|a| !a.is_empty()),
+            )
+            .unwrap_or_default()
+        };
+        let mut genres: Vec<(String, usize)> = vec![];
+        for g in tags.iter().flat_map(|t| &t.genres) {
+            match genres.iter_mut().find(|(n, _)| n.eq_ignore_ascii_case(g)) {
+                Some((_, n)) => *n += 1,
+                None => genres.push((g.clone(), 1)),
+            }
+        }
+        genres.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+        Self {
+            album: super::most_common(tags.iter().filter_map(|t| t.album.clone())),
+            year: super::most_common(tags.iter().filter_map(|t| t.year)),
+            genres: genres.into_iter().take(20).map(|(g, _)| g).collect(),
+            release: super::most_common(tags.iter().filter_map(|t| t.release.clone())),
+            compilation,
+            artists,
+            artist,
+        }
+    }
+
+    /// The key that tells the albums of a folder at the root apart: the release, else the album and its artist.
+    pub fn key(&self) -> Option<String> {
+        self.release.clone().or_else(|| {
+            let norm = fliks_domain::music::matcher::normalize;
+            Some(format!(
+                "{}|{}",
+                norm(self.album.as_deref()?),
+                norm(&self.artist)
+            ))
+        })
     }
 }
 
@@ -315,5 +395,23 @@ mod tests {
         .unwrap();
         let v = strip_lyrics(&info);
         assert_eq!(v["tags"], serde_json::json!({"title": "T"}));
+    }
+
+    #[test]
+    fn a_compilation_is_searched_by_album_alone_and_grouped_by_album() {
+        let mut various = tags();
+        various.album_artist = Some("Various Artists".into());
+        various.musicbrainz_release_id = None;
+        let a = TrackTags::of(&various, None, &Separators::default(), "x");
+        let mut b = various.clone();
+        b.artists = vec!["Zed".into()];
+        let b = TrackTags::of(&b, None, &Separators::default(), "y");
+        let album = AlbumTags::of(&[a.clone(), b.clone()]);
+        assert!(album.compilation && album.artist.is_empty() && album.artists.is_empty());
+        assert_eq!(a.album_key(), b.album_key());
+        let plain = TrackTags::of(&tags(), None, &Separators::default(), "x");
+        let album = AlbumTags::of(&[plain]);
+        assert!(!album.compilation);
+        assert_eq!(album.artist, "Ana");
     }
 }

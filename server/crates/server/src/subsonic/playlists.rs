@@ -85,14 +85,13 @@ async fn entries(st: &AppState, c: &Caller, id: i32) -> Result<Vec<Value>, SubEr
 /// `id`, name, owner's username, visibility, created and changed of a `playlists` row.
 type Row = (i32, String, String, String, DateTime<Utc>, DateTime<Utc>);
 
-fn header((id, name, owner, visibility, created, changed): &Row, entries: &[Value]) -> Obj {
-    let duration: i64 = entries.iter().filter_map(|e| e["duration"].as_i64()).sum();
+fn header((id, name, owner, visibility, created, changed): &Row, count: i64, duration: i64) -> Obj {
     let mut o = Obj::new();
     o.insert("id".into(), ids::playlist(*id).into());
     o.insert("name".into(), name.clone().into());
     o.insert("owner".into(), owner.clone().into());
     o.insert("public".into(), (visibility == "public").into());
-    o.insert("songCount".into(), entries.len().into());
+    o.insert("songCount".into(), count.into());
     o.insert("duration".into(), duration.into());
     o.insert("created".into(), catalog::iso(*created).into());
     o.insert("changed".into(), catalog::iso(*changed).into());
@@ -102,6 +101,38 @@ fn header((id, name, owner, visibility, created, changed): &Row, entries: &[Valu
 const ROW: &str = r#"SELECT p.id, p.name, u.username, p.visibility::text, p."createdAt", p."updatedAt"
    FROM playlists p JOIN users u ON u.id = p."ownerId""#;
 
+fn sum(entries: &[Value]) -> (i64, i64) {
+    let duration = entries.iter().filter_map(|e| e["duration"].as_i64()).sum();
+    (entries.len() as i64, duration)
+}
+
+/// Track count and duration of the plain playlists among `ids` in one query; smart ones are absent, as are those with no visible track.
+async fn totals(
+    st: &AppState,
+    c: &Caller,
+    ids: &[i32],
+) -> Result<HashMap<i32, (i64, i64)>, sqlx::Error> {
+    let rows: Vec<(i32, i64, i64)> = sqlx::query_as(
+        r#"SELECT pl.id, count(f.id), COALESCE(sum(round(COALESCE(td."durationMs" / 1000.0,
+             (f."streamInfo"->>'durationSeconds')::numeric, 0))), 0)::bigint
+           FROM playlists pl
+           JOIN playlist_items pi ON pi."playlistId" = pl.id
+           JOIN items i ON i.id = pi."itemId"
+           JOIN editions e ON e.id = i."editionId"
+           JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
+           JOIN track_details td ON td."itemId" = i.id
+           JOIN LATERAL (SELECT mf.id, mf."streamInfo" FROM media_files mf WHERE mf.id = track_file(i.id)) f ON true
+           WHERE pl.id = ANY($1) AND pl.rules IS NULL AND m."libraryId" = ANY($2)
+             AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+           GROUP BY pl.id"#,
+    )
+    .bind(ids)
+    .bind(&c.libraries)
+    .fetch_all(&st.db)
+    .await?;
+    Ok(rows.into_iter().map(|(id, n, d)| (id, (n, d))).collect())
+}
+
 pub async fn list(st: &AppState, c: &Caller) -> Answer {
     let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"{ROW} WHERE p."ownerId" = $1 OR EXISTS (SELECT 1 FROM playlist_shares s WHERE s."playlistId" = p.id AND s."userId" = $1)
@@ -110,9 +141,21 @@ pub async fn list(st: &AppState, c: &Caller) -> Answer {
     .bind(c.user())
     .fetch_all(&st.db)
     .await?;
+    let ids: Vec<i32> = rows.iter().map(|r| r.0).collect();
+    let mut totals = totals(st, c, &ids).await?;
+    let smart: Vec<i32> =
+        sqlx::query_scalar("SELECT id FROM playlists WHERE id = ANY($1) AND rules IS NOT NULL")
+            .bind(&ids)
+            .fetch_all(&st.db)
+            .await?;
     let mut out = vec![];
     for row in &rows {
-        out.push(Value::Object(header(row, &entries(st, c, row.0).await?)));
+        let (count, duration) = if smart.contains(&row.0) {
+            sum(&entries(st, c, row.0).await?)
+        } else {
+            totals.remove(&row.0).unwrap_or((0, 0))
+        };
+        out.push(Value::Object(header(row, count, duration)));
     }
     one("playlists", json!({"playlist": out}))
 }
@@ -124,7 +167,8 @@ async fn full(st: &AppState, c: &Caller, id: i32, min: Role) -> Result<Obj, SubE
         .fetch_one(&st.db)
         .await?;
     let e = entries(st, c, id).await?;
-    let mut o = header(&row, &e);
+    let (count, duration) = sum(&e);
+    let mut o = header(&row, count, duration);
     o.insert("entry".into(), e.into());
     Ok(o)
 }
@@ -201,14 +245,14 @@ pub async fn create(st: &AppState, c: &Caller, p: &Params) -> Answer {
         if assert_role(&st.db, c.user(), id, min).await?.0.is_smart() {
             return Err(read_only());
         }
-        let held = item_ids(&st.db, id).await?;
+        let mut tx = st.db.begin().await?;
+        lock(&mut tx, id).await?;
+        let held = item_ids(&mut *tx, id).await?;
         let replaced: Vec<i32> = catalog::visible_tracks(&st.db, &c.libraries, &held)
             .await?
             .into_iter()
             .map(|(item, _)| item)
             .collect();
-        let mut tx = st.db.begin().await?;
-        lock(&mut tx, id).await?;
         sqlx::query(r#"DELETE FROM playlist_items WHERE "playlistId" = $1 AND "itemId" = ANY($2)"#)
             .bind(id)
             .bind(&replaced)
@@ -259,8 +303,9 @@ pub async fn update(st: &AppState, c: &Caller, p: &Params) -> Answer {
     if public == Some(true) && c.a.user.share_disabled {
         return Err(SubError::new(50, "Sharing is disabled for this user"));
     }
+    let mut tx = st.db.begin().await?;
+    lock(&mut tx, id).await?;
     let entries = entries(st, c, id).await?;
-    let order = item_ids(&st.db, id).await?;
     let mut remove = vec![];
     for raw in p.all("songIndexToRemove") {
         let at = raw
@@ -273,9 +318,6 @@ pub async fn update(st: &AppState, c: &Caller, p: &Params) -> Answer {
             remove.push(n);
         }
     }
-    debug_assert!(remove.iter().all(|r| order.contains(r)));
-    let mut tx = st.db.begin().await?;
-    lock(&mut tx, id).await?;
     if let Some(name) = p.get("name") {
         sqlx::query("UPDATE playlists SET name = $2 WHERE id = $1")
             .bind(id)

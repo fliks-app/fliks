@@ -71,7 +71,7 @@ pub async fn music_folders(st: &AppState, c: &Caller) -> Answer {
     .await?;
     let folders: Vec<Value> = rows
         .into_iter()
-        .map(|(id, name)| json!({"id": id.to_string(), "name": name}))
+        .map(|(id, name)| json!({"id": id, "name": name}))
         .collect();
     one("musicFolders", json!({"musicFolder": folders}))
 }
@@ -294,7 +294,17 @@ fn year(p: &Params, name: &str) -> Result<i32, SubError> {
     p.int(name).ok_or_else(|| SubError::missing(name))
 }
 
-pub async fn album_list(st: &AppState, c: &Caller, p: &Params) -> Answer {
+/// The albums of a legacy (folder mode) call: each one a directory child of its artist.
+fn legacy_albums(albums: Vec<Value>) -> Vec<Value> {
+    albums
+        .iter()
+        .map(|a| album_as_directory(a, a["artistId"].as_str().unwrap_or_default()))
+        .collect()
+}
+
+/// `getAlbumList2`, or `getAlbumList` (`legacy`) with its albums as directories.
+pub async fn album_list(st: &AppState, c: &Caller, p: &Params, legacy: bool) -> Answer {
+    let key = if legacy { "albumList" } else { "albumList2" };
     let kind = p.required("type")?;
     let mut f = Filter {
         limit: p.count("size", 10, MAX_PAGE),
@@ -312,7 +322,7 @@ pub async fn album_list(st: &AppState, c: &Caller, p: &Params) -> Answer {
             f.played = true;
             AlbumOrder::Recent
         }
-        "highest" => return one("albumList2", json!({"album": []})),
+        "highest" => return one(key, json!({"album": []})),
         "starred" => {
             f.starred = true;
             AlbumOrder::Starred
@@ -341,9 +351,10 @@ pub async fn album_list(st: &AppState, c: &Caller, p: &Params) -> Answer {
         }
     };
     let rows = catalog::albums(&st.db, c.user(), &c.scope(p), &f, order).await?;
+    let albums = catalog::album_values(&st.db, &rows).await?;
     one(
-        "albumList2",
-        json!({"album": catalog::album_values(&st.db, &rows).await?}),
+        key,
+        json!({"album": if legacy { legacy_albums(albums) } else { albums }}),
     )
 }
 
@@ -376,7 +387,13 @@ pub async fn songs_by_genre(st: &AppState, c: &Caller, p: &Params) -> Answer {
     )
 }
 
-pub async fn starred(st: &AppState, c: &Caller, p: &Params) -> Answer {
+/// `getNowPlaying`: scrobble notices are not stored, so nobody is ever playing.
+pub fn now_playing() -> Answer {
+    one("nowPlaying", json!({"entry": []}))
+}
+
+/// `getStarred2`, or `getStarred` (`legacy`) with its albums as directories.
+pub async fn starred(st: &AppState, c: &Caller, p: &Params, legacy: bool) -> Answer {
     let libs = c.scope(p);
     let f = Filter {
         starred: true,
@@ -385,13 +402,15 @@ pub async fn starred(st: &AppState, c: &Caller, p: &Params) -> Answer {
     };
     let albums = catalog::albums(&st.db, c.user(), &libs, &f, AlbumOrder::Starred).await?;
     let songs = catalog::songs(&st.db, c.user(), &libs, &f, SongOrder::Starred).await?;
+    let albums = catalog::album_values(&st.db, &albums).await?;
     one(
-        "starred2",
-        json!({"album": catalog::album_values(&st.db, &albums).await?, "song": catalog::song_values(&st.db, &songs).await?}),
+        if legacy { "starred" } else { "starred2" },
+        json!({"album": if legacy { legacy_albums(albums) } else { albums }, "song": catalog::song_values(&st.db, &songs).await?}),
     )
 }
 
-pub async fn search(st: &AppState, c: &Caller, p: &Params) -> Answer {
+/// `search3`, or `search2` (`legacy`) with its albums as directories.
+pub async fn search(st: &AppState, c: &Caller, p: &Params, legacy: bool) -> Answer {
     let libs = c.scope(p);
     let patterns = catalog::search_patterns(p.get("query").unwrap_or_default());
     let page = |count: &str, offset: &str| Filter {
@@ -424,11 +443,16 @@ pub async fn search(st: &AppState, c: &Caller, p: &Params) -> Answer {
         order,
     )
     .await?;
+    let albums = catalog::album_values(&st.db, &albums).await?;
     one(
-        "searchResult3",
+        if legacy {
+            "searchResult2"
+        } else {
+            "searchResult3"
+        },
         json!({
             "artist": artists.iter().map(|r| Value::Object(catalog::artist(r, &c.base))).collect::<Vec<_>>(),
-            "album": catalog::album_values(&st.db, &albums).await?,
+            "album": if legacy { legacy_albums(albums) } else { albums },
             "song": catalog::song_values(&st.db, &songs).await?,
         }),
     )

@@ -113,7 +113,7 @@ pub async fn scrobble(st: &AppState, c: &Caller, p: &Params) -> Answer {
             .get(i)
             .and_then(|t| t.trim().parse::<i64>().ok())
             .and_then(DateTime::<Utc>::from_timestamp_millis)
-            .unwrap_or_else(Utc::now);
+            .map_or_else(Utc::now, |t| t.min(Utc::now()));
         sqlx::query(
             r#"INSERT INTO playback_history ("userId", "itemId", "playedAt")
                SELECT $1, $2, $3 WHERE NOT EXISTS (

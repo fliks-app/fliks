@@ -336,8 +336,8 @@ export class PlaylistDetailComponent {
       albumTitle: t.albumTitle,
       coverUrl: t.posterUrl,
       durationSeconds: t.durationSeconds,
-      gain: null,
-      peak: null,
+      gain: t.gain,
+      peak: t.peak,
       albumGain: null,
       albumPeak: null,
     };

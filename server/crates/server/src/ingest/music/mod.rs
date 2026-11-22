@@ -38,7 +38,7 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
-use tags::{Named, Separators, TrackTags, strip_lyrics};
+use tags::{AlbumTags, Named, Separators, TrackTags, strip_lyrics};
 
 pub fn format_of(name: &str) -> Option<String> {
     let dot = name.rfind('.').filter(|d| *d > 0)?;
@@ -88,7 +88,7 @@ pub async fn sample(st: &AppState, path: &Path) -> Option<Sample> {
     let t = TrackTags::read(&p.info, &seps, stem(&file_name(path)));
     Some(Sample {
         record: album_record(std::slice::from_ref(&t)),
-        artist: t.artist_line(),
+        artist: AlbumTags::of(std::slice::from_ref(&t)).artist,
         release_group: t.release_group.clone(),
         release: t.release.clone(),
     })
@@ -120,24 +120,16 @@ pub(super) fn most_common<T: Clone + Eq + std::hash::Hash>(
 
 /// The `file` record of an album: its title, year and genres, as the majority of its files say.
 pub fn album_record(tags: &[TrackTags]) -> Record {
+    let a = AlbumTags::of(tags);
     let mut m = Record::new();
-    if let Some(t) = most_common(tags.iter().filter_map(|t| t.album.clone())) {
+    if let Some(t) = a.album {
         m.insert("title".into(), t.into());
     }
-    if let Some(y) = most_common(tags.iter().filter_map(|t| t.year)) {
+    if let Some(y) = a.year {
         m.insert("year".into(), y.into());
     }
-    let mut genres: Vec<(String, usize)> = vec![];
-    for g in tags.iter().flat_map(|t| &t.genres) {
-        match genres.iter_mut().find(|(n, _)| n.eq_ignore_ascii_case(g)) {
-            Some((_, n)) => *n += 1,
-            None => genres.push((g.clone(), 1)),
-        }
-    }
-    genres.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
-    if !genres.is_empty() {
-        let list: Vec<String> = genres.into_iter().take(20).map(|(g, _)| g).collect();
-        m.insert("genres".into(), json!(list));
+    if !a.genres.is_empty() {
+        m.insert("genres".into(), json!(a.genres));
     }
     m
 }
@@ -828,18 +820,8 @@ async fn album_facts(
                 .to_lowercase();
             provider::PRIMARY_TYPES.iter().find(|k| **k == ty).copied()
         });
-        let tagged_line = tags
-            .iter()
-            .find(|t| !t.album_artists.is_empty())
-            .map(|t| &t.album_artists);
-        let mut firsts: Vec<String> = tags
-            .iter()
-            .filter_map(|t| Some(t.artists.first()?.name.to_lowercase()))
-            .collect();
-        firsts.sort();
-        firsts.dedup();
-        let compilation =
-            tags.iter().any(|t| t.compilation) || (tagged_line.is_none() && firsts.len() > 1);
+        let album = AlbumTags::of(tags);
+        let compilation = album.compilation;
         let first = tags
             .iter()
             .filter_map(|t| provider::partial_date(t.original_date.as_deref()?))
@@ -854,13 +836,7 @@ async fn album_facts(
         .bind(first)
         .execute(&mut *c)
         .await?;
-        let line = tagged_line.or_else(|| {
-            tags.iter()
-                .find(|t| !t.artists.is_empty())
-                .map(|t| &t.artists)
-                .filter(|_| !compilation)
-        });
-        let mut artists: Vec<Credited> = line.into_iter().flatten().map(credited).collect();
+        let mut artists: Vec<Credited> = album.artists.iter().map(credited).collect();
         if compilation && artists.is_empty() {
             artists = vec![people::various_artists()];
         }
@@ -925,8 +901,8 @@ pub async fn folder_cover(st: &AppState, media: i32) -> Option<Vec<u8>> {
                 for ext in ["jpg", "jpeg", "png", "webp"] {
                     let want = format!("{base}.{ext}");
                     if let Some(n) = names.iter().find(|n| n.to_lowercase() == want)
+                        && std::fs::metadata(d.join(n)).is_ok_and(|m| m.len() <= 16 << 20)
                         && let Ok(bytes) = std::fs::read(d.join(n))
-                        && bytes.len() <= 16 << 20
                     {
                         return Some(bytes);
                     }

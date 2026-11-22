@@ -84,7 +84,7 @@ export class ComposerPageComponent {
     return this.player.playTracks([
       {
         itemId: r.itemId, mediaId: r.mediaId, title: r.title, artists: this.performers(r), albumTitle: r.albumTitle,
-        coverUrl: r.posterUrl, durationSeconds: r.durationSeconds, gain: null, peak: null, albumGain: null, albumPeak: null,
+        coverUrl: r.posterUrl, durationSeconds: r.durationSeconds, gain: r.gain, peak: r.peak, albumGain: null, albumPeak: null,
       },
     ]);
   }
