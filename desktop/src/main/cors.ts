@@ -1,17 +1,13 @@
 import { session } from 'electron';
 import { APP_SCHEME } from './protocol';
 import { appendLog, redactQuery } from './log-file';
-import { isReportedServer, noteValidChain } from './trusted-servers';
+import { isReportedServer, noteValidChain, onServerChanged, reportedOrigins } from './trusted-servers';
 
 const APP_ORIGIN = `${APP_SCHEME}://app`;
 
 const METHODS = 'GET, HEAD, PUT, PATCH, POST, DELETE';
 
-/**
- * The Angular client runs at origin `fliks://app` and calls the user's Fliks server cross-origin, and
- * servers only allowlist the known web/mobile origins. Responses of the servers the page reported
- * (and only those) are rewritten to allow `fliks://app`, preflights included.
- */
+/** The page runs at `fliks://app`, which servers do not allowlist: responses of its reported server, preflights included, are rewritten to allow it. */
 export function corsResponseHeaders(
   headers: Record<string, string[]>,
   preflightRequestHeaders: string | undefined,
@@ -22,7 +18,7 @@ export function corsResponseHeaders(
   }
   out['Access-Control-Allow-Origin'] = [APP_ORIGIN];
   out['Access-Control-Allow-Credentials'] = ['true'];
-  // The page reads Content-Range, Content-Disposition and the like: expose what the response carries.
+  // The page reads Content-Range and the like.
   out['Access-Control-Expose-Headers'] = [Object.keys(out).join(', ')];
   if (preflightRequestHeaders !== undefined) {
     out['Access-Control-Allow-Methods'] = [METHODS];
@@ -40,13 +36,21 @@ export function permissionAllowed(permission: string, mediaTypes?: readonly stri
 export function installCorsBypass(): void {
   const { webRequest } = session.defaultSession;
   const preflightHeaders = new Map<number, string>();
-  webRequest.onBeforeSendHeaders((details, callback) => {
-    if (details.method === 'OPTIONS') {
-      const asked = Object.entries(details.requestHeaders).find(([k]) => k.toLowerCase() === 'access-control-request-headers');
-      if (asked) preflightHeaders.set(details.id, asked[1]);
-    }
-    callback({ requestHeaders: details.requestHeaders });
-  });
+  // Only the page's own server needs its preflight request headers read.
+  const capturePreflight = () => {
+    const origins = reportedOrigins();
+    if (origins.length === 0) return webRequest.onBeforeSendHeaders(null);
+    const urls = origins.some((o) => o.includes('[')) ? ['*://*/*'] : origins.map((o) => `${o}/*`);
+    webRequest.onBeforeSendHeaders({ urls }, (details, callback) => {
+      if (details.method === 'OPTIONS') {
+        const asked = Object.entries(details.requestHeaders).find(([k]) => k.toLowerCase() === 'access-control-request-headers');
+        if (asked) preflightHeaders.set(details.id, asked[1]);
+      }
+      callback({ requestHeaders: details.requestHeaders });
+    });
+  };
+  capturePreflight();
+  onServerChanged(capturePreflight);
   webRequest.onHeadersReceived((details, callback) => {
     const asked = preflightHeaders.get(details.id);
     preflightHeaders.delete(details.id);
@@ -70,6 +74,7 @@ export function installCorsBypass(): void {
   // is the one place the underlying ERR_* (reset / TLS / network-changed) is
   // available at all.
   webRequest.onErrorOccurred((details) => {
+    preflightHeaders.delete(details.id);
     appendLog(`[net] ${details.method} ${redactQuery(details.url)} ${details.error}`);
   });
 

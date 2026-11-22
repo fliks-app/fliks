@@ -70,6 +70,7 @@ namespace M {
 mpv_handle* (*create)(void) = nullptr;
 int (*set_option_string)(mpv_handle*, const char*, const char*) = nullptr;
 int (*set_property_string)(mpv_handle*, const char*, const char*) = nullptr;
+int (*set_property)(mpv_handle*, const char*, mpv_format, void*) = nullptr;
 char* (*get_property_string)(mpv_handle*, const char*) = nullptr;
 int (*observe_property)(mpv_handle*, uint64_t, const char*, mpv_format) = nullptr;
 int (*request_log_messages)(mpv_handle*, const char*) = nullptr;
@@ -106,6 +107,7 @@ bool Load() {
   SYM(create, "mpv_create")
   SYM(set_option_string, "mpv_set_option_string")
   SYM(set_property_string, "mpv_set_property_string")
+  SYM(set_property, "mpv_set_property")
   SYM(get_property_string, "mpv_get_property_string")
   SYM(observe_property, "mpv_observe_property")
   SYM(request_log_messages, "mpv_request_log_messages")
@@ -971,6 +973,21 @@ Napi::Value OnEvent(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+// A list property, not the loadfile options string: a ',' in a value would split it into more options.
+// Set on every load, empty when absent, so a reused handle never keeps the previous load's headers.
+void SetHeaderFields(const std::vector<std::string>& fields) {
+  std::vector<mpv_node> items(fields.size());
+  for (size_t i = 0; i < fields.size(); i++) {
+    items[i].format = MPV_FORMAT_STRING;
+    items[i].u.string = const_cast<char*>(fields[i].c_str());
+  }
+  mpv_node_list list = {static_cast<int>(items.size()), items.data(), nullptr};
+  mpv_node node;
+  node.format = MPV_FORMAT_NODE_ARRAY;
+  node.u.list = &list;
+  M::set_property(g_state.mpv, "http-header-fields", MPV_FORMAT_NODE, &node);
+}
+
 // load({url, fileOptions?, headers?, subtitles?}) — lifted from addon.cc Load.
 Napi::Value Load(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
@@ -983,18 +1000,16 @@ Napi::Value Load(const Napi::CallbackInfo& info) {
     Napi::Array fo = o.Get("fileOptions").As<Napi::Array>();
     for (uint32_t i = 0; i < fo.Length(); i++) opts.push_back(fo.Get(i).ToString().Utf8Value());
   }
+  std::vector<std::string> fields;
   if (o.Has("headers") && o.Get("headers").IsObject()) {
     Napi::Object h = o.Get("headers").As<Napi::Object>();
     Napi::Array keys = h.GetPropertyNames();
-    std::string fields;
     for (uint32_t i = 0; i < keys.Length(); i++) {
       std::string k = keys.Get(i).ToString().Utf8Value();
-      std::string v = h.Get(k).ToString().Utf8Value();
-      if (!fields.empty()) fields += ",";
-      fields += k + ": " + v;
+      fields.push_back(k + ": " + h.Get(k).ToString().Utf8Value());
     }
-    if (!fields.empty()) opts.push_back("http-header-fields=" + fields);
   }
+  SetHeaderFields(fields);
   std::string optstr;
   for (size_t i = 0; i < opts.size(); i++) {
     if (i) optstr += ",";

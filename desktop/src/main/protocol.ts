@@ -1,4 +1,4 @@
-import { protocol, net } from 'electron';
+import { protocol, net, type IpcMainInvokeEvent } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -20,10 +20,28 @@ export function registerAppSchemePrivileged(): void {
   ]);
 }
 
-export function registerAppProtocol(webDir: string): void {
+const LOCAL_PREFIX = '_local/';
+
+/** Where the page loads a downloaded sidecar or book file from: a file:// URL is refused to a page that is not file://. */
+export const localFileUrl = (name: string) => `${APP_URL}${LOCAL_PREFIX}${encodeURIComponent(name)}`;
+
+/** Whether an IPC call comes from the app page's top frame, not a frame it embeds. */
+export function fromAppPage(e: IpcMainInvokeEvent): boolean {
+  const frame = e.senderFrame;
+  return !!frame && frame === e.sender.mainFrame && frame.url.startsWith(APP_URL);
+}
+
+/** `resolveLocal` maps a downloaded file's name to its path, or null. */
+export function registerAppProtocol(webDir: string, resolveLocal: (name: string) => string | null): void {
   const root = path.resolve(webDir);
   protocol.handle(APP_SCHEME, async (request) => {
     const { pathname } = new URL(request.url);
+    if (pathname.startsWith(`/${LOCAL_PREFIX}`)) {
+      const file = resolveLocal(decodeURIComponent(pathname.slice(LOCAL_PREFIX.length + 1)));
+      if (!file) return new Response('not found', { status: 404 });
+      // The headers carry the Range of a seek.
+      return net.fetch(pathToFileURL(file).toString(), { headers: request.headers });
+    }
     const rel = decodeURIComponent(pathname).replace(/^\/+/, '');
     let filePath = path.join(root, rel);
 

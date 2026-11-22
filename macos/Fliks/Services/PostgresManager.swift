@@ -20,6 +20,7 @@ actor PostgresManager {
 
     /// Password of the `fliks` role, generated once into `Paths.dbPasswordFile`.
     private var password = ""
+    private var passwordUnsaved = false
     var dbPassword: String { password }
 
     private var hbaFile: URL { dataDir.appendingPathComponent("pg_hba.conf") }
@@ -51,12 +52,15 @@ actor PostgresManager {
     /// First-launch initialization: runs `initdb` if the data directory
     /// doesn't contain a `PG_VERSION` file yet.
     func initialize() async throws {
-        let passwordCreated = try loadPassword()
+        try loadPassword()
         let pgVersion = dataDir.appendingPathComponent("PG_VERSION")
         guard !FileManager.default.fileExists(atPath: pgVersion.path) else {
             logger.info("PostgreSQL data directory already initialized")
             // A cluster already on scram lost its password file: only single-user mode can reset it.
-            if passwordCreated && !hbaTrusts() { try await resetPasswordSingleUser() }
+            if passwordUnsaved && !hbaTrusts() {
+                try await resetPasswordSingleUser()
+                try savePassword()
+            }
             return
         }
 
@@ -72,6 +76,8 @@ actor PostgresManager {
         var env = pgEnv
         env["PGDATA"] = dataDir.path
 
+        // initdb reads the role password from the file.
+        try savePassword()
         let result = try await ProcessRunner.run(
             executable: binDir.appendingPathComponent("initdb"),
             arguments: [
@@ -209,11 +215,7 @@ actor PostgresManager {
             arguments: [
                 "-D", dataDir.path,
                 "-l", logFile.path,
-                // Single-quote the path: postgres word-splits pg_ctl's -o
-                // string, so a bundle path containing a space must be quoted to
-                // survive as a single argument. -D and env vars are passed as
-                // whole args and don't need this.
-                // An empty unix_socket_directories (the shell drops the '') turns the socket off.
+                // postgres word-splits -o: the path is single-quoted, and the empty unix_socket_directories turns the socket off.
                 "-o", "-p \(port) -c dynamic_library_path='\(libDir.appendingPathComponent("postgresql").path)' -c unix_socket_directories=''",
                 "start",
             ],
@@ -246,32 +248,41 @@ actor PostgresManager {
         guard result.succeeded else { throw PostgresError.startFailed("pg_ctl reload: \(result.stderr)") }
     }
 
-    /// Read `.db-password`, or generate it (64 hex characters, mode 0600). True when generated.
-    private func loadPassword() throws -> Bool {
-        let file = Paths.dbPasswordFile
-        if let existing = try? String(contentsOf: file, encoding: .utf8) {
+    /// Read `.db-password`, or generate a password in memory (64 hex characters): the file is written
+    /// by `savePassword` once the role has it, so a failed reset is retried at the next launch.
+    private func loadPassword() throws {
+        if let existing = try? String(contentsOf: Paths.dbPasswordFile, encoding: .utf8) {
             let trimmed = existing.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
+            if trimmed.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil {
                 password = trimmed
-                return false
+                passwordUnsaved = false
+                return
             }
+            logger.warning("The database password file is not 64 hex characters: it is replaced")
         }
 
         var bytes = [UInt8](repeating: 0, count: 32)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
             throw PostgresError.initFailed("no random bytes for the database password")
         }
-        let hex = bytes.map { String(format: "%02x", $0) }.joined()
+        password = bytes.map { String(format: "%02x", $0) }.joined()
+        passwordUnsaved = true
+    }
 
+    /// Writes `.db-password` (mode 0600) when `loadPassword` generated it.
+    private func savePassword() throws {
+        guard passwordUnsaved else { return }
+        let file = Paths.dbPasswordFile
         try Paths.ensureDirectory(Paths.confDir)
-        let fd = open(file.path, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
+        let temp = file.path + ".tmp"
+        let fd = open(temp, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
         guard fd >= 0 else { throw PostgresError.initFailed("cannot write \(file.path)") }
-        defer { close(fd) }
-        guard write(fd, hex, hex.utf8.count) == hex.utf8.count else {
+        let written = write(fd, password, password.utf8.count)
+        close(fd)
+        guard written == password.utf8.count, rename(temp, file.path) == 0 else {
             throw PostgresError.initFailed("cannot write \(file.path)")
         }
-        password = hex
-        return true
+        passwordUnsaved = false
     }
 
     /// Whether any line of `pg_hba.conf` still uses the `trust` method.
@@ -307,11 +318,12 @@ actor PostgresManager {
                         "-v", "ON_ERROR_STOP=1"],
             environment: pgEnv,
             timeout: 10,
-            stdin: "ALTER ROLE fliks PASSWORD '\(password)';\n"
+            stdin: "SET log_min_error_statement = 'panic';\nALTER ROLE fliks PASSWORD '\(password)';\n"
         )
         guard result.succeeded else {
             throw PostgresError.authFailed("psql exited \(result.exitCode)")
         }
+        try savePassword()
         try writeHba()
         try await reload()
     }

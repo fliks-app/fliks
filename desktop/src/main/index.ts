@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { registerAppSchemePrivileged, registerAppProtocol, APP_URL, APP_SCHEME } from './protocol';
+import { registerAppSchemePrivileged, registerAppProtocol, fromAppPage, APP_URL, APP_SCHEME } from './protocol';
 import { installCorsBypass } from './cors';
 import { appendLog, echoRendererConsole, redactQuery } from './log-file';
 import { setupUpdater } from './updater';
-import { registerDownloadIpc } from './download';
+import { localFilePath, registerDownloadIpc } from './download';
 import { registerCastIpc } from './cast';
 import { oidcCancel, oidcListen, oidcWait, type OidcPage, type OidcPages } from './oidc-loopback';
 import { IPC, MENU_IPC, type DesktopEvent, type DesktopMediaMetadata } from '../shared/contract';
@@ -24,6 +24,7 @@ import { Notifier } from './notify';
 import { refreshMenu, setMenuLabels, setMenuFullscreen, setMenuPlayback } from './menu';
 import { pressMediaKey, type MediaKey } from './menu-template';
 import { acceptCertificate, loadTrust, trustServer } from './trusted-servers';
+import { httpsUpgrade } from './server-redirect';
 import { askTrust, pemChain } from './trust-prompt';
 
 // Velopack's install/update/uninstall hooks run and exit here, before any Electron startup.
@@ -79,10 +80,15 @@ process.on('unhandledRejection', (e) => console.error('[main:unhandledRejection]
 app.on('certificate-error', (event, _wc, url, error, cert, callback) => {
   event.preventDefault();
   const pem = { fingerprint: cert.fingerprint, chain: pemChain(cert) };
-  void acceptCertificate(url, error, pem, askTrust).then((ok) => {
-    appendLog(`[tls] ${redactQuery(url)} ${error} ${ok ? 'accepted' : 'refused'}`);
-    callback(ok);
-  });
+  acceptCertificate(url, error, pem, askTrust)
+    .catch((e) => {
+      console.error('[tls] trust prompt failed:', e);
+      return false;
+    })
+    .then((ok) => {
+      appendLog(`[tls] ${redactQuery(url)} ${error} ${ok ? 'accepted' : 'refused'}`);
+      callback(ok);
+    });
 });
 
 const WIDTH = 1280;
@@ -351,7 +357,10 @@ app.whenReady().then(async () => {
   ipcMain.handle(MENU_IPC.setLabels, (_e, labels: unknown) => {
     if (process.platform === 'darwin') setMenuLabels(labels);
   });
-  ipcMain.handle(IPC.setServerUrl, (_e, url: unknown) => trustServer(url));
+  ipcMain.handle(IPC.setServerUrl, async (e, url: unknown) => {
+    if (!fromAppPage(e)) throw new Error('not the app page');
+    trustServer(url, await httpsUpgrade(url));
+  });
 
   // macOS ignores a BrowserWindow's `icon`; the dock icon comes from the app
   // bundle when packaged, but a dev `electron .` run shows Electron's default.
@@ -421,7 +430,7 @@ app.whenReady().then(async () => {
 
   const dir = webDir();
   const haveApp = fs.existsSync(path.join(dir, 'index.html'));
-  if (haveApp) registerAppProtocol(dir);
+  if (haveApp) registerAppProtocol(dir, localFilePath);
 
   // Both use PlayerSession, which picks the platform's window model and player.
   if (process.platform === 'win32' || process.platform === 'darwin') {

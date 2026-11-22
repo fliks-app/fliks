@@ -29,6 +29,12 @@ We composite ourselves (rather than embedding an mpv child window) because under
 overlay. mpv runs from a self-contained static **libmpv**, so on Linux HDR is
 **SDR tone-mapped** (render API uses `vo_gpu`).
 
+## Self-signed servers
+
+The page reports its one server; a certificate the OS rejects is pinned there on the user's say-so (`src/main/trusted-servers.ts`).
+mpv opens a pinned server against a CA file holding only that pin, or unverified when FFmpeg cannot check the certificate.
+Downloads and notifications go through the main process `net`, which raises no `certificate-error`: they fail on such a server.
+
 ## Develop
 
 ### Dependencies
