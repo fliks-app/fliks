@@ -1,11 +1,11 @@
 //! Component tests (SDK-11): a built guest under the real host on a scratch database named
 //! `FLIKS_HARNESS_DB_PREFIX` + hex, created through the superuser `FLIKS_HARNESS_PG_URL`.
 
-use fliks_server::sync::MutexExt;
 use crate::build::Crate;
 use fliks_server::net::guard::{Net, SystemNet};
 use fliks_server::plugins::runtime::{CallError, HostConfig, PluginRt, State};
 use fliks_server::plugins::{HealthReport, HttpRequest, HttpResponse, Options, Plugins, Principal};
+use fliks_server::sync::MutexExt;
 use fliks_server::{config::Config, state::AppState};
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
@@ -130,12 +130,7 @@ impl Net for Targets {
 
     fn connect(&self, addr: SocketAddr) -> BoxFuture<'static, std::io::Result<TcpStream>> {
         self.connects.lock_clean().push(addr);
-        let to = self
-            .routes
-            .lock_clean()
-            .get(&addr)
-            .copied()
-            .unwrap_or(addr);
+        let to = self.routes.lock_clean().get(&addr).copied().unwrap_or(addr);
         Box::pin(TcpStream::connect(to))
     }
 
@@ -296,6 +291,7 @@ impl Harness {
                     port: opts.get_port(),
                     dbname: db.clone(),
                 },
+                own_ports: Arc::default(),
                 tune: Some(Arc::new(move |c: &mut HostConfig| {
                     c.compile_in_process = true;
                     if let Some(t) = &user_tune {

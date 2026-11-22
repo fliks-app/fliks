@@ -2,10 +2,10 @@
 //! The SDK harness and build tooling on this fixture, under the real host. Needs the release
 //! component (`cargo xtask build examples/fixture-guest`) and `FLIKS_HARNESS_PG_URL`.
 
-use fliks_server::sync::MutexExt;
 use fliks_plugin_sdk::build::{self, Crate};
 use fliks_plugin_sdk::harness::fliks_server::plugins::HttpResponse;
 use fliks_plugin_sdk::harness::fliks_server::plugins::runtime::{HostConfig, State};
+use fliks_plugin_sdk::harness::fliks_server::sync::MutexExt;
 use fliks_plugin_sdk::harness::{Harness, Setup, request, until};
 use serde_json::{Value, json};
 use std::io::{Read, Write};
