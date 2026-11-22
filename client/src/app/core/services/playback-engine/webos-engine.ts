@@ -65,6 +65,8 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   private lastVolumeEvent: { volume: number; muted: boolean } | null = null;
   private muteGate: MuteGate | null = null;
   private muteRanges: readonly TimeRange[] = [];
+  /** Settles the load in flight as cancelled, detaching its listeners; set while one is pending. */
+  private cancelPending: (() => void) | null = null;
 
   // ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -87,6 +89,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 
   async destroy(): Promise<void> {
+    this.cancelPending?.();
     this.clearSeekDebounce();
     this.seekIntent = null;
     this.pendingReloadTarget = null;
@@ -213,6 +216,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
   async load(url: string, startTime?: number, mimeType?: string): Promise<void> {
     if (!this.video) throw new Error('WebOsEngine not initialised');
+    this.cancelPending?.();
     this.loadedUrl = url;
     this.directMime = mimeType;
     this.frameBaseline = null;
@@ -234,8 +238,9 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         await this.attachAndPlay(url, start, true);
       } catch (e) {
         // A refused <source> (mediaOption schema, a type canPlayType rejects such as MKV) retries with plain src;
-        // a load timeout is surfaced as unsupported for the copy fallback (a plain-src retry burns another 30s).
-        if (e instanceof Error && e.name === 'WebOsLoadTimeout') throw e;
+        // a load timeout is surfaced as unsupported for the copy fallback (a plain-src retry burns another 30s),
+        // and a cancelled load never retries.
+        if (e instanceof Error && (e.name === 'WebOsLoadTimeout' || e.name === 'WebOsLoadCancelled')) throw e;
         await this.attachAndPlay(url, start, false);
       }
     } finally {
@@ -263,10 +268,14 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        if (this.cancelPending === cancel) this.cancelPending = null;
         v.removeEventListener('loadedmetadata', onMeta);
         v.removeEventListener('error', onErr);
         fn();
       };
+      const cancel = () =>
+        finish(() => reject(Object.assign(new Error('webOS load cancelled'), { name: 'WebOsLoadCancelled' })));
+      this.cancelPending = cancel;
       const onMeta = () => {
         // mediaOption.playTime.start already positioned the stream; only the
         // plain-src fallback needs a manual resume seek.
@@ -302,6 +311,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 
   async unload(): Promise<void> {
+    this.cancelPending?.();
     this.clearSeekDebounce();
     this.seekIntent = null;
     this.pendingReloadTarget = null;

@@ -28,6 +28,7 @@ import { SessionSyncService } from '../../core/services/session-sync.service';
 import { backTarget } from './back-target';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { LocalPlaybackOutput } from './local-playback-output';
+import { PlayerLoader, isLoadSuperseded, type LoadKind, type LoadOp } from './player-loader';
 import type { CastStart, PlaybackOutput, PlaybackSnapshot, VideoHandoff } from '../../core/services/playback/playback-output';
 import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
@@ -96,6 +97,8 @@ interface AudioOption {
  *  controller still sees the change in about a frame's time. */
 const FORCED_SAVE_COALESCE_MS = 300;
 const RELOAD_NEGOTIATE_TIMEOUT_MS = 15_000;
+/** A cold launch may wait on a transcode or a scan; a reload keeps the shorter bound. */
+const LAUNCH_NEGOTIATE_TIMEOUT_MS = 30_000;
 
 
 interface PipPlugin {
@@ -859,7 +862,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.destroyed;
   }
   currentSid(): string | undefined {
-    return this.playbackInfo?.sessionId;
+    return this.loader.sessionId();
   }
   currentMediaFileId(): number {
     return this.mediaFileId;
@@ -868,7 +871,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.authService.hasServerFeature(feature);
   }
   isReloadIdle(): boolean {
-    return !this.reloadingStream && !this.firstLoadPending && !this.recovery.active;
+    return !this.reloadingStream && !this.loader.busy() && !this.recovery.active;
   }
   fail(e: unknown): void {
     this.recovery.fail({ thrown: e });
@@ -915,7 +918,18 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const sep = url.includes('?') ? '&' : '?';
     return `${url}${sep}size=thumb`;
   });
-  private playbackInfo: PlaybackInfoResponse | null = null;
+  protected readonly loader = new PlayerLoader({
+    stopSession: (sid) => void this.streamingApi.stopSession(sid).catch(() => {}),
+    canReplace: () => this.authService.hasServerFeature('sessionReplaces'),
+    discardEngine: (engine, releaseSurface) => {
+      if (releaseSurface) {
+        releaseEngineSurface();
+        const video = this.videoEl()?.nativeElement;
+        if (video) video.style.display = '';
+      }
+      void engine.destroy().catch(() => {});
+    },
+  });
 
   /** Last URL handed to the engine's load(), surfaced (token-redacted) in the
    *  error diagnostics so a failed open shows which endpoint/format was tried. */
@@ -925,10 +939,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private activeSessionId(): string | undefined {
     if (this.castService.isConnected()) {
       return (
-        this.castPlayerService.liveSessionId() ?? this.playbackInfo?.sessionId
+        this.castPlayerService.liveSessionId() ?? this.loader.sessionId()
       );
     }
-    return this.playbackInfo?.sessionId;
+    return this.loader.sessionId();
   }
 
   readonly playerStats = computed<PlayerStats | null>(() => {
@@ -944,7 +958,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
     return buildPlayerStats({
       quality,
-      pi: this.playbackInfo,
+      pi: this.loader.info(),
       engineStats: this.engine?.getStats(),
       hwAccel: this.hwAccel(),
       isOfflinePlayback: this.isOfflinePlayback,
@@ -984,40 +998,40 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // ── Lifecycle ──
 
   /** Offline launch on the engine this shell plays local files with. */
-  private async launchOffline(localUrl: string, startTime: number | undefined): Promise<void> {
+  private async launchOffline(op: LoadOp, localUrl: string, startTime: number | undefined): Promise<void> {
     if (this.isDesktopNative) {
       // Desktop: the original container lives on disk; mpv plays it back
       // offline (file://) with full codec coverage + embedded tracks.
-      await this.createDesktopEngine();
+      await this.createDesktopEngine(op);
       this.applyVideoCrop();
-      await this.prepareLoad();
-      await this.engine!.load(localUrl, startTime);
-      await this.loadOfflineSubtitles();
+      await op.wait(this.prepareLoad());
+      await op.load(this.engine!, localUrl, startTime);
+      await op.wait(this.loadOfflineSubtitles());
     } else if (this.isNative) {
       // Android: ExoPlayer with CacheDataSource (offline HLS from cache)
-      await this.createNativeEngine();
+      await this.createNativeEngine(op);
       (this.engine as NativeEngine).setOffline(true);
       this.applyNativeSubtitleStyle();
       this.applyVideoCrop();
 
-      await this.prepareLoad();
-      await this.engine!.load(localUrl, startTime, 'application/x-mpegURL');
+      await op.wait(this.prepareLoad());
+      await op.load(this.engine!, localUrl, startTime, 'application/x-mpegURL');
     } else {
       // Web: Shaka offline URI ("offline:123") — IndexedDB-backed
-      await this.createShakaEngine();
+      await this.createShakaEngine(op);
       this.applyVideoCrop();
-      await this.prepareLoad();
-      await this.engine!.load(localUrl, startTime);
+      await op.wait(this.prepareLoad());
+      await op.load(this.engine!, localUrl, startTime);
     }
   }
 
   /** Tizen (AVPlay) and webOS (LG native <video>) share one shape: HW decoder, DOM subtitle overlay,
    *  streamInfo audio fallback, no Shaka/MSE. Only the engine instance differs. */
-  private async launchTv(startTime: number | undefined): Promise<void> {
+  private async launchTv(op: LoadOp, startTime: number | undefined): Promise<void> {
     if (this.isWebOs) {
-      await this.createWebOsEngine();
+      await this.createWebOsEngine(op);
     } else {
-      await this.createTizenEngine();
+      await this.createTizenEngine(op);
       this.applyVideoCrop();
     }
     this.applyNativeSubtitleStyle();
@@ -1035,23 +1049,23 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const { url: tizenUrl, mimeType: tizenMimeType } = this.buildPlayUrl({
       startTime,
     });
-    await this.prepareLoad();
-    await this.engine!.load(tizenUrl, startTime, tizenMimeType, headers);
+    await op.wait(this.prepareLoad());
+    await op.load(this.engine!, tizenUrl, startTime, tizenMimeType, headers);
 
     // Expose to the picker only: auto-pick runs once for all engines in `autoSelectSubtitle` below (it
     // handles visibility and burn-in).
-    const subs = await tvSubsPromise;
+    const subs = await op.wait(tvSubsPromise);
     this.subs.availableSubtitles.set(subs);
   }
 
-  /** Android ExoPlayer / desktop mpv launch. False when the view was left during setup. */
-  private async launchNative(startTime: number | undefined, mode: PlaybackMode): Promise<boolean> {
+  /** Android ExoPlayer / desktop mpv launch. */
+  private async launchNative(op: LoadOp, startTime: number | undefined, mode: PlaybackMode): Promise<void> {
     // Subtitles arrive as HLS SUBTITLES renditions, so load() doesn't depend on this fetch; resolved
     // after load() like the Shaka path, as awaiting it first delays the first frame.
     void this.itemSubtitles();
 
-    if (this.isDesktopNative) await this.createDesktopEngine();
-    else await this.createNativeEngine();
+    if (this.isDesktopNative) await this.createDesktopEngine(op);
+    else await this.createNativeEngine(op);
 
     this.applyNativeSubtitleStyle();
 
@@ -1071,8 +1085,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         let w: number;
         let h: number;
         if (savedQualityId === 'original') {
-          w = this.playbackInfo?.source?.width ?? 3840;
-          h = this.playbackInfo?.source?.height ?? 2160;
+          w = this.loader.info()?.source?.width ?? 3840;
+          h = this.loader.info()?.source?.height ?? 2160;
         } else {
           w = widthForProfile(savedQualityId) ?? 1920;
           h = this.qualityManager.availableQualities()
@@ -1081,23 +1095,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.engine.selectVariantTrack({ width: w, height: h });
       }
     }
-    await this.prepareLoad();
+    await op.wait(this.prepareLoad());
     const { url: nativeUrl, mimeType: nativeMimeType } = this.buildPlayUrl({
       startTime,
     });
-    // Left the view during setup: stop the engine, don't start playback.
-    if (this.destroyed) {
-      await this.engine?.destroy().catch(() => {});
-      this.engine = null;
-      return false;
-    }
-    await this.engine!.load(nativeUrl, startTime, nativeMimeType, headers);
-    return true;
+    await op.load(this.engine!, nativeUrl, startTime, nativeMimeType, headers);
   }
 
   /** Web launch: Shaka with the saved-quality ABR setup and long retry windows for slow segment waits. */
-  private async launchShaka(startTime: number | undefined, mode: PlaybackMode): Promise<void> {
-    await this.createShakaEngine();
+  private async launchShaka(op: LoadOp, startTime: number | undefined, mode: PlaybackMode): Promise<void> {
+    await this.createShakaEngine(op);
     this.applyVideoCrop();
 
     // Start subtitle loading in parallel with engine.load (Shaka doesn't need them upfront)
@@ -1148,8 +1155,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const { url: shakaUrl, mimeType: shakaMimeType } = this.buildPlayUrl({
       startTime,
     });
-    await this.prepareLoad();
-    await this.engine!.load(shakaUrl, startTime, shakaMimeType);
+    await op.wait(this.prepareLoad());
+    await op.load(this.engine!, shakaUrl, startTime, shakaMimeType);
   }
 
 
@@ -1194,13 +1201,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.queue.clear();
     }
 
+    this.registerListeners();
     await this.session.rejoinCast();
     if (this.destroyed) return;
     if (this.session.isLocal()) {
       this.attachLocalOutput();
-      const completed = await this.openLocal({ position: resumeTime, paused: launchPaused, tracks: this.launchTracks }, false);
-      // Everything above awaits, so a back-out mid-launch runs ngOnDestroy first and its removals would miss the
-      // listeners registered below.
+      const completed = await this.openLocal({ position: resumeTime, paused: launchPaused, tracks: this.launchTracks }, 'launch');
       if (!completed || this.destroyed) return;
     } else {
       await this.openOnOutput(resumeTime, launchPaused);
@@ -1211,7 +1217,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.attachLocalOutput();
     }
     this.outputFollowing = true;
-    this.registerListeners();
   }
 
   private attachLocalOutput(): void {
@@ -1219,24 +1224,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Opens the local engine on the route's item, at `resumeTime` when given; false when the launch did not run to its end. */
-  private async startLocal(resumeTime: number | undefined): Promise<boolean> {
+  private async startLocal(resumeTime: number | undefined, kind: LoadKind): Promise<boolean> {
     // The chunk downloads during the start requests; createShakaEngine awaits the same import.
     if (!this.isTizen && !this.isWebOs && !this.isDesktopNative && !this.isNative) preloadShakaEngine();
+    let settle!: () => void;
+    this.firstLoadSettled = new Promise<void>((resolve) => (settle = resolve));
+    try {
+      return (await this.loader.run(kind, (op) => this.launch(op, resumeTime))) ?? false;
+    } finally {
+      settle();
+    }
+  }
+
+  /** The launch body: every await is `op.wait`, so a leave or a newer launch stops it where it stands. */
+  private async launch(op: LoadOp, resumeTime: number | undefined): Promise<boolean> {
     const qp = this.route.snapshot.queryParams;
-    this.firstLoadSettled = new Promise<void>((resolve) => (this.settleFirstLoad = resolve));
     // Hoisted so the catch can anchor a remux fallback at the resume point.
     let startTime: number | undefined = resumeTime ?? undefined;
 
-    // An engine `error` racing this pending load() must wait via isReloadIdle(), not
-    // fire a second one. Not reloadingStream: that would drop post-load reloads (burn-in).
-    this.firstLoadPending = true;
     try {
       // A finished download plays locally whatever the connectivity; `offline=1` (downloads page) insists on it.
       const forced = qp['offline'] === '1';
       const download = readyDownloadFor(this.dlCache.load(), this.mediaFileId, this.castService.isConnected());
       const offlineCheck =
         forced || download
-          ? await this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null)
+          ? await op.wait(this.offlineStorage.getLocalUrl(`download-${this.mediaFileId}`).catch(() => null))
           : null;
       if (forced && !offlineCheck) {
         this.state.setError(this.translate.instant('player.offline_not_found'), {
@@ -1264,26 +1276,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // playback-info runs once the media is known: its audio index picks the DEFAULT rendition, and
       // startQuality/startAt let the backend pre-spawn ffmpeg.
-      await this.deviceProfileService.whenDesktopProbed();
+      await op.wait(this.deviceProfileService.whenDesktopProbed());
       // The service is app-scoped: without this the request would carry the
       // previous media's rung instead of the user's saved one.
       this.qualityManager.restorePreference();
-      let playbackInfoPromise: ReturnType<StreamingApiService['getPlaybackInfo']> | null = null;
+      let playbackInfoPromise: Promise<PlaybackInfoResponse> | null = null;
       const requestPlaybackInfo = () => {
         if (this.isOfflinePlayback || playbackInfoPromise) return;
         // The launch failure path shows the server's reason on its error card.
-        playbackInfoPromise = this.negotiatePlayback(resumeTime, {}, {
-          skipErrorToast: true,
-          preRollFirst: this.preRollMayRun(resumeTime),
-        });
+        playbackInfoPromise = op.negotiate((replaces) =>
+          this.negotiatePlayback(resumeTime, {}, {
+            skipErrorToast: true,
+            preRollFirst: this.preRollMayRun(resumeTime),
+            timeoutMs: LAUNCH_NEGOTIATE_TIMEOUT_MS,
+            replaces,
+          }),
+        );
+        playbackInfoPromise.catch(() => {});
       };
 
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
       if (mediaPromise) {
-        const media = await mediaPromise;
+        const media = await op.wait(mediaPromise);
         this.media = media;
         this.resolveAudioTarget();
-        await this.planSubtitleDelivery();
+        await op.wait(this.planSubtitleDelivery());
         requestPlaybackInfo();
 
         this.mediaLoadedTick.update(v => v + 1);
@@ -1303,10 +1320,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // The server's resume point (another device may have advanced it) wins when it answers; else this device's last.
       if (startTime == null && this.isOfflinePlayback && this.mediaId && this.network.isOnline()) {
         // A refusal (4xx) fails the launch onto the error card; an unreachable server just skips the server resume point.
-        const st = await this.streamingApi.getPlaybackState(this.mediaId, this.episodeId, undefined, { silent: true }).catch((e) => {
+        const st = await op.wait(this.streamingApi.getPlaybackState(this.mediaId, this.episodeId, undefined, { silent: true }).catch((e) => {
           if (e instanceof HttpErrorResponse && e.status >= 400 && e.status < 500) throw e;
           return null;
-        });
+        }));
         if (st && !st.completed && st.positionSeconds > 10) startTime = st.positionSeconds;
       }
       if (startTime == null && this.isOfflinePlayback && this.mediaId) {
@@ -1329,19 +1346,21 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.lastStreamUrl = offlineCheck ?? '';
         this.resolveAudioTarget();
 
-        await this.launchOffline(offlineCheck!, startTime);
+        await this.launchOffline(op, offlineCheck!, startTime);
       } else {
         // Await playback-info (kicked off in parallel with media load above)
         requestPlaybackInfo();
-        this.playbackInfo = await playbackInfoPromise!;
-        startTime ??= this.playbackInfo.startAtSeconds || undefined;
+        const answered = await playbackInfoPromise!;
+        startTime ??= answered.startAtSeconds || undefined;
         this.pendingStartTime = startTime ?? 0;
-        await this.maybeStartPreRoll(startTime);
+        await this.maybeStartPreRoll(op, startTime);
         // No item played (every one failed to negotiate): the film opens now, the way a plugin-free launch does.
-        if (this.playbackInfo.deferred && !this.preRollActive()) {
-          this.playbackInfo = await this.negotiatePlayback(resumeTime, {}, { skipErrorToast: true });
+        if (answered.deferred && !this.preRollActive()) {
+          await op.negotiate((replaces) =>
+            this.negotiatePlayback(resumeTime, {}, { skipErrorToast: true, timeoutMs: LAUNCH_NEGOTIATE_TIMEOUT_MS, replaces }),
+          );
         }
-        const pi = this.playbackInfo!;
+        const pi = this.loader.info()!;
 
         // Mode, options + the rung the backend locked in, BEFORE load
         this.adoptPlaybackInfo(pi);
@@ -1352,27 +1371,27 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // Cache the file's stream JWT before building URLs and Bearer headers: ExoPlayer/AVPlay/Shaka bake auth at
         // load() and the 1h access token would expire mid-film. A pre-roll swapped the file since the mint.
         if (streamTokenPromise) {
-          await streamTokenPromise;
-          await this.requireStreamToken();
+          await op.wait(streamTokenPromise);
+          await op.wait(this.requireStreamToken());
         }
 
         // Native (Capacitor) uses the platform player, Samsung Tizen uses AVPlay (Shaka's MSE chokes on Tizen
         // 6.5: EAC3 claims support but `addSourceBuffer` throws); web keeps Shaka.
         if (this.isTizen || this.isWebOs) {
-          await this.launchTv(startTime);
+          await this.launchTv(op, startTime);
         } else if (this.isDesktopNative || this.isNative) {
-          if (!(await this.launchNative(startTime, mode))) return false;
+          await this.launchNative(op, startTime, mode);
         } else {
-          await this.launchShaka(startTime, mode);
+          await this.launchShaka(op, startTime, mode);
         }
       }
 
-      this.firstLoadPending = false;
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
       this.firstLoadSetupDone = true;
       await this.completePostLoadSetup();
 
     } catch (e: any) {
+      if (op.stale()) return false;
       console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
       const recovered = () => {
         if (this.firstLoadSetupDone) return;
@@ -1401,9 +1420,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
       }
     } finally {
-      this.state.loading.set(false);
-      this.firstLoadPending = false;
-      this.settleFirstLoad();
+      if (!op.stale()) this.state.loading.set(false);
     }
     return true;
   }
@@ -1443,6 +1460,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.loader.abort();
     this.unregisterSession();
     this.stopDesktopSeekRequests?.();
     this.keyboardOverlay.leave();
@@ -1521,26 +1539,32 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Take over the launch with the plugin's pre-roll list when the response
    *  carries one. No-op on resume, offline, Cast, or when nothing negotiates. */
   private async maybeStartPreRoll(
+    op: LoadOp,
     startTime: number | undefined,
   ): Promise<void> {
-    const items = this.playbackInfo?.preRoll ?? [];
+    const items = this.loader.info()?.preRoll ?? [];
     if (!items.length || !this.preRollMayRun(startTime)) return;
 
     const mainFileId = this.mediaFileId;
-    const mainSid = this.playbackInfo!.sessionId;
+    const mainSid = this.loader.sessionId();
     const rest = [...items];
     while (rest.length) {
       const item = rest.shift()!;
-      const info = await this.negotiatePlayback(undefined, { fileId: item.mediaFileId }).catch(() => null);
+      // No `replaces`: the film's session stays open until a candidate answers, so a launch where every one fails
+      // is byte-identical to a plugin-free one, on any server.
+      const info = await op.negotiate(
+        () => this.negotiatePlayback(undefined, { fileId: item.mediaFileId }, { timeoutMs: LAUNCH_NEGOTIATE_TIMEOUT_MS }),
+        { replace: false },
+      ).catch((e) => {
+        if (isLoadSuperseded(e)) throw e;
+        return null;
+      });
       if (!info) continue; // this candidate failed to negotiate — try the next
-      // Only stop the main session once a pre-roll item is committed: if every
-      // candidate fails, the launch is byte-identical to a plugin-free one.
-      if (mainSid) await this.streamingApi.stopSession(mainSid).catch(() => {});
+      if (mainSid) await op.wait(this.streamingApi.stopSession(mainSid).catch(() => {}));
       this.preRollMainFileId = mainFileId;
       this.preRollRest = rest;
       this.preRollCurrent.set(item);
       this.mediaFileId = item.mediaFileId;
-      this.playbackInfo = info;
       this.state.duration.set(info.source?.durationSeconds ?? 0);
       return;
     }
@@ -1607,8 +1631,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // ── Engine factories ──
 
-  private async createShakaEngine(): Promise<void> {
-    const { engine } = await this.createSurface('shaka');
+  private async createShakaEngine(op: LoadOp): Promise<void> {
+    const { engine } = await this.createSurface(op, 'shaka');
     this.engine = engine;
     this.isNativeEngine.set(false);
     this.state.bindEngine(engine);
@@ -1622,10 +1646,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.wireErrorRecovery(engine);
   }
 
-  private async createWebOsEngine(): Promise<void> {
+  private async createWebOsEngine(op: LoadOp): Promise<void> {
     // webOS plays through the same visible <video> as Shaka, with no transparent hardware plane, so the Shaka
     // UX (isNativeEngine=false) fits.
-    const { engine } = await this.createSurface('webos');
+    const { engine } = await this.createSurface(op, 'webos');
     this.engine = engine;
     this.isNativeEngine.set(false);
     this.state.bindEngine(engine);
@@ -1637,8 +1661,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.wireErrorRecovery(engine);
   }
 
-  private async createTizenEngine(): Promise<void> {
-    const { engine } = await this.createSurface('tizen');
+  private async createTizenEngine(op: LoadOp): Promise<void> {
+    const { engine } = await this.createSurface(op, 'tizen');
     this.engine = engine;
     this.isTizenEngine.set(true);
     // Group with the native-engine UX; code gated on `!isNativeEngine()` would otherwise treat AVPlay as a
@@ -1653,8 +1677,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.wireErrorRecovery(engine);
   }
 
-  private async createNativeEngine(): Promise<void> {
-    const { engine } = await this.createSurface('native');
+  private async createNativeEngine(op: LoadOp): Promise<void> {
+    const { engine } = await this.createSurface(op, 'native');
     if (engine instanceof NativeEngine) {
       engine.cropSupported = this.deviceProfileService.nativeCropsBlackBars();
       if (this.playerSettings.get().backgroundAudio) {
@@ -1675,8 +1699,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.wireNativePlayerEngine(engine);
   }
 
-  private async createDesktopEngine(): Promise<void> {
-    const { engine } = await this.createSurface('desktop');
+  private async createDesktopEngine(op: LoadOp): Promise<void> {
+    const { engine } = await this.createSurface(op, 'desktop');
     if (engine instanceof DesktopEngine) this.fullscreen.set(engine.fullscreen);
     engine.on('fullscreenChanged', (e) => this.fullscreen.set(e.fullscreen));
     this.wireNativePlayerEngine(engine);
@@ -1684,12 +1708,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Engine plus the surface contract that goes with it; the wiring below is
    *  this player's own. */
-  private async createSurface(kind: EngineSurfaceKind) {
-    const surface = await createEngineSurface({
+  private async createSurface(op: LoadOp, kind: EngineSurfaceKind) {
+    const surface = await op.engine(createEngineSurface({
       kind,
       video: this.videoEl()!.nativeElement,
       container: this.containerEl()?.nativeElement,
-    });
+    }));
     this.edl.attach(surface.engine);
     this.keyframeGrid.attach(surface.engine);
     return surface;
@@ -1979,7 +2003,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  is unknown — a slightly wrong step beats a dead key. */
   private stepFrame(direction: -1 | 1) {
     if (!this.engine) return;
-    const fps = Number(this.playbackInfo?.source?.frameRate) || 24;
+    const fps = Number(this.loader.info()?.source?.frameRate) || 24;
     if (!this.engine.paused) this.onTogglePlay();
     this.onSeek(this.engine.currentTime + direction / fps);
   }
@@ -2188,7 +2212,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.reloadLoadPending = true;
     this.switchingItem = true;
     this.engine.resetRecoveryGuard();
-    const previousSessionId = this.playbackInfo?.sessionId;
+    const previousSessionId = this.loader.sessionId();
     this.qoe.setStalled(false, { sessionId: previousSessionId, position: this.engine.currentTime });
     this.qoe.onTeardown(previousSessionId);
     this.qoe.flushKeepalive(previousSessionId);
@@ -2201,7 +2225,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.recovery.clearEpisode();
       this.edlEnded = false;
       // Drop the outgoing episode's info so an early failure doesn't report its stale playMethod/hwAccel.
-      this.playbackInfo = null;
+      this.loader.forget();
       this.resetTrackState();
 
       // Native engines must be stopped before a fresh load to avoid a freeze;
@@ -2506,7 +2530,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Settles when the first launch ends (loaded or failed), so a handoff never races the engine it would unload. */
   private firstLoadSettled: Promise<void> = Promise.resolve();
-  private settleFirstLoad: () => void = () => {};
   private trackSetup: Promise<void> = Promise.resolve();
 
   /** Moving off this device: the engine falls silent and unloads, and what the target needs is handed over. */
@@ -2533,7 +2556,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       cast: this.castStart(),
       resolveSubtitle,
       audioLanguage: this.targetAudioLanguage(),
-      localSessionId: this.playbackInfo?.sessionId,
+      localSessionId: this.loader.sessionId(),
     };
   }
 
@@ -2581,7 +2604,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (active !== 'auto') return active;
     // Still 'auto': DirectStream's playUrl carries remux=1 alone, and a
     // pinned rung here would collapse the master onto a transcoded rung.
-    if (this.playbackInfo?.playMethod === 'DirectStream') return undefined;
+    if (this.loader.info()?.playMethod === 'DirectStream') return undefined;
     const supportsAbr = this.deviceProfileService.getProfile().supportsAbr ?? true;
     return supportsAbr ? undefined : this.qualityManager.topRungId();
   }
@@ -2741,7 +2764,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     sid?: string | null;
     startTime?: number;
   } = {}): { url: string; mimeType?: string } {
-    const pi = this.playbackInfo!;
+    const pi = this.loader.info()!;
     const sid = opts.sid ?? pi.sessionId;
     const built: { url: string; mimeType?: string } = {
       url: this.streamingApi.buildPlayUrl(pi, {
@@ -2932,7 +2955,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async onExternalPlaybackFailed(reason: string): Promise<void> {
     if (this.destroyed || !this.session.isLocal()) return;
     const id = this.mediaFileId;
-    const pi = this.playbackInfo;
+    const pi = this.loader.info();
     const trySdr = !!pi?.source?.hdrFormat && !pi.tonemapping && !this.sdrFallbackFileIds.has(id);
     if (!this.engine || !trySdr) {
       this.state.setError(this.translate.instant('player.error_airplay_unsupported'), {
@@ -2974,8 +2997,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // title's values (state.reset() doesn't clear them).
     const dump = formatErrorDiagnostics(err, {
       currentTime: this.state.currentTime(),
-      mode: this.playbackInfo ? this.state.playbackMode() : undefined,
-      hwAccel: this.playbackInfo ? this.state.hwAccel() : undefined,
+      mode: this.loader.info() ? this.state.playbackMode() : undefined,
+      hwAccel: this.loader.info() ? this.state.hwAccel() : undefined,
       engine: this.engineLabel(),
       url: this.lastStreamUrl,
       title: this.diagnosticsTitle(),
@@ -3024,7 +3047,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** True when the media is Dolby Vision served untouched (DirectPlay/DirectStream), so a decode failure is a
    *  DV-capability failure. Read live at error time via the PlayerStateService probe. */
   private isDolbyVisionPassthrough(): boolean {
-    const method = this.playbackInfo?.playMethod;
+    const method = this.loader.info()?.playMethod;
     if (method !== 'DirectPlay' && method !== 'DirectStream') return false;
     const v = this.currentFile()?.streamInfo?.video?.[0];
     return (v?.dvProfile ?? 0) > 0;
@@ -3033,7 +3056,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** GET the HLS manifest on the live sid at the playhead: a keep-alive plus prewarm that revives a GC'd
    *  session and starts ffmpeg at the resume segment (no-op if running). Skipped off HLS and offline. */
   private async prewarmCurrentStream(): Promise<void> {
-    const sid = this.playbackInfo?.sessionId;
+    const sid = this.loader.sessionId();
     if (!sid || this.isOfflinePlayback || this.playbackMode() === 'direct') {
       return;
     }
@@ -3064,7 +3087,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const reload = !!this.engine;
     try {
       if (!reload) this.state.loading.set(true);
-      if (await this.openLocal(s, reload) && reload && adopted) {
+      if (await this.openLocal(s, reload ? 'reload' : 'resume') && reload && adopted) {
         await this.completeEpisodeSwitchSetup();
       }
     } catch (e) {
@@ -3076,13 +3099,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** The one way this device's engine opens: the first launch and every hand-back apply position, pause and picks here. */
   private async openLocal(
     { position, paused, tracks }: { position: number | undefined; paused: boolean; tracks: LaunchTracks | null },
-    reload: boolean,
+    how: LoadKind | 'reload',
   ): Promise<boolean> {
     this.resumePaused = paused;
     try {
-      if (!reload) {
+      if (how !== 'reload') {
         this.launchTracks = tracks;
-        return await this.startLocal(position);
+        return await this.startLocal(position, how);
       }
       this.adoptTracks(tracks);
       return await this.refreshSidAndReload(position ?? 0, { preservePause: false, unmute: true, paused });
@@ -3126,7 +3149,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private async adoptOutputItem(item: { fileId: number; mediaId: number; episodeId?: number }): Promise<void> {
     this.mediaFileId = item.fileId;
     this.episodeId = item.episodeId;
-    this.playbackInfo = null;
+    this.loader.forget();
     this.itemAdopted = true;
     this.edlEnded = false;
     this.resetTrackState();
@@ -3207,7 +3230,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       const { mediaId, mediaFileId: fileId } = this;
       if (!mediaId || !fileId) return;
       // The view needs the new owner to observe: read the session before the route commits to it.
-      if (keepOpen && this.engine && this.session.isLocal() && !this.firstLoadPending && !this.preRollActive() && (await this.sessionSync.refresh(), this.sessionSync.observableOwner())) {
+      if (keepOpen && this.engine && this.session.isLocal() && !this.loader.busy() && !this.preRollActive() && (await this.sessionSync.refresh(), this.sessionSync.observableOwner())) {
         await this.savePosition();
         if (await this.session.yieldToView()) return;
       }
@@ -3226,6 +3249,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   });
 
   onBack() {
+    this.loader.abort();
     this.detachLocalOutput();
     this.savePosition();
     const kind = this.media?.type ?? this.offlineMediaType ?? 'movie';
@@ -3561,7 +3585,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  playing (`videoCopyStream`) - a re-encode already cut it server-side. */
   activeCropRect(): CropRect | undefined {
     if (this.isOfflinePlayback) return this.offlineCrop ?? undefined;
-    return this.playbackInfo?.videoCopyStream ? this.playbackInfo.source?.crop : undefined;
+    const pi = this.loader.info();
+    return pi?.videoCopyStream ? pi.source?.crop : undefined;
   }
 
   /** Push the black-bar rectangle onto the active engine: mpv crops
@@ -3593,7 +3618,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.isOfflinePlayback) {
       return { width: this.offlineCrop?.sourceWidth ?? 0, height: this.offlineCrop?.sourceHeight ?? 0 };
     }
-    return { width: this.playbackInfo?.source?.width ?? 0, height: this.playbackInfo?.source?.height ?? 0 };
+    const source = this.loader.info()?.source;
+    return { width: source?.width ?? 0, height: source?.height ?? 0 };
   }
   fit(): 'contain' | 'cover' {
     return this.fillScreen() ? 'cover' : 'contain';
@@ -3643,8 +3669,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** True until a reload's `engine.load()` resolves: the window where an engine error is
    *  the expected teardown, unlike one raised during the post-load awaits. */
   private reloadLoadPending = false;
-  /** True until ngAfterViewInit's engine.load() settles; only {@link isReloadIdle} reads it. */
-  private firstLoadPending = false;
   /** Set once doReloadStream reaches a successful engine.load(), so the reloadStream catch can tell a dead
    *  surface (failure before load) from a live one. */
   private reloadReachedPlayback = false;
@@ -3710,7 +3734,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     onLoaded: () => void;
   }): Promise<void> {
     const engine = this.engine!;
-    const pi = (this.playbackInfo = await this.negotiatePlayback(o.negotiateAt, {}, { ...o.replace, timeoutMs: o.timeoutMs }));
+    const pi = await this.negotiatePlayback(o.negotiateAt, {}, { ...o.replace, timeoutMs: o.timeoutMs });
+    this.loader.adopt(pi);
     this.adoptPlaybackInfo(pi);
     // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
     // load.
@@ -3744,7 +3769,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // The new stream restarts at `at`: the old one must not play on through the renegotiation.
       else if (opts.restart) await engine.pause().catch(() => {});
       // Only this device's session goes; multi-device viewers on the same file stay alive.
-      replace = await this.retirePreviousSession(this.playbackInfo?.sessionId);
+      replace = await this.retirePreviousSession(this.loader.sessionId());
       if (opts.unmute) engine.muted = false;
       await this.negotiateAndLoad({
         negotiateAt: at,
@@ -3787,8 +3812,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Release this device's session on exit, DirectPlay included, so its "now watching" row clears at once
     // instead of lingering until the backend idle reap.
     if (!sid) return;
-    const url = this.streamingApi.getStopSessionUrl(sid);
-    fetch(url, { method: 'DELETE', keepalive: true }).catch(() => {});
+    const { url, init } = this.streamingApi.stopSessionRequest(sid);
+    fetch(url, init).catch(() => {});
   }
 
   /** Get the currently active variant track. */

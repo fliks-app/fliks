@@ -234,3 +234,65 @@ describe('TizenEngine start position', () => {
     expect(av.seekTo).toHaveBeenCalledWith(50_000, expect.any(Function), expect.any(Function));
   });
 });
+
+describe('TizenEngine cancelled loads', () => {
+  afterEach(() => {
+    delete (window as unknown as { webapis?: unknown }).webapis;
+    delete (globalThis as unknown as { webapis?: unknown }).webapis;
+  });
+
+  function avplay() {
+    const prepared: (() => void)[] = [];
+    const stop = vi.fn();
+    const play = vi.fn();
+    const known: Record<string, unknown> = {
+      getState: () => 'IDLE',
+      getDuration: () => 600_000,
+      getTotalTrackInfo: () => [],
+      getCurrentStreamInfo: () => [],
+      stop,
+      play,
+      prepareAsync: (ok: () => void) => prepared.push(ok),
+    };
+    stubAvplay(new Proxy(known, { get: (t, k: string) => t[k] ?? (() => undefined) }));
+    return { stop, play, prepare: (i: number) => prepared[i]?.() };
+  }
+
+  it('stops AVPlay when the prepare of an unloaded load completes, and never plays', async () => {
+    const av = avplay();
+    const engine = new TizenEngine();
+    const pending = engine.load('http://x/a.mkv').then(() => null, (e) => e);
+    await engine.unload();
+    expect((await pending)?.message).toBe('AVPlay load cancelled');
+    av.stop.mockClear();
+    av.prepare(0);
+    expect(av.play).not.toHaveBeenCalled();
+    expect(av.stop).toHaveBeenCalled();
+  });
+
+  it('stops AVPlay when the prepare of a destroyed engine completes', async () => {
+    const av = avplay();
+    const engine = new TizenEngine();
+    const pending = engine.load('http://x/a.mkv').then(() => null, (e) => e);
+    await engine.destroy();
+    expect((await pending)?.message).toBe('AVPlay load cancelled');
+    av.stop.mockClear();
+    av.prepare(0);
+    expect(av.play).not.toHaveBeenCalled();
+    expect(av.stop).toHaveBeenCalled();
+  });
+
+  it('leaves AVPlay to a newer load when a second load() replaces one mid-prepare', async () => {
+    const av = avplay();
+    const engine = new TizenEngine();
+    const first = engine.load('http://x/a.mkv').then(() => null, (e) => e);
+    const second = engine.load('http://x/b.mkv');
+    expect((await first)?.message).toBe('AVPlay load cancelled');
+    av.stop.mockClear();
+    av.prepare(0);
+    expect(av.stop).not.toHaveBeenCalled();
+    av.prepare(1);
+    await second;
+    expect(av.play).toHaveBeenCalledTimes(1);
+  });
+});

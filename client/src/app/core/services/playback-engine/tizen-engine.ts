@@ -106,6 +106,12 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   private _pendingSeek: number | null = null;
   /** Between open() and the end of prepareAsync: AVPlay refuses seekTo there (PLAYER_ERROR_SEEK_FAILED). */
   private _preparing = false;
+  /** Bumped by load, unload and destroy: a prepare callback of an older number belongs to a load no one waits for. */
+  private loadSeq = 0;
+  /** The number of the last load() call, to tell a newer load from an unload. */
+  private latestLoad = 0;
+  /** Settles the load in flight as cancelled; set while one is pending. */
+  private settlePending: (() => void) | null = null;
   /** A failed seek is retried once through a reload; a second failure there must not reload again. */
   private _reloadingForSeek = false;
 
@@ -158,6 +164,8 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 
   async destroy(): Promise<void> {
+    this.loadSeq++;
+    this.settlePending?.();
     this.muteGate.dispose();
     this.applyTvMute(false);
     document.removeEventListener('visibilitychange', this.releaseOnHide);
@@ -243,6 +251,8 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     _mimeType?: string,
     _headers?: Record<string, string>,
   ): Promise<void> {
+    const seq = (this.latestLoad = ++this.loadSeq);
+    this.settlePending?.();
     this._lastLoadedUrl = url;
     this._preparing = true;
     this.resetFirstFrame();
@@ -280,9 +290,30 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
 
     return new Promise<void>((resolve, reject) => {
       let settled = false;
+      // Stops AVPlay for a load that no newer one replaced, unless another engine took the shared surface.
+      const release = () => {
+        if (this.latestLoad !== seq) return;
+        this._preparing = false;
+        if (TizenEngine.activeEngine === this || TizenEngine.activeEngine === null) {
+          try { webapis.avplay.stop(); } catch { /* ok */ }
+        }
+      };
+      // An unload, destroy or newer load ended this one: it settles without emitting an error.
+      const cancelled = () => {
+        if (seq === this.loadSeq) return false;
+        release();
+        reject(new Error('AVPlay load cancelled'));
+        return true;
+      };
+      // AVPlay answers a cancelled load late: it must not be left prepared or playing.
+      const lateRelease = () => {
+        if (seq !== this.loadSeq) release();
+      };
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
+        if (this.settlePending === cancel) this.settlePending = null;
+        if (cancelled()) return;
         this._preparing = false;
         this.stopIfOwner();
         const msg = 'AVPlay prepareAsync timeout (30s)';
@@ -293,12 +324,16 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        if (this.settlePending === cancel) this.settlePending = null;
         fn();
       };
+      const cancel = () => done(() => void cancelled());
+      this.settlePending = cancel;
 
       try {
         webapis.avplay.prepareAsync(
-          () => done(() => {
+          () => settled ? lateRelease() : done(() => {
+            if (cancelled()) return;
             try {
               this._duration = (webapis.avplay.getDuration() ?? 0) / 1000;
             } catch { this._duration = 0; }
@@ -321,7 +356,8 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
             this._pendingSeek = null;
             if (pending !== null) void this.seek(pending);
           }),
-          (err) => done(() => {
+          (err) => settled ? lateRelease() : done(() => {
+            if (cancelled()) return;
             this._preparing = false;
             this.stopIfOwner();
             this.emit('error', { code: -1, message: 'AVPlay prepare failed: ' + String(err), errorKey: 'player.playback_error' });
@@ -330,6 +366,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
         );
       } catch (e) {
         done(() => {
+          if (cancelled()) return;
           this._preparing = false;
           this.stopIfOwner();
           const msg = 'AVPlay prepareAsync threw: ' + (e instanceof Error ? e.message : String(e));
@@ -341,6 +378,8 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
   }
 
   async unload(): Promise<void> {
+    this.loadSeq++;
+    this.settlePending?.();
     try {
       const s = webapis.avplay.getState();
       if (s !== 'NONE' && s !== 'IDLE') webapis.avplay.stop();
