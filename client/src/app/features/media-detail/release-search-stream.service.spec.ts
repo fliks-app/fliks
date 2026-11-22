@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ReleaseSearchStreamService, type IndexerRosterEntry } from './release-search-stream.service';
 import { SseService } from '../../core/services/sse.service';
+import { sseStub } from '../../testing/sse.stub';
 import type { MovieRelease } from './media-detail-release-picker.service';
 
 const PLUGIN_ID = 'acme.acquire';
@@ -11,21 +12,19 @@ function release(title: string, score: Partial<Pick<MovieRelease, 'rank' | 'cust
 }
 
 function setup() {
-  const lastEvent = signal<Record<string, unknown> | null>(null);
+  const sse = sseStub();
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
-      { provide: SseService, useValue: { lastEvent } },
+      { provide: SseService, useValue: sse },
     ],
   });
   const service = TestBed.inject(ReleaseSearchStreamService);
   const releases = signal<MovieRelease[]>([]);
   const indexers = signal<IndexerRosterEntry[]>([]);
-  /** Delivers one event and lets the effect that reads it run. */
   const deliver = async (type: string, payload: unknown) => {
-    lastEvent.set({ type, payload });
-    TestBed.tick();
+    sse.deliver({ type, payload });
     await Promise.resolve();
   };
   return { service, releases, indexers, deliver };

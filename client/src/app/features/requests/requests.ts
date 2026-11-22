@@ -3,14 +3,15 @@ import {
   signal,
   inject,
   computed,
-  effect,
   OnInit,
   OnDestroy,
   viewChild,
 } from '@angular/core';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, ParamMap, RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { distinctUntilChanged, filter, map, skip } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { AuthService } from '../../core/services/auth.service';
@@ -87,18 +88,29 @@ export class RequestsComponent implements OnInit, OnDestroy {
   private readonly downloadProgress = inject(DownloadProgressService);
   readonly auth = inject(AuthService);
   private static readonly SCROLL_KEY = 'requests';
+  private static statusOf(q: ParamMap): FliksRequestStatus | null {
+    const status = q.get('status') as FliksRequestStatus | null;
+    return status && REQUEST_STATUSES.includes(status) ? status : null;
+  }
   /** Cached route: a return keeps the list and its scroll, then refetches the loaded rows. */
   private readonly routeFresh = keepRouteFresh({
     refresh: () => void this.refreshStatuses(),
     scrollKey: RequestsComponent.SCROLL_KEY,
   });
 
-  /** When a download finishes, refetch so a monitored request flips to its
-   *  downloaded state and the progress badge clears. */
-  private readonly importEffect = effect(() => {
-    const ev = this.sse.lastEvent();
-    if (ev?.type === 'import.complete') void this.refreshStatuses();
-  });
+  /** A request changed status for its owner (approved, declined, available): refetch so the row and its progress badge follow. */
+  private readonly requestNotified = this.sse.notifications
+    .pipe(filter((n) => n.cat === 'requests'), takeUntilDestroyed())
+    .subscribe(() => void this.refreshStatuses());
+
+  /** A push to `/requests?status=…` lands on a cached or visible page, where `ngOnInit` does not run again. */
+  private readonly statusParam = this.route.queryParamMap
+    .pipe(map(RequestsComponent.statusOf), distinctUntilChanged(), skip(1), takeUntilDestroyed())
+    .subscribe((status) => {
+      if (!status || status === this.statusFilter()) return;
+      this.statusFilter.set(status);
+      this.reload();
+    });
 
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   private readonly viewDeclineModal = viewChild(RequestViewDeclineModalComponent);
@@ -141,10 +153,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.scrollMemory.activate(RequestsComponent.SCROLL_KEY);
-    const status = this.route.snapshot.queryParamMap.get('status');
-    if (status && REQUEST_STATUSES.includes(status as FliksRequestStatus)) {
-      this.statusFilter.set(status as FliksRequestStatus);
-    }
+    const status = RequestsComponent.statusOf(this.route.snapshot.queryParamMap);
+    if (status) this.statusFilter.set(status);
     this.reload();
     try {
       const [qp, lp, libs] = await Promise.all([

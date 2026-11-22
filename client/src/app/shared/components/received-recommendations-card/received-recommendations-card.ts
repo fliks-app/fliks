@@ -2,10 +2,10 @@ import {
   Component,
   OnInit,
   computed,
-  effect,
   inject,
   signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
@@ -85,11 +85,7 @@ export class ReceivedRecommendationsCardComponent implements OnInit {
     keepRouteFresh({ refresh: () => { if (!this.tv.isTv()) void this.load(); } });
     // Refresh the moment a new recommendation SSE arrives, without waiting for
     // the next page load.
-    effect(() => {
-      if (this.sse.lastEvent()?.type === 'social.content_recommended') {
-        void this.load();
-      }
-    });
+    this.sse.on('social.content_recommended').pipe(takeUntilDestroyed()).subscribe(() => void this.load());
   }
 
   ngOnInit(): void {

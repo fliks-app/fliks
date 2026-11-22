@@ -17,7 +17,7 @@ import { MarkersApiService } from '../../core/services/api/markers-api.service';
 import { RequestsService } from '../../core/services/api/requests.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
-import { SseService, SseEvent } from '../../core/services/sse.service';
+import { SseService } from '../../core/services/sse.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
 import { DownloadProgressService } from '../../core/services/download-progress.service';
 import { TvService } from '../../core/services/tv.service';
@@ -25,6 +25,7 @@ import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../core/services/recommend.service';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
+import { sseStub } from '../../testing/sse.stub';
 
 const MEDIA_ID = 42;
 
@@ -47,12 +48,7 @@ const MOVIE: Media = {
   files: [],
 };
 
-/**
- * Reproduces series -> episode navigation, which destroys and recreates
- * MediaDetailComponent while the root-provided SseService keeps its last
- * event: a fresh instance must treat that stale event as already handled.
- */
-function createHarness(seedEvent: SseEvent | null) {
+function createHarness() {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -77,7 +73,7 @@ function createHarness(seedEvent: SseEvent | null) {
       { provide: BackgroundService, useValue: { set: vi.fn(), release: vi.fn(), suspend: vi.fn(), url: signal(null) } },
       { provide: ConfirmationService, useValue: {} },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
-      { provide: SseService, useValue: { lastEvent: signal(seedEvent) } },
+      { provide: SseService, useValue: sseStub() },
       { provide: StreamingApiService, useValue: {} },
       { provide: MarkersApiService, useValue: {} },
       { provide: RequestsService, useValue: {} },
@@ -109,30 +105,38 @@ function createHarness(seedEvent: SseEvent | null) {
   return { fixture, toast, mediaService };
 }
 
-describe('MediaDetailComponent — SSE replay across route-driven recreation', () => {
+describe('MediaDetailComponent: SSE events', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('does not replay a metadata.refreshed event the service already retained before construction', () => {
-    const staleEvent: SseEvent = { type: 'metadata.refreshed', mediaId: MEDIA_ID };
-    const { fixture, toast, mediaService } = createHarness(staleEvent);
-
+  it('a new event for the same media fires the toast', () => {
+    const { fixture, toast } = createHarness();
     fixture.componentInstance.media.set(MOVIE);
-    fixture.detectChanges(); // flush sseEffect now that `media` matches the stale event
 
-    expect(toast.success).not.toHaveBeenCalled();
-    expect(mediaService.getOne).not.toHaveBeenCalled(); // reloadAfterRescan never fires
-  });
-
-  it('sanity check: a genuinely new event for the same media still fires the toast', () => {
-    const { fixture, toast } = createHarness(null);
-
-    fixture.componentInstance.media.set(MOVIE);
-    fixture.detectChanges();
-
-    const freshEvent: SseEvent = { type: 'metadata.refreshed', mediaId: MEDIA_ID };
-    TestBed.inject(SseService).lastEvent.set(freshEvent);
-    fixture.detectChanges();
+    sse().deliver({ type: 'metadata.refreshed', mediaId: MEDIA_ID });
 
     expect(toast.success).toHaveBeenCalled();
   });
+
+  it('an import followed at once by queue.updated still reloads the page', () => {
+    const { fixture, mediaService } = createHarness();
+    fixture.componentInstance.media.set(MOVIE);
+
+    sse().deliver({ type: 'import.complete', mediaId: MEDIA_ID });
+    sse().deliver({ type: 'queue.updated' });
+
+    expect(mediaService.getOne).toHaveBeenCalled();
+  });
+
+  it('ignores an event of another media', () => {
+    const { fixture, toast } = createHarness();
+    fixture.componentInstance.media.set(MOVIE);
+
+    sse().deliver({ type: 'metadata.refreshed', mediaId: MEDIA_ID + 1 });
+
+    expect(toast.success).not.toHaveBeenCalled();
+  });
 });
+
+function sse() {
+  return TestBed.inject(SseService) as unknown as ReturnType<typeof sseStub>;
+}

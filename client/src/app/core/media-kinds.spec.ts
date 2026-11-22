@@ -4,6 +4,7 @@ import {
   MEDIA_KINDS,
   canMarkWatched,
   isMediaKind,
+  videoKindOf,
   kindOf,
   kindFromSegment,
   kindOfListFilter,
@@ -61,5 +62,12 @@ describe('a kind the client predates', () => {
     expect(kindOf(unknown)).toBe(KIND_REGISTRY.movie);
     expect(kindOf(undefined)).toBe(KIND_REGISTRY.movie);
     expect(mediaDetailLink(unknown, 3)).toEqual(['/movies', '3']);
+  });
+});
+
+describe('videoKindOf', () => {
+  it('is the episodic video kind for an episode and the single-file one otherwise', () => {
+    expect(videoKindOf(true)).toBe('series');
+    expect(videoKindOf(false)).toBe('movie');
   });
 });

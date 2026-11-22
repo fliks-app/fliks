@@ -1,11 +1,11 @@
 import {
   Component,
   OnInit,
-  effect,
   inject,
   input,
   signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCheck, LucideX } from '@lucide/angular';
@@ -36,9 +36,7 @@ export class FollowRequestsCardComponent implements OnInit {
     // Home is a cached route, so ngOnInit doesn't run again on return.
     keepRouteFresh({ refresh: () => { if (!this.tv.isTv()) void this.load(); } });
     // Prepend a request the moment its SSE arrives, without a round-trip.
-    effect(() => {
-      if (this.sse.lastEvent()?.type === 'social.follow_request') void this.load();
-    });
+    this.sse.on('social.follow_request').pipe(takeUntilDestroyed()).subscribe(() => void this.load());
   }
 
   ngOnInit(): void {

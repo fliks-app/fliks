@@ -1,5 +1,7 @@
 import { Component, ElementRef, OnInit, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { filter } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { SseService } from '../../../../core/services/sse.service';
 import { ToastService } from '../../../../core/services/toast.service';
@@ -67,15 +69,16 @@ export class LiveTvGuideAdminComponent implements OnInit {
   );
 
   constructor() {
-    effect(() => {
-      const event = this.sse.lastEvent();
-      if (event?.type === 'command.completed' && event['name'] === 'LiveTvGuideSync') {
-        untracked(() => {
-          void this.api.listGuideSources().then((rows) => this.rows.set(rows)).catch(() => {});
-          void this.loadReport();
-        });
-      }
-    });
+    this.sse
+      .on('command.completed')
+      .pipe(
+        filter((e) => e['name'] === 'LiveTvGuideSync'),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => {
+        void this.api.listGuideSources().then((rows) => this.rows.set(rows)).catch(() => {});
+        void this.loadReport();
+      });
   }
 
   ngOnInit(): void {

@@ -120,6 +120,10 @@ export default [
       '@angular-eslint/no-implicit-take-until-destroyed': 'error',
       '@typescript-eslint/no-explicit-any': 'off',
       'no-restricted-syntax': ['error', ...RESTRICTED_SYNTAX],
+      'no-restricted-properties': [
+        'error',
+        { property: 'lastEvent', message: 'A signal coalesces frames: subscribe to SseService.events / on(...types).' },
+      ],
     },
     linterOptions: {
       reportUnusedDisableDirectives: 'off',

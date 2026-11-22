@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
-import { of } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import { SubtitlesModalComponent } from './subtitles-modal';
 import { SubtitleFileRow, SubtitlesApiService } from '../../../core/services/api/subtitles-api.service';
 import { SubtitleActionsService } from '../../../core/services/subtitle-actions.service';
@@ -35,7 +35,7 @@ const providers = (getForMedia: () => Promise<SubtitleFileRow[]>) => [
     {
       provide: SseService,
       useValue: {
-        lastEvent: () => null,
+        on: () => EMPTY,
         translationProgress: () => ({}),
         retainTranslationProgress: () => {},
       },

@@ -1,6 +1,8 @@
 import { Component, ElementRef, OnInit, effect, inject, signal, computed, untracked, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { filter } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import { SseService } from '../../../../core/services/sse.service';
@@ -120,12 +122,13 @@ export class LiveTvSourcesComponent implements OnInit {
   }
 
   constructor() {
-    effect(() => {
-      const event = this.sse.lastEvent();
-      if (event?.type === 'command.completed' && event['name'] === 'LiveTvSourceSync') {
-        untracked(() => void this.api.listSources().then((rows) => this.rows.set(rows)).catch(() => {}));
-      }
-    });
+    this.sse
+      .on('command.completed')
+      .pipe(
+        filter((e) => e['name'] === 'LiveTvSourceSync'),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => void this.api.listSources().then((rows) => this.rows.set(rows)).catch(() => {}));
   }
 
   ngOnInit(): void {

@@ -26,6 +26,7 @@ import { AddToPlaylistService } from '../../core/services/add-to-playlist.servic
 import { RecommendService } from '../../core/services/recommend.service';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
+import { sseStub } from '../../testing/sse.stub';
 
 /**
  * Two episodes of one series are the same route config, so the page keeps its
@@ -76,7 +77,7 @@ function createFixture() {
       },
       { provide: ConfirmationService, useValue: {} },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
-      { provide: SseService, useValue: { lastEvent: signal(null) } },
+      { provide: SseService, useValue: sseStub() },
       { provide: StreamingApiService, useValue: {} },
       { provide: MarkersApiService, useValue: {} },
       { provide: RequestsService, useValue: {} },

@@ -36,13 +36,15 @@
           [label]="'settings.plugins.settings.allow_older_versions' | translate"
           [hint]="'settings.plugins.settings.allow_older_versions_hint' | translate"
         />
-        <app-toggle-field
-          [value]="allowUnsigned()"
-          (valueChange)="toggleAllowUnsigned($event)"
-          [disabled]="saving()"
-          [label]="'settings.plugins.settings.allow_unsigned' | translate"
-          [hint]="'settings.plugins.settings.allow_unsigned_hint' | translate"
-        />
+        @if (isAdmin()) {
+          <app-toggle-field
+            [value]="allowUnsigned()"
+            (valueChange)="toggleAllowUnsigned($event)"
+            [disabled]="saving()"
+            [label]="'settings.plugins.settings.allow_unsigned' | translate"
+            [hint]="'settings.plugins.settings.allow_unsigned_hint' | translate"
+          />
+        }
       </div>
     }
 

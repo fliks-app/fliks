@@ -1,4 +1,4 @@
-import { Injectable, Injector, WritableSignal, effect, inject, untracked } from '@angular/core';
+import { Injectable, WritableSignal, inject, untracked } from '@angular/core';
 import { SseService } from '../../core/services/sse.service';
 import { MovieRelease } from './media-detail-release-picker.service';
 
@@ -46,7 +46,6 @@ interface Run extends ProviderSearch {
 @Injectable({ providedIn: 'root' })
 export class ReleaseSearchStreamService {
   private readonly sse = inject(SseService);
-  private readonly injector = inject(Injector);
   /** Latest search per sinks: an older run still in flight must not write into them. */
   private readonly latest = new WeakMap<object, string>();
 
@@ -79,30 +78,23 @@ export class ReleaseSearchStreamService {
   }
 
   private listen(runs: Run[], live: () => boolean, publishRoster: () => void, publishReleases: () => void): () => void {
-    const ref = effect(
-      () => {
-        const event = this.sse.lastEvent();
-        if (!event) return;
-        const run = runs.find((r) => event.type.startsWith(`plugin.${r.pluginId}.search.`));
-        if (!run) return;
-        const payload = event['payload'] as
-          | { searchId?: string; indexers?: IndexerRosterEntry[]; releases?: MovieRelease[] }
-          | undefined;
-        if (!payload || payload.searchId !== run.searchId || !live()) return;
-        untracked(() => {
-          if (payload.indexers) {
-            run.roster = payload.indexers.map((ix) => ({ ...ix, pluginId: run.pluginId, pluginName: run.name }));
-            publishRoster();
-          }
-          if (payload.releases) {
-            run.releases = stamp(run.pluginId, payload.releases);
-            publishReleases();
-          }
-        });
-      },
-      { injector: this.injector },
-    );
-    return () => ref.destroy();
+    const sub = this.sse.events.subscribe((event) => {
+      const run = runs.find((r) => event.type.startsWith(`plugin.${r.pluginId}.search.`));
+      if (!run) return;
+      const payload = event['payload'] as
+        | { searchId?: string; indexers?: IndexerRosterEntry[]; releases?: MovieRelease[] }
+        | undefined;
+      if (!payload || payload.searchId !== run.searchId || !live()) return;
+      if (payload.indexers) {
+        run.roster = payload.indexers.map((ix) => ({ ...ix, pluginId: run.pluginId, pluginName: run.name }));
+        publishRoster();
+      }
+      if (payload.releases) {
+        run.releases = stamp(run.pluginId, payload.releases);
+        publishReleases();
+      }
+    });
+    return () => sub.unsubscribe();
   }
 }
 

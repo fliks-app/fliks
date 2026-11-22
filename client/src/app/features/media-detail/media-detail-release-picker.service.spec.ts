@@ -123,7 +123,10 @@ describe('MediaDetailReleasePickerService', () => {
   });
 
   const outcome = (name: string, scope: Record<string, unknown> = {}) =>
-    grabBestEvents.next({ outcome: name, scope: { mediaId: 7, family: 'video', groupId: null, itemId: 12, ...scope } });
+    grabBestEvents.next({
+      type: 'acquisition.grab-best',
+      payload: { outcome: name, scope: { mediaId: 7, family: 'video', groupId: null, itemId: 12, ...scope } },
+    });
 
   it('posts a grab-best to the core, a null language for an any-language want, and waits for its outcome', async () => {
     await install(ROUTES);

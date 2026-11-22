@@ -16,7 +16,7 @@ import type { Media } from '../api/media.service';
 import { SessionSyncService } from '../session-sync.service';
 import { RemotePlaybackTarget } from '../remote-playback-target';
 import { parseDeviceLabel } from '../../utils/format-device-label';
-import { isMediaKind, playsInAudioPlayer } from '../../media-kinds';
+import { isMediaKind, playsInAudioPlayer, videoKindOf } from '../../media-kinds';
 import { sameTarget } from '../remote-target-id';
 import { launchPickFor, type LaunchTracks } from '../track-manager.service';
 import { launchTracksToWire, RemoteService, snapshotToWire } from '../remote.service';
@@ -305,8 +305,7 @@ export class PlaybackSession {
   /** The device `play` loads on (`RemoteService.playTarget`); a party plays on this device or the output it drives. */
   private playTarget(item: Pick<PlayItem, 'episodeId' | 'media'>): string | null {
     if (this.kind() === 'local' && this.partyActive()) return null;
-    // eslint-disable-next-line no-restricted-syntax -- fallback kind of an item without media: an episode id means a series
-    return this.remoteSvc().playTarget(item.media?.type ?? (item.episodeId ? 'series' : 'movie'));
+    return this.remoteSvc().playTarget(item.media?.type ?? videoKindOf(!!item.episodeId));
   }
 
   /** A play of `item` started now stays on this device. */

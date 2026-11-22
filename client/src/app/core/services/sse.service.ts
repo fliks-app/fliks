@@ -1,5 +1,5 @@
 import { Injectable, signal, computed, inject, effect, untracked, OnDestroy } from '@angular/core';
-import { Subject, firstValueFrom } from 'rxjs';
+import { Observable, Subject, filter, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { translatePlural } from '../pipes/translate-plural.pipe';
 import { ToastService } from './toast.service';
@@ -15,6 +15,7 @@ import { invalidatePrefix, invalidateResource } from '../interceptors/cache.inte
 import { getOrCreateDeviceId } from '../utils/device-info';
 import { parseDeviceLabel } from '../utils/format-device-label';
 import { DeviceService } from './device.service';
+import { AppResumeService } from './app-resume.service';
 import { SystemInfoService } from './system-info.service';
 import { currentTargetId } from './remote-target-id';
 import { holdTabNonce } from './tab-nonce';
@@ -229,9 +230,9 @@ export class SseService implements OnDestroy {
   private readonly device = inject(DeviceService);
   private readonly systemInfo = inject(SystemInfoService);
   private readonly network = inject(NetworkService);
+  private readonly appResume = inject(AppResumeService);
 
   readonly activeProgress = signal<Map<string, TaskProgress>>(new Map());
-  readonly lastEvent = signal<SseEvent | null>(null);
   /** Live machine-translation progress keyed by the PROCESSING subtitle id
    *  (0–100). Read by the subtitle modal to show a per-row percentage. */
   readonly translationProgress = signal<Record<number, number>>({});
@@ -248,15 +249,17 @@ export class SseService implements OnDestroy {
   /** Commands are transient intent: a last-value signal would let a state
    *  frame overwrite one before its consumer ran, losing it with no trace. */
   readonly commands = new Subject<RemoteCommand>();
+  /** Every frame no dedicated Subject takes, in arrival order: two frames in one task both reach a subscriber. */
+  readonly events = new Subject<SseEvent>();
   /** Id of a subtitle whose server-side sync just finished. */
   readonly subtitleSynced = new Subject<number>();
   /** A subtitle sync that the server gave up on. */
   readonly subtitleSyncFailed = new Subject<{ subtitleId: number; error: string }>();
   /** Id of a subtitle whose running or queued sync was cancelled. */
   readonly subtitleSyncCancelled = new Subject<number>();
-  /** A target leaving its player; transient, so not on `lastEvent`, which `remote.targets_changed` replaces before any effect runs. */
+  /** A target leaving its player; transient, so it never shares a state signal with the frames around it. */
   readonly stopped = new Subject<{ targetId: string; sessionId: string | null }>();
-  /** `session.changed` / `session.superseded`, on their own Subject like `commands`: a supersede must not be replaced on `lastEvent` before it is read. */
+  /** `session.changed` / `session.superseded`, on their own Subject like `commands`. */
   readonly sessionEvents = new Subject<SessionEvent>();
   /** A user notification (`notification`), on its own Subject: `PushService` shows or hides each one. */
   readonly notifications = new Subject<PushNotification>();
@@ -264,17 +267,17 @@ export class SseService implements OnDestroy {
   readonly likeEvents = new Subject<LikesChangedEvent>();
   /** Watch-party events, routed on their own Subject like `commands`: each one matters, not just the latest. */
   readonly partyEvents = new Subject<PartyEvent>();
-  /** Optimizer queue events, on their own Subject: progress ticks every heartbeat and must not flood `lastEvent`. */
+  /** Optimizer queue events, on their own Subject: progress ticks every heartbeat and would flood `events`. */
   readonly optimizeEvents = new Subject<SseEvent>();
-  /** Karaoke model downloads and track jobs: progress ticks every second and must not flood `lastEvent`. */
+  /** Karaoke model downloads and track jobs: progress ticks every second and would flood `events`. */
   readonly karaokeEvents = new Subject<SseEvent>();
   /** Pairing requests and cancellations, routed on their own Subject: two in one tick must both reach the approver. */
   readonly pairingEvents = new Subject<SseEvent>();
   /** Outcome of a grab-best the user started: each one matters to the request waiting for it. */
   readonly grabBestEvents = new Subject<SseEvent>();
-  /** Queue reports of the providers, on their own Subject: they tick with every poll and must not flood `lastEvent`. */
+  /** Queue reports of the providers, on their own Subject: they tick with every poll and would flood `events`. */
   readonly queueEvents = new Subject<SseEvent>();
-  /** Every frame, off `lastEvent`: an ack or a queue rides on one frame, which a signal would coalesce with the next. */
+  /** Every `remote.state` frame: an ack or a queue rides on one frame, which a signal would coalesce with the next. */
   readonly remoteStates = new Subject<RemoteState>();
   /** The latest frame, for a reader that only wants where things stand. */
   readonly remoteState = signal<RemoteState | null>(null);
@@ -285,6 +288,8 @@ export class SseService implements OnDestroy {
    *  that await would otherwise open a stream for the previous session. */
   private generation = 0;
   private retryDelay = 5000;
+  /** A stream already opened for this session: its next `sse.connected` is a re-dial. */
+  private dialled = false;
   private retryHandle: ReturnType<typeof setTimeout> | null = null;
   private lastMessageAt = 0;
   private livenessHandle: ReturnType<typeof setInterval> | null = null;
@@ -297,6 +302,7 @@ export class SseService implements OnDestroy {
       this.auth.sessionEpoch();
       untracked(() => {
         this.close();
+        this.dialled = false;
         if (this.auth.isAuthenticated()) void this.connect();
         // Progress is keyed by media, not account; dropping it also stops the sweep timer of an unwatched session.
         this.downloadProgress.reset();
@@ -319,6 +325,11 @@ export class SseService implements OnDestroy {
       this.auth.isAuthenticated();
       untracked(() => this.syncUnreachable());
     });
+  }
+
+  /** The frames of these types, in arrival order. */
+  on(...types: string[]): Observable<SseEvent> {
+    return this.events.pipe(filter((e) => types.includes(e.type)));
   }
 
   /** Logged-out is never "unreachable": nothing is trying to connect. */
@@ -444,84 +455,7 @@ export class SseService implements OnDestroy {
     }, LIVENESS_CHECK_MS);
     this.eventSource.onmessage = (event) => {
       this.lastMessageAt = Date.now();
-      try {
-        const data = JSON.parse(event.data) as SseEvent;
-        if (data.type === 'sse.connected') {
-          const id = data['connectionId'];
-          if (typeof id === 'string' && id) {
-            this.connectionId.set(id);
-          }
-          // Changes missed while disconnected are not replayed: reread the current state, once the page has painted.
-          whenIdle(() => {
-            this.downloadProgress.reset();
-            void this.downloadProgress.hydrate();
-          });
-          this.activeProgress.set(new Map());
-          // A reconnect means we don't know what we missed while disconnected.
-          void invalidateResource('/api/media');
-          void invalidateResource('/api/likes');
-          this.optimizeEvents.next(data);
-          this.karaokeEvents.next(data);
-          return;
-        }
-        if (data.type === 'remote.command') {
-          this.commands.next(data as unknown as RemoteCommand);
-          return;
-        }
-        if (data.type === 'remote.stopped') {
-          this.stopped.next({ targetId: String(data['targetId'] ?? ''), sessionId: typeof data['sessionId'] === 'string' ? data['sessionId'] : null });
-          return;
-        }
-        if (data.type === 'session.changed' || data.type === 'session.superseded') {
-          this.sessionEvents.next(data as unknown as SessionEvent);
-          return;
-        }
-        if (data.type === 'likes.changed') {
-          void invalidateResource('/api/likes');
-          this.likeEvents.next(data as unknown as LikesChangedEvent);
-          return;
-        }
-        if (data.type.startsWith('party.')) {
-          this.partyEvents.next(data as unknown as PartyEvent);
-          return;
-        }
-        if (data.type.startsWith('optimize.')) {
-          this.optimizeEvents.next(data);
-          return;
-        }
-        if (data.type.startsWith('karaoke.')) {
-          this.karaokeEvents.next(data);
-          return;
-        }
-        if (data.type === 'acquisition.grab-best') {
-          this.grabBestEvents.next(data);
-          return;
-        }
-        if (data.type === 'acquisition.queue') {
-          this.queueEvents.next(data);
-          return;
-        }
-        if (data.type === 'pairing.requested' || data.type === 'pairing.cancelled') {
-          this.pairingEvents.next(data);
-          return;
-        }
-        if (data.type === 'remote.state') {
-          const state = data as unknown as RemoteState;
-          this.remoteState.set(state);
-          this.remoteStates.next(state);
-          return;
-        }
-        this.handleEvent(data);
-        // Don't update lastEvent for high-frequency progress events
-        // (handled via dedicated signals/stores instead)
-        if (
-          data.type !== 'task.progress' &&
-          data.type !== 'download.progress' &&
-          data.type !== 'subtitle.translation_progress'
-        ) {
-          this.lastEvent.set(data);
-        }
-      } catch { /* ignore parse errors */ }
+      this.ingest(event.data);
     };
     this.retryDelay = 5000; // Reset on successful connection
     this.eventSource.onopen = () => { this.retryDelay = 5000; };
@@ -538,6 +472,89 @@ export class SseService implements OnDestroy {
       this.retryHandle = setTimeout(() => void this.connect(), this.retryDelay);
       this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
     };
+  }
+
+  /** Routes one frame to its Subject or signal; a frame that does not parse is dropped. */
+  ingest(raw: string): void {
+    try {
+      const data = JSON.parse(raw) as SseEvent;
+      if (data.type === 'sse.connected') {
+        const id = data['connectionId'];
+        if (typeof id === 'string' && id) {
+          this.connectionId.set(id);
+        }
+        // Changes missed while disconnected are not replayed: reread the current state, once the page has painted.
+        whenIdle(() => {
+          this.downloadProgress.reset();
+          void this.downloadProgress.hydrate();
+        });
+        this.activeProgress.set(new Map());
+        // A reconnect means we don't know what we missed while disconnected: the open page rereads too.
+        void invalidateResource('/api/media');
+        void invalidateResource('/api/likes');
+        if (this.dialled) this.appResume.refresh();
+        this.dialled = true;
+        this.optimizeEvents.next(data);
+        this.karaokeEvents.next(data);
+        return;
+      }
+      if (data.type === 'remote.command') {
+        this.commands.next(data as unknown as RemoteCommand);
+        return;
+      }
+      if (data.type === 'remote.stopped') {
+        this.stopped.next({ targetId: String(data['targetId'] ?? ''), sessionId: typeof data['sessionId'] === 'string' ? data['sessionId'] : null });
+        return;
+      }
+      if (data.type === 'session.changed' || data.type === 'session.superseded') {
+        this.sessionEvents.next(data as unknown as SessionEvent);
+        return;
+      }
+      if (data.type === 'likes.changed') {
+        void invalidateResource('/api/likes');
+        this.likeEvents.next(data as unknown as LikesChangedEvent);
+        return;
+      }
+      if (data.type.startsWith('party.')) {
+        this.partyEvents.next(data as unknown as PartyEvent);
+        return;
+      }
+      if (data.type.startsWith('optimize.')) {
+        this.optimizeEvents.next(data);
+        return;
+      }
+      if (data.type.startsWith('karaoke.')) {
+        this.karaokeEvents.next(data);
+        return;
+      }
+      if (data.type === 'acquisition.grab-best') {
+        this.grabBestEvents.next(data);
+        return;
+      }
+      if (data.type === 'acquisition.queue') {
+        this.queueEvents.next(data);
+        return;
+      }
+      if (data.type === 'pairing.requested' || data.type === 'pairing.cancelled') {
+        this.pairingEvents.next(data);
+        return;
+      }
+      if (data.type === 'remote.state') {
+        const state = data as unknown as RemoteState;
+        this.remoteState.set(state);
+        this.remoteStates.next(state);
+        return;
+      }
+      this.handleEvent(data);
+      // High-frequency progress is state, read from its signals and stores.
+      if (
+        data.type !== 'task.progress' &&
+        data.type !== 'download.progress' &&
+        data.type !== 'subtitle.translation_progress'
+      ) {
+        this.events.next(data);
+      }
+    } catch { /* ignore parse errors */ }
   }
 
   /** A name its owner chose beats the label derived from the User-Agent, as it does in the picker; both travel verbatim. */
