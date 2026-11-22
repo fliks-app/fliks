@@ -9,10 +9,10 @@ internal sealed record ServerEnvironment(ushort Port, ushort DbPort, string DbPa
 {
     public IReadOnlyDictionary<string, string> AsEnvironment()
     {
-        // ffmpeg + pg_dump/psql first on PATH: the engine and the server spawn them by name.
+        // The tools pack + pg_dump/psql first on PATH: the engine and the server spawn them by name.
         var systemPath = Environment.GetEnvironmentVariable("PATH") ?? "";
         var path = string.Join(Path.PathSeparator,
-            new[] { AppPaths.FfmpegBinDir, AppPaths.PgBinDir, systemPath });
+            new[] { AppPaths.ToolsDir, AppPaths.PgBinDir, systemPath });
 
         return new Dictionary<string, string>
         {

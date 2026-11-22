@@ -46,7 +46,7 @@ done
 
 # Fail fast on missing native bits — otherwise Electron crashes cryptically.
 [ -f "$ROOT/desktop/native/vendor/libmpv.so.2" ] || {
-  echo "dev-linux: missing desktop/native/vendor/libmpv.so.2 (vendored, gitignored) — see desktop/CLAUDE.md" >&2; exit 1; }
+  echo "dev-linux: missing desktop/native/vendor/libmpv.so.2 (gitignored): run desktop/scripts/fetch-libmpv-linux.sh with the LIBMPV_LINUX_* values of desktop-release.yml, or see desktop/CLAUDE.md" >&2; exit 1; }
 [ -f "$ROOT/desktop/native/build/Release/fliks_compositor.node" ] || {
   echo "dev-linux: missing native addon — re-run with --addon (or see desktop/CLAUDE.md)" >&2; exit 1; }
 

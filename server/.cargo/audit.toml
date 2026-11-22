@@ -1,0 +1,4 @@
+[advisories]
+# rsa (Marvin timing attack) enters only through jsonwebtoken's RS*/PS* verification of OIDC
+# keys: no RSA private-key operation exists, so the leak is unreachable.
+ignore = ["RUSTSEC-2023-0071"]

@@ -40,6 +40,7 @@ jobs:
       libmpv_mac: ${{ steps.diff.outputs.libmpv_mac }}
       receiver: ${{ steps.diff.outputs.receiver }}
       tvos: ${{ steps.diff.outputs.tvos }}
+      macos: ${{ steps.diff.outputs.macos }}
     steps:
       # Depth 2: a PR checks out its merge commit, whose first parent is the base branch tip.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,7 +64,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          out() { printf 'server=%s\nclient=%s\ndesktop=%s\nlibmpv_mac=%s\nreceiver=%s\ntvos=%s\n' "$1" "$1" "$1" "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
+          out() { printf 'server=%s\nclient=%s\ndesktop=%s\nlibmpv_mac=%s\nreceiver=%s\ntvos=%s\nmacos=%s\n' "$1" "$1" "$1" "$1" "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
           # Release PRs only bump versions (main re-runs everything after the merge); drafts wait for review.
           if [[ "$RELEASE_PR" == true || "$DRAFT" == true ]]; then out false; exit 0; fi
           case "$EVENT" in
@@ -80,6 +81,7 @@ jobs:
             echo "client=$(hit '^(client/|server/fixtures/)')"
             echo "desktop=$(hit '^desktop/')"
             echo "tvos=$(hit '^(appletv/|server/parity/scenarios/|client/public/i18n/)')"
+            echo "macos=$(hit '^(macos/|scripts/embedded-postgres\.conf$)')"
             echo "receiver=$(hit '^(cast-receiver/|server/public/emoji/)')"
             echo "libmpv_mac=$(hit '^desktop/(scripts/(build-libmpv-mac|verify-libmpv-mac|verify-minos-mac)\.sh|native/(binding\.gyp|player_mac/))')"
           } | tee -a "$GITHUB_OUTPUT"
@@ -638,10 +640,30 @@ jobs:
           done
           exit 1
 
+  # Swift compile of the macOS server host only: no bundle, no signing, no engine or Postgres fetch.
+  macos:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.macos == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: macos
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: xcodegen generate
+      - name: Compile the Swift app
+        run: |
+          xcodebuild -project Fliks.xcodeproj -scheme Fliks -configuration Debug \
+            -derivedDataPath build ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build
+
   # The only required check: a skipped job (area untouched) counts as passed.
   ci-ok:
     if: always()
-    needs: [changes, no-em-dash, lint, build, test-shard, restore-pg17, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos]
+    needs: [changes, no-em-dash, lint, build, test-shard, restore-pg17, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos, macos]
     runs-on: ubuntu-latest
     steps:
       - env:

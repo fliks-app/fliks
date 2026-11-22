@@ -70,11 +70,11 @@ enum Paths {
         return URL(fileURLWithPath: "/opt/homebrew/opt/postgresql@18/share")
     }()
 
-    // MARK: - FFmpeg
+    // MARK: - Tools pack
 
-    /// FFmpeg binary with VideoToolbox support.
-    static let ffmpegDir: URL = {
-        let bundled = resources.appendingPathComponent("ffmpeg/bin")
+    /// ffmpeg (VideoToolbox), ffprobe, fpcalc, mkvmerge from the engine's tools pack.
+    static let toolsDir: URL = {
+        let bundled = resources.appendingPathComponent("tools")
         if isExecutable(bundled.appendingPathComponent("ffmpeg")) { return bundled }
         let brew = URL(fileURLWithPath: "/opt/homebrew/bin")
         if isExecutable(brew.appendingPathComponent("ffmpeg")) { return brew }

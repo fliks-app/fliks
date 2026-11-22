@@ -33,7 +33,7 @@ mechanisms.
 ```powershell
 cd windows
 
-# 1. Fetch vendored binaries (PostgreSQL, FFmpeg) into .\Vendored
+# 1. Fetch vendored binaries (PostgreSQL) into .\Vendored
 .\Scripts\fetch-vendored.ps1
 
 # 2. Build client + fliks-server + tray, fetch fliks-engine, assemble .\build\Bundle

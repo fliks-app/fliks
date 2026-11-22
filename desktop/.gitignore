@@ -5,12 +5,6 @@ release/
 # electron-builder to ship at resources/web; a generated artifact, not source.
 web/
 vendor/
-# …except the self-contained libmpv the compositor addon dlopen's. It's a
-# prebuilt runtime dep (FFmpeg statically linked, hidden symbols) vendored into
-# the repo so CI produces a working .deb without a separate fetch step.
-!native/vendor/
-native/vendor/*
-!native/vendor/libmpv.so.2
 # SDL3 headers and pkg-config from scripts/build-sdl3-linux.sh.
 native/.sdl3/
 *.log

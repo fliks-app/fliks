@@ -4,9 +4,8 @@
 #
 # Prerequisites:
 #   1. brew install xcodegen postgresql@18
-#   2. ./Scripts/fetch-vendored.sh  (jellyfin-ffmpeg, arm64)
-#   3. Xcode 16+ with command line tools
-#   4. Rust toolchain (cargo) for fliks-server, npm for the client
+#   2. Xcode 16+ with command line tools
+#   3. Rust toolchain (cargo) for fliks-server, npm for the client
 #
 # Usage: ./build-app.sh [--skip-web] [--skip-xcode]
 #
@@ -18,7 +17,6 @@ cd "$(dirname "$0")/.."
 
 REPO_ROOT="$(cd .. && pwd)"
 MACOS_DIR="$(pwd)"
-VENDORED="$MACOS_DIR/Vendored"
 BUILD_DIR="$MACOS_DIR/build"
 SCRIPTS_DIR="$MACOS_DIR/Scripts"
 SKIP_WEB=false
@@ -36,16 +34,11 @@ if ! command -v psql &>/dev/null; then
     echo "Error: psql not found. Run: brew install postgresql@18"
     exit 1
 fi
-if [ ! -x "$VENDORED/ffmpeg/bin/ffmpeg" ]; then
-    echo "Error: Vendored ffmpeg not found. Run ./Scripts/fetch-vendored.sh first."
-    exit 1
-fi
 
 PG_PREFIX="$(brew --prefix postgresql@18)"
 
 echo "==> Build configuration"
 echo "    PostgreSQL: $PG_PREFIX ($($PG_PREFIX/bin/postgres --version | awk '{print $NF}'))"
-echo "    FFmpeg:     $VENDORED/ffmpeg/bin/ffmpeg ($("$VENDORED/ffmpeg/bin/ffmpeg" -version 2>&1 | head -1 | awk '{print $3}'))"
 echo ""
 
 # ── Build web apps ──
@@ -85,7 +78,7 @@ echo "==> Populating $APP_BUNDLE"
 # protected-write check. Without this, an incremental xcodebuild leaves
 # the old Resources in place and the script aborts on the first cp,
 # silently shipping a DMG with a stale server / Postgres / FFmpeg.
-rm -rf "$RESOURCES/bin" "$RESOURCES/postgres" "$RESOURCES/ffmpeg" "$RESOURCES/cast" "$RESOURCES/client" \
+rm -rf "$RESOURCES/bin" "$RESOURCES/postgres" "$RESOURCES/tools" "$RESOURCES/cast" "$RESOURCES/client" \
     "$RESOURCES/node" "$RESOURCES/backend"  # 4.x layout, wiped for one release
 
 mkdir -p "$RESOURCES/bin"
@@ -115,6 +108,22 @@ curl -fsSL -o "$KARAOKE_TGZ" \
 echo "$KARAOKE_SHA  $KARAOKE_TGZ" | shasum -a 256 -c -
 tar -xzf "$KARAOKE_TGZ" -C "$RESOURCES/bin"
 rm -f "$KARAOKE_TGZ"
+
+# Tools pack (ffmpeg, ffprobe, fpcalc, mkvmerge, mkvpropedit): the archive's top dir is tools/, put on the engine's PATH.
+TOOLS_SHA="$(sed -n 's/^sha256_tools_darwin_arm64=//p' "$REPO_ROOT/engine.lock")"
+if [ -z "$TOOLS_SHA" ]; then
+    echo "Error: engine.lock has no sha256_tools_darwin_arm64 (run scripts/bump-engine.sh)." >&2
+    exit 1
+fi
+TOOLS_TGZ="$(mktemp)"
+curl -fsSL -o "$TOOLS_TGZ" \
+    "https://github.com/fliks-app/engine/releases/download/v$ENGINE_VERSION/fliks-engine-tools-darwin-arm64.tar.gz"
+echo "$TOOLS_SHA  $TOOLS_TGZ" | shasum -a 256 -c -
+tar -xzf "$TOOLS_TGZ" -C "$RESOURCES"
+rm -f "$TOOLS_TGZ"
+for t in ffmpeg ffprobe fpcalc mkvmerge mkvpropedit; do
+    [ -x "$RESOURCES/tools/$t" ] || { echo "Error: tools/$t is missing from the tools pack." >&2; exit 1; }
+done
 
 # ── fliks-server (Rust, built here; runs behind the engine) ──
 echo "    [server] Building fliks-server..."
@@ -176,11 +185,6 @@ bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$PG_ROOT/lib/libpq.5.dylib" "$PG_ROOT/lib"
 # cover lib/postgresql/, so relocate their deps into the shared bundled lib/ too.
 bash "$SCRIPTS_DIR/bundle-dylibs.sh" "$PG_ROOT/lib/postgresql" "$PG_ROOT/lib"
 
-# ── FFmpeg (vendored jellyfin-ffmpeg, statically linked — no dylib fixup) ──
-echo "    [ffmpeg] Copying jellyfin-ffmpeg..."
-mkdir -p "$RESOURCES/ffmpeg/bin"
-cp -R "$VENDORED/ffmpeg/bin/"* "$RESOURCES/ffmpeg/bin/"
-
 # ── Cast receiver page ──
 mkdir -p "$RESOURCES/cast"
 cp -R "$REPO_ROOT/server/public/"* "$RESOURCES/cast/"
@@ -212,7 +216,7 @@ sign() {
     fi
 }
 
-# Every Mach-O inside the bundle: dylibs and the engine/server/postgres/ffmpeg
+# Every Mach-O inside the bundle: dylibs and the engine/server/postgres/tools
 # binaries. `file -b` decides (name/perm would miss a .bundle);
 # restricted to executable/shared-library/bundle so .o objects and dSYM
 # companions, which codesign refuses, are skipped. Sign in parallel: each
@@ -257,8 +261,8 @@ fi
 
 # 2. No vendored Mach-O may reference /opt/homebrew — those paths exist only on
 #    the build host, so every dependency must be relocated into the bundle.
-#    Scoped to the dirs this script relocates (bin/postgres/ffmpeg).
-stray="$(find "$RESOURCES/bin" "$RESOURCES/postgres" "$RESOURCES/ffmpeg" \
+#    Scoped to the dirs this script relocates (bin/postgres/tools).
+stray="$(find "$RESOURCES/bin" "$RESOURCES/postgres" "$RESOURCES/tools" \
     -type f \( -perm +111 -o -name '*.dylib' \) -print0 2>/dev/null \
     | xargs -0 -I{} sh -c 'otool -L "$1" 2>/dev/null | grep -q "/opt/homebrew" && echo "$1"' _ {} \
     || true)"
@@ -279,12 +283,16 @@ echo "    [verify] postgres resolves share/ inside the bundle"
 # 3. ffmpeg must have zscale (libzimg) + the VideoToolbox tone-map — the HDR
 #    paths (crop / burn-in / DV) depend on them.
 for filt in zscale tonemap_videotoolbox; do
-    if ! "$RESOURCES/ffmpeg/bin/ffmpeg" -hide_banner -filters 2>/dev/null | grep -qw "$filt"; then
+    if ! "$RESOURCES/tools/ffmpeg" -hide_banner -filters 2>/dev/null | grep -qw "$filt"; then
         echo "Error: bundled ffmpeg is missing the '$filt' filter (expected jellyfin-ffmpeg)."
         exit 1
     fi
 done
 echo "    [verify] ffmpeg has zscale + tonemap_videotoolbox"
+"$RESOURCES/tools/fpcalc" -version >/dev/null 2>&1 \
+    && "$RESOURCES/tools/mkvmerge" --version >/dev/null 2>&1 \
+    || { echo "Error: bundled fpcalc or mkvmerge does not run once signed."; exit 1; }
+echo "    [verify] fpcalc and mkvmerge run"
 
 # 4. The karaoke pack must be present and its tools must run once signed (hardened runtime).
 for f in whisper-cli ffmpeg-pitch libonnxruntime.dylib; do

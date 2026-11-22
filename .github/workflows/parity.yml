@@ -111,10 +111,14 @@ jobs:
       # The backup scenarios run pg_dump against the Postgres 18 service; the runner image ships 16.
       - name: PostgreSQL 18 client tools
         run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
-      # The engine release's own ffmpeg, as in its image (the runner has none).
+      # Same jellyfin-ffmpeg as the engine image (its Dockerfile pins version and sha256); the runner has none.
       - name: ffmpeg
+        env:
+          JELLYFIN_FFMPEG_VERSION: 8.1.2-1
+          JELLYFIN_FFMPEG_SHA256: 0683c730f0cfa7d2edd321d5c4921ef17d4e6a33a9626c04bef9092c29f94e1e
         run: |
-          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/ffmpeg.deb" https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v8.1.2-1/jellyfin-ffmpeg8_8.1.2-1-noble_amd64.deb
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/ffmpeg.deb" "https://github.com/jellyfin/jellyfin-ffmpeg/releases/download/v${JELLYFIN_FFMPEG_VERSION}/jellyfin-ffmpeg8_${JELLYFIN_FFMPEG_VERSION}-noble_amd64.deb"
+          echo "${JELLYFIN_FFMPEG_SHA256}  $RUNNER_TEMP/ffmpeg.deb" | sha256sum -c -
           sudo apt-get install -y -qq "$RUNNER_TEMP/ffmpeg.deb"
           sudo ln -sf /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/local/bin/ffmpeg
           sudo ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe

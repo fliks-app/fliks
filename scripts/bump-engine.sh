@@ -17,6 +17,9 @@ gh release download "v$v" -R fliks-app/engine -p 'fliks-engine-*.sha256' -D "$tm
         echo "sha256_${p//-/_}=$(awk '{print $1}' "$f.sha256")"
     done
     for p in darwin-arm64 windows-x64; do
+        echo "sha256_tools_${p//-/_}=$(awk '{print $1}' "$tmp/fliks-engine-tools-$p".*.sha256)"
+    done
+    for p in darwin-arm64 windows-x64; do
         echo "sha256_karaoke_${p//-/_}=$(awk '{print $1}' "$tmp/fliks-engine-karaoke-$p".*.sha256)"
     done
 } > engine.lock.new

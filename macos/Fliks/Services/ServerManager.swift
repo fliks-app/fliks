@@ -186,8 +186,8 @@ struct ServerEnvironment {
     let dbPassword: String
 
     var asEnvironment: [String: String] {
-        // Build PATH: resolved ffmpeg + pg_dump/psql + Homebrew + system essentials.
-        let ffmpegBin = Paths.ffmpegDir.path
+        // Build PATH: tools pack + pg_dump/psql + Homebrew + system essentials.
+        let toolsBin = Paths.toolsDir.path
         let pgBin = Paths.pgBinDir.path
         let systemPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -201,7 +201,7 @@ struct ServerEnvironment {
             "DB_NAME": "fliks",
             "SERVE_STATIC_PATH": Paths.effectiveClientDir.path,
             "FLIKS_CONF_DIR": Paths.confDir.path,
-            "PATH": "\(ffmpegBin):\(pgBin):\(systemPath)",
+            "PATH": "\(toolsBin):\(pgBin):\(systemPath)",
             "FLIKS_CAST_DIR": Paths.effectiveCastDir.path,
         ]
         return env
