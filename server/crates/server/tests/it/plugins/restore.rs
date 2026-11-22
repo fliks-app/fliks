@@ -331,6 +331,7 @@ async fn a_schema_the_backup_left_out_is_reported_and_its_plugin_disabled() {
         .output()
         .unwrap();
     assert!(dump.status.success());
+    std::fs::create_dir_all(backup::dir()).unwrap();
     std::fs::write(path(name), &dump.stdout).unwrap();
     let out = restore::restore(
         &cfg,
