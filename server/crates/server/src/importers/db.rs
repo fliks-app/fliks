@@ -190,12 +190,11 @@ pub async fn update_media(
     Ok(())
 }
 
-/// Local profiles, id ascending (the last of a duplicate name wins).
+/// Local video profiles, id ascending (the last of a duplicate name wins).
 pub async fn quality_profiles(db: &PgPool) -> sqlx::Result<Vec<(i32, String)>> {
-    let rows = sqlx::query!("SELECT id, name FROM quality_profiles ORDER BY id")
+    sqlx::query_as("SELECT id, name FROM quality_profiles WHERE family = 'video' ORDER BY id")
         .fetch_all(db)
-        .await?;
-    Ok(rows.into_iter().map(|r| (r.id, r.name)).collect())
+        .await
 }
 
 pub async fn insert_quality_profile(

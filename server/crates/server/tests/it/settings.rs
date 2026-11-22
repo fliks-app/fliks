@@ -654,7 +654,7 @@ async fn setup_checklist_items_and_dismissal(pool: PgPool) {
     )
     .await;
     assert!(done(&items, 3) && !done(&items, 8));
-    sqlx::query("UPDATE commands SET status = 'completed'")
+    sqlx::query("INSERT INTO app_settings (key, value) VALUES ('data_import_done', 'true')")
         .execute(&pool)
         .await
         .unwrap();

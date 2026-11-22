@@ -37,7 +37,7 @@ pub async fn create(
     req: Request,
 ) -> Res<(StatusCode, Json<Value>)> {
     a.require(Action::Create, Subject::FliksRequest)?;
-    let dto = dto::create_request(&st.namespaces(), body(req).await?)?;
+    let dto = dto::create_request(&st.namespaces(), body(req).await?, flow::can_manage(&a))?;
     Ok(created(flow::create(&st, &a, dto).await?))
 }
 

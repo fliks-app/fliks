@@ -33,7 +33,7 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 @Component({
   selector: 'app-persons',
-  imports: [EmptyStateComponent, RowSkeletonComponent, 
+  imports: [EmptyStateComponent, RowSkeletonComponent,
     TranslatePluralPipe,
     TvSelectDirective,
     FormsModule,

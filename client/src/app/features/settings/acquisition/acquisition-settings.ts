@@ -1,3 +1,4 @@
+import { AuthService } from '../../../core/services/auth.service';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -53,6 +54,8 @@ export class AcquisitionSettingsComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
   private readonly registry = inject(PluginUiRegistryService);
+  private readonly auth = inject(AuthService);
+  protected readonly isAdmin = computed(() => !!this.auth.user()?.isAdmin);
   readonly tv = inject(TvService);
 
   readonly loading = signal(true);

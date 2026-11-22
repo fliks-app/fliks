@@ -49,6 +49,7 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   /** Suppress the persistent `error` handler while a (re)load is in flight —
    *  a mediaOption rejection is recovered via the fallback, not surfaced. */
   private loadingPhase = false;
+  private loadSeq = 0;
 
   /** Optimistic position while a seek settles, so the seekbar stays pinned and ±10s steps accumulate. */
   private seekIntent: number | null = null;
@@ -231,20 +232,19 @@ export class WebOsEngine extends AbstractPlaybackEngine implements PlaybackEngin
   /** Attach + play at `start`, trying mediaOption first, then plain `src`. */
   private async loadInternal(url: string, start: number): Promise<void> {
     this._duration = 0;
+    const seq = ++this.loadSeq;
     this.loadingPhase = true;
     try {
       try {
         // Preferred path: native resume + start-bitrate via mediaOption.
         await this.attachAndPlay(url, start, true);
       } catch (e) {
-        // A refused <source> (mediaOption schema, a type canPlayType rejects such as MKV) retries with plain src;
-        // a load timeout is surfaced as unsupported for the copy fallback (a plain-src retry burns another 30s),
-        // and a cancelled load never retries.
+        // A refused <source> retries with plain src; a timeout (another 30s) or a cancelled load never does.
         if (e instanceof Error && (e.name === 'WebOsLoadTimeout' || e.name === 'WebOsLoadCancelled')) throw e;
         await this.attachAndPlay(url, start, false);
       }
     } finally {
-      this.loadingPhase = false;
+      if (seq === this.loadSeq) this.loadingPhase = false;
     }
   }
 

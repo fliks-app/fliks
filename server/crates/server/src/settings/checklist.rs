@@ -11,6 +11,20 @@ use fliks_domain::acl::{Action, Subject};
 use serde_json::{Value, json};
 
 const KEY: &str = "setup_checklist_dismissed_keys";
+const IMPORTED_KEY: &str = "data_import_done";
+
+/// An import finished: the checklist item stays done after the audit rows are pruned or cleared.
+pub async fn mark_data_imported(db: &sqlx::PgPool) {
+    let r = sqlx::query(
+        r#"INSERT INTO app_settings ("key", "value") VALUES ($1, 'true') ON CONFLICT ("key") DO NOTHING"#,
+    )
+    .bind(IMPORTED_KEY)
+    .execute(db)
+    .await;
+    if let Err(e) = r {
+        tracing::warn!("data-import marker not written: {e}");
+    }
+}
 
 /// Rule 3, in response order: key, severity, route tail, `done` query.
 const ITEMS: [(&str, &str, &str, &str); 9] = [
@@ -66,7 +80,7 @@ const ITEMS: [(&str, &str, &str, &str); 9] = [
         "data-import",
         "recommended",
         "data-imports",
-        "SELECT EXISTS(SELECT 1 FROM commands WHERE status = 'completed' AND name IN ('ImportWatchHistory', 'ImportSeerrRequests'))",
+        "SELECT EXISTS(SELECT 1 FROM app_settings WHERE key = 'data_import_done')",
     ),
 ];
 

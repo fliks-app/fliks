@@ -438,8 +438,14 @@ async fn attach_watched(
     uid: i32,
 ) -> Result<(), sqlx::Error> {
     let by_id = watched_map(db, ids, uid).await?;
-    for (item, id) in data.iter_mut().zip(ids) {
-        let (watched, progress) = by_id.get(id).copied().unwrap_or((false, 0));
+    for item in data.iter_mut() {
+        let id = item
+            .get("id")
+            .and_then(Value::as_i64)
+            .and_then(|i| i32::try_from(i).ok());
+        let (watched, progress) = id
+            .and_then(|i| by_id.get(&i).copied())
+            .unwrap_or((false, 0));
         if let Some(o) = item.as_object_mut() {
             o.insert("watched".into(), watched.into());
             o.insert("progressPercent".into(), progress.into());

@@ -17,7 +17,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
 
 @Component({
   selector: 'app-watch-history',
-  imports: [EmptyStateComponent, RowSkeletonComponent, 
+  imports: [EmptyStateComponent, RowSkeletonComponent,
     CachedSrcDirective,
     TranslatePipe, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical, DefaultFocusDirective],
   templateUrl: './watch-history.html',

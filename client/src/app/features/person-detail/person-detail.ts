@@ -19,7 +19,7 @@ import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-s
 
 @Component({
   selector: 'app-person-detail',
-  imports: [RowSkeletonComponent, 
+  imports: [RowSkeletonComponent,
     PersonBooksComponent, PersonHeaderComponent, FollowToggleComponent, TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, LucideChevronLeft],
   templateUrl: './person-detail.html',
 })

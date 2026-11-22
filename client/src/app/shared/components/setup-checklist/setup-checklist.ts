@@ -6,6 +6,7 @@ import {
   OnInit,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { AuthService } from '../../../core/services/auth.service';
 import { TvService } from '../../../core/services/tv.service';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
@@ -44,7 +45,12 @@ export class SetupChecklistComponent implements OnInit {
   /** When `true`, also surface completed and dismissed items (with a reactivate button on the latter). */
   readonly showAll = input(false);
 
-  readonly items = this.api.items;
+  private readonly auth = inject(AuthService);
+
+  /** The catalogue step links to an admin-only page, so a settings-access user who is no admin never sees it. */
+  readonly items = computed(() =>
+    this.auth.user()?.isAdmin ? this.api.items() : this.api.items().filter((i) => i.key !== 'download-provider'),
+  );
   readonly loading = this.api.loading;
 
   /** Items shown in the list. Compact mode (default) keeps only the
@@ -77,7 +83,7 @@ export class SetupChecklistComponent implements OnInit {
     // discarded, on the slowest network path in the product.
     if (this.isTv()) return;
     // Reuse already-cached items on second mount; otherwise fetch.
-    if (this.items().length === 0) void this.api.refresh();
+    if (this.api.items().length === 0) void this.api.refresh();
   }
 
   onDismiss(key: ChecklistItemKey, event: Event) {

@@ -68,4 +68,35 @@ describe('WantedComponent', () => {
     expect(el.querySelector('app-load-failed')).toBeNull();
     expect(el.querySelectorAll('[data-testid="wanted-row"]')).toHaveLength(1);
   });
+
+  it('drops the previous filter rows when a filter change fails', async () => {
+    const { http, settle, el } = await setup();
+    http.expectOne('/api/wanted?page=1&limit=25').flush({ data: [row(1, 'Alpha')], total: 2 });
+    await settle();
+    (el.querySelectorAll('[data-testid="wanted-filters"] button')[3] as HTMLButtonElement).click();
+    http.expectOne((r) => r.url === '/api/wanted' && r.params.get('type') === 'book').flush('x', {
+      status: 500,
+      statusText: 'Server Error',
+    });
+    await settle();
+    expect(el.querySelector('app-load-failed')).not.toBeNull();
+    expect(el.querySelectorAll('[data-testid="wanted-row"]')).toHaveLength(0);
+    expect(el.querySelector('[data-testid="wanted-more"]')).toBeNull();
+  });
+
+  it('offers an inline retry when a page append fails, and keeps the rows', async () => {
+    const { http, settle, el } = await setup();
+    http.expectOne('/api/wanted?page=1&limit=25').flush({ data: [row(1, 'Alpha')], total: 2 });
+    await settle();
+    (el.querySelector('[data-testid="wanted-more"]') as HTMLButtonElement).click();
+    http.expectOne((r) => r.params.get('page') === '2').flush('x', { status: 0, statusText: 'Unknown' });
+    await settle();
+    expect(el.querySelectorAll('[data-testid="wanted-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="wanted-more"]')).toBeNull();
+    (el.querySelector('app-load-failed button') as HTMLButtonElement).click();
+    http.expectOne((r) => r.params.get('page') === '2').flush({ data: [row(2, 'Beta')], total: 2 });
+    await settle();
+    expect(el.querySelectorAll('[data-testid="wanted-row"]')).toHaveLength(2);
+    expect(el.querySelector('app-load-failed')).toBeNull();
+  });
 });

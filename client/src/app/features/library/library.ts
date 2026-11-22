@@ -87,8 +87,6 @@ type AlbumMedia = Media & { album?: AlbumListInfo };
 interface BookQuery { format?: string; language?: string; authorId?: number; narratorId?: number; inProgress?: true }
 const BOOK_FILTER_KEYS = ['format', 'language', 'authorId', 'narratorId'] as const;
 
-const EMPTY_ICONS: Record<string, string> = { movie: 'film', series: 'tv', album: 'music', book: 'book-open', comic: 'book-marked' };
-
 /** Footer counter of each kind: a new MediaType fails to compile until it declares one. */
 const KIND_STATS: Record<MediaType, (m: Media) => { key: string; labelKey: string; done: number; total: number | null }> = {
   movie: (m) => ({ key: 'movie', labelKey: 'legend.movie_files', done: m.files?.length ? 1 : 0, total: null }),
@@ -351,7 +349,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   protected readonly canAdminLibrary = computed(() => this.auth.canAccessSettings());
   /** No result for an active search or filter, as opposed to a library with nothing in it. */
   protected readonly noMatch = computed(() => !!this.searchQuery() || this.hasActiveFilters());
-  protected readonly emptyIcon = computed(() => EMPTY_ICONS[this.library()?.mediaTypes[0] ?? ''] ?? 'library');
+  protected readonly emptyIcon = computed(() => this.library()?.icon || 'library');
   protected readonly emptyFolder = computed(() => this.library()?.folders[0]?.name ?? null);
 
   protected clearSearchAndFilters() {

@@ -2,7 +2,7 @@
 use super::{
     MediaRow, drop_thumbnails, fsx,
     library::{Ep, file_name, season_episodes},
-    load_media, probe, probe_hashed,
+    load_media, probe, probe_with,
 };
 use crate::{
     events::{Num, Subject},
@@ -594,7 +594,7 @@ pub async fn refresh_content(
     disk_size: i64,
     mtime: Option<i64>,
 ) -> Result<MediaInfo, String> {
-    let p = probe_hashed(st, abs, change.content_changed).await?;
+    let p = probe_with(st, abs, change.content_changed, !change.timeline_preserved).await?;
     let mut info = p.info.clone();
     if let Some(old) = &stored.info
         && !change.content_changed

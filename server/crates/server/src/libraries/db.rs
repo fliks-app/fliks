@@ -329,3 +329,11 @@ pub async fn metadata_profile(
         })
         .unwrap_or_default())
 }
+
+pub async fn default_quality_profile(db: &PgPool, library: i32) -> sqlx::Result<Option<i32>> {
+    sqlx::query_scalar(r#"SELECT "defaultQualityProfileId" FROM libraries WHERE id = $1"#)
+        .bind(library)
+        .fetch_optional(db)
+        .await
+        .map(Option::flatten)
+}

@@ -57,7 +57,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
 
 @Component({
   selector: 'app-requests',
-  imports: [EmptyStateComponent, RowSkeletonComponent, TvSelectDirective, 
+  imports: [EmptyStateComponent, RowSkeletonComponent, TvSelectDirective,
     FormsModule,
     LocaleDatePipe,
     TranslatePipe,

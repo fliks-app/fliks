@@ -401,6 +401,27 @@ async fn a_book_is_not_a_tmdb_title(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_member_cannot_choose_profiles_and_gets_the_default(pool: PgPool) {
+    let c = ctx(pool).await;
+    let default: i32 = sqlx::query_scalar(
+        "SELECT id FROM quality_profiles WHERE family = 'video' ORDER BY id LIMIT 1",
+    )
+    .fetch_one(&c.pool())
+    .await
+    .unwrap();
+    let mut body = movie(11);
+    body.as_object_mut().unwrap().remove("qualityProfileId");
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, body).await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(r["qualityProfileId"], json!(default));
+    let mut chosen = movie(12);
+    chosen["qualityProfileId"] = json!(999);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, chosen).await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(r["qualityProfileId"], json!(default));
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_video_request_needs_a_quality_profile(pool: PgPool) {
     let c = ctx(pool).await;
     for profile in [None, Some(json!(null))] {
@@ -409,14 +430,14 @@ async fn a_video_request_needs_a_quality_profile(pool: PgPool) {
         if let Some(p) = profile {
             body["qualityProfileId"] = p;
         }
-        let (s, r) = call(&c, "POST", "/api/requests", &c.user, body).await;
+        let (s, r) = call(&c, "POST", "/api/requests", &c.admin, body).await;
         assert_eq!(s, 400, "{r}");
         assert_eq!(r["message"], json!(["A quality profile is required"]));
     }
     q(&c.pool(), "INSERT INTO quality_profiles (id, name, family, cutoff, items) VALUES (3, 'T', 'text', 1, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items").await;
     let mut body = movie(10);
     body["qualityProfileId"] = json!(3);
-    let (s, r) = call(&c, "POST", "/api/requests", &c.user, body).await;
+    let (s, r) = call(&c, "POST", "/api/requests", &c.admin, body).await;
     assert_eq!(
         (s, &r["message"]),
         (400, &json!("Quality profile #3 not found"))
@@ -1074,10 +1095,9 @@ async fn existing_media_is_reused_only_when_its_profiles_cover_the_request(pool:
         r#"INSERT INTO wants ("mediaId", family, "qualityProfileId") VALUES (9, 'video', 1)"#,
     )
     .await;
-    let mut body = movie(82);
-    body["languageProfileId"] = json!(102);
-    let (_, a) = call(&c, "POST", "/api/requests", &c.user, body).await;
+    let (_, a) = call(&c, "POST", "/api/requests", &c.user, movie(82)).await;
     let id = rid(&a);
+    q(&c.pool(), "UPDATE requests SET \"languageProfileId\" = 102").await;
     let (s, r) = call(
         &c,
         "POST",

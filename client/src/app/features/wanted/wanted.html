@@ -30,6 +30,8 @@
 
   @if (failed()) {
     <app-load-failed [message]="'wanted.load_error' | translate" (retry)="retry()" />
+  } @else if (moreFailed()) {
+    <app-load-failed [message]="'wanted.load_error' | translate" (retry)="loadMore()" />
   }
 
   @if (rows().length === 0 && !loading() && !failed()) {
@@ -60,7 +62,7 @@
 
   @if (loading()) {
     <div class="flex justify-center py-6"><span class="loading loading-spinner loading-lg"></span></div>
-  } @else if (more()) {
+  } @else if (more() && !moreFailed()) {
     <button type="button" class="btn btn-outline btn-sm self-center" data-testid="wanted-more" (click)="loadMore()">
       {{ 'wanted.more' | translate }}
     </button>

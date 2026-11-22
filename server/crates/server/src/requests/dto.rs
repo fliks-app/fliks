@@ -119,7 +119,7 @@ const ALBUM_KEYS: [&str; 8] = [
     "folderId",
 ];
 
-pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
+pub fn create_request(known: &Namespaces, v: Value, can_choose: bool) -> Res<CreateRequest> {
     let o = object(v);
     let work_kind = o
         .get("mediaType")
@@ -198,7 +198,7 @@ pub fn create_request(known: &Namespaces, v: Value) -> Res<CreateRequest> {
         )
     };
     let video = media_type.is_some_and(MediaKind::is_video);
-    if video && !delete && o.get("qualityProfileId").is_none_or(Value::is_null) {
+    if video && !delete && can_choose && o.get("qualityProfileId").is_none_or(Value::is_null) {
         c.errs.push(PROFILE_REQUIRED.into());
     }
     let library = opt_int(&mut c, "libraryId", true, None);
@@ -766,6 +766,7 @@ mod tests {
                 "externalId": "11111111-1111-1111-1111-111111111111",
                 "wants": [{"family": "audio", "qualityProfileId": 1}]
             }),
+            true,
         )
         .unwrap();
         assert_eq!(ok.media_type, MediaKind::Album);
@@ -774,6 +775,7 @@ mod tests {
         let bad = msgs(create_request(
             &Namespaces::default(),
             json!({"mediaType": "album", "title": "t", "externalId": "tt1", "wants": [{"family": "audio", "qualityProfileId": 1}]}),
+            true,
         ));
         assert_eq!(
             bad,
@@ -786,6 +788,7 @@ mod tests {
         let m = msgs(create_request(
             &Namespaces::default(),
             json!({"mediaType": "comic", "tmdbId": 1, "title": "t"}),
+            true,
         ));
         assert_eq!(
             m,
@@ -798,7 +801,8 @@ mod tests {
         assert_eq!(
             msgs(create_request(
                 &Namespaces::default(),
-                json!({"qualityProfileId": 1})
+                json!({"qualityProfileId": 1}),
+                true
             )),
             json!([
                 "mediaType must be one of the following values: movie, series, book, comic, album",
@@ -810,7 +814,8 @@ mod tests {
         assert_eq!(
             msgs(create_request(
                 &Namespaces::default(),
-                json!({"mediaType":"movie","tmdbId":"5","title":"t","extra":1,"qualityProfileId":1})
+                json!({"mediaType":"movie","tmdbId":"5","title":"t","extra":1,"qualityProfileId":1}),
+                true
             )),
             json!([
                 "property extra should not exist",
@@ -827,17 +832,19 @@ mod tests {
             json!({"mediaType":"movie","tmdbId":5,"title":"t","qualityProfileId":null}),
         ] {
             assert_eq!(
-                msgs(create_request(&Namespaces::default(), body)),
+                msgs(create_request(&Namespaces::default(), body, true)),
                 json!(["A quality profile is required"])
             );
         }
         let zero = json!({"mediaType":"movie","tmdbId":5,"title":"t","qualityProfileId":0});
         assert_eq!(
-            msgs(create_request(&Namespaces::default(), zero)),
+            msgs(create_request(&Namespaces::default(), zero, true)),
             json!(["qualityProfileId must not be less than 1"])
         );
         let del = json!({"mediaType":"movie","kind":"delete","tmdbId":5,"title":"t"});
-        assert!(create_request(&Namespaces::default(), del).is_ok());
+        assert!(create_request(&Namespaces::default(), del, true).is_ok());
+        let member = json!({"mediaType":"movie","tmdbId":5,"title":"t"});
+        assert!(create_request(&Namespaces::default(), member, false).is_ok());
     }
 
     #[test]
@@ -848,6 +855,7 @@ mod tests {
                 "mediaType":"series","tmdbId":7,"title":"","seasons":["2",3],
                 "libraryId":"4","qualityProfileId":"3","languageProfileId":null
             }),
+            true,
         )
         .unwrap();
         assert_eq!(c.seasons, Some(vec![2, 3]));
@@ -863,7 +871,7 @@ mod tests {
             &Namespaces::default(),
             json!({
                 "mediaType":"series","provider":"tvdb","externalId":"81189","title":"t","qualityProfileId":1
-            }),
+            }), true,
         )
         .unwrap();
         assert_eq!(by.key.provider, Namespace::TVDB);
@@ -872,13 +880,14 @@ mod tests {
             "mediaType":"movie","tmdbId":5,"provider":"tmdb","externalId":"5","title":"t","qualityProfileId":1
         });
         assert_eq!(
-            msgs(create_request(&Namespaces::default(), both)),
+            msgs(create_request(&Namespaces::default(), both, true)),
             json!(["tmdbId must not be combined with provider and externalId"])
         );
         let bad = |p: &str, e: &str| {
             msgs(create_request(
                 &Namespaces::default(),
                 json!({"mediaType":"movie","provider":p,"externalId":e,"title":"t","qualityProfileId":1}),
+                true,
             ))
         };
         assert_eq!(bad("nope", "1"), json!(["provider Unknown provider: nope"]));

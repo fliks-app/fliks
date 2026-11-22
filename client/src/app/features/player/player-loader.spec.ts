@@ -110,6 +110,40 @@ describe('PlayerLoader', () => {
     expect(loader.sessionId()).toBeUndefined();
   });
 
+  /** Leaves 'a' carried: an op answered after a newer one started. */
+  async function carryA() {
+    const t = setup();
+    const first = deferred<PlaybackInfoResponse>();
+    const run1 = t.loader.run('launch', (op) => op.negotiate(() => first.promise));
+    await flush();
+    void t.loader.run('resume', () => new Promise<void>(() => {}));
+    first.resolve(pi('a'));
+    await run1;
+    await flush();
+    return t;
+  }
+
+  it('adopt drops the carried session the reload retired, without deleting it again', async () => {
+    const { loader, host } = await carryA();
+    loader.adopt(pi('b'), 'a');
+    expect(host.stopSession).not.toHaveBeenCalled();
+    expect(loader.sessionId()).toBe('b');
+  });
+
+  it('adopt deletes a carried session the adopted answer did not replace', async () => {
+    const { loader, host } = await carryA();
+    loader.adopt(pi('b'));
+    expect(host.stopSession).toHaveBeenCalledWith('a');
+    expect(loader.sessionId()).toBe('b');
+  });
+
+  it('deletes a carried session that an open without replaces leaves behind', async () => {
+    const { loader, host } = await carryA();
+    await loader.run('launch', (op) => op.negotiate(async () => pi('item'), { replace: false }));
+    expect(host.stopSession).toHaveBeenCalledWith('a');
+    expect(loader.sessionId()).toBe('item');
+  });
+
   it('replaces the held session in the next open', async () => {
     const { loader } = setup();
     loader.adopt(pi('old'));
