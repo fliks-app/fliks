@@ -400,12 +400,25 @@ describe('CastService web sender script', () => {
   afterEach(() => {
     sender().forEach((s) => s.remove());
     localStorage.removeItem('fliks.deviceOverride');
+    vi.restoreAllMocks();
     TestBed.resetTestingModule();
   });
 
-  it('loads the Cast sender in a browser', () => {
+  const withUserAgent = (ua: string) => vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(ua);
+
+  it('loads the Cast sender in a Chromium browser', () => {
+    withUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36');
     make(null);
     expect(sender().length).toBe(1);
+  });
+
+  it.each([
+    ['Firefox', 'Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0'],
+    ['iOS Chrome', 'Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 CriOS/130.0 Mobile/15E148 Safari/604.1'],
+  ])('never loads it on %s', (_n, ua) => {
+    withUserAgent(ua);
+    make(null);
+    expect(sender().length).toBe(0);
   });
 
   it('never loads it on a TV', () => {

@@ -121,12 +121,23 @@ export class ComicEngineComponent implements ReaderEngine, OnDestroy {
   constructor() {
     this.session.attach(this);
     afterNextRender(() => void this.open());
-    // A mode switch replaces the stage element.
-    effect(() => {
+    // A mode switch replaces the stage element. Plain listeners: a template binding would run change detection per scroll or wheel event.
+    effect((onCleanup) => {
       const el = this.stage()?.nativeElement;
       untracked(() => {
         this.resizer.disconnect();
         if (el) this.resizer.observe(el);
+      });
+      if (!el) return;
+      const onScroll = () => {
+        if (this.webtoon()) this.onScroll();
+      };
+      const onWheel = (e: WheelEvent) => this.gestures.wheel(e);
+      el.addEventListener('scroll', onScroll, { passive: true });
+      el.addEventListener('wheel', onWheel, { passive: false });
+      onCleanup(() => {
+        el.removeEventListener('scroll', onScroll);
+        el.removeEventListener('wheel', onWheel);
       });
     });
     effect(() => {
@@ -182,10 +193,11 @@ export class ComicEngineComponent implements ReaderEngine, OnDestroy {
     return this.api.pageUrl(t.itemId, t.fileId, n - 1, width);
   }
 
-  protected aspect(n: number): string {
-    const p = this.pages()[n - 1];
-    return `${p.width} / ${p.height}`;
-  }
+  protected readonly webtoonPages = computed(() =>
+    this.webtoon()
+      ? this.pages().map((p, i) => ({ n: i + 1, src: this.src(i + 1, 1), aspect: `${p.width} / ${p.height}` }))
+      : [],
+  );
 
   /** Warms the cache for the next screens: the browser reuses the response when they come up. */
   private preload(spreads: number[][], at: number): void {

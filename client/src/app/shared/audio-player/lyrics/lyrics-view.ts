@@ -88,6 +88,12 @@ export class LyricsViewComponent {
     afterNextRender(() => {
       this.scrollToLine(untracked(this.first), 'instant');
       this.placed = true;
+      // Passive: a template binding is non-passive and would hold touch scrolling on the main thread.
+      const box = this.scroller()?.nativeElement;
+      if (!box) return;
+      const onManual = () => this.onManualScroll();
+      box.addEventListener('wheel', onManual, { passive: true });
+      box.addEventListener('touchmove', onManual, { passive: true });
     });
     effect(() => {
       const i = this.first();
@@ -145,7 +151,7 @@ export class LyricsViewComponent {
     );
   }
 
-  protected onManualScroll(): void {
+  private onManualScroll(): void {
     this.manualUntil = performance.now() + MANUAL_SCROLL_MS;
   }
 

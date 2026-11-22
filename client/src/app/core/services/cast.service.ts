@@ -419,7 +419,8 @@ export class CastService implements OnDestroy {
 
   private initWeb() {
     // A TV never shows the Cast entry points.
-    if (detectDevice().formFactor === 'tv') return;
+    const device = detectDevice();
+    if (device.formFactor === 'tv' || !device.chromium) return;
     const w = window as any;
     w['__onGCastApiAvailable'] = (isAvailable: boolean) => {
       if (isAvailable) this.initWebCast();

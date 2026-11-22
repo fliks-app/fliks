@@ -40,20 +40,24 @@ import { NavigationHistoryService } from '../../core/services/navigation-history
 import { NetworkService } from '../../core/services/network.service';
 import { PageScrollerService } from '../../core/services/page-scroller.service';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
-import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
-import { PartyCreateModalComponent } from '../../features/party/party-create-modal';
-import { PartyReconnectComponent } from '../../features/party/party-reconnect';
-import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
-import { OptimizeModalComponent } from '../components/optimize-modal/optimize-modal';
-import { IdentifyModalHostComponent } from '../components/identify-modal-host/identify-modal-host';
-import { TrackingModalHostComponent } from '../components/tracking-modal-host/tracking-modal-host';
 import { UserMenuComponent } from '../components/user-menu';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
 import { PlaybackSurface } from '../../core/services/playback/playback-surface';
 import { AudioPlayerComponent } from '../audio-player/audio-player';
-import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
+import { PartyCreateModalComponent } from '../../features/party/party-create-modal';
+import { PartyReconnectComponent } from '../../features/party/party-reconnect';
+import { OptimizeModalComponent } from '../components/optimize-modal/optimize-modal';
+import { IdentifyModalHostComponent } from '../components/identify-modal-host/identify-modal-host';
+import { TrackingModalHostComponent } from '../components/tracking-modal-host/tracking-modal-host';
 import { WhatsNewModalComponent } from '../components/whats-new-modal/whats-new-modal';
+import { AddToPlaylistModalComponent } from '../components/add-to-playlist-modal/add-to-playlist-modal.component';
+import { RecommendModalComponent } from '../components/recommend-modal/recommend-modal.component';
+import { AppUpdateModalComponent } from '../components/app-update-modal/app-update-modal';
 import { AppUpdateService } from '../../core/services/app-update.service';
+import { PartyService } from '../../core/services/party/party.service';
+import { TrackingModalService } from '../../core/services/tracking-modal.service';
+import { IdentifyModalService } from '../../core/services/identify-modal.service';
+import { OptimizeModalService } from '../../core/services/optimize-modal.service';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../core/services/recommend.service';
 import { LucideIconComponent } from '../components/lucide-icon';
@@ -118,9 +122,9 @@ const PAIRING_TTL_MS = 600_000;
     TrackingModalHostComponent,
     IdentifyModalHostComponent,
     OptimizeModalComponent,
-    UserMenuComponent,
     AppUpdateModalComponent,
     WhatsNewModalComponent,
+    UserMenuComponent,
     LucideIconComponent,
     NavIconComponent,
     BottomSheetComponent,
@@ -141,8 +145,12 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly downloadManager = inject(DownloadManagerService);
   // Instantiate eagerly so it records the launching page BEFORE the player opens (the player injects it too late).
   private readonly navHistory = inject(NavigationHistoryService);
-  private readonly addToPlaylistSvc = inject(AddToPlaylistService);
-  private readonly addToPlaylistModal = viewChild(AddToPlaylistModalComponent);
+  protected readonly party = inject(PartyService);
+  protected readonly trackingModal = inject(TrackingModalService);
+  protected readonly identifyModal = inject(IdentifyModalService);
+  protected readonly optimizeModal = inject(OptimizeModalService);
+  protected readonly addToPlaylistSvc = inject(AddToPlaylistService);
+  private readonly addToPlaylistModal = viewChild<AddToPlaylistModalComponent>('addToPlaylistModal');
   // Bridge global "add to playlist" requests to the modal in this layout; consumed once so a rebuilt shell (player is outside it) doesn't reopen it.
   private readonly addToPlaylistBridge = effect(() => {
     const req = this.addToPlaylistSvc.request();
@@ -152,8 +160,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
       modal.open(req.target);
     }
   });
-  private readonly recommendSvc = inject(RecommendService);
-  private readonly recommendModal = viewChild(RecommendModalComponent);
+  protected readonly recommendSvc = inject(RecommendService);
+  private readonly recommendModal = viewChild<RecommendModalComponent>('recommendModal');
   // Bridge the global "recommend to a member" requests to the layout modal.
   private readonly recommendBridge = effect(() => {
     const req = this.recommendSvc.request();
@@ -180,11 +188,19 @@ export class LayoutComponent implements OnInit, OnDestroy {
   protected readonly hasRemotePlayer = computed(() => !!this.session.playing());
   protected readonly nowPlayingTitle = computed(() => this.session.nowPlaying()?.title ?? '');
   readonly appUpdate = inject(AppUpdateService);
-  private readonly updateModal = viewChild(AppUpdateModalComponent);
+  private readonly updateModal = viewChild<AppUpdateModalComponent>('updateModal');
+  protected readonly updateModalRequested = signal(false);
+  // The modal is a lazy chunk: open it once its @defer block has rendered.
+  private readonly updateModalBridge = effect(() => {
+    const modal = this.updateModal();
+    if (!modal || !untracked(this.updateModalRequested)) return;
+    this.updateModalRequested.set(false);
+    modal.open();
+  });
   private readonly title = inject(Title);
 
   openUpdateModal(): void {
-    this.updateModal()?.open();
+    this.updateModalRequested.set(true);
   }
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);

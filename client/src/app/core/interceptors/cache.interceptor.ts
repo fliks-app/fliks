@@ -1,5 +1,5 @@
 import { HttpEvent, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
-import { finalize, Observable, of, share, Subscription, tap } from 'rxjs';
+import { finalize, map, Observable, of, share, Subscription, tap } from 'rxjs';
 
 /** IndexedDB cache ("fliks-api-cache") of the last known body of each GET /api/*. Invalidation marks
  *  entries stale and never deletes them: the body stays the offline fallback and the paint-first read. */
@@ -70,6 +70,8 @@ export interface CacheEntry {
   body: any;
   /** When the request that produced `body` was sent, so a response racing an invalidation is stale. */
   timestamp: number;
+  /** The server's validator for `body`: an answer with the same one reuses the body object and skips the write. */
+  etag?: string;
 }
 
 interface Invalidation {
@@ -94,6 +96,25 @@ let invalidations = new Map<string, number>();
 let pruned = false;
 /** Bodies waiting for their idle write, so a read right after a fetch sees it. */
 const pendingWrites = new Map<string, CacheEntry>();
+
+/** Last body emitted per URL, so an unchanged ETag hands back the same object and the views see no change. */
+const MAX_MEMOS = 100;
+const memos = new Map<string, { etag: string; body: unknown; at: number }>();
+
+function remember(url: string, etag: string, body: unknown, at: number): void {
+  memos.delete(url);
+  memos.set(url, { etag, body, at });
+  if (memos.size > MAX_MEMOS) memos.delete(memos.keys().next().value!);
+}
+
+/** A cache read whose ETag matches the memo serves the memo's body, so identity holds across reads. */
+function adopt(entry: CacheEntry): CacheEntry {
+  if (!entry.etag) return entry;
+  const memo = memos.get(entry.url);
+  if (memo?.etag === entry.etag) return { ...entry, body: memo.body };
+  remember(entry.url, entry.etag, entry.body, entry.timestamp);
+  return entry;
+}
 
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
@@ -151,6 +172,7 @@ function forgetState(): void {
   invalidations = new Map();
   inFlight.clear();
   pendingWrites.clear();
+  memos.clear();
   pruned = false;
 }
 
@@ -244,8 +266,8 @@ async function getCached(url: string): Promise<CacheEntry | null> {
 }
 
 /** Defer the write past render: `store.put` structured-clones the body on the main thread (a 700-item list stutters the spinner). */
-function putCacheWhenIdle(url: string, body: any, sentAt: number, generation: number): void {
-  const entry: CacheEntry = { url, body, timestamp: sentAt };
+function putCacheWhenIdle(url: string, body: any, sentAt: number, generation: number, etag?: string): void {
+  const entry: CacheEntry = { url, body, timestamp: sentAt, ...(etag ? { etag } : {}) };
   pendingWrites.set(url, entry);
   const write = () => void putCache(entry, generation);
   const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void })
@@ -391,10 +413,16 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
   const key = `${url} ${req.responseType}`;
   if (!isCacheable(url)) return sharedGet(key, () => next(req));
 
-  const store = tap((event: HttpEvent<unknown>) => {
-    if (event instanceof HttpResponse && event.status === 200) {
-      putCacheWhenIdle(url, event.body, sentAt, generation);
+  const store = map((event: HttpEvent<unknown>): HttpEvent<unknown> => {
+    if (!(event instanceof HttpResponse) || event.status !== 200) return event;
+    const etag = event.headers.get('ETag') ?? undefined;
+    const memo = etag ? memos.get(url) : undefined;
+    if (memo && memo.etag === etag && !isInvalidated({ url, body: null, timestamp: memo.at })) {
+      return event.clone({ body: memo.body });
     }
+    if (etag && generation === cacheGeneration) remember(url, etag, event.body, sentAt);
+    putCacheWhenIdle(url, event.body, sentAt, generation, etag);
+    return event;
   });
 
   // Force-refresh path: skip the cache READ but still PUT the network
@@ -404,8 +432,9 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
   return new Observable((subscriber) => {
     // Unsubscribing cancels a network read (an aborted caller); a background revalidation runs on.
     const wire = new Subscription();
-    getCached(url).then((entry) => {
+    getCached(url).then((found) => {
       if (subscriber.closed) return;
+      const entry = found && adopt(found);
       const plan = readPlan(entry, known, freshSince);
       const cached = entry ? new HttpResponse({ status: 200, body: entry.body }) : null;
       if (plan === 'cached') {

@@ -10,11 +10,14 @@ export class CachedSrcDirective {
   private readonly cache = inject(ImageCacheService);
   /** Guards against a slow resolve landing after a newer binding. */
   private seq = 0;
+  private onLoad?: () => void;
 
   constructor() {
     effect(() => {
       const url = this.cachedSrc();
       const token = ++this.seq;
+      if (this.onLoad) this.el.removeEventListener('load', this.onLoad);
+      this.onLoad = undefined;
       if (!url) {
         this.el.removeAttribute('src');
         return;
@@ -31,7 +34,13 @@ export class CachedSrcDirective {
         return;
       }
       void this.cache.resolve(url).then((resolved) => {
-        if (token === this.seq) this.el.setAttribute('src', resolved);
+        if (token !== this.seq) return;
+        // Only images actually shown get copied to disk; the refetch hits the HTTP cache.
+        if (resolved === url) {
+          this.onLoad = () => this.cache.store(url);
+          this.el.addEventListener('load', this.onLoad, { once: true });
+        }
+        this.el.setAttribute('src', resolved);
       });
     });
   }

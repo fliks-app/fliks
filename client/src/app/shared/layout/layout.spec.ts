@@ -42,6 +42,10 @@ import { NavigationHistoryService } from '../../core/services/navigation-history
 import { NetworkService } from '../../core/services/network.service';
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../core/services/recommend.service';
+import { PartyService } from '../../core/services/party/party.service';
+import { TrackingModalService } from '../../core/services/tracking-modal.service';
+import { IdentifyModalService } from '../../core/services/identify-modal.service';
+import { OptimizeModalService } from '../../core/services/optimize-modal.service';
 import { AppUpdateService } from '../../core/services/app-update.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { SearchStateService } from '../../core/services/search-state.service';
@@ -153,6 +157,10 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
       { provide: NavigationHistoryService, useValue: { resetNavHistory: () => {} } },
       { provide: AddToPlaylistService, useValue: { request: () => null, clear: () => {} } },
       { provide: RecommendService, useValue: { request: () => null, clear: () => {} } },
+      { provide: PartyService, useValue: { createRequest: () => null, reconnecting: () => false } },
+      { provide: TrackingModalService, useValue: { request: () => null } },
+      { provide: IdentifyModalService, useValue: { request: () => null } },
+      { provide: OptimizeModalService, useValue: { request: () => null } },
       { provide: NetworkService, useValue: { isOnline: () => true } },
       {
         provide: CastService,
@@ -242,6 +250,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
     },
   });
 
+  await TestBed.compileComponents();
   const fixture = TestBed.createComponent(LayoutComponent);
   fixture.detectChanges();
   // ngOnInit's own refreshCounts() is fire-and-forget (a plain Promise, not

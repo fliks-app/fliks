@@ -39,16 +39,5 @@
       }
     }
   ],
-  "dataGroups": [
-    {
-      "name": "media-images",
-      "urls": ["/api/images/**"],
-      "cacheConfig": {
-        "strategy": "performance",
-        "maxSize": 2000,
-        "maxAge": "30d"
-      }
-    }
-  ],
   "navigationRequestStrategy": "freshness"
 }

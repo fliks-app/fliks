@@ -38,17 +38,17 @@ export function resolveMenuContributions(opts: {
   /** Every contribution at any depth, so the alias check still finds a core row moved into a submenu (a plugin could otherwise widen it). */
   const flatten = (list: readonly UiContribution[]): UiContribution[] =>
     list.flatMap((c) => [c, ...flatten(c.children ?? [])]);
-  const everything = flatten(contributions);
+  const coreRows = new Map<string, UiContribution>();
+  for (const a of flatten(contributions)) {
+    if (a.id.startsWith('core.') && a.action.kind === 'action' && !coreRows.has(a.action.actionId)) coreRows.set(a.action.actionId, a);
+  }
 
   /** A contribution aliasing a core actionId inherits that core row's gate: a
    *  plugin may narrow one of core's actions, never widen it. */
   const coreFor = (c: UiContribution) => {
     // A core row is its own gate, so core can offer one action under several conditions (an OR).
     if (c.action.kind !== 'action' || c.id.startsWith('core.')) return undefined;
-    const wanted = c.action.actionId;
-    return everything.find(
-      (a) => a.id.startsWith('core.') && a.action.kind === 'action' && a.action.actionId === wanted,
-    );
+    return coreRows.get(c.action.actionId);
   };
 
   const rows: ResolvedMenuRow[] = [];

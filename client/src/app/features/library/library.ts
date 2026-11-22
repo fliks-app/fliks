@@ -64,8 +64,8 @@ import {
   CdkVirtualScrollViewport,
   CdkFixedSizeVirtualScroll,
   CdkVirtualForOf,
-  CdkVirtualScrollableWindow,
 } from '@angular/cdk/scrolling';
+import { PageScrollWindowDirective } from '../../shared/directives/page-scroll-window.directive';
 import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { canMarkWatched, mediaDetailLink, kindOf } from '../../core/media-kinds';
@@ -173,7 +173,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     CdkVirtualScrollViewport,
     CdkFixedSizeVirtualScroll,
     CdkVirtualForOf,
-    CdkVirtualScrollableWindow,
+    PageScrollWindowDirective,
     CardSkeletonComponent,
     ImportProgressBannerComponent,
     MusicPeopleComponent,
@@ -209,7 +209,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
   /** Cached per library name: revalidate the grid on return and restore its
    *  saved offset. */
-  private readonly routeFresh = keepRouteFresh({
+  protected readonly detached = keepRouteFresh({
     refresh: () => this.refreshCurrentView(),
     scrollKey: () => this.scrollMemoryKey(),
     onAttach: () => {
@@ -1089,7 +1089,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       // A slower answer to an earlier query must not replace a later one.
       if (gen !== this.loadGen) return;
       this.list.setItems(res.data, (m) => m.title);
-      this.watchedIds.set(new Set(watchedIds));
+      this.setWatched(watchedIds);
     } catch (e) {
       if (isAbort(e)) return;
       throw e;
@@ -1105,7 +1105,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       ]).then(([res, watchedIds]) => {
         if (gen !== this.loadGen) return;
         if (res) this.list.setItems(res.data, (m) => m.title);
-        if (watchedIds) this.watchedIds.set(new Set(watchedIds));
+        if (watchedIds) this.setWatched(watchedIds);
       });
     });
   }
@@ -1115,8 +1115,20 @@ export class LibraryComponent implements OnInit, OnDestroy {
     return canMarkWatched(m);
   }
 
+  private readonly likedMediaIds = computed(
+    () => new Set(this.likesList().filter((l) => !l.seasonId && !l.episodeId).map((l) => l.mediaId)),
+  );
+
   isLiked(mediaId: number): boolean {
-    return this.likesList().some((l) => l.mediaId === mediaId && !l.seasonId && !l.episodeId);
+    return this.likedMediaIds().has(mediaId);
+  }
+
+  /** An unchanged body (same array from the request cache) keeps the set, so the grid sees no change. */
+  private watchedSource: number[] | null = null;
+  private setWatched(ids: number[]): void {
+    if (ids === this.watchedSource) return;
+    this.watchedSource = ids;
+    this.watchedIds.set(new Set(ids));
   }
 
   /** Flips the likes list first from the card's media; a failed request restores it. */

@@ -5,8 +5,6 @@
   [class.overflow-hidden]="large() || tv()"
   appTvSection
   data-testid="lyrics-lines"
-  (wheel)="onManualScroll()"
-  (touchmove)="onManualScroll()"
 >
   <div class="h-[45%] shrink-0" aria-hidden="true"></div>
   @for (r of rows(); track $index; let i = $index) {

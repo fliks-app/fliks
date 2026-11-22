@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   Injector,
   OnDestroy,
@@ -128,6 +129,14 @@ export class PdfEngineComponent implements ReaderEngine, OnDestroy {
   constructor() {
     this.session.attach(this);
     afterNextRender(() => void this.open());
+    // A plain passive listener: a template binding would run change detection per scroll event.
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(() => {
+      const el = this.scroller().nativeElement;
+      const onScroll = () => this.onScroll();
+      el.addEventListener('scroll', onScroll, { passive: true });
+      destroyRef.onDestroy(() => el.removeEventListener('scroll', onScroll));
+    });
     effect(() => {
       const p = this.progression();
       untracked(() => this.furthest.update((f) => Math.max(f, p)));

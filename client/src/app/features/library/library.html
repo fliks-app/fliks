@@ -417,7 +417,7 @@
       <div class="flex gap-1 pt-2">
         <cdk-virtual-scroll-viewport
           #allViewport
-          scrollWindow
+          [pageScrollWindow]="detached()"
           data-tv-zone
           [itemSize]="rowHeight()"
           [minBufferPx]="rowHeight() * 2"
@@ -608,7 +608,7 @@
     } @else {
       <!-- Genre grid: 4-poster mosaic (or folder icon) per genre; click pivots to `all` with the genre filter. -->
       <cdk-virtual-scroll-viewport
-        scrollWindow
+        [pageScrollWindow]="detached()"
         [itemSize]="genreGrid.rowHeight()"
         [minBufferPx]="genreGrid.rowHeight() * 2"
         [maxBufferPx]="genreGrid.rowHeight() * 4"
@@ -645,7 +645,7 @@
       </div>
     } @else {
       <cdk-virtual-scroll-viewport
-        scrollWindow
+        [pageScrollWindow]="detached()"
         [itemSize]="collectionGrid.rowHeight()"
         [minBufferPx]="collectionGrid.rowHeight() * 2"
         [maxBufferPx]="collectionGrid.rowHeight() * 4"
@@ -681,7 +681,7 @@
       </div>
     } @else {
       <cdk-virtual-scroll-viewport
-        scrollWindow
+        [pageScrollWindow]="detached()"
         [itemSize]="seriesGrid.rowHeight()"
         [minBufferPx]="seriesGrid.rowHeight() * 2"
         [maxBufferPx]="seriesGrid.rowHeight() * 4"
@@ -718,7 +718,7 @@
       </div>
     } @else {
       <cdk-virtual-scroll-viewport
-        scrollWindow
+        [pageScrollWindow]="detached()"
         [itemSize]="authorGrid.rowHeight()"
         [minBufferPx]="authorGrid.rowHeight() * 2"
         [maxBufferPx]="authorGrid.rowHeight() * 4"

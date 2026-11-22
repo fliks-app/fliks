@@ -151,8 +151,8 @@ export class PersonsComponent implements OnInit, OnDestroy {
     if (!silent) this.loading.set(true);
     try {
       const results = this.bookRole ? await this.loadBookPeople(this.bookRole) : await this.personsApi.search(this.searchQuery());
-      results.sort((a, b) => a.name.localeCompare(b.name));
-      this.allResults = results;
+      const sorted = [...results].sort((a, b) => a.name.localeCompare(b.name));
+      this.allResults = sorted;
       this.applyFilter();
     } finally {
       if (!silent) this.loading.set(false);

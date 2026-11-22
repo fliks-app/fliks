@@ -157,9 +157,9 @@ body.tv [data-scroller]::after {
   margin-left: -1.5rem;
 }
 
-/* Run the focus lift on the compositor; unpromoted, the TV WebView repaints the card and its overlaps every frame. */
-body.tv app-media-card figure,
-body.tv app-media-card figure + div {
+/* Run the focus lift on the compositor, only for the rail or grid holding focus: a layer per card exhausts TV GPU memory. */
+body.tv :is([data-scroller], [data-tv-zone]):focus-within app-media-card figure,
+body.tv :is([data-scroller], [data-tv-zone]):focus-within app-media-card figure + div {
   will-change: transform;
 }
 

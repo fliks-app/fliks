@@ -8,7 +8,7 @@
     "cast-app-id": "node scripts/cast-app-id.mjs",
     "start": "npm run cast-app-id && ng serve",
     "start:docker": "npm run cast-app-id && ng serve --configuration docker --host 0.0.0.0 --port 4500 --poll 2000",
-    "build": "ng build && node scripts/stage-licenses.mjs",
+    "build": "ng build && node scripts/stage-licenses.mjs && node scripts/preload-closure.mjs",
     "build:dev": "npm run cast-app-id && ng build --configuration development",
     "watch": "npm run cast-app-id && ng build --watch --configuration development",
     "lint": "eslint src",

@@ -3,7 +3,7 @@ import { TvSelectDirective } from '../../../shared/directives/tv-select.directiv
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DisplaySettingsService, MediaTypeBadgeScope } from '../../../core/services/display-settings.service';
-import { SUPPORTED_LOCALES, resolveInitialLocale } from '../../../core/constants/app-locale';
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, resolveInitialLocale } from '../../../core/constants/app-locale';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 
 @Component({
@@ -57,6 +57,9 @@ export class DisplaySettingsPageComponent implements OnInit {
     this.language.set(value);
     this.displaySettings.save({ language: value });
     // Switches UI text live; `''` resolves to the browser/OS language. Date/number formatting (`LOCALE_ID`) follows on next launch.
-    this.translate.use(resolveInitialLocale());
+    const lang = resolveInitialLocale();
+    // The fallback `en` was loaded empty for a non-English session: fetch the real file before switching to it.
+    if (lang === DEFAULT_LOCALE) this.translate.reloadLang(lang).subscribe(() => this.translate.use(lang));
+    else this.translate.use(lang);
   }
 }
