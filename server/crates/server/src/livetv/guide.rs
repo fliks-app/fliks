@@ -715,10 +715,12 @@ async fn run(st: &AppState, g: &GuideSource) -> Result<GuideSyncResult, String> 
         (Ok(()), Some(conn)) => swap(conn, g.id, &touched, window_start, window_end).await,
         (streamed, _) => streamed,
     };
-    if let Some(mut conn) = stage {
-        let _ = sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE IF EXISTS {STAGE}")))
+    if let Some(mut conn) = stage
+        && let Err(e) = sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE IF EXISTS {STAGE}")))
             .execute(&mut *conn)
-            .await;
+            .await
+    {
+        tracing::warn!("guide stage not dropped: {e}");
     }
     swapped?;
     sqlx::query(
