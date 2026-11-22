@@ -1,4 +1,3 @@
-import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import {
   Component,
   signal,
@@ -16,6 +15,7 @@ import {
   METADATA_LANGUAGE_OPTIONS,
   metadataRegionOptions,
 } from '../../../core/constants/metadata-locale';
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 
 @Component({
   selector: 'app-general-settings',

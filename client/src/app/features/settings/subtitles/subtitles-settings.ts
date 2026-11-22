@@ -1,4 +1,3 @@
-import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import {
   Component,
   signal,
@@ -10,6 +9,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 
 @Component({
   selector: 'app-subtitles-settings',

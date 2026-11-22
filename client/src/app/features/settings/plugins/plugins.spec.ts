@@ -7,6 +7,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TranslateLoader, TranslateService, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { PluginsSettingsComponent } from './plugins';
+import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import type { CatalogPluginEntry, PluginSourceRow, PluginSummary } from '../../../core/services/api/plugins-api.service';
 import { statusDetail } from './plugin-status';
@@ -93,7 +94,7 @@ async function flushReload(
   }
 }
 
-async function createComponent(rows: PluginSummary[] = [ROW], offers: CatalogPluginEntry[] = []) {
+async function createComponent(rows: PluginSummary[] = [ROW], offers: CatalogPluginEntry[] = [], isAdmin = true) {
   confirmation.confirmWithToggle.mockResolvedValue({ ok: true, toggle: false });
   TestBed.configureTestingModule({
     providers: [
@@ -106,12 +107,14 @@ async function createComponent(rows: PluginSummary[] = [ROW], offers: CatalogPlu
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
       { provide: ConfirmationService, useValue: confirmation },
+      { provide: AuthService, useValue: { user: () => ({ isAdmin }), sessionEpoch: () => 0, isAuthenticated: () => false } },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
   const fixture = TestBed.createComponent(PluginsSettingsComponent);
   fixture.detectChanges();
   await flushReload(fixture, http, rows, offers);
+  http.match('/api/system/version').forEach((r) => r.flush({ version: '7.1.1' }));
   return { fixture, http, page: fixture.componentInstance, state: TestBed.inject(PluginsState) };
 }
 
@@ -156,6 +159,16 @@ describe('PluginsSettingsComponent: enable/disable', () => {
     await settle(fixture);
 
     expect(state.rows()[0].enabled).toBe(true);
+  });
+});
+
+describe('PluginsSettingsComponent: non-admin', () => {
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it('a Manage Settings role is not offered enable or disable', async () => {
+    const { page } = await createComponent([ROW], [], false);
+    expect(action(page, 'fliks.acme', 'settings.plugins.disable')).toBeUndefined();
+    expect(action(page, 'fliks.acme', 'settings.plugins.enable')).toBeUndefined();
   });
 });
 

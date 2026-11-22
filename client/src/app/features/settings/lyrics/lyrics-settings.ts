@@ -1,4 +1,3 @@
-import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -16,6 +15,7 @@ import { DropListSettleDirective } from '../../../shared/directives/drop-list-se
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 
 const KEYS = {
   order: 'lyrics.provider_order',
@@ -62,7 +62,8 @@ export function listJson(text: string, split: RegExp): string {
 @Component({
   selector: 'app-lyrics-settings',
   imports: [
-    LoadFailedComponent, FormsModule,
+    LoadFailedComponent,
+    FormsModule,
     TranslatePipe,
     ToggleFieldComponent,
     CdkDropList,

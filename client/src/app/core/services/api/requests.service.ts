@@ -12,14 +12,16 @@ export interface RequestUser {
   username: string;
 }
 
-export type FliksRequestStatus =
-  | 'pending'
-  | 'approved'
-  | 'declined'
-  | 'processing'
-  | 'available'
-  | 'failed'
-  | 'removed';
+export const REQUEST_STATUSES = [
+  'pending',
+  'approved',
+  'declined',
+  'processing',
+  'available',
+  'failed',
+  'removed',
+] as const;
+export type FliksRequestStatus = (typeof REQUEST_STATUSES)[number];
 
 /** Whether the request adds a title to the library or asks to delete one that
  *  is already imported. Omitting `kind` on create defaults to an add request. */

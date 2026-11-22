@@ -90,6 +90,12 @@ fn named(id: i64) -> ParsedReleaseQuality {
     }
 }
 
+/// A lone `web` tag counts as WEB-DL only when no other source tag is present, so "Web Therapy 720p HDTV" is HDTV.
+pub(super) fn is_bare_web(t: &str) -> bool {
+    rx!(r"\bweb\b").is_match(t)
+        && !rx!(r"\b(hdtv|sdtv|dvd|dvdrip|dvd-?r|bluray|blu-?ray|bdrip|brrip|bdr)\b").is_match(t)
+}
+
 /// App quality of a release name (torrent title).
 pub fn parse_release_quality(title: &str) -> ParsedReleaseQuality {
     let t = title.replace('.', " ").to_lowercase();
@@ -97,8 +103,7 @@ pub fn parse_release_quality(title: &str) -> ParsedReleaseQuality {
     let is_remux = rx!(r"\bremux\b").is_match(&t);
     let is_bluray = rx!(r"\b(bluray|blu-?ray|bdrip|brrip|bdr)\b").is_match(&t);
     let is_web_rip = rx!(r"\bweb[ -]?rip\b").is_match(&t);
-    let is_web_dl =
-        rx!(r"\bweb[ -]?dl\b").is_match(&t) || (rx!(r"\bweb\b").is_match(&t) && !is_web_rip);
+    let is_web_dl = rx!(r"\bweb[ -]?dl\b").is_match(&t) || (is_bare_web(&t) && !is_web_rip);
     let is_hdtv = rx!(r"\bhdtv\b").is_match(&t);
     let is_dvd = rx!(r"\b(dvd|dvdrip|dvd-?r)\b").is_match(&t);
     let is_dvdr = rx!(r"\bdvd-?r\b").is_match(&t);
@@ -204,6 +209,8 @@ mod tests {
         assert_eq!(name("Show.S01E01.1080p.WEB.h264-GRP"), "WEBDL-1080p");
         assert_eq!(name("Show.S02E03.WEB.DL.1080p.AAC"), "WEBDL-1080p");
         assert_eq!(name("Show.S02E03.WEB.Rip.1080p"), "WEBRip-1080p");
+        assert_eq!(name("Web.Therapy.S01E01.720p.HDTV"), "HDTV-720p");
+        assert_eq!(name("Web.Therapy.S01E01.1080p.WEB.h264"), "WEBDL-1080p");
         assert_eq!(name("Movie.2019.HDCAM.XviD"), "CAM");
         assert_eq!(name("Movie.2019.HDTS.XviD"), "TELESYNC");
     }

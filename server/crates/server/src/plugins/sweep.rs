@@ -140,7 +140,21 @@ pub enum RouteError {
     Busy,
     /// The provider did not answer within its deadline.
     TimedOut,
+    /// The provider refused the grab: another one of the title is already under way.
+    InFlight,
     Failed(String),
+}
+
+/// A 409 whose error key ends in `already_in_flight`.
+fn is_in_flight(body: &[u8]) -> bool {
+    serde_json::from_slice::<Value>(body)
+        .ok()
+        .and_then(|v| {
+            v["error"]["key"]
+                .as_str()
+                .map(|k| k.ends_with(".already_in_flight"))
+        })
+        .unwrap_or(false)
 }
 
 impl RouteError {
@@ -156,6 +170,7 @@ impl std::fmt::Display for RouteError {
             Self::Unavailable => f.write_str("provider not running"),
             Self::Busy => f.write_str("provider busy"),
             Self::TimedOut => f.write_str("provider timed out"),
+            Self::InFlight => f.write_str("a grab is already in flight"),
             Self::Failed(m) => f.write_str(m),
         }
     }
@@ -187,6 +202,9 @@ impl Plugins {
             e => RouteError::Failed(format!("{e:?}")),
         })?;
         if !(200..300).contains(&res.status) {
+            if res.status == 409 && is_in_flight(&res.body) {
+                return Err(RouteError::InFlight);
+            }
             return Err(RouteError::Failed(format!(
                 "status {}: {}",
                 res.status,
@@ -322,6 +340,7 @@ impl Plugins {
                     );
                     return Outcome::TimedOut(id);
                 }
+                Err(RouteError::InFlight) => return Outcome::Skipped("in flight"),
                 Err(e) => {
                     busy |= matches!(e, RouteError::Busy | RouteError::Unavailable);
                     tracing::warn!(
@@ -544,6 +563,17 @@ mod tests {
             .all(RouteError::is_transient)
         );
         assert!(!RouteError::Failed("x".into()).is_transient());
+        assert!(!RouteError::InFlight.is_transient());
+    }
+
+    #[test]
+    fn a_409_in_flight_key_is_recognised() {
+        let b = br#"{"error":{"key":"download.grab.errors.already_in_flight"}}"#;
+        assert!(is_in_flight(b));
+        assert!(!is_in_flight(
+            br#"{"error":{"key":"download.grab.errors.release_expired"}}"#
+        ));
+        assert!(!is_in_flight(b"nope"));
     }
 
     #[test]

@@ -152,7 +152,6 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
       const start =
         parseLocator(saved?.locator) ??
         (typeof saved?.progression === 'number' ? this.positionAt(saved.progression) : undefined);
-      this.start = start ?? positions[0];
       const nav = new EpubNavigator(
         container,
         publication,
@@ -239,8 +238,10 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
     this.landing.set(null);
     this.book.locator.set(locator);
     this.selectionBar().dismiss();
-    if (!this.moved && this.atStart(locator)) return;
-    this.moved = true;
+    if (!this.opened) {
+      this.opened = true;
+      return;
+    }
     this.progress.report(this.target(), { progression: total, locator: locator.serialize() as Record<string, unknown> });
   }
 
@@ -282,14 +283,8 @@ export class EpubEngineComponent implements ReaderEngine, OnDestroy {
     }
   }
 
-  /** The position restored on open; nothing is reported until the reader leaves it. */
-  private start: Locator | undefined;
-  private moved = false;
-
-  private atStart(locator: Locator): boolean {
-    const s = this.start;
-    return !!s && s.href === locator.href.split('#')[0] && Math.abs((s.locations.progression ?? 0) - (locator.locations.progression ?? 0)) < 1e-3;
-  }
+  /** The first relocation is the open itself, whatever locator the layout settles on: never reported. */
+  private opened = false;
 
   private positionAt(at: number): Locator | undefined {
     const positions = this.book.positions;

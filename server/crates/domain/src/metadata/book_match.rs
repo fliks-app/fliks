@@ -5,9 +5,6 @@ use unicode_normalization::UnicodeNormalization;
 /// The least score a title and author search may link on.
 pub const MIN_CONFIDENCE: u8 = 85;
 
-/// The least title similarity a text search may link a folder on; same 0-100 scale, same bar.
-pub const MIN_TITLE_SIMILARITY: u8 = MIN_CONFIDENCE;
-
 const STOPWORDS: [&str; 14] = [
     "le", "la", "les", "l", "un", "une", "des", "de", "du", "the", "a", "an", "of", "and",
 ];
@@ -127,7 +124,7 @@ mod tests {
 
     #[test]
     fn title_similarity_links_the_same_title_only() {
-        let near = |a, b| title_similarity(a, b) >= MIN_TITLE_SIMILARITY;
+        let near = |a, b| title_similarity(a, b) >= MIN_CONFIDENCE;
         assert!(near("The Alpha Beta", "alpha beta"));
         assert!(near("Alpha: Beta", "Alpha Beta"));
         assert!(!near("Alpha Beta", "Alpha Beta Gamma Delta"));

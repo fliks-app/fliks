@@ -1,4 +1,3 @@
-import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -16,6 +15,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
 import { listOf, ranked } from '../lyrics/lyrics-settings';
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 
 /** `visible` in its new order, placed in the slots `stored` gives the visible ids; an id that is not shown (a provider that is down) keeps its place. */
 export function placeVisible(stored: string[], visible: string[]): string[] {
@@ -32,7 +32,8 @@ export type UnrequestedTracks = 'import_unmonitored' | 'skip';
 @Component({
   selector: 'app-acquisition-settings',
   imports: [
-    LoadFailedComponent, TranslatePipe,
+    LoadFailedComponent,
+    TranslatePipe,
     FormsModule,
     CdkDropList,
     DropListSettleDirective,

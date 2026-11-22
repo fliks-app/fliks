@@ -1,5 +1,5 @@
 //! Quality name from real pixels plus the source tag of a name (`quality-from-resolution.ts`).
-use super::quality::APP_QUALITIES;
+use super::quality::{APP_QUALITIES, is_bare_web};
 use crate::js::rx;
 
 /// Canonical height step of a width x height pair; 480 when both are 0 or absent.
@@ -33,7 +33,7 @@ pub fn quality_from_resolution(
         "remux"
     } else if rx!(r"\b(bluray|blu-?ray|bdrip|brrip)\b").is_match(&t) {
         "bluray"
-    } else if rx!(r"\bweb([ -]?(dl|rip))?\b").is_match(&t) {
+    } else if rx!(r"\bweb[ -]?(dl|rip)\b").is_match(&t) || is_bare_web(&t) {
         "web"
     } else if rx!(r"\b(dvd|dvdrip)\b").is_match(&t) {
         "dvd"
@@ -45,4 +45,16 @@ pub fn quality_from_resolution(
         .find(|q| q.resolution == resolution && q.source == source)
         .or_else(|| APP_QUALITIES.iter().find(|q| q.resolution == resolution))
         .map_or_else(|| format!("HDTV-{resolution}p"), |q| q.name.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::quality_from_resolution as q;
+
+    #[test]
+    fn a_title_word_web_is_not_a_source() {
+        let (w, h) = (Some(1280.0), Some(720.0));
+        assert_eq!(q("Web.Therapy.S01E01.720p.HDTV", w, h), "HDTV-720p");
+        assert_eq!(q("Show.S01E01.720p.WEB.h264-GRP", w, h), "WEBDL-720p");
+    }
 }

@@ -1,4 +1,3 @@
-import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import { RouterLink } from '@angular/router';
 import { Component, computed, inject, signal, OnInit } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
@@ -11,6 +10,7 @@ import { StreamsApiService } from '../../../core/services/api/streams-api.servic
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SERVER_SINCE, ServerVersionService } from '../../../core/services/server-version.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 
 @Component({
   selector: 'app-streaming-settings',

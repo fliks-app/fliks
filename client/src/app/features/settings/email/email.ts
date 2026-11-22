@@ -1,4 +1,3 @@
-import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { InputFieldComponent } from '../../../shared/components/forms/input-field/input-field';
@@ -6,6 +5,7 @@ import { SelectFieldComponent } from '../../../shared/components/forms/select-fi
 import { EmailDevicesApiService } from '../../../core/services/api/email-devices-api.service';
 import { SettingsApiService, settingsSecretsSet } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
 
 const DEFAULT_MAX_MB = '50';
 
@@ -30,6 +30,7 @@ export class EmailSettingsComponent implements OnInit {
   readonly username = signal('');
   readonly password = signal('');
   readonly passwordStored = signal(false);
+  private savedHost = '';
   readonly from = signal('');
   readonly maxMb = signal(DEFAULT_MAX_MB);
   readonly testTo = signal('');
@@ -45,6 +46,7 @@ export class EmailSettingsComponent implements OnInit {
     try {
       const all = await this.settings.getAll(true);
       this.host.set(all['smtp_host'] ?? '');
+      this.savedHost = this.host().trim().toLowerCase();
       this.port.set(all['smtp_port'] ?? '');
       this.security.set(all['smtp_security'] || 'starttls');
       this.username.set(all['smtp_username'] ?? '');
@@ -62,7 +64,7 @@ export class EmailSettingsComponent implements OnInit {
     if (this.busy()) return;
     this.busy.set(true);
     try {
-      // A blank password keeps the stored one.
+      // A blank password keeps the stored one, unless the host changed: the server then drops it.
       await this.settings.setBulk({
         smtp_host: this.host().trim(),
         smtp_port: this.port().trim(),
@@ -72,7 +74,10 @@ export class EmailSettingsComponent implements OnInit {
         smtp_from: this.from().trim(),
         smtp_max_attachment_mb: this.maxMb().trim(),
       });
-      this.passwordStored.update((s) => s || !!this.password());
+      const host = this.host().trim().toLowerCase();
+      const hostChanged = host !== this.savedHost;
+      this.passwordStored.update((s) => (s && !hostChanged) || !!this.password());
+      this.savedHost = host;
       this.password.set('');
       this.toast.success(this.translate.instant('settings.email.saved'));
     } catch {

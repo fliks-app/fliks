@@ -17,8 +17,13 @@ struct Ctx {
 }
 
 async fn ctx(pool: PgPool) -> Ctx {
+    ctx_with(pool, |_| {}).await
+}
+
+async fn ctx_with(pool: PgPool, setup: impl FnOnce(&mut AppState)) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
-    let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
+    let mut st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
+    setup(&mut st);
     sqlx::query(r#"INSERT INTO roles (name, permissions) VALUES ('lib', '["settings.access","media.read"]')"#)
         .execute(&pool)
         .await
@@ -1381,5 +1386,52 @@ async fn a_series_relinked_by_folder_takes_its_season_folders_and_loose_episodes
     );
     let movie = json!({"libraryId": l["id"], "type": "movie", "folderName": "Show A"});
     assert_eq!(call(&c, "POST", uri, &c.admin, movie).await.0, 400);
+    let _ = std::fs::remove_dir_all(&c.tmp);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_auto_orphan_whose_only_hit_is_another_title_is_not_imported(pool: PgPool) {
+    let fake = crate::fakes::Scripted::new(fliks_domain::external_id::Namespace::TMDB);
+    fake.ok(
+        "search/series",
+        json!([{"provider": "tmdb", "tmdbId": 9, "title": "Wrong Title", "year": 2001}]),
+    );
+    let f = fake.clone();
+    let c = ctx_with(pool, move |st| st.metadata.add_plugin(f)).await;
+    let show = c.tmp.join("lib/Show A");
+    std::fs::create_dir_all(&show).unwrap();
+    std::fs::write(show.join("Show A - S01E01.mkv"), b"x").unwrap();
+    let lib = c.tmp.join("lib").to_string_lossy().into_owned();
+    let (s, l) = call(
+        &c,
+        "POST",
+        "/api/libraries",
+        &c.admin,
+        json!({"name": "S", "path": lib, "mediaTypes": ["series"]}),
+    )
+    .await;
+    assert_eq!(s, 201);
+    let item = json!({"libraryId": l["id"], "type": "series", "folderName": "Show A",
+        "title": "Show A", "year": 2001, "auto": true});
+    let (s, _) = call(
+        &c,
+        "POST",
+        "/api/imports/library/orphans/relink-batch",
+        &c.admin,
+        json!({ "items": [item] }),
+    )
+    .await;
+    assert_eq!(s, 201);
+    for _ in 0..100 {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        if !fake.seen("search/series").is_empty() && c.st.hub.activity().list(1, 10).total == 0 {
+            break;
+        }
+    }
+    assert!(!fake.seen("search/series").is_empty());
+    assert!(
+        fake.seen("work/series/9").is_empty(),
+        "a same-year wrong hit was imported"
+    );
     let _ = std::fs::remove_dir_all(&c.tmp);
 }

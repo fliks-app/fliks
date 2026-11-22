@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { saveFile } from '../../../core/plugins/save-file.plugin';
+import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { CardAction } from '../../../core/services/card-actions.service';
@@ -54,6 +55,9 @@ export class PluginsState {
   private readonly toast = inject(ToastService);
   private readonly registry = inject(PluginUiRegistryService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly auth = inject(AuthService);
+  /** Installing, enabling and sources need the server admin, not just Manage Settings. */
+  readonly isAdmin = computed(() => !!this.auth.user()?.isAdmin);
   private readonly router = inject(Router);
 
   readonly rows = signal<PluginSummary[]>([]);
@@ -167,7 +171,7 @@ export class PluginsState {
     const row = entry.installed;
     const install = (version: string) => () => void this.installVersion(catalog!, version, consent);
     if (!row) {
-      if (catalog?.latestVersion) {
+      if (catalog?.latestVersion && this.isAdmin()) {
         actions.push({
           labelKey: 'settings.plugins.catalogue.install',
           icon: 'download',
@@ -177,7 +181,7 @@ export class PluginsState {
       }
       return actions;
     }
-    if (catalog && entry.updateTo) {
+    if (catalog && entry.updateTo && this.isAdmin()) {
       actions.push({
         label: this.translate.instant('settings.plugins.catalogue.switch_to', { version: entry.updateTo }),
         icon: 'download',
@@ -185,14 +189,14 @@ export class PluginsState {
         run: install(entry.updateTo),
       });
     }
-    actions.push(
-      {
+    if (this.isAdmin()) {
+      actions.push({
         labelKey: row.enabled ? 'settings.plugins.disable' : 'settings.plugins.enable',
         icon: row.enabled ? 'ban' : 'check',
         run: () => void this.toggleEnabled(row, !row.enabled),
-      },
-      { labelKey: 'settings.plugins.export.button', icon: 'database', run: () => void this.exportData(row) },
-    );
+      });
+    }
+    actions.push({ labelKey: 'settings.plugins.export.button', icon: 'database', run: () => void this.exportData(row) });
     if (row.origin !== 'bundled') {
       actions.push({
         labelKey: 'settings.plugins.uninstall',
