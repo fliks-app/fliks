@@ -154,19 +154,6 @@ pub(super) async fn rows_by_id(db: &sqlx::PgPool, ids: &[i32], libraries: &[i32]
     rows.into_iter().map(wire).collect()
 }
 
-/// `%`, `_` and `\` match themselves in a `LIKE`.
-fn like(q: &str) -> String {
-    let mut out = String::from("%");
-    for c in q.chars() {
-        if matches!(c, '%' | '_' | '\\') {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out.push('%');
-    out
-}
-
 async fn list(st: &AppState, a: &Authed, p: &Page, open: bool) -> Result<Json<Value>, AppError> {
     a.require(Action::Grab, Subject::Media)?;
     let libraries = accessible_library_ids(&st.db, a).await?;
@@ -193,7 +180,7 @@ async fn list(st: &AppState, a: &Authed, p: &Page, open: bool) -> Result<Json<Va
             AND ($4::int IS NULL OR q."mediaId" = $4)
             AND q."deletedAt" IS NULL AND m."libraryId" = ANY($3)"#
     );
-    let like = q.map(like);
+    let like = q.map(fliks_domain::media::search::contains_pattern);
     let order = if open {
         "q.id DESC"
     } else {
@@ -439,11 +426,6 @@ pub async fn queue_remove(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn like_escapes_its_wildcards() {
-        assert_eq!(like("50%_a\\"), "%50\\%\\_a\\\\%");
-    }
 
     #[test]
     fn an_action_names_its_states_and_route() {

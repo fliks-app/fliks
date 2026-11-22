@@ -104,7 +104,7 @@ pub async fn resolve(
 #[utoipa::path(get, path = "/api/persons/search", responses((status = 200)))]
 pub async fn search(
     State(st): State<AppState>,
-    _a: Authed,
+    a: Authed,
     Query(q): Query<Vec<(String, String)>>,
 ) -> Res {
     let mut qs = q.iter().filter(|(k, _)| k == "q");
@@ -113,7 +113,8 @@ pub async fn search(
         (Some((_, v)), None) => v.trim(),
         _ => "",
     };
-    Ok(Json(Value::Array(service::search(&st.db, q).await?)))
+    let acl = accessible_library_ids(&st.db, &a).await?;
+    Ok(Json(Value::Array(service::search(&st.db, q, &acl).await?)))
 }
 
 #[utoipa::path(get, path = "/api/persons/{id}", responses((status = 200)))]

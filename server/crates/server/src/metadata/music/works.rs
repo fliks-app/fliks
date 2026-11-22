@@ -175,8 +175,8 @@ pub async fn search(
         return Ok(Json(Value::Array(vec![])));
     }
     let sql = format!(
-        "{SELECT} AND ($2::text IS NULL OR w.\"searchVector\" @@ to_tsquery('simple', $2)) \
-         ORDER BY CASE WHEN $2::text IS NULL THEN 0 ELSE -ts_rank(w.\"searchVector\", to_tsquery('simple', $2)) END, w.title, w.id LIMIT $3"
+        "{SELECT} AND ($2::text IS NULL OR w.\"searchVector\" @@ to_tsquery('simple', f_unaccent($2))) \
+         ORDER BY CASE WHEN $2::text IS NULL THEN 0 ELSE -ts_rank(w.\"searchVector\", to_tsquery('simple', f_unaccent($2))) END, w.title, w.id LIMIT $3"
     );
     let rows: Vec<Value> = sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
         .bind(&acl)

@@ -485,6 +485,17 @@ async fn person_search(pool: PgPool) {
     {
         person(&pool, i as i32 + 1, "tmdb", 100 + i as i32, n, "1 day").await;
     }
+    person(&pool, 6, "tmdb", 106, "Hidden Claude", "1 day").await;
+    media(&pool, 1, "movie", Some(11), None, 1).await;
+    media(&pool, 2, "movie", Some(22), None, 2).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO media_credits (role, position, "mediaId", "personId")
+             SELECT 'cast', id, 1, id FROM persons WHERE id <= 5;
+           INSERT INTO media_credits (role, position, "mediaId", "personId") VALUES ('cast', 1, 2, 6)"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     let cr = &c;
     let search = |q: &'static str| async move {
         call(cr, &format!("/api/persons/search{q}"), Some(&cr.reader)).await
@@ -501,18 +512,26 @@ async fn person_search(pool: PgPool) {
     assert_eq!(names(&search("?q=Jean-Luc").await.1), ["Jean-Luc Godard"]);
     assert_eq!(names(&search("?q=jean%20luc").await.1), ["Jean-Luc Godard"]);
     assert_eq!(names(&search("?q=am%C3%A9lie").await.1), ["Amélie Poulain"]);
+    assert_eq!(names(&search("?q=amelie").await.1), ["Amélie Poulain"]);
+    assert_eq!(
+        names(&search("?q=claude").await.1),
+        ["Claude Rains"],
+        "a person credited only in an unreadable library is not listed"
+    );
     assert_eq!(names(&search("").await.1).len(), 5);
     sqlx::raw_sql(
-        r#"INSERT INTO persons (id, name) SELECT 10000 + g, 'Zz ' || g FROM generate_series(1, 1000) g;
-           INSERT INTO person_external_ids SELECT 10000 + g, 'tmdb', (10000 + g)::text FROM generate_series(1, 1000) g"#,
+        r#"INSERT INTO persons (id, name) SELECT 10000 + g, 'Zz ' || g FROM generate_series(1, 100) g;
+           INSERT INTO person_external_ids SELECT 10000 + g, 'tmdb', (10000 + g)::text FROM generate_series(1, 100) g;
+           INSERT INTO media_credits (role, position, "mediaId", "personId")
+             SELECT 'cast', g, 1, 10000 + g FROM generate_series(1, 100) g"#,
     )
     .execute(&pool)
     .await
     .unwrap();
     assert_eq!(
         names(&search("").await.1).len(),
-        1000,
-        "no cap on the result count"
+        50,
+        "a blank query lists one page"
     );
     sqlx::query("DELETE FROM persons WHERE name LIKE 'Zz %'")
         .execute(&pool)

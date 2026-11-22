@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object('id', p.id, 'createdAt', iso_ms(p.\"createdAt\"), 'updatedAt', iso_ms(p.\"updatedAt\"),\n    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p.\"avatarUrl\", 'biography', p.biography,\n    'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p.\"placeOfBirth\",\n    'knownForDepartment', p.\"knownForDepartment\", 'departments', p.departments,\n    'metadataRefreshedAt', iso_ms(p.\"metadataRefreshedAt\")) AS \"json!: Value\"\nFROM persons p LEFT JOIN person_ids x ON x.\"personId\" = p.id\nWHERE EXISTS (SELECT 1 FROM media_credits mc JOIN media m ON m.id = mc.\"mediaId\"\n               WHERE mc.\"personId\" = p.id AND m.\"libraryId\" = ANY($1))\n   OR EXISTS (SELECT 1 FROM item_credits ic JOIN items i ON i.id = ic.\"itemId\" JOIN media m ON m.id = i.\"mediaId\"\n               WHERE ic.\"personId\" = p.id AND m.\"libraryId\" = ANY($1))\nORDER BY p.name ASC, p.id ASC LIMIT 50",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4137cdf8fffd94e1761ae5637c9a53eb24b6a9b44e81f3fd2c5fd253d38532c5"
+}
