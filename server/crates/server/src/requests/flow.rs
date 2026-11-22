@@ -330,7 +330,7 @@ async fn existing_series_profiles(
     }
 }
 
-pub async fn title_state(st: &AppState, key: &TitleKey) -> Res<Value> {
+pub async fn title_state(st: &AppState, a: &Authed, key: &TitleKey) -> Res<Value> {
     let mut conn = st.db.acquire().await?;
     let keys = db::title_keys(&mut conn, key).await?;
     let active = db::active_adds_of(&mut conn, &keys).await?;
@@ -355,6 +355,18 @@ pub async fn title_state(st: &AppState, key: &TitleKey) -> Res<Value> {
         "lockedQualityProfileId": locked.and_then(|l| l.0),
         "lockedLanguageProfileId": locked.and_then(|l| l.1),
     });
+    let ids: Vec<i32> = active.iter().map(|r| r.id).collect();
+    let pairs = db::watch_pairs(&mut conn, &ids).await?;
+    let mut people: Vec<i32> = active
+        .iter()
+        .filter_map(|r| r.user_id)
+        .chain(pairs.iter().map(|p| p.1))
+        .collect();
+    people.sort_unstable();
+    people.dedup();
+    state["requesterCount"] = json!(people.len());
+    state["watching"] = json!(pairs.iter().any(|p| p.1 == a.user.id));
+    state["requestedByMe"] = json!(active.iter().any(|r| r.user_id == Some(a.user.id)));
     if super::is_work(key.media_type) {
         let wants: Vec<&WantSpec> = active
             .iter()
@@ -375,6 +387,16 @@ pub async fn title_state(st: &AppState, key: &TitleKey) -> Res<Value> {
             state["requestedRecordings"] = json!(tracks);
         }
     }
+    let makes_requested = |r: &&db::Req| match key.media_type {
+        MediaKind::Album => r.recordings.is_none(),
+        k if super::is_work(k) => r.wants.as_ref().is_some_and(|w| !w.0.is_empty()),
+        k if k.has_seasons() => r.scope().is_none(),
+        _ => true,
+    };
+    state["requestId"] = match state["requested"].as_bool() {
+        Some(true) => json!(active.iter().find(makes_requested).map(|r| r.id)),
+        _ => Value::Null,
+    };
     Ok(state)
 }
 
@@ -923,6 +945,13 @@ pub async fn detail(st: &AppState, a: &Authed, row: &db::Req) -> Res<Map<String,
         "comments",
         json!(db::comments(&st.db, row.id).await?),
     );
+    if can_manage(a) {
+        put(
+            &mut json,
+            "watchers",
+            json!(db::watchers(&st.db, row.id).await?),
+        );
+    }
     Ok(json)
 }
 
@@ -1035,13 +1064,96 @@ pub async fn remove(st: &AppState, a: &Authed, id: i32) -> Res<()> {
             ));
         }
         owner_or_manager(a, row.user_id)?;
+        return cancel_own(st, &row).await;
     }
-    if !db::delete(&st.db, id, !can_manage(a)).await? && !can_manage(a) {
+    db::delete(&st.db, id, false).await?;
+    Ok(())
+}
+
+/// Rule 53: the owner's cancel of a pending row hands it to the earliest watcher, else deletes it.
+async fn cancel_own(st: &AppState, row: &db::Req) -> Res<()> {
+    let mut tx = st.db.begin().await?;
+    sqlx::query("SET LOCAL lock_timeout = '10s'")
+        .execute(&mut *tx)
+        .await?;
+    db::lock_title(&mut tx, &row.key())
+        .await
+        .map_err(|e| lock_err(e, true))?;
+    let pending = db::find(&mut *tx, row.id)
+        .await?
+        .is_some_and(|r| r.status == "pending" && r.user_id == row.user_id);
+    let owner = row.user_id.unwrap_or_default();
+    let handed = pending && db::promote_watcher(&mut tx, row.id, owner).await?;
+    if !handed && !db::delete(&mut *tx, row.id, true).await? {
         return Err(AppError::forbidden(
             "Only pending requests can be cancelled",
         ));
     }
+    tx.commit().await?;
     Ok(())
+}
+
+/// Rule 53: follow an in-flight request of someone else; a joiner whose auto-approval rule matches approves it.
+pub async fn watch(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
+    let row = db::find(&st.db, id).await?.ok_or_else(|| not_found(id))?;
+    assert_can_access_request_library(st, a, row.library_id, row.user_id).await?;
+    if !a.kinds.has(row.media_type) {
+        return Err(not_found(id));
+    }
+    if row.kind != "add" || !db::IN_FLIGHT.contains(&row.status.as_str()) {
+        return Err(AppError::conflict("This request is no longer in flight"));
+    }
+    if row.user_id == Some(a.user.id) {
+        return Err(AppError::conflict("You made this request"));
+    }
+    let dto = CreateRequest {
+        media_type: row.media_type,
+        delete: false,
+        key: row.key(),
+        title: row.title.clone(),
+        seasons: row.seasons.as_ref().map(|s| s.0.clone()),
+        wants: row.wants.as_ref().map(|w| w.0.clone()),
+        recordings: row.recordings.clone(),
+        quality_profile_id: row.quality_profile_id,
+        language_profile_id: row.language_profile_id,
+        library_id: row.library_id,
+        folder_id: row.folder_id,
+    };
+    let candidates = rules::candidates(st, a, &dto).await?;
+    let mut tx = st.db.begin().await?;
+    sqlx::query("SET LOCAL lock_timeout = '10s'")
+        .execute(&mut *tx)
+        .await?;
+    db::lock_title(&mut tx, &row.key())
+        .await
+        .map_err(|e| lock_err(e, true))?;
+    let row = match db::find(&mut *tx, id).await? {
+        Some(r) if db::IN_FLIGHT.contains(&r.status.as_str()) && r.user_id != Some(a.user.id) => r,
+        _ => return Err(AppError::conflict("This request is no longer in flight")),
+    };
+    db::watch_add(&mut *tx, id, a.user.id).await?;
+    tx.commit().await?;
+    if row.status == "pending" && candidates.approves(a, &dto, row.library_id.unwrap_or_default()) {
+        match settled(tokio::spawn(approve_add(
+            st.clone(),
+            a.user.id,
+            id,
+            row,
+            false,
+        )))
+        .await
+        {
+            Err(e) if e.status() == StatusCode::CONFLICT => {}
+            other => drop(other?),
+        }
+    }
+    Ok(json!({"requestId": id, "watching": true}))
+}
+
+/// Rule 53: stop following; idempotent.
+pub async fn unwatch(st: &AppState, a: &Authed, id: i32) -> Res<()> {
+    db::find(&st.db, id).await?.ok_or_else(|| not_found(id))?;
+    Ok(db::watch_remove(&st.db, id, a.user.id).await?)
 }
 
 /// Rule 23 steps 1-4, shared with `decline`.

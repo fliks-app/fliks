@@ -5328,6 +5328,26 @@
         }
       }
     },
+    "/api/requests/{id}/watch": {
+      "post": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "watch",
+        "responses": {
+          "201": {}
+        }
+      },
+      "delete": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "unwatch",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/roles": {
       "get": {
         "tags": [

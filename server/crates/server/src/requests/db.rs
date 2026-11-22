@@ -605,7 +605,7 @@ pub async fn set_wants(db: &mut PgConnection, id: i32, wants: &[WantSpec]) -> sq
 }
 
 /// Deletes the row; `pending_only` (a requester cancelling) leaves a row that moved on. False when nothing went.
-pub async fn delete(db: &PgPool, id: i32, pending_only: bool) -> sqlx::Result<bool> {
+pub async fn delete(db: impl PgExecutor<'_>, id: i32, pending_only: bool) -> sqlx::Result<bool> {
     Ok(sqlx::query!(
         "DELETE FROM requests WHERE id = $1 AND (NOT $2 OR status = 'pending')",
         id,
@@ -615,6 +615,70 @@ pub async fn delete(db: &PgPool, id: i32, pending_only: bool) -> sqlx::Result<bo
     .await?
     .rows_affected()
         == 1)
+}
+
+/// Follows a request; false when the caller already did.
+pub async fn watch_add(db: impl PgExecutor<'_>, id: i32, user: i32) -> sqlx::Result<bool> {
+    Ok(sqlx::query(
+        r#"INSERT INTO request_watchers ("requestId", "userId") VALUES ($1, $2) ON CONFLICT DO NOTHING"#,
+    )
+    .bind(id)
+    .bind(user)
+    .execute(db)
+    .await?
+    .rows_affected()
+        == 1)
+}
+
+pub async fn watch_remove(db: &PgPool, id: i32, user: i32) -> sqlx::Result<()> {
+    sqlx::query(r#"DELETE FROM request_watchers WHERE "requestId" = $1 AND "userId" = $2"#)
+        .bind(id)
+        .bind(user)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+/// The watchers of the given requests as `(requestId, userId)`.
+pub async fn watch_pairs(db: &mut PgConnection, ids: &[i32]) -> sqlx::Result<Vec<(i32, i32)>> {
+    sqlx::query_as(
+        r#"SELECT "requestId", "userId" FROM request_watchers WHERE "requestId" = ANY($1)"#,
+    )
+    .bind(ids)
+    .fetch_all(db)
+    .await
+}
+
+/// A manager's view of a request's watchers, earliest first.
+pub async fn watchers(db: &PgPool, id: i32) -> sqlx::Result<Vec<Value>> {
+    sqlx::query_scalar(
+        r#"SELECT jsonb_build_object('id', u.id, 'username', u.username, 'avatar', u.avatar,
+        'createdAt', iso_ms(w."createdAt")) FROM request_watchers w JOIN users u ON u.id = w."userId"
+        WHERE w."requestId" = $1 ORDER BY w."createdAt", w."userId""#,
+    )
+    .bind(id)
+    .fetch_all(db)
+    .await
+}
+
+/// Hands a pending row to its earliest watcher, who stops watching; false when it has no watcher.
+pub async fn promote_watcher(tx: &mut PgConnection, id: i32, owner: i32) -> sqlx::Result<bool> {
+    let next: Option<i32> = sqlx::query_scalar(
+        r#"DELETE FROM request_watchers WHERE ("requestId", "userId") =
+        (SELECT "requestId", "userId" FROM request_watchers WHERE "requestId" = $1
+         ORDER BY "createdAt", "userId" LIMIT 1) RETURNING "userId""#,
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(next) = next else { return Ok(false) };
+    sqlx::query(r#"UPDATE requests SET "userId" = $1 WHERE id = $2 AND "userId" = $3"#)
+        .bind(next)
+        .bind(id)
+        .bind(owner)
+        .execute(tx)
+        .await?;
+    Ok(true)
 }
 
 /// Declines a pending row; false when it is no longer pending.

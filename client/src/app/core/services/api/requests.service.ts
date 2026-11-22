@@ -138,6 +138,19 @@ export interface FliksRequestRow {
 /** An album request limited to some of its tracks. */
 export const isTrackRequest = (r: FliksRequestRow): boolean => r.mediaType === 'album' && !!r.recordings?.length;
 
+/** A member following a request, as a manager sees it. */
+export interface RequestWatcher {
+  id: number;
+  username: string;
+  avatar?: string | null;
+  createdAt: string;
+}
+
+/** A request's detail; `watchers` is sent to managers only. */
+export interface FliksRequestDetail extends FliksRequestRow {
+  watchers?: RequestWatcher[];
+}
+
 export interface RequestsPage {
   data: FliksRequestRow[];
   total: number;
@@ -146,6 +159,13 @@ export interface RequestsPage {
 /** Aggregate active-request state for a title across all users (no requester identity); drives the "already requested" gate and the series season/profile-lock UI. */
 export interface TitleRequestState {
   requested: boolean;
+  /** The caller follows the active request without owning it. */
+  watching: boolean;
+  /** Requester plus watchers; names stay private to non-managers. */
+  requesterCount: number;
+  requestedByMe: boolean;
+  /** The active row behind `requested`. */
+  requestId: number | null;
   wholeSeriesRequested: boolean;
   requestedSeasons: number[];
   profilesLocked: boolean;
@@ -209,6 +229,21 @@ export class RequestsService {
     );
   }
 
+  get(id: number) {
+    return firstValueFrom(this.http.get<FliksRequestDetail>(`/api/requests/${id}`));
+  }
+
+  /** The caller reports a failure with its own toast, so the global one is skipped. */
+  watch(id: number) {
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    return firstValueFrom(this.http.post<void>(`/api/requests/${id}/watch`, null, { context }));
+  }
+
+  unwatch(id: number) {
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    return firstValueFrom(this.http.delete<void>(`/api/requests/${id}/watch`, { context }));
+  }
+
   getTitleState(key: TitleKey, mediaType: MediaType) {
     const [provider, externalId] = titleRef(key);
     const params = new HttpParams()
@@ -232,8 +267,9 @@ export class RequestsService {
   }
 
   /** `wholeAlbum` widens a track request to the whole album. */
-  approve(id: number, wholeAlbum?: boolean) {
-    return firstValueFrom(this.http.post<FliksRequestRow>(`/api/requests/${id}/approve`, wholeAlbum ? { wholeAlbum } : {}));
+  approve(id: number, wholeAlbum?: boolean, skipToast = false) {
+    const context = skipToast ? new HttpContext().set(SKIP_ERROR_TOAST, true) : undefined;
+    return firstValueFrom(this.http.post<FliksRequestRow>(`/api/requests/${id}/approve`, wholeAlbum ? { wholeAlbum } : {}, { context }));
   }
 
   decline(id: number, reason?: string) {

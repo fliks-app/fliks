@@ -11,6 +11,8 @@ import { ToastService } from '../../../../core/services/toast.service';
 import { NavbarService } from '../../../../core/services/navbar.service';
 import { RequestsService, TitleKey, TitleRequestState, FliksRequestRow, VideoMediaType } from '../../../../core/services/api/requests.service';
 import { RequestDeclineModalComponent } from '../../../requests/request-decline-modal/request-decline-modal.component';
+import { RequestRequestersComponent } from '../../../requests/request-requesters/request-requesters.component';
+import { RequestWatchComponent } from '../../../requests/request-watch/request-watch.component';
 import { RequestEditModalComponent } from '../../../requests/request-edit-modal/request-edit-modal.component';
 import { RequestDeclineFlow, RequestEditFlow } from '../../../requests/request-flows';
 import { AddDialogComponent } from '../../../../shared/components/add-dialog/add-dialog';
@@ -31,7 +33,7 @@ import { PREVIEW_HOST, type PreviewSeed } from '../../preview-host';
 /** The add preview of a movie or a series: its facts, seasons and cast, and Add, Request or the manager's pending requests. */
 @Component({
   selector: 'app-video-preview',
-  imports: [NgTemplateOutlet, TranslatePipe, AddDialogComponent, TvRowDirective, DetailSectionComponent, FactsGridComponent, HeroBaseComponent, MediaCastComponent, PreviewSeasonsComponent, RequestDeclineModalComponent, RequestEditModalComponent, TrailerDialogComponent, LucidePlay, LucidePlus],
+  imports: [NgTemplateOutlet, TranslatePipe, AddDialogComponent, TvRowDirective, DetailSectionComponent, FactsGridComponent, HeroBaseComponent, MediaCastComponent, PreviewSeasonsComponent, RequestDeclineModalComponent, RequestEditModalComponent, RequestRequestersComponent, RequestWatchComponent, TrailerDialogComponent, LucidePlay, LucidePlus],
   templateUrl: './video-preview.component.html',
   host: { class: 'block' },
 })

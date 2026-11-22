@@ -41,6 +41,9 @@ export class RequestFlowController {
       mediaTitleKey(this.host.media()) != null,
   );
 
+  /** Manager view of an active request: approve and see who asked. */
+  readonly canManage = computed(() => this.deps.auth.hasPermission('requests.manage'));
+
   /** Requester (no `media.delete`) can ask an admin to delete this library
    *  title. Admins with `media.delete` delete directly and never see it. */
   readonly canRequestDeletion = computed(

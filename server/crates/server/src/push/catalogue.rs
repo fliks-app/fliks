@@ -196,7 +196,10 @@ pub fn request_event(st: &AppState, event: &'static str, payload: &Map<String, V
         };
         let mut n = match event {
             "request.approved" | "request.declined" | "request.available" => {
-                let Some(user) = r.requester else { return };
+                let to = request_recipients(&st.db, r.id, r.requester).await;
+                if to.is_empty() {
+                    return;
+                }
                 let key = event.replace('.', "_");
                 let mut n = Notification::core(
                     "requests",
@@ -208,7 +211,7 @@ pub fn request_event(st: &AppState, event: &'static str, payload: &Map<String, V
                 if event != "request.declined" {
                     n.actions = vec![open(&n.url.clone())];
                 }
-                (vec![user], n)
+                (to, n)
             }
             "request.created" => {
                 let who = match r.requester {
@@ -249,6 +252,20 @@ pub fn request_event(st: &AppState, event: &'static str, payload: &Map<String, V
         n.1.image = r.media.map(|(m, _)| poster(m));
         notify(&st, n.0, n.1);
     });
+}
+
+/// The requester and the users watching the request.
+pub async fn request_recipients(db: &sqlx::PgPool, id: i32, requester: Option<i32>) -> Vec<i32> {
+    let mut to: Vec<i32> = requester.into_iter().collect();
+    let watchers: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT "userId" FROM request_watchers WHERE "requestId" = $1 ORDER BY "createdAt", "userId""#,
+    )
+    .bind(id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    to.extend(watchers.into_iter().filter(|w| Some(*w) != requester));
+    to
 }
 
 async fn approvers(st: &AppState) -> Vec<i32> {
@@ -325,7 +342,7 @@ fn listen(st: AppState) -> impl Future<Output = ()> {
 }
 
 /// Users who watch the series (a row not hidden from continue watching), still read its library and
-/// have no request for it: a requester gets the `requests` notifications instead.
+/// have no request for it and do not follow one: a requester or watcher gets the `requests` notifications instead.
 pub(super) async fn episode_recipients(
     st: &AppState,
     media: i32,
@@ -335,6 +352,8 @@ pub(super) async fn episode_recipients(
         r#"SELECT ps."userId" FROM playback_states ps JOIN items i ON i.id = ps."itemId"
            WHERE i."mediaId" = $1
              AND NOT EXISTS (SELECT 1 FROM requests r WHERE r."mediaId" = $1 AND r."userId" = ps."userId")
+             AND NOT EXISTS (SELECT 1 FROM request_watchers w JOIN requests r ON r.id = w."requestId"
+                             WHERE r."mediaId" = $1 AND w."userId" = ps."userId")
            GROUP BY ps."userId" HAVING bool_or(NOT ps."hiddenFromContinueWatching")
            ORDER BY ps."userId""#,
     )

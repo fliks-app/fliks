@@ -1,10 +1,23 @@
-<dialog #dialog class="modal" aria-labelledby="request-decline-title">
+<dialog #dialog class="modal max-sm:modal-bottom" aria-labelledby="request-decline-title">
   <div class="modal-box max-w-md">
     <app-modal-header>
       <h3 id="request-decline-title" class="text-lg font-bold">
         {{ 'requests.decline_title' | translate }}
       </h3>
     </app-modal-header>
+    <div appTvRow class="flex flex-wrap gap-2 mt-3 scroll-ring-safe">
+      @for (key of reasons; track key) {
+        <button
+          type="button"
+          class="btn btn-sm btn-outline"
+          [class.btn-active]="isPicked(key)"
+          [attr.aria-pressed]="isPicked(key)"
+          (click)="pick(key)"
+        >
+          {{ key | translate }}
+        </button>
+      }
+    </div>
     <textarea
       class="textarea textarea-bordered w-full mt-3"
       rows="3"
