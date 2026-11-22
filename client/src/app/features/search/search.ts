@@ -43,7 +43,8 @@ import { MediaCardComponent, CardBadge, SEARCH_CARD_CONTEXT } from '../../shared
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
 import { NgTemplateOutlet } from '@angular/common';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
-import { SearchFiltersComponent, libraryFilterParams } from '../../shared/components/search-filters/search-filters';
+import { SearchFiltersComponent } from '../../shared/components/search-filters/search-filters';
+import { libraryFilterParams } from '../../shared/components/search-filters/search-filters.model';
 import { LucideSearch, LucideX, LucideSettings, LucideMusic } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
