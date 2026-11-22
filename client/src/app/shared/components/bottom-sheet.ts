@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   Component,
   input,
@@ -30,6 +31,7 @@ const DOCK_BG = 'bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95 
   selector: 'app-bottom-sheet',
   // The backdrop and sheet are `position: fixed`, so the host needs no box (as in `app-popover-menu`); a box becomes a stray grid item in `.modal`.
   styles: [':host { display: contents; }'],
+  imports: [NgTemplateOutlet],
   templateUrl: './bottom-sheet.html',
 })
 export class BottomSheetComponent {
@@ -155,7 +157,7 @@ export class BottomSheetComponent {
   }
 
   sheetTransform(): string {
-    if (this.dismissing()) return this.aboveDock() ? '' : 'translateY(100%)';
+    if (this.dismissing()) return 'translateY(100%)';
     const offset = this.dragOffset();
     return offset > 0 ? `translateY(${offset}px)` : '';
   }

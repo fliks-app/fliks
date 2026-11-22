@@ -9,12 +9,13 @@
     (pointerdown)="$event.preventDefault()"
     (click)="dismiss()"
   ></div>
-  <!-- Sheet -->
+  <!-- Resting on the dock, the sheet slides inside a box that ends where the dock begins, so it never crosses it. -->
+  <ng-template #sheetTpl>
   <div
     #sheet
     data-tv-modal
     [class]="
-      'fixed bottom-0 shadow-2xl overflow-y-auto overscroll-contain ' +
+      (aboveDock() ? 'pointer-events-auto absolute' : 'fixed') + ' bottom-0 shadow-2xl overflow-y-auto overscroll-contain ' +
       layers().sheet + ' ' +
       (fullHeight()
         ? 'inset-x-0 top-0 flex flex-col bg-base-100 text-base-content'
@@ -23,12 +24,9 @@
           : layers().bg + ' rounded-t-2xl max-h-[70vh] portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
             (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto'))
     "
-    [class.animate-slide-up]="!dismissing() && !aboveDock()"
-    [class.animate-sheet-rise]="!dismissing() && aboveDock()"
-    [class.opacity-0]="dismissing() && aboveDock()"
+    [class.animate-slide-up]="!dismissing()"
     [style.transform]="sheetTransform()"
-    [style.transition]="dragging() ? 'none' : 'transform 0.18s ease-out, opacity 0.18s ease-out'"
-    [style.bottom]="aboveDock() ? 'var(--dock-h, 0px)' : null"
+    [style.transition]="dragging() ? 'none' : 'transform 0.18s ease-out'"
     [style.padding-bottom]="aboveDock() ? null : 'env(safe-area-inset-bottom)'"
     (touchstart)="onTouchStart($event)"
     (touchmove)="onTouchMove($event)"
@@ -55,4 +53,12 @@
       <ng-content></ng-content>
     </div>
   </div>
+  </ng-template>
+  @if (aboveDock()) {
+    <div class="pointer-events-none fixed inset-x-0 top-0 overflow-hidden" [class]="layers().sheet" style="bottom: var(--dock-h, 0px)">
+      <ng-container [ngTemplateOutlet]="sheetTpl" />
+    </div>
+  } @else {
+    <ng-container [ngTemplateOutlet]="sheetTpl" />
+  }
 }
