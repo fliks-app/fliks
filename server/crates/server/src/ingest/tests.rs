@@ -6363,8 +6363,8 @@ mod music_ingest {
             "its old ids are aliases of the survivor"
         );
         // The search finds a person by its sort name.
-        sqlx::query(r#"UPDATE persons SET "sortName" = 'Zzyzx, Ana' WHERE id = $1"#)
-            .bind(p)
+        sqlx::query(r#"UPDATE persons SET "sortName" = 'Zzyzx, Bo' WHERE id = $1"#)
+            .bind(q)
             .execute(&c.st.db)
             .await
             .unwrap();
@@ -6376,7 +6376,7 @@ mod music_ingest {
             Value::Null,
         )
         .await;
-        assert_eq!((s, b[0]["name"].as_str()), (200, Some("Ana")));
+        assert_eq!((s, b[0]["name"].as_str()), (200, Some("Bo")));
     }
 
     #[sqlx::test(migrations = false)]
