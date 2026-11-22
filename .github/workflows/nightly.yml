@@ -1,0 +1,157 @@
+# Nightly on main: the full test suite as the non-superuser role `fliks_app` (what a production install runs), and the
+# targeted set of ci.yml's `test-app-role` on Postgres 15 to 17. A red run mails the person who last edited the cron line.
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+jobs:
+  # Same archive as ci.yml's `build`, without its openapi checks.
+  build:
+    if: github.repository == 'fliks-app/fliks'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: server
+    env:
+      SQLX_OFFLINE: 'true'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      ARCHIVE_DIR: ${{ github.workspace }}/nextest-archive
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          # Restores ci.yml's test cache (same crate graph); saving is that workflow's.
+          save-if: false
+          shared-key: server-test
+          workspaces: server
+      - uses: ./.github/actions/fixture-components
+      - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
+      - name: archive the test binaries
+        run: |
+          mkdir -p "$ARCHIVE_DIR"
+          cargo nextest archive --workspace --archive-file "$ARCHIVE_DIR/tests.tar.zst"
+          cp target/wasm32-wasip2/release/fixture_*.wasm "$ARCHIVE_DIR"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: nextest-archive
+          path: ${{ env.ARCHIVE_DIR }}
+          retention-days: 1
+          compression-level: 0
+
+  test-full:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    name: full suite as fliks_app ${{ matrix.shard }}/3
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: fliks
+          POSTGRES_PASSWORD: fliks
+          POSTGRES_DB: fliks
+          POSTGRES_INITDB_ARGS: -c max_connections=500 -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fliks"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: server
+    env:
+      DATABASE_URL: postgres://fliks_app:fliks-app-test@localhost:5432/fliks
+      SQLX_OFFLINE: 'true'
+      S8_PG_ADMIN_URL: postgres://fliks:fliks@localhost:5432/postgres
+      FLIKS_HARNESS_PG_URL: postgres://fliks:fliks@localhost:5432/postgres
+      ARCHIVE_DIR: ${{ github.workspace }}/nextest-archive
+      FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/nextest-archive
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: nextest-archive
+          path: ${{ env.ARCHIVE_DIR }}
+      - name: PostgreSQL 18 client tools
+        run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
+      - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
+      - uses: ./.github/actions/app-role-db
+        with:
+          archive: ${{ env.ARCHIVE_DIR }}
+      - run: >-
+          cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
+          --partition count:${{ matrix.shard }}/3 --no-fail-fast --profile ci
+
+  test-pg-versions:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    name: app role on postgres ${{ matrix.pg }}
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [15, 16, 17]
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg }}
+        env:
+          POSTGRES_USER: fliks
+          POSTGRES_PASSWORD: fliks
+          POSTGRES_DB: fliks
+          POSTGRES_INITDB_ARGS: -c max_connections=500 -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fliks"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: server
+    env:
+      DATABASE_URL: postgres://fliks_app:fliks-app-test@localhost:5432/fliks
+      SQLX_OFFLINE: 'true'
+      S8_PG_ADMIN_URL: postgres://fliks:fliks@localhost:5432/postgres
+      FLIKS_HARNESS_PG_URL: postgres://fliks:fliks@localhost:5432/postgres
+      ARCHIVE_DIR: ${{ github.workspace }}/nextest-archive
+      FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/nextest-archive
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: nextest-archive
+          path: ${{ env.ARCHIVE_DIR }}
+      # pg_dump 18 reads every older server; the runner image ships 16.
+      - name: PostgreSQL 18 client tools
+        run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
+      - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
+      - uses: ./.github/actions/app-role-db
+        with:
+          archive: ${{ env.ARCHIVE_DIR }}
+      - run: >-
+          cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
+          --no-fail-fast --profile app-role

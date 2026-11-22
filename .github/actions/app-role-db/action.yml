@@ -1,0 +1,26 @@
+name: App role database
+description: Hands the Postgres service to the non-superuser role `fliks_app` and migrates template1 as that role, as a production install runs.
+inputs:
+  archive:
+    description: The nextest archive holding target/debug/fliks-server.
+    required: true
+runs:
+  using: composite
+  steps:
+    # CREATEDB is test-only: sqlx::test creates a database per test.
+    - name: db-role on template1 and fliks, migrate template1 as the app role
+      shell: bash
+      env:
+        DB_HOST: localhost
+        DB_PORT: '5432'
+        DB_USERNAME: fliks_app
+        DB_PASSWORD: fliks-app-test
+        DB_ADMIN_USERNAME: fliks
+        DB_ADMIN_PASSWORD: fliks
+      run: |
+        tar --zstd -xf "${{ inputs.archive }}/tests.tar.zst" -C "$RUNNER_TEMP" target/debug/fliks-server
+        bin="$RUNNER_TEMP/target/debug/fliks-server"
+        DB_NAME=template1 "$bin" db-role
+        DB_NAME=fliks "$bin" db-role
+        PGPASSWORD=fliks psql -h localhost -U fliks -d postgres -v ON_ERROR_STOP=1 -c 'ALTER ROLE fliks_app CREATEDB'
+        DB_NAME=template1 "$bin" migrate

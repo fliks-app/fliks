@@ -73,7 +73,8 @@ vendored binaries and the repo's `client/dist` and `server/public`; `fliks-engin
 | Path | Contents |
 |------|----------|
 | `%LOCALAPPDATA%\Fliks Server\postgresql\` | Database cluster |
-| `%LOCALAPPDATA%\Fliks Server\conf\` | JWT secret, `.db-password` (generated Postgres password) + tray settings |
+| `%LOCALAPPDATA%\Fliks Server\conf\` | JWT secret, `.db-password` (generated password of the `fliks_app` role the server connects with) + tray settings |
+| `%LOCALAPPDATA%\Fliks Server\private\` | `.db-admin-password`, the generated password of the `fliks` superuser (tray only, not passed to the server) |
 | `%LOCALAPPDATA%\Fliks Server\data\` | Server cwd (images, backups) |
 | `%LOCALAPPDATA%\Fliks Server\logs\` | Server (`server-<date>.log`) + PostgreSQL logs, kept 14 days |
 | `%LOCALAPPDATA%\Fliks Server\transcode\` | HLS transcode cache (ephemeral) |
@@ -81,6 +82,18 @@ vendored binaries and the repo's `client/dist` and `server/public`; `fliks-engin
 Setup installs the app under `%LOCALAPPDATA%\FliksServer` (per-user, no admin);
 the tray offers new releases and applies them after stopping PostgreSQL and the server.
 Uninstalling removes that folder only and leaves `%LOCALAPPDATA%\Fliks Server` data intact.
+
+## Database access
+
+The server connects as the non-superuser `fliks_app` with `conf\.db-password`; the tray (and a manual `psql` as
+`-h 127.0.0.1 -p 5433 -U fliks`, `PGPASSWORD`) uses the superuser password in `private\.db-admin-password`.
+At each launch the tray runs the bundled `fliks-server db-role`, which hands the database to `fliks_app`
+(idempotent, immediate when nothing is missing). Deleting `conf\.db-password` is safe: the next launch sets a new
+`fliks_app` password. Deleting `private\.db-admin-password` is not enough to recover the superuser: delete
+`conf\.db-password` too, and the next launch resets both. Back up `private\` with `conf\` and the cluster.
+
+Rollback: a build older than the app role reads `conf\.db-password` as the superuser password. Before running it,
+copy `private\.db-admin-password` over `conf\.db-password`.
 
 ## Clean reset
 

@@ -1,4 +1,5 @@
 pub mod migrate;
+pub mod role;
 
 pub use migrate::{MigrateError, adopt_typeorm, known_version, migrate, pending_version};
 

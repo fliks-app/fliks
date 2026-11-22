@@ -29,13 +29,13 @@ actor ServerManager {
 
         logger.info("Starting the server on port \(config.port)...")
 
-        guard let engine = Paths.engineBinary else { throw ServerError.missingEngine }
+        guard let engine = Paths.engineBinary, let server = Paths.serverBinary else { throw ServerError.missingEngine }
         let proc = Process()
         proc.executableURL = engine
         // The engine owns the public port; fliks-server listens on port + 1 behind it.
         proc.arguments = ["--supervise", "--public-listen", "0.0.0.0:\(config.port)",
                           "--upstream", "http://127.0.0.1:\(config.port + 1)",
-                          "--", engine.deletingLastPathComponent().appendingPathComponent("fliks-server").path]
+                          "--", server.path]
         proc.currentDirectoryURL = Paths.dataDir
         proc.environment = config.asEnvironment
 
@@ -196,7 +196,7 @@ struct ServerEnvironment {
             "FLIKS_BIND": "127.0.0.1",
             "DB_HOST": "localhost",
             "DB_PORT": String(dbPort),
-            "DB_USERNAME": "fliks",
+            "DB_USERNAME": "fliks_app",
             "DB_PASSWORD": dbPassword,
             "DB_NAME": "fliks",
             "SERVE_STATIC_PATH": Paths.effectiveClientDir.path,

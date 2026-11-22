@@ -13,6 +13,7 @@ mod cleanup_bulk;
 mod client_kinds;
 mod comics_api;
 mod comics_pages;
+mod db_role;
 mod device_tokens;
 mod email_devices;
 mod events_ticket;

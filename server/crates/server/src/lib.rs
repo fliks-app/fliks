@@ -79,10 +79,13 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// The 4.x pool size (`bootstrap.md` rule 14).
 pub(crate) const POOL_MAX: u32 = 30;
 
+/// Longest wait for a lock (advisory, row or table): a stuck holder fails the statement, not the server.
+const LOCK_TIMEOUT: &str = "60s";
+
 async fn connect(cfg: &Config) -> Result<PgPool, sqlx::Error> {
     PgPoolOptions::new()
         .max_connections(POOL_MAX)
-        .connect_with(cfg.db.clone())
+        .connect_with(cfg.db.clone().options([("lock_timeout", LOCK_TIMEOUT)]))
         .await
 }
 
@@ -185,6 +188,10 @@ async fn boot(cfg: Config) -> Result<(AppState, axum::Router, PgConnection), Box
         Err(_) => return Err("cannot reach the database: no answer within 10 s".into()),
     };
     let pool = connect(&cfg).await?;
+    match db::role::status(&pool).await {
+        Ok(s) => db::role::log(&s),
+        Err(e) => tracing::warn!("database role check failed: {e}"),
+    }
     system::backup::before_migration(&cfg, &pool).await?;
     db::migrate(&pool).await?;
     jobs::sweep(&pool).await?;

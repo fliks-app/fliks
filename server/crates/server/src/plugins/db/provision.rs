@@ -160,6 +160,35 @@ impl From<sqlx::Error> for ProvisionError {
     }
 }
 
+/// Core joins the role before it creates anything for it: `CREATE SCHEMA ... AUTHORIZATION` and
+/// `ALTER ... OWNER` need membership of a non-superuser core.
+async fn grant_membership(tx: &mut Tx, qr: &str) -> Result<(), ProvisionError> {
+    let v: i32 = sqlx::query_scalar("SELECT current_setting('server_version_num')::int")
+        .fetch_one(&mut **tx)
+        .await?;
+    let options = if v >= 160_000 {
+        " WITH INHERIT TRUE, SET TRUE"
+    } else {
+        ""
+    };
+    sqlx::Executor::execute(
+        &mut **tx,
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "GRANT {qr} TO CURRENT_USER{options}"
+        ))),
+    )
+    .await
+    .map(drop)
+    .map_err(|e| match e {
+        sqlx::Error::Database(d) if d.code().as_deref() == Some("42501") => ProvisionError::new(
+            format!(
+                "the database role cannot administer {qr}: run `fliks-server db-role` as the database admin"
+            ),
+        ),
+        e => e.into(),
+    })
+}
+
 pub(super) async fn public_create_open(tx: &mut Tx) -> sqlx::Result<bool> {
     sqlx::query_scalar("SELECT has_schema_privilege('public', 'public', 'CREATE')")
         .fetch_one(&mut **tx)
@@ -236,6 +265,7 @@ pub async fn provision(
         )
         .await?;
     }
+    grant_membership(&mut tx, &qr).await?;
     let mut former = vec![];
     let legacy = format!("plugin_{suffix}");
     let exists = role_exists(&mut tx, &legacy).await?;
@@ -308,12 +338,10 @@ pub async fn provision(
         .await?;
     }
     own_routines_and_types(&mut tx, &schema, &qs, &qr).await?;
-    // Core joins the role: a non-superuser core needs it for `CREATE SCHEMA ... AUTHORIZATION` and `ALTER ... OWNER`.
     let mut sql = format!(
         "ALTER ROLE {qr} LOGIN {clause};
          GRANT USAGE ON SCHEMA public TO {qr};
          REVOKE SELECT, REFERENCES ON ALL TABLES IN SCHEMA public FROM {qr};
-         GRANT {qr} TO CURRENT_USER;
          COMMENT ON SCHEMA {qs} IS NULL;"
     );
     for t in core_refs {

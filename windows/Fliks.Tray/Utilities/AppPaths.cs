@@ -17,14 +17,22 @@ internal static class AppPaths
     public static readonly string PgDataDir = Path.Combine(AppData, "postgresql", "data");
     public static readonly string PgLogFile = Path.Combine(AppData, "postgresql", "pg.log");
     public static readonly string ConfDir = Path.Combine(AppData, "conf");
-    /// <summary>Generated password of the bundled Postgres role; read by the tray only.</summary>
+    /// <summary>Tray-private files, never passed to the server.</summary>
+    public static readonly string PrivateDir = Path.Combine(AppData, "private");
+    /// <summary>Password of the <c>fliks</c> superuser; read by the tray only.</summary>
+    public static readonly string DbAdminPasswordFile = Path.Combine(PrivateDir, ".db-admin-password");
+    /// <summary>Password of the <c>fliks_app</c> role, handed to the server.</summary>
     public static readonly string DbPasswordFile = Path.Combine(ConfDir, ".db-password");
+    /// <summary>App role password not yet in effect (<c>db-role</c> ran, <c>.db-password</c> not replaced).</summary>
+    public static readonly string DbPasswordNextFile = Path.Combine(ConfDir, ".db-password.next");
     public static readonly string DataDir = Path.Combine(AppData, "data");
     public static readonly string LogsDir = Path.Combine(AppData, "logs");
     public static readonly string TranscodeDir = Path.Combine(AppData, "transcode");
 
     /// <summary>fliks-engine.exe and fliks-server.exe (install layout only).</summary>
     public static readonly string BinDir = Path.Combine(BaseDir, "bin");
+
+    public static string ServerExe => Path.Combine(BinDir, "fliks-server.exe");
 
     /// <summary>Supervisor beside fliks-server.exe (null only when it is missing).</summary>
     public static string? EngineExe
@@ -64,7 +72,7 @@ internal static class AppPaths
     {
         foreach (var dir in new[]
                  {
-                     AppData, Path.GetDirectoryName(PgDataDir)!, ConfDir, DataDir,
+                     AppData, Path.GetDirectoryName(PgDataDir)!, ConfDir, PrivateDir, DataDir,
                      LogsDir, TranscodeDir,
                  })
         {

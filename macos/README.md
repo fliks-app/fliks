@@ -104,16 +104,26 @@ Use `--skip-web` to skip rebuilding the client if unchanged:
 | Path | Contents |
 |------|----------|
 | `~/Library/Application Support/Fliks Server/postgresql/` | Database cluster |
-| `~/Library/Application Support/Fliks Server/conf/` | JWT secret and `.db-password`, the generated Postgres password (auto-generated) |
+| `~/Library/Application Support/Fliks Server/conf/` | JWT secret and `.db-password`, the generated password of the `fliks_app` role the server connects with |
+| `~/Library/Application Support/Fliks Server/private/` | `.db-admin-password`, the generated password of the `fliks` superuser (mode 0700, tray only, not passed to the server) |
 | `~/Library/Application Support/Fliks Server/data/images/` | Cached posters & fanart |
 | `~/Library/Application Support/Fliks Server/logs/` | PostgreSQL and server logs (`server-<date>.log`), kept 14 days |
 | `/tmp/transcode/` | HLS transcode cache (ephemeral) |
 
 ## Database access
 
-The bundled Postgres only listens on TCP loopback (no unix socket) and every login needs the password in
-`conf/.db-password`. A manual `psql` needs `-h localhost -p 5433 -U fliks` and `PGPASSWORD`; a future `pg_upgrade`
-needs its own `--socketdir`. Deleting `.db-password` is safe: the next launch resets the role password.
+The bundled Postgres only listens on TCP loopback (no unix socket) and every login needs a password. The server
+connects as the non-superuser `fliks_app` with `conf/.db-password`; the tray (and a manual `psql` as
+`-h localhost -p 5433 -U fliks`, `PGPASSWORD`) uses the superuser password in `private/.db-admin-password`. A future
+`pg_upgrade` needs its own `--socketdir`.
+
+At each launch the tray runs the bundled `fliks-server db-role`, which hands the database to `fliks_app`
+(idempotent, immediate when nothing is missing). Deleting `conf/.db-password` is safe: the next launch sets a new
+`fliks_app` password. Deleting `private/.db-admin-password` is not enough to recover the superuser: delete
+`conf/.db-password` too, and the next launch resets both. Back up `private/` with `conf/` and the cluster.
+
+Rollback: a build older than the app role reads `conf/.db-password` as the superuser password. Before running it,
+copy `private/.db-admin-password` over `conf/.db-password`.
 
 ## Clean reset
 

@@ -14,13 +14,14 @@ internal sealed class PostgresManager(ushort port = 5433)
     private readonly string _binDir = AppPaths.PgBinDir;
     private readonly string _dataDir = AppPaths.PgDataDir;
     private readonly string _logFile = AppPaths.PgLogFile;
+    // Password of the fliks superuser, kept in the tray-private AppPaths.DbAdminPasswordFile.
     private string _password = "";
     private bool _passwordUnsaved;
     private static readonly System.Text.RegularExpressions.Regex PasswordFormat = new("^[0-9a-f]{64}$");
     private string HbaFile => Path.Combine(_dataDir, "pg_hba.conf");
 
-    /// <summary>Password of the <c>fliks</c> role, generated once into <see cref="AppPaths.DbPasswordFile"/>.</summary>
-    public string DbPassword => _password;
+    /// <summary>Password of the <c>fliks_app</c> role the server connects with (<see cref="AppPaths.DbPasswordFile"/>), set by <see cref="CreateDatabaseIfNeededAsync"/>.</summary>
+    public string DbPassword { get; private set; } = "";
     // Held for the tray's lifetime so postgres dies with it. pg_ctl joins it before
     // spawning postgres, which then inherits it instead of pg_ctl's own UI-limited job.
     private readonly JobObject _job = new();
@@ -50,7 +51,7 @@ internal sealed class PostgresManager(ushort port = 5433)
         LoadPassword();
         if (IsInitialized)
         {
-            // A cluster already on scram lost its password file: only single-user mode can reset it.
+            // A cluster already on scram lost its admin password file: only single-user mode can reset it.
             if (_passwordUnsaved && !HbaTrusts())
             {
                 await ResetPasswordSingleUserAsync();
@@ -68,7 +69,7 @@ internal sealed class PostgresManager(ushort port = 5433)
             {
                 "-D", _dataDir,
                 "--auth=scram-sha-256",
-                $"--pwfile={AppPaths.DbPasswordFile}",
+                $"--pwfile={AppPaths.DbAdminPasswordFile}",
                 "--username=fliks",
                 "--encoding=UTF-8",
                 "--locale=C",
@@ -139,36 +140,90 @@ internal sealed class PostgresManager(ushort port = 5433)
             throw new InvalidOperationException($"pg_ctl reload failed: {r.Stderr}");
     }
 
-    /// <summary>Read <c>.db-password</c>, or generate a password in memory (64 hex characters): the file is
+    /// <summary>Read the admin password file, or generate a password in memory (64 hex characters): the file is
     /// written by <see cref="SavePassword"/> once the role has it, so a failed reset is retried at the next launch.</summary>
     private void LoadPassword()
     {
-        var file = AppPaths.DbPasswordFile;
-        if (File.Exists(file))
+        var stored = ReadPassword(AppPaths.DbAdminPasswordFile);
+        if (stored is not null)
         {
-            var existing = File.ReadAllText(file).Trim();
-            if (PasswordFormat.IsMatch(existing))
-            {
-                _password = existing;
-                _passwordUnsaved = false;
-                return;
-            }
-            Log.Info("pg: the database password file is not 64 hex characters, it is replaced");
+            _password = stored;
+            _passwordUnsaved = false;
+            return;
         }
 
-        _password = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        // A cluster from before the app role: .db-password still holds the superuser password.
+        var legacy = ReadPassword(AppPaths.DbPasswordFile);
+        if (IsInitialized && !File.Exists(AppPaths.DbPasswordNextFile) && legacy is not null)
+        {
+            WriteSecret(legacy, AppPaths.DbAdminPasswordFile);
+            _password = legacy;
+            _passwordUnsaved = false;
+            return;
+        }
+
+        _password = RandomPassword();
         _passwordUnsaved = true;
     }
 
-    /// <summary>Writes <c>.db-password</c> when <see cref="LoadPassword"/> generated it.</summary>
+    /// <summary>Writes the admin password file when <see cref="LoadPassword"/> generated it.</summary>
     private void SavePassword()
     {
         if (!_passwordUnsaved) return;
-        Directory.CreateDirectory(AppPaths.ConfDir);
-        var temp = AppPaths.DbPasswordFile + ".tmp";
-        File.WriteAllText(temp, _password);
-        File.Move(temp, AppPaths.DbPasswordFile, overwrite: true);
+        WriteSecret(_password, AppPaths.DbAdminPasswordFile);
         _passwordUnsaved = false;
+    }
+
+    /// <summary>Temp file + rename.</summary>
+    private static void WriteSecret(string value, string file)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        var temp = file + ".tmp";
+        File.WriteAllText(temp, value);
+        File.Move(temp, file, overwrite: true);
+    }
+
+    private static string? ReadPassword(string file)
+    {
+        if (!File.Exists(file)) return null;
+        var text = File.ReadAllText(file).Trim();
+        return PasswordFormat.IsMatch(text) ? text : null;
+    }
+
+    private static string RandomPassword() =>
+        Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+
+    /// <summary>Runs the bundled <c>fliks-server db-role</c> so the server connects as <c>fliks_app</c>, never as the
+    /// superuser. <c>.db-password</c> is replaced only by the final move of <c>.db-password.next</c>, so a crash redoes the steps.</summary>
+    private async Task ProvisionAppRoleAsync()
+    {
+        var next = AppPaths.DbPasswordNextFile;
+        var current = ReadPassword(AppPaths.DbPasswordFile);
+        var pending = ReadPassword(next);
+        var pendingMove = pending is not null || current is null || current == _password;
+        var candidate = pending ?? (pendingMove ? RandomPassword() : current!);
+        if (pending is null && pendingMove) WriteSecret(candidate, next);
+
+        var r = await ProcessRunner.RunAsync(
+            AppPaths.ServerExe,
+            new[] { "db-role" },
+            new Dictionary<string, string>
+            {
+                ["DB_HOST"] = "127.0.0.1",
+                ["DB_PORT"] = port.ToString(),
+                ["DB_NAME"] = "fliks",
+                ["DB_USERNAME"] = "fliks_app",
+                ["DB_PASSWORD"] = candidate,
+                ["DB_ADMIN_USERNAME"] = "fliks",
+                ["DB_ADMIN_PASSWORD"] = _password,
+            },
+            timeout: TimeSpan.FromSeconds(90));
+        Log.Info($"fliks-server db-role: exit={r.ExitCode}" + (r.Stderr.Length > 0 ? $" stderr={r.Stderr}" : ""));
+        if (!r.Succeeded)
+            throw new InvalidOperationException($"database role setup failed: {r.Stderr}");
+
+        if (pendingMove) File.Move(next, AppPaths.DbPasswordFile, overwrite: true);
+        DbPassword = candidate;
     }
 
     /// <summary>Whether any line of <c>pg_hba.conf</c> still uses the <c>trust</c> method.</summary>
@@ -214,7 +269,7 @@ internal sealed class PostgresManager(ushort port = 5433)
         await ReloadAsync();
     }
 
-    /// <summary><c>.db-password</c> is gone while the cluster is already on scram: stop, reset the role
+    /// <summary>The admin password file is gone while the cluster is already on scram: stop, reset the role
     /// password in single-user mode (statement on stdin, never logged); the caller starts again.</summary>
     private async Task ResetPasswordSingleUserAsync()
     {
@@ -234,7 +289,7 @@ internal sealed class PostgresManager(ushort port = 5433)
             : $"resetting the database password failed (postgres exit {r.ExitCode})");
     }
 
-    /// <summary>Create the <c>fliks</c> database and pg_trgm extension if absent.</summary>
+    /// <summary>Create the <c>fliks</c> database if absent, then hand it to the <c>fliks_app</c> role.</summary>
     public async Task CreateDatabaseIfNeededAsync()
     {
         var check = await ProcessRunner.RunAsync(
@@ -260,16 +315,7 @@ internal sealed class PostgresManager(ushort port = 5433)
                 throw new InvalidOperationException($"createdb failed: {created.Stderr}");
         }
 
-        var ext = await ProcessRunner.RunAsync(
-            Tool("psql"),
-            new[]
-            {
-                "-w", "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks", "-d", "fliks",
-                "-c", "CREATE EXTENSION IF NOT EXISTS pg_trgm",
-            },
-            PgEnv,
-            timeout: TimeSpan.FromSeconds(10));
-        LogResult("psql pg_trgm", ext);
+        await ProvisionAppRoleAsync();
     }
 
     public async Task<bool> IsReadyAsync()
