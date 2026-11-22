@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import { NetworkService } from './network.service';
 import { DeviceService } from './device.service';
 import { SystemInfoService } from './system-info.service';
+import { AppResumeService } from './app-resume.service';
 
 /**
  * The seam between the wire and the store. `download.progress` carries a media's whole set, so
@@ -303,5 +304,64 @@ describe('SseService: tab nonce', () => {
     expect(first).not.toBe('dev#abc12345');
     expect(second).toBe(first);
     expect(sessionStorage.getItem(KEY)).toBe(first.split('#')[1]);
+  });
+});
+
+describe('SseService: resume refresh', () => {
+  const OPEN = 1;
+  const CLOSED = 2;
+
+  /** The service after its first `sse.connected`, so the next one is a re-dial. */
+  function dialled() {
+    TestBed.resetTestingModule();
+    const refresh = vi.fn();
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        }),
+        { provide: ToastService, useValue: {} },
+        { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
+        { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+        { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => false, sessionEpoch: () => 0 } },
+        { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
+        { provide: AppResumeService, useValue: { refresh } },
+      ],
+    });
+    vi.stubGlobal('EventSource', { CONNECTING: 0, OPEN, CLOSED });
+    const sse = TestBed.inject(SseService);
+    vi.spyOn(sse, 'reconnect').mockImplementation(() => {});
+    const raw = sse as unknown as { eventSource: unknown; lastMessageAt: number; ingest(raw: string): void };
+    raw.ingest('{"type":"sse.connected","connectionId":"a"}');
+    return { sse, raw, refresh };
+  }
+
+  const redial = (h: ReturnType<typeof dialled>, stream: { readyState: number }, lastMessageAt: number) => {
+    h.raw.eventSource = stream;
+    h.raw.lastMessageAt = lastMessageAt;
+    h.sse.resume();
+    h.raw.ingest('{"type":"sse.connected","connectionId":"b"}');
+  };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('skips the refresh when the stream was open and heard from lately', () => {
+    const h = dialled();
+    redial(h, { readyState: OPEN }, Date.now());
+    expect(h.refresh).not.toHaveBeenCalled();
+  });
+
+  it('refreshes when the stream died while the app was away', () => {
+    const h = dialled();
+    redial(h, { readyState: CLOSED }, Date.now());
+    expect(h.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes when an open stream was silent past the liveness limit', () => {
+    const h = dialled();
+    redial(h, { readyState: OPEN }, Date.now() - 3_600_000);
+    expect(h.refresh).toHaveBeenCalledTimes(1);
   });
 });

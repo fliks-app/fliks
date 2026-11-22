@@ -93,14 +93,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the merge base with the target branch needs the history
       - name: the banned-shape script catches what it should
         run: scripts/check-added-lines.test.sh
       - name: banned shapes in added server and client lines
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
-          git diff -U0 --no-color FETCH_HEAD HEAD -- server client ':!*.md' | scripts/check-added-lines.sh
+          git fetch --no-tags origin "$BASE_REF"
+          git diff -U0 --no-color FETCH_HEAD...HEAD -- server client ':!*.md' | scripts/check-added-lines.sh
 
   lint:
     needs: changes
@@ -214,13 +216,36 @@ jobs:
           mkdir -p "$ARCHIVE_DIR"
           cargo nextest archive --workspace --archive-file "$ARCHIVE_DIR/tests.tar.zst"
           cp target/wasm32-wasip2/release/fixture_*.wasm "$ARCHIVE_DIR"
-      # The binary the archive build left in target/: `cargo run` would rebuild the deps without the dev-dependency features.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: nextest-archive
+          path: ${{ env.ARCHIVE_DIR }}
+          retention-days: 1
+          compression-level: 0
+
+  # The API contract checks run on the binary the build archived, in their own job: a red here must not skip the test shards.
+  contract:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      ARCHIVE_DIR: ${{ github.workspace }}/nextest-archive
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: nextest-archive
+          path: ${{ env.ARCHIVE_DIR }}
       - name: openapi.json is current
-        run: target/debug/fliks-server openapi | diff - openapi.json
+        run: |
+          tar --zstd -xf "$ARCHIVE_DIR/tests.tar.zst" -C "$RUNNER_TEMP" target/debug/fliks-server
+          "$RUNNER_TEMP/target/debug/fliks-server" openapi | diff - server/openapi.json
       # An operation the last release served and a client of that release may call goes only with the `wire-break` label
       # and a line in server/wire-breaks.txt, which keeps later PRs green.
       - name: no operation of the last release is gone
-        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'wire-break')
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -228,13 +253,18 @@ jobs:
           tag=$(gh release view --json tagName --jq .tagName)
           git fetch -q --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
           git show "$tag:server/openapi.json" > "$RUNNER_TEMP/released-openapi.json"
-          ../.github/scripts/route-retention.sh "$RUNNER_TEMP/released-openapi.json" openapi.json
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: nextest-archive
-          path: ${{ env.ARCHIVE_DIR }}
-          retention-days: 1
-          compression-level: 0
+          .github/scripts/route-retention.sh "$RUNNER_TEMP/released-openapi.json" server/openapi.json
+      - name: wire-breaks.txt changes carry the wire-break label
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'wire-break')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if gh pr diff "$PR" --name-only | grep -qx server/wire-breaks.txt; then
+            echo "server/wire-breaks.txt changed: a PR editing it needs the wire-break label." >&2
+            exit 1
+          fi
 
   test-shard:
     needs: build
@@ -708,7 +738,7 @@ jobs:
   # The only required check: a skipped job (area untouched) counts as passed.
   ci-ok:
     if: always()
-    needs: [changes, no-em-dash, lint, build, test-shard, restore-pg, test-app-role, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos, macos]
+    needs: [changes, no-em-dash, lint, build, contract, test-shard, restore-pg, test-app-role, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos, macos]
     runs-on: ubuntu-latest
     steps:
       - env:

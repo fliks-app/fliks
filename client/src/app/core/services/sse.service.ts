@@ -1,5 +1,5 @@
 import { Injectable, signal, computed, inject, effect, untracked, OnDestroy } from '@angular/core';
-import { Observable, Subject, filter, firstValueFrom } from 'rxjs';
+import { Observable, Subject, filter, firstValueFrom, merge } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { translatePlural } from '../pipes/translate-plural.pipe';
 import { ToastService } from './toast.service';
@@ -373,7 +373,9 @@ export class SseService implements OnDestroy {
    *  nothing about the server, so the fresh dial gets the full grace period. */
   resume() {
     this.clearUnreachable();
-    this.refreshOnConnect = false;
+    // Only a stream that was open and heard from lately missed nothing; a dead one refreshes on its re-dial.
+    const healthy = this.eventSource?.readyState === EventSource.OPEN && Date.now() - this.lastMessageAt < LIVENESS_TIMEOUT_MS;
+    this.refreshOnConnect = !healthy;
     this.reconnect();
     this.syncUnreachable();
   }
@@ -791,4 +793,9 @@ export class SseService implements OnDestroy {
     this.close();
     if (this.unreachableTimer) clearTimeout(this.unreachableTimer);
   }
+}
+
+/** Request activity: `request.changed`, plus the `requests` notification an older server sends instead (problem pushes ride it too). */
+export function requestActivity(sse: Pick<SseService, 'on' | 'notifications'>): Observable<unknown> {
+  return merge(sse.on('request.changed'), sse.notifications.pipe(filter((n) => n.cat === 'requests')));
 }

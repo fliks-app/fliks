@@ -43,7 +43,7 @@ import { RequestViewDeclineModalComponent } from './request-view-decline-modal/r
 import { RequestEditModalComponent } from './request-edit-modal/request-edit-modal.component';
 import { RequestDeclineFlow, RequestEditFlow } from './request-flows';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
-import { SseService } from '../../core/services/sse.service';
+import { SseService, requestActivity } from '../../core/services/sse.service';
 import {
   DownloadProgressService,
   MediaDownloadProgress,
@@ -112,8 +112,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   });
 
   /** A request changed status (approved, declined, available): refetch so the row and its progress badge follow. */
-  private readonly requestChanged = this.sse
-    .on('request.changed')
+  private readonly requestChanged = requestActivity(this.sse)
     .pipe(debounceTime(REQUEST_CHANGED_DEBOUNCE_MS), takeUntilDestroyed())
     .subscribe(() => void this.refreshStatuses());
 
