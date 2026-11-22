@@ -98,7 +98,7 @@ export function extractMessage(
   }
 
   if (body?.message && !isFrameworkNotFound(err.status, body.message)) {
-    const message = translatedServerMessage(body.message, translate);
+    const message = translatedServerMessage(body.message, translate, body);
     if (message) return message;
   }
 

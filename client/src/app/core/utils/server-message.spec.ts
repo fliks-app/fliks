@@ -3,8 +3,10 @@ import { serverMessage, translatedServerMessage } from './server-message';
 
 /** Knows two keys; anything else comes back unchanged, like ngx-translate does. */
 const translate = {
-  instant: (key: string) =>
-    key === 'errors.plugin_timeout' ? 'The plugin took too long' : key === 'fallback.key' ? 'Fallback' : key,
+  instant: (key: string, params?: { n?: number }) =>
+    key === 'requests.quota_exceeded'
+      ? `Quota of ${params?.n} reached`
+      : key === 'errors.plugin_timeout' ? 'The plugin took too long' : key === 'fallback.key' ? 'Fallback' : key,
 } as TranslateService;
 
 describe('translatedServerMessage', () => {
@@ -14,6 +16,15 @@ describe('translatedServerMessage', () => {
 
   it('keeps a plain sentence the backend wrote', () => {
     expect(translatedServerMessage('Username already taken', translate)).toBe('Username already taken');
+  });
+
+  it('prefers the body key translated with its params', () => {
+    const body = { key: 'requests.quota_exceeded', params: { n: 3 } };
+    expect(translatedServerMessage('Quota exceeded', translate, body)).toBe('Quota of 3 reached');
+  });
+
+  it('falls back to the message when the body key is unknown', () => {
+    expect(translatedServerMessage('Quota exceeded', translate, { key: 'nope.unknown' })).toBe('Quota exceeded');
   });
 
   it('joins a validation array', () => {
