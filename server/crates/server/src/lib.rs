@@ -18,6 +18,7 @@ pub mod email;
 pub mod engine;
 pub mod events;
 pub mod fs;
+pub mod health;
 pub mod http;
 pub mod images;
 pub mod importers;
@@ -247,6 +248,7 @@ async fn boot(cfg: Config) -> Result<(AppState, axum::Router), BoxError> {
     requests::spawn(&state);
     requests::spawn_reconcile(&state);
     problems::spawn(&state);
+    health::spawn(&state);
     let cfg = state.cfg.clone();
     let app = app::router(
         state.clone(),

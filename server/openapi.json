@@ -6234,6 +6234,28 @@
         }
       }
     },
+    "/api/system/checks": {
+      "get": {
+        "tags": [
+          "crate::health"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/system/checks/run": {
+      "post": {
+        "tags": [
+          "crate::health"
+        ],
+        "operationId": "run_now",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
     "/api/system/events": {
       "get": {
         "tags": [

@@ -848,12 +848,9 @@
     "count": "{{current}}/{{total}}"
   },
   "dashboard": {
-    "title": "Tableau de bord",
-    "subtitle": "Vue d'ensemble de la bibliothèque.",
-    "stat_movies": "Films",
-    "stat_series": "Séries",
+    "title": "Vue d'ensemble",
+    "subtitle": "Bibliothèques, demandes et espace disque.",
     "stat_pending": "Demandes en attente",
-    "stat_total": "Total",
     "disk_title": "Espace disque",
     "disk_free": "Libre",
     "disk_unavailable": "Dossier inaccessible",
@@ -1806,7 +1803,24 @@
     "cmd_follow_refresh": "Suivre les nouveautés",
     "logs_level_info": "Info",
     "logs_level_warn": "Avertissement",
-    "logs_level_error": "Erreur"
+    "logs_level_error": "Erreur",
+    "checks": {
+      "title": "À traiter",
+      "all_good": "Tout va bien",
+      "last_checked": "Dernière vérification : {{date}}",
+      "since": "Depuis le {{date}}",
+      "run": "Vérifier à nouveau",
+      "open": "Ouvrir",
+      "plugin_failed": "Le plugin {{plugin}} n'a pas démarré.",
+      "plugin_degraded": "Le plugin {{plugin}} fonctionne avec des problèmes.",
+      "library_unmounted": "Le dossier {{folder}} de la bibliothèque {{library}} n'est pas monté.",
+      "library_read_only": "Le dossier {{folder}} de la bibliothèque {{library}} est en lecture seule.",
+      "space_low": "{{label}} dispose de {{freeGb}} Go libres, sous le minimum de {{floorGb}} Go.",
+      "conf_volatile": "Le dossier de configuration n'est pas persistant : les secrets sont perdus quand le conteneur est recréé.",
+      "data_volatile": "Le dossier de données n'est pas persistant : les données sont perdues quand le conteneur est recréé.",
+      "job_failed": "La tâche {{job}} a échoué lors de sa dernière exécution.",
+      "unknown": "Une vérification signale un problème."
+    }
   },
   "qoe": {
     "title": "Qualité de lecture",

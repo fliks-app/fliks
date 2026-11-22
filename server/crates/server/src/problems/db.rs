@@ -10,7 +10,7 @@ pub const ACTIVE: [&str; 2] = ["open", "acknowledged"];
 #[derive(Debug, sqlx::FromRow)]
 pub struct Row {
     pub id: i32,
-    pub user_id: i32,
+    pub user_id: Option<i32>,
     pub media_id: i32,
     pub item_id: Option<i32>,
     pub season_number: Option<i32>,
@@ -167,6 +167,21 @@ pub async fn insert(tx: &mut PgConnection, n: &New<'_>) -> sqlx::Result<i32> {
     .await
 }
 
+/// A system report of a file the health scan found corrupt; none while one is already active for it.
+pub async fn insert_system(db: &PgPool, file: i32) -> sqlx::Result<Option<i32>> {
+    sqlx::query_scalar(
+        r#"INSERT INTO media_issues ("source", "mediaId", "mediaFileId", "fileSize", "issueKind")
+           SELECT 'health', f."mediaId", f.id, f.size, 'other' FROM media_files f
+           WHERE f.id = $1 AND NOT EXISTS (SELECT 1 FROM media_issues i
+             WHERE i."source" = 'health' AND i."mediaFileId" = f.id AND i.status = ANY($2))
+           RETURNING id"#,
+    )
+    .bind(file)
+    .bind(&ACTIVE[..])
+    .fetch_optional(db)
+    .await
+}
+
 /// Moves a report out of one of the `from` states; false when it was not in any (a concurrent change).
 pub async fn transition(
     tx: &mut PgConnection,
@@ -243,19 +258,19 @@ pub async fn rows(
         r#"SELECT jsonb_build_object('id', i.id, 'createdAt', iso_ms(i."createdAt"), 'updatedAt', iso_ms(i."updatedAt"),
   'status', i.status, 'kind', i."issueKind", 'itemId', i."itemId", 'seasonNumber', i."seasonNumber",
   'episodeNumber', i."episodeNumber", 'fileSize', i."fileSize", 'autoResolved', i."autoResolved",
-  'resolvedAt', iso_ms(i."resolvedAt"),
+  'resolvedAt', iso_ms(i."resolvedAt"), 'source', i.source,
   'media', jsonb_build_object('id', m.id, 'type', m.type::text, 'title', m.title,
     'posterUrl', CASE WHEN m."posterUrl" IS NULL THEN NULL ELSE '/api/images/media/' || m.id || '/poster?size=medium' END),
   'file', CASE WHEN fl.id IS NULL THEN NULL ELSE jsonb_build_object('id', fl.id,
     'name', regexp_replace(fl."relativePath", '^.*/', ''), 'quality', fl.quality, 'size', fl.size) END,
-  'user', {u}, 'resolvedBy', CASE WHEN r.id IS NULL THEN NULL ELSE {r} END,
+  'user', CASE WHEN u.id IS NULL THEN NULL ELSE {u} END, 'resolvedBy', CASE WHEN r.id IS NULL THEN NULL ELSE {r} END,
   'commentCount', (SELECT count(*) FROM media_issue_comments c WHERE c."issueId" = i.id),
   'lastReply', (SELECT jsonb_build_object('message', c.message, 'createdAt', iso_ms(c."createdAt"),
       'user', CASE WHEN cu.id IS NULL THEN NULL ELSE {cu} END)
     FROM media_issue_comments c LEFT JOIN users cu ON cu.id = c."userId"
     WHERE c."issueId" = i.id AND c."userId" IS DISTINCT FROM i."userId"
     ORDER BY c."createdAt" DESC, c.id DESC LIMIT 1)) AS json
-FROM media_issues i JOIN media m ON m.id = i."mediaId" JOIN users u ON u.id = i."userId"
+FROM media_issues i JOIN media m ON m.id = i."mediaId" LEFT JOIN users u ON u.id = i."userId"
   LEFT JOIN media_files fl ON fl.id = i."mediaFileId" LEFT JOIN users r ON r.id = i."resolvedById"
 {WHERE} ORDER BY i."createdAt" DESC, i.id DESC LIMIT $7 OFFSET $8"#
     );

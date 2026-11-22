@@ -93,7 +93,7 @@ async fn manager_libraries(st: &AppState, a: &Authed) -> Res<Option<Vec<i32>>> {
 /// 404, then the owner, or a manager of the report's library.
 async fn gate(st: &AppState, a: &Authed, id: i32) -> Res<Row> {
     let row = db::find(&st.db, id).await?.ok_or_else(|| not_found(id))?;
-    if row.user_id == a.user.id {
+    if row.user_id == Some(a.user.id) {
         return Ok(row);
     }
     if !can_manage(a) {
@@ -124,6 +124,10 @@ pub enum Event {
 
 /// The admin notification (`problem.created`, `problem.resolved`) and the push of one transition.
 pub fn announce(st: &AppState, row: &Row, event: Event) {
+    // A system report has no reporter and `health.corrupt` already told the admins.
+    let Some(reporter) = row.user_id else {
+        return;
+    };
     let (admin, key) = match event {
         Event::Created => (Some("problem.created"), "problem_created"),
         Event::Resolved => (Some("problem.resolved"), "problem_resolved"),
@@ -149,7 +153,7 @@ pub fn announce(st: &AppState, row: &Row, event: Event) {
                 media: row.media_id,
                 media_kind,
                 library: row.library_id,
-                reporter: row.user_id,
+                reporter,
             },
         );
     }
@@ -389,21 +393,14 @@ pub async fn reopen(st: &AppState, a: &Authed, id: i32, body: Reopen) -> Res<Val
         None => db::sole_file(&st.db, row.media_id, scope).await?,
     };
     let mut tx = st.db.begin().await?;
-    lock_user_quota(&mut tx, row.user_id).await?;
-    if db::duplicate(
-        &mut tx,
-        row.user_id,
-        row.media_id,
-        scope,
-        &row.kind,
-        Some(id),
-    )
-    .await?
-    {
-        return Err(AppError::conflict("problem_already_open"));
-    }
-    if db::active_count(&mut tx, row.user_id).await? >= MAX_ACTIVE {
-        return Err(AppError::conflict("problem_cap"));
+    if let Some(user) = row.user_id {
+        lock_user_quota(&mut tx, user).await?;
+        if db::duplicate(&mut tx, user, row.media_id, scope, &row.kind, Some(id)).await? {
+            return Err(AppError::conflict("problem_already_open"));
+        }
+        if db::active_count(&mut tx, user).await? >= MAX_ACTIVE {
+            return Err(AppError::conflict("problem_cap"));
+        }
     }
     if !db::transition(&mut tx, id, from, "open", None).await? {
         return Err(AppError::conflict("problem_reopen_denied"));
@@ -437,7 +434,7 @@ pub async fn comment_add(st: &AppState, a: &Authed, id: i32, body: CommentBody) 
     let message = text("message", Some(body.message), true)?.unwrap_or_default();
     let mut tx = st.db.begin().await?;
     let comment = db::comment_insert(&mut tx, id, a.user.id, &message).await?;
-    let reply = row.user_id != a.user.id;
+    let reply = row.user_id != Some(a.user.id);
     if reply && can_manage(a) {
         db::transition(&mut tx, id, &["open"], "acknowledged", None).await?;
     }

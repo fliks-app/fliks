@@ -848,12 +848,9 @@
     "count": "{{current}}/{{total}}"
   },
   "dashboard": {
-    "title": "Panel de control",
-    "subtitle": "Visión general de la biblioteca.",
-    "stat_movies": "Películas",
-    "stat_series": "Series",
+    "title": "Resumen",
+    "subtitle": "Bibliotecas, solicitudes y espacio en disco.",
     "stat_pending": "Solicitudes pendientes",
-    "stat_total": "Total",
     "disk_title": "Espacio en disco",
     "disk_free": "Libre",
     "disk_unavailable": "Carpeta inaccesible",
@@ -1806,7 +1803,24 @@
     "cmd_follow_refresh": "Seguir novedades",
     "logs_level_info": "Info",
     "logs_level_warn": "Advertencia",
-    "logs_level_error": "Error"
+    "logs_level_error": "Error",
+    "checks": {
+      "title": "Requiere atención",
+      "all_good": "Todo en orden",
+      "last_checked": "Última comprobación: {{date}}",
+      "since": "Desde el {{date}}",
+      "run": "Comprobar de nuevo",
+      "open": "Abrir",
+      "plugin_failed": "El plugin {{plugin}} no se pudo iniciar.",
+      "plugin_degraded": "El plugin {{plugin}} funciona con problemas.",
+      "library_unmounted": "La carpeta {{folder}} de la biblioteca {{library}} no está montada.",
+      "library_read_only": "La carpeta {{folder}} de la biblioteca {{library}} es de solo lectura.",
+      "space_low": "{{label}} tiene {{freeGb}} GB libres, por debajo del mínimo de {{floorGb}} GB.",
+      "conf_volatile": "La carpeta de configuración no es persistente: los secretos se pierden al recrear el contenedor.",
+      "data_volatile": "La carpeta de datos no es persistente: los datos se pierden al recrear el contenedor.",
+      "job_failed": "La tarea {{job}} falló en su última ejecución.",
+      "unknown": "Una comprobación indica un problema."
+    }
   },
   "qoe": {
     "title": "Calidad de reproducción",

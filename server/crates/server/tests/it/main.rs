@@ -18,6 +18,7 @@ mod device_tokens;
 mod email_devices;
 mod events_ticket;
 mod fakes;
+mod health;
 mod heartbeat;
 mod importers;
 mod item_pairs;

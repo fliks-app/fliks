@@ -36,9 +36,9 @@ pub const EVENTS: [&str; 25] = [
     "problem.resolved",
 ];
 
-/// What `GET /notifications/events` lists: `health.issue` is only ever sent by the test route.
+/// What `GET /notifications/events` lists.
 pub fn subscribable() -> impl Iterator<Item = &'static str> {
-    EVENTS.into_iter().filter(|e| *e != "health.issue")
+    EVENTS.into_iter()
 }
 
 pub fn is_event(event: &str) -> bool {
