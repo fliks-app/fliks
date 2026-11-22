@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { signal } from '@angular/core';
 import { CastPlayerService } from './cast-player.service';
+import { LatestWins } from '../utils/latest-wins';
 
 type Info = { sessionId: string; qualities: never[] };
 
@@ -10,7 +11,7 @@ function harness(infos: Promise<Info>[]) {
   const order: string[] = [];
   const next = [...infos];
   Object.assign(svc, {
-    reloadGen: 0,
+    reloads: new LatestWins(),
     reloading: signal(false),
     mediaFileId: () => 1,
     liveSessionId: () => live,
@@ -20,21 +21,25 @@ function harness(infos: Promise<Info>[]) {
     cast: { currentTime: () => 10 },
     getCastPlaybackInfo: vi.fn(() => next.shift()),
     authService: { getCastInfo: async () => ({ token: 't', streamBaseUrl: 'b' }) },
-    streamingApi: { stopSession: vi.fn(async (sid: string) => void order.push(`stop:${sid}`)) },
+    streamingApi: {
+      stopSession: vi.fn(async (sid: string) => void order.push(`stop:${sid}`)),
+      retireSession: vi.fn(async (sid?: string) => ({ replaces: sid })),
+    },
     dispatchLoad: vi.fn(async (_m: number, pi: Info) => {
       live = pi.sessionId;
       order.push(`load:${pi.sessionId}`);
       return true;
     }),
   });
-  return { svc: svc as unknown as CastPlayerService, order };
+  return { svc: svc as unknown as CastPlayerService, order, info: svc['getCastPlaybackInfo'] as ReturnType<typeof vi.fn> };
 }
 
 describe('cast reload single-flight', () => {
-  it('stops the old session only after the new LOAD resolves', async () => {
-    const { svc, order } = harness([Promise.resolve({ sessionId: 'n', qualities: [] })]);
+  it('opens the new session as the replacement of the old one, which is never stopped separately', async () => {
+    const { svc, order, info } = harness([Promise.resolve({ sessionId: 'n', qualities: [] })]);
     await svc.reloadCastStream();
-    expect(order).toEqual(['load:n', 'stop:old']);
+    expect(info.mock.calls[0][5]).toBe('old');
+    expect(order).toEqual(['load:n']);
   });
 
   it('lets only the latest overlapping reload LOAD and drops the superseded session', async () => {
@@ -45,7 +50,7 @@ describe('cast reload single-flight', () => {
     await svc.reloadCastStream();
     release({ sessionId: 'a', qualities: [] });
     await first;
-    expect(order).toEqual(['load:b', 'stop:old', 'stop:a']);
+    expect(order).toEqual(['load:b', 'stop:a']);
     expect(svc.reloading()).toBe(false);
   });
 

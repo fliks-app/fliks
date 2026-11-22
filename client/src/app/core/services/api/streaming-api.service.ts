@@ -620,6 +620,20 @@ export class StreamingApiService {
     );
   }
 
+  /** The old sid must not outlive the next open as a sibling that splits onto a cold job: the server retires it
+   *  inside `playback-info` when it can (`replaces`), else it is stopped first. */
+  async retireSession(sid: string | undefined): Promise<{ replaces?: string }> {
+    if (!sid) return {};
+    if (this.auth.hasServerFeature('sessionReplaces')) return { replaces: sid };
+    await this.stopSession(sid).catch(() => {});
+    return {};
+  }
+
+  /** An open that failed before it could retire `replaces` leaves the old session to its TTL: stop it. */
+  stopUnreplaced(r: { replaces?: string }): void {
+    if (r.replaces) void this.stopSession(r.replaces).catch(() => {});
+  }
+
   getWatchedEpisodeIds(mediaId: number) {
     return firstValueFrom(
       this.http.get<number[]>(`/api/playback/media/${mediaId}/watched-episodes`),
@@ -683,6 +697,7 @@ export class StreamingApiService {
       stemsAvailable?: boolean;
       hasNext?: boolean;
       lastCmdId?: string;
+      lastCmdRefused?: string;
       /** An audio playback's queue, sent when it changes and on the first beat. */
       queue?: { itemIds: number[]; index: number; shuffle: boolean; repeat: 'off' | 'all' | 'one' };
       /** The Cast receiver this playback plays on: the account session shows it as the owner. */

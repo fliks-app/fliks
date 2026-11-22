@@ -169,6 +169,8 @@ export class RemoteService {
   readonly startedHere = new Subject<void>();
   /** Last command this device actually applied: rides the heartbeat as the ack. */
   readonly lastAppliedCmdId = signal<string | null>(null);
+  /** Why the last command was acknowledged without taking effect; rides the beat beside `lastCmdId`. */
+  readonly lastCmdRefused = signal<string | null>(null);
 
   // ── Controller ──
 
@@ -521,6 +523,7 @@ export class RemoteService {
     }
     if (!this.isKnownAction(cmd.action)) {
       console.warn('[remote] dropped unknown action', cmd.cmdId, cmd.action);
+      this.markApplied(cmd.cmdId, 'unknown_action');
       return;
     }
     if (cmd.action === 'load') {
@@ -638,8 +641,9 @@ export class RemoteService {
     }
   }
 
-  /** Called by the player once it has applied a command. */
-  markApplied(cmdId: string): void {
+  /** Called by the player once it has handled a command; a refusal is acknowledged too, with its reason. */
+  markApplied(cmdId: string, refused?: string): void {
+    this.lastCmdRefused.set(refused ?? null);
     this.lastAppliedCmdId.set(cmdId);
   }
 

@@ -95,6 +95,18 @@ describe('AudioPlayerService', () => {
     expect(fetch).toHaveBeenCalledWith('/stop/sid', { method: 'DELETE' });
   });
 
+  it('pauses and banks the position when a TV hides the app', async () => {
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.play(req);
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null));
+    const pause = vi.spyOn(audio, 'pause');
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    (audio as unknown as { onTvHidden(): void }).onTvHidden();
+    expect(pause).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith('/x', expect.objectContaining({ body: expect.any(String) }));
+    expect(fetch).not.toHaveBeenCalledWith('/stop/sid', expect.anything());
+  });
+
   it('never pauses an item that is already playing when asked to play it again', async () => {
     const audio = TestBed.inject(AudioPlayerService);
     await audio.play(req);

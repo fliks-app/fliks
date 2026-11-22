@@ -76,6 +76,13 @@ describe('NativeEngine.setCrop', () => {
     expect(plugin.setCrop).toHaveBeenCalledWith({ ...rect, sourceWidth: 1920, sourceHeight: 1080 });
   });
 
+  it('reports 1x after a load', async () => {
+    const engine = new NativeEngine();
+    (engine as unknown as { _playbackRate: number })._playbackRate = 0.95;
+    await engine.load('https://x/master.m3u8');
+    expect(engine.playbackRate).toBe(1);
+  });
+
   it('forgets the crop on destroy', async () => {
     const engine = new NativeEngine();
     engine.cropSupported = true;

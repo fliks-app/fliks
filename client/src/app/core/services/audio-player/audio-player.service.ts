@@ -251,6 +251,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   constructor() {
     if (typeof window === 'undefined') return;
     window.addEventListener('pagehide', (e) => this.beatOnExit(e.persisted));
+    if (this.tv.isTizen() || this.tv.isWebOs()) document.addEventListener('visibilitychange', () => this.onTvHidden());
     window.addEventListener('keydown', (e) => this.onMediaKey(e));
     this.castOut.attach({
       current: () => (this._track() ? this.mq.current : null),
@@ -1723,6 +1724,13 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     if (key === this.queueSent) return null;
     this.queueSent = key;
     return value;
+  }
+
+  /** Home, input switch and standby freeze JS on Tizen and webOS: stop and bank the position first, resume stays manual. */
+  private onTvHidden(): void {
+    if (document.visibilityState !== 'hidden') return;
+    if (!this.castOut.active()) this.pause();
+    this.beatOnExit(true);
   }
 
   /** An unloading page ends its session, so the server parks it now and a reload finds it parked, not owned by a dead tab. */

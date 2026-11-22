@@ -384,16 +384,26 @@ document.addEventListener('keydown', (e) => {
   if (first || cueState.shown === null || (e.key !== 'Enter' && e.keyCode !== 13)) return refreshCue();
   e.preventDefault();
   if (cueState.shown === 'intro') playerManager.seek(cueState.cues.intro.endSeconds);
-  else context.sendCustomMessage(FLIKS_NAMESPACE, cueState.sender || undefined, { kind: 'next_episode' });
+  else {
+    const target = cueState.sender || (context.getSenders()[0] || {}).id;
+    try {
+      if (target) context.sendCustomMessage(FLIKS_NAMESPACE, target, { kind: 'next_episode' });
+    } catch (err) {
+      console.warn('[fliks-cast] next_episode not sent', err);
+    }
+  }
   cueEl.classList.remove('show');
 });
 
 context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
   const msg = event.data;
-  if (!msg || msg.kind !== 'cues') return;
+  if (!msg || msg.kind !== 'cues' || !owns(cueState, event.senderId)) return;
   cueState.cues = msg;
   refreshCue();
   renderBar();
+});
+context.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED, (event) => {
+  if (event.senderId === cueState.sender) cueState.sender = null;
 });
 
 // --- Progress bar ---------------------------------------------------------------
@@ -988,7 +998,7 @@ function queuedMedia(m) {
 
 context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
   const msg = event.data;
-  if (!msg || msg.kind !== 'queue_next') return;
+  if (!msg || msg.kind !== 'queue_next' || !owns(cueState, event.senderId)) return;
   const queue = playerManager.getQueueManager();
   const current = queue.getCurrentItem();
   // The queue may already have moved on to it: never drop the playing item.
@@ -1239,6 +1249,7 @@ playerManager.addEventListener(cast.framework.events.EventType.SEEKING, () => {
 context.addCustomMessageListener(FLIKS_NAMESPACE, (event) => {
   const msg = event.data;
   if (!msg || msg.kind !== 'mix' || typeof msg.id !== 'string' || !Array.isArray(msg.sources)) return;
+  if (!owns(cueState, event.senderId)) return;
   mixSpecs.delete(msg.id);
   mixSpecs.set(msg.id, msg.sources);
   if (mixSpecs.size > 4) mixSpecs.delete(mixSpecs.keys().next().value);

@@ -246,3 +246,35 @@ describe('LivePlayerComponent — sessionExpired', () => {
     expect(api.play).not.toHaveBeenCalled();
   });
 });
+
+describe('LivePlayerComponent TV hide and show', () => {
+  function flip(component: { onTvVisibility: () => void }, state: DocumentVisibilityState) {
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(state);
+    component.onTvVisibility();
+  }
+
+  it('releases the viewer session on hide and re-tunes on show', async () => {
+    const { component, api, plays } = createComponent();
+    const pause = vi.fn();
+    component.engine = { pause };
+    component.api.stopSessionOnUnload = vi.fn();
+    component.liveQoe.end = vi.fn();
+    component.currentSessionId = 's5';
+    component.session.set(makeSession('s5', 5));
+    component.currentChannelId.set(5);
+
+    flip(component, 'hidden');
+    expect(pause).toHaveBeenCalledOnce();
+    expect(component.api.stopSessionOnUnload).toHaveBeenCalledWith('s5');
+    expect(component.currentSessionId).toBeNull();
+    expect(component.session()).toBeNull();
+
+    flip(component, 'visible');
+    await flush();
+    plays.get(5)!.resolve(makeSession('s5b', 5));
+    await flush();
+    expect(api.play).toHaveBeenCalledWith(5, expect.anything());
+    expect(component.session().sessionId).toBe('s5b');
+    vi.restoreAllMocks();
+  });
+});

@@ -103,6 +103,8 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     headers?: Record<string, string>,
   ): Promise<void> {
     this.resetFirstFrame();
+    // The player restarts at 1x on every load.
+    this._playbackRate = 1;
     const startPaused = this.startPaused;
     this.startPaused = false;
     const keepFrame = this.keepFrame;

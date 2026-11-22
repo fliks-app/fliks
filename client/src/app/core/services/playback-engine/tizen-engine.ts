@@ -128,9 +128,14 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     apply: (muted) => this.applyTvMute(muted),
     leadS: TIZEN_MUTE_LEAD_S,
   });
-  private readonly releaseOnHide = () => {
-    if (document.visibilityState === 'hidden') this.muteGate.setRanges([]);
-    else this.muteGate.setRanges(this.muteRanges);
+  private readonly onVisibility = () => {
+    if (document.visibilityState === 'hidden') {
+      this.muteGate.setRanges([]);
+      if (this._lastLoadedUrl) this.suspend();
+    } else {
+      if (this._lastLoadedUrl) this.restore();
+      this.muteGate.setRanges(this.muteRanges);
+    }
   };
   private readonly releaseOnUnload = () => this.applyTvMute(false);
 
@@ -156,7 +161,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.avObject = obj;
     TizenEngine.activeEngine = this;
     this.recoverTvMute();
-    document.addEventListener('visibilitychange', this.releaseOnHide);
+    document.addEventListener('visibilitychange', this.onVisibility);
     window.addEventListener('beforeunload', this.releaseOnUnload);
     this.applyDisplayRect();
     this.orientationHandler = () => this.applyDisplayRect();
@@ -168,7 +173,7 @@ export class TizenEngine extends AbstractPlaybackEngine implements PlaybackEngin
     this.settlePending?.();
     this.muteGate.dispose();
     this.applyTvMute(false);
-    document.removeEventListener('visibilitychange', this.releaseOnHide);
+    document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('beforeunload', this.releaseOnUnload);
     if (this.orientationHandler) {
       window.removeEventListener('resize', this.orientationHandler);

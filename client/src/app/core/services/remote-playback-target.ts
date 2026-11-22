@@ -28,6 +28,9 @@ export class RemotePlaybackTarget implements PlaybackOutput {
   readonly duration = computed(() => this.remote.targetState()?.durationSeconds ?? 0);
   /** Selected: the output this device drives. Observing follows the account session's owner without taking its screen. */
   readonly isConnected = this.remote.isRemoting;
+  readonly sessionId = () => undefined;
+  readonly reportsHere = () => false;
+  readonly audioStreamIndex = () => this.remote.targetState()?.audioTrackIndex ?? null;
   readonly isObserving = this.remote.isObserving;
   /** A selected target is present even with nothing playing: releasing it is
    *  an explicit action, not a side effect of stopping the media. */
@@ -79,6 +82,7 @@ export class RemotePlaybackTarget implements PlaybackOutput {
       id: q.id,
       label: q.label,
       sub: q.lowBandwidth ? this.translate.instant('player.low_bandwidth') : undefined,
+      lowBandwidth: q.lowBandwidth,
     })),
   );
 

@@ -192,6 +192,9 @@ function createHarness(opts: {
     getEdl: vi.fn(async () => [] as unknown[]),
     getPlaybackState,
     stopSession,
+    retireSession: (sid?: string) =>
+      StreamingApiService.prototype.retireSession.call({ auth: TestBed.inject(AuthService), stopSession }, sid),
+    stopUnreplaced: (r: { replaces?: string }) => StreamingApiService.prototype.stopUnreplaced.call({ stopSession }, r),
     updatePlaybackState,
     getHlsUrl,
     buildPlayUrl,
@@ -242,6 +245,7 @@ function createHarness(opts: {
           registerLoader: vi.fn(),
           markApplied: vi.fn(),
           lastAppliedCmdId: () => null,
+          lastCmdRefused: () => null,
         },
       },
       {
@@ -273,7 +277,7 @@ function createHarness(opts: {
         },
       },
       { provide: MusicCastOutput, useValue: { attach: () => () => {}, active: signal(false), isConnected: () => false, hasMedia: signal(false), hasNext: () => false, dropNext: () => {}, clearStems: () => {}, stop: () => {}, release: () => {} } },
-      { provide: CastPlaybackTarget, useValue: { isConnected: () => false } },
+      { provide: CastPlaybackTarget, useValue: { isConnected: signal(false) } },
       { provide: RemotePlaybackTarget, useValue: { isConnected: () => false, isObserving: () => false } },
       {
         provide: CastPlayerService,
@@ -358,7 +362,7 @@ function createHarness(opts: {
   const state = TestBed.inject(PlayerStateService);
   const remoteService = TestBed.inject(RemoteService) as unknown as {
     validated: Subject<RemoteCommand>;
-    markApplied: (id: string) => void;
+    markApplied: (id: string, refused?: string) => void;
     lastAppliedCmdId: () => string | null;
   };
 
@@ -896,9 +900,9 @@ describe('PlayerComponent remote control', () => {
 
     h.remoteService.validated.next(baseCmd({ action: 'seek', positionSeconds: 30 }));
 
-    // No clamp-to-0 jump, and no false ack for a command that didn't apply.
+    // No clamp-to-0 jump; the refusal is acknowledged with its reason.
     expect(h.engine.currentTime).toBe(42);
-    expect(h.remoteService.markApplied).not.toHaveBeenCalled();
+    expect(h.remoteService.markApplied).toHaveBeenCalledWith('cmd-1', 'duration_unknown');
   });
 
   it('reports a locally-driven pause at once instead of at the next save tick', () => {
@@ -966,7 +970,7 @@ describe('PlayerComponent remote control', () => {
     h.remoteService.validated.next(baseCmd({ action: 'play' }));
 
     expect(h.engine.play).toHaveBeenCalled();
-    expect(h.remoteService.markApplied).toHaveBeenCalledWith('cmd-1');
+    expect(h.remoteService.markApplied).toHaveBeenCalledWith('cmd-1', undefined);
     expect(h.streamingApi.updatePlaybackState).toHaveBeenCalled();
   });
 });
@@ -1256,6 +1260,30 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
   });
 });
 
+/** The cast output the player reads its beat from, connected and reporting a 42 s playhead. */
+function connectCastTarget(controlOnly: () => boolean = () => false): void {
+  const target = TestBed.inject(CastPlaybackTarget) as unknown as Record<string, unknown>;
+  Object.assign(target, {
+    sessionId: () => 'sid-cast',
+    reportsHere: () => !controlOnly(),
+    position: () => 42,
+    duration: () => 100,
+    buffering: () => false,
+    uiPaused: () => false,
+    volume: () => 1,
+    muted: () => false,
+    canSetVolume: () => true,
+    autoplayBlocked: () => false,
+    canPlayNext: () => false,
+    activeQualityId: () => '1080p',
+    availableQualities: () => [],
+    audioStreamIndex: () => 2,
+    activeSubtitleId: () => 'ext-5',
+    activeAudioTrackId: () => 'audio-2',
+  });
+  (target['isConnected'] as ReturnType<typeof signal<boolean>>).set(true);
+}
+
 describe('PlayerComponent selectSubtitle Cast guard', () => {
   afterEach(() => {
     TestBed.resetTestingModule();
@@ -1268,6 +1296,7 @@ describe('PlayerComponent selectSubtitle Cast guard', () => {
     h.component.castService.isConnected = () => true;
     h.component.castService.volume = () => 1;
     h.component.castService.muted = () => false;
+    connectCastTarget();
     h.component.subs.activeBurnInId = 'burn-1';
 
     await h.component.subs.selectSubtitle({
@@ -2789,21 +2818,28 @@ describe('PlayerComponent cast session picks', () => {
       isConnected: () => true, deviceName: () => 'Living room', currentTime: () => 42, duration: () => 100, volume: () => 1, muted: () => false,
     });
     const cp = TestBed.inject(CastPlayerService) as unknown as Record<string, ReturnType<typeof vi.fn>>;
+    connectCastTarget(() => (cp as unknown as { controlOnly(): boolean }).controlOnly());
     return { h, cp };
   }
 
-  it('reports the receiver\'s picks, not the local ones, while casting', async () => {
-    const { h, cp } = casting();
-    cp['selectionFor'].mockReturnValue({ subtitleId: 'ext-5', audioStreamIndex: 2 });
+  it('reports the cast output\'s sid, picks and rung, not the local ones, while casting', async () => {
+    const { h } = casting();
     h.component.activeAudioStreamIndex = 0;
     h.component.subs.activeSubtitleId.set('emb-1');
 
     await h.component.savePosition(true);
 
-    expect(cp['selectionFor']).toHaveBeenCalledWith(MAIN_FILE_ID);
     expect(h.streamingApi.updatePlaybackState).toHaveBeenLastCalledWith(
       MEDIA_ID,
-      expect.objectContaining({ audioTrackIndex: 2, subtitleId: 'ext-5', castDevice: 'Living room' }),
+      expect.objectContaining({
+        sessionId: 'sid-cast',
+        quality: '1080p',
+        qualities: [],
+        audioTrackIndex: 2,
+        subtitleId: 'ext-5',
+        positionSeconds: 42,
+        castDevice: 'Living room',
+      }),
     );
   });
 
@@ -3505,22 +3541,19 @@ describe('PlayerComponent stall counting', () => {
     expect(h.state.seekLocked()).toBe(false);
   });
 
-  it('TV hide banks the position, pauses and suspends the engine; show restores it', async () => {
+  it('TV hide banks the position and pauses; show does nothing', async () => {
     const h = createHarness();
     const c = h.component as any;
-    const engine = h.engine as any;
-    engine.suspend = vi.fn();
-    engine.restore = vi.fn();
     const save = vi.spyOn(c, 'savePosition').mockResolvedValue(undefined);
     const vis = vi.spyOn(document, 'visibilityState', 'get');
     vis.mockReturnValue('hidden');
     c.onTvVisibility();
     expect(save).toHaveBeenCalledWith(true);
     expect(h.engine.pause).toHaveBeenCalled();
-    expect(engine.suspend).toHaveBeenCalled();
     vis.mockReturnValue('visible');
+    save.mockClear();
     c.onTvVisibility();
-    expect(engine.restore).toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
     vis.mockRestore();
   });
 
@@ -3638,15 +3671,16 @@ describe('PlayerComponent review fixes', () => {
   it('keeps the episode ids unsaved until the new stream is loaded', async () => {
     const h = createHarness();
     h.engine.currentTime = 95;
-    let savedDuringSwitch = false;
     h.engine.load = vi.fn(async () => {
       await h.component.savePosition(true);
-      savedDuringSwitch = h.streamingApi.updatePlaybackState.mock.calls.length > 0;
     });
 
     await h.component.reloadForEpisode(2, MEDIA_ID, undefined);
 
-    expect(savedDuringSwitch).toBe(false);
+    // Only the outgoing item's bank-before-switch save went out.
+    const saves = h.streamingApi.updatePlaybackState.mock.calls as unknown as [number, { mediaFileId: number; positionSeconds: number }][];
+    expect(saves).toHaveLength(1);
+    expect(saves[0][1]).toMatchObject({ mediaFileId: MAIN_FILE_ID, positionSeconds: 95 });
     expect(h.component.switchingItem).toBe(false);
   });
 

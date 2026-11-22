@@ -17,6 +17,8 @@ export interface PlaybackOption {
    *  `label` on a source that cannot split it. */
   head?: string;
   sub?: string;
+  /** An eco rung: one exists per height, so a beat carries the flag for a controller to tell them apart. */
+  lowBandwidth?: boolean;
 }
 
 /** How the party sync corrects drift on an output. */
@@ -53,6 +55,11 @@ export interface PlaybackOutput {
   readonly sync: PlaybackSync;
 
   readonly isConnected: Signal<boolean>;
+  /** The stream session this device holds for what plays; none when another device holds it. */
+  readonly sessionId: () => string | undefined;
+  /** This device reports the output's progress: false for another device's output (it beats for itself) and a
+   *  receiver another account drives. */
+  readonly reportsHere: () => boolean;
   /** The output has a media (a remote target is present even with nothing playing). */
   readonly hasMedia: Signal<boolean>;
   // ready, item, paused and position are plain reads: an engine's own state is not reactive.
@@ -73,7 +80,7 @@ export interface PlaybackOutput {
   readonly muted: Signal<boolean>;
   readonly volume: Signal<number>;
   /** False when the engine cannot change a per-stream level, so the slider is hidden. */
-  readonly canSetVolume: Signal<boolean>;
+  readonly canSetVolume: () => boolean;
 
   readonly spriteUrl: Signal<string | null>;
   readonly spriteMetadata: Signal<SpriteMetadata | null>;
@@ -83,6 +90,8 @@ export interface PlaybackOutput {
   readonly activeSubtitleId: Signal<string | null>;
   readonly activeAudioTrackId: Signal<string | null>;
   readonly activeQualityId: Signal<string>;
+  /** The playing audio as a `streamInfo` index, the one space every device agrees on. */
+  readonly audioStreamIndex: () => number | null;
 
   /** What the seekbar marks and the skip cues key on. */
   readonly timeline: Signal<PlaybackTimeline>;

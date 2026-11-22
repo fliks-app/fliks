@@ -28,6 +28,9 @@ export class CastPlaybackTarget implements PlaybackOutput {
   readonly buffering = this.cast.buffering;
   readonly duration = this.cast.duration;
   readonly isConnected = this.cast.isConnected;
+  readonly sessionId = () => this.cp.liveSessionId() ?? undefined;
+  readonly reportsHere = () => !this.cp.controlOnly() && this.cast.receiverPlays(this.cp.mediaFileId());
+  readonly audioStreamIndex = () => this.cp.activeAudioStreamIndex() ?? null;
   readonly paused = this.cast.isPaused;
   readonly uiPaused = this.cast.isPaused;
   readonly ended = this.cast.ended;
@@ -66,6 +69,7 @@ export class CastPlaybackTarget implements PlaybackOutput {
       id: q.id,
       label: q.label,
       sub: q.lowBandwidth ? this.translate.instant('player.low_bandwidth') : undefined,
+      lowBandwidth: q.lowBandwidth,
     })),
   );
   readonly activeSubtitleId = this.cp.activeSubtitleId;

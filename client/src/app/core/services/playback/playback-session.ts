@@ -234,6 +234,14 @@ export class PlaybackSession {
     }
   }
 
+  /** Ends what plays: another output is left (a Cast session ends with its receiver), then this device's player closes. */
+  stop(): void {
+    const o = this.output();
+    const local = this.local();
+    if (o && o !== local) o.disconnect();
+    local?.disconnect();
+  }
+
   private takeBackOnAttach = false;
 
   /** Brings playback back here; with no player mounted it opens one first, and an idle output is just released. */

@@ -3,7 +3,6 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Subject } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
-import { CastService } from '../../core/services/cast.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { SseService, type RemoteCommand } from '../../core/services/sse.service';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
@@ -18,12 +17,12 @@ function setup() {
     selectSubtitleById: vi.fn(async () => {}),
     selectQualityById: vi.fn(async () => {}),
   };
+  const session = { output: () => output, command: () => false, stop: vi.fn() };
   const remoteService = { validated: new Subject<RemoteCommand>(), markApplied: vi.fn() };
   const host = {
     mediaFileId: () => 1,
     activeSessionId: () => 'sid',
     duration: () => 100,
-    onBack: vi.fn(),
     onTogglePlay: vi.fn(),
     onSeek: vi.fn(),
     savePosition: vi.fn(async () => {}),
@@ -35,15 +34,14 @@ function setup() {
       { provide: SseService, useValue: sseStub() },
       { provide: AuthService, useValue: { user: () => ({ id: 1 }) } },
       { provide: RemoteService, useValue: remoteService },
-      { provide: CastService, useValue: { isConnected: () => false, disconnect: vi.fn() } },
       { provide: ControlsVisibilityService, useValue: { show: vi.fn() } },
       { provide: QueueController, useValue: {} },
-      { provide: PlaybackSession, useValue: { output: () => output, command: () => false } },
+      { provide: PlaybackSession, useValue: session },
     ],
   });
   const controller = TestBed.inject(RemoteController);
   controller.attach(host);
-  return { controller, output, remoteService, host };
+  return { controller, output, remoteService, host, session };
 }
 
 describe('RemoteController track and quality commands', () => {
@@ -70,16 +68,26 @@ describe('RemoteController track and quality commands', () => {
     expect(remoteService.markApplied).not.toHaveBeenCalled();
     done();
     await applied;
-    expect(remoteService.markApplied).toHaveBeenCalledWith('q');
+    expect(remoteService.markApplied).toHaveBeenCalledWith('q', undefined);
   });
 
-  it('drops a pick that names no track or rung', async () => {
-    const { controller, output } = setup();
+  it('acknowledges a refused pick with its reason', async () => {
+    const { controller, output, remoteService } = setup();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await controller.applyRemoteCommand({ action: 'audio', cmdId: 'a' } as RemoteCommand);
     await controller.applyRemoteCommand({ action: 'quality', cmdId: 'b' } as RemoteCommand);
     expect(output.selectAudioById).not.toHaveBeenCalled();
     expect(output.selectQualityById).not.toHaveBeenCalled();
+    expect(remoteService.markApplied).toHaveBeenCalledWith('a', 'missing_track');
+    expect(remoteService.markApplied).toHaveBeenCalledWith('b', 'missing_quality');
     warn.mockRestore();
+  });
+
+  it('stops through the session after acknowledging', async () => {
+    const { controller, remoteService, session, host } = setup();
+    await controller.applyRemoteCommand({ action: 'stop', cmdId: 's' } as RemoteCommand);
+    expect(remoteService.markApplied).toHaveBeenCalledWith('s');
+    expect(host.savePosition).toHaveBeenCalledWith(true);
+    expect(session.stop).toHaveBeenCalled();
   });
 });

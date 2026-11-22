@@ -5,7 +5,6 @@ import type { Media } from '../../core/services/api/media.service';
 import { MediaService } from '../../core/services/api/media.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
-import { CastService } from '../../core/services/cast.service';
 import { DeviceService } from '../../core/services/device.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { NotificationLike } from '../../core/services/notification-like';
@@ -44,7 +43,6 @@ export class QueueController {
   private readonly session = inject(PlaybackSession);
   private readonly state = inject(PlayerStateService);
   private readonly playerSettings = inject(PlayerSettingsService);
-  private readonly castService = inject(CastService);
   private readonly device = inject(DeviceService);
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
@@ -150,12 +148,7 @@ export class QueueController {
   /** Marks the playing item completed server-side, so advancing past it counts as watched. */
   async markCurrentComplete(): Promise<void> {
     if (!this.host.mediaId() || this.host.preRollActive()) return;
-    const dur =
-      (this.castService.isConnected()
-        ? this.castService.duration()
-        : this.host.engineDuration()) ||
-      this.host.duration() ||
-      0;
+    const dur = this.session.output()?.duration() || this.host.engineDuration() || this.host.duration() || 0;
     if (dur <= 0) return;
     try {
       await this.streamingApi.updatePlaybackState(this.host.mediaId(), {
