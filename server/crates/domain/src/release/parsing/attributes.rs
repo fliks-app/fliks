@@ -122,3 +122,30 @@ pub fn parse_release_attributes(title: &str) -> ReleaseAttributes {
             .is_match(&t),
     }
 }
+
+/// 2 for a PROPER, REPACK or RERIP release, 1 otherwise; a higher one wins a tie of rank and score.
+pub fn parse_revision(title: &str) -> u32 {
+    let t = title.replace('.', " ").to_lowercase();
+    if rx!(r"\b(proper|repack|rerip)\b").is_match(&t) {
+        2
+    } else {
+        1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_revision;
+
+    #[test]
+    fn proper_repack_and_rerip_are_revision_two() {
+        for t in [
+            "Show.S01E01.PROPER.720p-GRP",
+            "Show 1080p REPACK",
+            "Show.RERIP.x264",
+        ] {
+            assert_eq!(parse_revision(t), 2, "{t}");
+        }
+        assert_eq!(parse_revision("Show.S01E01.1080p.WEB-DL-GRP"), 1);
+    }
+}

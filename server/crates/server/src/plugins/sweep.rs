@@ -6,6 +6,7 @@ use super::{HttpRequest, Plugins, Principal, acquisition, events, picker};
 use crate::ingest::KeyedLocks;
 use crate::state::AppState;
 use crate::sync::MutexExt;
+use fliks_domain::release::parsing::attributes::parse_revision;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
@@ -103,7 +104,14 @@ fn merge(offers: Vec<Offer>) -> Vec<(String, Value)> {
         .into_iter()
         .flat_map(|(p, rs)| rs.into_iter().map(move |r| (p.clone(), r)))
         .collect();
-    let key = |r: &Value| (r["rank"].as_i64(), r["customFormatScore"].as_i64());
+    let key = |r: &Value| {
+        let revision = r["title"].as_str().map(parse_revision);
+        (
+            r["rank"].as_i64(),
+            r["customFormatScore"].as_i64(),
+            revision,
+        )
+    };
     all.sort_by_key(|(_, r)| std::cmp::Reverse(key(r)));
     all
 }
@@ -133,6 +141,13 @@ pub enum RouteError {
     /// The provider did not answer within its deadline.
     TimedOut,
     Failed(String),
+}
+
+impl RouteError {
+    /// A search that may answer later: the lane was full, the provider is not running or did not answer in time.
+    fn is_transient(&self) -> bool {
+        matches!(self, Self::Busy | Self::Unavailable | Self::TimedOut)
+    }
 }
 
 impl std::fmt::Display for RouteError {
@@ -257,7 +272,7 @@ impl Plugins {
             match r {
                 Ok(list) => offers.push((id, eligible(&list))),
                 Err(e) => {
-                    busy |= matches!(e, RouteError::Busy);
+                    busy |= e.is_transient();
                     tracing::warn!(
                         "acquisition: search of \"{}\" at \"{id}\" failed: {e}",
                         tg.title
@@ -304,7 +319,7 @@ impl Plugins {
                     return Outcome::TimedOut(id);
                 }
                 Err(e) => {
-                    busy |= matches!(e, RouteError::Busy);
+                    busy |= matches!(e, RouteError::Busy | RouteError::Unavailable);
                     tracing::warn!(
                         "acquisition: grab of \"{}\" at \"{id}\" failed: {e}",
                         release["title"]
@@ -496,6 +511,35 @@ mod tests {
             .collect();
         assert_eq!(titles, ["a", "b"]);
         assert!(eligible(&json!(null)).is_empty());
+    }
+
+    #[test]
+    fn a_repack_wins_a_tie_on_rank_and_score() {
+        let offers = vec![(
+            "a".to_owned(),
+            vec![
+                rel("Show.S01E01.1080p.WEB-DL-GRP", 5, 0),
+                rel("Show.S01E01.REPACK.1080p.WEB-DL-GRP", 5, 0),
+            ],
+        )];
+        assert_eq!(
+            merge(offers)[0].1["title"],
+            "Show.S01E01.REPACK.1080p.WEB-DL-GRP"
+        );
+    }
+
+    #[test]
+    fn transient_route_errors_read_as_busy() {
+        assert!(
+            [
+                RouteError::Busy,
+                RouteError::Unavailable,
+                RouteError::TimedOut
+            ]
+            .iter()
+            .all(RouteError::is_transient)
+        );
+        assert!(!RouteError::Failed("x".into()).is_transient());
     }
 
     #[test]

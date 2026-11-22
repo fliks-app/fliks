@@ -6952,3 +6952,4 @@ mod music_ingest {
 }
 
 mod album_acquisition;
+mod replace_existing;
