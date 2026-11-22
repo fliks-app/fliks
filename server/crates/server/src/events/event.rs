@@ -1,4 +1,4 @@
-//! Wire events (`docs/spec/events-hub.md`, Events): the 51 `SseEvent` types, the 11 `DomainEvent`
+//! Wire events (`docs/spec/events-hub.md`, Events): the 70 `SseEvent` types, the 12 `DomainEvent`
 //! types and the plugin envelope. Field names and omission rules follow `JSON.stringify` of the 4.x objects.
 use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -209,6 +209,28 @@ pub struct QualityRung {
     pub low_bandwidth: Option<bool>,
 }
 
+/// The outcome of a manual grab, echoing the call's `scope`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GrabBest {
+    pub scope: Value,
+    pub outcome: String,
+    pub detail: String,
+}
+
+/// The queue rows of one plugin that changed; `null` rows mean the page reloads.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcquisitionQueue {
+    pub plugin_id: String,
+    pub rows: Option<Vec<Value>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginRef {
+    pub plugin_id: String,
+}
+
 /// Everything a client can receive on `/api/system/events` except `ping` and `plugin.*` (see `RawEvent`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all_fields = "camelCase")]
@@ -332,6 +354,12 @@ pub enum SseEvent {
     },
     #[serde(rename = "activity.changed")]
     ActivityChanged {},
+    #[serde(rename = "acquisition.grab-best")]
+    AcquisitionGrabBest { payload: GrabBest },
+    #[serde(rename = "acquisition.queue")]
+    AcquisitionQueue { payload: AcquisitionQueue },
+    #[serde(rename = "acquisition.sources")]
+    AcquisitionSources { payload: PluginRef },
     #[serde(rename = "command.started")]
     CommandStarted { name: String },
     #[serde(rename = "command.completed")]
@@ -692,6 +720,14 @@ pub enum SseEvent {
 }
 
 impl SseEvent {
+    pub fn acquisition_sources(plugin_id: &str) -> Self {
+        Self::AcquisitionSources {
+            payload: PluginRef {
+                plugin_id: plugin_id.to_owned(),
+            },
+        }
+    }
+
     /// The three types the household fan-out hook widens past their owner (rule 18).
     pub fn is_household_scoped(&self) -> bool {
         matches!(
@@ -762,6 +798,15 @@ pub enum DomainEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         episode_number: Option<i64>,
     },
+    #[serde(rename = "acquisition.imported")]
+    AcquisitionImported {
+        media_id: i64,
+        family: Family,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        season_number: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        episode_number: Option<i64>,
+    },
     #[serde(rename = "request.created")]
     RequestCreated {
         request_id: i64,
@@ -813,83 +858,125 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// One minimal wire sample per `SseEvent` type of the spec table (51).
-    fn samples() -> Vec<Value> {
-        let sub = json!({"title": "T"});
-        vec![
-            json!({"type":"sse.connected","connectionId":"c"}),
-            json!({"type":"task.progress","command":"c","current":1,"total":2,"message":"m","subject":sub}),
-            json!({"type":"subtitle.synced","subtitleId":1,"language":"en"}),
-            json!({"type":"subtitle.sync_failed","subtitleId":1,"error":"e","mediaId":2}),
-            json!({"type":"subtitle.downloaded","mediaId":1,"title":"t","language":"en","provider":"p"}),
-            json!({"type":"subtitle.failed","mediaId":1,"title":"t","language":"en","error":"e","scope":"daily"}),
-            json!({"type":"subtitle.list_changed","mediaId":1}),
-            json!({"type":"subtitle.translation_progress","subtitleId":1,"mediaId":2,"progress":50}),
-            json!({"type":"import.complete","mediaId":1,"title":"t","seasonNumber":1}),
-            json!({"type":"import.failed","mediaId":1,"title":"t","error":"e"}),
-            json!({"type":"download.progress","mediaId":1,"mediaType":"series","downloads":[
+    /// One minimal wire sample per `SseEvent` type. The generated `match` has no wildcard, so a new
+    /// variant fails to compile until it is listed here.
+    macro_rules! samples {
+        ($($variant:ident => $json:expr,)*) => {
+            fn samples() -> Vec<Value> {
+                vec![$($json),*]
+            }
+
+            #[allow(dead_code)]
+            fn every_variant_has_a_sample(ev: &SseEvent) {
+                match ev {
+                    $(SseEvent::$variant { .. } => {})*
+                }
+            }
+        };
+    }
+
+    samples! {
+
+            SseConnected => json!({"type":"sse.connected","connectionId":"c"}),
+            TaskProgress => json!({"type":"task.progress","command":"c","current":1,"total":2,"message":"m","subject":{"title":"T"}}),
+            SubtitleSynced => json!({"type":"subtitle.synced","subtitleId":1,"language":"en"}),
+            SubtitleSyncFailed => json!({"type":"subtitle.sync_failed","subtitleId":1,"error":"e","mediaId":2}),
+            SubtitleDownloaded => json!({"type":"subtitle.downloaded","mediaId":1,"title":"t","language":"en","provider":"p"}),
+            SubtitleFailed => json!({"type":"subtitle.failed","mediaId":1,"title":"t","language":"en","error":"e","scope":"daily"}),
+            SubtitleListChanged => json!({"type":"subtitle.list_changed","mediaId":1}),
+            SubtitleTranslationProgress => json!({"type":"subtitle.translation_progress","subtitleId":1,"mediaId":2,"progress":50}),
+            ImportComplete => json!({"type":"import.complete","mediaId":1,"title":"t","seasonNumber":1}),
+            ImportFailed => json!({"type":"import.failed","mediaId":1,"title":"t","error":"e"}),
+            DownloadProgress => json!({"type":"download.progress","mediaId":1,"mediaType":"series","downloads":[
                 {"ref":"r","episodeNumber":3,"progress":0.5,"dlspeed":10,"eta":60,"state":"active"}]}),
-            json!({"type":"stalled.removed","title":"t"}),
-            json!({"type":"queue.updated"}),
-            json!({"type":"activity.changed"}),
-            json!({"type":"command.started","name":"n"}),
-            json!({"type":"command.completed","name":"n","status":"failed"}),
-            json!({"type":"rescan.started","mediaId":1,"title":"t"}),
-            json!({"type":"rescan.completed","mediaId":1,"title":"t","added":1,"removed":0,"updated":2,"subtitleRemovedMissing":0}),
-            json!({"type":"rescan.failed","mediaId":1,"title":"t","error":"e"}),
-            json!({"type":"orphan_import.completed","created":1,"linked":2,"failed":1}),
-            json!({"type":"media.files.delete_failed","mediaId":1,"title":"t"}),
-            json!({"type":"player.command","sessionId":"s","mediaFileId":1,"userId":2,"action":"message","message":"m"}),
-            json!({"type":"markers.season.completed","mediaId":1,"seasonId":2,"seasonNumber":3,"introsDetected":4}),
-            json!({"type":"metadata.started","mediaId":1,"title":"t"}),
-            json!({"type":"metadata.refreshed","mediaId":1,"title":"t"}),
-            json!({"type":"metadata.failed","mediaId":1,"title":"t","error":"e"}),
-            json!({"type":"watch-history.import.started","serverId":1,"serverName":"s"}),
-            json!({"type":"watch-history.import.completed","serverId":1,"serverName":"s","users":1,"usersCreated":0,"imported":2,"skipped":3,"errors":["e"],"errorCount":1}),
-            json!({"type":"watch-history.import.failed","serverId":1,"serverName":"s","error":""}),
-            json!({"type":"seerr.import.started"}),
-            json!({"type":"seerr.import.completed","users":1,"usersCreated":0,"imported":2,"updated":3,"skipped":4,"errors":[],"errorCount":0}),
-            json!({"type":"seerr.import.failed","error":"e"}),
-            json!({"type":"pairing.requested","userId":1,"pairingId":"p","deviceName":"n","deviceId":"d","legacyClient":false}),
-            json!({"type":"pairing.cancelled","userId":1,"pairingId":"p"}),
-            json!({"type":"remote.command","cmdId":"c","expiresAt":10,"byTargetId":null,"action":"seek","positionSeconds":12.5,"subtitleId":null,"qualityId":"q","paused":true}),
-            json!({"type":"remote.state","targetId":"t","sessionId":"s","mediaId":null,"mediaFileId":1,"episodeId":null,
+            StalledRemoved => json!({"type":"stalled.removed","title":"t"}),
+            QueueUpdated => json!({"type":"queue.updated"}),
+            ActivityChanged => json!({"type":"activity.changed"}),
+            CommandStarted => json!({"type":"command.started","name":"n"}),
+            CommandCompleted => json!({"type":"command.completed","name":"n","status":"failed"}),
+            RescanStarted => json!({"type":"rescan.started","mediaId":1,"title":"t"}),
+            RescanCompleted => json!({"type":"rescan.completed","mediaId":1,"title":"t","added":1,"removed":0,"updated":2,"subtitleRemovedMissing":0}),
+            RescanFailed => json!({"type":"rescan.failed","mediaId":1,"title":"t","error":"e"}),
+            OrphanImportCompleted => json!({"type":"orphan_import.completed","created":1,"linked":2,"failed":1}),
+            MediaFilesDeleteFailed => json!({"type":"media.files.delete_failed","mediaId":1,"title":"t"}),
+            PlayerCommand => json!({"type":"player.command","sessionId":"s","mediaFileId":1,"userId":2,"action":"message","message":"m"}),
+            MarkersSeasonCompleted => json!({"type":"markers.season.completed","mediaId":1,"seasonId":2,"seasonNumber":3,"introsDetected":4}),
+            MetadataStarted => json!({"type":"metadata.started","mediaId":1,"title":"t"}),
+            MetadataRefreshed => json!({"type":"metadata.refreshed","mediaId":1,"title":"t"}),
+            MetadataFailed => json!({"type":"metadata.failed","mediaId":1,"title":"t","error":"e"}),
+            WatchHistoryImportStarted => json!({"type":"watch-history.import.started","serverId":1,"serverName":"s"}),
+            WatchHistoryImportCompleted => json!({"type":"watch-history.import.completed","serverId":1,"serverName":"s","users":1,"usersCreated":0,"imported":2,"skipped":3,"errors":["e"],"errorCount":1}),
+            WatchHistoryImportFailed => json!({"type":"watch-history.import.failed","serverId":1,"serverName":"s","error":""}),
+            SeerrImportStarted => json!({"type":"seerr.import.started"}),
+            SeerrImportCompleted => json!({"type":"seerr.import.completed","users":1,"usersCreated":0,"imported":2,"updated":3,"skipped":4,"errors":[],"errorCount":0}),
+            SeerrImportFailed => json!({"type":"seerr.import.failed","error":"e"}),
+            PairingRequested => json!({"type":"pairing.requested","userId":1,"pairingId":"p","deviceName":"n","deviceId":"d","legacyClient":false}),
+            PairingCancelled => json!({"type":"pairing.cancelled","userId":1,"pairingId":"p"}),
+            RemoteCommand => json!({"type":"remote.command","cmdId":"c","expiresAt":10,"byTargetId":null,"action":"seek","positionSeconds":12.5,"subtitleId":null,"qualityId":"q","paused":true}),
+            RemoteState => json!({"type":"remote.state","targetId":"t","sessionId":"s","mediaId":null,"mediaFileId":1,"episodeId":null,
                 "mediaTitle":null,"episodeLabel":null,"posterUrl":null,"fanartUrl":null,"positionSeconds":1,"durationSeconds":2,
                 "state":"playing","volume":null,"muted":null,"playbackRate":1.5,"supportsVolume":true,"subtitleId":null,"quality":null,
                 "qualities":[{"id":"i","label":"l","lowBandwidth":true}],"autoplayBlocked":false,"hasNext":false,
                 "audioTrackIndex":null,"subtitleTrackIndex":null,"lastCmdId":null}),
-            json!({"type":"likes.changed","mediaId":1,"seasonId":2,"itemId":3,"liked":true}),
-            json!({"type":"remote.targets_changed"}),
-            json!({"type":"remote.stopped","targetId":"t","sessionId":"s"}),
-            json!({"type":"social.followed","userId":1,"username":"u","avatar":null}),
-            json!({"type":"social.follow_request","userId":1,"username":"u","avatar":"a"}),
-            json!({"type":"social.follow_accepted","userId":1,"username":"u","avatar":null}),
-            json!({"type":"social.content_recommended","userId":1,"username":"u","avatar":null,"mediaTitle":"m"}),
-            json!({"type":"party.state","partyId":1,"rev":2,"state":"playing","item":{"mediaId":1},"anchor":{"position":1.5,"serverTimeMs":3},"whenMs":null,"by":{"userId":1,"username":"u"},"action":"play"}),
-            json!({"type":"party.members","partyId":1,"rev":2,"members":[]}),
-            json!({"type":"party.settings","partyId":1,"rev":2,"name":"n","policy":"host_only",
+            LikesChanged => json!({"type":"likes.changed","mediaId":1,"seasonId":2,"itemId":3,"liked":true}),
+            RemoteTargetsChanged => json!({"type":"remote.targets_changed"}),
+            RemoteStopped => json!({"type":"remote.stopped","targetId":"t","sessionId":"s"}),
+            SocialFollowed => json!({"type":"social.followed","userId":1,"username":"u","avatar":null}),
+            SocialFollowRequest => json!({"type":"social.follow_request","userId":1,"username":"u","avatar":"a"}),
+            SocialFollowAccepted => json!({"type":"social.follow_accepted","userId":1,"username":"u","avatar":null}),
+            SocialContentRecommended => json!({"type":"social.content_recommended","userId":1,"username":"u","avatar":null,"mediaTitle":"m"}),
+            PartyState => json!({"type":"party.state","partyId":1,"rev":2,"state":"playing","item":{"mediaId":1},"anchor":{"position":1.5,"serverTimeMs":3},"whenMs":null,"by":{"userId":1,"username":"u"},"action":"play"}),
+            PartyMembers => json!({"type":"party.members","partyId":1,"rev":2,"members":[]}),
+            PartySettings => json!({"type":"party.settings","partyId":1,"rev":2,"name":"n","policy":"host_only",
                 "reactionsEnabled":true,"chatEnabled":true,"linkSharing":false,"rotation":false,"public":true}),
-            json!({"type":"party.message","partyId":1,"message":{"id":1}}),
-            json!({"type":"party.reaction","partyId":1,"userId":2,"username":"u","emoji":"x"}),
-            json!({"type":"party.closed","partyId":1,"reason":"expired","by":null}),
-            json!({"type":"party.invited","partyId":1,"name":"n","scheduledAt":null,"host":{"userId":1,"username":"u"},"item":{"mediaId":1}}),
-            json!({"type":"party.starting","partyId":1,"name":"n"}),
-            json!({"type":"party.updated","partyId":1}),
-            json!({"type":"party.signal","partyId":1,"from":{"userId":2,"deviceId":"d"},"kind":"offer","data":{"sdp":"x"}}),
-            json!({"type":"party.programme","partyId":1,"rev":3,"item":{"mediaId":1}}),
-            json!({"type":"party.proposals","partyId":1,"proposals":[{"id":1,"upvoterIds":[2],"downvoterIds":[]}]}),
-            json!({"type":"notification","id":"n","ts":1,"ttl":60,"cat":"requests","title":"t","body":"b","url":"/requests","badge":0}),
-        ]
+            PartyMessage => json!({"type":"party.message","partyId":1,"message":{"id":1}}),
+            PartyReaction => json!({"type":"party.reaction","partyId":1,"userId":2,"username":"u","emoji":"x"}),
+            PartyClosed => json!({"type":"party.closed","partyId":1,"reason":"expired","by":null}),
+            PartyInvited => json!({"type":"party.invited","partyId":1,"name":"n","scheduledAt":null,"host":{"userId":1,"username":"u"},"item":{"mediaId":1}}),
+            PartyStarting => json!({"type":"party.starting","partyId":1,"name":"n"}),
+            PartyUpdated => json!({"type":"party.updated","partyId":1}),
+            PartySignal => json!({"type":"party.signal","partyId":1,"from":{"userId":2,"deviceId":"d"},"kind":"offer","data":{"sdp":"x"}}),
+            PartyProgramme => json!({"type":"party.programme","partyId":1,"rev":3,"item":{"mediaId":1}}),
+            PartyProposals => json!({"type":"party.proposals","partyId":1,"proposals":[{"id":1,"upvoterIds":[2],"downvoterIds":[]}]}),
+            Notification => json!({"type":"notification","id":"n","ts":1,"ttl":60,"cat":"requests","title":"t","body":"b","url":"/requests","badge":0}),
+            SubtitleSyncCancelled => json!({"type":"subtitle.sync_cancelled","subtitleId":1,"mediaId":2}),
+            MediaFileChanged => json!({"type":"media.file_changed","mediaId":1,"mediaFileId":2}),
+            OptimizeQueueChanged => json!({"type":"optimize.queue_changed"}),
+            OptimizeJobChanged => json!({"type":"optimize.job_changed","jobId":1,"state":"running"}),
+            OptimizeJobProgress => json!({"type":"optimize.job_progress","jobId":1,"progress":0.5,"paused":false}),
+            KaraokeModelChanged => json!({"type":"karaoke.model_changed","model":{"id":"m"}}),
+            KaraokeJobChanged => json!({"type":"karaoke.job_changed","itemId":1,"state":"running","stage":"s","progress":0.5}),
+            MediaMoveCompleted => json!({"type":"media.move.completed","mediaId":1,"title":"t","files":2,"leftover":0}),
+            MediaMoveFailed => json!({"type":"media.move.failed","mediaId":1,"title":"t","error":"e"}),
+            SessionChanged => json!({"type":"session.changed","epoch":1,"itemId":2,"state":"playing","ownerTargetId":null}),
+            SessionSuperseded => json!({"type":"session.superseded","sessionId":"s","byDeviceName":"d","epoch":3}),
+            AcquisitionGrabBest => json!({"type":"acquisition.grab-best","payload":{"scope":{"mediaId":1,"family":"video","groupId":null,"itemId":null},"outcome":"grabbed","detail":"d"}}),
+            AcquisitionQueue => json!({"type":"acquisition.queue","payload":{"pluginId":"p","rows":[{"id":1}]}}),
+            AcquisitionSources => json!({"type":"acquisition.sources","payload":{"pluginId":"p"}}),
     }
+
+    const FIXTURE: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/sse-events.json"
+    );
 
     #[test]
     fn every_type_round_trips_to_the_same_json() {
-        let all = samples();
-        assert_eq!(all.len(), 56);
-        for want in all {
+        for want in samples() {
             let ev: SseEvent = serde_json::from_value(want.clone()).unwrap();
             assert_eq!(serde_json::to_value(&ev).unwrap(), want);
         }
+    }
+
+    /// The samples the client's dispatcher spec parses; `BLESS=1` rewrites the file.
+    #[test]
+    fn the_fixture_holds_the_samples() {
+        let lines: Vec<String> = samples().iter().map(Value::to_string).collect();
+        let text = format!("[\n  {}\n]\n", lines.join(",\n  "));
+        if std::env::var("BLESS").is_ok_and(|v| v == "1") {
+            std::fs::write(FIXTURE, &text).unwrap();
+        }
+        assert_eq!(std::fs::read_to_string(FIXTURE).unwrap(), text);
     }
 
     #[test]
@@ -919,7 +1006,7 @@ mod tests {
     }
 
     #[test]
-    fn the_eleven_domain_events_and_the_bus_envelope_round_trip() {
+    fn the_twelve_domain_events_and_the_bus_envelope_round_trip() {
         let all = [
             json!({"type":"media.imported","mediaId":1,"externalIds":[],"mediaType":"movie","libraryId":null,"addedByUserId":2}),
             json!({"type":"media.monitored.changed","mediaId":1,"monitored":true}),
@@ -928,6 +1015,7 @@ mod tests {
             json!({"type":"media.files.imported","mediaId":1,"family":"video","episodeNumber":2,"source":"disk"}),
             json!({"type":"media.acquisition.requested","mediaIds":[1,2],"reason":"r"}),
             json!({"type":"acquisition.grabbed","mediaId":1,"family":"video"}),
+            json!({"type":"acquisition.imported","mediaId":1,"family":"video","seasonNumber":1,"episodeNumber":2}),
             json!({"type":"request.created","requestId":1,"mediaType":"movie","externalIds":[{"provider":"tmdb","value":"2"}],"userId":null,"kind":"k","seasons":null}),
             json!({"type":"request.approved","requestId":1,"mediaId":null,"mediaType":"movie","externalIds":[{"provider":"tmdb","value":"2"}],"seasons":[1],"approvedByUserId":null}),
             json!({"type":"library.scan.completed","libraryId":1,"added":2,"updated":3}),

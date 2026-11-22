@@ -1,16 +1,10 @@
 //! The request lifecycle (`requests.md` rules 32-42): what happens to requests when the media side moves.
 use super::{db, services};
-use crate::{
-    events::{Bus, DomainEvent, SseEvent},
-    http::AppError,
-    profiles,
-    state::AppState,
-};
+use crate::{events::DomainEvent, http::AppError, profiles, state::AppState};
 use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde_json::json;
 use sqlx::PgConnection;
-use std::collections::BTreeSet;
-use tokio::sync::broadcast::error::RecvError;
+use std::{collections::BTreeSet, sync::Arc};
 
 type Res<T> = Result<T, AppError>;
 
@@ -298,51 +292,49 @@ pub fn spawn_reconcile(st: &AppState) {
     );
 }
 
-/// The two event subscriptions of rule 34, at-most-once: `import.complete` and `acquisition.grabbed`.
+/// The two event subscriptions of rule 34: `acquisition.imported` and `acquisition.grabbed`. A lag runs
+/// the reconcile of rule 43.
 pub fn spawn(st: &AppState) {
-    let lc = Lifecycle::of(st);
-    let mut rx = st.hub.subscribe();
-    tokio::spawn(async move {
-        loop {
-            let ev = match rx.recv().await {
-                Ok(ev) => ev,
-                Err(RecvError::Lagged(n)) => {
-                    tracing::warn!("request lifecycle lagged {n} events");
-                    continue;
-                }
-                Err(RecvError::Closed) => return,
+    let (lc, on_lag) = (Lifecycle::of(st), Lifecycle::of(st));
+    let on_event = move |ev: &Arc<DomainEvent>| match &**ev {
+        DomainEvent::AcquisitionImported { media_id, .. } => {
+            let Ok(id) = i32::try_from(*media_id) else {
+                return;
             };
             let lc = lc.clone();
-            match &*ev {
-                Bus::Sse(SseEvent::ImportComplete { media_id, .. }) => {
-                    let Ok(id) = i32::try_from(*media_id) else {
-                        continue;
-                    };
-                    tokio::spawn(async move {
-                        if let Err(e) = lc.on_import_complete(id).await {
-                            tracing::warn!("onImportComplete failed for media#{id}: {e:?}");
-                        }
-                    });
+            tokio::spawn(async move {
+                if let Err(e) = lc.on_import_complete(id).await {
+                    tracing::warn!("onImportComplete failed for media#{id}: {e:?}");
                 }
-                Bus::Domain(DomainEvent::AcquisitionGrabbed {
-                    media_id,
-                    family,
-                    season_number,
-                    ..
-                }) => {
-                    let family = *family;
-                    let Ok(id) = i32::try_from(*media_id) else {
-                        continue;
-                    };
-                    let season = season_number.and_then(|s| i32::try_from(s).ok());
-                    tokio::spawn(async move {
-                        if let Err(e) = lc.mark_in_progress(id, season, family).await {
-                            tracing::warn!("markInProgress failed for media#{id}: {e:?}");
-                        }
-                    });
-                }
-                _ => {}
-            }
+            });
         }
-    });
+        DomainEvent::AcquisitionGrabbed {
+            media_id,
+            family,
+            season_number,
+            ..
+        } => {
+            let (lc, family) = (lc.clone(), *family);
+            let Ok(id) = i32::try_from(*media_id) else {
+                return;
+            };
+            let season = season_number.and_then(|s| i32::try_from(s).ok());
+            tokio::spawn(async move {
+                if let Err(e) = lc.mark_in_progress(id, season, family).await {
+                    tracing::warn!("markInProgress failed for media#{id}: {e:?}");
+                }
+            });
+        }
+        _ => {}
+    };
+    let on_lag = move || {
+        let lc = on_lag.clone();
+        tokio::spawn(async move { lc.reconcile().await });
+    };
+    tokio::spawn(crate::events::listen(
+        "request lifecycle",
+        st.hub.subscribe_domain(),
+        on_event,
+        on_lag,
+    ));
 }

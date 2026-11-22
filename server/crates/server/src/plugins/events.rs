@@ -341,6 +341,12 @@ pub async fn publish(
                 let id = i.media_id as i32;
                 let (season, episode) = event_unit(i.family, i.unit.as_ref())?;
                 let title = media_row(st, id).await.map(|(t, _)| t).unwrap_or_default();
+                st.hub.emit_domain(DomainEvent::AcquisitionImported {
+                    media_id: i.media_id.into(),
+                    family: i.family.into(),
+                    season_number: season.map(i64::from),
+                    episode_number: episode.map(i64::from),
+                });
                 let to = viewers(st, Some(id)).await;
                 st.hub.emit_to_users(
                     &to,

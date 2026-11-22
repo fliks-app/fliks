@@ -1,6 +1,6 @@
 //! The acquisition queue and history (`plugins.md` rules 69-75) through the fixture plugin.
 use super::harness::*;
-use fliks_server::events::Bus;
+use fliks_server::events::{Bus, SseEvent};
 use fliks_server::plugins::queue;
 use fliks_server::plugins::runtime::fliks::plugin::types::{
     GrabMethod, QueueEntry, QueueState, UnitRef,
@@ -188,7 +188,7 @@ async fn a_provider_reports_its_queue_and_the_core_proxies_actions() {
     assert_eq!(imported["total"], 1);
     let mut seen = false;
     while let Ok(bus) = rx.try_recv() {
-        seen |= matches!(&*bus, Bus::Raw(r) if r.r#type == "acquisition.queue");
+        seen |= matches!(&*bus, Bus::Sse(SseEvent::AcquisitionQueue { .. }));
     }
     assert!(seen, "a change announces itself");
 
@@ -512,10 +512,8 @@ async fn queue_patches_reach_only_recipients_of_the_library_and_in_flight_reads_
     let patches = |rx: &mut tokio::sync::broadcast::Receiver<std::sync::Arc<Bus>>| {
         let mut n = Vec::new();
         while let Ok(bus) = rx.try_recv() {
-            if let Bus::Raw(r) = &*bus
-                && r.r#type == "acquisition.queue"
-            {
-                n.push(r.payload["rows"].as_array().map(Vec::len));
+            if let Bus::Sse(SseEvent::AcquisitionQueue { payload }) = &*bus {
+                n.push(payload.rows.as_ref().map(Vec::len));
             }
         }
         n

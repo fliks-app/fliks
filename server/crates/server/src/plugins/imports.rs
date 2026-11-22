@@ -6,6 +6,7 @@ use super::runtime::fliks::plugin::{db, host, log, notify, types as t};
 use super::runtime::{Ctx, HostError};
 use super::scheduled;
 use super::units;
+use crate::events::SseEvent;
 use crate::state::AppState;
 use fliks_domain::media::family::Family;
 use sqlx::PgPool;
@@ -496,11 +497,7 @@ impl host::Host for Ctx {
                     })
                     .collect();
                 if app.plugins.pickers.set_sources(&id, list)? {
-                    app.hub.emit_raw(
-                        "acquisition.sources",
-                        serde_json::json!({"pluginId": id}),
-                        None,
-                    );
+                    app.hub.emit(SseEvent::acquisition_sources(&id));
                 }
                 Ok(())
             }

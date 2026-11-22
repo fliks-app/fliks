@@ -483,6 +483,16 @@ impl Plugins {
     }
 }
 
+/// A pass over every target under the `AcquisitionSweep` claim; false when one is already running.
+pub async fn sweep_all(st: &AppState) -> bool {
+    let Some(_claim) = st.jobs.claim("AcquisitionSweep") else {
+        tracing::warn!("AcquisitionSweep skipped: it is already running");
+        return false;
+    };
+    st.plugins.sweep(st, None).await;
+    true
+}
+
 /// The hourly tick: the sweep runs once its interval has passed since the last one.
 pub fn spawn_tick(st: &AppState) {
     let last = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
@@ -500,12 +510,9 @@ pub fn spawn_tick(st: &AppState) {
                 if now - last.load(std::sync::atomic::Ordering::Relaxed) < due {
                     return;
                 }
-                let Some(_claim) = st.jobs.claim("AcquisitionSweep") else {
-                    tracing::warn!("Scheduled AcquisitionSweep skipped: it is already running");
-                    return;
-                };
-                last.store(now, std::sync::atomic::Ordering::Relaxed);
-                st.plugins.sweep(&st, None).await;
+                if sweep_all(&st).await {
+                    last.store(now, std::sync::atomic::Ordering::Relaxed);
+                }
             });
         },
     );
@@ -715,5 +722,16 @@ mod tests {
         ] {
             assert!(!other.is_saturated(), "{other:?}");
         }
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_full_pass_takes_the_claim_and_refuses_a_second(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        let st = crate::metadata::books::tests::state(&pool, vec![]);
+        let held = st.jobs.claim("AcquisitionSweep").unwrap();
+        assert!(!sweep_all(&st).await);
+        drop(held);
+        assert!(sweep_all(&st).await);
+        assert!(st.jobs.claim("AcquisitionSweep").is_some());
     }
 }

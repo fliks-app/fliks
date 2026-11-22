@@ -1,7 +1,7 @@
 //! The notification catalogue (`push.md` rules 31 to 37): which event reaches whom, and as what.
 use super::{ActionSpec, Notification, notify};
 use crate::{
-    events::{Bus, DomainEvent, SseEvent},
+    events::{DomainEvent, SseEvent},
     http::auth::{Authed, load_users},
     state::AppState,
     sync::MutexExt,
@@ -14,7 +14,7 @@ use fliks_domain::{
 use serde_json::{Map, Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -296,37 +296,36 @@ impl Episodes {
     }
 }
 
-/// The in-process subscriber of `media.files.imported` (`push.md` rule 35).
+/// The in-process subscriber of `media.files.imported` (`push.md` rule 35). Lossy by contract: a lagged
+/// feed loses the import it missed, and no marker says which notification that was.
 async fn listen(st: AppState) {
-    let mut rx = st.hub.subscribe();
-    loop {
-        match rx.recv().await {
-            Ok(bus) => {
-                if let Bus::Domain(DomainEvent::MediaFilesImported {
-                    media_id,
-                    family: Family::Video,
-                    season_number: Some(season),
-                    episode_number: Some(episode),
-                    ..
-                }) = &*bus
-                    && let Ok(media) = i32::try_from(*media_id)
-                    && st.push.episodes.add(media, *season, *episode)
-                {
-                    let st = st.clone();
-                    tokio::spawn(async move {
-                        tokio::time::sleep(GROUP_WINDOW).await;
-                        if let Err(e) = flush(&st, media).await {
-                            tracing::warn!("new-episode notification: {e}");
-                        }
-                    });
+    let on_event = |ev: &Arc<DomainEvent>| {
+        if let DomainEvent::MediaFilesImported {
+            media_id,
+            family: Family::Video,
+            season_number: Some(season),
+            episode_number: Some(episode),
+            ..
+        } = &**ev
+            && let Ok(media) = i32::try_from(*media_id)
+            && st.push.episodes.add(media, *season, *episode)
+        {
+            let st = st.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(GROUP_WINDOW).await;
+                if let Err(e) = flush(&st, media).await {
+                    tracing::warn!("new-episode notification: {e}");
                 }
-            }
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                tracing::warn!("new-episode listener lagged {n} events");
-            }
-            Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+            });
         }
-    }
+    };
+    crate::events::listen(
+        "new-episode listener",
+        st.hub.subscribe_domain(),
+        on_event,
+        || {},
+    )
+    .await;
 }
 
 /// Users who watch the series (a row not hidden from continue watching), still read its library and
@@ -562,5 +561,29 @@ mod tests {
             episode_recipients(&st, media, None).await.unwrap(),
             [a, mixed]
         );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_episode_listener_keeps_grouping_after_a_lag(pool: sqlx::PgPool) {
+        let st = crate::metadata::books::tests::state(&pool, vec![]);
+        tokio::spawn(listen(st.clone()));
+        for _ in 0..5000 {
+            st.hub
+                .emit_domain(DomainEvent::SettingsChanged { key: "k".into() });
+        }
+        st.hub.emit_domain(DomainEvent::MediaFilesImported {
+            media_id: 7,
+            family: Family::Video,
+            season_number: Some(1),
+            episode_number: Some(2),
+            source: crate::events::event::ImportSource::Disk,
+        });
+        for _ in 0..50 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            if st.push.episodes.pending() == [7] {
+                return;
+            }
+        }
+        panic!("the listener did not recover from the lag");
     }
 }

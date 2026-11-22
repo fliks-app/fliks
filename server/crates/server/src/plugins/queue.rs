@@ -2,11 +2,10 @@
 use super::imports::{db_err, host_err};
 use super::runtime::{HostError, fliks::plugin::types as t};
 use super::units;
-use crate::events::event::{Download, DownloadState};
+use crate::events::event::{AcquisitionQueue, Download, DownloadState};
 use crate::events::{Num, SseEvent};
 use crate::state::AppState;
 use fliks_domain::media::{family::Family, kind::MediaKind};
-use serde_json::json;
 use sqlx::{FromRow, PgPool};
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -543,10 +542,14 @@ async fn announce(st: &AppState, plugin: &str, changes: Changes) {
     if changes.structural || changes.updated.len() > MAX_PATCH {
         let ids: Vec<i32> = users.iter().map(|(id, _)| *id).collect();
         if !ids.is_empty() {
-            st.hub.emit_raw(
-                "acquisition.queue",
-                json!({"pluginId": plugin, "rows": null}),
-                Some(&ids),
+            st.hub.emit_to_users(
+                &ids,
+                SseEvent::AcquisitionQueue {
+                    payload: AcquisitionQueue {
+                        plugin_id: plugin.to_owned(),
+                        rows: None,
+                    },
+                },
             );
         }
     } else {
@@ -558,10 +561,14 @@ async fn announce(st: &AppState, plugin: &str, changes: Changes) {
             };
             let rows = super::queue_routes::rows_by_id(&st.db, &changes.updated, &libraries).await;
             if !rows.is_empty() {
-                st.hub.emit_raw(
-                    "acquisition.queue",
-                    json!({"pluginId": plugin, "rows": rows}),
-                    Some(&[user]),
+                st.hub.emit_to_users(
+                    &[user],
+                    SseEvent::AcquisitionQueue {
+                        payload: AcquisitionQueue {
+                            plugin_id: plugin.to_owned(),
+                            rows: Some(rows),
+                        },
+                    },
                 );
             }
         }

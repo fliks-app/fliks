@@ -39,6 +39,7 @@ pub mod webhooks;
 
 pub use fliks_plugin_manifest::{archive, manifest, trust};
 
+use crate::events::SseEvent;
 use crate::ingest::KeyedLocks;
 use crate::state::AppState;
 use crate::sync::{MutexExt, RwLockExt};
@@ -46,7 +47,7 @@ use fliks_domain::media::family::Family;
 use packages::Package;
 use registry::{Fail, Registered, Registry, fail};
 use runtime::{Env, HostConfig, PluginRt, Shared, SpawnError, State};
-use serde_json::{Value, json};
+use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -371,8 +372,7 @@ impl Plugins {
     /// What a plugin that stopped working leaves behind: its sources, placeholders and open rows (rule 71).
     async fn drop_acquisition(&self, app: &AppState, id: &str) {
         if self.pickers.forget(id) {
-            app.hub
-                .emit_raw("acquisition.sources", json!({"pluginId": id}), None);
+            app.hub.emit(SseEvent::acquisition_sources(id));
         }
         self.item_claims.forget(id);
         self.progress.forget(app, id).await;
@@ -397,8 +397,7 @@ impl Plugins {
                 } else if (s == State::Ready) != ready
                     && plugins.registry.release_picker_of(&id).is_some()
                 {
-                    st.hub
-                        .emit_raw("acquisition.sources", json!({"pluginId": id}), None);
+                    st.hub.emit(SseEvent::acquisition_sources(&id));
                 }
                 ready = s == State::Ready;
                 if matches!(s, State::Failed | State::Stopped) {
@@ -509,24 +508,18 @@ impl Plugins {
 
     /// Process lifetime tasks: domain events, scheduled calls, staging sweep, catalog boot pass.
     pub fn spawn(self: &Arc<Self>, st: &AppState) {
-        let me = self.clone();
-        let mut rx = st.hub.subscribe();
-        let st2 = st.clone();
-        tokio::spawn(async move {
-            loop {
-                match rx.recv().await {
-                    Ok(bus) => {
-                        if let crate::events::Bus::Domain(ev) = &*bus {
-                            me.domain_event(&st2, ev);
-                        }
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!("plugin event feed lagged {n} events");
-                    }
-                    Err(_) => return,
-                }
-            }
-        });
+        let (me, st2, on_lag) = (self.clone(), st.clone(), st.clone());
+        // Plugin pushes and webhooks are lossy by contract; a lost request for a sweep is not.
+        let on_lag = move || {
+            let st = on_lag.clone();
+            tokio::spawn(async move { sweep::sweep_all(&st).await });
+        };
+        tokio::spawn(crate::events::listen(
+            "plugin event feed",
+            st.hub.subscribe_domain(),
+            move |ev| me.domain_event(&st2, ev),
+            on_lag,
+        ));
         jobs::spawn_claimer(st);
         let st3 = st.clone();
         crate::jobs::spawn_cron(
