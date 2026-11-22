@@ -52,14 +52,14 @@
           [attr.value]="update.progress()"
           max="100"
         ></progress>
-        <p class="text-xs opacity-70 mt-1 text-center">
+        <p class="text-sm opacity-70 mt-1 text-center">
           @if (update.progress() === null) {
             {{ 'update.preparing' | translate }}
           } @else {
             {{ 'update.downloading' | translate: { percent: update.progress() } }}
           }
         </p>
-        <p class="text-xs opacity-70 text-center">{{ 'update.restart_notice' | translate }}</p>
+        <p class="text-sm opacity-70 text-center">{{ 'update.restart_notice' | translate }}</p>
       </div>
     } @else if (update.errorMessage(); as err) {
       <p class="text-sm text-error mb-3">{{ 'update.error' | translate }}: {{ err }}</p>

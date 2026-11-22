@@ -87,7 +87,7 @@
       <span class="label-text">{{ 'settings.roles.field_permissions' | translate }}</span>
       @for (group of permissionGroups(); track group.id) {
         <div class="mt-3">
-          <span class="label-text text-xs opacity-70">{{ 'settings.roles.group_' + group.id | translate }}</span>
+          <span class="label-text text-sm opacity-70">{{ 'settings.roles.group_' + group.id | translate }}</span>
           <div class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
             @for (perm of group.permissions; track perm) {
               @let via = includedIn(perm);
@@ -103,9 +103,9 @@
                 <span class="flex flex-col gap-0.5">
                   <span class="label-text text-sm">{{ permLabel(perm) }}</span>
                   @if (via) {
-                    <span class="text-xs text-base-content/60">{{ 'settings.roles.included_in' | translate: { name: via } }}</span>
+                    <span class="text-sm text-base-content/60">{{ 'settings.roles.included_in' | translate: { name: via } }}</span>
                   } @else if (inc && formPermissions().has(perm)) {
-                    <span class="text-xs text-base-content/60">{{ 'settings.roles.includes' | translate: { names: inc } }}</span>
+                    <span class="text-sm text-base-content/60">{{ 'settings.roles.includes' | translate: { names: inc } }}</span>
                   }
                 </span>
               </label>
@@ -121,7 +121,7 @@
       }
       @for (group of pluginPermissionGroups(); track group.pluginId) {
         <div class="mt-3">
-          <span class="label-text text-xs opacity-70">{{ group.name }}</span>
+          <span class="label-text text-sm opacity-70">{{ group.name }}</span>
           <div class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
             @for (grant of group.grants; track grant.value) {
               <label class="label cursor-pointer justify-start gap-2 p-2 rounded hover:bg-base-200">

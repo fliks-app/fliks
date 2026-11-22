@@ -14,7 +14,7 @@
           <svg lucideX class="h-4 w-4"></svg>
         </button>
       </div>
-      <p class="text-xs text-center mt-1 text-base-content/60">{{ 'downloads.downloading' | translate }} {{ progress() }}%</p>
+      <p class="text-sm text-center mt-1 text-base-content/60">{{ 'downloads.downloading' | translate }} {{ progress() }}%</p>
     </div>
   }
 
@@ -35,7 +35,7 @@
           <span class="label-text">{{ 'downloads.unwatched_only' | translate }}</span>
         </label>
       }
-      <p class="text-xs text-base-content/60 mb-2">
+      <p class="text-sm text-base-content/60 mb-2">
         {{ (batchCount() === 1 ? 'downloads.batch_count_one' : 'downloads.batch_count_other') | translate: { count: batchCount() } }}
       </p>
     }
@@ -57,7 +57,7 @@
             {{ q.key === 'original' ? ('downloads.original' | translate) : q.key }}
           </span>
           @if (q.estimatedSize) {
-            <span class="text-xs opacity-60">~{{ formatBytes(q.estimatedSize * batchCount()) }}</span>
+            <span class="text-sm opacity-60">~{{ formatBytes(q.estimatedSize * batchCount()) }}</span>
           }
         </button>
       }
@@ -73,7 +73,7 @@
         <svg lucideDownload class="h-4 w-4"></svg>
         {{ 'downloads.original_file' | translate }}
       </button>
-      <p class="text-xs text-base-content/60 mt-1">
+      <p class="text-sm text-base-content/60 mt-1">
         {{ 'downloads.original_file_note' | translate }}
       </p>
     }
@@ -90,7 +90,7 @@
   @if (downloading()) {
     <div class="mt-4">
       <progress class="progress progress-primary w-full" [value]="downloadProgress()" max="100"></progress>
-      <p class="text-xs text-center mt-1 text-base-content/60">{{ downloadProgress() }}%</p>
+      <p class="text-sm text-center mt-1 text-base-content/60">{{ downloadProgress() }}%</p>
     </div>
   }
 </dialog>
