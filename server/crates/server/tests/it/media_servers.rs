@@ -649,6 +649,33 @@ async fn dispatch_hits_enabled_subscribers_only(pool: PgPool) {
     assert_eq!(c.hits.0.lock().unwrap().len(), 1);
 }
 
+/// `acquisition.imported` keeps SSE and the queue event; the refresh belongs to `library.ingest`.
+#[sqlx::test(migrations = false)]
+async fn an_imported_event_does_not_dispatch_a_second_refresh(pool: PgPool) {
+    use fliks_server::plugins::{
+        events::publish,
+        runtime::fliks::plugin::types::{AcquisitionEvent, Family, Imported},
+    };
+    let c = ctx(pool).await;
+    add_server(&c, "ok", &["download.complete"], true).await;
+    let media: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type, "folderName") VALUES ('T', 'movie', 'T') RETURNING id"#,
+    )
+    .fetch_one(&c.st.db)
+    .await
+    .unwrap();
+    let event = AcquisitionEvent::Imported(Imported {
+        media_id: media as u32,
+        family: Family::Video,
+        unit: None,
+        quality: "x".into(),
+        source_title: "y".into(),
+    });
+    publish(&c.st, "acme", vec![event]).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(c.hits.0.lock().unwrap().is_empty());
+}
+
 async fn seed_library(pool: &PgPool) {
     let q = |s: &'static str| sqlx::query(s);
     sqlx::raw_sql(r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Movies', '["movie"]'), (2, 'Series', '["series"]');

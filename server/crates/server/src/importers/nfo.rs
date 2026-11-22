@@ -1,30 +1,22 @@
 //! File lookup of the NFO reader (`importers.md` rule 48); the parser is `fliks_domain::nfo`.
-use fliks_domain::nfo::{NfoData, parse};
+use fliks_domain::nfo::{MAX_BYTES, NfoData, parse};
 use std::{io::Read, path::Path};
-
-/// Larger files are cut here, far above any real `.nfo`.
-const MAX_BYTES: u64 = 1024 * 1024;
 
 /// The parsed file; `None` for a missing or unreadable one. Blocking: call it from `spawn_blocking`.
 pub fn read_nfo_file(path: &Path) -> Option<NfoData> {
     let mut bytes = vec![];
     std::fs::File::open(path)
         .ok()?
-        .take(MAX_BYTES)
+        .take(MAX_BYTES as u64)
         .read_to_end(&mut bytes)
         .ok()?;
     Some(parse(&String::from_utf8_lossy(&bytes)))
 }
 
-/// The `.nfo` files around a video merged most-specific first, stopping at the first that gives an id.
+/// A movie's `.nfo` files merged most-specific first, stopping at the first that gives an id.
 pub fn read_for_video_file(video: &Path) -> Option<NfoData> {
     let dir = video.parent()?;
-    let mut candidates = vec![
-        video.with_extension("nfo"),
-        dir.join("movie.nfo"),
-        dir.join("tvshow.nfo"),
-    ];
-    candidates.extend(dir.parent().map(|p| p.join("tvshow.nfo")));
+    let candidates = [video.with_extension("nfo"), dir.join("movie.nfo")];
     let mut merged: Option<NfoData> = None;
     for c in candidates {
         let Some(data) = read_nfo_file(&c) else {
@@ -89,8 +81,15 @@ mod tests {
         )
         .unwrap();
         let got = read_for_video_file(&season.join("Show.S01E01.mkv")).unwrap();
-        assert_eq!((got.title.as_deref(), got.tvdb_id), (Some("Ep"), Some(5)));
-        assert!(read_for_video_file(&dir.join("lone.mkv")).is_some());
+        assert_eq!((got.title.as_deref(), got.tvdb_id), (Some("Ep"), None));
+        assert!(read_for_video_file(&dir.join("lone.mkv")).is_none());
+        std::fs::write(
+            season.join("movie.nfo"),
+            "<m><uniqueid type='tmdb'>9</uniqueid></m>",
+        )
+        .unwrap();
+        let got = read_for_video_file(&season.join("Show.S01E01.mkv")).unwrap();
+        assert_eq!((got.title.as_deref(), got.tmdb_id), (Some("Ep"), Some(9)));
         assert!(read_nfo_file(&dir.join("missing.nfo")).is_none());
         let show = read_for_show_file(&dir, &season.join("Show.S01E01.mkv")).unwrap();
         assert_eq!(show.title.as_deref(), Some("Show"));

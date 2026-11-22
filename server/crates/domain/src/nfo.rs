@@ -60,12 +60,17 @@ impl NfoData {
     }
 }
 
+/// Larger input is cut here, far above any real `.nfo`.
+pub const MAX_BYTES: usize = 1024 * 1024;
+/// Deeper start tags are read as empty elements, which bounds every walk up the parents.
+const MAX_DEPTH: usize = 128;
+
 struct Element {
     name: String,
     attrs: Vec<(String, String)>,
     parent: Option<usize>,
-    /// Descendant text in document order.
-    text: String,
+    /// The text runs seen while the element was open: its descendant text in document order.
+    runs: std::ops::Range<usize>,
 }
 
 fn decode(s: &str) -> String {
@@ -110,13 +115,14 @@ fn decode(s: &str) -> String {
     out
 }
 
-/// Elements in document order; text lands on every open element.
-fn tokenize(xml: &str) -> Vec<Element> {
+/// Elements in document order and the text runs of the document, each stored once.
+fn tokenize(xml: &str) -> Doc {
     let mut els: Vec<Element> = vec![];
+    let mut texts: Vec<String> = vec![];
     let mut stack: Vec<usize> = vec![];
-    let add_text = |els: &mut Vec<Element>, stack: &[usize], t: &str| {
-        for &i in stack {
-            els[i].text.push_str(t);
+    let add_text = |texts: &mut Vec<String>, stack: &[usize], t: &str| {
+        if !stack.is_empty() {
+            texts.push(t.to_owned());
         }
     };
     let mut i = 0;
@@ -125,7 +131,7 @@ fn tokenize(xml: &str) -> Vec<Element> {
         if b[i] != b'<' {
             let end = xml[i..].find('<').map_or(b.len(), |n| i + n);
             let t = decode(&xml[i..end]);
-            add_text(&mut els, &stack, &t);
+            add_text(&mut texts, &stack, &t);
             i = end;
             continue;
         }
@@ -134,7 +140,7 @@ fn tokenize(xml: &str) -> Vec<Element> {
             i += rest.find("-->").map_or(rest.len(), |n| n + 3);
         } else if let Some(body) = rest.strip_prefix("<![CDATA[") {
             let n = body.find("]]>").unwrap_or(body.len());
-            add_text(&mut els, &stack, &body[..n]);
+            add_text(&mut texts, &stack, &body[..n]);
             i += 9 + n + if n < body.len() { 3 } else { 0 };
         } else if rest.starts_with("<!") || rest.starts_with("<?") {
             i += rest.find('>').map_or(rest.len(), |n| n + 1);
@@ -145,21 +151,33 @@ fn tokenize(xml: &str) -> Vec<Element> {
                 .next()
                 .unwrap_or("");
             if let Some(pos) = stack.iter().rposition(|&e| els[e].name == name) {
+                for &e in &stack[pos..] {
+                    els[e].runs.end = texts.len();
+                }
                 stack.truncate(pos);
             }
             i += 2 + (end + 1).min(close.len());
         } else if rest[1..].starts_with(|c: char| c.is_ascii_alphabetic()) {
-            i = open_tag(xml, i, &mut els, &mut stack);
+            i = open_tag(xml, i, &mut els, &mut stack, texts.len());
         } else {
-            add_text(&mut els, &stack, "<");
+            add_text(&mut texts, &stack, "<");
             i += 1;
         }
     }
-    els
+    for &e in &stack {
+        els[e].runs.end = texts.len();
+    }
+    Doc { els, texts }
 }
 
 /// Reads one start tag at `start`, pushes the element and returns the index after it.
-fn open_tag(xml: &str, start: usize, els: &mut Vec<Element>, stack: &mut Vec<usize>) -> usize {
+fn open_tag(
+    xml: &str,
+    start: usize,
+    els: &mut Vec<Element>,
+    stack: &mut Vec<usize>,
+    runs_seen: usize,
+) -> usize {
     let b = xml.as_bytes();
     let mut i = start + 1;
     let word_end = |from: usize, stops: &[u8]| {
@@ -228,31 +246,39 @@ fn open_tag(xml: &str, start: usize, els: &mut Vec<Element>, stack: &mut Vec<usi
         name,
         attrs,
         parent: stack.last().copied(),
-        text: String::new(),
+        runs: runs_seen..runs_seen,
     });
-    if !self_closing {
+    if !self_closing && stack.len() < MAX_DEPTH {
         stack.push(idx);
     }
     i
 }
 
-struct Doc(Vec<Element>);
+struct Doc {
+    els: Vec<Element>,
+    texts: Vec<String>,
+}
 
 impl Doc {
     fn named<'a>(&'a self, name: &'a str) -> impl Iterator<Item = usize> + 'a {
-        (0..self.0.len()).filter(move |&i| self.0[i].name == name)
+        (0..self.els.len()).filter(move |&i| self.els[i].name == name)
+    }
+
+    /// Descendant text of element `i` in document order.
+    fn text(&self, i: usize) -> String {
+        self.texts[self.els[i].runs.clone()].concat()
     }
 
     /// Text of the first element named `name`, `""` without one.
-    fn first(&self, name: &str) -> &str {
+    fn first(&self, name: &str) -> String {
         self.named(name)
             .next()
-            .map_or("", |i| self.0[i].text.as_str())
+            .map_or_else(String::new, |i| self.text(i))
     }
 
     fn has_ancestor(&self, mut i: usize, ok: impl Fn(&Element) -> bool) -> bool {
-        while let Some(p) = self.0[i].parent {
-            if ok(&self.0[p]) {
+        while let Some(p) = self.els[i].parent {
+            if ok(&self.els[p]) {
                 return true;
             }
             i = p;
@@ -261,7 +287,7 @@ impl Doc {
     }
 
     /// `ratings rating[default="true"] value` and `ratings rating value`.
-    fn rating_value(&self, only_default: bool) -> &str {
+    fn rating_value(&self, only_default: bool) -> String {
         let is_rating = |e: &Element| {
             e.name == "rating"
                 && (!only_default || e.attrs.iter().any(|(k, v)| k == "default" && v == "true"))
@@ -269,15 +295,15 @@ impl Doc {
         let in_ratings = |i: usize| self.has_ancestor(i, |e| e.name == "ratings");
         let hit = self.named("value").find(|&v| {
             let mut cur = v;
-            while let Some(p) = self.0[cur].parent {
-                if is_rating(&self.0[p]) && in_ratings(p) {
+            while let Some(p) = self.els[cur].parent {
+                if is_rating(&self.els[p]) && in_ratings(p) {
                     return true;
                 }
                 cur = p;
             }
             false
         });
-        hit.map_or("", |i| self.0[i].text.as_str())
+        hit.map_or_else(String::new, |i| self.text(i))
     }
 }
 
@@ -363,20 +389,30 @@ fn non_empty(s: &str) -> Option<String> {
     (!t.is_empty()).then(|| t.to_owned())
 }
 
+/// `xml` up to `MAX_BYTES`, ended on a character boundary.
+fn cut(xml: &str) -> &str {
+    let end = (0..=MAX_BYTES.min(xml.len()))
+        .rev()
+        .find(|&n| xml.is_char_boundary(n))
+        .unwrap_or(0);
+    &xml[..end]
+}
+
 /// Never fails: unreadable text gives `{}`.
 pub fn parse(xml: &str) -> NfoData {
-    let doc = Doc(tokenize(xml));
+    let doc = tokenize(cut(xml));
     let mut out = NfoData::default();
     let falsy = |n: Option<i64>| n.is_none_or(|n| n == 0);
 
     for i in doc.named("uniqueid") {
-        let e = &doc.0[i];
+        let e = &doc.els[i];
         let typ = e
             .attrs
             .iter()
             .find(|(k, _)| k == "type")
             .map_or(String::new(), |(_, v)| v.to_lowercase());
-        let value = trim(&e.text);
+        let text = doc.text(i);
+        let value = trim(&text);
         if value.is_empty() {
             continue;
         }
@@ -388,15 +424,16 @@ pub fn parse(xml: &str) -> NfoData {
         }
     }
     if falsy(out.tmdb_id) {
-        out.tmdb_id = parse_int(doc.first("tmdbid"));
+        out.tmdb_id = parse_int(&doc.first("tmdbid"));
     }
     if falsy(out.tvdb_id) {
-        out.tvdb_id = parse_int(doc.first("tvdbid"));
+        out.tvdb_id = parse_int(&doc.first("tvdbid"));
     }
     if out.imdb_id.is_none() {
-        out.imdb_id = non_empty(doc.first("imdbid"));
+        out.imdb_id = non_empty(&doc.first("imdbid"));
     }
-    let raw_id = trim(doc.first("id"));
+    let id = doc.first("id");
+    let raw_id = trim(&id);
     if raw_id.starts_with("tt") && out.imdb_id.is_none() {
         out.imdb_id = Some(raw_id.to_owned());
     } else if !raw_id.is_empty() && falsy(out.tvdb_id) && raw_id.bytes().all(|c| c.is_ascii_digit())
@@ -404,37 +441,37 @@ pub fn parse(xml: &str) -> NfoData {
         out.tvdb_id = parse_int(raw_id);
     }
 
-    out.title = non_empty(doc.first("showtitle")).or_else(|| non_empty(doc.first("title")));
-    out.original_title = non_empty(doc.first("originaltitle"));
-    out.plot = non_empty(doc.first("plot")).or_else(|| non_empty(doc.first("outline")));
+    out.title = non_empty(&doc.first("showtitle")).or_else(|| non_empty(&doc.first("title")));
+    out.original_title = non_empty(&doc.first("originaltitle"));
+    out.plot = non_empty(&doc.first("plot")).or_else(|| non_empty(&doc.first("outline")));
     let mut genres: Vec<String> = vec![];
     for i in doc.named("genre") {
-        if let Some(g) = non_empty(&doc.0[i].text)
+        if let Some(g) = non_empty(&doc.text(i))
             && !genres.contains(&g)
         {
             genres.push(g);
         }
     }
     out.genres = (!genres.is_empty()).then_some(genres);
-    out.runtime = parse_int(doc.first("runtime")).filter(|n| *n != 0);
+    out.runtime = parse_int(&doc.first("runtime")).filter(|n| *n != 0);
 
     let default = doc.rating_value(true);
     let any = doc.rating_value(false);
     let raw = [default, any, doc.first("rating")]
         .into_iter()
         .find(|s| !s.is_empty())
-        .unwrap_or("");
-    out.rating = rating(raw);
+        .unwrap_or_default();
+    out.rating = rating(&raw);
 
     let premiered = match doc.first("premiered") {
-        "" => doc.first("aired"),
+        p if p.is_empty() => doc.first("aired"),
         p => p,
     };
-    let premiered = trim(premiered);
+    let premiered = trim(&premiered);
     if let Some(iso) = iso_prefix(premiered).filter(|iso| valid_date(iso)) {
         out.premiered = Some(iso.to_owned());
     }
-    out.year = parse_int(doc.first("year"))
+    out.year = parse_int(&doc.first("year"))
         .filter(|n| *n != 0)
         .or_else(|| {
             let head: String = premiered.chars().take(4).collect();
@@ -479,6 +516,19 @@ mod tests {
         assert_eq!(n.plot.as_deref(), Some("x < y A"));
         let n = parse("<a><title>one</b>two</title></a>");
         assert_eq!(n.title.as_deref(), Some("onetwo"));
+    }
+
+    #[test]
+    fn hostile_nesting_and_size_stay_bounded() {
+        let deep = format!("{}{}", "<a>".repeat(250_000), "x".repeat(250_000));
+        assert_eq!(parse(&deep), NfoData::default());
+        let interleaved = "<a>x".repeat(250_000);
+        assert_eq!(parse(&interleaved), NfoData::default());
+        let past = format!("<m>{}<title>late</title></m>", " ".repeat(MAX_BYTES));
+        assert_eq!(parse(&past).title, None);
+        let nested = |depth: usize| parse(&format!("{}<title>T</title>", "<w>".repeat(depth)));
+        assert_eq!(nested(MAX_DEPTH - 1).title.as_deref(), Some("T"));
+        assert_eq!(nested(MAX_DEPTH + 10).title, None);
     }
 
     #[test]

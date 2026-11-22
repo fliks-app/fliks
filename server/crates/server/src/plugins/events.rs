@@ -6,7 +6,7 @@ use crate::events::{DomainEvent, Num, SseEvent};
 use crate::state::AppState;
 use crate::sync::MutexExt;
 use fliks_domain::media::{family::Family, kind::MediaKind};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -341,12 +341,6 @@ pub async fn publish(
                 let id = i.media_id as i32;
                 let (season, episode) = event_unit(i.family, i.unit.as_ref())?;
                 let title = media_row(st, id).await.map(|(t, _)| t).unwrap_or_default();
-                let notify = st.clone();
-                let payload =
-                    json!({"title": title, "quality": i.quality, "sourceTitle": i.source_title});
-                tokio::spawn(async move {
-                    crate::subtitles::events::notify(&notify, "download.complete", payload).await
-                });
                 let to = viewers(st, Some(id)).await;
                 st.hub.emit_to_users(
                     &to,
@@ -358,7 +352,6 @@ pub async fn publish(
                     },
                 );
                 st.hub.emit(SseEvent::QueueUpdated {});
-                crate::media_servers::dispatch_detached(st, "download.complete");
             }
             t::AcquisitionEvent::Failed(f) => {
                 let id = f.media_id as i32;
