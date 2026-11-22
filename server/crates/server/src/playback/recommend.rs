@@ -4,7 +4,6 @@ use fliks_domain::recommend::{
     Candidate, GenreWeight, HistoryMedia, RecommendationItem, Taste, rank_by_score, stratify,
 };
 use sqlx::{PgPool, types::Json};
-use std::collections::HashSet;
 
 /// The user's 15 most recent completed states, only those in `libs` when given; a state without
 /// media still uses a slot unless scoped.
@@ -63,54 +62,56 @@ pub async fn recommendations(
     let Some(taste) = Taste::from_history(&window(db, user, None).await?) else {
         return Ok(vec![]);
     };
-    let mut excluded: HashSet<i32> = taste.kept_ids().map(|id| id as i32).collect();
-    excluded.extend(
-        sqlx::query_scalar!(
-            r#"SELECT DISTINCT i."mediaId" FROM playback_states ps JOIN items i ON i.id = ps."itemId"
-               WHERE ps."userId" = $1"#,
-            user
-        )
-        .fetch_all(db)
-        .await?,
-    );
-    excluded.extend(
-        sqlx::query_scalar!(
-            r#"SELECT d."mediaId" FROM recommendation_dismissals d WHERE d."userId" = $1"#,
-            user
-        )
-        .fetch_all(db)
-        .await?,
-    );
-    let excluded: Vec<i32> = excluded.into_iter().collect();
+    let kept: Vec<i32> = taste.kept_ids().map(|id| id as i32).collect();
     let candidates = sqlx::query!(
-        r#"SELECT m.id, m.title, m.type AS "kind!", m.year, m."posterUrl" AS poster_url,
-                  m."fanartUrl" AS fanart_url, m."additionalFanartUrls" AS additional_fanart_urls,
-                  m.genres AS "genres: Json<Vec<String>>"
+        r#"SELECT m.id, m.type AS "kind!", m.genres AS "genres: Json<Vec<String>>"
            FROM media m
            WHERE m.genres IS NOT NULL AND m.genres != '[]'::jsonb AND m.type <> 'album'
-             AND m.id != ALL($1) AND m."libraryId" = ANY($2) AND m.type = ANY($3)"#,
-        &excluded,
+             AND m.id != ALL($1) AND m."libraryId" = ANY($2) AND m.type = ANY($3)
+             AND NOT EXISTS (SELECT 1 FROM playback_states ps JOIN items i ON i.id = ps."itemId"
+                             WHERE ps."userId" = $4 AND i."mediaId" = m.id)
+             AND NOT EXISTS (SELECT 1 FROM recommendation_dismissals d
+                             WHERE d."userId" = $4 AND d."mediaId" = m.id)"#,
+        &kept,
         libs,
-        &kinds.names()
+        &kinds.names(),
+        user
     )
     .fetch_all(db)
     .await?
     .into_iter()
     .map(|r| Candidate {
         id: r.id.into(),
-        title: r.title,
+        title: String::new(),
         kind: r.kind,
-        year: r.year.map(Into::into),
-        poster_url: r.poster_url,
-        fanart_url: r.fanart_url,
-        additional_fanart_urls: Some(r.additional_fanart_urls),
+        year: None,
+        poster_url: None,
+        fanart_url: None,
+        additional_fanart_urls: None,
         genres: r.genres.map(|g| g.0),
     })
     .collect();
     let mut scored = taste.score(candidates);
     rank_by_score(&mut scored);
-    let top = stratify(scored, limit);
+    let mut top = stratify(scored, limit);
     let ids: Vec<i32> = top.iter().map(|s| s.media.id as i32).collect();
+    let cards = sqlx::query!(
+        r#"SELECT m.id, m.title, m.year, m."posterUrl" AS poster_url, m."fanartUrl" AS fanart_url,
+                  m."additionalFanartUrls" AS additional_fanart_urls
+           FROM media m WHERE m.id = ANY($1)"#,
+        &ids
+    )
+    .fetch_all(db)
+    .await?;
+    for s in &mut top {
+        if let Some(r) = cards.iter().find(|r| i64::from(r.id) == s.media.id) {
+            s.media.title.clone_from(&r.title);
+            s.media.year = r.year.map(Into::into);
+            s.media.poster_url.clone_from(&r.poster_url);
+            s.media.fanart_url.clone_from(&r.fanart_url);
+            s.media.additional_fanart_urls = Some(r.additional_fanart_urls.clone());
+        }
+    }
     let available = sqlx::query_scalar!(
         r#"SELECT mf."mediaId"
            FROM media_files mf

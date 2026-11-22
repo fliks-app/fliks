@@ -65,6 +65,15 @@ fn widths(t: &Target) -> (Option<u32>, Option<u32>) {
     }
 }
 
+/// TMDB rendition stored as `full`: the smallest one that still covers the type's largest variant.
+fn tmdb_full(t: &Target) -> &'static str {
+    match t.kind {
+        Kind::Person => "h632",
+        Kind::Season => "w500",
+        _ => "original",
+    }
+}
+
 fn is_png(t: &Target) -> bool {
     t.kind == Kind::Livetv || (t.kind == Kind::Media && t.variant == Some(Variant::Logo))
 }
@@ -249,8 +258,8 @@ impl ImageStore {
         }
     }
 
-    /// `image.tmdb.org/t/p/<size>/<file>` is fetched at `original` (rule 5).
-    fn fetch_url(&self, url: &str) -> String {
+    /// `image.tmdb.org/t/p/<size>/<file>` is fetched at the type's `full` rendition (rule 5).
+    fn fetch_url(&self, url: &str, t: &Target) -> String {
         let Ok(mut u) = reqwest::Url::parse(url) else {
             return url.to_owned();
         };
@@ -261,7 +270,7 @@ impl ImageStore {
         if u.host_str() == Some("image.tmdb.org")
             && let Some((_, file)) = rest.filter(|(s, f)| !s.is_empty() && !f.is_empty())
         {
-            let path = format!("/t/p/original/{file}");
+            let path = format!("/t/p/{}/{file}", tmdb_full(t));
             u.set_path(&path);
             return u.into();
         }
@@ -443,8 +452,10 @@ impl ImageStore {
         if let Some(hit) = self.cached(t, key).await {
             return Some(hit);
         }
-        let _slot = self.net.acquire().await.ok()?;
-        let bytes = match source.await {
+        let slot = self.net.acquire().await.ok()?;
+        let bytes = source.await;
+        drop(slot);
+        let bytes = match bytes {
             Ok(b) => b,
             Err(e) => {
                 tracing::warn!("image {shown}: {e}");
@@ -474,7 +485,7 @@ impl ImageStore {
             self.run(
                 t,
                 url,
-                self.download(&self.fetch_url(url), t.kind == Kind::Livetv),
+                self.download(&self.fetch_url(url, t), t.kind == Kind::Livetv),
                 &shown,
             ),
         )
@@ -1012,7 +1023,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn tmdb_urls_are_fetched_at_original_and_other_hosts_untouched() {
+    async fn tmdb_urls_are_fetched_at_the_types_full_rendition_and_other_hosts_untouched() {
         let f = fx().await;
         f.serve("abc.jpg", jpeg(600, 900));
         let t = Target::media(1, Variant::Poster);
@@ -1039,9 +1050,15 @@ mod tests {
                 .unwrap();
         assert_eq!(side.url, url);
         assert_eq!(
-            f.store.fetch_url(&format!("{tmdb}/t/p/w500")),
+            f.store.fetch_url(&format!("{tmdb}/t/p/w500"), &t),
             format!("{tmdb}/t/p/w500")
         );
+        for (t, size) in [(Target::person(4), "h632"), (Target::season(5), "w500")] {
+            assert_eq!(
+                f.store.fetch_url(&format!("{tmdb}/t/p/w45/abc.jpg"), &t),
+                format!("{tmdb}/t/p/{size}/abc.jpg")
+            );
+        }
     }
 
     #[tokio::test]

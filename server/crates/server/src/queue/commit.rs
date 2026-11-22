@@ -534,7 +534,7 @@ pub async fn sync_rows(
         .and_then(|n| n.to_str())
         .unwrap_or_default()
         .to_owned();
-    rescan::refresh_content(
+    let info = rescan::refresh_content(
         st,
         now_at,
         &name,
@@ -560,7 +560,7 @@ pub async fn sync_rows(
     .await
     .map_err(sql)?
     .flatten();
-    crate::subtitles::embedded::detect_and_store(st, f.media_id, file_id, episode).await;
+    crate::subtitles::embedded::store_probed(st, f.media_id, file_id, episode, &info).await;
     crate::subtitles::events::emit(
         st,
         f.media_id,

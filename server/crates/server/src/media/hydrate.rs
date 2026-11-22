@@ -22,8 +22,8 @@ pub async fn items(db: &PgPool, ids: &[i32], see_paths: bool) -> Result<Vec<Valu
     items_view(db, ids, see_paths, false, None).await
 }
 
-/// `items`, or with `grid` the card shape (`media-query.md` rule 14a): first file only plus `fileCount`, briefer
-/// `library` and `qualityProfile`, no `alternativeTitles`.
+/// `items`, or with `grid` the card shape (`media-query.md` rule 14a): first file only (five keys, no `streamInfo`)
+/// plus `fileCount`, briefer `library` and `qualityProfile`, no `alternativeTitles`.
 /// With `acl` (the caller's readable libraries) the files of a book's hidden editions are left out (`books.md` rule 22).
 pub async fn items_view(
     db: &PgPool,
@@ -68,12 +68,14 @@ pub async fn items_view(
     'languageProfile', CASE WHEN lp.id IS NULL THEN 'null'::jsonb ELSE
       jsonb_build_object('id', lp.id, 'createdAt', iso_ms(lp."createdAt"), 'updatedAt', iso_ms(lp."updatedAt"),
         'name', lp.name, 'audioLanguages', lp."audioLanguages", 'subtitleLanguages', lp."subtitleLanguages") END,
-    'files', COALESCE((SELECT jsonb_agg(
-        jsonb_build_object('id', f.id, 'createdAt', iso_ms(f."createdAt"), 'updatedAt', iso_ms(f."updatedAt"),
+    'files', COALESCE((SELECT jsonb_agg(CASE WHEN $2 THEN
+        jsonb_build_object('id', f.id, 'quality', f.quality, 'relativePath', f."relativePath", 'size', f.size,
+          'episodeId', (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id))
+        ELSE jsonb_build_object('id', f.id, 'createdAt', iso_ms(f."createdAt"), 'updatedAt', iso_ms(f."updatedAt"),
           'relativePath', f."relativePath", 'size', f.size, 'quality', f.quality, 'language', f.language,
           'streamInfo', f."streamInfo", 'osdbHash', f."osdbHash", 'osdbBytesize', f."osdbBytesize",
           'mediaId', f."mediaId",
-          'episodeId', (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id)) ORDER BY f.id)
+          'episodeId', (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id)) END ORDER BY f.id)
       FROM media_files f WHERE f."mediaId" = media.id AND NOT f.id = ANY(hid.ids)
         AND (NOT $2 OR f.id = (SELECT MIN(g.id) FROM media_files g WHERE g."mediaId" = media.id AND NOT g.id = ANY(hid.ids)))), '[]'::jsonb),
     'sizeOnDisk', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = media.id AND NOT f.id = ANY(hid.ids)), 0))
@@ -136,15 +138,16 @@ WHERE media.id = ANY($1)"#
             };
             if grid {
                 obj.remove("alternativeTitles");
-            }
-            for f in obj
-                .get_mut("files")
-                .and_then(Value::as_array_mut)
-                .into_iter()
-                .flatten()
-            {
-                if let Some(info) = f.get_mut("streamInfo") {
-                    track_markers::annotate(info);
+            } else {
+                for f in obj
+                    .get_mut("files")
+                    .and_then(Value::as_array_mut)
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Some(info) = f.get_mut("streamInfo") {
+                        track_markers::annotate(info);
+                    }
                 }
             }
             if see_paths {
@@ -243,11 +246,11 @@ pub async fn credit_media(
 ) -> Result<HashMap<i32, Value>, sqlx::Error> {
     let mut meta = metadata(db, ids).await?;
     let mut out = HashMap::new();
-    for mut m in items(db, ids, see_paths).await? {
+    for mut m in items_view(db, ids, see_paths, true, None).await? {
         let Some(obj) = m.as_object_mut() else {
             continue;
         };
-        for k in ["files", "sizeOnDisk", "episodeStats"] {
+        for k in ["files", "fileCount", "sizeOnDisk", "episodeStats"] {
             obj.remove(k);
         }
         let id = obj

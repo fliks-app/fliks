@@ -89,7 +89,7 @@ Scope: `playback_history`, `cleanup_rules`, `cleanup_candidates`, `cleanup_exclu
 
 ### E. Routes
 
-19. `leaving-soon`: media with a non-null `deleteAt` on a whole-media candidate (season and episode candidates are not listed) in the viewer's accessible libraries (the `recently-added` ACL; each item is matched to its `deleteAt` by id, so an id that vanished meanwhile only drops out), ordered by `deleteAt`, `id`; each item is the `recently-added` card plus `deleteAt`.
+19. `leaving-soon`: media with a non-null `deleteAt` on a whole-media candidate (season and episode candidates are not listed) in the viewer's accessible libraries (the `recently-added` ACL; each item is matched to its `deleteAt` by id, so an id that vanished meanwhile only drops out), ordered by `deleteAt`, `id`, the first 20; each item is the `recently-added` card plus `deleteAt`.
 20. The media detail (`GET /api/media/{id}`) carries `deleteAt` (ISO) only when the media itself is flagged with a date; the key is absent otherwise. Likewise each season and episode object of `seasons` carries `deleteAt` when its own candidate has a date.
 21. `POST exclusions` is idempotent and removes the candidates it now protects in the same transaction.
 22. `delete-now` runs the candidate's rule action at once, whatever its `deleteAt`; for a rule with action `none` it deletes the media (an explicit gesture), or the scope's files for a season or episode candidate.

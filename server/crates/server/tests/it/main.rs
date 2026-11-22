@@ -52,6 +52,7 @@ mod smart_playlists;
 mod social;
 mod subsonic;
 mod topology;
+mod tvos_contract;
 mod users;
 
 /// The server binary read at run time: a nextest archive runs it where `env!` baked another path.

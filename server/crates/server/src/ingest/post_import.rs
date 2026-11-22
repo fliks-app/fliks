@@ -287,7 +287,7 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
         )
         .await;
     }
-    let probed = super::probe(
+    let probed = super::probe_hashed(
         st,
         &path,
         info.as_ref().is_some_and(|i| !i.video.is_empty()),

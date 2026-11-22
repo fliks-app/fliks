@@ -2,7 +2,7 @@
 use super::{
     MediaRow, drop_thumbnails, fsx,
     library::{Ep, file_name, season_episodes},
-    load_media, probe,
+    load_media, probe, probe_hashed,
 };
 use crate::{
     events::{Num, Subject},
@@ -198,7 +198,7 @@ pub async fn rescan_files(
     }
     let mut c = Counts::default();
     let mut slots_created = false;
-    let mut touched: Vec<(i32, Option<i32>)> = vec![];
+    let mut touched: Vec<Touched> = vec![];
     let mut slots = Slots::default();
     if media.has_seasons() {
         slots = Slots::load(&st.db, media_id).await?;
@@ -485,7 +485,7 @@ async fn refresh_existing(
     slots: &Slots,
     force: bool,
     c: &mut Counts,
-    touched: &mut Vec<(i32, Option<i32>)>,
+    touched: &mut Vec<Touched>,
 ) -> Result<(), AppError> {
     let media_id = media.id;
     let mut links: Vec<Link> = vec![];
@@ -539,7 +539,7 @@ async fn refresh_existing(
             && r.probe_version == Some(PROBE_VERSION)
         {
             if episode_id != r.episode_id {
-                touched.push((r.id, episode_id));
+                touched.push((r.id, episode_id, None));
             }
             continue;
         }
@@ -552,7 +552,7 @@ async fn refresh_existing(
             content_changed: !unchanged,
             timeline_preserved: false,
         };
-        let Ok(()) = refresh_content(st, &abs, &name, stored, change, disk_size, mtime)
+        let Ok(info) = refresh_content(st, &abs, &name, stored, change, disk_size, mtime)
             .await
             .inspect_err(|e| {
                 tracing::error!("Rescan[media #{media_id}] refresh \"{}\": {e}", r.rel)
@@ -561,7 +561,7 @@ async fn refresh_existing(
             continue;
         };
         c.updated += 1;
-        touched.push((r.id, episode_id));
+        touched.push((r.id, episode_id, Some(info)));
     }
     items::attach(&st.db, media_id, &links).await?;
     set_ends(&st.db, &ends).await?;
@@ -593,8 +593,8 @@ pub async fn refresh_content(
     change: Change,
     disk_size: i64,
     mtime: Option<i64>,
-) -> Result<(), String> {
-    let p = probe(st, abs, change.content_changed).await?;
+) -> Result<MediaInfo, String> {
+    let p = probe_hashed(st, abs, change.content_changed).await?;
     let mut info = p.info.clone();
     if let Some(old) = &stored.info
         && !change.content_changed
@@ -634,9 +634,9 @@ pub async fn refresh_content(
         st.engine.invalidate(stored.file_id as u32).await;
     }
     if change.content_changed || stored.mtime_ms.is_some_and(|m| Some(m) != mtime) {
-        crate::stream::spawn_scan(st, stored.file_id, abs.to_path_buf(), Some(info));
+        crate::stream::spawn_scan(st, stored.file_id, abs.to_path_buf(), Some(info.clone()));
     }
-    Ok(())
+    Ok(info)
 }
 
 async fn add_new(
@@ -646,7 +646,7 @@ async fn add_new(
     linked: &HashSet<String>,
     slots: &Slots,
     c: &mut Counts,
-    touched: &mut Vec<(i32, Option<i32>)>,
+    touched: &mut Vec<Touched>,
 ) -> Result<(), AppError> {
     let media_id = media.id;
     let Some(folder_id) = media.folder.as_ref().map(|f| f.id) else {
@@ -693,15 +693,16 @@ async fn add_new(
             size: meta.len() as i64,
             quality,
             info: serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?,
+            probed: p.info,
             mtime: mtime_ms(&meta),
         });
     }
     if fresh.is_empty() {
         return Ok(());
     }
-    let by_rel: HashMap<&str, (Option<i32>, Option<i32>)> = fresh
+    let by_rel: HashMap<&str, (Option<i32>, Option<i32>, &MediaInfo)> = fresh
         .iter()
-        .map(|n| (n.rel.as_str(), (n.episode_id, n.last)))
+        .map(|n| (n.rel.as_str(), (n.episode_id, n.last, &n.probed)))
         .collect();
     let inserted = match insert_rows(&st.db, media_id, folder_id, &fresh).await {
         Ok(rows) => rows,
@@ -725,8 +726,10 @@ async fn add_new(
     };
     let mut links = vec![];
     for (id, rel) in inserted {
-        let (ep, last) = by_rel.get(rel.as_str()).copied().unwrap_or_default();
-        touched.push((id, ep));
+        let (ep, last, info) = by_rel
+            .get(rel.as_str())
+            .map_or((None, None, None), |&(e, l, i)| (e, l, Some(i.clone())));
+        touched.push((id, ep, info));
         c.added += 1;
         links.push(Link {
             file: id,
@@ -766,6 +769,9 @@ async fn insert_rows(
     Ok(rows.into_iter().map(|r| (r.id, r.rel)).collect())
 }
 
+/// A file the pass added, re-probed or relinked, with its probe unless it was only relinked.
+type Touched = (i32, Option<i32>, Option<MediaInfo>);
+
 struct NewRow {
     rel: String,
     episode_id: Option<i32>,
@@ -773,6 +779,7 @@ struct NewRow {
     size: i64,
     quality: String,
     info: serde_json::Value,
+    probed: MediaInfo,
     mtime: Option<i64>,
 }
 
@@ -906,12 +913,12 @@ impl Slots {
     }
 }
 
-/// Embedded detection probes again, so it runs only for files this pass added, re-probed or relinked.
+/// Embedded detection reuses the pass's probe; a relinked file was not probed, so it probes here.
 async fn reconcile_subtitles(
     st: &AppState,
     media_id: i32,
     c: &mut Counts,
-    touched: &[(i32, Option<i32>)],
+    touched: &[Touched],
     walk_complete: bool,
 ) {
     if walk_complete {
@@ -921,8 +928,15 @@ async fn reconcile_subtitles(
         c.subtitle_removed_duplicates = dupes as i64;
         crate::subtitles::sidecars::discover_external(st, media_id).await;
     }
-    for &(file, episode) in touched {
-        crate::subtitles::embedded::detect_and_store(st, media_id, file, episode).await;
+    for (file, episode, info) in touched {
+        match info {
+            Some(info) => {
+                crate::subtitles::embedded::store_probed(st, media_id, *file, *episode, info).await
+            }
+            None => {
+                crate::subtitles::embedded::detect_and_store(st, media_id, *file, *episode).await
+            }
+        };
     }
 }
 
