@@ -94,11 +94,14 @@ fn unmapped(ip: IpAddr) -> IpAddr {
     }
 }
 
-/// A cloud metadata service (`100.100.100.200`, `fd00:ec2::254`), embedded IPv4 included.
+/// A cloud metadata service (`100.100.100.200`, `fd00:ec2::254`, `fd20:ce::254`), embedded IPv4 included.
 pub fn is_metadata(ip: IpAddr) -> bool {
-    const AWS_V6: Ipv6Addr = Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254);
+    const V6: [Ipv6Addr; 2] = [
+        Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254),
+        Ipv6Addr::new(0xfd20, 0xce, 0, 0, 0, 0, 0, 0x254),
+    ];
     let ip = unmapped(ip);
-    ip == IpAddr::from([100, 100, 100, 200]) || ip == IpAddr::V6(AWS_V6)
+    ip == IpAddr::from([100, 100, 100, 200]) || matches!(ip, IpAddr::V6(v) if V6.contains(&v))
 }
 
 /// Loopback or a cloud metadata service, embedded IPv4 included.
@@ -188,6 +191,7 @@ mod never_tests {
             "64:ff9b:1:7f00:0:100::",
             "100.100.100.200",
             "fd00:ec2::254",
+            "fd20:ce::254",
         ] {
             assert!(is_loopback_or_metadata(ip.parse().unwrap()), "{ip}");
         }

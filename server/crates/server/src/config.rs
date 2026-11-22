@@ -28,6 +28,8 @@ impl std::fmt::Debug for Secret {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub port: u16,
+    /// `FLIKS_PUBLIC_PORT`: the port of the engine's public listener, which forwards to `port`.
+    pub public_port: Option<u16>,
     /// `FLIKS_BIND`: listen address, 0.0.0.0 unless set (the image sets loopback).
     pub bind: IpAddr,
     pub db: PgConnectOptions,
@@ -83,6 +85,9 @@ impl Config {
             .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
         Self {
             port,
+            public_port: get("FLIKS_PUBLIC_PORT")
+                .and_then(|v| v.trim().parse().ok())
+                .filter(|n| *n != 0),
             bind,
             db,
             db_password: Secret(db_password),
@@ -172,6 +177,16 @@ mod tests {
         assert_eq!(cfg(&[("PORT", "abc")]).port, 4849);
         assert_eq!(cfg(&[("PORT", "0")]).port, 4849);
         assert_eq!(cfg(&[("PORT", "3001")]).port, 3001);
+    }
+
+    #[test]
+    fn public_port_is_unset_unless_a_valid_port_is_given() {
+        assert_eq!(cfg(&[]).public_port, None);
+        assert_eq!(cfg(&[("FLIKS_PUBLIC_PORT", "abc")]).public_port, None);
+        assert_eq!(
+            cfg(&[("FLIKS_PUBLIC_PORT", "4848")]).public_port,
+            Some(4848)
+        );
     }
 
     #[test]

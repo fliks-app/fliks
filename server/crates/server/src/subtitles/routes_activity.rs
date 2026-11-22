@@ -269,7 +269,8 @@ pub async fn missing(
 ) -> Res<Json<Value>> {
     policy(&a, Action::Read)?;
     let (page, limit) = page_limit(&q, 50.0, Some((1.0, 500.0)))?;
-    let burn_in = crate::settings::flag(&st.db, "subtitle_burn_in_covers_language", false).await;
+    let burn_in =
+        crate::settings::try_flag(&st.db, "subtitle_burn_in_covers_language", false).await?;
     let codecs: Vec<String> = if burn_in {
         vec![]
     } else {

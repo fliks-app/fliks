@@ -564,7 +564,7 @@ fn notify_account(
     notifications::dispatch(
         &st.db,
         event,
-        json!({"sourceName": source.name, "expiresAt": expires.map(iso)}),
+        notifications::payload!({"sourceName": source.name, "expiresAt": expires.map(iso)}),
     );
 }
 
@@ -579,7 +579,7 @@ async fn adult_guard(st: &AppState, source: &Source, groups: Vec<String>) {
             notifications::dispatch(
                 &st.db,
                 "livetv.adult_guard_failed",
-                json!({"sourceName": source.name}),
+                notifications::payload!({"sourceName": source.name}),
             );
             Some(e)
         }

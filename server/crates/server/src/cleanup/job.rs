@@ -9,11 +9,12 @@ use crate::{
         delete_media_file, remove_media_folder, remove_media_with_dir, set_media_monitored,
         set_season_monitored,
     },
+    notifications,
     requests::services,
     settings,
     state::AppState,
 };
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use tokio::sync::OwnedMutexGuard;
 
@@ -21,12 +22,6 @@ type Key = (i32, Option<i32>, Option<i32>);
 
 const MAX_PER_RUN_KEY: &str = "cleanup_max_per_run";
 const DEFAULT_MAX_PER_RUN: i64 = 10;
-
-fn notify(st: &AppState, event: &'static str, payload: Value) {
-    if let Value::Object(p) = payload {
-        services::notify(st, event, p, None);
-    }
-}
 
 pub async fn run(st: &AppState) -> Result<(), String> {
     let flagged = flag(st).await.map_err(|e| e.to_string())?;
@@ -154,20 +149,20 @@ async fn remind(st: &AppState, fresh: &[i32]) -> sqlx::Result<()> {
                 .execute(&st.db)
                 .await?;
         }
-        let mut p = json!({"title": d.title, "mediaId": d.media, "deleteAt": d.delete_at, "daysLeft": d.days_left});
+        let mut p = notifications::payload!({"title": d.title, "mediaId": d.media, "deleteAt": d.delete_at, "daysLeft": d.days_left});
         scope_numbers(&mut p, d.season, d.episode);
-        notify(st, "media.leaving_soon", p);
+        services::notify(st, "media.leaving_soon", p, None);
     }
     Ok(())
 }
 
 /// Adds `seasonNumber` / `episodeNumber` to a notification payload when scoped.
-fn scope_numbers(payload: &mut Value, season: Option<i32>, episode: Option<i32>) {
+fn scope_numbers(payload: &mut Map<String, Value>, season: Option<i32>, episode: Option<i32>) {
     if let Some(s) = season {
-        payload["seasonNumber"] = json!(s);
+        payload.insert("seasonNumber".into(), json!(s));
     }
     if let Some(e) = episode {
-        payload["episodeNumber"] = json!(e);
+        payload.insert("episodeNumber".into(), json!(e));
     }
 }
 
@@ -228,10 +223,11 @@ async fn unmonitor_whole(
         .await
         .map_err(|e| e.to_string())?;
     drop(lock);
-    notify(
+    services::notify(
         st,
         "media.cleaned_up",
-        json!({"title": media.title, "mediaId": id, "action": action}),
+        notifications::payload!({"title": media.title, "mediaId": id, "action": action}),
+        None,
     );
     Ok(())
 }
@@ -256,10 +252,11 @@ async fn remove_whole(
         return Err(e);
     }
     drop(lock);
-    notify(
+    services::notify(
         st,
         "media.cleaned_up",
-        json!({"title": media.title, "mediaId": id, "action": action}),
+        notifications::payload!({"title": media.title, "mediaId": id, "action": action}),
+        None,
     );
     Ok(())
 }
@@ -330,9 +327,9 @@ async fn act_scope(
     .fetch_one(&st.db)
     .await
     .map_err(err)?;
-    let mut p = json!({"title": media.title, "mediaId": id, "action": action});
+    let mut p = notifications::payload!({"title": media.title, "mediaId": id, "action": action});
     scope_numbers(&mut p, season, episode);
-    notify(st, "media.cleaned_up", p);
+    services::notify(st, "media.cleaned_up", p, None);
     if delete_series_when_empty && empty {
         remove_whole(st, id, "delete", lock).await?;
     }

@@ -60,10 +60,7 @@ async fn deliver(
 
 /// Spawned: sends to every enabled connection subscribed to `event`. A failing sender affects
 /// neither the others nor the caller, and everything that fails is logged.
-pub fn dispatch(pool: &PgPool, event: &str, payload: impl Into<Value>) {
-    let Value::Object(payload) = payload.into() else {
-        return;
-    };
+pub fn dispatch(pool: &PgPool, event: &str, payload: Map<String, Value>) {
     let (pool, event) = (pool.clone(), event.to_owned());
     tokio::spawn(async move {
         match db::subscribed(&pool, &event).await {

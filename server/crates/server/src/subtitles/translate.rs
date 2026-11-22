@@ -80,7 +80,7 @@ pub async fn start(
     provider_id: Option<i32>,
     remove_hi_tags: bool,
 ) -> Result<Value, AppError> {
-    if !settings::flag(&st.db, "subtitle_translation_enabled", false).await {
+    if !settings::try_flag(&st.db, "subtitle_translation_enabled", false).await? {
         return Err(AppError::bad_request("errors.translation_disabled"));
     }
     let provider = match provider_id {
@@ -117,7 +117,7 @@ pub async fn start(
         return Err(AppError::bad_request("errors.source_target_language_same"));
     }
     let remove_hi =
-        remove_hi_tags || settings::flag(&st.db, "subtitle_remove_hi_tags", false).await;
+        remove_hi_tags || settings::try_flag(&st.db, "subtitle_remove_hi_tags", false).await?;
     let hi = source.hearing_impaired && !remove_hi;
     let key = format!(
         "{}:{}:{target}:{}:{hi}",
