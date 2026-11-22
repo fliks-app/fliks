@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id, m.title, m.type AS \"kind!\", m.year, m.\"posterUrl\" AS poster_url,\n                  m.\"fanartUrl\" AS fanart_url, m.\"additionalFanartUrls\" AS additional_fanart_urls,\n                  m.genres AS \"genres: Json<Vec<String>>\"\n           FROM media m\n           WHERE m.genres IS NOT NULL AND m.genres != '[]'::jsonb AND m.type <> 'album'\n             AND m.id != ALL($1) AND m.\"libraryId\" = ANY($2) AND m.type = ANY($3)",
+  "query": "SELECT m.id, m.title, m.year, m.\"posterUrl\" AS poster_url, m.\"fanartUrl\" AS fanart_url,\n                  m.\"additionalFanartUrls\" AS additional_fanart_urls\n           FROM media m WHERE m.id = ANY($1)",
   "describe": {
     "columns": [
       {
@@ -27,17 +27,6 @@
       },
       {
         "ordinal": 2,
-        "name": "kind!",
-        "type_info": "Text",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "type"
-          }
-        }
-      },
-      {
-        "ordinal": 3,
         "name": "year",
         "type_info": "Int4",
         "origin": {
@@ -48,7 +37,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 3,
         "name": "poster_url",
         "type_info": "Varchar",
         "origin": {
@@ -59,7 +48,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 4,
         "name": "fanart_url",
         "type_info": "Varchar",
         "origin": {
@@ -70,7 +59,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "additional_fanart_urls",
         "type_info": "TextArray",
         "origin": {
@@ -79,36 +68,21 @@
             "name": "additionalFanartUrls"
           }
         }
-      },
-      {
-        "ordinal": 7,
-        "name": "genres: Json<Vec<String>>",
-        "type_info": "Jsonb",
-        "origin": {
-          "Table": {
-            "table": "media",
-            "name": "genres"
-          }
-        }
       }
     ],
     "parameters": {
       "Left": [
-        "Int4Array",
-        "Int4Array",
-        "TextArray"
+        "Int4Array"
       ]
     },
     "nullable": [
       false,
       false,
-      false,
       true,
       true,
       true,
-      false,
-      true
+      false
     ]
   },
-  "hash": "5df297e9bdebd73ea4549ebfb2ee4a1b52a2d9bd3755d681b1ecc6109b231125"
+  "hash": "b67bc5da76d7d82dea0efa0a520f2cf79f29145eeb2925a23e77f7f761698880"
 }

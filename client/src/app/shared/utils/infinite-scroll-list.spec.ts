@@ -20,6 +20,15 @@ describe('InfiniteScrollList', () => {
     expect(list().grid.rows().map((r) => r.items.map((p) => p.id))).toEqual([[1, 2], [3, 4], [5]]);
   });
 
+  it('patches one item in place by id', () => {
+    const l = list();
+    l.patch(2, { name: 'Zed' });
+    expect(l.all().map((p) => p.name)).toEqual(['Alpha', 'Zed', 'Bravo', 'Charlie', 'Delta']);
+    expect(l.grid.rows()[0].items[1].name).toBe('Zed');
+    l.patch(99, { name: 'none' });
+    expect(l.all()).toHaveLength(5);
+  });
+
   it('jumps to the row of a letter, measured from the document', () => {
     const l = list();
     const host = document.createElement('div');

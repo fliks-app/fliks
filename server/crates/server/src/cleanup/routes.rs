@@ -308,12 +308,12 @@ pub async fn leaving_soon(State(st): State<AppState>, a: Authed) -> Res<Json<Vec
     let ids = accessible_library_ids(&st.db, &a).await?;
     let rows = db::leaving_soon(&st.db, &ids, &a.kinds.names()).await?;
     let page: Vec<i32> = rows.iter().map(|r| r.0).collect();
-    let mut items = hydrate::items(&st.db, &page, paths_visible(&a.perms)).await?;
+    let mut items = hydrate::items_view(&st.db, &page, paths_visible(&a.perms), true, None).await?;
     with_delete_at(&mut items, &rows);
     Ok(Json(items))
 }
 
-/// By id: `hydrate::items` drops media that vanished since `rows` was read.
+/// By id: `hydrate::items_view` drops media that vanished since `rows` was read.
 pub(super) fn with_delete_at(items: &mut [Value], rows: &[(i32, String)]) {
     let at: HashMap<i64, &str> = rows
         .iter()

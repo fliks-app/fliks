@@ -14,18 +14,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-04T07:00:00.000Z",
                 "episodeId": null,
                 "id": 54,
-                "language": "en",
-                "mediaId": 51,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "No Signal Movie (2020)/No Signal Movie (2020).mkv",
-                "size": 1000054,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000054
               }
             ],
             "folderName": "No Signal Movie (2020)",
@@ -76,18 +69,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-02T18:00:00.000Z",
                 "episodeId": null,
                 "id": 53,
-                "language": "en",
-                "mediaId": 50,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Cal Movie Release Inside Cinema Outside (2020)/Cal Movie Release Inside Cinema Outside (2020).mkv",
-                "size": 1000053,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000053
               }
             ],
             "folderName": "Cal Movie Release Inside Cinema Outside (2020)",
@@ -138,18 +124,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-01T05:00:00.000Z",
                 "episodeId": null,
                 "id": 52,
-                "language": "en",
-                "mediaId": 49,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Cal Movie Release Only (2020)/Cal Movie Release Only (2020).mkv",
-                "size": 1000052,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000052
               }
             ],
             "folderName": "Cal Movie Release Only (2020)",
@@ -200,18 +179,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T21:00:00.000Z",
                 "episodeId": null,
                 "id": 51,
-                "language": "en",
-                "mediaId": 48,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Cal Movie Cinema Digital (2020)/Cal Movie Cinema Digital (2020).mkv",
-                "size": 1000051,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000051
               }
             ],
             "folderName": "Cal Movie Cinema Digital (2020)",
@@ -266,18 +238,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-02T11:00:00.000Z",
                 "episodeId": 27,
                 "id": 61,
-                "language": "en",
-                "mediaId": 47,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Series Calendar (2020)/Season 01/e27.mkv",
-                "size": 1000061,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000061
               }
             ],
             "folderName": "Series Calendar (2020)",
@@ -385,18 +350,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T14:00:00.000Z",
                 "episodeId": 23,
                 "id": 59,
-                "language": "en",
-                "mediaId": 45,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Series Half Watched (2020)/Season 01/e23.mkv",
-                "size": 1000059,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000059
               }
             ],
             "folderName": "Series Half Watched (2020)",
@@ -451,18 +409,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-02T01:00:00.000Z",
                 "episodeId": 20,
                 "id": 58,
-                "language": "en",
-                "mediaId": 44,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "Bluray-1080p",
                 "relativePath": "Series Watched (2020)/Season 01/e20.mkv",
-                "size": 1000058,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000058
               }
             ],
             "folderName": "Series Watched (2020)",
@@ -520,18 +471,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-04T17:00:00.000Z",
                 "episodeId": 13,
                 "id": 57,
-                "language": "en",
-                "mediaId": 43,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-720p",
                 "relativePath": "Series Multi (2020)/Season 01/e13.mkv",
-                "size": 1000057,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000057
               }
             ],
             "folderName": "Series Multi (2020)",
@@ -635,18 +579,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-05T00:00:00.000Z",
                 "episodeId": null,
                 "id": 49,
-                "language": "en",
-                "mediaId": 41,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Language Profile Movie (2020)/Language Profile Movie (2020).mkv",
-                "size": 1000049,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000049
               }
             ],
             "folderName": "Language Profile Movie (2020)",
@@ -704,18 +641,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T11:00:00.000Z",
                 "episodeId": null,
                 "id": 48,
-                "language": "en",
-                "mediaId": 40,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Unknown Cutoff Movie (2020)/Unknown Cutoff Movie (2020).mkv",
-                "size": 1000048,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000048
               }
             ],
             "folderName": "Unknown Cutoff Movie (2020)",
@@ -769,18 +699,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-01T22:00:00.000Z",
                 "episodeId": null,
                 "id": 47,
-                "language": "en",
-                "mediaId": 39,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "576p WEB-DL",
                 "relativePath": "Profile Movie 8K (2020)/Profile Movie 8K (2020).mkv",
-                "size": 1000047,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000047
               }
             ],
             "folderName": "Profile Movie 8K (2020)",
@@ -834,18 +757,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-04T14:00:00.000Z",
                 "episodeId": null,
                 "id": 46,
-                "language": "en",
-                "mediaId": 38,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "",
                 "relativePath": "Profile Movie Empty Quality (2020)/Profile Movie Empty Quality (2020).mkv",
-                "size": 1000046,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000046
               }
             ],
             "folderName": "Profile Movie Empty Quality (2020)",
@@ -899,22 +815,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T01:00:00.000Z",
                 "episodeId": null,
                 "id": 45,
-                "language": "en",
-                "mediaId": 37,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "Bluray-1080p",
                 "relativePath": "Profile Movie Met (2020)/Profile Movie Met (2020).mkv",
-                "size": 1000045,
-                "streamInfo": {
-                  "audio": [],
-                  "subtitles": [],
-                  "video": []
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000045
               }
             ],
             "folderName": "Profile Movie Met (2020)",
@@ -968,18 +873,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-01T12:00:00.000Z",
                 "episodeId": null,
                 "id": 44,
-                "language": "en",
-                "mediaId": 36,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-720p",
                 "relativePath": "Profile Movie Unmet (2020)/Profile Movie Unmet (2020).mkv",
-                "size": 1000044,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000044
               }
             ],
             "folderName": "Profile Movie Unmet (2020)",
@@ -1033,22 +931,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-05T04:00:00.000Z",
                 "episodeId": null,
                 "id": 30,
-                "language": "en",
-                "mediaId": 21,
-                "osdbBytesize": 12345678901,
-                "osdbHash": "8e245d9679d31e12",
                 "quality": "WEBDL-1080p",
                 "relativePath": "alpha test (2020)/alpha test (2020).mkv",
-                "size": 1000030,
-                "streamInfo": {
-                  "audio": [],
-                  "subtitles": [],
-                  "video": []
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000030
               }
             ],
             "folderName": "alpha test (2020)",
@@ -1108,63 +995,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T12:00:00.000Z",
                 "episodeId": 1,
                 "id": 18,
-                "language": "en",
-                "mediaId": 18,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Parity Series A/Season 01/Parity Series A - S01E01.mkv",
-                "size": 73237,
-                "streamInfo": {
-                  "audio": [
-                    {
-                      "channelLayout": "mono",
-                      "channels": 1,
-                      "codec": "aac",
-                      "endSeconds": 3.021,
-                      "isDefault": false,
-                      "language": "eng",
-                      "profile": "LC",
-                      "sampleRate": 48000,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 1
-                    }
-                  ],
-                  "chapters": [],
-                  "durationSeconds": 3.021,
-                  "formatBitRate": 193941,
-                  "formatName": "matroska,webm",
-                  "formatStartSeconds": 0,
-                  "subtitles": [],
-                  "video": [
-                    {
-                      "avgFrameRate": "24/1",
-                      "bitDepth": 8,
-                      "codec": "h264",
-                      "colorRange": "tv",
-                      "displayAspectRatio": "16:9",
-                      "dvBlPresent": false,
-                      "dvElPresent": false,
-                      "dvRpuPresent": false,
-                      "endSeconds": 3,
-                      "firstFrameSeconds": 0,
-                      "frameRate": "24",
-                      "hdr10Plus": false,
-                      "height": 90,
-                      "level": 10,
-                      "pixelFormat": "yuv420p",
-                      "profile": "High",
-                      "reorderFrames": 2,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 0,
-                      "width": 160
-                    }
-                  ]
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 73237
               }
             ],
             "folderName": "Parity Series A",
@@ -1217,18 +1052,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-04T04:00:00.000Z",
                 "episodeId": null,
                 "id": 43,
-                "language": "en",
-                "mediaId": 35,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Collection Other Library (2020)/Collection Other Library (2020).mkv",
-                "size": 1000043,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000043
               }
             ],
             "folderName": "Collection Other Library (2020)",
@@ -1279,64 +1107,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-04T22:00:00.000Z",
                 "episodeId": null,
                 "id": 8,
-                "language": "en",
-                "mediaId": 8,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Parity Movie 08 (2020)/Parity Movie 08 (2020).mp4",
-                "size": 74465,
-                "streamInfo": {
-                  "audio": [
-                    {
-                      "bitRate": 64628,
-                      "channelLayout": "mono",
-                      "channels": 1,
-                      "codec": "aac",
-                      "endSeconds": 3,
-                      "isDefault": true,
-                      "language": "eng",
-                      "profile": "LC",
-                      "sampleRate": 48000,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 1
-                    }
-                  ],
-                  "chapters": [],
-                  "durationSeconds": 3,
-                  "formatBitRate": 198573,
-                  "formatName": "mov,mp4,m4a,3gp,3g2,mj2",
-                  "formatStartSeconds": 0,
-                  "subtitles": [],
-                  "video": [
-                    {
-                      "avgFrameRate": "24/1",
-                      "bitDepth": 8,
-                      "bitRate": 124082,
-                      "codec": "h264",
-                      "displayAspectRatio": "16:9",
-                      "dvBlPresent": false,
-                      "dvElPresent": false,
-                      "dvRpuPresent": false,
-                      "endSeconds": 3,
-                      "firstFrameSeconds": 0,
-                      "frameRate": "24",
-                      "hdr10Plus": false,
-                      "height": 90,
-                      "level": 10,
-                      "pixelFormat": "yuv420p",
-                      "profile": "High",
-                      "reorderFrames": 2,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 0,
-                      "width": 160
-                    }
-                  ]
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 74465
               }
             ],
             "folderName": "Parity Movie 08 (2020)",

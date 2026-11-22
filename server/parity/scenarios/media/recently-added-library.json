@@ -18,18 +18,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T14:00:00.000Z",
                 "episodeId": 23,
                 "id": 59,
-                "language": "en",
-                "mediaId": 45,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Series Half Watched (2020)/Season 01/e23.mkv",
-                "size": 1000059,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000059
               }
             ],
             "folderName": "Series Half Watched (2020)",
@@ -84,63 +77,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T12:00:00.000Z",
                 "episodeId": 1,
                 "id": 18,
-                "language": "en",
-                "mediaId": 18,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Parity Series A/Season 01/Parity Series A - S01E01.mkv",
-                "size": 73237,
-                "streamInfo": {
-                  "audio": [
-                    {
-                      "channelLayout": "mono",
-                      "channels": 1,
-                      "codec": "aac",
-                      "endSeconds": 3.021,
-                      "isDefault": false,
-                      "language": "eng",
-                      "profile": "LC",
-                      "sampleRate": 48000,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 1
-                    }
-                  ],
-                  "chapters": [],
-                  "durationSeconds": 3.021,
-                  "formatBitRate": 193941,
-                  "formatName": "matroska,webm",
-                  "formatStartSeconds": 0,
-                  "subtitles": [],
-                  "video": [
-                    {
-                      "avgFrameRate": "24/1",
-                      "bitDepth": 8,
-                      "codec": "h264",
-                      "colorRange": "tv",
-                      "displayAspectRatio": "16:9",
-                      "dvBlPresent": false,
-                      "dvElPresent": false,
-                      "dvRpuPresent": false,
-                      "endSeconds": 3,
-                      "firstFrameSeconds": 0,
-                      "frameRate": "24",
-                      "hdr10Plus": false,
-                      "height": 90,
-                      "level": 10,
-                      "pixelFormat": "yuv420p",
-                      "profile": "High",
-                      "reorderFrames": 2,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 0,
-                      "width": 160
-                    }
-                  ]
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 73237
               }
             ],
             "folderName": "Parity Series A",
@@ -197,63 +138,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T05:00:00.000Z",
                 "episodeId": 9,
                 "id": 26,
-                "language": "en",
-                "mediaId": 20,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Parity Series C/Season 01/Parity Series C - S01E01.mkv",
-                "size": 73237,
-                "streamInfo": {
-                  "audio": [
-                    {
-                      "channelLayout": "mono",
-                      "channels": 1,
-                      "codec": "aac",
-                      "endSeconds": 3.021,
-                      "isDefault": false,
-                      "language": "eng",
-                      "profile": "LC",
-                      "sampleRate": 48000,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 1
-                    }
-                  ],
-                  "chapters": [],
-                  "durationSeconds": 3.021,
-                  "formatBitRate": 193941,
-                  "formatName": "matroska,webm",
-                  "formatStartSeconds": 0,
-                  "subtitles": [],
-                  "video": [
-                    {
-                      "avgFrameRate": "24/1",
-                      "bitDepth": 8,
-                      "codec": "h264",
-                      "colorRange": "tv",
-                      "displayAspectRatio": "16:9",
-                      "dvBlPresent": false,
-                      "dvElPresent": false,
-                      "dvRpuPresent": false,
-                      "endSeconds": 3,
-                      "firstFrameSeconds": 0,
-                      "frameRate": "24",
-                      "hdr10Plus": false,
-                      "height": 90,
-                      "level": 10,
-                      "pixelFormat": "yuv420p",
-                      "profile": "High",
-                      "reorderFrames": 2,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 0,
-                      "width": 160
-                    }
-                  ]
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 73237
               }
             ],
             "folderName": "Parity Series C",
@@ -311,18 +200,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-04T17:00:00.000Z",
                 "episodeId": 13,
                 "id": 57,
-                "language": "en",
-                "mediaId": 43,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-720p",
                 "relativePath": "Series Multi (2020)/Season 01/e13.mkv",
-                "size": 1000057,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000057
               }
             ],
             "folderName": "Series Multi (2020)",
@@ -383,63 +265,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-01T06:00:00.000Z",
                 "episodeId": 5,
                 "id": 22,
-                "language": "en",
-                "mediaId": 19,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Parity Series B/Season 01/Parity Series B - S01E01.mkv",
-                "size": 73237,
-                "streamInfo": {
-                  "audio": [
-                    {
-                      "channelLayout": "mono",
-                      "channels": 1,
-                      "codec": "aac",
-                      "endSeconds": 3.021,
-                      "isDefault": false,
-                      "language": "eng",
-                      "profile": "LC",
-                      "sampleRate": 48000,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 1
-                    }
-                  ],
-                  "chapters": [],
-                  "durationSeconds": 3.021,
-                  "formatBitRate": 193941,
-                  "formatName": "matroska,webm",
-                  "formatStartSeconds": 0,
-                  "subtitles": [],
-                  "video": [
-                    {
-                      "avgFrameRate": "24/1",
-                      "bitDepth": 8,
-                      "codec": "h264",
-                      "colorRange": "tv",
-                      "displayAspectRatio": "16:9",
-                      "dvBlPresent": false,
-                      "dvElPresent": false,
-                      "dvRpuPresent": false,
-                      "endSeconds": 3,
-                      "firstFrameSeconds": 0,
-                      "frameRate": "24",
-                      "hdr10Plus": false,
-                      "height": 90,
-                      "level": 10,
-                      "pixelFormat": "yuv420p",
-                      "profile": "High",
-                      "reorderFrames": 2,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 0,
-                      "width": 160
-                    }
-                  ]
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 73237
               }
             ],
             "folderName": "Parity Series B",
@@ -492,18 +322,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-04T04:00:00.000Z",
                 "episodeId": null,
                 "id": 43,
-                "language": "en",
-                "mediaId": 35,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Collection Other Library (2020)/Collection Other Library (2020).mkv",
-                "size": 1000043,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000043
               }
             ],
             "folderName": "Collection Other Library (2020)",
@@ -558,18 +381,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-02T11:00:00.000Z",
                 "episodeId": 27,
                 "id": 61,
-                "language": "en",
-                "mediaId": 47,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Series Calendar (2020)/Season 01/e27.mkv",
-                "size": 1000061,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000061
               }
             ],
             "folderName": "Series Calendar (2020)",
@@ -626,18 +442,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-02T01:00:00.000Z",
                 "episodeId": 20,
                 "id": 58,
-                "language": "en",
-                "mediaId": 44,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "Bluray-1080p",
                 "relativePath": "Series Watched (2020)/Season 01/e20.mkv",
-                "size": 1000058,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000058
               }
             ],
             "folderName": "Series Watched (2020)",

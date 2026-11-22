@@ -358,7 +358,7 @@ pub async fn recently_played(
     .fetch_all(&st.db)
     .await?;
     let mut data =
-        hydrate::items_view(&st.db, &ids, paths_visible(&a.perms), false, Some(&acl)).await?;
+        hydrate::items_view(&st.db, &ids, paths_visible(&a.perms), true, Some(&acl)).await?;
     attach_list_info(&st.db, &mut data, a.user.id, &acl).await?;
     Ok(Json(Value::Array(data)))
 }

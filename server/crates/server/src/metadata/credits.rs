@@ -155,7 +155,9 @@ async fn write_avatars(st: &AppState, jobs: Vec<AvatarJob>) {
                 return;
             }
             if let Err(e) = sqlx::query!(
-                r#"UPDATE persons SET name = COALESCE($2, name), "avatarUrl" = COALESCE($3, "avatarUrl") WHERE id = $1"#,
+                r#"UPDATE persons SET name = COALESCE($2, name), "avatarUrl" = COALESCE($3, "avatarUrl")
+                   WHERE id = $1 AND (name IS DISTINCT FROM COALESCE($2, name)
+                                      OR "avatarUrl" IS DISTINCT FROM COALESCE($3, "avatarUrl"))"#,
                 id,
                 name,
                 local

@@ -36,18 +36,11 @@
               "fileCount": 2,
               "files": [
                 {
-                  "createdAt": "2026-01-01T00:00:00.000Z",
                   "episodeId": null,
                   "id": 101,
-                  "language": null,
-                  "mediaId": 101,
-                  "osdbBytesize": null,
-                  "osdbHash": null,
                   "quality": "EPUB",
                   "relativePath": "alpha.epub",
-                  "size": 1,
-                  "streamInfo": {},
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                  "size": 1
                 }
               ],
               "folderName": "Parity Book Alpha",
@@ -119,32 +112,11 @@
               "fileCount": 2,
               "files": [
                 {
-                  "createdAt": "2026-01-01T00:00:00.000Z",
                   "episodeId": null,
                   "id": 103,
-                  "language": null,
-                  "mediaId": 102,
-                  "osdbBytesize": null,
-                  "osdbHash": null,
                   "quality": "M4B",
                   "relativePath": "beta-1.m4b",
-                  "size": 1,
-                  "streamInfo": {
-                    "chapters": [
-                      {
-                        "endSeconds": 40,
-                        "startSeconds": 0,
-                        "title": "A"
-                      },
-                      {
-                        "endSeconds": 100,
-                        "startSeconds": 40,
-                        "title": "B"
-                      }
-                    ],
-                    "durationSeconds": 100
-                  },
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                  "size": 1
                 }
               ],
               "folderName": "Parity Book Beta",
@@ -332,20 +304,11 @@
               "fileCount": 1,
               "files": [
                 {
-                  "createdAt": "2026-01-01T00:00:00.000Z",
                   "episodeId": null,
                   "id": 105,
-                  "language": null,
-                  "mediaId": 103,
-                  "osdbBytesize": null,
-                  "osdbHash": null,
                   "quality": "MP3",
                   "relativePath": "gamma.mp3",
-                  "size": 1,
-                  "streamInfo": {
-                    "durationSeconds": 300
-                  },
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                  "size": 1
                 }
               ],
               "folderName": "Parity Book Gamma",

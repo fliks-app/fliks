@@ -5,6 +5,7 @@ use super::{
 };
 use crate::{ingest::fsx, state::AppState};
 use fliks_domain::language::normalize_language_code;
+use fliks_engine_core::api::{MediaInfo, SubtitleStreamInfo};
 
 /// Refreshes the embedded rows of one file; a probe that failed keeps the stored ones.
 pub async fn detect_and_store(
@@ -14,6 +15,29 @@ pub async fn detect_and_store(
     episode_id: Option<i32>,
 ) -> Vec<i32> {
     match detect(st, media_id, file_id, episode_id).await {
+        Ok(ids) => ids,
+        Err(e) => {
+            tracing::warn!("Embedded subtitles of file #{file_id} not refreshed: {e}");
+            vec![]
+        }
+    }
+}
+
+/// `detect_and_store` from a probe the caller already holds; one that failed keeps the stored rows.
+pub async fn store_probed(
+    st: &AppState,
+    media_id: i32,
+    file_id: i32,
+    episode_id: Option<i32>,
+    info: &MediaInfo,
+) -> Vec<i32> {
+    if info.error.is_some() {
+        tracing::warn!(
+            "Keeping stored embedded subtitles for file #{file_id}: the probe could not read it"
+        );
+        return vec![];
+    }
+    match replace(st, media_id, file_id, episode_id, &info.subtitles).await {
         Ok(ids) => ids,
         Err(e) => {
             tracing::warn!("Embedded subtitles of file #{file_id} not refreshed: {e}");
@@ -54,6 +78,17 @@ async fn detect(
         );
         return Ok(vec![]);
     };
+    replace(st, media_id, file_id, episode_id, &info.subtitles).await
+}
+
+async fn replace(
+    st: &AppState,
+    media_id: i32,
+    file_id: i32,
+    episode_id: Option<i32>,
+    subtitles: &[SubtitleStreamInfo],
+) -> Result<Vec<i32>, String> {
+    let sql = |e: sqlx::Error| e.to_string();
     let mut tx = st.db.begin().await.map_err(sql)?;
     let removed = sqlx::query(
         r#"DELETE FROM subtitle_files WHERE "mediaFileId" = $1 AND "providerType" = 'embedded'"#,
@@ -64,7 +99,7 @@ async fn detect(
     .map_err(sql)?
     .rows_affected();
     let mut ids = vec![];
-    for s in &info.subtitles {
+    for s in subtitles {
         let n = New {
             media_id,
             media_file_id: file_id,

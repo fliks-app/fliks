@@ -211,9 +211,23 @@ pub async fn setting_on(db: &PgPool, key: &str) -> Result<bool, sqlx::Error> {
 /// `detectMediaFileInfo` through the engine probe: a bad file is an `error` blob, an unreachable
 /// engine an `Err` (`ingest.md` rule 21).
 pub async fn probe(st: &AppState, path: &Path, crop: bool) -> Result<Probed, String> {
+    probe_with(st, path, crop, false).await
+}
+
+/// `probe` plus the OpenSubtitles hash, which reads the head and tail of the file.
+pub async fn probe_hashed(st: &AppState, path: &Path, crop: bool) -> Result<Probed, String> {
+    probe_with(st, path, crop, true).await
+}
+
+async fn probe_with(
+    st: &AppState,
+    path: &Path,
+    crop: bool,
+    moviehash: bool,
+) -> Result<Probed, String> {
     let r = st
         .engine
-        .probe(&path.to_string_lossy(), crop, false, true)
+        .probe(&path.to_string_lossy(), crop, false, moviehash)
         .await
         .map_err(|e| e.to_string())?;
     let info = match r.info {

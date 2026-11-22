@@ -265,7 +265,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
   readonly libraryName = signal('');
 
   readonly list = new InfiniteScrollList<Media>();
-  readonly watchedIds = signal<Set<number>>(new Set());
   readonly loading = signal(true);
   readonly searchQuery = signal('');
   readonly sortBy = signal('title');
@@ -1082,14 +1081,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
     const { signal } = (this.loadCtl = new AbortController());
     const freshSince = Date.now();
     try {
-      const [res, watchedIds] = await Promise.all([
-        this.mediaService.getAll(params, { known: true }, signal),
-        this.streamingApi.getWatchedMediaIds({ known: true }).catch(() => [] as number[]),
-      ]);
+      const res = await this.mediaService.getAll(params, { known: true }, signal);
       // A slower answer to an earlier query must not replace a later one.
       if (gen !== this.loadGen) return;
       this.list.setItems(res.data, (m) => m.title);
-      this.setWatched(watchedIds);
     } catch (e) {
       if (isAbort(e)) return;
       throw e;
@@ -1099,14 +1094,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
     queueMicrotask(() => {
       // Known lists paint instantly, however old; this pass brings in what changed. The generation check drops stale results.
       if (gen !== this.loadGen) return;
-      void Promise.all([
-        this.mediaService.getAll(params, { force: true, freshSince }, signal).catch(() => null),
-        this.streamingApi.getWatchedMediaIds({ force: true, freshSince }).catch(() => null),
-      ]).then(([res, watchedIds]) => {
-        if (gen !== this.loadGen) return;
-        if (res) this.list.setItems(res.data, (m) => m.title);
-        if (watchedIds) this.setWatched(watchedIds);
-      });
+      void this.mediaService
+        .getAll(params, { force: true, freshSince }, signal)
+        .catch(() => null)
+        .then((res) => {
+          if (gen !== this.loadGen) return;
+          if (res) this.list.setItems(res.data, (m) => m.title);
+        });
     });
   }
 
@@ -1121,14 +1115,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   isLiked(mediaId: number): boolean {
     return this.likedMediaIds().has(mediaId);
-  }
-
-  /** An unchanged body (same array from the request cache) keeps the set, so the grid sees no change. */
-  private watchedSource: number[] | null = null;
-  private setWatched(ids: number[]): void {
-    if (ids === this.watchedSource) return;
-    this.watchedSource = ids;
-    this.watchedIds.set(new Set(ids));
   }
 
   /** Flips the likes list first from the card's media; a failed request restores it. */
@@ -1154,22 +1140,19 @@ export class LibraryComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** The `watchedIds` set drives the card's badge: flipped first, restored if the request fails. */
+  /** The item's `watched` drives the card's badge: flipped first, restored if the request fails. */
   async toggleMediaWatched(m: Media, watched: boolean) {
     const fileId = m.files?.[0]?.id;
     const hasSeasons = kindOf(m.type).hasSeasons;
     if (!hasSeasons && !fileId) return;
-    const prev = this.watchedIds();
-    const next = new Set(prev);
-    if (watched) next.add(m.id);
-    else next.delete(m.id);
-    this.watchedIds.set(next);
+    const prev = !!m.watched;
+    this.list.patch(m.id, { watched });
     try {
       await (hasSeasons
         ? this.streamingApi.toggleSeriesWatched(m.id, watched)
         : this.streamingApi.toggleWatched(m.id, fileId!));
     } catch {
-      this.watchedIds.set(prev);
+      this.list.patch(m.id, { watched: prev });
     }
   }
 }

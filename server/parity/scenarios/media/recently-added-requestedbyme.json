@@ -14,22 +14,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-05T04:00:00.000Z",
                 "episodeId": null,
                 "id": 30,
-                "language": "en",
-                "mediaId": 21,
-                "osdbBytesize": 12345678901,
-                "osdbHash": "8e245d9679d31e12",
                 "quality": "WEBDL-1080p",
                 "relativePath": "alpha test (2020)/alpha test (2020).mkv",
-                "size": 1000030,
-                "streamInfo": {
-                  "audio": [],
-                  "subtitles": [],
-                  "video": []
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000030
               }
             ],
             "folderName": "alpha test (2020)",
@@ -87,18 +76,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-02T11:00:00.000Z",
                 "episodeId": 27,
                 "id": 61,
-                "language": "en",
-                "mediaId": 47,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Series Calendar (2020)/Season 01/e27.mkv",
-                "size": 1000061,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000061
               }
             ],
             "folderName": "Series Calendar (2020)",
@@ -149,18 +131,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T21:00:00.000Z",
                 "episodeId": null,
                 "id": 51,
-                "language": "en",
-                "mediaId": 48,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Cal Movie Cinema Digital (2020)/Cal Movie Cinema Digital (2020).mkv",
-                "size": 1000051,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000051
               }
             ],
             "folderName": "Cal Movie Cinema Digital (2020)",
@@ -209,18 +184,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-02T12:00:00.000Z",
                 "episodeId": null,
                 "id": 31,
-                "language": "en",
-                "mediaId": 22,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "12 Angry Men (2020)/12 Angry Men (2020).mkv",
-                "size": 1000031,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000031
               }
             ],
             "folderName": "12 Angry Men (2020)",
@@ -271,18 +239,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-01T12:00:00.000Z",
                 "episodeId": null,
                 "id": 44,
-                "language": "en",
-                "mediaId": 36,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-720p",
                 "relativePath": "Profile Movie Unmet (2020)/Profile Movie Unmet (2020).mkv",
-                "size": 1000044,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000044
               }
             ],
             "folderName": "Profile Movie Unmet (2020)",

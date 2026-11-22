@@ -29,7 +29,6 @@
               "media": {
                 "addedById": null,
                 "additionalFanartUrls": [],
-                "alternativeTitles": [],
                 "createdAt": "2026-01-01T00:00:00.000Z",
                 "digitalRelease": null,
                 "fanartUrl": null,
@@ -43,21 +42,8 @@
                 "languageProfile": null,
                 "languageProfileId": null,
                 "library": {
-                  "color": "#3b82f6",
-                  "createdAt": "2026-01-01T00:00:00.000Z",
-                  "defaultLanguageProfileId": null,
-                  "defaultQualityProfileId": null,
-                  "icon": "film",
                   "id": 1,
-                  "label": null,
-                  "mediaTypes": [
-                    "movie"
-                  ],
-                  "metadataLanguage": null,
-                  "metadataRegion": null,
-                  "name": "Movies",
-                  "preferredProvider": null,
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                  "name": "Movies"
                 },
                 "libraryId": 1,
                 "logoUrl": null,
@@ -111,7 +97,6 @@
               "media": {
                 "addedById": null,
                 "additionalFanartUrls": [],
-                "alternativeTitles": [],
                 "createdAt": "2026-01-01T00:00:00.000Z",
                 "digitalRelease": null,
                 "fanartUrl": null,
@@ -125,21 +110,8 @@
                 "languageProfile": null,
                 "languageProfileId": null,
                 "library": {
-                  "color": "#3b82f6",
-                  "createdAt": "2026-01-01T00:00:00.000Z",
-                  "defaultLanguageProfileId": null,
-                  "defaultQualityProfileId": null,
-                  "icon": "film",
                   "id": 1,
-                  "label": null,
-                  "mediaTypes": [
-                    "movie"
-                  ],
-                  "metadataLanguage": null,
-                  "metadataRegion": null,
-                  "name": "Movies",
-                  "preferredProvider": null,
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                  "name": "Movies"
                 },
                 "libraryId": 1,
                 "logoUrl": null,
@@ -196,7 +168,6 @@
               "media": {
                 "addedById": null,
                 "additionalFanartUrls": [],
-                "alternativeTitles": [],
                 "createdAt": "2026-01-01T00:00:00.000Z",
                 "digitalRelease": null,
                 "fanartUrl": null,
@@ -210,21 +181,8 @@
                 "languageProfile": null,
                 "languageProfileId": null,
                 "library": {
-                  "color": "#3b82f6",
-                  "createdAt": "2026-01-01T00:00:00.000Z",
-                  "defaultLanguageProfileId": null,
-                  "defaultQualityProfileId": null,
-                  "icon": "film",
                   "id": 1,
-                  "label": null,
-                  "mediaTypes": [
-                    "movie"
-                  ],
-                  "metadataLanguage": null,
-                  "metadataRegion": null,
-                  "name": "Movies",
-                  "preferredProvider": null,
-                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                  "name": "Movies"
                 },
                 "libraryId": 1,
                 "logoUrl": null,

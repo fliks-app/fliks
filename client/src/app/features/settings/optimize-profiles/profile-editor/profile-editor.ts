@@ -257,7 +257,7 @@ export class OptimizeProfileEditorComponent implements OnInit {
     this.outcome.set(null);
     try {
       const page = await this.media.getAll({
-        libraryId: id, limit: 100, sortBy: 'title', sortOrder: 'ASC', view: 'grid',
+        libraryId: id, limit: 100, sortBy: 'title', sortOrder: 'ASC',
       });
       if (seq !== this.libSeq) return;
       const files = page.data.flatMap((m) =>
