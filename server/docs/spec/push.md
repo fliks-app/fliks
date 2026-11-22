@@ -88,7 +88,7 @@ Scope: the push pipeline (`push::notify`), the relay client, the identity file, 
     | `requests` | request approved | the requester | `request_approved` | 1 day | poster | open |
     | `requests` | request declined | the requester | `request_declined` | 1 day | poster | open |
     | `requests` | request available | the requester | `request_available` | 1 day | poster | open |
-    | `requests` | request created | users who can approve (`requests.manage`, `manage:all`), minus the requester | `request_created` | 1 day | poster | Approve, Decline (`call`) |
+    | `requests` | request created | users who can approve (`requests.manage`, `manage:all`), minus the requester | `request_created` | 1 day | poster | Approve, Decline (`call`); opens `/requests?status=pending` |
     | `parties` | `party.invited` | the invitees | `party_invited` | 1 day | party image | Join (`open`) |
     | `parties` | `party.starting` | the invitees | `party_starting` | 15 min | party image | Join (`open`) |
     | `social` | `social.follow_request` | the target user | `follow_request` | 1 day | avatar | Accept, Decline (`call`) |

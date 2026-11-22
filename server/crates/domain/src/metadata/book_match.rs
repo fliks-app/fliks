@@ -5,6 +5,9 @@ use unicode_normalization::UnicodeNormalization;
 /// The least score a title and author search may link on.
 pub const MIN_CONFIDENCE: u8 = 85;
 
+/// The least title similarity a text search may link a folder on; same 0-100 scale, same bar.
+pub const MIN_TITLE_SIMILARITY: u8 = MIN_CONFIDENCE;
+
 const STOPWORDS: [&str; 14] = [
     "le", "la", "les", "l", "un", "une", "des", "de", "du", "the", "a", "an", "of", "and",
 ];
@@ -37,6 +40,11 @@ fn jaccard(a: &BTreeSet<String>, b: &BTreeSet<String>) -> f64 {
     } else {
         a.intersection(b).count() as f64 / all as f64
     }
+}
+
+/// 0 to 100: the share of title words (stopwords ignored) the two titles have in common.
+pub fn title_similarity(wanted: &str, found: &str) -> u8 {
+    (jaccard(&title_words(wanted), &title_words(found)) * 100.0).round() as u8
 }
 
 /// What a file or tag says of the book.
@@ -115,6 +123,16 @@ mod tests {
                 year,
             },
         )
+    }
+
+    #[test]
+    fn title_similarity_links_the_same_title_only() {
+        let near = |a, b| title_similarity(a, b) >= MIN_TITLE_SIMILARITY;
+        assert!(near("The Alpha Beta", "alpha beta"));
+        assert!(near("Alpha: Beta", "Alpha Beta"));
+        assert!(!near("Alpha Beta", "Alpha Beta Gamma Delta"));
+        assert!(!near("Alpha Beta", "Gamma Delta"));
+        assert_eq!(title_similarity("", "Alpha"), 0);
     }
 
     #[test]

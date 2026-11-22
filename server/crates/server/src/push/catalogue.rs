@@ -225,7 +225,7 @@ pub fn request_event(st: &AppState, event: &'static str, payload: &Map<String, V
                     "requests",
                     "request_created",
                     &params(json!({"title": title, "user": who})),
-                    "/pending-requests".into(),
+                    "/requests?status=pending".into(),
                     DAY,
                 );
                 n.actions = vec![

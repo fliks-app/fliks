@@ -35,7 +35,10 @@ use fliks_domain::{
         kind::MediaKind,
         path::resolve,
     },
-    metadata::limiter::Priority,
+    metadata::{
+        book_match::{MIN_TITLE_SIMILARITY, title_similarity},
+        limiter::Priority,
+    },
     naming::{
         self, EpisodeNumbers, is_special_file, parse_episode_numbers, validate_folder_name,
         validate_folder_path,
@@ -917,30 +920,20 @@ async fn auto_pick(st: &AppState, d: &mut RelinkDto) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Same year first, then an equal title, then one a prefix of the other; ties keep the provider's order.
+/// The hit whose title is at least `MIN_TITLE_SIMILARITY` like the folder's, the closest first; a
+/// year within one of it breaks ties, then the provider's order. None below the floor.
 fn best_hit<'a>(hits: &'a [Value], title: &str, year: Option<i32>) -> Option<&'a Value> {
-    let norm = |s: &str| -> String {
-        s.to_lowercase()
-            .chars()
-            .filter(|c| c.is_alphanumeric())
-            .collect()
+    let key = |h: &Value| {
+        let similarity = title_similarity(title, h["title"].as_str().unwrap_or_default());
+        let near = year
+            .zip(h["year"].as_i64())
+            .is_some_and(|(y, hy)| (i64::from(y) - hy).abs() <= 1);
+        (similarity, near)
     };
-    let wanted = norm(title);
-    let score = |h: &Value| {
-        let t = norm(h["title"].as_str().unwrap_or_default());
-        let y = year.is_some_and(|y| h["year"].as_i64() == Some(i64::from(y)));
-        let named = if wanted.is_empty() {
-            0
-        } else if t == wanted {
-            50
-        } else if !t.is_empty() && (t.starts_with(&wanted) || wanted.starts_with(&t)) {
-            20
-        } else {
-            0
-        };
-        u32::from(y) * 100 + named
-    };
-    hits.iter().rev().max_by_key(|h| score(h))
+    hits.iter()
+        .rev()
+        .filter(|h| key(h).0 >= MIN_TITLE_SIMILARITY)
+        .max_by_key(|h| key(h))
 }
 
 /// Rule 73: sequential, failures logged, every activity row removed at the end.
@@ -1173,7 +1166,7 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn the_auto_pick_prefers_the_year_then_the_title_then_the_provider_order() {
+    fn the_auto_pick_needs_a_like_title_then_prefers_the_year_then_the_provider_order() {
         let h = |t: &str, y: i64| json!({"title": t, "year": y});
         let hits = [
             h("Alpha Two", 2001),
@@ -1187,19 +1180,37 @@ mod tests {
             Some((json!("Alpha"), json!(2001)))
         );
         assert_eq!(pick("Alpha", None), Some((json!("Alpha"), json!(1999))));
-        assert_eq!(pick("Gamma", None), Some((json!("Alpha Two"), json!(2001))));
+        assert_eq!(pick("Gamma", None), None);
+        assert_eq!(
+            pick("Gamma", Some(2001)),
+            None,
+            "a same-year wrong hit is no match"
+        );
         assert_eq!(best_hit(&[], "Alpha", None), None);
     }
 
     #[test]
-    fn a_non_ascii_title_is_not_an_empty_prefix_of_everything() {
+    fn a_year_one_off_breaks_a_tie_but_never_beats_the_title() {
+        let h = |t: &str, y: i64| json!({"title": t, "year": y});
+        let hits = [
+            h("Alpha", 2010),
+            h("Alpha", 2003),
+            h("Alpha Beta Gamma", 2002),
+        ];
+        let pick = best_hit(&hits, "Alpha", Some(2002)).map(|v| v["year"].clone());
+        assert_eq!(pick, Some(json!(2003)));
+    }
+
+    #[test]
+    fn a_non_ascii_title_matches_itself_only() {
         let hits = [
             json!({"title": "千と千尋の神隠し", "year": 2001}),
             json!({"title": "Spirited Away", "year": 2001}),
         ];
         let pick = |t| best_hit(&hits, t, None).map(|v| v["title"].clone());
-        assert_eq!(pick("Spirited"), Some(json!("Spirited Away")));
+        assert_eq!(pick("Spirited Away"), Some(json!("Spirited Away")));
         assert_eq!(pick("千と千尋の神隠し"), Some(json!("千と千尋の神隠し")));
+        assert_eq!(pick("Spirited"), None);
     }
 
     #[test]
