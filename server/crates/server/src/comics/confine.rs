@@ -1,9 +1,15 @@
 //! What the comic archive child may do once it runs (`docs/spec/comics.md`, rule 22): Landlock removes
 //! the filesystem, a seccomp filter removes sockets and the ways to reach the server process.
-use std::mem::size_of;
+use std::{ffi::CStr, mem::size_of};
 
 const FS_V1: u64 = 0x1fff;
 const READ: u64 = 0b1100;
+const READABLE: [&CStr; 4] = [
+    c"/usr/lib/locale",
+    c"/usr/lib/gconv",
+    c"/usr/lib/x86_64-linux-gnu/gconv",
+    c"/usr/lib/aarch64-linux-gnu/gconv",
+];
 const RULE_PATH_BENEATH: libc::c_long = 1;
 
 fn abi() -> libc::c_long {
@@ -20,7 +26,7 @@ pub fn probe() {
     }
 }
 
-/// Reads below `/usr/lib/locale` only; the archive is already open on stdin.
+/// Reads below the locale and charset-conversion data only; the archive is already open on stdin.
 fn landlock() {
     #[repr(C, packed)]
     struct PathBeneath {
@@ -47,23 +53,25 @@ fn landlock() {
         if ruleset < 0 {
             return;
         }
-        let dir = libc::open(
-            c"/usr/lib/locale".as_ptr(),
-            libc::O_PATH | libc::O_DIRECTORY | libc::O_CLOEXEC,
-        );
-        if dir >= 0 {
-            let rule = PathBeneath {
-                allowed: READ,
-                parent_fd: dir,
-            };
-            libc::syscall(
-                libc::SYS_landlock_add_rule,
-                ruleset,
-                RULE_PATH_BENEATH,
-                &rule as *const PathBeneath,
-                0u32,
+        for path in READABLE {
+            let dir = libc::open(
+                path.as_ptr(),
+                libc::O_PATH | libc::O_DIRECTORY | libc::O_CLOEXEC,
             );
-            libc::close(dir);
+            if dir >= 0 {
+                let rule = PathBeneath {
+                    allowed: READ,
+                    parent_fd: dir,
+                };
+                libc::syscall(
+                    libc::SYS_landlock_add_rule,
+                    ruleset,
+                    RULE_PATH_BENEATH,
+                    &rule as *const PathBeneath,
+                    0u32,
+                );
+                libc::close(dir);
+            }
         }
         libc::syscall(libc::SYS_landlock_restrict_self, ruleset, 0u32);
         libc::close(ruleset);
@@ -135,14 +143,15 @@ fn seccomp() -> bool {
         filter: f.as_mut_ptr(),
     };
     // SAFETY: `prog` points at `f`, which outlives the call; the kernel copies the filter.
-    unsafe {
-        libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0
-            && libc::prctl(libc::PR_SET_SECCOMP, 2, &prog as *const libc::sock_fprog) == 0
-    }
+    unsafe { libc::prctl(libc::PR_SET_SECCOMP, 2, &prog as *const libc::sock_fprog) == 0 }
 }
 
 /// Called first in the child. False when the filter cannot be installed: the child does not run unconfined.
 pub fn enter() -> bool {
+    // SAFETY: a plain prctl; Landlock refuses an unprivileged process without it.
+    if unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } != 0 {
+        return false;
+    }
     landlock();
     seccomp()
 }
