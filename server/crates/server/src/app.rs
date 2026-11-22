@@ -461,6 +461,8 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         requests::remove,
         requests::approve,
         requests::decline,
+        requests::watch,
+        requests::unwatch,
         requests::comment_create,
         requests::comments_list,
         requests::comment_remove,

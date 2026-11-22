@@ -1,4 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
+import { RequestWatchComponent } from '../../requests/request-watch/request-watch.component';
 import { NgTemplateOutlet } from '@angular/common';
 import type { MediaCollection, RelatedMedia } from '../../../core/services/api/media.service';
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
@@ -20,6 +21,7 @@ import { VideoWorkBase } from '../video-work';
 @Component({
   selector: 'app-movie-work',
   imports: [
+    RequestWatchComponent,
     NgTemplateOutlet,
     TranslatePipe,
     DetailHeroComponent,

@@ -112,6 +112,10 @@ pub fn router() -> Router<AppState> {
         .route("/api/requests/{id}/approve", post(routes::approve))
         .route("/api/requests/{id}/decline", post(routes::decline))
         .route(
+            "/api/requests/{id}/watch",
+            post(routes::watch).delete(routes::unwatch),
+        )
+        .route(
             "/api/requests/{id}/comments",
             get(routes::comments_list).post(routes::comment_create),
         )

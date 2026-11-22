@@ -55,7 +55,7 @@ pub async fn title_state(
 ) -> Res<Json<Value>> {
     a.require(Action::Create, Subject::FliksRequest)?;
     Ok(Json(
-        flow::title_state(&st, &dto::title_state(&st.namespaces(), &q)?).await?,
+        flow::title_state(&st, &a, &dto::title_state(&st.namespaces(), &q)?).await?,
     ))
 }
 
@@ -151,5 +151,26 @@ pub async fn comment_remove(
 ) -> Res<StatusCode> {
     a.require(Action::Read, Subject::FliksRequest)?;
     flow::comment_remove(&st, &a, int_param(&id)?).await?;
+    Ok(StatusCode::OK)
+}
+
+#[utoipa::path(post, path = "/api/requests/{id}/watch", responses((status = 201)))]
+pub async fn watch(
+    State(st): State<AppState>,
+    a: Authed,
+    PathParams(id): PathParams<String>,
+) -> Res<(StatusCode, Json<Value>)> {
+    a.require(Action::Create, Subject::FliksRequest)?;
+    Ok(created(flow::watch(&st, &a, int_param(&id)?).await?))
+}
+
+#[utoipa::path(delete, path = "/api/requests/{id}/watch", responses((status = 200)))]
+pub async fn unwatch(
+    State(st): State<AppState>,
+    a: Authed,
+    PathParams(id): PathParams<String>,
+) -> Res<StatusCode> {
+    a.require(Action::Create, Subject::FliksRequest)?;
+    flow::unwatch(&st, &a, int_param(&id)?).await?;
     Ok(StatusCode::OK)
 }

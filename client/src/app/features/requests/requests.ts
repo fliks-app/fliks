@@ -13,7 +13,7 @@ import { ActivatedRoute, ParamMap, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { distinctUntilChanged, filter, map, skip } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
+import { TranslatePluralPipe, translatePlural } from '../../core/pipes/translate-plural.pipe';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import {
@@ -47,7 +47,7 @@ import {
 } from '../../core/services/download-progress.service';
 import { RequestStatusBadgeComponent } from './request-status-badge/request-status-badge.component';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
-import { LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
+import { LucideCheck, LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { KIND_REGISTRY, kindOf } from '../../core/media-kinds';
 
@@ -67,6 +67,7 @@ import { KIND_REGISTRY, kindOf } from '../../core/media-kinds';
     DropdownMenuComponent,
     RequestStatusBadgeComponent,
     DownloadDetailModalComponent,
+    LucideCheck,
     LucideEllipsisVertical,
     LucidePencil,
     LucideTrash2,
@@ -146,6 +147,15 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly edit = new RequestEditFlow(() => this.editModal(), () => this.libraries());
 
   private page = 1;
+
+  /** Pending rows on screen, what "Approve all" acts on; shown on the Pending filter for managers only. */
+  readonly approvableRows = computed(() =>
+    this.statusFilter() === 'pending' && this.auth.hasPermission('requests.manage')
+      ? this.rows().filter((r) => r.status === 'pending')
+      : [],
+  );
+  /** `[done, total]` while "Approve all" runs. */
+  readonly approveAllProgress = signal<[number, number] | null>(null);
 
   readonly canLoadMore = computed(
     () => this.total() > this.rows().length,
@@ -306,6 +316,38 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.patchRow(updated);
     } finally {
       this.actionBusyId.set(null);
+    }
+  }
+
+  /** Sequential client loop over the approve route, so each request is searched right away. */
+  async approveAll() {
+    const ids = this.approvableRows().map((r) => r.id);
+    if (!ids.length || this.approveAllProgress()) return;
+    const ok = await this.confirmation.confirm({
+      title: translatePlural(this.translate, 'requests.approve_all_title', ids.length),
+      message: this.translate.instant('requests.approve_all_message'),
+      confirmLabel: translatePlural(this.translate, 'requests.approve_all_confirm', ids.length),
+      variant: 'info',
+    });
+    if (!ok) return;
+    let done = 0;
+    let failed = 0;
+    this.approveAllProgress.set([0, ids.length]);
+    for (const id of ids) {
+      try {
+        await this.requestsService.approve(id, false, true);
+        done++;
+      } catch {
+        failed++;
+      }
+      this.approveAllProgress.set([done + failed, ids.length]);
+    }
+    this.approveAllProgress.set(null);
+    this.reload();
+    if (failed) {
+      this.toast.error(this.translate.instant('requests.approve_all_partial', { done, failed }));
+    } else {
+      this.toast.success(translatePlural(this.translate, 'requests.approve_all_done', done));
     }
   }
 

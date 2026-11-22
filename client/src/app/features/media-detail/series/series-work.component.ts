@@ -1,4 +1,5 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { RequestWatchComponent } from '../../requests/request-watch/request-watch.component';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -44,6 +45,7 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
 @Component({
   selector: 'app-series-work',
   imports: [
+    RequestWatchComponent,
     TranslatePipe,
     SeasonLabelPipe,
     DetailHeroComponent,

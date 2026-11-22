@@ -152,7 +152,13 @@
     (openDownloadDetail)="openDownloadDetailModal()"
     (seriesWatchedToggled)="watched.onSeriesToggled($event)"
     (likeToggled)="like.toggle()"
-  />
+  >
+    @if (host.requestFlow.canRequest() && host.requestFlow.titleState(); as state) {
+      @if (state.requested) {
+        <app-request-watch heroActions [state]="state" [canManage]="host.requestFlow.canManage()" (changed)="host.requestFlow.onSubmitted()" />
+      }
+    }
+  </app-detail-hero>
 
   @if (m.seasons?.length) {
     <app-media-detail-seasons

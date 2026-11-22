@@ -829,3 +829,197 @@ async fn a_lagged_lifecycle_feed_runs_the_reconcile(pool: PgPool) {
     }
     panic!("the lag did not reconcile the request");
 }
+
+async fn joiner(c: &Ctx) -> String {
+    sqlx::raw_sql(
+        r#"INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (5, 'joiner', false, 1), (6, 'second', false, 1);
+        INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 5), (1, 6);"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    session::token(&c.st, 5, "joiner").await
+}
+
+async fn pending(c: &Ctx) -> i64 {
+    let (_, r) = c
+        .request(&c.user, "OL2W", json!([want("text", None)]))
+        .await;
+    r["id"].as_i64().unwrap()
+}
+
+async fn watch(c: &Ctx, tok: &str, id: i64, method: &str) -> u16 {
+    c.call(
+        tok,
+        method,
+        &format!("/api/requests/{id}/watch"),
+        json!(null),
+    )
+    .await
+    .0
+}
+
+async fn title_state(c: &Ctx, tok: &str) -> Value {
+    c.call(
+        tok,
+        "GET",
+        "/api/requests/title-state?mediaType=book&externalId=OL2W",
+        json!(null),
+    )
+    .await
+    .1
+}
+
+#[sqlx::test(migrations = false)]
+async fn following_is_idempotent_private_and_counted(pool: PgPool) {
+    let c = ctx(pool).await;
+    let tok = joiner(&c).await;
+    let id = pending(&c).await;
+    assert_eq!(watch(&c, &tok, id, "POST").await, 201);
+    assert_eq!(watch(&c, &tok, id, "POST").await, 201, "idempotent");
+    assert_eq!(watch(&c, &c.user, id, "POST").await, 409, "own request");
+    assert_eq!(
+        watch(&c, &c.reader, id, "POST").await,
+        403,
+        "no requests.create"
+    );
+    assert_eq!(watch(&c, &tok, 9999, "POST").await, 404);
+
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM request_watchers")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+    let s = title_state(&c, &tok).await;
+    assert_eq!(
+        (
+            &s["watching"],
+            &s["requesterCount"],
+            &s["requestedByMe"],
+            &s["requestId"]
+        ),
+        (&json!(true), &json!(2), &json!(false), &json!(id)),
+        "{s}"
+    );
+    let s = title_state(&c, &c.user).await;
+    assert_eq!(
+        (&s["watching"], &s["requestedByMe"]),
+        (&json!(false), &json!(true))
+    );
+
+    let (_, own) = c
+        .call(&c.user, "GET", &format!("/api/requests/{id}"), json!(null))
+        .await;
+    assert!(own.get("watchers").is_none(), "a plain owner sees no names");
+    let (_, seen) = c
+        .call(
+            &c.manager,
+            "GET",
+            &format!("/api/requests/{id}"),
+            json!(null),
+        )
+        .await;
+    assert_eq!(seen["watchers"][0]["username"], "joiner", "{seen}");
+    assert!(seen["watchers"][0]["createdAt"].is_string());
+
+    assert_eq!(watch(&c, &tok, id, "DELETE").await, 200);
+    assert_eq!(watch(&c, &tok, id, "DELETE").await, 200, "idempotent");
+    assert_eq!(title_state(&c, &tok).await["requesterCount"], 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_decided_request_cannot_be_followed_and_watchers_hear_of_it(pool: PgPool) {
+    let c = ctx(pool).await;
+    let tok = joiner(&c).await;
+    let id = pending(&c).await;
+    watch(&c, &tok, id, "POST").await;
+    let to = crate::push::request_recipients(&c.pool, id as i32, Some(2)).await;
+    assert_eq!(to, vec![2, 5]);
+    let (s, _) = c
+        .call(
+            &c.manager,
+            "POST",
+            &format!("/api/requests/{id}/decline"),
+            json!({}),
+        )
+        .await;
+    assert_eq!(s, 201);
+    assert_eq!(watch(&c, &tok, id, "POST").await, 409);
+    assert_eq!(
+        crate::push::request_recipients(&c.pool, id as i32, Some(2)).await,
+        vec![2, 5],
+        "a declined row still notifies its watchers"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_matching_rule_approves_the_row_on_join(pool: PgPool) {
+    let c = ctx(pool).await;
+    let tok = joiner(&c).await;
+    sqlx::query(r#"INSERT INTO auto_approval_rules (name, enabled, criteria) VALUES ('r', true, '{"userIds":[5]}')"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let id = pending(&c).await;
+    assert_eq!(watch(&c, &c.reader, id, "POST").await, 403);
+    assert_eq!(watch(&c, &tok, id, "POST").await, 201);
+    let (st, by): (String, Option<i32>) =
+        sqlx::query_as(r#"SELECT status::text, "approvedById" FROM requests WHERE id = $1"#)
+            .bind(id as i32)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!((st.as_str(), by), ("approved", Some(5)));
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_owner_cancel_promotes_the_earliest_watcher(pool: PgPool) {
+    let c = ctx(pool).await;
+    let tok = joiner(&c).await;
+    let second = session::token(&c.st, 6, "second").await;
+    let id = pending(&c).await;
+    watch(&c, &tok, id, "POST").await;
+    watch(&c, &second, id, "POST").await;
+    let (s, _) = c
+        .call(
+            &c.user,
+            "DELETE",
+            &format!("/api/requests/{id}"),
+            json!(null),
+        )
+        .await;
+    assert_eq!(s, 200);
+    let owner: Option<i32> = sqlx::query_scalar(r#"SELECT "userId" FROM requests WHERE id = $1"#)
+        .bind(id as i32)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(owner, Some(5));
+    let left: Vec<i32> =
+        sqlx::query_scalar(r#"SELECT "userId" FROM request_watchers WHERE "requestId" = $1"#)
+            .bind(id as i32)
+            .fetch_all(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(left, vec![6]);
+    let s = title_state(&c, &tok).await;
+    assert_eq!(
+        (&s["requestedByMe"], &s["requesterCount"]),
+        (&json!(true), &json!(2))
+    );
+
+    let (s, _) = c
+        .call(
+            &c.manager,
+            "DELETE",
+            &format!("/api/requests/{id}"),
+            json!(null),
+        )
+        .await;
+    assert_eq!(s, 200);
+    let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM requests")
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(rows, 0, "a manager removal ends the row");
+}

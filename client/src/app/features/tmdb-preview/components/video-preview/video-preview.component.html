@@ -24,6 +24,7 @@
               </button>
             </span>
           </div>
+          <app-request-requesters [requestId]="r.id" />
           @if (seasonScope(r) || qualityProfileName(r) || languageProfileName(r)) {
             <div class="flex flex-col gap-0.5 text-sm text-base-content/60">
               @if (seasonScope(r)) {
@@ -98,7 +99,9 @@
         }
         @if (canRequest()) {
           @if (hasBlockingRequest()) {
-            <span class="badge badge-warning">{{ 'discover.already_requested' | translate }}</span>
+            @if (titleState(); as state) {
+              <app-request-watch [state]="state" [canManage]="canManageRequests()" (changed)="refreshExistingRequests()" />
+            }
           } @else {
             <button type="button" class="btn btn-secondary max-md:flex-1" (click)="openRequestModal()">
               {{ 'discover.request' | translate }}
