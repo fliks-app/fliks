@@ -15,13 +15,14 @@ async function open(saved: unknown, prefs?: unknown) {
   localStorage.clear();
   if (prefs) localStorage.setItem('reader.comics:s::1', JSON.stringify({ 3: prefs }));
   const saveProgress = vi.fn().mockResolvedValue(undefined);
+  const saveProgressOnExit = vi.fn();
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
       { provide: StorageScopeService, useValue: { suffix: () => 's::1', canPersist: () => true } },
       { provide: ComicsApiService, useValue: { pageUrl: (i: number, _f: number, n: number, w?: number) => `/p/${i}/${n}?width=${w}`, prepare: async () => undefined } },
-      { provide: ReaderApiService, useValue: { loadProgress: async () => saved, saveProgress } },
+      { provide: ReaderApiService, useValue: { loadProgress: async () => saved, saveProgress, saveProgressOnExit } },
       { provide: AudioPlayerService, useValue: {} },
     ],
   });
@@ -31,7 +32,7 @@ async function open(saved: unknown, prefs?: unknown) {
   fixture.componentRef.setInput('pages', pages);
   await fixture.whenStable();
   await fixture.whenStable();
-  return { fixture, el: fixture.nativeElement as HTMLElement, saveProgress };
+  return { fixture, el: fixture.nativeElement as HTMLElement, saveProgress, saveProgressOnExit };
 }
 
 describe('the reader on a comic', () => {
@@ -50,6 +51,24 @@ describe('the reader on a comic', () => {
     const imgs = el.querySelectorAll('img');
     expect(imgs).toHaveLength(1);
     expect(imgs[0].getAttribute('src')).toBe('/p/7/2?width=512');
+  });
+
+  it('resumes from the saved progression when no page was saved', async () => {
+    const { el } = await open({ progression: 0.5 });
+    expect(el.querySelector('img')?.getAttribute('src')).toContain('/p/7/3?');
+  });
+
+  it('reports nothing for the opening screen, then the page the reader turns to', async () => {
+    const { fixture, el, saveProgressOnExit } = await open({ progression: 0.5 });
+    const flush = () => (fixture.componentInstance as unknown as { s: { flushProgress(): void } }).s.flushProgress();
+    flush();
+    expect(saveProgressOnExit).not.toHaveBeenCalled();
+    const key = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true });
+    Object.defineProperty(key, 'keyCode', { value: 39 });
+    el.querySelector('[data-testid=comic-paged]')!.dispatchEvent(key);
+    await fixture.whenStable();
+    flush();
+    expect(saveProgressOnExit).toHaveBeenCalledTimes(1);
   });
 
   it('shows a webtoon volume as a strip of every page', async () => {

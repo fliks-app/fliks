@@ -107,13 +107,14 @@ async function createComponent(rows: PluginSummary[] = [ROW], offers: CatalogPlu
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
       { provide: ConfirmationService, useValue: confirmation },
-      { provide: AuthService, useValue: { user: () => ({ isAdmin }) } },
+      { provide: AuthService, useValue: { user: () => ({ isAdmin }), sessionEpoch: () => 0, isAuthenticated: () => false } },
     ],
   });
   const http = TestBed.inject(HttpTestingController);
   const fixture = TestBed.createComponent(PluginsSettingsComponent);
   fixture.detectChanges();
   await flushReload(fixture, http, rows, offers);
+  http.match('/api/system/version').forEach((r) => r.flush({ version: '7.1.1' }));
   return { fixture, http, page: fixture.componentInstance, state: TestBed.inject(PluginsState) };
 }
 
