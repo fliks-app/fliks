@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Pipes;
+using System.Security.Cryptography;
 using Fliks.Tray.Utilities;
 
 namespace Fliks.Tray.Services;
@@ -13,6 +14,11 @@ internal sealed class PostgresManager(ushort port = 5433)
     private readonly string _binDir = AppPaths.PgBinDir;
     private readonly string _dataDir = AppPaths.PgDataDir;
     private readonly string _logFile = AppPaths.PgLogFile;
+    private string _password = "";
+    private string HbaFile => Path.Combine(_dataDir, "pg_hba.conf");
+
+    /// <summary>Password of the <c>fliks</c> role, generated once into <see cref="AppPaths.DbPasswordFile"/>.</summary>
+    public string DbPassword => _password;
     // Held for the tray's lifetime so postgres dies with it. pg_ctl joins it before
     // spawning postgres, which then inherits it instead of pg_ctl's own UI-limited job.
     private readonly JobObject _job = new();
@@ -31,6 +37,7 @@ internal sealed class PostgresManager(ushort port = 5433)
     {
         ["PGDATA"] = _dataDir,
         ["LC_ALL"] = "C",
+        ["PGPASSWORD"] = _password,
     };
 
     public bool IsInitialized => File.Exists(Path.Combine(_dataDir, "PG_VERSION"));
@@ -38,7 +45,13 @@ internal sealed class PostgresManager(ushort port = 5433)
     /// <summary>Run initdb on first launch (no PG_VERSION file yet).</summary>
     public async Task InitializeAsync()
     {
-        if (IsInitialized) return;
+        var passwordCreated = LoadPassword();
+        if (IsInitialized)
+        {
+            // A cluster already on scram lost its password file: only single-user mode can reset it.
+            if (passwordCreated && !HbaTrusts()) await ResetPasswordSingleUserAsync();
+            return;
+        }
 
         Directory.CreateDirectory(_dataDir);
         var result = await ProcessRunner.RunAsync(
@@ -46,7 +59,8 @@ internal sealed class PostgresManager(ushort port = 5433)
             new[]
             {
                 "-D", _dataDir,
-                "--auth=trust",
+                "--auth=scram-sha-256",
+                $"--pwfile={AppPaths.DbPasswordFile}",
                 "--username=fliks",
                 "--encoding=UTF-8",
                 "--locale=C",
@@ -59,10 +73,25 @@ internal sealed class PostgresManager(ushort port = 5433)
             throw new InvalidOperationException($"initdb failed: {result.Stderr}");
 
         TweakConfig();
+        WriteHba();
     }
 
     /// <summary>Start the server and wait until it accepts connections.</summary>
     public async Task StartAsync(CancellationToken ct)
+    {
+        if (await IsPostmasterRunningAsync())
+            Log.Info("pg: postmaster already running");
+        else
+            await StartPostmasterAsync();
+
+        await WaitForReadyAsync(TimeSpan.FromSeconds(30), ct);
+        // A postmaster that outlived the tray may still trust connections in memory
+        // while pg_hba.conf already says scram.
+        await ReloadAsync();
+        if (HbaTrusts()) await MigrateToScramAsync();
+    }
+
+    private async Task StartPostmasterAsync()
     {
         // -W (pg_ctl waits by default) and no output capture: pg_ctl returns at once and
         // WaitForReadyAsync covers crash recovery; capturing hangs on the inherited pipe.
@@ -84,8 +113,104 @@ internal sealed class PostgresManager(ushort port = 5433)
         LogResult("pg_ctl start", result);
         if (!result.Succeeded)
             throw new InvalidOperationException($"pg_ctl start failed: {result.Stderr}");
+    }
 
-        await WaitForReadyAsync(TimeSpan.FromSeconds(30), ct);
+    private async Task<bool> IsPostmasterRunningAsync()
+    {
+        var r = await ProcessRunner.RunAsync(
+            Tool("pg_ctl"), new[] { "-D", _dataDir, "status" }, PgEnv, timeout: TimeSpan.FromSeconds(10));
+        return r.Succeeded;
+    }
+
+    private async Task ReloadAsync()
+    {
+        var r = await ProcessRunner.RunAsync(
+            Tool("pg_ctl"), new[] { "-D", _dataDir, "reload" }, PgEnv, timeout: TimeSpan.FromSeconds(10));
+        LogResult("pg_ctl reload", r);
+        if (!r.Succeeded)
+            throw new InvalidOperationException($"pg_ctl reload failed: {r.Stderr}");
+    }
+
+    /// <summary>Read <c>.db-password</c>, or generate it (64 hex characters, in the per-user conf dir). True when generated.</summary>
+    private bool LoadPassword()
+    {
+        var file = AppPaths.DbPasswordFile;
+        if (File.Exists(file))
+        {
+            var existing = File.ReadAllText(file).Trim();
+            if (existing.Length > 0)
+            {
+                _password = existing;
+                return false;
+            }
+        }
+
+        Directory.CreateDirectory(AppPaths.ConfDir);
+        _password = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        File.WriteAllText(file, _password);
+        return true;
+    }
+
+    /// <summary>Whether any line of <c>pg_hba.conf</c> still uses the <c>trust</c> method.</summary>
+    private bool HbaTrusts()
+    {
+        if (!File.Exists(HbaFile)) return false;
+        return File.ReadLines(HbaFile).Any(line =>
+            line.Split('#')[0].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Contains("trust"));
+    }
+
+    /// <summary>TCP loopback only, scram everywhere: the same file a fresh cluster ends up with.</summary>
+    private void WriteHba()
+    {
+        var temp = HbaFile + ".tmp";
+        File.WriteAllText(temp,
+            "# TYPE  DATABASE  USER  ADDRESS       METHOD\n" +
+            "host    all       all   127.0.0.1/32  scram-sha-256\n" +
+            "host    all       all   ::1/128       scram-sha-256\n");
+        File.Move(temp, HbaFile, overwrite: true);
+    }
+
+    /// <summary>Live repair of a trust cluster: set the role password while trust still lets us in,
+    /// then close <c>pg_hba.conf</c>. A crash in between leaves <c>trust</c>, so the next launch retries.</summary>
+    private async Task MigrateToScramAsync()
+    {
+        Log.Info("pg: switching the cluster from trust to scram-sha-256");
+        // The statement goes through stdin: argv is visible to other processes, and the result
+        // is not logged because an error echoes the statement.
+        var r = await ProcessRunner.RunAsync(
+            Tool("psql"),
+            new[]
+            {
+                "-w", "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks", "-d", "postgres",
+                "-v", "ON_ERROR_STOP=1",
+            },
+            PgEnv,
+            timeout: TimeSpan.FromSeconds(10),
+            stdin: $"ALTER ROLE fliks PASSWORD '{_password}';\n");
+        if (!r.Succeeded)
+            throw new InvalidOperationException($"setting the database password failed (psql exit {r.ExitCode})");
+        WriteHba();
+        await ReloadAsync();
+    }
+
+    /// <summary><c>.db-password</c> is gone while the cluster is already on scram: stop, reset the role
+    /// password in single-user mode (statement on stdin, never logged); the caller starts again.</summary>
+    private async Task ResetPasswordSingleUserAsync()
+    {
+        Log.Info("pg: the database password file is missing, resetting the role password");
+        if (await IsPostmasterRunningAsync()) await StopAsync();
+        var r = await ProcessRunner.RunAsync(
+            Tool("postgres"),
+            new[] { "--single", "-D", _dataDir, "postgres" },
+            PgEnv,
+            timeout: TimeSpan.FromSeconds(30),
+            stdin: $"ALTER ROLE fliks PASSWORD '{_password}'\n");
+        if (r.Succeeded) return;
+        // postgres.exe refuses an administrator token; pg_ctl avoids it with a restricted one.
+        var elevated = r.Stderr.Contains("administrative", StringComparison.OrdinalIgnoreCase);
+        throw new InvalidOperationException(elevated
+            ? "The database password file is missing and postgres.exe refuses to run with administrator rights: start Fliks as a normal user"
+            : $"resetting the database password failed (postgres exit {r.ExitCode})");
     }
 
     /// <summary>Create the <c>fliks</c> database and pg_trgm extension if absent.</summary>
@@ -95,7 +220,7 @@ internal sealed class PostgresManager(ushort port = 5433)
             Tool("psql"),
             new[]
             {
-                "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks", "-d", "postgres",
+                "-w", "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks", "-d", "postgres",
                 "-tAc", "SELECT 1 FROM pg_database WHERE datname = 'fliks'",
             },
             PgEnv,
@@ -106,7 +231,7 @@ internal sealed class PostgresManager(ushort port = 5433)
         {
             var created = await ProcessRunner.RunAsync(
                 Tool("createdb"),
-                new[] { "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks", "fliks" },
+                new[] { "-w", "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks", "fliks" },
                 PgEnv,
                 timeout: TimeSpan.FromSeconds(10));
             LogResult("createdb", created);
@@ -118,7 +243,7 @@ internal sealed class PostgresManager(ushort port = 5433)
             Tool("psql"),
             new[]
             {
-                "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks", "-d", "fliks",
+                "-w", "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks", "-d", "fliks",
                 "-c", "CREATE EXTENSION IF NOT EXISTS pg_trgm",
             },
             PgEnv,
@@ -136,7 +261,7 @@ internal sealed class PostgresManager(ushort port = 5433)
             Tool("psql"),
             new[]
             {
-                "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks",
+                "-w", "-h", "127.0.0.1", "-p", port.ToString(), "-U", "fliks",
                 "-d", "postgres", "-tAc", "SELECT 1",
             },
             PgEnv,

@@ -35,6 +35,7 @@ final class AppState: ObservableObject {
     func startAll() async {
         do {
             try Paths.ensureAppSupportStructure()
+            Paths.pruneLogs()
 
             // 1. PostgreSQL
             serverState = .startingPostgres
@@ -45,7 +46,8 @@ final class AppState: ObservableObject {
 
             // 2. Engine + fliks-server
             serverState = .startingServer
-            let env = ServerEnvironment(port: config.port, dbPort: config.pgPort)
+            let env = ServerEnvironment(port: config.port, dbPort: config.pgPort,
+                                        dbPassword: await postgresManager.dbPassword)
 
             await serverManager.setOnCrash { [weak self] exitCode in
                 Task { @MainActor in
@@ -113,7 +115,8 @@ final class AppState: ObservableObject {
             guard !Task.isCancelled, case .error = self.serverState else { return }
             logger.info("Auto-restarting the server...")
             self.serverState = .startingServer
-            let env = ServerEnvironment(port: self.config.port, dbPort: self.config.pgPort)
+            let env = ServerEnvironment(port: self.config.port, dbPort: self.config.pgPort,
+                                        dbPassword: await self.postgresManager.dbPassword)
             do {
                 try await self.serverManager.start(config: env)
                 self.serverState = .running

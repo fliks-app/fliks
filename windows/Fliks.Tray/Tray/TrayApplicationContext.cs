@@ -128,8 +128,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void Quit()
     {
         _icon.Visible = false;
-        // Bounded graceful shutdown so a hung child can't wedge exit.
-        Task.Run(() => _app.ShutdownAsync()).Wait(TimeSpan.FromSeconds(20));
+        // Bounded graceful shutdown so a hung child can't wedge exit: the server's grace (15 s)
+        // plus Postgres' (20 s) and the kill fallback.
+        Task.Run(() => _app.ShutdownAsync()).Wait(TimeSpan.FromSeconds(45));
         _icon.Dispose();
         _menu.Dispose();
         ExitThread();

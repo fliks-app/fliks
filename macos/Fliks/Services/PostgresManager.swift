@@ -1,5 +1,6 @@
 import Foundation
 import os
+import Security
 
 /// Manages the embedded PostgreSQL 18 lifecycle: init, start, stop,
 /// health checks, and database creation.
@@ -17,15 +18,23 @@ actor PostgresManager {
     private let logFile: URL
     private let port: UInt16
 
+    /// Password of the `fliks` role, generated once into `Paths.dbPasswordFile`.
+    private var password = ""
+    var dbPassword: String { password }
+
+    private var hbaFile: URL { dataDir.appendingPathComponent("pg_hba.conf") }
+
     /// Common environment variables injected into every pg command.
     /// Includes Homebrew lib dirs for transitive dependencies (libintl, libicu, etc.).
     private var pgEnv: [String: String] {
         let brewLib = "/opt/homebrew/lib"
-        return [
+        var env = [
             "DYLD_LIBRARY_PATH": "\(libDir.path):\(brewLib)",
             "DYLD_FALLBACK_LIBRARY_PATH": "\(libDir.path):\(brewLib)",
             "LC_ALL": "C",
         ]
+        if !password.isEmpty { env["PGPASSWORD"] = password }
+        return env
     }
 
     init(port: UInt16 = 5433) {
@@ -42,9 +51,12 @@ actor PostgresManager {
     /// First-launch initialization: runs `initdb` if the data directory
     /// doesn't contain a `PG_VERSION` file yet.
     func initialize() async throws {
+        let passwordCreated = try loadPassword()
         let pgVersion = dataDir.appendingPathComponent("PG_VERSION")
         guard !FileManager.default.fileExists(atPath: pgVersion.path) else {
             logger.info("PostgreSQL data directory already initialized")
+            // A cluster already on scram lost its password file: only single-user mode can reset it.
+            if passwordCreated && !hbaTrusts() { try await resetPasswordSingleUser() }
             return
         }
 
@@ -64,7 +76,8 @@ actor PostgresManager {
             executable: binDir.appendingPathComponent("initdb"),
             arguments: [
                 "-D", dataDir.path,
-                "--auth=trust",
+                "--auth=scram-sha-256",
+                "--pwfile=\(Paths.dbPasswordFile.path)",
                 "--username=fliks",
                 "--encoding=UTF-8",
                 "--locale=C",
@@ -80,35 +93,25 @@ actor PostgresManager {
 
         // Tune postgresql.conf for embedded usage.
         try tweakConfig()
+        try writeHba()
         logger.info("PostgreSQL initialized successfully")
     }
 
     /// Start the PostgreSQL server and wait until it accepts connections.
     func start() async throws {
-        logger.info("Starting PostgreSQL on port \(self.port)...")
-
-        let result = try await ProcessRunner.run(
-            executable: binDir.appendingPathComponent("pg_ctl"),
-            arguments: [
-                "-D", dataDir.path,
-                "-l", logFile.path,
-                // Single-quote the path: postgres word-splits pg_ctl's -o
-                // string, so a bundle path containing a space must be quoted to
-                // survive as a single argument. -D and env vars are passed as
-                // whole args and don't need this.
-                "-o", "-p \(port) -c dynamic_library_path='\(libDir.appendingPathComponent("postgresql").path)'",
-                "start",
-            ],
-            environment: pgEnv,
-            timeout: 30
-        )
-
-        guard result.succeeded else {
-            throw PostgresError.startFailed(result.stderr)
+        if await isPostmasterRunning() {
+            // A force-quit app leaves its postmaster running.
+            logger.info("PostgreSQL is already running")
+        } else {
+            try await startPostmaster()
         }
 
         // Poll pg_isready until the server is accepting connections.
         try await waitForReady(timeout: 30)
+        // A postmaster that outlived the app may still trust connections in memory
+        // while pg_hba.conf already says scram.
+        try await reload()
+        if hbaTrusts() { try await migrateToScram() }
         logger.info("PostgreSQL is ready")
     }
 
@@ -120,7 +123,7 @@ actor PostgresManager {
         let check = try await ProcessRunner.run(
             executable: binDir.appendingPathComponent("psql"),
             arguments: [
-                "-h", "localhost",
+                "-w", "-h", "localhost",
                 "-p", String(port),
                 "-U", "fliks",
                 "-d", "postgres",
@@ -134,7 +137,7 @@ actor PostgresManager {
             let result = try await ProcessRunner.run(
                 executable: binDir.appendingPathComponent("createdb"),
                 arguments: [
-                    "-h", "localhost",
+                    "-w", "-h", "localhost",
                     "-p", String(port),
                     "-U", "fliks",
                     "fliks",
@@ -152,7 +155,7 @@ actor PostgresManager {
         let extResult = try await ProcessRunner.run(
             executable: binDir.appendingPathComponent("psql"),
             arguments: [
-                "-h", "localhost",
+                "-w", "-h", "localhost",
                 "-p", String(port),
                 "-U", "fliks",
                 "-d", "fliks",
@@ -173,9 +176,9 @@ actor PostgresManager {
 
         let result = try await ProcessRunner.run(
             executable: binDir.appendingPathComponent("pg_ctl"),
-            arguments: ["-D", dataDir.path, "-m", "fast", "stop"],
+            arguments: ["-D", dataDir.path, "-m", "fast", "-t", "60", "stop"],
             environment: pgEnv,
-            timeout: 15
+            timeout: 65
         )
 
         if !result.succeeded {
@@ -197,6 +200,138 @@ actor PostgresManager {
     }
 
     // MARK: - Private
+
+    private func startPostmaster() async throws {
+        logger.info("Starting PostgreSQL on port \(self.port)...")
+
+        let result = try await ProcessRunner.run(
+            executable: binDir.appendingPathComponent("pg_ctl"),
+            arguments: [
+                "-D", dataDir.path,
+                "-l", logFile.path,
+                // Single-quote the path: postgres word-splits pg_ctl's -o
+                // string, so a bundle path containing a space must be quoted to
+                // survive as a single argument. -D and env vars are passed as
+                // whole args and don't need this.
+                // An empty unix_socket_directories (the shell drops the '') turns the socket off.
+                "-o", "-p \(port) -c dynamic_library_path='\(libDir.appendingPathComponent("postgresql").path)' -c unix_socket_directories=''",
+                "start",
+            ],
+            environment: pgEnv,
+            timeout: 30
+        )
+
+        guard result.succeeded else {
+            throw PostgresError.startFailed(result.stderr)
+        }
+    }
+
+    private func isPostmasterRunning() async -> Bool {
+        let result = try? await ProcessRunner.run(
+            executable: binDir.appendingPathComponent("pg_ctl"),
+            arguments: ["-D", dataDir.path, "status"],
+            environment: pgEnv,
+            timeout: 10
+        )
+        return result?.succeeded ?? false
+    }
+
+    private func reload() async throws {
+        let result = try await ProcessRunner.run(
+            executable: binDir.appendingPathComponent("pg_ctl"),
+            arguments: ["-D", dataDir.path, "reload"],
+            environment: pgEnv,
+            timeout: 10
+        )
+        guard result.succeeded else { throw PostgresError.startFailed("pg_ctl reload: \(result.stderr)") }
+    }
+
+    /// Read `.db-password`, or generate it (64 hex characters, mode 0600). True when generated.
+    private func loadPassword() throws -> Bool {
+        let file = Paths.dbPasswordFile
+        if let existing = try? String(contentsOf: file, encoding: .utf8) {
+            let trimmed = existing.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                password = trimmed
+                return false
+            }
+        }
+
+        var bytes = [UInt8](repeating: 0, count: 32)
+        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+            throw PostgresError.initFailed("no random bytes for the database password")
+        }
+        let hex = bytes.map { String(format: "%02x", $0) }.joined()
+
+        try Paths.ensureDirectory(Paths.confDir)
+        let fd = open(file.path, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
+        guard fd >= 0 else { throw PostgresError.initFailed("cannot write \(file.path)") }
+        defer { close(fd) }
+        guard write(fd, hex, hex.utf8.count) == hex.utf8.count else {
+            throw PostgresError.initFailed("cannot write \(file.path)")
+        }
+        password = hex
+        return true
+    }
+
+    /// Whether any line of `pg_hba.conf` still uses the `trust` method.
+    private func hbaTrusts() -> Bool {
+        guard let hba = try? String(contentsOf: hbaFile, encoding: .utf8) else { return false }
+        return hba.split(separator: "\n").contains { line in
+            let body = line.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+            return body.split(whereSeparator: \.isWhitespace).contains("trust")
+        }
+    }
+
+    /// TCP loopback only, scram everywhere: the same file a fresh cluster ends up with.
+    private func writeHba() throws {
+        let hba = """
+        # TYPE  DATABASE  USER  ADDRESS       METHOD
+        host    all       all   127.0.0.1/32  scram-sha-256
+        host    all       all   ::1/128       scram-sha-256
+
+        """
+        try hba.write(to: hbaFile, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: hbaFile.path)
+    }
+
+    /// Live repair of a trust cluster: set the role password while trust still lets us in,
+    /// then close `pg_hba.conf`. A crash in between leaves `trust`, so the next launch retries.
+    private func migrateToScram() async throws {
+        logger.info("Switching the PostgreSQL cluster from trust to scram-sha-256")
+        // The statement goes through stdin: argv is visible in `ps`, and the output is
+        // not logged because an error echoes the statement.
+        let result = try await ProcessRunner.run(
+            executable: binDir.appendingPathComponent("psql"),
+            arguments: ["-w", "-h", "localhost", "-p", String(port), "-U", "fliks", "-d", "postgres",
+                        "-v", "ON_ERROR_STOP=1"],
+            environment: pgEnv,
+            timeout: 10,
+            stdin: "ALTER ROLE fliks PASSWORD '\(password)';\n"
+        )
+        guard result.succeeded else {
+            throw PostgresError.authFailed("psql exited \(result.exitCode)")
+        }
+        try writeHba()
+        try await reload()
+    }
+
+    /// `.db-password` is gone while the cluster is already on scram: stop, reset the role
+    /// password in single-user mode (statement on stdin, never logged), the caller starts again.
+    private func resetPasswordSingleUser() async throws {
+        logger.warning("The database password file is missing: resetting the role password")
+        if await isPostmasterRunning() { try await stop() }
+        let result = try await ProcessRunner.run(
+            executable: binDir.appendingPathComponent("postgres"),
+            arguments: ["--single", "-D", dataDir.path, "postgres"],
+            environment: pgEnv,
+            timeout: 30,
+            stdin: "ALTER ROLE fliks PASSWORD '\(password)'\n"
+        )
+        guard result.succeeded else {
+            throw PostgresError.authFailed("postgres --single exited \(result.exitCode)")
+        }
+    }
 
     /// Poll `pg_isready` until success or timeout.
     private func waitForReady(timeout: TimeInterval) async throws {
@@ -229,6 +364,7 @@ enum PostgresError: LocalizedError {
     case initFailed(String)
     case startFailed(String)
     case createDBFailed(String)
+    case authFailed(String)
     case timeout
 
     var errorDescription: String? {
@@ -236,6 +372,7 @@ enum PostgresError: LocalizedError {
         case .initFailed(let msg):    return "PostgreSQL init failed: \(msg)"
         case .startFailed(let msg):   return "PostgreSQL start failed: \(msg)"
         case .createDBFailed(let msg): return "Database creation failed: \(msg)"
+        case .authFailed(let msg):    return "PostgreSQL password reset failed: \(msg)"
         case .timeout:                return "PostgreSQL did not become ready in time"
         }
     }

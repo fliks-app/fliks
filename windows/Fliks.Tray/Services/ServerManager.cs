@@ -5,7 +5,7 @@ using Fliks.Tray.Utilities;
 namespace Fliks.Tray.Services;
 
 /// <summary>Environment injected into the engine and its fliks-server child.</summary>
-internal sealed record ServerEnvironment(ushort Port, ushort DbPort)
+internal sealed record ServerEnvironment(ushort Port, ushort DbPort, string DbPassword)
 {
     public IReadOnlyDictionary<string, string> AsEnvironment()
     {
@@ -21,7 +21,7 @@ internal sealed record ServerEnvironment(ushort Port, ushort DbPort)
             ["DB_HOST"] = "127.0.0.1",
             ["DB_PORT"] = DbPort.ToString(),
             ["DB_USERNAME"] = "fliks",
-            ["DB_PASSWORD"] = "fliks",
+            ["DB_PASSWORD"] = DbPassword,
             ["DB_NAME"] = "fliks",
             ["SERVE_STATIC_PATH"] = AppPaths.ClientDir,
             ["FLIKS_SUPERVISED"] = "1",
@@ -104,13 +104,28 @@ internal sealed class ServerManager
         var proc = _process;
         if (proc is null || proc.HasExited) { Cleanup(); return; }
 
-        try { proc.CloseMainWindow(); } catch { /* no window */ }
-        try { proc.Kill(entireProcessTree: true); } catch { /* already gone */ }
-
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
-        while (!proc.HasExited && DateTime.UtcNow < deadline) await Task.Delay(200);
+        // Ctrl-C reaches the engine, fliks-server and their ffmpeg runs through the engine's console,
+        // so the server drains (QoE flush, plugins, HTTP) before the engine exits.
+        var signalled = ConsoleCtrl.SendCtrlC(proc.Id);
+        if (!signalled) Log.Error("server stop: cannot signal the engine, killing it");
+        if (!signalled || !await ExitedWithinAsync(proc, StopGrace))
+        {
+            Log.Info("server stop: the engine did not exit in time, killing the process tree");
+            try { proc.Kill(entireProcessTree: true); } catch { /* already gone */ }
+            await ExitedWithinAsync(proc, TimeSpan.FromSeconds(5));
+        }
         _job?.Dispose();
         Cleanup();
+    }
+
+    // The engine gives its server 10 s to drain before killing it; this adds a margin.
+    private static readonly TimeSpan StopGrace = TimeSpan.FromSeconds(15);
+
+    private static async Task<bool> ExitedWithinAsync(Process proc, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!proc.HasExited && DateTime.UtcNow < deadline) await Task.Delay(200);
+        return proc.HasExited;
     }
 
     private void Cleanup()

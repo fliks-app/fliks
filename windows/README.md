@@ -73,9 +73,9 @@ vendored binaries and the repo's `client/dist` and `server/public`; `fliks-engin
 | Path | Contents |
 |------|----------|
 | `%LOCALAPPDATA%\Fliks Server\postgresql\` | Database cluster |
-| `%LOCALAPPDATA%\Fliks Server\conf\` | JWT secret + tray settings |
+| `%LOCALAPPDATA%\Fliks Server\conf\` | JWT secret, `.db-password` (generated Postgres password) + tray settings |
 | `%LOCALAPPDATA%\Fliks Server\data\` | Server cwd (images, backups) |
-| `%LOCALAPPDATA%\Fliks Server\logs\` | Server (`server-<date>.log`) + PostgreSQL logs |
+| `%LOCALAPPDATA%\Fliks Server\logs\` | Server (`server-<date>.log`) + PostgreSQL logs, kept 14 days |
 | `%LOCALAPPDATA%\Fliks Server\transcode\` | HLS transcode cache (ephemeral) |
 
 Setup installs the app under `%LOCALAPPDATA%\FliksServer` (per-user, no admin);
