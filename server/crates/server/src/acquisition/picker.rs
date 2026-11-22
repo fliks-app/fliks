@@ -1,7 +1,7 @@
 //! Acquisition providers (`plugins.md` section K): sources and provider order.
-use super::Plugins;
-use super::imports::host_err;
-use super::runtime::{HostError, State};
+use crate::plugins::Plugins;
+use crate::plugins::imports::host_err;
+use crate::plugins::runtime::{HostError, State};
 use crate::sync::MutexExt;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -146,7 +146,7 @@ impl Plugins {
         self.pickers.configure(order);
     }
 
-    pub(super) fn push_to_plugins(&self, name: &str, payload: &Value) {
+    pub(crate) fn push_to_plugins(&self, name: &str, payload: &Value) {
         let text = payload.to_string();
         for rt in self.live() {
             rt.push_event(name, &text);

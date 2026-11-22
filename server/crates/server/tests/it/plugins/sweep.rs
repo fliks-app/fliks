@@ -1,9 +1,9 @@
 //! Core-driven acquisition (`plugins.md` rule 68) through two fixture providers.
 use super::harness::*;
+use fliks_server::acquisition;
+use fliks_server::acquisition::sweep::Outcome;
 use fliks_server::events::DomainEvent;
-use fliks_server::plugins::acquisition;
 use fliks_server::plugins::runtime::fliks::plugin::types::{CandidatesQuery, Target};
-use fliks_server::plugins::sweep::Outcome;
 use serde_json::{Value, json};
 use std::time::Duration;
 

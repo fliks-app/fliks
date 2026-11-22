@@ -1,4 +1,5 @@
 pub mod account_session;
+pub mod acquisition;
 pub mod annotations;
 pub mod app;
 pub mod atomic_file;

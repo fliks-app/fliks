@@ -422,7 +422,7 @@ pub async fn queue_set(h: &H, plugin: &str, media: u32, refs: &[&str]) {
             error: None,
         })
         .collect();
-    fliks_server::plugins::queue::set(&h.st, plugin, entries)
+    fliks_server::acquisition::queue::set(&h.st, plugin, entries)
         .await
         .unwrap();
 }

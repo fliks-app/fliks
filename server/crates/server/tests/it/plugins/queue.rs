@@ -1,7 +1,7 @@
 //! The acquisition queue and history (`plugins.md` rules 69-75) through the fixture plugin.
 use super::harness::*;
+use fliks_server::acquisition::queue;
 use fliks_server::events::{Bus, SseEvent};
-use fliks_server::plugins::queue;
 use fliks_server::plugins::runtime::fliks::plugin::types::{
     GrabMethod, QueueEntry, QueueState, UnitRef,
 };
@@ -112,10 +112,11 @@ async fn a_provider_reports_its_queue_and_the_core_proxies_actions() {
 
     // The table feeds the in-flight read (a plugin never sees itself).
     let others =
-        fliks_server::plugins::queue::in_flight(&h.st.db, "other", media, None, None).await;
+        fliks_server::acquisition::queue::in_flight(&h.st.db, "other", media, None, None).await;
     assert_eq!(others.unwrap(), vec!["fliks.fixture".to_owned()]);
     let own =
-        fliks_server::plugins::queue::in_flight(&h.st.db, "fliks.fixture", media, None, None).await;
+        fliks_server::acquisition::queue::in_flight(&h.st.db, "fliks.fixture", media, None, None)
+            .await;
     assert!(own.unwrap().is_empty());
 
     // The core proxies an action to the owner with the ref; no route declared, no action.

@@ -186,8 +186,8 @@ fn validate(key: &str, value: &str) -> Result<(), AppError> {
             "music.unrequested_tracks must be one of the following values: import_unmonitored, skip",
         ]));
     }
-    if key == crate::plugins::picker::ORDER_KEY {
-        crate::plugins::picker::validate_order(value)
+    if key == crate::acquisition::picker::ORDER_KEY {
+        crate::acquisition::picker::validate_order(value)
             .map_err(|m| AppError::bad_request(vec![m]))?;
     }
     if key == "karaoke.aligners" {

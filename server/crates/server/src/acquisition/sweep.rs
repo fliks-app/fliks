@@ -1,9 +1,10 @@
 //! Core-driven acquisition (`plugins.md` section K): the core asks every provider to search, ranks the
 //! answers and asks the best one's provider to grab.
-use super::runtime::fliks::plugin::types as t;
-use super::runtime::{CallError, State};
-use super::{HttpRequest, Plugins, Principal, acquisition, events, picker};
+use super::{self as acquisition, picker};
 use crate::ingest::KeyedLocks;
+use crate::plugins::runtime::fliks::plugin::types as t;
+use crate::plugins::runtime::{CallError, State};
+use crate::plugins::{HttpRequest, Plugins, Principal, events};
 use crate::state::AppState;
 use crate::sync::MutexExt;
 use fliks_domain::release::parsing::attributes::parse_revision;
@@ -47,7 +48,7 @@ impl Queue {
 #[derive(Default)]
 pub struct Sweeps {
     /// Held from a media's in-flight check to its grab.
-    pub(super) claims: KeyedLocks<i32>,
+    pub(crate) claims: KeyedLocks<i32>,
     slots: Mutex<HashMap<String, Arc<Semaphore>>>,
     queue: Mutex<Queue>,
 }
@@ -710,7 +711,7 @@ mod tests {
 
     #[test]
     fn only_a_full_lane_is_saturated() {
-        use super::super::runtime::{QUEUE_FULL, QUEUE_WAIT};
+        use crate::plugins::runtime::{QUEUE_FULL, QUEUE_WAIT};
         let un = |m: &str| CallError::Unavailable(m.into());
         for full in [CallError::Busy, un(QUEUE_FULL), un(QUEUE_WAIT)] {
             assert!(full.is_saturated(), "{full:?}");

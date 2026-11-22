@@ -365,19 +365,19 @@ async fn act(
         .call_route(&plugin, "POST", route, vec![], body)
         .await
         .map_err(|e| match e {
-            crate::plugins::sweep::RouteError::Unavailable => {
+            crate::acquisition::sweep::RouteError::Unavailable => {
                 AppError::plain(StatusCode::SERVICE_UNAVAILABLE, "PLUGIN_UNAVAILABLE")
             }
-            crate::plugins::sweep::RouteError::Busy => {
+            crate::acquisition::sweep::RouteError::Busy => {
                 AppError::plain(StatusCode::SERVICE_UNAVAILABLE, "PLUGIN_BUSY")
             }
-            crate::plugins::sweep::RouteError::TimedOut => {
+            crate::acquisition::sweep::RouteError::TimedOut => {
                 AppError::plain(StatusCode::GATEWAY_TIMEOUT, "PLUGIN_TIMEOUT")
             }
-            crate::plugins::sweep::RouteError::InFlight => {
+            crate::acquisition::sweep::RouteError::InFlight => {
                 AppError::plain(StatusCode::CONFLICT, "ALREADY_IN_FLIGHT")
             }
-            crate::plugins::sweep::RouteError::Failed(m) => {
+            crate::acquisition::sweep::RouteError::Failed(m) => {
                 AppError::with_message(StatusCode::BAD_GATEWAY, m)
             }
         })?;

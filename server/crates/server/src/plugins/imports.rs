@@ -25,7 +25,7 @@ pub fn host_err(code: &str, message: impl Into<String>) -> HostError {
     }
 }
 
-pub(super) fn db_err(e: sqlx::Error) -> HostError {
+pub(crate) fn db_err(e: sqlx::Error) -> HostError {
     let unreachable = matches!(
         e,
         sqlx::Error::Io(_) | sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed
@@ -219,7 +219,7 @@ impl host::Host for Ctx {
             async {
                 let app = app?;
                 let family = family.map(Family::from);
-                super::acquisition::context(&app, media_id, family, language, group_id, item_id)
+                crate::acquisition::context(&app, media_id, family, language, group_id, item_id)
                     .await
             }
         )
@@ -240,7 +240,7 @@ impl host::Host for Ctx {
                     .then(|| chrono::NaiveDate::parse_from_str(&q.available_on, "%Y-%m-%d").ok())
                     .flatten()
                     .ok_or_else(|| host_err("ERR_VALIDATION", "availableOn must be YYYY-MM-DD"))?;
-                super::acquisition::candidates(&app.db, q, on)
+                crate::acquisition::candidates(&app.db, q, on)
                     .await
                     .map_err(db_err)
             }
@@ -259,7 +259,7 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                super::acquisition::matches(&app, titles, min_age_minutes)
+                crate::acquisition::matches(&app, titles, min_age_minutes)
                     .await
                     .map_err(db_err)
             }
@@ -282,7 +282,7 @@ impl host::Host for Ctx {
             async {
                 let app = app?;
                 let family = family.map(Family::from);
-                super::acquisition::score_any(&app, media_id, family, language, unit, releases)
+                crate::acquisition::score_any(&app, media_id, family, language, unit, releases)
                     .await
             }
         )
@@ -334,7 +334,7 @@ impl host::Host for Ctx {
                 let app = app?;
                 // Spawned so a deadline stops the wait, not the import and its request hooks.
                 tokio::spawn(async move {
-                    super::acquisition::resolve_or_create(
+                    crate::acquisition::resolve_or_create(
                         &app,
                         &plugin_id,
                         &kind,
@@ -363,7 +363,7 @@ impl host::Host for Ctx {
             async {
                 let app = app?;
                 tokio::spawn(async move {
-                    super::acquisition::want_recording(&app, recording, library_id).await
+                    crate::acquisition::want_recording(&app, recording, library_id).await
                 })
                 .await
                 .map_err(|e| host_err("ERR", e.to_string()))?
@@ -382,7 +382,7 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                super::acquisition::find_recording(&app, recording).await
+                crate::acquisition::find_recording(&app, recording).await
             }
         )
     }
@@ -401,7 +401,7 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                super::acquisition::playlist_sync(&app, &plugin_id, user_id, &name, &item_ids).await
+                crate::acquisition::playlist_sync(&app, &plugin_id, user_id, &name, &item_ids).await
             }
         )
     }
@@ -490,7 +490,7 @@ impl host::Host for Ctx {
                 let app = app?;
                 let list = sources
                     .into_iter()
-                    .map(|s| super::picker::Source {
+                    .map(|s| crate::acquisition::picker::Source {
                         id: s.id,
                         name: s.name,
                         kinds: s.kinds,
@@ -539,7 +539,7 @@ impl host::Host for Ctx {
             HOST_CALL,
             async {
                 let app = app?;
-                super::queue::set(&app, &id, entries).await
+                crate::acquisition::queue::set(&app, &id, entries).await
             }
         )
     }

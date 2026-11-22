@@ -1,9 +1,9 @@
 //! The acquisition queue and history (`plugins.md` rules 69-75): what providers report, what readers see.
-use super::imports::{db_err, host_err};
-use super::runtime::{HostError, fliks::plugin::types as t};
-use super::units;
 use crate::events::event::{AcquisitionQueue, Download, DownloadState};
 use crate::events::{Num, SseEvent};
+use crate::plugins::imports::{db_err, host_err};
+use crate::plugins::runtime::{HostError, fliks::plugin::types as t};
+use crate::plugins::units;
 use crate::state::AppState;
 use fliks_domain::media::{family::Family, kind::MediaKind};
 use sqlx::{FromRow, PgPool};
@@ -535,7 +535,7 @@ async fn announce(st: &AppState, plugin: &str, changes: Changes) {
         return;
     }
     for media in &changes.media {
-        super::events::push_progress(st, *media, st.plugins.progress.union(*media)).await;
+        crate::plugins::events::push_progress(st, *media, st.plugins.progress.union(*media)).await;
     }
     let users = audience(st).await;
     // Rows to patch only when nothing joined or left the list and few changed; else the page reloads.
