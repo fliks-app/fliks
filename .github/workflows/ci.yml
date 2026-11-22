@@ -68,13 +68,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: no literal em dash in added server and client lines
+      - name: banned shapes in added server and client lines
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_REF"
-          git diff -U0 --no-color FETCH_HEAD HEAD -- server client ':!*.md' |
-            awk -v d="$(printf '\342\200\224')" '/^\+\+\+ /{f=$2; next} /^\+/ && index($0,d){print f": "$0; bad=1} END{exit bad}'
+          git diff -U0 --no-color FETCH_HEAD HEAD -- server client ':!*.md' | scripts/check-added-lines.sh
 
   lint:
     needs: changes

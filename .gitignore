@@ -64,6 +64,7 @@ volumes/*
 /scripts/*
 !/scripts/bump-engine.sh
 !/scripts/bump-providers.sh
+!/scripts/check-added-lines.sh
 !/scripts/dev-plugin.sh
 !/scripts/with-test-postgres.sh
 !/scripts/embedded-postgres.conf
