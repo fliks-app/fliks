@@ -1,7 +1,7 @@
 //! The SSE hub (`docs/spec/events-hub.md`): connection registry, audiences, polled
 //! targets and attribution. Every method locks briefly and never awaits; the household hook runs unlocked.
 use super::{
-    Bus, SseEvent,
+    Bus, DomainEvent, SseEvent,
     activity::Activity,
     event::{RawEvent, RemoteAction},
 };
@@ -143,6 +143,7 @@ type UsersHook = Arc<dyn Fn(&SseEvent, &[i32]) + Send + Sync>;
 pub struct Shared {
     inner: Mutex<Inner>,
     bus: broadcast::Sender<Arc<Bus>>,
+    domain: broadcast::Sender<Arc<DomainEvent>>,
     fan_out: Mutex<Option<FanOut>>,
     to_users: Mutex<Option<UsersHook>>,
     down: watch::Sender<bool>,
@@ -217,6 +218,7 @@ impl Hub {
         Self(Arc::new_cyclic(|w| Shared {
             inner: Mutex::default(),
             bus: broadcast::channel(BUS_CAPACITY).0,
+            domain: broadcast::channel(BUS_CAPACITY).0,
             fan_out: Mutex::new(None),
             to_users: Mutex::new(None),
             down: watch::channel(false).0,
@@ -228,10 +230,15 @@ impl Hub {
         &self.0.activity
     }
 
-    /// Every event of both kinds, whatever its audience: the in-process subscribers' feed.
-    /// At-most-once; a slow receiver lags and loses events.
+    /// Every event of every kind, whatever its audience: the tests' feed, never a production subscriber's.
     pub fn subscribe(&self) -> broadcast::Receiver<Arc<Bus>> {
         self.0.bus.subscribe()
+    }
+
+    /// The domain events only, so a burst of UI frames never lags a business subscriber.
+    /// At-most-once: a lagged receiver runs its reconcile (`events::listen`).
+    pub fn subscribe_domain(&self) -> broadcast::Receiver<Arc<DomainEvent>> {
+        self.0.domain.subscribe()
     }
 
     /// Closes every SSE stream and refuses new ones, so a graceful shutdown is not held open.
@@ -290,6 +297,7 @@ impl Hub {
 
     /// A plugin event (`type` is the full `plugin.<id>.<type>`); `None` broadcasts.
     pub fn emit_raw(&self, r#type: &str, payload: serde_json::Value, users: Option<&[i32]>) {
+        debug_assert!(r#type.starts_with("plugin."), "core events are `SseEvent`s");
         let raw = RawEvent {
             r#type: r#type.to_owned(),
             payload,
@@ -302,7 +310,8 @@ impl Hub {
     }
 
     /// In-process only (rules 37-39); never reaches a browser.
-    pub fn emit_domain(&self, ev: super::DomainEvent) {
+    pub fn emit_domain(&self, ev: DomainEvent) {
+        let _ = self.0.domain.send(Arc::new(ev.clone()));
         let _ = self.0.bus.send(Arc::new(Bus::Domain(ev)));
     }
 
@@ -1072,6 +1081,21 @@ mod tests {
             })
             .collect();
         assert_eq!(kinds, ["sse", "sse", "domain"]);
+    }
+
+    #[tokio::test]
+    async fn the_domain_feed_is_not_lagged_by_a_burst_of_frames() {
+        let hub = Hub::new();
+        let mut rx = hub.subscribe_domain();
+        for _ in 0..BUS_CAPACITY + 10 {
+            hub.emit(SseEvent::QueueUpdated {});
+        }
+        hub.emit_domain(DomainEvent::SettingsChanged { key: "k".into() });
+        assert_eq!(
+            *rx.try_recv().unwrap(),
+            DomainEvent::SettingsChanged { key: "k".into() }
+        );
+        assert!(rx.try_recv().is_err());
     }
 
     #[test]

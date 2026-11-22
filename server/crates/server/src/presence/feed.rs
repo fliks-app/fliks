@@ -2,7 +2,7 @@
 use super::Presence;
 use crate::{engine::Feed, state::AppState};
 use fliks_engine_core::api::EngineEvent;
-use tokio::sync::broadcast::{Receiver, error::RecvError};
+use tokio::sync::broadcast::Receiver;
 
 /// Subscribes before the engine starts, so the first `Resync` is never missed. Runs for the process.
 pub fn spawn(st: &AppState) {
@@ -20,21 +20,13 @@ pub fn spawn(st: &AppState) {
 /// A lagged receiver lost events: `on_lag` makes the engine reconnect, whose `Resync` repairs it.
 /// `on_end` hears every session that ended or was dropped as an orphan (QoE finalizes its tracker).
 pub(super) async fn run(
-    mut rx: Receiver<Feed>,
+    rx: Receiver<Feed>,
     presence: Presence,
     on_end: impl Fn(&str),
     on_lag: impl Fn(),
 ) {
-    loop {
-        match rx.recv().await {
-            Ok(feed) => apply(&presence, &feed).iter().for_each(|sid| on_end(sid)),
-            Err(RecvError::Lagged(n)) => {
-                tracing::warn!("presence feed lagged by {n}, resyncing");
-                on_lag();
-            }
-            Err(RecvError::Closed) => return,
-        }
-    }
+    let on_event = |feed: &Feed| apply(&presence, feed).iter().for_each(|sid| on_end(sid));
+    crate::events::listen("presence feed", rx, on_event, on_lag).await;
 }
 
 /// The sids that left presence.

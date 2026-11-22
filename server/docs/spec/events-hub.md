@@ -51,7 +51,7 @@ Scope: the hub, its two routes, the event catalogue and the domain bus. The remo
 19. `register_household_fan_out(fn)` is registered once by the remote service; its behaviour (grantees of the device or owner plus all enabled admins, minus the owner, via `emit_to_users`; 30 s grant cache; `remote.state` and `remote.stopped` scoped to the device id of `targetId`, the part before `#`) belongs to `remote.md`. Because it calls `emit_to_users`, which never invokes the hook, it cannot loop.
 20. `emit_to_users(userIds, event)`: connections of those users; an empty list delivers to nobody (an empty array is a non-null audience). No hook.
 21. `emit_to_connection(connectionId, event)` returns a boolean. Polled target (key `polled:<targetId>`): pushed to its queue, `true`; if the queue already holds 20 (`POLLED_QUEUE_MAX`) the event is dropped with a warning and `false`. SSE connection unknown: warning, `false`. Otherwise delivered to exactly that connection only. A caller must not fall back to `emit_to_user` for `remote.command` (it would command every device of the user).
-   - 21a. `emit_raw(type, payload, audience)` for plugin events: wire event is `{"type":"plugin.<id>.<type>","payload":<payload>}`; `audience: null` broadcasts, else a user-id list.
+   - 21a. `emit_raw(type, payload, audience)` for plugin events only (`type` starts with `plugin.`; every core event is an `SseEvent`): wire event is `{"type":"plugin.<id>.<type>","payload":<payload>}`; `audience: null` broadcasts, else a user-id list.
 22. Superseded-connection eviction: on connect with a `targetId`, every other connection of the same `userId` and same `targetId` is deleted from the registry and its stream is closed by the server. It stops being a target, receives no teardown announce and is skipped by `drop_connections_for_*`. Rationale: a killed webview or dropped mobile network sends no FIN. Two tabs of one device have different `targetId` and coexist; connections without `targetId` are never evicted; the same `targetId` under another user is not evicted.
 23. Each `emit*` goes through one `dispatch`: the envelope is delivered to the audience, then published on the bus. Nothing is cached.
 24. Backend-internal `subscribe` receives every SSE event envelope's event regardless of audience (including events addressed to one connection through the bus; not polled-queue events and not `sse.connected`/`ping`).
@@ -75,8 +75,8 @@ Scope: the hub, its two routes, the event catalogue and the domain bus. The remo
 
 ### Domain bus (backend to backend)
 
-37. `emit_domain(event)` publishes to the domain bus; a subscriber registers a handler. In-process, at-most-once, no persistence, no replay, no retry; a handler that fails is caught and logged `Domain event handler threw on "<type>": <message>`, never reaching the emitter.
-38. Domain event payloads (11 types) are in the Events section. The plugin contract's webhook event list equals the domain event types; adding a domain event requires adding it to the plugin webhook event names too.
+37. `emit_domain(event)` publishes to the domain channel (`subscribe_domain`), which carries domain events only, so a burst of SSE frames never lags it; a subscriber registers a handler. In-process, at-most-once, no persistence, no replay, no retry; a receiver that lags runs its `on_lag` reconcile (`events::listen`) or, where this spec says so, loses the events; a handler that fails is caught and logged `Domain event handler threw on "<type>": <message>`, never reaching the emitter.
+38. Domain event payloads (12 types) are in the Events section. The plugin contract's webhook event list equals the domain event types; adding a domain event requires adding it to the plugin webhook event names too.
 39. `settings.changed` exists only as a domain event (emitted after the in-process consumers ran); there is no `settings.changed` SSE event.
 
 ### `GET /api/system/activity` and the registry
@@ -160,9 +160,9 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 39 | `social.content_recommended` | U(recipient) | `{userId, username, avatar: string|null, mediaTitle: string}` |
 | 39a | `notification` | Us(recipients), one payload each | `{id: string, ts: number, ttl: number, cat: string, title: string, body: string, url: string, image?: string, actions?: {id, title, kind: 'open'|'call', url?, token?}[], badge: number, tag?: string}` (rule 49, `push.md`) |
 | 40 | `plugin.<pluginId>.<type>` (raw, outside the union) | B, or Us(`[userId]`), or Us(recipientsForMedia) | `{payload: unknown}` (plus `type`) |
-| 40a | `acquisition.sources` (raw, outside the union, no `plugin.` prefix) | B | `{payload: {pluginId: string}}` (plus `type`): the sources of an acquisition provider changed, or a provider with a release picker turned ready or stopped being ready (`plugins.md` rules 63, 71) |
-| 40b | `acquisition.queue` (raw, outside the union, no `plugin.` prefix) | Us(enabled users holding `media.grab`, admins and `manage:all` included) | `{payload: {pluginId: string, rows: AcquisitionRow[]|null}}` (plus `type`): a provider's `queue.set` changed a row of the acquisition queue; `rows` the changed wire rows (`plugins.md` rule 73) when nothing joined or left the open list and at most 100 changed, else null (`plugins.md` rule 75) |
-| 40c | `acquisition.grab-best` (raw, outside the union, no `plugin.` prefix) | Us(the caller) | `{payload: {scope: {mediaId: number, family: string, groupId: number|null, itemId: number|null}, outcome: 'grabbed'|'none'|'skipped'|'busy'|'error'|'timeout', detail: string}}` (plus `type`): the outcome of `POST /api/media/:id/grab-best` (`plugins.md` rule 68) |
+| 40a | `acquisition.sources` (a typed `SseEvent` whose fields sit under `payload`) | B | `{payload: {pluginId: string}}` (plus `type`): the sources of an acquisition provider changed, or a provider with a release picker turned ready or stopped being ready (`plugins.md` rules 63, 71) |
+| 40b | `acquisition.queue` (a typed `SseEvent` whose fields sit under `payload`) | Us(enabled users holding `media.grab`, admins and `manage:all` included) | `{payload: {pluginId: string, rows: AcquisitionRow[]|null}}` (plus `type`): a provider's `queue.set` changed a row of the acquisition queue; `rows` the changed wire rows (`plugins.md` rule 73) when nothing joined or left the open list and at most 100 changed, else null (`plugins.md` rule 75) |
+| 40c | `acquisition.grab-best` (a typed `SseEvent` whose fields sit under `payload`) | Us(the caller) | `{payload: {scope: {mediaId: number, family: string, groupId: number|null, itemId: number|null}, outcome: 'grabbed'|'none'|'skipped'|'busy'|'error'|'timeout', detail: string}}` (plus `type`): the outcome of `POST /api/media/:id/grab-best` (`plugins.md` rule 68) |
 | 41 | `party.state` | C (each member of the party) | `{partyId: number, rev: number, state: 'idle'|'waiting'|'paused'|'playing', item: PartyItem, anchor: {position: number, serverTimeMs: number}, whenMs: number|null, by: {userId, username}|null, action: string|null}` (`watch-party.md`) |
 | 42 | `party.members` | C (members) | `{partyId, rev, members: PartyMember[]}` |
 | 43 | `party.settings` | C (members) | `{partyId, rev, name: string, policy: 'everyone'|'host_only'}` |
@@ -181,7 +181,7 @@ Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent`
 
 `RemoteCommandAction` = `'load'|'play'|'pause'|'playpause'|'stop'|'seek'|'volume'|'mute'|'next'|'prev'|'shuffle'|'repeat'|'queue'|'enqueue'|'audio'|'subtitle'|'quality'|'browse'`; all absolute except `playpause`, `next` and `prev`.
 
-### Domain events (`DomainEvent`, 11 types, in-process only)
+### Domain events (`DomainEvent`, 12 types, in-process only)
 
 | Event | Payload |
 |---|---|
@@ -192,6 +192,7 @@ Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent`
 | `media.files.imported` | `{mediaId: number, family: 'video'|'audio'|'text'|'image', seasonNumber?: number, episodeNumber?: number, source: 'download'|'disk'}` |
 | `media.acquisition.requested` | `{mediaIds: number[], reason: string}` (starts the core's acquisition sweep of those media, `plugins.md` rule 66; `reason` `media-added` after a direct add) |
 | `acquisition.grabbed` | `{mediaId: number, family: 'video'|'audio'|'text'|'image', seasonNumber?: number, episodeNumber?: number}` |
+| `acquisition.imported` | `{mediaId: number, family: 'video'|'audio'|'text'|'image', seasonNumber?: number, episodeNumber?: number}` (a provider reported the import, `plugins.md` rule 33; the request lifecycle reads it) |
 | `request.created` | `{requestId: number, mediaType: string, externalIds: ExternalId[], userId: number|null, kind: string, seasons: number[]|null}` |
 | `request.approved` | `{requestId: number, mediaId: number|null, mediaType: string, externalIds: ExternalId[], seasons: number[]|null, approvedByUserId: number|null}` |
 | `library.scan.completed` | `{libraryId: number, added: number, updated: number}` |
@@ -201,17 +202,15 @@ Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent`
 
 ### In-process subscribers
 
-Two in-process buses: the SSE bus (`subscribe`, audience-blind) and the domain bus (`emit_domain`). Every subscriber below sees every event of its type, at-most-once. Error isolation (rule 37) covers only the domain bus: a subscriber of the SSE bus catches its own errors.
+Two in-process feeds: the all-frames bus (`subscribe`, audience-blind, every SSE frame; tests only) and the domain channel (`subscribe_domain`, `emit_domain` only). Every subscriber below sees every event of its type, at-most-once, and reads the domain channel. A subscriber that lags runs its reconcile through `events::listen`, the loop `presence/feed.rs` shares.
 
-| Subscriber | Bus | Event types consumed | Effect |
+| Subscriber | Event types consumed | Effect | On lag |
 |---|---|---|---|
-| request lifecycle | SSE bus | `import.complete` | recompute of open requests for the media |
-| request lifecycle | domain bus | `acquisition.grabbed` | APPROVED to PROCESSING for the media and season |
-| post-import queue | domain bus | `media.files.imported` | debounce-schedule sprites/markers/scans for the media |
-| post-import queue | SSE bus | `rescan.completed` | schedule post-import when `added > 0`, else scan sources |
-| new-episode notifier (`push.md` rule 35) | domain bus | `media.files.imported` | groups imports of a series for 5 minutes, then `push::notify` |
-| plugin webhook dispatcher | domain bus | all 11 domain types (filtered by each plugin's declared webhooks) | HTTP webhook delivery |
-| plugin process dispatcher | domain bus | all 11 | NDJSON event to every ready `process` plugin |
+| request lifecycle | `acquisition.imported` | recompute of open requests for the media | the reconcile of `requests.md` rule 43 |
+| request lifecycle | `acquisition.grabbed` | APPROVED to PROCESSING for the media and season | the same reconcile |
+| new-episode notifier (`push.md` rule 35) | `media.files.imported` | groups imports of a series for 5 minutes, then `push::notify` | lossy by contract: no marker says which import was lost |
+| plugin webhook dispatcher | all 12 domain types (filtered by each plugin's declared webhooks) | HTTP webhook delivery | the full acquisition sweep of `plugins.md` rule 66, in place of a lost `media.acquisition.requested`; the delivery itself is lossy by contract |
+| plugin process dispatcher | all 12 | NDJSON event to every ready `process` plugin | the same sweep; the push itself is lossy by contract |
 
 The notification hook of rule 51 is a hub-level hook (like the household fan-out), not a bus subscriber. Not subscribers: media-server dispatch and notification dispatch are direct calls at the emitting sites, and the settings change consumers are the direct calls of `settings.md` rule 11, not the bus.
 

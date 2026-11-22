@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
 
-pub const WEBHOOK_EVENTS: [&str; 11] = [
+pub const WEBHOOK_EVENTS: [&str; 12] = [
     "media.imported",
     "media.monitored.changed",
     "media.season.monitored.changed",
@@ -17,6 +17,7 @@ pub const WEBHOOK_EVENTS: [&str; 11] = [
     "media.files.imported",
     "media.acquisition.requested",
     "acquisition.grabbed",
+    "acquisition.imported",
     "request.created",
     "request.approved",
     "library.scan.completed",

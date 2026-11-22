@@ -82,7 +82,7 @@ async fn a_provider_publishes_sources_and_reads_in_flight() {
     let (mut sources, mut failed, mut queue) = (0, vec![], 0);
     while let Ok(bus) = rx.try_recv() {
         match &*bus {
-            Bus::Raw(r) if r.r#type == "acquisition.sources" => sources += 1,
+            Bus::Sse(SseEvent::AcquisitionSources { .. }) => sources += 1,
             Bus::Sse(SseEvent::ImportFailed { error, .. }) => failed.push(error.clone()),
             Bus::Sse(SseEvent::QueueUpdated {}) => queue += 1,
             _ => {}

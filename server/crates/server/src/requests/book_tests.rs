@@ -789,3 +789,43 @@ async fn auto_approval_rules_filter_book_requests_by_family_and_language(pool: P
         .await;
     assert_eq!(r["status"], json!("approved"), "{r}");
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_lagged_lifecycle_feed_runs_the_reconcile(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, r) = c
+        .request(&c.user, "OL2W", json!([want("text", Some("fr"))]))
+        .await;
+    let id = r["id"].as_i64().unwrap();
+    let uri = format!("/api/requests/{id}/approve");
+    let (_, r) = c.call(&c.manager, "POST", &uri, json!({})).await;
+    let media = r["mediaId"].as_i64().unwrap();
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"INSERT INTO editions (id, "mediaId", family, language) VALUES (500, {media}, 'text', 'fr');
+           INSERT INTO items (id, "mediaId", "editionId", monitored) VALUES (600, {media}, 500, true);
+           INSERT INTO media_files (id, "mediaId", "relativePath", size, quality, "folderId")
+             VALUES (700, {media}, 'f', 1, 'x', (SELECT id FROM library_folders WHERE "libraryId" = 1));
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", "version") VALUES (600, 700, {media}, 0);"#
+    )))
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    super::lifecycle::spawn(&c.st);
+    // The task has not run yet: the burst overruns its receiver, so it lags before reading anything.
+    for _ in 0..5000 {
+        c.st.hub
+            .emit_domain(crate::events::DomainEvent::SettingsChanged { key: "k".into() });
+    }
+    for _ in 0..50 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let status: String = sqlx::query_scalar("SELECT status::text FROM requests WHERE id = $1")
+            .bind(id as i32)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+        if status == "available" {
+            return;
+        }
+    }
+    panic!("the lag did not reconcile the request");
+}

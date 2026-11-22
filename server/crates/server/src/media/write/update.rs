@@ -1,7 +1,7 @@
 //! Create, update, bulk, library, profiles, season and episode patches (rules 18, 26-35).
 use super::{body::Body, detail_or_404, entity_or_404, gate};
 use crate::{
-    events::DomainEvent,
+    events::{DomainEvent, SseEvent, event::GrabBest},
     http::{
         AppError,
         auth::Authed,
@@ -754,10 +754,15 @@ pub async fn grab_best(
             }
         }
         let (_, outcome, detail) = best;
-        st.hub.emit_raw(
-            "acquisition.grab-best",
-            json!({"scope": scope, "outcome": outcome, "detail": detail}),
-            Some(&[user]),
+        st.hub.emit_to_users(
+            &[user],
+            SseEvent::AcquisitionGrabBest {
+                payload: GrabBest {
+                    scope,
+                    outcome: outcome.to_owned(),
+                    detail,
+                },
+            },
         );
     });
     Ok((StatusCode::ACCEPTED, Json(json!({"mediaId": id}))))
