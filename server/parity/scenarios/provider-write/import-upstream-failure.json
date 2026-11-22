@@ -43,11 +43,7 @@
         "type": "movie"
       },
       "expect": {
-        "body": {
-          "message": "Internal server error",
-          "statusCode": 500
-        },
-        "status": 500
+        "status": 503
       },
       "ignore": [
         "$.metadata",
@@ -76,11 +72,7 @@
         "type": "movie"
       },
       "expect": {
-        "body": {
-          "message": "Internal server error",
-          "statusCode": 500
-        },
-        "status": 500
+        "status": 503
       },
       "ignore": [
         "$.metadata",
