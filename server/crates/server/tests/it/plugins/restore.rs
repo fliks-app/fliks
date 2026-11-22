@@ -381,6 +381,42 @@ async fn the_offline_restore_refuses_while_another_session_holds_the_instance_lo
     s.finish().await;
 }
 
+/// Below 17 the shipped `pg_restore` cannot run: the restore is refused with the version, nothing replayed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_server_before_17_refuses_a_restore_untouched() {
+    if !tools() {
+        return;
+    }
+    let Some(s) = Scratch::create("rstrold17").await else {
+        return;
+    };
+    let version: i32 = sqlx::query_scalar("SELECT current_setting('server_version_num')::int")
+        .fetch_one(&s.pool)
+        .await
+        .unwrap();
+    if version >= 170_000 {
+        return s.finish().await;
+    }
+    let cfg = config_for(&s.url, &s.name);
+    let made = backup::create(&cfg, &s.pool, &backup::dir()).await.unwrap();
+    sqlx::query("INSERT INTO app_settings (key, value) VALUES ('rstr_marker', 'after')")
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    let err = restore::offline(&cfg, &s.pool, &path(&made.filename))
+        .await
+        .unwrap_err();
+    assert_eq!(err.status(), 400);
+    assert!(err.text().contains("PostgreSQL 17"), "{err}");
+    let kept = rows(
+        &s.pool,
+        "SELECT count(*) FROM app_settings WHERE key = 'rstr_marker'",
+    )
+    .await;
+    assert_eq!(kept, 1, "nothing was replayed");
+    s.finish().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_plugin_pass_that_fails_is_reported_and_leaves_core_restored() {
     if !tools() {

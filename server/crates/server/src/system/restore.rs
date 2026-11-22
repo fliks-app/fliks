@@ -12,6 +12,7 @@ use crate::{
     plugins::{Plugins, db as plugin_db, packages},
 };
 use serde::Serialize;
+use serde_json::json;
 use sqlx::PgPool;
 use std::{
     io::Write,
@@ -19,7 +20,7 @@ use std::{
     process::Stdio,
     sync::Arc,
 };
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 /// A plugin whose data the restore could not bring back (rule 38).
 #[derive(Debug, Serialize, PartialEq)]
@@ -443,48 +444,20 @@ async fn plugin_passes(
     Ok(failed)
 }
 
-/// The header line of PostgreSQL 18's `pg_restore` that servers before 17 reject.
-const TRANSACTION_TIMEOUT: &str = "SET transaction_timeout = 0;";
-/// Same length, so the script is patched in place whatever its size.
-const TIMEOUT_NOOP: &str = "SET statement_timeout = 0;  ";
-const _: () = assert!(TRANSACTION_TIMEOUT.len() == TIMEOUT_NOOP.len());
-
-/// Overwrites the line in `head`; false when it is absent.
-fn blank_transaction_timeout(head: &mut [u8]) -> bool {
-    let pat = TRANSACTION_TIMEOUT.as_bytes();
-    let Some(at) = head.windows(pat.len()).position(|w| w == pat) else {
-        return false;
-    };
-    head[at..at + pat.len()].copy_from_slice(TIMEOUT_NOOP.as_bytes());
-    true
-}
-
-/// The client tools are 18's and the server may be 15 or 16: `transaction_timeout` does not exist there.
-async fn fit_server(script: &Path, db: &PgPool) -> Result<(), AppError> {
+/// The shipped `pg_restore` is 18's and sends `SET transaction_timeout`, which servers before 17 reject.
+async fn require_restorable_server(db: &PgPool) -> Result<(), AppError> {
     let version: i32 = sqlx::query_scalar("SELECT current_setting('server_version_num')::int")
         .fetch_one(db)
         .await?;
     if version >= 170_000 {
         return Ok(());
     }
-    let mut f = tokio::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(script)
-        .await
-        .map_err(|e| internal(e.to_string()))?;
-    let mut head = vec![0; 8192];
-    let n = f
-        .read(&mut head)
-        .await
-        .map_err(|e| internal(e.to_string()))?;
-    if blank_transaction_timeout(&mut head[..n]) {
-        f.rewind().await.map_err(|e| internal(e.to_string()))?;
-        f.write_all(&head[..n])
-            .await
-            .map_err(|e| internal(e.to_string()))?;
-    }
-    Ok(())
+    let major = version / 10_000;
+    Err(AppError::bad_request(format!(
+        "Restoring a backup needs PostgreSQL 17 or later (this server runs {major}): restore it by hand \
+         with the matching pg_restore, or move the database to PostgreSQL 17 or later"
+    ))
+    .keyed("system.restore_needs_pg17", json!({"version": major})))
 }
 
 /// What `prepare` reads of a file before anything is stopped or replaced.
@@ -520,6 +493,7 @@ async fn prepare(cfg: &Config, db: &PgPool, path: &Path) -> Result<Prepared, App
             scratch,
         });
     }
+    require_restorable_server(db).await?;
     let list = toc(path).await?;
     let schemas = plugin_schemas(&list);
     let kept = restore_list(&list, |_| false);
@@ -537,7 +511,6 @@ async fn prepare(cfg: &Config, db: &PgPool, path: &Path) -> Result<Prepared, App
     args.push(s(path));
     run_tool(cfg, "pg_restore", &args, Stdio::null()).await?;
     screen(&script).await?;
-    fit_server(&script, db).await?;
     Ok(Prepared {
         plan: Plan::Archive {
             script,
@@ -792,16 +765,6 @@ mod tests {
         assert!(!kept.contains("FK CONSTRAINT plugin_a t"));
         // plugin_ab is another schema: its key stays.
         assert!(kept.contains("FK CONSTRAINT plugin_ab"));
-    }
-
-    #[test]
-    fn the_header_line_of_a_newer_client_is_blanked_in_place() {
-        let mut head = b"SET lock_timeout = 0;\nSET transaction_timeout = 0;\nSET x;\n".to_vec();
-        let len = head.len();
-        assert!(blank_transaction_timeout(&mut head));
-        assert_eq!(head.len(), len);
-        assert!(!String::from_utf8_lossy(&head).contains("transaction_timeout"));
-        assert!(!blank_transaction_timeout(&mut head));
     }
 
     #[test]

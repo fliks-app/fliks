@@ -1729,6 +1729,7 @@
     "restore_ok": "Cópia de segurança restaurada. Reinicie o servidor para a aplicar.",
     "restore_restarting": "Cópia de segurança restaurada. O servidor está a reiniciar.",
     "restore_plugins_not_restored": "Estes plugins não foram restaurados e estão desativados: {{plugins}}",
+    "restore_needs_pg17": "Restaurar uma cópia de segurança requer PostgreSQL 17 ou posterior (este servidor usa a versão {{version}}). Restaure-a manualmente com o pg_restore correspondente ou mova a base de dados para PostgreSQL 17 ou posterior.",
     "backup_plugins_skipped": "A cópia de segurança não inclui os dados destes plugins: {{plugins}}",
     "health_app": "Aplicação",
     "health_db": "Base de dados",
