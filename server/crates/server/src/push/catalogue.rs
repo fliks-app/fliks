@@ -445,10 +445,10 @@ pub(super) async fn episode_recipients(
         r#"SELECT ps."userId" FROM playback_states ps JOIN items i ON i.id = ps."itemId"
            WHERE i."mediaId" = $1
              AND NOT EXISTS (SELECT 1 FROM requests r WHERE r."mediaId" = $1 AND r."userId" = ps."userId"
-                             AND (r.status = ANY($2) OR r."updatedAt" > now() - make_interval(secs => $3)))
+                             AND (r.status::text = ANY($2) OR r."updatedAt" > now() - make_interval(secs => $3)))
              AND NOT EXISTS (SELECT 1 FROM request_watchers w JOIN requests r ON r.id = w."requestId"
                              WHERE r."mediaId" = $1 AND w."userId" = ps."userId"
-                               AND (r.status = ANY($2) OR r."updatedAt" > now() - make_interval(secs => $3)))
+                               AND (r.status::text = ANY($2) OR r."updatedAt" > now() - make_interval(secs => $3)))
            GROUP BY ps."userId" HAVING bool_or(NOT ps."hiddenFromContinueWatching")
            ORDER BY ps."userId""#,
     )
