@@ -15,6 +15,8 @@ internal sealed class PostgresManager(ushort port = 5433)
     private readonly string _dataDir = AppPaths.PgDataDir;
     private readonly string _logFile = AppPaths.PgLogFile;
     private string _password = "";
+    private bool _passwordUnsaved;
+    private static readonly System.Text.RegularExpressions.Regex PasswordFormat = new("^[0-9a-f]{64}$");
     private string HbaFile => Path.Combine(_dataDir, "pg_hba.conf");
 
     /// <summary>Password of the <c>fliks</c> role, generated once into <see cref="AppPaths.DbPasswordFile"/>.</summary>
@@ -45,14 +47,20 @@ internal sealed class PostgresManager(ushort port = 5433)
     /// <summary>Run initdb on first launch (no PG_VERSION file yet).</summary>
     public async Task InitializeAsync()
     {
-        var passwordCreated = LoadPassword();
+        LoadPassword();
         if (IsInitialized)
         {
             // A cluster already on scram lost its password file: only single-user mode can reset it.
-            if (passwordCreated && !HbaTrusts()) await ResetPasswordSingleUserAsync();
+            if (_passwordUnsaved && !HbaTrusts())
+            {
+                await ResetPasswordSingleUserAsync();
+                SavePassword();
+            }
             return;
         }
 
+        // initdb reads the role password from the file.
+        SavePassword();
         Directory.CreateDirectory(_dataDir);
         var result = await ProcessRunner.RunAsync(
             Tool("initdb"),
@@ -131,24 +139,36 @@ internal sealed class PostgresManager(ushort port = 5433)
             throw new InvalidOperationException($"pg_ctl reload failed: {r.Stderr}");
     }
 
-    /// <summary>Read <c>.db-password</c>, or generate it (64 hex characters, in the per-user conf dir). True when generated.</summary>
-    private bool LoadPassword()
+    /// <summary>Read <c>.db-password</c>, or generate a password in memory (64 hex characters): the file is
+    /// written by <see cref="SavePassword"/> once the role has it, so a failed reset is retried at the next launch.</summary>
+    private void LoadPassword()
     {
         var file = AppPaths.DbPasswordFile;
         if (File.Exists(file))
         {
             var existing = File.ReadAllText(file).Trim();
-            if (existing.Length > 0)
+            if (PasswordFormat.IsMatch(existing))
             {
                 _password = existing;
-                return false;
+                _passwordUnsaved = false;
+                return;
             }
+            Log.Info("pg: the database password file is not 64 hex characters, it is replaced");
         }
 
-        Directory.CreateDirectory(AppPaths.ConfDir);
         _password = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
-        File.WriteAllText(file, _password);
-        return true;
+        _passwordUnsaved = true;
+    }
+
+    /// <summary>Writes <c>.db-password</c> when <see cref="LoadPassword"/> generated it.</summary>
+    private void SavePassword()
+    {
+        if (!_passwordUnsaved) return;
+        Directory.CreateDirectory(AppPaths.ConfDir);
+        var temp = AppPaths.DbPasswordFile + ".tmp";
+        File.WriteAllText(temp, _password);
+        File.Move(temp, AppPaths.DbPasswordFile, overwrite: true);
+        _passwordUnsaved = false;
     }
 
     /// <summary>Whether any line of <c>pg_hba.conf</c> still uses the <c>trust</c> method.</summary>
@@ -186,9 +206,10 @@ internal sealed class PostgresManager(ushort port = 5433)
             },
             PgEnv,
             timeout: TimeSpan.FromSeconds(10),
-            stdin: $"ALTER ROLE fliks PASSWORD '{_password}';\n");
+            stdin: $"SET log_min_error_statement = 'panic';\nALTER ROLE fliks PASSWORD '{_password}';\n");
         if (!r.Succeeded)
             throw new InvalidOperationException($"setting the database password failed (psql exit {r.ExitCode})");
+        SavePassword();
         WriteHba();
         await ReloadAsync();
     }

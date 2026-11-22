@@ -10,12 +10,13 @@ import {
   type DesktopDownloadStatus,
 } from '../shared/contract';
 import { mirrorHls } from './hls-mirror';
+import { localFileUrl } from './protocol';
 
 // Offline downloads for the desktop client: fetch a media file to disk under
 // userData and hand mpv a local file:// URL on playback. Sidecar subtitle files
 // are fetched the same way (mpv can only sub-add a real path, not a blob URL).
-// The download URL already carries the ?token= stream JWT, and net.request goes
-// out on the default session (self-signed certs accepted app-wide).
+// The download URL carries the ?token= stream JWT. net.request raises no `certificate-error`:
+// a server whose certificate the OS rejects cannot be downloaded from, pinned or not.
 
 const PROGRESS_MIN_INTERVAL_MS = 400;
 
@@ -355,9 +356,14 @@ async function saveFile(key: string, url: string): Promise<boolean> {
   });
 }
 
-async function fileUrl(key: string): Promise<string | null> {
+/** The sidecar file saved under `key`, or null. */
+export function localFilePath(key: string): string | null {
   const p = path.join(filesDir(), safe(key));
-  return existsSync(p) ? pathToFileURL(p).toString() : null;
+  return existsSync(p) ? p : null;
+}
+
+async function fileUrl(key: string): Promise<string | null> {
+  return localFilePath(key) ? localFileUrl(key) : null;
 }
 
 async function deleteFile(key: string): Promise<void> {

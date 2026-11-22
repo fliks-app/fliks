@@ -10,13 +10,19 @@ export function pemChain(cert: Electron.Certificate): string[] {
   return chain;
 }
 
+const INTRO: Record<TrustPrompt['kind'], string> = {
+  new: 'The operating system does not trust this certificate. Trust it only if this is your own server.',
+  changed:
+    'The certificate of this server is not the one you trusted before. This can be an attack on your network: trust it only if you replaced the certificate yourself.',
+  'was-valid':
+    'This server presented a valid certificate recently and now presents one the operating system does not trust. This can be an attack on your network: trust it only if you moved the server to a self-signed certificate yourself.',
+};
+
 /** Asks whether to trust the certificate a self-hosted server presented; refusal is the default. */
-export async function askTrust({ origin, cert, changed, mpvUnverified }: TrustPrompt): Promise<boolean> {
+export async function askTrust({ origin, cert, kind, mpvUnverified }: TrustPrompt): Promise<boolean> {
   const detail = [
-    changed
-      ? 'The certificate of this server is not the one you trusted before. This can be an attack on your network: trust it only if you replaced the certificate yourself.'
-      : 'The operating system does not trust this certificate. Trust it only if this is your own server.',
-    mpvUnverified ? 'The video player cannot check it (its name does not match the address, or it has expired), so streams from this server are not verified.' : '',
+    INTRO[kind],
+    mpvUnverified ? 'The video player cannot check it (its name does not match the address, it has expired, or its issuer is unknown), so streams from this server are not verified.' : '',
     `Fingerprint: ${cert.fingerprint}`,
   ];
   const { response } = await dialog.showMessageBox({
