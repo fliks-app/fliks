@@ -124,7 +124,7 @@ BEGIN
   IF NOT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
     IF v >= 160000 THEN GRANT {ident} TO CURRENT_USER WITH SET TRUE; ELSE GRANT {ident} TO CURRENT_USER; END IF;
   END IF;
-  EXECUTE format('GRANT CONNECT, CREATE ON DATABASE %I TO {ident}', current_database());
+  EXECUTE format('GRANT CONNECT, CREATE, TEMPORARY ON DATABASE %I TO {ident}', current_database());
   FOR rec IN {advisory} LOOP
     EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', rec.f);
     EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO {ident}', rec.f);
@@ -226,7 +226,8 @@ impl Status {
 pub async fn status<'c>(e: impl sqlx::PgExecutor<'c>) -> sqlx::Result<Status> {
     let sql = format!(
         r"SELECT r.rolsuper, current_setting('server_version_num')::int, r.rolcreaterole,
-       has_database_privilege(current_user, current_database(), 'CREATE'),
+       has_database_privilege(current_user, current_database(), 'CREATE')
+         AND has_database_privilege(current_user, current_database(), 'TEMPORARY'),
        coalesce((SELECT nspowner = r.oid FROM pg_namespace WHERE nspname = 'public'), false),
        (SELECT count(*) FROM ({objects}) o WHERE o.name <> 'public'),
        coalesce((SELECT bool_or(p.proacl IS NULL

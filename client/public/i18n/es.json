@@ -1768,7 +1768,7 @@
     "db_docs": "Más información",
     "db_limited": "PostgreSQL 15 da al rol de la base de datos un aislamiento limitado: usa la versión 16 o posterior.",
     "db_gap_create_role": "El rol de la base de datos no puede crear roles.",
-    "db_gap_create_database": "El rol de la base de datos no puede crear bases de datos.",
+    "db_gap_create_database": "El rol de la base de datos no puede crear objetos ni tablas temporales en la base de datos.",
     "db_gap_public_owner": "El rol de la base de datos no es propietario del esquema public.",
     "db_gap_foreign_objects": "Algunos objetos de la base de datos pertenecen a otro rol.",
     "db_gap_advisory_locks": "El rol de la base de datos no puede tomar bloqueos consultivos.",

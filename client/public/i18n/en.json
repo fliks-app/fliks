@@ -1768,7 +1768,7 @@
     "db_docs": "Learn more",
     "db_limited": "PostgreSQL 15 gives the database role limited isolation: use 16 or newer.",
     "db_gap_create_role": "The database role cannot create roles.",
-    "db_gap_create_database": "The database role cannot create databases.",
+    "db_gap_create_database": "The database role may not create objects or temporary tables in the database.",
     "db_gap_public_owner": "The database role does not own the public schema.",
     "db_gap_foreign_objects": "Some database objects belong to another role.",
     "db_gap_advisory_locks": "The database role cannot take advisory locks.",

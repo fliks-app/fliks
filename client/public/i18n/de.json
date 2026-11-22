@@ -1768,7 +1768,7 @@
     "db_docs": "Mehr erfahren",
     "db_limited": "PostgreSQL 15 bietet der Datenbankrolle nur eine eingeschränkte Isolation: Version 16 oder neuer verwenden.",
     "db_gap_create_role": "Die Datenbankrolle kann keine Rollen anlegen.",
-    "db_gap_create_database": "Die Datenbankrolle kann keine Datenbanken anlegen.",
+    "db_gap_create_database": "Die Datenbankrolle darf in der Datenbank keine Objekte anlegen oder temporäre Tabellen nutzen.",
     "db_gap_public_owner": "Die Datenbankrolle besitzt das Schema public nicht.",
     "db_gap_foreign_objects": "Einige Datenbankobjekte gehören einer anderen Rolle.",
     "db_gap_advisory_locks": "Die Datenbankrolle kann keine Advisory Locks setzen.",

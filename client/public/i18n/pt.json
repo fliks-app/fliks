@@ -1768,7 +1768,7 @@
     "db_docs": "Saber mais",
     "db_limited": "O PostgreSQL 15 dá à função da base de dados um isolamento limitado: use a versão 16 ou mais recente.",
     "db_gap_create_role": "A função da base de dados não pode criar funções.",
-    "db_gap_create_database": "A função da base de dados não pode criar bases de dados.",
+    "db_gap_create_database": "A função da base de dados não pode criar objetos nem tabelas temporárias na base de dados.",
     "db_gap_public_owner": "A função da base de dados não é proprietária do esquema public.",
     "db_gap_foreign_objects": "Alguns objetos da base de dados pertencem a outra função.",
     "db_gap_advisory_locks": "A função da base de dados não pode obter bloqueios consultivos.",
