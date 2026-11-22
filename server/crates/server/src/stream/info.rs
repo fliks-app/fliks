@@ -10,7 +10,7 @@ use crate::{
     engine::{EngineError, enc},
     http::{
         AppError,
-        auth::StreamAuthed,
+        auth::{FileBoundAuthed, StreamAuthed},
         validate::{PathParams, ValidJson, from_value},
     },
     presence::{Facts, LiveSession, Tags, kind_of, now_ms, parse_source_fps, to_tags},
@@ -145,12 +145,13 @@ fn open_error(e: EngineError) -> AppError {
 #[utoipa::path(post, path = "/api/stream/{mediaFileId}/playback-info", responses((status = 201)))]
 pub async fn playback_info(
     State(st): State<AppState>,
-    StreamAuthed(a): StreamAuthed,
+    a: FileBoundAuthed,
     PathParams(id): PathParams<i64>,
     Query(pairs): Query<Vec<(String, String)>>,
     headers: HeaderMap,
     ValidJson(body): ValidJson<Value>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
+    a.covers(id)?;
     let device = device_profile(body)?;
     let q = Params {
         pitch_semitones: None,
@@ -164,7 +165,7 @@ pub async fn playback_info(
     };
     let out = run(
         &st,
-        &a,
+        &a.auth,
         Target::File(id),
         device,
         q,

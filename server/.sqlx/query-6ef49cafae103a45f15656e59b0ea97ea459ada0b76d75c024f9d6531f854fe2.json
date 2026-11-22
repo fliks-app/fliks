@@ -1,22 +1,23 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM users WHERE username = $1",
+  "query": "SELECT \"userId\" FROM user_external_ids WHERE provider = $1 AND \"externalId\" = $2",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
+        "name": "userId",
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "users",
-            "name": "id"
+            "table": "user_external_ids",
+            "name": "userId"
           }
         }
       }
     ],
     "parameters": {
       "Left": [
+        "Text",
         "Text"
       ]
     },
@@ -24,5 +25,5 @@
       false
     ]
   },
-  "hash": "dd99e48b1572e25db38f03da95984fda1072913b29bb6b3753a0d351583dfff6"
+  "hash": "6ef49cafae103a45f15656e59b0ea97ea459ada0b76d75c024f9d6531f854fe2"
 }

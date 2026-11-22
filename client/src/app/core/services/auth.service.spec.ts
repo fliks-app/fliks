@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { NEVER, of, throwError } from 'rxjs';
 import { AuthService, type User } from './auth.service';
@@ -72,7 +72,13 @@ describe('AuthService.mintEventTicket', () => {
   });
 
   it('returns null when the server has no ticket route', async () => {
-    expect(await setup(() => throwError(() => new Error('404'))).mintEventTicket()).toBeNull();
+    const notFound = new HttpErrorResponse({ status: 404 });
+    expect(await setup(() => throwError(() => notFound)).mintEventTicket()).toBeNull();
+  });
+
+  it('rejects on any other failure, so no caller falls back to the access token', async () => {
+    const down = new HttpErrorResponse({ status: 503 });
+    await expect(setup(() => throwError(() => down)).mintEventTicket()).rejects.toBe(down);
   });
 });
 
@@ -106,7 +112,7 @@ describe('AuthService.ensureStreamToken', () => {
     expect(post.mock.calls[0][2].context.get(SKIP_ERROR_TOAST)).toBe(true);
   });
 
-  it('keeps one token per file and falls back to the access token for another', async () => {
+  it('keeps one token per file and gives none for another', async () => {
     const post = vi.fn((_url: string, body: { mediaFileId: number }) =>
       of({ streamToken: `st${body.mediaFileId}`, expiresAt: Date.now() + 3 * 3600_000 }),
     );
@@ -118,7 +124,7 @@ describe('AuthService.ensureStreamToken', () => {
     expect(post).toHaveBeenCalledTimes(2);
     expect(service.playbackTokenFor(1)).toBe('st1');
     expect(service.playbackTokenFor(2)).toBe('st2');
-    expect(service.playbackTokenFor(3)).toBe(service.accessToken);
+    expect(service.playbackTokenFor(3)).toBeNull();
   });
 
   it('remints a token with less than 30 minutes left', async () => {

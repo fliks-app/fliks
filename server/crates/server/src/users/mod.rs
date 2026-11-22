@@ -8,5 +8,5 @@ pub use db::{
     Access, NewUser, apply_access, create_user, default_libraries, is_last_enabled_admin,
     not_found, revoke_other_sessions,
 };
-pub use imported::imported_user;
+pub use imported::{Imported, imported_user, map_external};
 pub use routes::*;

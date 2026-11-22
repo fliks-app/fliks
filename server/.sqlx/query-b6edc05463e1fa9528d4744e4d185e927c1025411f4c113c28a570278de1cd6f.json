@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_external_ids (provider, \"externalId\", \"userId\") VALUES ($1, $2, $3)\n           ON CONFLICT (provider, \"externalId\") DO UPDATE SET \"userId\" = EXCLUDED.\"userId\"",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b6edc05463e1fa9528d4744e4d185e927c1025411f4c113c28a570278de1cd6f"
+}

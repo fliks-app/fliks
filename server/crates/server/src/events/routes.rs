@@ -85,7 +85,7 @@ pub async fn keepalive(
 }
 
 // Auth runs once at connect: a later token expiry or disable does not close the stream. `?ticket=` is the
-// credential of native clients; the session token (cookie, Bearer or `?token=`) stays accepted for released ones.
+// credential of native clients; the session token (cookie or Bearer, never `?token=`) stays accepted for released ones.
 #[utoipa::path(get, path = "/api/system/events", responses((status = 200)))]
 pub async fn events(
     State(st): State<AppState>,

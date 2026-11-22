@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT count(*) AS \"n!\" FROM remote_control_grants WHERE \"deviceId\" = $1 AND \"granteeUserId\" = $2",
+  "query": "SELECT count(*) AS \"n!\" FROM remote_control_grants\n           WHERE \"ownerUserId\" = $1 AND \"deviceId\" = $2 AND \"granteeUserId\" IS NULL",
   "describe": {
     "columns": [
       {
@@ -12,13 +12,13 @@
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Int4"
+        "Int4",
+        "Text"
       ]
     },
     "nullable": [
       null
     ]
   },
-  "hash": "532d32363fb06c5939a121837ec570ebcc95b57b854af8eb8468789f980a7cbb"
+  "hash": "332926b1a78579816c9fadefc8fb6d2d600a649c967b1f0b2b5e99c3129ad2e1"
 }

@@ -589,6 +589,8 @@ pub async fn proxy(State(st): State<AppState>, a: Authed, req: Request) -> Res {
         .map(|q| {
             url::form_urlencoded::parse(q.as_bytes())
                 .into_owned()
+                // Never hand a credential to plugin code.
+                .filter(|(k, _)| k != "token")
                 .collect()
         })
         .unwrap_or_default();

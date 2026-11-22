@@ -1,13 +1,13 @@
 //! Seerr: connection test and the request import (`importers.md` D).
 use super::{dto, fetch};
-use crate::events::event::ImportErrors;
+use crate::events::event::{ImportErrors, ImportUnmapped, UnmappedUser};
 use crate::{
     events::SseEvent,
     http::{AppError, auth::Authed},
     jobs::{Trigger, run_audited},
     outbound::{LIST_TIMEOUT, TEST_TIMEOUT, base_url, error_text},
     state::AppState,
-    users::imported_user,
+    users::{Imported, imported_user},
 };
 use axum::{Json, http::StatusCode};
 use chrono::{DateTime, Utc};
@@ -68,6 +68,8 @@ pub(super) async fn start(st: AppState, a: Authed) -> Res<(StatusCode, Json<Valu
                         skipped: s.skipped,
                         errors: s.errors.first,
                         error_count: s.errors.total,
+                        unmapped: s.unmapped.first,
+                        unmapped_count: s.unmapped.total,
                     });
                     Ok(())
                 }
@@ -92,12 +94,13 @@ pub(super) async fn start(st: AppState, a: Authed) -> Res<(StatusCode, Json<Valu
 
 #[derive(Default)]
 struct Stats {
-    users: HashSet<String>,
+    users: HashSet<i64>,
     users_created: i64,
     imported: i64,
     updated: i64,
     skipped: i64,
     errors: ImportErrors,
+    unmapped: ImportUnmapped,
 }
 
 enum Outcome {
@@ -117,7 +120,7 @@ struct Run<'a> {
     key: String,
     media: HashMap<(MediaKind, i32), Option<MediaRow>>,
     titles: HashMap<(String, i32), Option<String>>,
-    users: HashMap<String, i32>,
+    users: HashMap<i64, Option<i32>>,
     stats: Stats,
 }
 
@@ -204,9 +207,9 @@ impl Run<'_> {
         .iter()
         .find_map(|k| who[*k].as_str().filter(|s| !s.is_empty()))
         .map_or("", str::trim);
-        if username.is_empty() {
+        let Some(seerr_id) = who["id"].as_i64().filter(|_| !username.is_empty()) else {
             return Ok(Outcome::Skipped);
-        }
+        };
         let media_type = if req["type"] == "tv" {
             MediaKind::Series
         } else {
@@ -219,7 +222,9 @@ impl Run<'_> {
         else {
             return Ok(Outcome::Skipped);
         };
-        let user = self.user(username).await.map_err(db_err)?;
+        let Some(user) = self.user(seerr_id, username).await.map_err(db_err)? else {
+            return Ok(Outcome::Skipped);
+        };
         if !self.media.contains_key(&(media_type, tmdb)) {
             let row = sqlx::query!(
                 r#"SELECT id, title FROM media WHERE id = (SELECT "mediaId" FROM media_external_ids
@@ -348,14 +353,30 @@ impl Run<'_> {
         Ok(Outcome::Updated)
     }
 
-    async fn user(&mut self, username: &str) -> Result<i32, sqlx::Error> {
-        self.stats.users.insert(username.to_owned());
-        if let Some(id) = self.users.get(username) {
+    /// The Fliks user of this Seerr user, `None` (reported once) when a Fliks account holds its name.
+    async fn user(&mut self, seerr_id: i64, username: &str) -> Result<Option<i32>, sqlx::Error> {
+        self.stats.users.insert(seerr_id);
+        if let Some(id) = self.users.get(&seerr_id) {
             return Ok(*id);
         }
-        let (id, created) = imported_user(self.db, username, "local").await?;
-        self.stats.users_created += i64::from(created);
-        self.users.insert(username.to_owned(), id);
+        let id = match imported_user(self.db, "seerr", &seerr_id.to_string(), username, "local")
+            .await?
+        {
+            Imported::Known(id) => Some(id),
+            Imported::Created(id) => {
+                self.stats.users_created += 1;
+                Some(id)
+            }
+            Imported::NameTaken => {
+                self.stats.unmapped.push(UnmappedUser {
+                    provider: "seerr".into(),
+                    external_id: seerr_id.to_string(),
+                    username: username.to_owned(),
+                });
+                None
+            }
+        };
+        self.users.insert(seerr_id, id);
         Ok(id)
     }
 

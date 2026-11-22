@@ -440,8 +440,14 @@ export class SseService implements OnDestroy {
         await this.auth.refreshAccessToken();
         if (generation !== this.generation || this.eventSource) return;
       }
-      // A one-time ticket keeps the session token out of proxy logs; a server without the route still takes `?token=`.
-      const ticket = await this.auth.mintEventTicket();
+      // A one-time ticket keeps the session token out of proxy logs; only a server without the route (404) still takes `?token=`.
+      let ticket: string | null;
+      try {
+        ticket = await this.auth.mintEventTicket();
+      } catch {
+        if (generation === this.generation && !this.eventSource) this.retryLater();
+        return;
+      }
       if (generation !== this.generation || this.eventSource) return;
       base = this.serverConfig.resolveUrl(base);
       const token = this.auth.accessToken;
@@ -485,10 +491,14 @@ export class SseService implements OnDestroy {
         window.addEventListener('online', this.onOnline, { once: true });
         return;
       }
-      // Exponential backoff: 5s → 10s → 20s → 30s max.
-      this.retryHandle = setTimeout(() => void this.connect(), this.retryDelay);
-      this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
+      this.retryLater();
     };
+  }
+
+  /** Exponential backoff: 5s → 10s → 20s → 30s max. */
+  private retryLater() {
+    this.retryHandle = setTimeout(() => void this.connect(), this.retryDelay);
+    this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
   }
 
   /** Routes one frame to its Subject or signal; a frame that does not parse is dropped. */

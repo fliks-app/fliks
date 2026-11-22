@@ -1,4 +1,4 @@
-//! In-process limiter of failed logins per (client network, username).
+//! In-process limiter of failed logins per (client network, username) and per client address.
 use crate::sync::MutexExt;
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -8,6 +8,8 @@ use std::time::{Duration, Instant};
 const MAX_FAILS: u32 = 5;
 const WINDOW: Duration = Duration::from_secs(15 * 60);
 const MAX_KEYS: usize = 10_000;
+/// Attempts per address across every username: a household behind one NAT stays well under it.
+const ADDRESS_MAX: u32 = 30;
 
 type Key = (String, String);
 
@@ -34,9 +36,23 @@ fn key(ip: Option<IpAddr>, username: &str) -> Key {
     (net(ip), username.to_lowercase())
 }
 
+/// The address bucket: an empty username never reaches the throttle, so it cannot collide with a
+/// pair. An IPv6 holder of a /48 owns 65 536 /64s, so the budget keys on the /48.
+fn address_key(ip: Option<IpAddr>) -> Key {
+    let net = match ip.map(|a| a.to_canonical()) {
+        Some(IpAddr::V6(v6)) => format!(
+            "{}/48",
+            std::net::Ipv6Addr::from(u128::from(v6) & (!0u128 << 80))
+        ),
+        other => net(other),
+    };
+    (net, String::new())
+}
+
 impl LoginThrottle {
     /// Counts an attempt and says whether it may run: check and count are one locked step, so a
-    /// burst cannot pass the limit together. A success calls `clear`.
+    /// burst cannot pass the limit together. A success calls `clear`. The address budget counts
+    /// the same attempt across every username.
     pub fn attempt(&self, ip: Option<IpAddr>, username: &str) -> bool {
         self.attempt_with(ip, username, MAX_FAILS)
     }
@@ -44,7 +60,17 @@ impl LoginThrottle {
     /// `attempt` with its own limit per window.
     pub fn attempt_with(&self, ip: Option<IpAddr>, username: &str, max: u32) -> bool {
         let mut m = self.fails.lock_clean();
-        let k = key(ip, username);
+        if !Self::bump(&mut m, address_key(ip), ADDRESS_MAX) {
+            return false;
+        }
+        let ok = Self::bump(&mut m, key(ip, username), max);
+        if !ok {
+            Self::give_back(&mut m, &address_key(ip));
+        }
+        ok
+    }
+
+    fn bump(m: &mut HashMap<Key, (u32, Instant)>, k: Key, max: u32) -> bool {
         if !m.contains_key(&k) && m.len() >= MAX_KEYS {
             m.retain(|_, (_, since)| since.elapsed() < WINDOW);
             // Evict the least-failed, then oldest, so a flood of one-off keys never frees a locked one.
@@ -68,6 +94,12 @@ impl LoginThrottle {
         true
     }
 
+    fn give_back(m: &mut HashMap<Key, (u32, Instant)>, k: &Key) {
+        if let Some(e) = m.get_mut(k) {
+            e.0 = e.0.saturating_sub(1);
+        }
+    }
+
     /// Whether the pair has used up `max` failures in the window, without counting anything.
     pub fn blocked(&self, ip: Option<IpAddr>, username: &str, max: u32) -> bool {
         self.fails
@@ -78,19 +110,24 @@ impl LoginThrottle {
 
     /// Counts one failure.
     pub fn fail(&self, ip: Option<IpAddr>, username: &str) {
-        self.attempt_with(ip, username, u32::MAX);
+        Self::bump(&mut self.fails.lock_clean(), key(ip, username), u32::MAX);
     }
 
     /// Gives back one attempt that turned out not to be a failure; unlike `clear` it cannot reset
     /// a counter an attacker fed with failures.
     pub fn refund(&self, ip: Option<IpAddr>, username: &str) {
-        if let Some(e) = self.fails.lock_clean().get_mut(&key(ip, username)) {
-            e.0 = e.0.saturating_sub(1);
-        }
+        let mut m = self.fails.lock_clean();
+        Self::give_back(&mut m, &key(ip, username));
+        Self::give_back(&mut m, &address_key(ip));
     }
 
+    /// A success: the pair is forgotten and its own attempt leaves the address budget, which no
+    /// success can reset.
     pub fn clear(&self, ip: Option<IpAddr>, username: &str) {
-        self.fails.lock_clean().remove(&key(ip, username));
+        let mut m = self.fails.lock_clean();
+        if m.remove(&key(ip, username)).is_some() {
+            Self::give_back(&mut m, &address_key(ip));
+        }
     }
 }
 
@@ -172,9 +209,35 @@ mod tests {
             t.attempt(ip("1.1.1.1"), "victim");
         }
         for i in 0..MAX_KEYS + 50 {
-            t.attempt(ip("9.9.9.9"), &format!("u{i}"));
+            t.fail(ip("9.9.9.9"), &format!("u{i}"));
         }
         assert!(!t.attempt(ip("1.1.1.1"), "victim"));
         assert!(t.fails.lock_clean().len() <= MAX_KEYS);
+    }
+
+    #[test]
+    fn the_address_budget_spans_usernames_and_no_success_resets_it() {
+        let t = LoginThrottle::default();
+        for i in 0..ADDRESS_MAX {
+            assert!(t.attempt(ip("1.1.1.1"), &format!("u{i}")), "{i}");
+        }
+        assert!(!t.attempt(ip("1.1.1.1"), "another"));
+        assert!(t.attempt(ip("2.2.2.2"), "another"));
+        t.clear(ip("1.1.1.1"), "u0");
+        assert!(
+            t.attempt(ip("1.1.1.1"), "mine"),
+            "a success frees only its own attempt"
+        );
+        assert!(!t.attempt(ip("1.1.1.1"), "again"));
+    }
+
+    #[test]
+    fn the_address_budget_of_an_ipv6_client_is_its_48() {
+        let t = LoginThrottle::default();
+        for i in 0..ADDRESS_MAX {
+            assert!(t.attempt(ip(&format!("2001:db8:1:{i:x}::1")), "bob"));
+        }
+        assert!(!t.attempt(ip("2001:db8:1:ffff::1"), "alice"));
+        assert!(t.attempt(ip("2001:db8:2::1"), "alice"));
     }
 }

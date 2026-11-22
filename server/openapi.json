@@ -1176,6 +1176,16 @@
         }
       }
     },
+    "/api/imports/user-mappings": {
+      "post": {
+        "tags": [],
+        "summary": "`POST /api/imports/user-mappings`: the admin's answer to an import's `unmapped` entries.",
+        "operationId": "map_user",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
     "/api/items/{itemId}/annotations": {
       "get": {
         "tags": [

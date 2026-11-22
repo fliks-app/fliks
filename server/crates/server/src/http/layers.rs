@@ -18,14 +18,14 @@ use tower_http::trace::TraceLayer;
 use super::error::AppError;
 use super::static_files::matches_etag;
 
-const WEB_DEFAULT: [&str; 2] = ["http://localhost:4200", "http://localhost:4500"];
+const DEV_ORIGINS: [&str; 2] = ["http://localhost:4200", "http://localhost:4500"];
 const NATIVE: [&str; 3] = [
     "https://localhost",
     "capacitor://localhost",
     "http://localhost",
 ];
 
-/// Origin list: `CORS_ORIGIN` (or the dev defaults) plus the native-app origins.
+/// Origin list: `CORS_ORIGIN` (or the dev origins in a debug build) plus the native-app origins.
 fn origins(cors_origin: Option<&str>) -> Vec<HeaderValue> {
     let env: Vec<&str> = cors_origin
         .unwrap_or_default()
@@ -33,7 +33,12 @@ fn origins(cors_origin: Option<&str>) -> Vec<HeaderValue> {
         .map(str::trim)
         .filter(|o| !o.is_empty())
         .collect();
-    let web: &[&str] = if env.is_empty() { &WEB_DEFAULT } else { &env };
+    let dev: &[&str] = if cfg!(debug_assertions) {
+        &DEV_ORIGINS
+    } else {
+        &[]
+    };
+    let web: &[&str] = if env.is_empty() { dev } else { &env };
     let mut out: Vec<HeaderValue> = Vec::new();
     for o in web.iter().chain(&NATIVE) {
         if let Ok(v) = HeaderValue::from_str(o)

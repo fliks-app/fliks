@@ -250,15 +250,15 @@ export class AuthService {
     return this._refreshToken;
   }
 
-  /** The stream token minted for `mediaFileId` while it is still valid, else the access token. */
+  /** The stream token minted for `mediaFileId` while it is still valid; the access token never rides in a URL. */
   playbackTokenFor(mediaFileId: number): string | null {
     const t = this._streamTokens.get(mediaFileId);
-    return t && t.expiresAt > Date.now() ? t.token : this._accessToken;
+    return t && t.expiresAt > Date.now() ? t.token : null;
   }
 
-  /** For URL query params of routes that are not bound to a file (cross-origin `<img>`, session calls): the latest stream token, else the access token. */
+  /** For URL query params of routes that are not bound to a file (cross-origin `<img>`, session calls): the latest stream token. */
   get playbackToken(): string | null {
-    return this._streamToken() ?? this._accessToken;
+    return this._streamToken();
   }
 
   readonly user = this._user.asReadonly();
@@ -315,12 +315,12 @@ export class AuthService {
     return u?.isAdmin || u?.permissions?.includes('users.manage') || false;
   });
 
-  /** Token dédié (court) + base URL serveur, juste avant le chargement Cast. */
-  async getCastInfo(): Promise<{ token: string; streamBaseUrl: string }> {
+  /** Token bound to the one file being cast + base URL serveur, juste avant le chargement Cast. */
+  async getCastInfo(mediaFileId: number): Promise<{ token: string; streamBaseUrl: string }> {
     return firstValueFrom(
       this.http.post<{ token: string; streamBaseUrl: string }>(
         '/api/auth/cast-info',
-        {},
+        { mediaFileId },
       ),
     );
   }
@@ -874,7 +874,7 @@ export class AuthService {
     return minted;
   }
 
-  /** A single-use ticket for the events stream (valid 30 s); null when the server cannot mint one. */
+  /** A single-use ticket for the events stream (valid 30 s); null only for a server without the route (404), any other failure rejects. */
   mintEventTicket(): Promise<string | null> {
     return firstValueFrom(
       this.http.post<{ ticket: string }>('/api/system/events/ticket', {}, {
@@ -882,7 +882,10 @@ export class AuthService {
       }),
     ).then(
       (r) => r.ticket,
-      () => null,
+      (err: unknown) => {
+        if (err instanceof HttpErrorResponse && err.status === 404) return null;
+        throw err;
+      },
     );
   }
 

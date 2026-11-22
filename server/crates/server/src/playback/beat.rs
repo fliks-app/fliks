@@ -33,6 +33,8 @@ use std::{collections::HashMap, sync::Mutex};
 
 const DEBOUNCE_MS: i64 = 30_000;
 const SEEK_SECONDS: f64 = 30.0;
+/// A sid whose position stays within this of its last write is standing still.
+const STILL_SECONDS: f64 = 1.0;
 const PRUNE_MS: i64 = DEBOUNCE_MS * 10;
 /// Serialised size above which a reader's locator is not stored.
 const LOCATOR_MAX: usize = 8 * 1024;
@@ -57,7 +59,8 @@ struct Reading {
 /// When, at which position and with which reading the last write happened.
 type LastWrite = (i64, f64, Option<Reading>);
 
-/// Last history write per `user:media:episode`, per process and never persisted (rules 1, 13, 14).
+/// Last history write per `user:media:episode`, and per sid on top of it for a beat that has one;
+/// per process and never persisted (rules 1, 13, 14).
 #[derive(Default)]
 pub struct Debounce(Mutex<HashMap<String, LastWrite>>);
 
@@ -65,29 +68,42 @@ impl Debounce {
     /// Decides and, on a flush, records the write before it happens, so a failed write still debounces.
     #[cfg(test)]
     fn flush(&self, key: &str, now: i64, pos: f64, dur: f64, state_changed: bool) -> bool {
-        self.flush_reading(key, now, pos, dur, state_changed, None)
+        self.flush_reading((key, None), now, pos, dur, state_changed, None)
     }
 
-    /// `flush`, also writing when `reading` differs from the one of the last write.
+    /// `flush`, also writing when `reading` differs from the one of the last write. A beat with a
+    /// sid is compared with that sid's own last write only, and skipped while it stands still.
     fn flush_reading(
         &self,
-        key: &str,
+        (key, sid): (&str, Option<&str>),
         now: i64,
         pos: f64,
         dur: f64,
         state_changed: bool,
         reading: Option<Reading>,
     ) -> bool {
+        let key = sid.map_or_else(|| key.to_owned(), |s| format!("{key}#{s}"));
         let mut map = self.0.lock_clean();
-        let last = map.get(key);
+        let last = map.get(&key);
         let seeked = last.is_none_or(|(_, p, _)| (pos - p).abs() > SEEK_SECONDS);
         let due = now - last.map_or(0, |(at, _, _)| *at) >= DEBOUNCE_MS;
         let moved = reading
             .as_ref()
             .is_some_and(|r| last.is_none_or(|(_, _, l)| l.as_ref() != Some(r)));
+        let still = sid.is_some()
+            && !state_changed
+            && !moved
+            && last.is_some_and(|(_, p, _)| (pos - p).abs() <= STILL_SECONDS);
+        if still {
+            // Refreshed so a long pause is not pruned and then written as a first beat.
+            if let Some(w) = map.get_mut(&key) {
+                w.0 = now;
+            }
+            return false;
+        }
         let go = state_changed || watched::completes(pos, dur) || seeked || due || moved;
         if go {
-            map.insert(key.to_owned(), (now, pos, reading));
+            map.insert(key, (now, pos, reading));
             map.retain(|_, (at, _, _)| *at >= now - PRUNE_MS);
         }
         go
@@ -664,7 +680,7 @@ pub async fn heartbeat(
     let text_done = progression.is_some_and(|p| p >= fliks_domain::media::finish::TEXT_SHARE);
     if client_played_at.is_none()
         && !st.debounce.flush_reading(
-            &key,
+            (&key, sid),
             now_ms() as i64,
             pos,
             dur,
@@ -949,12 +965,55 @@ mod tests {
             progression: Some(p),
             locator: Some(json!({"href": href})),
         };
-        let beat = |now, r| d.flush_reading("t", now, 0.0, 0.0, false, Some(r));
+        let beat = |now, r| d.flush_reading(("t", None), now, 0.0, 0.0, false, Some(r));
         assert!(beat(1_000, at(0.1, "a")), "first beat");
         assert!(!beat(11_000, at(0.1, "a")), "same position, 10 s on");
         assert!(beat(12_000, at(0.2, "a")), "progression moved");
         assert!(beat(13_000, at(0.2, "b")), "locator moved");
         assert!(!beat(14_000, at(0.2, "b")));
+    }
+
+    #[test]
+    fn a_sid_is_compared_with_its_own_last_write_and_skipped_while_still() {
+        let d = Debounce::default();
+        let beat = |sid, now, pos, changed| {
+            d.flush_reading(("k", Some(sid)), now, pos, 3600.0, changed, None)
+        };
+        assert!(beat("a", 1_000, 1200.0, false), "first beat of a");
+        assert!(beat("a", 2_000, 1200.0, true), "a pauses: state change");
+        assert!(beat("b", 3_000, 3000.0, false), "first beat of b");
+        assert!(beat("b", 33_000, 3010.0, false), "b plays on");
+        assert!(!beat("a", 43_000, 1200.0, false), "a paused, b wrote since");
+        assert!(!beat("a", 53_000, 1200.5, false), "30 s on, still");
+        assert!(beat("a", 54_000, 1260.0, false), "a seeks vs its own write");
+        assert!(
+            beat("a", 55_000, 1260.0, true),
+            "a state change still writes"
+        );
+        assert!(!beat("b", 56_000, 3010.4, false), "b still");
+        assert!(
+            d.flush("k", 57_000, 100.0, 3600.0, false),
+            "a beat without sid has its own key"
+        );
+    }
+
+    #[test]
+    fn a_long_pause_is_not_pruned_and_a_moved_reading_still_writes() {
+        let d = Debounce::default();
+        let beat = |now, r| d.flush_reading(("k", Some("a")), now, 5.0, 0.0, false, r);
+        assert!(beat(0, None));
+        for i in 1..=60 {
+            assert!(!beat(i * 10_000, None), "paused beat {i}");
+        }
+        let at = |p| {
+            Some(Reading {
+                progression: Some(p),
+                locator: None,
+            })
+        };
+        assert!(beat(610_000, at(0.1)));
+        assert!(!beat(620_000, at(0.1)));
+        assert!(beat(630_000, at(0.2)), "reading moved at the same position");
     }
 
     #[test]

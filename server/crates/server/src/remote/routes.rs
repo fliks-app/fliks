@@ -9,6 +9,7 @@ use crate::{
     http::{
         AppError,
         auth::{Authed, SessionAuthed},
+        client_ip,
         json::iso_ms,
         validate::{PathParams, ValidJson},
     },
@@ -16,15 +17,15 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Query, State},
-    http::StatusCode,
+    extract::{ConnectInfo, Extension, Query, State},
+    http::{HeaderMap, StatusCode},
     routing::{delete, get, post},
 };
 use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Subject};
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::{collections::HashMap, net::SocketAddr};
 
 const CODE_TTL_SECS: i64 = 600;
 const MAX_CODES_PER_DEVICE: i64 = 3;
@@ -164,7 +165,11 @@ pub async fn targets(
         for t in st.hub.list_for_user(owner.id) {
             // The grant is per device: a second device of the same owner stays invisible.
             let device = device_id_of(t.identity.target_id.as_deref().unwrap_or_default());
-            if keep(&t) && granted.iter().any(|g| g.device_id == device) {
+            if keep(&t)
+                && granted
+                    .iter()
+                    .any(|g| g.owner_user_id == owner.id && g.device_id == device)
+            {
                 rows.push(to_dto(t, &mut live, Some(owner.username.clone())));
             }
         }
@@ -240,7 +245,7 @@ pub async fn can_control(
     let Some(device) = device_id.filter(|d| !d.is_empty()) else {
         return Ok(Err("no_device_id"));
     };
-    if !db::is_granted(&st.db, device, me.user.id).await? {
+    if !db::is_granted(&st.db, target_user, device, me.user.id).await? {
         return Ok(Err("device_not_granted"));
     }
     Ok(if owner.enabled {
@@ -476,7 +481,7 @@ pub async fn grant_code(
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     dto.validate()?;
     db::prune_expired_codes(&st.db).await?;
-    if db::unclaimed_count(&st.db, &dto.device_id).await? >= MAX_CODES_PER_DEVICE {
+    if db::unclaimed_count(&st.db, a.user.id, &dto.device_id).await? >= MAX_CODES_PER_DEVICE {
         return Err(AppError::bad_request("remote.error_too_many_codes"));
     }
     let mut code = None;
@@ -507,15 +512,31 @@ pub async fn grant_code(
 #[utoipa::path(post, path = "/api/remote/grants/claim", responses((status = 201)))]
 pub async fn grant_claim(
     State(st): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    headers: HeaderMap,
     SessionAuthed(a): SessionAuthed,
     ValidJson(dto): ValidJson<Claim>,
 ) -> Result<(StatusCode, Json<GrantDto>), AppError> {
     dto.validate()?;
     let me = a.user.id;
+    let ip = client_ip(
+        &st,
+        &headers,
+        peer.as_ref().map(|Extension(ConnectInfo(a))| a),
+    )
+    .await;
+    let key = format!("remote-claim:{me}");
+    if !st.pairing_throttle.attempt(ip, &key) {
+        return Err(AppError::with_message(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Too many failed attempts, try again later",
+        ));
+    }
     let code = dto.code.trim().to_uppercase();
     let Some(mut grant) = db::unclaimed_by_code(&st.db, &code).await? else {
         return Err(AppError::not_found("remote.error_unknown_code"));
     };
+    st.pairing_throttle.refund(ip, &key);
     if grant.code_expires_at < Utc::now() {
         db::delete(&st.db, grant.id).await?;
         return Err(AppError::not_found("remote.error_expired_code"));
@@ -523,7 +544,9 @@ pub async fn grant_claim(
     if grant.owner_user_id == me {
         return Err(AppError::bad_request("remote.error_own_device"));
     }
-    if let Some(existing) = db::held_on_device(&st.db, &grant.device_id, me).await? {
+    if let Some(existing) =
+        db::held_on_device(&st.db, grant.owner_user_id, &grant.device_id, me).await?
+    {
         db::delete(&st.db, grant.id).await?;
         return Ok((StatusCode::CREATED, Json(one(&st, existing).await?)));
     }

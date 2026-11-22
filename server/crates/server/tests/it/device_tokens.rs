@@ -3,6 +3,7 @@ use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_engine_core::api::ResolveCredentialSource::Basic;
 use fliks_server::{config::Config, device_tokens, state::AppState};
+use md5::{Digest, Md5};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
@@ -111,6 +112,67 @@ async fn a_token_is_shown_once_and_stored_as_a_hash(pool: PgPool) {
     assert_eq!(c.owner_of(&token).await, Some(uid));
     let (_, list) = c.call("GET", "/api/device-tokens", &jwt, None).await;
     assert!(list[0]["lastUsedAt"].is_string(), "a hit stamps lastUsedAt");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_lookup_stamps_last_used_at_once_a_minute(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, jwt) = c.user("a").await;
+    let (_, opds) = c
+        .call(
+            "POST",
+            "/api/device-tokens",
+            &jwt,
+            Some(json!({"name": "o", "kind": "opds"})),
+        )
+        .await;
+    let (_, sync) = c
+        .call(
+            "POST",
+            "/api/device-tokens",
+            &jwt,
+            Some(json!({"name": "k", "kind": "kosync"})),
+        )
+        .await;
+    let opds = opds["token"].as_str().unwrap();
+    let key: String = Md5::digest(sync["token"].as_str().unwrap())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let stamp = || async {
+        sqlx::query_scalar::<_, Option<String>>(
+            r#"SELECT string_agg("lastUsedAt"::text, ',' ORDER BY id) FROM device_tokens"#,
+        )
+        .fetch_one(&c.pool)
+        .await
+        .unwrap()
+    };
+    assert_eq!(stamp().await, None);
+    c.owner_of(opds).await.unwrap();
+    device_tokens::kosync_owner(&c.pool, &key)
+        .await
+        .unwrap()
+        .unwrap();
+    let first = stamp().await.unwrap();
+    for _ in 0..3 {
+        c.owner_of(opds).await.unwrap();
+        device_tokens::kosync_owner(&c.pool, &key)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+    assert_eq!(stamp().await.unwrap(), first, "a fresh stamp is left alone");
+    sqlx::query(r#"UPDATE device_tokens SET "lastUsedAt" = now() - interval '2 minutes'"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let stale = stamp().await.unwrap();
+    c.owner_of(opds).await.unwrap();
+    device_tokens::kosync_owner(&c.pool, &key)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_ne!(stamp().await.unwrap(), stale, "a stale one is renewed");
 }
 
 #[sqlx::test(migrations = false)]

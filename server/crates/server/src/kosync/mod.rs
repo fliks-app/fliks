@@ -84,7 +84,12 @@ async fn auth(
     peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
 ) -> Response {
-    let ip = client_ip(&headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a));
+    let ip = client_ip(
+        &st,
+        &headers,
+        peer.as_ref().map(|Extension(ConnectInfo(a))| a),
+    )
+    .await;
     if !st.login_throttle.attempt(ip, THROTTLE_KEY) {
         return message(
             StatusCode::TOO_MANY_REQUESTS,

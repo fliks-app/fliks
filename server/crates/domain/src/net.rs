@@ -109,6 +109,35 @@ pub fn is_loopback_or_metadata(ip: IpAddr) -> bool {
     unmapped(ip).is_loopback() || is_metadata(ip)
 }
 
+/// An address range `a.b.c.d/n` or `x::y/n`; a bare address is a single-host range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cidr {
+    net: IpAddr,
+    bits: u32,
+}
+
+impl Cidr {
+    pub fn parse(s: &str) -> Option<Cidr> {
+        let s = s.trim();
+        let (addr, bits) = s.split_once('/').map_or((s, None), |(a, b)| (a, Some(b)));
+        let net = unmapped(addr.parse::<IpAddr>().ok()?);
+        let max = if net.is_ipv4() { 32 } else { 128 };
+        let bits = match bits {
+            Some(b) => b.parse::<u32>().ok().filter(|b| *b <= max)?,
+            None => max,
+        };
+        Some(Cidr { net, bits })
+    }
+
+    pub fn contains(&self, ip: IpAddr) -> bool {
+        match (self.net, unmapped(ip)) {
+            (IpAddr::V4(n), IpAddr::V4(ip)) => in_v4(ip, n.octets(), self.bits),
+            (IpAddr::V6(n), IpAddr::V6(ip)) => in_v6(ip, u128::from(n), self.bits),
+            _ => false,
+        }
+    }
+}
+
 fn classify_v6(ip: Ipv6Addr) -> Class {
     if let Some(v4) = embedded_v4(ip) {
         return classify_v4(v4);
@@ -134,6 +163,23 @@ fn classify_v6(ip: Ipv6Addr) -> Class {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cidr_ranges() {
+        let c = |s: &str| Cidr::parse(s).unwrap();
+        let ip = |s: &str| s.parse::<IpAddr>().unwrap();
+        assert!(c("10.0.0.0/8").contains(ip("10.9.9.9")));
+        assert!(!c("10.0.0.0/8").contains(ip("11.0.0.1")));
+        assert!(c("192.168.1.5").contains(ip("192.168.1.5")));
+        assert!(!c("192.168.1.5").contains(ip("192.168.1.6")));
+        assert!(c("127.0.0.1/32").contains(ip("::ffff:127.0.0.1")));
+        assert!(c("fd00::/8").contains(ip("fd12::1")));
+        assert!(!c("fd00::/8").contains(ip("10.0.0.1")));
+        assert!(c("0.0.0.0/0").contains(ip("8.8.8.8")));
+        for bad in ["", "10.0.0.0/33", "::1/129", "nope", "10.0.0.0/x"] {
+            assert!(Cidr::parse(bad).is_none(), "{bad}");
+        }
+    }
 
     #[test]
     fn classes() {

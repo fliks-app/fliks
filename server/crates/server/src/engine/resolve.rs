@@ -15,7 +15,10 @@ use axum::{
     extract::{FromRequestParts, State},
     http::{HeaderMap, HeaderValue, StatusCode, header, request::Parts},
 };
-use fliks_domain::acl::{Action, Permissions, Subject};
+use fliks_domain::{
+    acl::{Action, Permissions, Subject},
+    media::family::Family,
+};
 use fliks_engine_core::{
     api::{
         ResolveCredentialSource, ResolveMediaId, ResolvePurpose, ResolveRequest, ResolveResponse,
@@ -134,8 +137,10 @@ pub async fn resolve(
     if device.is_some_and(|k| !k.opens(request.purpose)) {
         return Ok(Json(deny()));
     }
-    // A Kobo reads text editions only: its token travels in URLs.
-    if device == Some(device_tokens::Kind::Kobo) && !text_file(&st, &request.media_id).await? {
+    // A device token opens the families of its catalogue only (a Kobo, text editions): it travels in URLs.
+    if let Some(families) = device.and_then(device_tokens::Kind::families)
+        && !in_families(&st, &request.media_id, families).await?
+    {
         return Ok(Json(deny()));
     }
     // A live token opens its own viewer's data plane only; a bare denial ends nobody's viewer.
@@ -350,16 +355,22 @@ async fn subsonic_credential(
         }))
 }
 
-/// Whether the file is the part of an item of a `text` edition.
-async fn text_file(st: &AppState, id: &ResolveMediaId) -> Result<bool, AppError> {
+/// Whether the file is the part of an item of an edition of one of `families`.
+async fn in_families(
+    st: &AppState,
+    id: &ResolveMediaId,
+    families: &[Family],
+) -> Result<bool, AppError> {
     let ResolveMediaId::File(id) = id else {
         return Ok(false);
     };
+    let families: Vec<&str> = families.iter().map(|f| f.as_str()).collect();
     Ok(sqlx::query_scalar(
         r#"SELECT EXISTS (SELECT 1 FROM item_parts ip JOIN items i ON i.id = ip."itemId"
-             JOIN editions e ON e.id = i."editionId" WHERE ip."mediaFileId" = $1 AND e.family = 'text')"#,
+             JOIN editions e ON e.id = i."editionId" WHERE ip."mediaFileId" = $1 AND e.family = ANY($2))"#,
     )
     .bind(*id as i32)
+    .bind(&families)
     .fetch_one(&st.db)
     .await?)
 }

@@ -133,6 +133,7 @@ async fn settings_access_alone_cannot_reach_the_host(pool: PgPool) {
         "plugins.allow_unsigned",
         "password_login",
         "oidc_auto_launch",
+        "trusted_proxies",
     ] {
         let uri = format!("/api/settings/{key}");
         assert_eq!(
@@ -717,6 +718,29 @@ async fn users_public_mode_accepts_only_known_values(pool: PgPool) {
             &c.app,
             "PUT",
             "/api/settings/users_public_mode",
+            Some(&c.admin),
+            json!({"value": v}),
+        )
+        .await;
+        assert_eq!(s, want, "{v}");
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn trusted_proxies_accepts_a_json_list_of_ranges_only(pool: PgPool) {
+    let c = ctx(pool).await;
+    for (v, want) in [
+        (r#"["127.0.0.1","192.168.1.0/24","fd00::/8"]"#, 200),
+        ("[]", 200),
+        ("", 200),
+        (r#"["10.0.0.0/33"]"#, 400),
+        (r#"["nope"]"#, 400),
+        ("10.0.0.1", 400),
+    ] {
+        let (s, _) = call(
+            &c.app,
+            "PUT",
+            "/api/settings/trusted_proxies",
             Some(&c.admin),
             json!({"value": v}),
         )

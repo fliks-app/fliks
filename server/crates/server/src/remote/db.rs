@@ -73,9 +73,11 @@ pub async fn enabled_admin_ids(db: &PgPool) -> sqlx::Result<Vec<i32>> {
         .collect())
 }
 
-pub async fn is_granted(db: &PgPool, device: &str, grantee: i32) -> sqlx::Result<bool> {
+pub async fn is_granted(db: &PgPool, owner: i32, device: &str, grantee: i32) -> sqlx::Result<bool> {
     sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!" FROM remote_control_grants WHERE "deviceId" = $1 AND "granteeUserId" = $2"#,
+        r#"SELECT count(*) AS "n!" FROM remote_control_grants
+           WHERE "ownerUserId" = $1 AND "deviceId" = $2 AND "granteeUserId" = $3"#,
+        owner,
         device,
         grantee
     )
@@ -141,9 +143,11 @@ pub async fn prune_expired_codes(db: &PgPool) -> sqlx::Result<()> {
     .map(drop)
 }
 
-pub async fn unclaimed_count(db: &PgPool, device: &str) -> sqlx::Result<i64> {
+pub async fn unclaimed_count(db: &PgPool, owner: i32, device: &str) -> sqlx::Result<i64> {
     sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!" FROM remote_control_grants WHERE "deviceId" = $1 AND "granteeUserId" IS NULL"#,
+        r#"SELECT count(*) AS "n!" FROM remote_control_grants
+           WHERE "ownerUserId" = $1 AND "deviceId" = $2 AND "granteeUserId" IS NULL"#,
+        owner,
         device
     )
     .fetch_one(db)
@@ -195,6 +199,7 @@ pub async fn unclaimed_by_code(db: &PgPool, code: &str) -> sqlx::Result<Option<G
 
 pub async fn held_on_device(
     db: &PgPool,
+    owner: i32,
     device: &str,
     grantee: i32,
 ) -> sqlx::Result<Option<Grant>> {
@@ -202,7 +207,9 @@ pub async fn held_on_device(
         Grant,
         r#"SELECT id, "createdAt" AS created_at, "deviceId" AS device_id, "ownerUserId" AS owner_user_id,
                   "granteeUserId" AS grantee_user_id, "deviceName" AS device_name, "codeExpiresAt" AS code_expires_at
-           FROM remote_control_grants WHERE "deviceId" = $1 AND "granteeUserId" = $2 LIMIT 1"#,
+           FROM remote_control_grants
+           WHERE "ownerUserId" = $1 AND "deviceId" = $2 AND "granteeUserId" = $3 LIMIT 1"#,
+        owner,
         device,
         grantee
     )

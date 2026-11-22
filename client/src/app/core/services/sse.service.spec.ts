@@ -166,7 +166,7 @@ describe('SseService: native dial credential', () => {
   const urls: string[] = [];
   const sources: { onmessage: (e: { data: string }) => void }[] = [];
 
-  async function dial(ticket: string | null, deviceName = ''): Promise<string> {
+  async function dial(ticket: string | null | Error, deviceName = ''): Promise<string> {
     vi.restoreAllMocks();
     urls.length = 0;
     vi.stubGlobal(
@@ -202,7 +202,10 @@ describe('SseService: native dial credential', () => {
             refreshToken: null,
             isAuthenticated: () => false,
             sessionEpoch: () => 0,
-            mintEventTicket: async () => ticket,
+            mintEventTicket: async () => {
+              if (ticket instanceof Error) throw ticket;
+              return ticket;
+            },
           },
         },
         { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
@@ -245,10 +248,15 @@ describe('SseService: native dial credential', () => {
     expect(sse.remoteState()?.lastCmdId).toBeNull();
   });
 
-  it('falls back to the access token when no ticket can be minted', async () => {
+  it('falls back to the access token only for a server without the ticket route', async () => {
     const url = await dial(null);
     expect(url).toContain('token=at');
     expect(url).not.toContain('ticket=');
+  });
+
+  it('opens no stream and keeps the access token out of a URL when the ticket call fails', async () => {
+    await dial(new Error('503'));
+    expect(urls).toEqual([]);
   });
 });
 

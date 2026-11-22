@@ -154,8 +154,10 @@ pub(crate) struct LoginDto {
     server_type: Option<String>,
 }
 
-fn is_lan(headers: &HeaderMap, peer: Option<&SocketAddr>) -> bool {
-    client_ip(headers, peer).is_some_and(|ip| classify(ip) != Class::Public)
+async fn is_lan(st: &AppState, headers: &HeaderMap, peer: Option<&SocketAddr>) -> bool {
+    client_ip(st, headers, peer)
+        .await
+        .is_some_and(|ip| classify(ip) != Class::Public)
 }
 
 #[utoipa::path(post, path = "/api/auth/login", responses((status = 200)))]
@@ -189,7 +191,12 @@ pub(crate) async fn login(
             "Media server login for {t} not yet implemented"
         )));
     }
-    let ip = client_ip(&headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a));
+    let ip = client_ip(
+        &st,
+        &headers,
+        peer.as_ref().map(|Extension(ConnectInfo(a))| a),
+    )
+    .await;
     if !st.login_throttle.attempt(ip, &dto.username) {
         return Err(AppError::with_message(
             StatusCode::TOO_MANY_REQUESTS,
@@ -525,6 +532,7 @@ pub(crate) async fn setup(
     )
     .execute(&mut *tx)
     .await?;
+    crate::settings::set_in(&mut tx, "users_public_mode", Some("hidden")).await?;
     tx.commit().await?;
     Ok(StatusCode::CREATED)
 }
@@ -557,7 +565,14 @@ pub(crate) async fn users_public(
     let mode = crate::settings::text(&st.db, "users_public_mode").await?;
     let shown = match mode.as_deref() {
         Some("hidden") => false,
-        Some("lan") => is_lan(&headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a)),
+        Some("lan") => {
+            is_lan(
+                &st,
+                &headers,
+                peer.as_ref().map(|Extension(ConnectInfo(a))| a),
+            )
+            .await
+        }
         _ => true,
     };
     if !shown {
@@ -575,15 +590,22 @@ pub(crate) async fn users_public(
     ))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub(crate) struct CastInfoDto {
+    media_file_id: u32,
+}
+
 #[utoipa::path(post, path = "/api/auth/cast-info", responses((status = 200)))]
 pub(crate) async fn cast_info(
     State(st): State<AppState>,
     a: Authed,
     headers: HeaderMap,
+    ValidJson(dto): ValidJson<CastInfoDto>,
 ) -> Result<Response, AppError> {
     let token = st
         .jwt
-        .sign_cast(a.user.id, &a.user.username, a.session()?)?
+        .sign_cast(a.user.id, &a.user.username, a.session()?, dto.media_file_id)?
         .token;
     let base = crate::http::public_base(&st, &headers).await;
     Ok((
@@ -665,7 +687,12 @@ pub(crate) async fn pairing_request(
     }
     check(errs)?;
     let device = device_id(&headers)?;
-    let ip = client_ip(&headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a));
+    let ip = client_ip(
+        &st,
+        &headers,
+        peer.as_ref().map(|Extension(ConnectInfo(a))| a),
+    )
+    .await;
     // Clients that show the code say so; older ones never display it, so the approver cannot be given it.
     let legacy = !headers.contains_key("x-fliks-pairing-code");
     let opened = db::open_pairing(
@@ -808,14 +835,19 @@ pub(crate) struct PairingApproveDto {
 }
 
 /// Digits of the typed code; every attempt counts, a hit is refunded by the caller.
-fn throttled_code(
+async fn throttled_code(
     st: &AppState,
     peer: &Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: &HeaderMap,
     user_id: i32,
     code: &str,
 ) -> Result<(Option<IpAddr>, String, String), AppError> {
-    let ip = client_ip(headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a));
+    let ip = client_ip(
+        st,
+        headers,
+        peer.as_ref().map(|Extension(ConnectInfo(a))| a),
+    )
+    .await;
     let key = format!("pairing:{user_id}");
     if !st.pairing_throttle.attempt(ip, &key) {
         return Err(AppError::with_message(
@@ -845,7 +877,7 @@ pub(crate) async fn pairing_lookup(
     a: Authed,
     ValidJson(dto): ValidJson<PairingCodeDto>,
 ) -> Result<Json<PairingLookup>, AppError> {
-    let (ip, key, code) = throttled_code(&st, &peer, &headers, a.user.id, &dto.code)?;
+    let (ip, key, code) = throttled_code(&st, &peer, &headers, a.user.id, &dto.code).await?;
     let p = db::lookup(&st.db, &code, a.user.id, Utc::now())
         .await?
         .ok_or_else(|| AppError::not_found("No pending request with this code"))?;
@@ -867,7 +899,7 @@ pub(crate) async fn pairing_approve(
     a: Authed,
     ValidJson(dto): ValidJson<PairingApproveDto>,
 ) -> Result<StatusCode, AppError> {
-    let (ip, key, code) = throttled_code(&st, &peer, &headers, a.user.id, &dto.code)?;
+    let (ip, key, code) = throttled_code(&st, &peer, &headers, a.user.id, &dto.code).await?;
     let approval = db::approve(
         &st.db,
         &code,

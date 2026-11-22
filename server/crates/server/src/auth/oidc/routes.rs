@@ -128,11 +128,17 @@ pub(crate) struct StartDto {
     current_password: Option<String>,
 }
 
-fn peer_ip(
+async fn peer_ip(
+    st: &AppState,
     peer: &Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: &HeaderMap,
 ) -> Option<std::net::IpAddr> {
-    client_ip(headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a))
+    client_ip(
+        st,
+        headers,
+        peer.as_ref().map(|Extension(ConnectInfo(a))| a),
+    )
+    .await
 }
 
 /// A base64url SHA-256 (the S256 challenge) or a 43 to 128 character verifier (RFC 7636 section 4.1).
@@ -160,9 +166,10 @@ pub(crate) async fn start(
         .await?
         .filter(|p| p.enabled)
         .ok_or_else(|| AppError::bare(StatusCode::NOT_FOUND))?;
+    let start_ip = peer_ip(&st, &peer, &headers).await;
     if !st
         .login_throttle
-        .attempt_with(peer_ip(&peer, &headers), THROTTLE_KEY, START_LIMIT)
+        .attempt_with(start_ip, THROTTLE_KEY, START_LIMIT)
     {
         return Err(AppError::with_message(
             StatusCode::TOO_MANY_REQUESTS,
@@ -461,7 +468,7 @@ pub(crate) async fn exchange(
         return Ok(idp(e));
     }
     let prof = sync::profile(&p, &claims);
-    let ip = peer_ip(&peer, &headers);
+    let ip = peer_ip(&st, &peer, &headers).await;
     let into = |f: Fail| match f {
         Fail::Kind(k) => Ok(refused(p.id, k, "refused")),
         Fail::Db(e) => Err(AppError::from(e)),

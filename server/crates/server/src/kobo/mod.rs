@@ -106,7 +106,7 @@ impl FromRequestParts<AppState> for Kobo {
             .extensions
             .get::<ConnectInfo<SocketAddr>>()
             .map(|c| &c.0);
-        let ip = client_ip(&parts.headers, peer);
+        let ip = client_ip(st, &parts.headers, peer).await;
         let token = original_path(parts)
             .strip_prefix("/kobo/")
             .and_then(|p| p.split('/').next())

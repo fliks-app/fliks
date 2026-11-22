@@ -36,6 +36,10 @@ export class GeneralSettingsComponent implements OnInit {
   readonly usersPublicMode = signal('everyone');
   readonly savingServer = signal(false);
 
+  // Network
+  readonly trustedProxies = signal('');
+  readonly savingNetwork = signal(false);
+
   // Metadata language + region
   readonly metadataLanguage = signal('en');
   readonly metadataRegion = signal('US');
@@ -69,6 +73,7 @@ export class GeneralSettingsComponent implements OnInit {
       this.serverName.set(map['server_name'] ?? '');
       this.publicUrl.set(map['public_url'] ?? '');
       this.usersPublicMode.set(map['users_public_mode'] ?? 'everyone');
+      this.trustedProxies.set(parseProxyList(map['trusted_proxies']));
       this.metadataLanguage.set(map['metadata_language'] ?? 'en');
       this.metadataRegion.set(map['metadata_region'] ?? 'US');
       this.partyIceServers.set(map['party_voice_ice_servers'] ?? '');
@@ -83,6 +88,19 @@ export class GeneralSettingsComponent implements OnInit {
       this.loadFailed.set(true);
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  async saveNetwork() {
+    this.savingNetwork.set(true);
+    try {
+      const lines = this.trustedProxies().split(/[\s,]+/).filter(Boolean);
+      await this.api.setBulk({ trusted_proxies: lines.length ? JSON.stringify(lines) : '' });
+      this.toast.success(this.translate.instant('settings.general.saved'));
+    } catch {
+      // Errors are surfaced by the global HTTP interceptor.
+    } finally {
+      this.savingNetwork.set(false);
     }
   }
 
@@ -139,5 +157,14 @@ export class GeneralSettingsComponent implements OnInit {
       await this.api.setBulk({ kobo_store_proxy: this.koboStoreProxy() });
       this.toast.success(this.translate.instant('settings.general.saved'));
     } catch { /* interceptor */ } finally { this.savingKobo.set(false); }
+  }
+}
+
+function parseProxyList(raw: string | null | undefined): string {
+  try {
+    const list: unknown = JSON.parse(raw ?? '');
+    return Array.isArray(list) ? list.join('\n') : '';
+  } catch {
+    return '';
   }
 }

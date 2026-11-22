@@ -73,7 +73,13 @@ export class KaraokeRelayService {
     if (!role || id == null) return;
     const params = new URLSearchParams({ role });
     if (this.config.isNative) {
-      const ticket = await this.auth.mintEventTicket();
+      let ticket: string | null;
+      try {
+        ticket = await this.auth.mintEventTicket();
+      } catch {
+        if (this.role === role && !this.ws) this.timer = setTimeout(() => void this.dial(), RETRY_MS);
+        return;
+      }
       const token = this.auth.accessToken;
       if (ticket) params.set('ticket', ticket);
       else if (token) params.set('token', token);

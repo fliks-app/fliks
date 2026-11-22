@@ -79,6 +79,31 @@
       </div>
     </div>
 
+    <!-- Network -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
+        <h2 class="card-title text-base">{{ 'settings.general.section_network' | translate }}</h2>
+        <label class="form-control w-full max-w-md">
+          <span class="label-text mb-1">{{ 'settings.general.trusted_proxies' | translate }}</span>
+          <textarea
+            class="textarea textarea-bordered w-full font-mono text-sm"
+            rows="3"
+            spellcheck="false"
+            placeholder="127.0.0.1&#10;192.168.1.0/24"
+            [ngModel]="trustedProxies()"
+            (ngModelChange)="trustedProxies.set($event)"
+          ></textarea>
+          <span class="label-text-alt text-base-content/60 mt-1">{{ 'settings.general.trusted_proxies_hint' | translate }}</span>
+        </label>
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-primary" (click)="saveNetwork()" [disabled]="savingNetwork()">
+            @if (savingNetwork()) { <span class="loading loading-spinner loading-sm"></span> }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Metadata language -->
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body gap-5">

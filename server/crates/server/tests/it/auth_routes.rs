@@ -292,7 +292,16 @@ async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
             .mf,
         None
     );
-    let (_, _, i) = call(
+    let (s, _, _) = call(
+        &c,
+        "POST",
+        "/api/auth/cast-info",
+        &[("authorization", &h)],
+        None,
+    )
+    .await;
+    assert_eq!(s, 400, "cast-info names the file it casts");
+    let (s, _, i) = call(
         &c,
         "POST",
         "/api/auth/cast-info",
@@ -301,10 +310,13 @@ async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
             ("host", "h:1"),
             ("x-forwarded-proto", "https"),
         ],
-        None,
+        Some(json!({"mediaFileId": 42})),
     )
     .await;
-    assert_eq!(i["streamBaseUrl"], "https://h:1");
+    assert_eq!((s, &i["streamBaseUrl"]), (201, &json!("https://h:1")));
+    let claims = c.st.jwt.verify(i["token"].as_str().unwrap()).unwrap();
+    assert_eq!((claims.mf, claims.sub), (Some(42), id));
+    assert!(claims.scope.is_some());
     sqlx::query("INSERT INTO app_settings (key, value) VALUES ('public_url', 'https://x.test//')")
         .execute(&pool)
         .await
@@ -314,7 +326,7 @@ async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
         "POST",
         "/api/auth/cast-info",
         &[("authorization", &h)],
-        None,
+        Some(json!({"mediaFileId": 42})),
     )
     .await;
     assert_eq!(i["streamBaseUrl"], "https://x.test");
@@ -611,6 +623,17 @@ async fn first_admin_setup(pool: PgPool) {
     let login = json!({"username": "root", "password": "long-enough-pass"});
     let (s, _, r) = call(&c, "POST", "/api/auth/login", &[], Some(login)).await;
     assert_eq!((s, r["user"]["isAdmin"].clone()), (201, json!(true)));
+    let mode: Option<String> =
+        sqlx::query_scalar("SELECT value FROM app_settings WHERE key = 'users_public_mode'")
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        mode.as_deref(),
+        Some("hidden"),
+        "a new install hides the roster"
+    );
+    assert_eq!(picker(&c, "192.168.1.20", None).await, json!([]));
 }
 
 #[sqlx::test(migrations = false)]
@@ -640,6 +663,72 @@ async fn first_admin_setup_race(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(n, 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn failed_logins_share_one_budget_per_address_across_usernames(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let try_login = async |name: &str, ip: &str| {
+        call(
+            &c,
+            "POST",
+            "/api/auth/login",
+            &[("x-forwarded-for", ip)],
+            Some(json!({"username": name, "password": "wrong"})),
+        )
+        .await
+        .0
+    };
+    for i in 0..30 {
+        assert_eq!(
+            try_login(&format!("nobody{i}"), "9.9.9.9").await,
+            401,
+            "{i}"
+        );
+    }
+    assert_eq!(try_login("another", "9.9.9.9").await, 429);
+    assert_eq!(
+        try_login("another", "9.9.9.8").await,
+        401,
+        "another address"
+    );
+    assert_eq!(
+        try_login("v6", "2001:db8:1:1::1").await,
+        401,
+        "first of an IPv6 prefix"
+    );
+    for i in 0..29 {
+        let ip = format!("2001:db8:1:{:x}::1", i + 2);
+        assert_eq!(try_login("v6", &ip).await, 401, "{ip}");
+    }
+    assert_eq!(try_login("v6", "2001:db8:1:ffff::1").await, 429, "same /48");
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_trusted_proxies_setting_decides_who_is_the_client(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let id = user(&pool, "bob", Some("[]"), false, true).await;
+    let roster = json!([{"id": id, "username": "bob", "avatar": null}]);
+    for (k, v) in [
+        ("users_public_mode", "lan"),
+        ("trusted_proxies", r#"["127.0.0.1"]"#),
+    ] {
+        sqlx::query("INSERT INTO app_settings (key, value) VALUES ($1, $2)")
+            .bind(k)
+            .bind(v)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        picker(&c, "10.0.0.2", Some("8.8.8.8")).await,
+        roster,
+        "a proxy outside the list is the client, not the address it forwards"
+    );
+    assert_eq!(
+        picker(&c, "127.0.0.1", Some("10.0.0.5, 8.8.8.8")).await,
+        json!([])
+    );
 }
 
 async fn picker(c: &Ctx, peer: &str, xff: Option<&str>) -> Value {

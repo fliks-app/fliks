@@ -735,6 +735,20 @@ mod resolve {
         token
     }
 
+    /// Makes the world's file the part of an item of an edition of `family`.
+    async fn in_edition(w: &World, family: &str) {
+        sqlx::query(
+            r#"WITH e AS (INSERT INTO editions ("mediaId", family) SELECT "mediaId", $2 FROM media_files WHERE id = $1 RETURNING id, "mediaId"),
+                    i AS (INSERT INTO items ("mediaId", "editionId") SELECT "mediaId", id FROM e RETURNING id, "mediaId")
+               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) SELECT id, $1, "mediaId", 0, 0 FROM i"#,
+        )
+        .bind(w.file)
+        .bind(family)
+        .execute(&w.c.pool)
+        .await
+        .unwrap();
+    }
+
     fn basic(identifier: &str, password: &str) -> String {
         use base64::{Engine, engine::general_purpose::STANDARD};
         format!(
@@ -758,6 +772,7 @@ mod resolve {
     #[sqlx::test(migrations = false)]
     async fn a_device_token_reads_files_through_basic_with_a_short_ttl(pool: PgPool) {
         let w = world(pool).await;
+        in_edition(&w, "text").await;
         let token = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
         for purpose in ["stream", "download", "sprite", "subtitle"] {
             let b = ask_device(&w, &basic("anything", &token), Some("basic"), purpose).await;
@@ -826,15 +841,7 @@ mod resolve {
             denied(),
             "a kobo token never reads a file that is not a text edition"
         );
-        sqlx::query(
-            r#"WITH e AS (INSERT INTO editions ("mediaId", family) SELECT "mediaId", 'text' FROM media_files WHERE id = $1 RETURNING id, "mediaId"),
-                    i AS (INSERT INTO items ("mediaId", "editionId") SELECT "mediaId", id FROM e RETURNING id, "mediaId")
-               INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) SELECT id, $1, "mediaId", 0, 0 FROM i"#,
-        )
-        .bind(w.file as i32)
-        .execute(&w.c.pool)
-        .await
-        .unwrap();
+        in_edition(&w, "text").await;
         let b = ask_device(&w, &kobo, Some("path"), "download").await;
         assert_eq!(
             b["allow"], true,
@@ -856,9 +863,35 @@ mod resolve {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn an_opds_token_reads_books_and_comics_only(pool: PgPool) {
+        let w = world(pool).await;
+        let token = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
+        let credential = basic("r", &token);
+        let asks = |purpose: &'static str| ask_device(&w, &credential, Some("basic"), purpose);
+        assert_eq!(asks("stream").await, denied(), "a file with no edition");
+        in_edition(&w, "video").await;
+        for (family, allowed) in [
+            ("video", false),
+            ("audio", false),
+            ("text", true),
+            ("image", true),
+        ] {
+            sqlx::query("UPDATE editions SET family = $1")
+                .bind(family)
+                .execute(&w.c.pool)
+                .await
+                .unwrap();
+            for purpose in ["stream", "download"] {
+                assert_eq!(asks(purpose).await["allow"], allowed, "{family} {purpose}");
+            }
+        }
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_device_token_never_reads_more_than_its_owner(pool: PgPool) {
         let w = world(pool).await;
         let p = &w.c.pool;
+        in_edition(&w, "text").await;
         let kind = crate::device_tokens::Kind::Opds;
         let member = device_token(&w, w.member.0, kind).await;
         let outsider = device_token(&w, w.outsider.0, kind).await;
@@ -873,24 +906,6 @@ mod resolve {
         let media: i32 = sqlx::query_scalar(r#"SELECT "mediaId" FROM media_files WHERE id = $1"#)
             .bind(w.file)
             .fetch_one(p)
-            .await
-            .unwrap();
-        let mut conn = p.acquire().await.unwrap();
-        crate::media::items::create_shell(
-            &mut conn,
-            media,
-            fliks_domain::media::kind::MediaKind::Movie,
-            Default::default(),
-        )
-        .await
-        .unwrap();
-        drop(conn);
-        let link = crate::media::items::Link {
-            file: w.file,
-            owner: None,
-            last: None,
-        };
-        crate::media::items::attach(p, media, &[link])
             .await
             .unwrap();
         sqlx::query(r#"INSERT INTO libraries (name) VALUES ('Hidden')"#)
@@ -929,6 +944,7 @@ mod resolve {
     #[sqlx::test(migrations = false)]
     async fn a_revoked_or_renewed_device_token_stops_resolving(pool: PgPool) {
         let w = world(pool).await;
+        in_edition(&w, "text").await;
         let token = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
         assert_eq!(ask_basic(&w, "r", &token).await["allow"], true);
         let (_, hash) = crate::device_tokens::issue(crate::device_tokens::Kind::Opds);

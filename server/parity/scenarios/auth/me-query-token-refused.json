@@ -1,0 +1,19 @@
+{
+  "name": "auth-me-query-token-refused",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "manager",
+      "auth": "query",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/auth/me"
+    }
+  ]
+}
