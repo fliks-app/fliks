@@ -1,9 +1,9 @@
 #!/bin/sh
-# Runs "$@" against a private PostgreSQL 18 container, removed on exit, so concurrent test runs never share databases.
+# Runs "$@" against a private PostgreSQL container (18, or FLIKS_TEST_PG_VERSION), removed on exit, so concurrent test runs never share databases.
 set -eu
 name="fliks-test-pg-$$"
 docker run -d --rm --name "$name" -e POSTGRES_USER=fliks -e POSTGRES_PASSWORD=fliks -e POSTGRES_DB=fliks \
-  -p 127.0.0.1::5432 --tmpfs /var/lib/postgresql postgres:18 >/dev/null
+  -p 127.0.0.1::5432 --tmpfs /var/lib/postgresql "postgres:${FLIKS_TEST_PG_VERSION:-18}" >/dev/null
 data=$(mktemp -d)
 trap 'docker rm -f "$name" >/dev/null 2>&1; rm -rf "$data"' EXIT INT TERM
 until docker exec "$name" pg_isready -h 127.0.0.1 -U fliks -q 2>/dev/null; do sleep 0.5; done

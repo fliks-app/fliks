@@ -790,11 +790,6 @@ impl db::Host for Ctx {
             None => Err(no_db()),
         };
         self.db_seen(&r);
-        if r.as_ref().is_ok_and(|a| !a.is_empty())
-            && let Some(app) = self.sh.env.app.get()
-        {
-            app.plugins.probe_core_fks(&self.sh.id).await;
-        }
         r
     }
 }

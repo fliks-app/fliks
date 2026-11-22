@@ -177,7 +177,6 @@ pub struct Plugins {
     locks: KeyedLocks<String>,
     crons: Mutex<HashMap<String, Vec<tokio::task::JoinHandle<()>>>>,
     app: OnceLock<AppState>,
-    pub(crate) fk_warnings: Mutex<HashMap<String, String>>,
     /// Plugins whose registration waits for the database, by generation and `statusReason`.
     db_waits: Mutex<HashMap<String, (u64, String)>>,
     wait_gen: AtomicU64,
@@ -229,7 +228,6 @@ impl Plugins {
             locks: KeyedLocks::default(),
             crons: Mutex::default(),
             app: OnceLock::new(),
-            fk_warnings: Mutex::default(),
             db_waits: Mutex::default(),
             wait_gen: AtomicU64::new(0),
             embedded: Mutex::default(),
@@ -313,20 +311,9 @@ impl Plugins {
         self.db_waits.lock_clean().get(id).map(|w| w.1.clone())
     }
 
-    /// The breaker message, else (down) the stderr tail, else the foreign-key advisory.
+    /// The breaker message, else (down) the stderr tail.
     pub fn status_message(&self, id: &str) -> String {
-        let Some(rt) = self.rt(id) else {
-            return String::new();
-        };
-        let m = rt.message();
-        if !m.is_empty() {
-            return m;
-        }
-        self.fk_warnings
-            .lock_clean()
-            .get(id)
-            .cloned()
-            .unwrap_or_default()
+        self.rt(id).map(|rt| rt.message()).unwrap_or_default()
     }
 
     async fn stop_rt(&self, id: &str) {
@@ -625,36 +612,6 @@ impl Plugins {
             tracing::warn!("restore: dropping foreign plugin roles failed: {e}");
         }
         self.boot().await;
-    }
-
-    pub async fn probe_core_fks(&self, id: &str) {
-        let fks = match db::unsafe_core_fks(&self.db, id).await {
-            Ok(f) => f,
-            Err(e) => {
-                tracing::warn!("plugin \"{id}\": could not check core foreign keys: {e}");
-                return;
-            }
-        };
-        for (c, t, r) in &fks {
-            self.logs.emit(
-                "warn",
-                &format!("plugin:{id}"),
-                format!(
-                    "constraint \"{c}\" on \"{t}\" references public.\"{r}\" without ON DELETE CASCADE or SET NULL, which will block core deletion of that table's rows. Declare ON DELETE CASCADE or SET NULL on it, or uninstall this plugin to drop its schema."
-                ),
-            );
-        }
-        let msg = if fks.is_empty() {
-            String::new()
-        } else {
-            let names: Vec<String> = fks.iter().map(|(c, ..)| format!("\"{c}\"")).collect();
-            format!(
-                "{} foreign key(s) block core deletion ({}) — declare ON DELETE CASCADE or SET NULL on them.",
-                fks.len(),
-                names.join(", ")
-            )
-        };
-        self.fk_warnings.lock_clean().insert(id.to_owned(), msg);
     }
 
     /// Rule 51: the winning `ui.player.preRollRoute`, 3 s including the queue; `None` on any failure.

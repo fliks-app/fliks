@@ -47,9 +47,9 @@ CREATE TABLE "download_history" (
   "status" varchar NOT NULL DEFAULT 'grabbed',
   "statusMessage" text,
   "grabSource" varchar(8) NOT NULL DEFAULT 'auto',
-  "mediaId" integer REFERENCES public."media"("id") ON DELETE CASCADE,
-  "episodeId" integer REFERENCES public."items"("id") ON DELETE SET NULL,
-  "seasonId" integer REFERENCES public."item_groups"("id") ON DELETE SET NULL,
+  "mediaId" integer,
+  "episodeId" integer,
+  "seasonId" integer,
   "indexerId" integer REFERENCES "indexers"("id") ON DELETE SET NULL,
   "downloadClientId" integer REFERENCES "download_clients"("id") ON DELETE SET NULL
 );
@@ -65,8 +65,8 @@ CREATE TABLE "blocklist" (
   "downloadUrl" varchar,
   "quality" varchar,
   "note" varchar,
-  "mediaId" integer REFERENCES public."media"("id") ON DELETE SET NULL,
-  "userId" integer REFERENCES public."users"("id") ON DELETE SET NULL
+  "mediaId" integer,
+  "userId" integer
 );
 CREATE UNIQUE INDEX "uq_blocklist_source_title_lower" ON "blocklist" (LOWER("sourceTitle"));
 

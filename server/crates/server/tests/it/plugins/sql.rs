@@ -275,7 +275,7 @@ async fn import_runs_plugin_triggers_as_the_plugin_role() {
     let rt = h.st.plugins.rt("fliks.fixture").unwrap();
     let sql = r#"CREATE TABLE spied (id int PRIMARY KEY);
         CREATE FUNCTION spy() RETURNS trigger LANGUAGE plpgsql AS $$
-        BEGIN PERFORM count(*) FROM public.users; RETURN NEW; END $$;
+        BEGIN PERFORM count("passwordHash") FROM public.users; RETURN NEW; END $$;
         CREATE TRIGGER spy BEFORE INSERT ON spied FOR EACH ROW EXECUTE FUNCTION spy();"#;
     let r = rt
         .http(
@@ -442,7 +442,7 @@ async fn the_import_body_cap_is_the_routes_own() {
     s.finish().await;
 }
 
-/// A core `DELETE` cascading into plugin tables queues AFTER and deferred triggers: none may run as core.
+/// A core `DELETE` reaches no plugin table: no foreign key survives, so no plugin trigger runs as core.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_core_delete_runs_no_plugin_trigger_as_core() {
     let Some((m, w)) = fixture() else { return };
@@ -456,74 +456,138 @@ async fn a_core_delete_runs_no_plugin_trigger_as_core() {
         "active"
     );
     let rt = h.st.plugins.rt("fliks.fixture").unwrap();
-    let sql = r#"CREATE TABLE probe_log (ev text, cu text, su text);
-        CREATE FUNCTION probe() RETURNS trigger LANGUAGE plpgsql AS $$
-        BEGIN
-          INSERT INTO plugin_fliks_fixture.probe_log VALUES (TG_ARGV[0], current_user, session_user);
-          RETURN NULL;
-        END $$;
-        CREATE TABLE t (m int REFERENCES public.media(id) ON DELETE CASCADE);
-        CREATE TRIGGER t_row AFTER DELETE ON t FOR EACH ROW EXECUTE FUNCTION probe('row');
-        CREATE TRIGGER t_stmt AFTER DELETE ON t FOR EACH STATEMENT EXECUTE FUNCTION probe('statement');
-        CREATE CONSTRAINT TRIGGER t_deferred AFTER DELETE ON t DEFERRABLE INITIALLY DEFERRED
-          FOR EACH ROW EXECUTE FUNCTION probe('deferred');
-        CREATE TABLE u (m int REFERENCES public.media(id) ON DELETE SET NULL);
-        CREATE TRIGGER u_update AFTER UPDATE ON u FOR EACH ROW EXECUTE FUNCTION probe('set-null');"#;
-    let r = rt
-        .http(
-            post(
-                "/test/db/script",
-                sql.as_bytes().to_vec(),
-                &[("name", "0100_cascade")],
-            ),
-            false,
-        )
-        .await
-        .unwrap();
-    let made: Value = serde_json::from_slice(&r.body).unwrap();
-    assert!(made.get("error").is_none(), "{made}");
-    let media: i32 =
-        sqlx::query_scalar(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
-            .fetch_one(&s.pool)
-            .await
-            .unwrap();
-    for table in ["t", "u"] {
+    let script = async |sql: &str, name: &str| {
         let r = rt
             .http(
                 post(
-                    "/test/db/query",
-                    q(
-                        &format!("INSERT INTO {table} (m) VALUES ($1::int)"),
-                        json!([{"t": "int", "v": media}]),
-                    ),
-                    &[],
+                    "/test/db/script",
+                    sql.as_bytes().to_vec(),
+                    &[("name", name)],
                 ),
                 false,
             )
             .await
             .unwrap();
-        let ins: Value = serde_json::from_slice(&r.body).unwrap();
-        assert!(ins.get("error").is_none(), "{ins}");
-    }
+        serde_json::from_slice::<Value>(&r.body).unwrap()
+    };
+    let made = script(
+        "CREATE TABLE refused (m int REFERENCES public.media(id))",
+        "0100_refused",
+    )
+    .await;
+    assert_eq!(
+        made["error"], "42501",
+        "REFERENCES is no longer granted: {made}"
+    );
+    let made = script(
+        r#"CREATE TABLE probe_log (ev text, cu text, su text);
+        CREATE FUNCTION probe() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          INSERT INTO plugin_fliks_fixture.probe_log VALUES (TG_ARGV[0], current_user, session_user);
+          RETURN NULL;
+        END $$;
+        CREATE TABLE t (m int);
+        CREATE TRIGGER t_row AFTER DELETE ON t FOR EACH ROW EXECUTE FUNCTION probe('row');
+        CREATE CONSTRAINT TRIGGER t_deferred AFTER DELETE ON t DEFERRABLE INITIALLY DEFERRED
+          FOR EACH ROW EXECUTE FUNCTION probe('deferred');
+        CREATE TABLE u (m int);
+        CREATE TRIGGER u_update AFTER UPDATE ON u FOR EACH ROW EXECUTE FUNCTION probe('set-null');"#,
+        "0101_probe",
+    )
+    .await;
+    assert!(made.get("error").is_none(), "{made}");
+    // The shape an install from before the grant change holds: foreign keys into core.
+    sqlx::raw_sql(
+        "ALTER TABLE plugin_fliks_fixture.t ADD FOREIGN KEY (m) REFERENCES public.media(id) ON DELETE CASCADE;
+         ALTER TABLE plugin_fliks_fixture.u ADD FOREIGN KEY (m) REFERENCES public.media(id) ON DELETE SET NULL",
+    )
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    let (st, r) = h
+        .call(
+            "POST",
+            "/api/plugins/fliks.fixture/restart",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    assert_eq!(st, 204, "{r}");
+    let left: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_constraint c JOIN pg_class k ON k.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = k.relnamespace
+          WHERE c.contype = 'f' AND n.nspname = 'plugin_fliks_fixture'",
+    )
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0, "provision drops a leftover foreign key into core");
+    let media: i32 =
+        sqlx::query_scalar(r#"INSERT INTO media (title, type) VALUES ('m', 'movie') RETURNING id"#)
+            .fetch_one(&s.pool)
+            .await
+            .unwrap();
+    sqlx::query("INSERT INTO plugin_fliks_fixture.t VALUES ($1)")
+        .bind(media)
+        .execute(&s.pool)
+        .await
+        .unwrap();
     sqlx::query("DELETE FROM media WHERE id = $1")
         .bind(media)
         .execute(&s.pool)
         .await
         .unwrap();
-    let role = format!("fp_{}_fliks_fixture", s.oid().await);
-    let mut log: Vec<(String, String, String)> =
-        sqlx::query_as("SELECT ev, cu, su FROM plugin_fliks_fixture.probe_log ORDER BY ev")
-            .fetch_all(&s.pool)
-            .await
-            .unwrap();
-    let events: Vec<&str> = log.iter().map(|(ev, ..)| ev.as_str()).collect();
-    assert_eq!(
-        events,
-        ["deferred", "row", "set-null", "statement"],
-        "every probe ran: {log:?}"
+    let log: Vec<String> = sqlx::query_scalar("SELECT ev FROM plugin_fliks_fixture.probe_log")
+        .fetch_all(&s.pool)
+        .await
+        .unwrap();
+    assert!(
+        log.is_empty(),
+        "no plugin code ran for a core delete: {log:?}"
     );
-    log.retain(|(_, cu, _)| *cu != role);
-    assert!(log.is_empty(), "triggers ran outside {role}: {log:?}");
+    h.finish().await;
+    s.finish().await;
+}
+
+/// A foreign key into core that cannot be dropped fails provisioning, naming the constraint.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_core_foreign_key_that_cannot_be_dropped_fails_provision_by_name() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("leftoverfk").await else {
+        return;
+    };
+    let h = harness(&s, "leftoverfk", |_| {}).await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    let role = format!("fp_{}_fliks_fixture", s.oid().await);
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"CREATE TABLE plugin_fliks_fixture.t (m int);
+        ALTER TABLE plugin_fliks_fixture.t OWNER TO "{role}";
+        ALTER TABLE plugin_fliks_fixture.t ADD CONSTRAINT leftover_fk FOREIGN KEY (m) REFERENCES public.media(id);
+        CREATE FUNCTION public.refuse_alter() RETURNS event_trigger LANGUAGE plpgsql AS
+          $$ BEGIN RAISE EXCEPTION 'ALTER refused'; END $$;
+        CREATE EVENT TRIGGER refuse_alter ON ddl_command_start WHEN TAG IN ('ALTER TABLE')
+          EXECUTE FUNCTION public.refuse_alter()"#
+    )))
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    let (st, r) = h
+        .call(
+            "POST",
+            "/api/plugins/fliks.fixture/restart",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    let msg = r["message"].as_str().unwrap_or_default();
+    assert!(
+        st >= 400 && msg.contains("leftover_fk") && msg.contains("db-provision-failed"),
+        "{st} {r}"
+    );
     h.finish().await;
     s.finish().await;
 }

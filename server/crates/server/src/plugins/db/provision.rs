@@ -264,17 +264,18 @@ pub async fn provision(
     let mut sql = format!(
         "ALTER ROLE {qr} LOGIN PASSWORD '{password}';
          GRANT USAGE ON SCHEMA public TO {qr};
-         REVOKE REFERENCES ON ALL TABLES IN SCHEMA public FROM {qr};
+         REVOKE SELECT, REFERENCES ON ALL TABLES IN SCHEMA public FROM {qr};
          GRANT {qr} TO CURRENT_USER;
          COMMENT ON SCHEMA {qs} IS NULL;"
     );
     for t in core_refs {
         sql.push_str(&format!(
-            "GRANT REFERENCES (id) ON public.{} TO {qr};",
+            "GRANT SELECT (id) ON public.{} TO {qr};",
             quote(t)
         ));
     }
     sqlx::Executor::execute(&mut *tx, sqlx::raw_sql(sqlx::AssertSqlSafe(sql))).await?;
+    drop_core_fks(&mut tx, &schema, &qs).await?;
     tx.commit().await?;
     Ok(password)
 }
@@ -422,12 +423,10 @@ pub async fn drop_foreign_roles(core: &PgPool, roles: &[String]) -> sqlx::Result
     tx.commit().await
 }
 
-/// The advisory of rule 35: foreign keys into `public` without `ON DELETE CASCADE/SET NULL`.
-pub async fn unsafe_core_fks(
-    core: &PgPool,
-    plugin_id: &str,
-) -> sqlx::Result<Vec<(String, String, String)>> {
-    sqlx::query_as(
+/// A foreign key from the plugin schema into `public` would run its cascade, and the plugin's AFTER and
+/// deferred triggers, as the core login on a core delete: drop it, or fail naming it.
+async fn drop_core_fks(tx: &mut Tx, schema: &str, qs: &str) -> Result<(), ProvisionError> {
+    let fks: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT con.conname::text, cl.relname::text, fcl.relname::text
            FROM pg_constraint con
            JOIN pg_class cl ON cl.oid = con.conrelid
@@ -435,10 +434,25 @@ pub async fn unsafe_core_fks(
            JOIN pg_class fcl ON fcl.oid = con.confrelid
            JOIN pg_namespace fns ON fns.oid = fcl.relnamespace
           WHERE con.contype = 'f' AND ns.nspname = $1 AND fns.nspname = 'public'
-            AND con.confdeltype NOT IN ('c', 'n')
           ORDER BY con.conname",
     )
-    .bind(schema(plugin_id))
-    .fetch_all(core)
-    .await
+    .bind(schema)
+    .fetch_all(&mut **tx)
+    .await?;
+    for (con, table, target) in fks {
+        let sql = format!(
+            "ALTER TABLE {qs}.{} DROP CONSTRAINT {}",
+            quote(&table),
+            quote(&con)
+        );
+        sqlx::Executor::execute(&mut **tx, sqlx::raw_sql(sqlx::AssertSqlSafe(sql)))
+            .await
+            .map_err(|e| {
+                ProvisionError::new(format!(
+                    "foreign key \"{con}\" on \"{table}\" references public.\"{target}\" and could not be dropped: {}",
+                    ProvisionError::from(e).message
+                ))
+            })?;
+    }
+    Ok(())
 }
