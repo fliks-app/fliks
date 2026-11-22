@@ -3,7 +3,7 @@
 use super::{
     burn_in, db, edl,
     file::{ResolvedFile, resolve_file},
-    hardware, item, preroll, scan,
+    item, preroll, scan,
 };
 use crate::{
     account_session::ReplaceGuard,
@@ -293,10 +293,11 @@ async fn run(
     user_agent: Option<String>,
 ) -> Result<Value, AppError> {
     check_engine(st)?;
-    let db = st.db.clone();
-    let profile = device.clone();
+    let (st_codecs, profile) = (st.clone(), device.clone());
     tokio::spawn(async move {
-        if let Err(e) = db::record_client_codecs(&db, &profile).await {
+        if let Err(e) =
+            db::record_client_codecs_if_due(&st_codecs.db, &st_codecs.stream.codecs, &profile).await
+        {
             tracing::warn!("client codecs not recorded: {e}");
         }
     });
@@ -333,25 +334,33 @@ async fn run(
     }
     let burn_in = match q.burn_in_subtitle_id.filter(|n| *n != 0) {
         None => None,
-        Some(sub) => match i32::try_from(sub) {
-            Ok(sub) => burn_in::resolve(st, sub, &file)
-                .await
-                .map_err(|e| tracing::warn!("Burn-in resolve failed for subtitle #{sub}: {e:?}"))
-                .ok(),
-            Err(_) => None,
-        },
+        Some(sub) => {
+            let unavailable = || {
+                AppError::with_message(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "errors.subtitle_unavailable",
+                )
+            };
+            let id = i32::try_from(sub).map_err(|_| unavailable())?;
+            let resolved = burn_in::resolve(st, id, &file).await.map_err(|e| {
+                tracing::warn!("Burn-in resolve failed for subtitle #{id}: {e:?}");
+                if e.status() == StatusCode::NOT_FOUND {
+                    unavailable()
+                } else {
+                    e
+                }
+            })?;
+            Some(resolved)
+        }
     };
     let mut info = file.info.take();
-    let (settings, held) = tokio::join!(crate::engine::load_streaming(&st.db), async {
-        match &item {
-            Some(it) => scan::Held {
-                scan: None,
-                version: Some(it.source_version.clone()),
-            },
-            None => scan::lookup(st, file.id, &file.absolute, info.as_mut()).await,
-        }
-    },);
-    hardware::apply(st, &settings?, false);
+    let held = match &item {
+        Some(it) => scan::Held {
+            scan: None,
+            version: Some(it.source_version.clone()),
+        },
+        None => scan::lookup(st, file.id, &file.absolute, info.as_mut()).await,
+    };
     file.info = info;
     let renditions = if item.is_none() && device.supports_hls_subtitles == Some(true) {
         Some(burn_in::renditions(st, &file).await)

@@ -156,3 +156,54 @@ describe('QualityManagerService start bandwidth estimate', () => {
     expect(configure.mock.calls[0][0].abr.defaultBandwidthEstimate).toBe(3_000_000);
   });
 });
+
+describe('QualityManagerService rung lookup', () => {
+  const rung = (id: string, width: number, height: number, label = id) => ({ id, label, width, height });
+  const ladder = [
+    rung('1080p', 1920, 1080),
+    rung('720p', 1280, 720),
+    rung('480p', 854, 480),
+    rung('360p', 640, 360),
+    rung('240p', 426, 240),
+  ];
+
+  function setup() {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: TranslateService, useValue: { instant: (k: string) => k } },
+        { provide: PlayerSettingsService, useValue: { get: () => ({ showEcoQualities: true }) } },
+      ],
+    });
+    const qm = TestBed.inject(QualityManagerService);
+    qm.buildQualityOptions({ playMethod: 'Transcode', videoCopyStream: false, source: {}, qualities: ladder });
+    return qm;
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('names the engine rungs by their own label', () => {
+    const qm = setup();
+    expect(qm.rungForVariant(854, 480)?.label).toBe('480p');
+    expect(qm.rungForVariant(640, 360)?.label).toBe('360p');
+    expect(qm.rungForVariant(426, 240)?.label).toBe('240p');
+  });
+
+  it('keeps a cropped variant on its rung', () => {
+    const qm = setup();
+    expect(qm.rungForVariant(1920, 800)?.id).toBe('1080p');
+    expect(qm.transcodeTierFromVariantHeight(536, 1280)).toBe('720p');
+  });
+
+  it('reads a copied stream as the original entry and gives it no transcode tier', () => {
+    const qm = setup();
+    qm.buildQualityOptions({
+      playMethod: 'DirectStream',
+      videoCopyStream: true,
+      source: {},
+      qualities: [{ id: 'original', label: '4K', width: 4096, height: 2160 }, rung('1080p', 1920, 1080)],
+    });
+    expect(qm.rungForVariant(4096, 2160)?.label).toBe('4K');
+    expect(qm.transcodeTierFromVariantHeight(2160, 4096)).toBeNull();
+  });
+});

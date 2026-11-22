@@ -73,12 +73,9 @@ Each is a positive integer.
 | `STREAM_LIVE_SESSION_TTL_MS` | `30_000` | `parseInt(raw, 10)`, finite and `> 0` else default |
 | `STREAM_LIVE_SESSION_GC_INTERVAL_MS` | `5_000` | `parseInt(raw, 10)`, finite and `> 0` else default |
 | `STREAM_SESSION_REVIVE_TTL_MS` | `15 * 60 * 1000` | `parseInt(raw, 10)`, finite and `> 0` else default |
-| `STREAM_MAX_SESSIONS_PER_USER` | `10` | `parseInt(raw, 10)`, finite and `> 0` else default |
-| `STREAM_JOB_GRACE_MS` | `60_000` | `parseInt(raw, 10)`, finite and `> 0` else default |
-| `STREAM_JOB_FALLBACK_TIMEOUT_MS` | `30 * 60 * 1000` | `parseInt(raw, 10)`, finite and `> 0` else default |
 | `TRANSCODE_CACHE_GC_INTERVAL_MS` | `5 * 60 * 1000` | `parseInt(raw, 10)`, finite and `> 0` else default |
 
-The stream-lifetime cache TTL and max bytes are fixed constants, not env.
+The stream-lifetime cache TTL and max bytes are fixed constants, not env. The per-user session cap is the setting `streaming_max_sessions_per_user` (`engine-glue.md` rule 22).
 
 ## Other
 

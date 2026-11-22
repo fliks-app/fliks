@@ -1,8 +1,76 @@
 //! The reads and writes playback-info makes outside the media tables: markers and the saved position.
 use crate::playback::find_state;
+use crate::sync::MutexExt;
 use fliks_engine_core::api::{Chapter, DeviceProfile};
 use serde::Serialize;
 use sqlx::PgPool;
+use std::{
+    collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
+    sync::Mutex,
+    time::{Duration, Instant},
+};
+
+/// A device whose profile is unchanged is rewritten at most this often (`lastSeenAt` feeds a 90 day window).
+const CODEC_REFRESH: Duration = Duration::from_secs(24 * 3600);
+/// Bound of the remembered devices: a client varying its id cannot grow the map without limit.
+const CODEC_DEVICES_MAX: usize = 4096;
+
+/// The last profile written per device id, so a launch, reload or seek that sends the same profile writes nothing.
+#[derive(Default)]
+pub struct CodecWrites(Mutex<HashMap<String, (u64, Instant)>>);
+
+impl CodecWrites {
+    /// True when this profile of `device` must be written: new, changed, or not written for a day.
+    fn due(&self, device: &str, d: &DeviceProfile) -> bool {
+        let mut h = DefaultHasher::new();
+        let parts = (
+            &d.device_name,
+            &d.system_name,
+            serde_json::to_string(&d.direct_play_profiles).unwrap_or_default(),
+            serde_json::to_string(&d.codec_conditions).unwrap_or_default(),
+            d.supports_hdr,
+            d.supports_dolby_vision,
+        );
+        parts.hash(&mut h);
+        let (hash, now) = (h.finish(), Instant::now());
+        let mut seen = self.0.lock_clean();
+        if seen
+            .get(device)
+            .is_some_and(|(prev, at)| *prev == hash && now.duration_since(*at) < CODEC_REFRESH)
+        {
+            return false;
+        }
+        if seen.len() >= CODEC_DEVICES_MAX && !seen.contains_key(device) {
+            seen.clear();
+        }
+        seen.insert(device.to_owned(), (hash, now));
+        true
+    }
+}
+
+/// The key of a device row: its id, or label and platform for a client that sends none.
+fn codec_device_id(d: &DeviceProfile) -> String {
+    d.device_id.clone().unwrap_or_else(|| {
+        format!(
+            "{}|{}",
+            d.device_name.as_deref().unwrap_or_default(),
+            d.system_name.as_deref().unwrap_or_default()
+        )
+    })
+}
+
+/// Writes the device's profile when it changed since the last write (see [`CodecWrites`]).
+pub async fn record_client_codecs_if_due(
+    db: &PgPool,
+    writes: &CodecWrites,
+    d: &DeviceProfile,
+) -> sqlx::Result<()> {
+    if writes.due(&codec_device_id(d), d) {
+        record_client_codecs(db, d).await?;
+    }
+    Ok(())
+}
 
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -20,7 +88,7 @@ pub struct Markers {
     pub outro: Option<Range>,
 }
 
-/// `None` when the item has neither; recap markers are never read here.
+/// `None` when the item has neither.
 pub async fn markers(db: &PgPool, item: i32) -> sqlx::Result<Option<Markers>> {
     let rows = sqlx::query!(
         r#"SELECT kind, "startSeconds" AS start, "endSeconds" AS "end"
@@ -156,13 +224,7 @@ pub async fn record_client_codecs(db: &PgPool, d: &DeviceProfile) -> sqlx::Resul
     .bind(d.codec_conditions.as_ref().map(sqlx::types::Json))
     .bind(d.supports_hdr)
     .bind(d.supports_dolby_vision)
-    .bind(d.device_id.clone().unwrap_or_else(|| {
-        format!(
-            "{}|{}",
-            d.device_name.as_deref().unwrap_or_default(),
-            d.system_name.as_deref().unwrap_or_default()
-        )
-    }))
+    .bind(codec_device_id(d))
     .execute(db)
     .await?;
     Ok(())

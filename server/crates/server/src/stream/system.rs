@@ -17,7 +17,10 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Subject};
-use fliks_engine_core::api::{AudioPlan, BitrateHint, JobStats, LiveMode, MediaInfo, SessionKind};
+use fliks_engine_core::{
+    api::{AudioPlan, BitrateHint, JobStats, LiveMode, MediaInfo, SessionKind},
+    ladder::bucket_resolution_height,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -80,24 +83,14 @@ fn resolution_label(w: u32, h: u32) -> Option<String> {
     if w == 0 && h == 0 {
         return None;
     }
-    let bucket = match (w, h) {
-        (w, h) if w <= 256 && h <= 192 => 144,
-        (w, h) if w <= 426 && h <= 320 => 240,
-        (w, h) if w <= 640 && h <= 432 => 360,
-        (w, h) if w <= 854 && h <= 576 => 480,
-        (w, h) if w <= 1280 && h <= 962 => 720,
-        (w, h) if w <= 1920 && h <= 1440 => 1080,
-        _ => 2160,
-    };
-    Some(if bucket == 2160 {
-        "4K".into()
-    } else {
-        format!("{bucket}p")
+    Some(match bucket_resolution_height(Some(w), Some(h)) {
+        2160 => "4K".into(),
+        bucket => format!("{bucket}p"),
     })
 }
 
 /// The decision's bitrates of the rung served; none for remux, direct play and an unknown rung.
-pub(super) fn served_rung<'a>(
+pub(crate) fn served_rung<'a>(
     mode: SessionKind,
     quality: &str,
     hdr_ladder: bool,
@@ -582,4 +575,34 @@ fn live_summary(st: &AppState, sid: &str) -> Option<Value> {
     st.qoe
         .live_summary(sid)
         .and_then(|s| serde_json::to_value(s).ok())
+}
+
+#[cfg(test)]
+mod bucket_tests {
+    use super::*;
+
+    #[test]
+    fn the_domain_table_matches_the_engines_and_labels_follow_it() {
+        for (w, h) in [
+            (0, 0),
+            (854, 480),
+            (640, 360),
+            (426, 240),
+            (1920, 800),
+            (1280, 962),
+            (3840, 2160),
+        ] {
+            assert_eq!(
+                fliks_domain::release::parsing::quality_from_resolution::bucket_resolution_height(
+                    Some(f64::from(w)),
+                    Some(f64::from(h))
+                ),
+                bucket_resolution_height(Some(w), Some(h)),
+                "{w}x{h}"
+            );
+        }
+        assert_eq!(resolution_label(854, 480).as_deref(), Some("480p"));
+        assert_eq!(resolution_label(3840, 2160).as_deref(), Some("4K"));
+        assert_eq!(resolution_label(0, 0), None);
+    }
 }

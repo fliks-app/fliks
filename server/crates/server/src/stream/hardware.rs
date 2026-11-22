@@ -70,7 +70,7 @@ impl Hardware {
     }
 }
 
-/// Playback-info calls this with the settings it just read; boot and each engine adoption `redetect`.
+/// A settings write re-pins the GPU and each engine adoption `redetect`s.
 /// The config push itself is the engine glue's (it dedupes), so only detection is left here.
 pub fn apply(st: &AppState, ss: &StreamingConfig, redetect: bool) {
     let re_pinned = st.stream.hardware.pin(&ss.gpu_render_node);
@@ -87,6 +87,17 @@ async fn refresh(st: &AppState, node: &str) {
             st.stream.hardware.store(c.capabilities);
         }
         Err(e) => tracing::warn!("engine capabilities unavailable: {e}"),
+    }
+}
+
+/// Applies a changed GPU pin; no other key moves the detection.
+pub async fn settings_changed(st: &AppState, keys: &[String]) {
+    if !keys.iter().any(|k| k == "streaming_gpu_render_node") {
+        return;
+    }
+    match engine::load_streaming(&st.db).await {
+        Ok(ss) => apply(st, &ss, false),
+        Err(e) => tracing::warn!("streaming settings not applied: {e}"),
     }
 }
 

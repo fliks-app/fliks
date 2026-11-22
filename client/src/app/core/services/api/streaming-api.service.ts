@@ -80,6 +80,7 @@ export interface PlaybackInfoResponse {
     id: string;
     label: string;
     height: number;
+    width: number;
     totalBitrateBps: number;
     isRemux: boolean;
     lowBandwidth?: boolean;

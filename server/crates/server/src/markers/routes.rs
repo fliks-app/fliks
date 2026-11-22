@@ -16,7 +16,7 @@ use serde_json::Value;
 
 type Res<T> = Result<T, AppError>;
 
-const TYPES: [&str; 3] = ["intro", "outro", "recap"];
+const TYPES: [&str; 2] = ["intro", "outro"];
 const ORDER: &str = "endSeconds must be > startSeconds";
 
 fn id_of(PathParams(raw): PathParams<String>) -> Res<i32> {
@@ -86,7 +86,7 @@ fn parse_create(body: Value) -> Res<Create> {
         .and_then(Value::as_str)
         .filter(|t| TYPES.contains(t));
     if kind.is_none() {
-        msgs.push("type must be one of the following values: intro, outro, recap".into());
+        msgs.push("type must be one of the following values: intro, outro".into());
     }
     let start = seconds("startSeconds", raw.start_seconds.as_ref(), false, &mut msgs);
     let end = seconds("endSeconds", raw.end_seconds.as_ref(), false, &mut msgs);

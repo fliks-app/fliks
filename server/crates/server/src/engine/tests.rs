@@ -265,6 +265,7 @@ mod config_push {
         assert_eq!(body["hostUrl"], "http://127.0.0.1:4849");
         assert_eq!(body["hostToken"], e.host_token());
         assert_eq!(body["lifetime"]["jobGraceMs"], 60_000);
+        assert_eq!(body["logEvents"], true);
         assert_eq!(body["lifetime"]["maxSessionsPerOwner"], 10);
         assert_eq!(body["streaming"]["segmentDuration"], 3.0);
         assert_eq!(body["streaming"]["gpuRenderNode"], "auto");

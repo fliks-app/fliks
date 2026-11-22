@@ -18,7 +18,7 @@ pub const LIVETV_KEYS: [&str; 5] = [
     "livetv_fast_zap",
 ];
 
-const STREAMING_KEYS: [&str; 12] = [
+const STREAMING_KEYS: [&str; 16] = [
     "streaming_segment_duration",
     "streaming_qsv_preset",
     "streaming_tonemap_algo",
@@ -31,6 +31,10 @@ const STREAMING_KEYS: [&str; 12] = [
     "streaming_gpu_render_node",
     "streaming_throttle_enabled",
     "streaming_throttle_threshold_seconds",
+    "streaming_opencl_device",
+    "streaming_ort_threads",
+    "streaming_optimize_pause_restart",
+    "streaming_max_sessions_per_user",
 ];
 const GB: f64 = 1024.0 * 1024.0 * 1024.0;
 const HOUR_MS: f64 = 3_600_000.0;
@@ -59,6 +63,11 @@ fn parse<T: DeserializeOwned>(raw: &str) -> Option<T> {
 pub fn streaming(raw: &HashMap<String, String>) -> StreamingConfig {
     let get = |k: &str| raw.get(k).map(String::as_str);
     let positive = |k: &str| get(k).and_then(jsnum::number).filter(|v| *v > 0.0);
+    let positive_u32 = |k: &str| {
+        positive(k)
+            .filter(|n| n.fract() == 0.0 && *n <= f64::from(u32::MAX))
+            .map(|n| n as u32)
+    };
     let d = StreamingConfig::default();
     StreamingConfig {
         segment_duration: jsnum::parse_float(get("streaming_segment_duration").unwrap_or("3"))
@@ -81,9 +90,7 @@ pub fn streaming(raw: &HashMap<String, String>) -> StreamingConfig {
             positive("streaming_cache_ttl_hours")
                 .map_or(DEFAULT_CACHE_TTL_MS, |h| jsnum::round(h * HOUR_MS)),
         ),
-        ffmpeg_slots: positive("streaming_ffmpeg_slots")
-            .filter(|n| n.fract() == 0.0 && *n <= f64::from(u32::MAX))
-            .map(|n| n as u32),
+        ffmpeg_slots: positive_u32("streaming_ffmpeg_slots"),
         job_min_free_bytes: d.job_min_free_bytes,
         auto_quality_mode: get("streaming_auto_quality_mode")
             .and_then(parse)
@@ -96,10 +103,12 @@ pub fn streaming(raw: &HashMap<String, String>) -> StreamingConfig {
             .to_owned(),
         subtitle_prewarm: d.subtitle_prewarm,
         sprite_decode: d.sprite_decode,
-        // Engine defaults: not settings yet.
-        opencl_device: d.opencl_device,
-        ort_threads: d.ort_threads,
-        optimize_pause_restart: d.optimize_pause_restart,
+        opencl_device: get("streaming_opencl_device")
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+            .map(str::to_owned),
+        ort_threads: positive_u32("streaming_ort_threads"),
+        optimize_pause_restart: get("streaming_optimize_pause_restart") == Some("true"),
         throttle_enabled: get("streaming_throttle_enabled") != Some("false"),
         throttle_threshold_seconds: jsnum::max(
             MIN_THROTTLE_THRESHOLD_SECONDS,
@@ -131,7 +140,8 @@ pub fn livetv(raw: &HashMap<String, String>) -> LiveTvConfig {
     }
 }
 
-/// `EngineConfig.lifetime` from the `STREAM_*` env: a positive integer, else the default.
+/// The deployment timings of `EngineConfig.lifetime` from the `STREAM_*` env: a positive integer, else the default.
+/// The host's own clocks (presence, QoE, account sessions) read the same values.
 pub fn lifetime(env: impl Fn(&str) -> Option<String>) -> LifetimeConfig {
     let d = LifetimeConfig::default();
     let int = |k: &str, default: u32| {
@@ -148,12 +158,18 @@ pub fn lifetime(env: impl Fn(&str) -> Option<String>) -> LifetimeConfig {
             d.live_session_gc_interval_ms,
         ),
         session_revive_ttl_ms: int("STREAM_SESSION_REVIVE_TTL_MS", d.session_revive_ttl_ms),
-        max_sessions_per_owner: int("STREAM_MAX_SESSIONS_PER_USER", d.max_sessions_per_owner),
-        job_grace_ms: int("STREAM_JOB_GRACE_MS", d.job_grace_ms),
-        job_fallback_timeout_ms: int("STREAM_JOB_FALLBACK_TIMEOUT_MS", d.job_fallback_timeout_ms),
         cache_gc_interval_ms: int("TRANSCODE_CACHE_GC_INTERVAL_MS", d.cache_gc_interval_ms),
         ..d
     }
+}
+
+/// `streaming_max_sessions_per_user`: a positive integer, else the engine's default.
+fn max_sessions_per_owner(raw: &HashMap<String, String>) -> u32 {
+    raw.get("streaming_max_sessions_per_user")
+        .and_then(|v| parse_int(v))
+        .filter(|n| *n > 0)
+        .and_then(|n| u32::try_from(n).ok())
+        .unwrap_or(LifetimeConfig::default().max_sessions_per_owner)
 }
 
 /// The saved `streaming_*` settings, resolved like the config push does.
@@ -172,14 +188,28 @@ pub fn validate_streaming_setting(key: &str, value: Option<&str>) -> Result<(), 
         "streaming_qsv_preset" if parse::<QsvPreset>(v).is_none() => Err(format!(
             "{key} must be one of the following values: veryfast, faster, fast, medium, slow, slower, veryslow"
         )),
-        "streaming_ffmpeg_slots" => match jsnum::number(v) {
-            Some(n) if n > 0.0 && (n.fract() != 0.0 || n > f64::from(u32::MAX)) => {
-                Err(format!("{key} must be a positive integer number"))
+        "streaming_ffmpeg_slots" | "streaming_ort_threads" | "streaming_max_sessions_per_user" => {
+            match jsnum::number(v) {
+                Some(n) if n > 0.0 && (n.fract() != 0.0 || n > f64::from(u32::MAX)) => {
+                    Err(format!("{key} must be a positive integer number"))
+                }
+                _ => Ok(()),
             }
-            _ => Ok(()),
-        },
+        }
+        "streaming_opencl_device" if !is_opencl_device(v.trim()) => Err(format!(
+            "{key} must be a platform and device index such as 0.0"
+        )),
         _ => Ok(()),
     }
+}
+
+/// `platform.device`, the index pair ffmpeg's `opencl=` device takes.
+fn is_opencl_device(v: &str) -> bool {
+    v.split_once('.').is_some_and(|(p, d)| {
+        [p, d]
+            .iter()
+            .all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+    })
 }
 
 impl Engine {
@@ -207,9 +237,11 @@ impl Engine {
         let Some(client) = self.state().client.clone() else {
             return Ok(());
         };
+        let mut lifetime = lifetime(|k| std::env::var(k).ok());
         let streaming = match self.db() {
             Some(db) => {
                 let raw = crate::settings::texts(db, &STREAMING_KEYS).await?;
+                lifetime.max_sessions_per_owner = max_sessions_per_owner(&raw);
                 streaming(&raw)
             }
             None => StreamingConfig::default(),
@@ -228,8 +260,8 @@ impl Engine {
             .segment_seconds
             .store(livetv.segment_seconds, std::sync::atomic::Ordering::Relaxed);
         let path_mappings = self.state().path_mappings.clone();
-        let key =
-            serde_json::to_string(&(&streaming, &livetv, &path_mappings)).expect("config key");
+        let key = serde_json::to_string(&(&streaming, &lifetime, &livetv, &path_mappings))
+            .expect("config key");
         if key == pushed.last_pushed {
             self.state().push_needed = false;
             return Ok(());
@@ -239,12 +271,11 @@ impl Engine {
             host_url: self.inner.host_url.get().cloned(),
             host_token: Some(self.inner.host_token.clone()),
             streaming,
-            lifetime: lifetime(|k| std::env::var(k).ok()),
+            lifetime,
             livetv,
             path_mappings,
             worker: true,
-            // Engine default: no Log events until the host reads them.
-            log_events: false,
+            log_events: true,
         };
         let backoff = self.timing().conflict_backoff;
         for attempt in 1..=CONFLICT_ATTEMPTS {
@@ -388,7 +419,7 @@ mod tests {
     }
 
     #[test]
-    fn lifetime_reads_positive_integers_only() {
+    fn lifetime_reads_positive_integers_only_and_the_session_cap_is_a_setting() {
         let env = |pairs: &'static [(&'static str, &'static str)]| {
             move |k: &str| {
                 pairs
@@ -403,16 +434,48 @@ mod tests {
             ("STREAM_LIVE_SESSION_TTL_MS", " 45000ms"),
             ("STREAM_LIVE_SESSION_GC_INTERVAL_MS", "0"),
             ("STREAM_SESSION_REVIVE_TTL_MS", "-5"),
-            ("STREAM_MAX_SESSIONS_PER_USER", "abc"),
-            ("STREAM_JOB_GRACE_MS", "99999999999"),
+            ("STREAM_MAX_SESSIONS_PER_USER", "3"),
             ("TRANSCODE_CACHE_GC_INTERVAL_MS", "7"),
         ]));
         assert_eq!(l.live_session_ttl_ms, 45_000);
         assert_eq!(l.live_session_gc_interval_ms, d.live_session_gc_interval_ms);
         assert_eq!(l.session_revive_ttl_ms, d.session_revive_ttl_ms);
         assert_eq!(l.max_sessions_per_owner, d.max_sessions_per_owner);
-        assert_eq!(l.job_grace_ms, d.job_grace_ms);
         assert_eq!(l.cache_gc_interval_ms, 7);
+        for bad in ["abc", "0", "-5", "99999999999"] {
+            let r = raw(&[("streaming_max_sessions_per_user", bad)]);
+            assert_eq!(
+                max_sessions_per_owner(&r),
+                d.max_sessions_per_owner,
+                "{bad}"
+            );
+        }
+        let r = raw(&[("streaming_max_sessions_per_user", " 4 ")]);
+        assert_eq!(max_sessions_per_owner(&r), 4);
+    }
+
+    #[test]
+    fn the_engine_knobs_are_settings_and_the_validation_refuses_what_they_cannot_hold() {
+        let d = streaming(&raw(&[]));
+        assert_eq!((d.opencl_device, d.ort_threads), (None, None));
+        assert!(!d.optimize_pause_restart);
+        let s = streaming(&raw(&[
+            ("streaming_opencl_device", " 1.0 "),
+            ("streaming_ort_threads", "4"),
+            ("streaming_optimize_pause_restart", "true"),
+        ]));
+        assert_eq!(s.opencl_device.as_deref(), Some("1.0"));
+        assert_eq!(s.ort_threads, Some(4));
+        assert!(s.optimize_pause_restart);
+        assert_eq!(
+            streaming(&raw(&[("streaming_ort_threads", "2.5")])).ort_threads,
+            None
+        );
+        assert!(validate_streaming_setting("streaming_ort_threads", Some("2.5")).is_err());
+        assert!(validate_streaming_setting("streaming_max_sessions_per_user", Some("3")).is_ok());
+        assert!(validate_streaming_setting("streaming_opencl_device", Some("0.0")).is_ok());
+        assert!(validate_streaming_setting("streaming_opencl_device", Some("gpu")).is_err());
+        assert!(validate_streaming_setting("streaming_opencl_device", Some("")).is_ok());
     }
 
     #[test]
