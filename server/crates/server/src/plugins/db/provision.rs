@@ -143,10 +143,12 @@ impl ProvisionError {
 
 impl From<sqlx::Error> for ProvisionError {
     fn from(e: sqlx::Error) -> Self {
-        let unavailable = matches!(
-            e,
-            sqlx::Error::Io(_) | sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed
-        );
+        let unavailable = match &e {
+            sqlx::Error::Io(_) | sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed => true,
+            // lock_not_available, deadlock_detected: another transaction holds the table; a retry may pass.
+            sqlx::Error::Database(d) => matches!(d.code().as_deref(), Some("55P03" | "40P01")),
+            _ => false,
+        };
         let message = match &e {
             sqlx::Error::Database(d) => d.message().to_owned(),
             other => other.to_string(),
@@ -521,12 +523,17 @@ async fn drop_core_fks(tx: &mut Tx, schema: &str, qs: &str) -> Result<(), Provis
            JOIN pg_namespace ns ON ns.oid = cl.relnamespace
            JOIN pg_class fcl ON fcl.oid = con.confrelid
            JOIN pg_namespace fns ON fns.oid = fcl.relnamespace
-          WHERE con.contype = 'f' AND ns.nspname = $1 AND fns.nspname = 'public'
+          WHERE con.contype = 'f' AND con.conparentid = 0 AND ns.nspname = $1 AND fns.nspname = 'public'
           ORDER BY con.conname",
     )
     .bind(schema)
     .fetch_all(&mut **tx)
     .await?;
+    if fks.is_empty() {
+        return Ok(());
+    }
+    // The drop locks the core table: wait briefly, then fail retryably instead of stalling its users.
+    sqlx::Executor::execute(&mut **tx, sqlx::raw_sql("SET LOCAL lock_timeout = '5s'")).await?;
     for (con, table, target) in fks {
         let sql = format!(
             "ALTER TABLE {qs}.{} DROP CONSTRAINT {}",
@@ -536,10 +543,12 @@ async fn drop_core_fks(tx: &mut Tx, schema: &str, qs: &str) -> Result<(), Provis
         sqlx::Executor::execute(&mut **tx, sqlx::raw_sql(sqlx::AssertSqlSafe(sql)))
             .await
             .map_err(|e| {
-                ProvisionError::new(format!(
+                let mut e = ProvisionError::from(e);
+                e.message = format!(
                     "foreign key \"{con}\" on \"{table}\" references public.\"{target}\" and could not be dropped: {}",
-                    ProvisionError::from(e).message
-                ))
+                    e.message
+                );
+                e
             })?;
     }
     Ok(())

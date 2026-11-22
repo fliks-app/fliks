@@ -1580,3 +1580,103 @@ async fn resolving_an_artist_is_idempotent_names_it_from_the_provider_and_never_
         assert_eq!(post(bad, c.admin.clone()).await.0, 400);
     }
 }
+
+async fn identify_series(c: &Ctx, listed: &[i32]) {
+    let eps: Vec<Value> = listed
+        .iter()
+        .map(|n| json!({"episodeNumber": n, "title": format!("E{n}")}))
+        .collect();
+    c.stub.ok(
+        "children/500",
+        json!([{"seasonNumber": 1, "episodes": eps}]),
+    );
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/media/5/identify")
+        .header("authorization", format!("Bearer {}", c.admin))
+        .header("content-type", "application/json")
+        .body(Body::from(json!({"tmdbId": 500}).to_string()))
+        .unwrap();
+    let res = c.app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status().as_u16(), 201);
+    for _ in 0..200 {
+        if c.st.hub.activity().list(1, 100).total == 0 {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("the identify task did not settle");
+}
+
+/// A provider that stops listing an episode takes it out of the library unless a file or a user's
+/// row holds it (`media-write.md` rules 50-51).
+#[sqlx::test(migrations = false)]
+async fn identify_keeps_the_unlisted_episodes_a_file_or_a_user_holds(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    media(&pool, 5, "series", Some(500), None, 1).await;
+    c.stub.ok(
+        "work/series/500",
+        json!({"tmdbId": 500, "title": "Show", "year": 2020}),
+    );
+    identify_series(&c, &[1, 2, 3, 4, 5]).await;
+    let ids: Vec<(i32, i32)> = sqlx::query_as(
+        r#"SELECT i."number", i.id FROM items i JOIN item_groups g ON g.id = i."groupId"
+           WHERE g."mediaId" = 5 ORDER BY 1"#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(ids.len(), 5);
+    let id = |n: i32| ids.iter().find(|(m, _)| *m == n).unwrap().1;
+    sqlx::query(r#"INSERT INTO users (id, username) VALUES (50, 'watcher')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for n in [3, 4] {
+        sqlx::query(r#"INSERT INTO playback_history ("userId", "itemId") VALUES (50, $1)"#)
+            .bind(id(n))
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    sqlx::query(
+        r#"WITH f AS (INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality)
+                      VALUES (5, 1, 'Show - S01E03.mkv', 1, 'WEBDL-1080p') RETURNING id)
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT $1, f.id, 5 FROM f"#,
+    )
+    .bind(id(3))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    identify_series(&c, &[1, 2]).await;
+
+    let left: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT i."number" FROM items i JOIN item_groups g ON g.id = i."groupId"
+           WHERE g."mediaId" = 5 ORDER BY 1"#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        left,
+        [1, 2, 3, 4],
+        "episode 5 had nothing, episodes 3 and 4 stay"
+    );
+    let wanted: Vec<(i32, bool)> =
+        sqlx::query_as(r#"SELECT "number", monitored FROM items WHERE id = ANY($1) ORDER BY 1"#)
+            .bind([id(3), id(4)])
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        wanted,
+        [(3, true), (4, false)],
+        "only the one with no file is unmonitored"
+    );
+    let history: i64 = sqlx::query_scalar(r#"SELECT count(*) FROM playback_history"#)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(history, 2);
+}

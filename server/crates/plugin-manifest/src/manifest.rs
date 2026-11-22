@@ -466,6 +466,7 @@ pub fn capabilities(m: &Value, network_newly_requested: bool) -> Vec<String> {
         }
         caps.extend(provider_capabilities(&m["provider"]));
     }
+    caps.extend(strs(&m["database"]["coreRefs"]).map(|t| format!("coreref:{t}")));
     caps
 }
 
@@ -689,6 +690,16 @@ mod tests {
     fn data() -> Value {
         json!({"id":"acme.hello","pluginApi":3,"name":"Hello","version":"1.0.0","fliks":">=5.0.0 <6.0.0",
                "author":"a","description":"d","license":"MIT","logo":"logo.svg","kind":"data"})
+    }
+
+    #[test]
+    fn core_refs_are_capabilities() {
+        let m = json!({"kind": "process", "scopes": ["config:rw"],
+            "database": {"schema": true, "coreRefs": ["users", "media"]}});
+        assert_eq!(
+            capabilities(&m, false),
+            ["scope:config:rw", "coreref:users", "coreref:media"]
+        );
     }
 
     #[test]

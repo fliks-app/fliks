@@ -311,6 +311,24 @@ pub async fn upsert_detected(
     .map(drop)
 }
 
+/// The cut changed: the episodes `ep` covers are scanned again and lose their detected intro and outro.
+pub async fn rearm(db: &sqlx::PgPool, ep: i32) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"WITH hit AS (
+             UPDATE items i SET "markersScannedAt" = NULL
+             FROM items o
+             WHERE o.id = $1 AND (i.id = o.id OR (i."groupId" = o."groupId"
+               AND i."number" >= o."number" AND i."number" <= COALESCE(o."endNumber", o."number")))
+             RETURNING i.id)
+           DELETE FROM item_markers WHERE "itemId" IN (SELECT id FROM hit)
+             AND kind IN ('intro', 'outro') AND NOT manual"#,
+        ep
+    )
+    .execute(db)
+    .await
+    .map(drop)
+}
+
 pub async fn stamp_scanned(db: &PgPool, season: i32) -> sqlx::Result<()> {
     sqlx::query!(
         r#"UPDATE items SET "markersScannedAt" = now() WHERE "groupId" = $1
