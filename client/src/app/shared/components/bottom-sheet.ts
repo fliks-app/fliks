@@ -23,6 +23,9 @@ import {
   scrollSelectedIntoView,
 } from '../../core/services/focusable.constants';
 
+/** The phone dock's own surface, so a sheet resting on it reads as one piece. */
+const DOCK_BG = 'bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95 reduced-effects:backdrop-filter-none';
+
 @Component({
   selector: 'app-bottom-sheet',
   // The backdrop and sheet are `position: fixed`, so the host needs no box (as in `app-popover-menu`); a box becomes a stray grid item in `.modal`.
@@ -41,7 +44,7 @@ export class BottomSheetComponent {
   readonly aboveDock = input(false);
   protected readonly layers = computed(() =>
     this.aboveDock()
-      ? { backdrop: 'z-[38]', sheet: 'z-[39]', bg: 'bg-base-100', handleBg: 'bg-base-100' }
+      ? { backdrop: 'z-[38]', sheet: 'z-[39]', bg: DOCK_BG, handleBg: 'bg-transparent' }
       : this.fullHeight()
         ? { backdrop: 'z-[94]', sheet: 'z-[95]', bg: 'bg-base-100', handleBg: 'bg-base-100' }
         : { backdrop: 'z-[100]', sheet: 'z-[101]', bg: 'bg-neutral/95', handleBg: 'bg-neutral' },
