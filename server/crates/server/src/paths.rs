@@ -28,7 +28,8 @@ fn intended_data_dir() -> PathBuf {
 }
 
 /// `resolveWritableDir([preferred, <tmp>/<fallback>])`: the first directory a `.probe` file can be written to.
-fn writable_or(preferred: PathBuf, fallback: &str, what: &str) -> PathBuf {
+/// The flag is false when the fallback was taken.
+fn writable_or(preferred: PathBuf, fallback: &str, what: &str) -> (PathBuf, bool) {
     let writable = |d: &Path| {
         let probe = d.join(".probe");
         std::fs::create_dir_all(d).is_ok()
@@ -36,17 +37,26 @@ fn writable_or(preferred: PathBuf, fallback: &str, what: &str) -> PathBuf {
             && std::fs::remove_file(probe).is_ok()
     };
     if writable(&preferred) {
-        return preferred;
+        return (preferred, true);
     }
     let fallback = std::env::temp_dir().join(fallback);
     tracing::warn!(dir = %preferred.display(), "{what} directory not writable: using {}", fallback.display());
-    fallback
+    (fallback, false)
 }
+
+static DATA: OnceLock<(PathBuf, bool)> = OnceLock::new();
 
 /// Artwork and uploaded avatars; resolved once.
 pub fn data_dir() -> &'static Path {
-    static DIR: OnceLock<PathBuf> = OnceLock::new();
-    DIR.get_or_init(|| writable_or(intended_data_dir(), "fliks-data", "data"))
+    &DATA
+        .get_or_init(|| writable_or(intended_data_dir(), "fliks-data", "data"))
+        .0
+}
+
+/// False when the data dir fell back to the temp dir, so artwork is lost at the next recreate.
+pub fn data_persistent() -> bool {
+    data_dir();
+    DATA.get().is_some_and(|d| d.1)
 }
 
 /// Extracted subtitles and seek-preview sprites: `FLIKS_CACHE_DIR`, else `<data dir>/cache`; resolved once.
@@ -55,7 +65,7 @@ pub fn cache_dir() -> &'static Path {
     DIR.get_or_init(|| {
         let preferred =
             env("FLIKS_CACHE_DIR").map_or_else(|| data_dir().join("cache"), PathBuf::from);
-        writable_or(preferred, "fliks-cache", "cache")
+        writable_or(preferred, "fliks-cache", "cache").0
     })
 }
 

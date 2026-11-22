@@ -27,8 +27,9 @@ services:
         condition: service_healthy
     # Uncomment if your platform pins the container user (TrueNAS catalog uid
     # 568, unraid 99:100, Kubernetes runAsNonRoot, OpenShift arbitrary uid).
-    # Any uid works as long as gid 0 is in the group list — the image's
+    # Any uid works as long as gid 0 is in the group list: the image's
     # /app/conf, /app/data and /app/transcode are group-writable by root.
+    # A volume owned by another uid needs `chown -R 568:0` (the log names it).
     # user: '568:568'
     # group_add: ['0']
     # Chromecast discovery happens on the sender (browser/app), not here, so
@@ -48,9 +49,6 @@ services:
       DB_USERNAME: fliks
       DB_PASSWORD: changeme
       DB_NAME: fliks
-      # Without this the segment cache lands in /tmp, which is tmpfs on many
-      # hosts — and its LRU cap defaults to 20 GB.
-      FLIKS_TRANSCODE_DIR: /app/transcode
       # Extracted subtitles and seek-preview sprites. Regenerable, safe to
       # delete. Defaults to cache/ inside /app/data; point it elsewhere to keep
       # it out of your data backups.
@@ -91,13 +89,14 @@ services:
       - /path/to/your/media:/medias
       # Same path here and in your download client.
       - /path/to/download/folder:/downloads
-      # JWT key: lose it and everyone is logged out.
+      # JWT key and push identity: lose them and every session, Subsonic app password and
+      # push registration is gone. Back it up with the database dump.
       - fliks_conf:/app/conf
       # Artwork and uploaded avatars, plus the cache/ subfolder (see
       # FLIKS_CACHE_DIR). Not disposable: the avatars can't be re-fetched.
       - fliks_data:/app/data
-      # HLS segment cache, paired with FLIKS_TRANSCODE_DIR above. Drop both to
-      # leave it in /tmp.
+      # HLS segment cache (the image points FLIKS_TRANSCODE_DIR here). Keep the named volume:
+      # without it each recreate leaves an anonymous one behind.
       - fliks_transcode:/app/transcode
 
   # ---- Intel QSV / VAAPI ---- add to the fliks service:

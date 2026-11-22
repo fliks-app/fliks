@@ -11,6 +11,8 @@
       "as": "admin",
       "expect": {
         "body": {
+          "confPersistent": true,
+          "dataPersistent": true,
           "database": {
             "name": "PostgreSQL",
             "ok": true

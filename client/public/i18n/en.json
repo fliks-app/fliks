@@ -1754,6 +1754,8 @@
     "health_db": "Database",
     "health_plugins": "Installed plugins",
     "health_plugins_running": "{{count}} running",
+    "conf_not_persistent": "The config folder is not usable. Secrets are kept in a temporary folder and are lost when the container is recreated.",
+    "data_not_persistent": "The data folder is not writable. Artwork and avatars are kept in a temporary folder and are lost when the container is recreated.",
     "uptime": "Uptime",
     "logs_title": "Logs",
     "logs_all_levels": "All levels",
