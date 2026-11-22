@@ -1,5 +1,6 @@
 //! `/api/system/*` rest (`docs/spec/system.md`): health, restart, version, update, stats, backups, logs.
 pub mod backup;
+pub mod instance;
 pub mod logs;
 pub mod restore;
 mod routes;

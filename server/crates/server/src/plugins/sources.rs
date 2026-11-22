@@ -348,15 +348,10 @@ impl Plugins {
                 .filter_map(|c| c.strip_prefix("namespace:"))
                 .filter(|n| !held_ns.contains(n))
                 .map(|n| format!("namespace:{n}"));
-            let held_refs: Vec<&str> = pkg.manifest["database"]["coreRefs"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .collect();
+            let held_refs = packages::core_refs(&pkg.manifest);
             let new_refs = caps()
                 .filter_map(|c| c.strip_prefix("coreref:"))
-                .filter(|t| !held_refs.contains(t))
+                .filter(|t| !held_refs.iter().any(|r| r == t))
                 .map(|t| format!("coreref:{t}"));
             let new_scopes: Vec<String> = granted
                 .iter()

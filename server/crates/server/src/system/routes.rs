@@ -208,28 +208,26 @@ pub async fn backup_restore(
     }
     let path = backup::locate(&backup::dir(), &name).await?;
     let supervised = st.system.supervisor().is_some();
-    let outcome = detached({
-        let st = st.clone();
-        async move {
-            let o = restore::restore(
-                &st.cfg,
-                &st.db,
-                &st.jobs,
-                &st.plugins,
-                &path,
-                &name,
-                supervised,
-            )
-            .await?;
-            st.queue.recover.notify_one();
-            Ok(o)
+    // The restart is decided in the task: a client that went away cannot leave plugins stopped.
+    let outcome = detached(async move {
+        let o = restore::restore(
+            &st.cfg,
+            &st.db,
+            &st.jobs,
+            &st.plugins,
+            &path,
+            &name,
+            supervised,
+        )
+        .await?;
+        st.queue.recover.notify_one();
+        if o.restarting {
+            tracing::warn!("Restart after the restore");
+            schedule_restart(st);
         }
+        Ok(o)
     })
     .await?;
-    if outcome.restarting {
-        tracing::warn!("Restart after the restore");
-        schedule_restart(st);
-    }
     Ok((StatusCode::CREATED, Json(outcome)).into_response())
 }
 

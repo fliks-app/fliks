@@ -232,12 +232,7 @@ impl Plugins {
             .await
             .map_err(|e| db_fail("db-provision-failed", e))?;
         let pool = if m["database"]["schema"] == Value::Bool(true) {
-            let refs: Vec<String> = m["database"]["coreRefs"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|v| v.as_str().map(str::to_owned))
-                .collect();
+            let refs = packages::core_refs(m);
             let jobs = m["jobs"].as_array().map_or(0, Vec::len);
             let c = &host.env.cfg;
             let cap = 1 + 1 + c.http_max + c.task_max + jobs;

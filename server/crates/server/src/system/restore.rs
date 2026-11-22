@@ -12,7 +12,7 @@ use crate::{
     plugins::{Plugins, db as plugin_db, packages},
 };
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::json;
 use sqlx::PgPool;
 use std::{
     io::Write,
@@ -184,7 +184,9 @@ fn plugin_schemas(list: &str) -> Vec<String> {
 
 /// A cast has no schema, so no `-N`/`-n` filter reaches it: one naming a plugin type is dropped.
 fn is_plugin_cast(line: &str) -> bool {
-    after_ids(line).is_some_and(|r| r.starts_with("CAST ") && r.contains("plugin_"))
+    after_ids(line).is_some_and(|r| {
+        r.starts_with("CAST ") && (r.contains("(plugin_") || r.contains(" AS plugin_"))
+    })
 }
 
 fn is_fk_of(line: &str, schema: &str) -> bool {
@@ -276,15 +278,6 @@ fn plugin_id(schema: &str) -> Option<String> {
     Some(schema.strip_prefix("plugin_")?.replace('_', "."))
 }
 
-fn core_refs(manifest: &Value) -> Vec<String> {
-    manifest["database"]["coreRefs"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|v| v.as_str().map(str::to_owned))
-        .collect()
-}
-
 /// What every pass reads: the archive and its (cast-free) list of entries.
 #[derive(Clone, Copy)]
 struct Archive<'a> {
@@ -347,8 +340,13 @@ async fn plugin_pass(
         args.extend([s(&one), s(archive)]);
         if let Err(f) = exec("pg_restore", &args, &password, Stdio::null()).await {
             // The rows are in already: empty the schema so a failed plugin never keeps half a restore.
-            let _ = empty_schema(db, schema, id, refs).await;
-            return Err(why(f));
+            let mut message = why(f);
+            if let Err(e) = empty_schema(db, schema, id, refs).await {
+                message.push_str(&format!(
+                    "; the half-restored schema could not be emptied: {e}"
+                ));
+            }
+            return Err(message);
         }
     }
     Ok(())
@@ -368,6 +366,41 @@ async fn empty_schema(db: &PgPool, schema: &str, id: &str, refs: &[String]) -> R
         .map_err(|e| e.message)
 }
 
+/// A registered package with a schema the archive does not hold (the dump left it out): the replay
+/// dropped its live schema, so the plugin stays disabled instead of booting on an empty one.
+async fn missing_schemas(
+    db: &PgPool,
+    plugins: Option<&Plugins>,
+    present: &[String],
+) -> Result<Vec<NotRestored>, AppError> {
+    let ids: Vec<String> = sqlx::query_scalar(
+        r#"SELECT "pluginId" FROM plugin_packages WHERE manifest #>> '{database,schema}' = 'true'
+            AND status = 'active' ORDER BY id"#,
+    )
+    .fetch_all(db)
+    .await?;
+    let mut out = vec![];
+    for id in ids {
+        let schema = plugin_db::schema(&id);
+        if present.contains(&schema) {
+            continue;
+        }
+        let _lock = match plugins {
+            Some(p) => Some(p.lock(&id).await),
+            None => None,
+        };
+        packages::set_enabled(db, &id, false).await?;
+        let message = "the backup does not hold its schema (the server could not read it when the backup was made)";
+        packages::set_status(db, &id, Some(&format!("restore-failed: {message}"))).await?;
+        tracing::warn!("restore: {schema} not restored: {message}");
+        out.push(NotRestored {
+            schema,
+            message: message.to_owned(),
+        });
+    }
+    Ok(out)
+}
+
 /// Rule 38: every plugin schema of the archive, one after the other.
 async fn plugin_passes(
     a: Archive<'_>,
@@ -385,14 +418,14 @@ async fn plugin_passes(
             Some(p) => Some(p.lock(&id).await),
             None => None,
         };
-        let pkg = packages::find(db, &id).await?;
-        let refs = pkg
+        let manifest = packages::manifest(db, &id).await?;
+        let refs = manifest
             .as_ref()
-            .map(|p| core_refs(&p.manifest))
+            .map(packages::core_refs)
             .unwrap_or_default();
         let done = plugin_pass(a, schema, &id, &refs, scratch).await;
-        match (&done, &pkg) {
-            (_, None) => orphan(db, schema, &id).await?,
+        match (&done, &manifest) {
+            (_, None) => plugin_db::keep_orphaned(db, &id).await?,
             (Err(m), Some(_)) => {
                 packages::set_enabled(db, &id, false).await?;
                 packages::set_status(db, &id, Some(&format!("restore-failed: {m}"))).await?;
@@ -407,29 +440,47 @@ async fn plugin_passes(
             });
         }
     }
+    failed.extend(missing_schemas(db, plugins, schemas).await?);
     Ok(failed)
 }
 
-/// A schema whose package is gone is kept as an orphan (`plugin_kept_data` came back with the dump).
-async fn orphan(db: &PgPool, schema: &str, id: &str) -> Result<(), AppError> {
-    let role = plugin_db::role(&plugin_db::database_oid(db).await?, id);
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        "ALTER ROLE {} NOLOGIN; COMMENT ON SCHEMA {} IS 'orphaned: plugin uninstalled, data kept'",
-        plugin_db::quote(&role),
-        plugin_db::quote(schema)
-    )))
-    .execute(db)
-    .await?;
-    Ok(())
+/// The shipped `pg_restore` is 18's and sends `SET transaction_timeout`, which servers before 17 reject.
+async fn require_restorable_server(db: &PgPool) -> Result<(), AppError> {
+    let version: i32 = sqlx::query_scalar("SELECT current_setting('server_version_num')::int")
+        .fetch_one(db)
+        .await?;
+    if version >= 170_000 {
+        return Ok(());
+    }
+    let major = version / 10_000;
+    Err(AppError::bad_request(format!(
+        "Restoring a backup needs PostgreSQL 17 or later (this server runs {major}): restore it by hand \
+         with the matching pg_restore, or move the database to PostgreSQL 17 or later"
+    ))
+    .keyed("system.restore_needs_pg17", json!({"version": major})))
 }
 
-/// Rules 22-24 and 36-38 for one file; `plugins` supplies the per-id locks (`None` offline).
-async fn apply(
-    cfg: &Config,
-    db: &PgPool,
-    path: &Path,
-    plugins: Option<&Plugins>,
-) -> Result<Vec<NotRestored>, AppError> {
+/// What `prepare` reads of a file before anything is stopped or replaced.
+enum Plan {
+    /// A plain SQL file of earlier builds.
+    Plain,
+    /// An archive: the core script, the plugin schemas it holds and its restore list.
+    Archive {
+        script: PathBuf,
+        schemas: Vec<String>,
+        list: String,
+    },
+}
+
+struct Prepared {
+    plan: Plan,
+    scratch: Scratch,
+}
+
+/// Rules 22-24, 39: every refusal that needs no database (plugin data in a plain file, a meta-command,
+/// a newer migration), so a refused file stops nothing.
+async fn prepare(cfg: &Config, db: &PgPool, path: &Path) -> Result<Prepared, AppError> {
+    let mut scratch = Scratch::new()?;
     if !path.extension().is_some_and(|e| e == "dump") {
         if screen(path).await?.plugin_data {
             return Err(AppError::conflict(
@@ -437,10 +488,12 @@ async fn apply(
                  would run as the database owner; restore a .dump backup instead",
             ));
         }
-        replay(cfg, path).await?;
-        return Ok(vec![]);
+        return Ok(Prepared {
+            plan: Plan::Plain,
+            scratch,
+        });
     }
-    let mut scratch = Scratch::new()?;
+    require_restorable_server(db).await?;
     let list = toc(path).await?;
     let schemas = plugin_schemas(&list);
     let kept = restore_list(&list, |_| false);
@@ -458,19 +511,50 @@ async fn apply(
     args.push(s(path));
     run_tool(cfg, "pg_restore", &args, Stdio::null()).await?;
     screen(&script).await?;
-    replay(cfg, &script).await?;
-    plugin_passes(
-        Archive {
-            cfg,
-            db,
-            path,
-            list: &kept,
+    Ok(Prepared {
+        plan: Plan::Archive {
+            script,
+            schemas,
+            list: kept,
         },
-        plugins,
-        &schemas,
-        &mut scratch,
-    )
-    .await
+        scratch,
+    })
+}
+
+/// Rules 24 and 36-38 for a prepared file; `plugins` supplies the per-id locks (`None` offline).
+async fn apply(
+    cfg: &Config,
+    db: &PgPool,
+    path: &Path,
+    plugins: Option<&Plugins>,
+    prepared: Prepared,
+) -> Result<Vec<NotRestored>, AppError> {
+    let Prepared { plan, mut scratch } = prepared;
+    match plan {
+        Plan::Plain => {
+            replay(cfg, path).await?;
+            Ok(vec![])
+        }
+        Plan::Archive {
+            script,
+            schemas,
+            list,
+        } => {
+            replay(cfg, &script).await?;
+            plugin_passes(
+                Archive {
+                    cfg,
+                    db,
+                    path,
+                    list: &list,
+                },
+                plugins,
+                &schemas,
+                &mut scratch,
+            )
+            .await
+        }
+    }
 }
 
 /// The sqlx migrations of this build, then the stale-state sweep: an older dump gets today's schema.
@@ -495,9 +579,10 @@ pub async fn restore(
     if jobs::any_active(db).await? {
         return Err(busy());
     }
+    let prepared = prepare(cfg, db, path).await?;
     tracing::warn!("Restoring backup: {name}");
     plugins.stop_all().await;
-    let done = apply(cfg, db, path, Some(plugins)).await;
+    let done = apply(cfg, db, path, Some(plugins), prepared).await;
     let done = match done {
         Ok(failed) => {
             tracing::info!("Backup restored: {name}");
@@ -518,8 +603,9 @@ pub async fn restore(
 /// `fliks-server restore <file>`: the same passes with the server stopped. It never migrates, so
 /// an older image still boots after a rollback; the next boot of whichever image does.
 pub async fn offline(cfg: &Config, db: &PgPool, path: &Path) -> Result<Vec<NotRestored>, AppError> {
+    let prepared = prepare(cfg, db, path).await?;
     tracing::warn!("Restoring backup: {}", path.display());
-    let failed = apply(cfg, db, path, None).await?;
+    let failed = apply(cfg, db, path, None, prepared).await?;
     tracing::info!("Backup restored: {}", path.display());
     Ok(failed)
 }
@@ -659,6 +745,8 @@ mod tests {
 8; 2605 23 CAST pg_catalog CAST (plugin_a.t AS integer)
 9; 2605 24 CAST pg_catalog CAST (public.m AS integer)
 10; 2605 25 CAST pg_catalog CAST (plugin_a.\"t 1; 2 3 SCHEMA - plugin_zz\" AS integer)
+11; 2605 26 CAST pg_catalog CAST (text AS public.plugin_packages_status_enum)
+12; 2605 27 CAST pg_catalog CAST (integer AS plugin_a.t)
 ";
 
     #[test]
@@ -671,6 +759,8 @@ mod tests {
         let kept = restore_list(LIST, |l| is_fk_of(l, "plugin_a"));
         assert!(kept.contains("CAST (public.m AS integer)"));
         assert!(!kept.contains("plugin_a.t AS integer"));
+        assert!(!kept.contains("AS plugin_a.t"));
+        assert!(kept.contains("AS public.plugin_packages_status_enum"));
         assert!(!kept.contains("plugin_zz"));
         assert!(!kept.contains("FK CONSTRAINT plugin_a t"));
         // plugin_ab is another schema: its key stays.

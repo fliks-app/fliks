@@ -427,12 +427,7 @@ impl Plugins {
                         "the data kept by an earlier uninstall belongs to another signer: uninstall the plugin with data deletion first",
                     ));
                 }
-                let refs: Vec<String> = m["database"]["coreRefs"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|v| v.as_str().map(str::to_owned))
-                    .collect();
+                let refs = packages::core_refs(m);
                 super::db::provision(&self.db, id, &refs)
                     .await
                     .map_err(|e| {

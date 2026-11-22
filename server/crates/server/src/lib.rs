@@ -99,16 +99,19 @@ const DRAIN: Duration = Duration::from_secs(15);
 
 /// `fliks-server restore <file>` (`system.md` rule 40): the server is stopped, and nothing migrates.
 pub async fn restore(cfg: &Config, file: &std::path::Path) -> Result<(), BoxError> {
-    if healthcheck(cfg.port) {
-        return Err("the server is running: stop it before restoring".into());
-    }
     let file = std::path::absolute(file)?;
     if !tokio::fs::metadata(&file).await.is_ok_and(|m| m.is_file()) {
         return Err(format!("{} is not a file", file.display()).into());
     }
+    // Held until the restore ends, so a server starting meanwhile sees it too.
+    let mut lock = PgConnection::connect_with(&cfg.db).await?;
+    if !system::instance::claim(&mut lock).await? {
+        return Err("a Fliks server is running on this database: stop it before restoring".into());
+    }
     let pool = connect(cfg).await?;
     let failed = system::restore::offline(cfg, &pool, &file).await;
     pool.close().await;
+    lock.close().await?;
     let failed = failed.map_err(|e| e.to_string())?;
     for f in &failed {
         tracing::warn!("plugin schema {} not restored: {}", f.schema, f.message);
@@ -141,7 +144,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         _ = stopped.wait_for(|s| *s) => return Ok(()),
         r = &mut http => return r?.map_err(Into::into),
     };
-    let (state, app) = booted;
+    let (state, app, _instance) = booted;
     let (system, hub, qoe) = (state.system.clone(), state.hub.clone(), state.qoe.clone());
     let _ = slot.set(app);
     let served = tokio::select! {
@@ -166,15 +169,20 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
 }
 
 /// Everything between the bound listener and the first request: probe, dump, migrations, seeds.
-async fn boot(cfg: Config) -> Result<(AppState, axum::Router), BoxError> {
+async fn boot(cfg: Config) -> Result<(AppState, axum::Router, PgConnection), BoxError> {
     // One direct attempt: the pool would retry a refused connection for its whole acquire timeout.
     let probe =
         tokio::time::timeout(Duration::from_secs(10), PgConnection::connect_with(&cfg.db)).await;
-    match probe {
-        Ok(Ok(c)) => c.close().await?,
+    let instance = match probe {
+        Ok(Ok(mut c)) => {
+            if !system::instance::claim(&mut c).await? {
+                tracing::warn!("another Fliks server or restore is using this database");
+            }
+            c
+        }
         Ok(Err(e)) => return Err(format!("cannot reach the database: {e}").into()),
         Err(_) => return Err("cannot reach the database: no answer within 10 s".into()),
-    }
+    };
     let pool = connect(&cfg).await?;
     system::backup::before_migration(&cfg, &pool).await?;
     db::migrate(&pool).await?;
@@ -245,7 +253,8 @@ async fn boot(cfg: Config) -> Result<(AppState, axum::Router), BoxError> {
         tracing::warn!("metadata provider order not loaded: {e}");
     }
     state.plugins.boot().await;
-    Ok((state, app))
+    // The session holding the instance lock lives as long as the server.
+    Ok((state, app, instance))
 }
 
 async fn shutdown_signal() {

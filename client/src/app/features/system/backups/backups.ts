@@ -7,6 +7,7 @@ import { firstValueFrom } from 'rxjs';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes } from '../../../core/utils/format-bytes';
+import { serverMessage } from '../../../core/utils/server-message';
 import { waitForServer } from '../../../core/utils/wait-for-server';
 
 interface NotRestored { schema: string; message: string; }
@@ -56,7 +57,7 @@ export class SystemBackupsComponent implements OnInit {
       const failed = result.pluginsNotRestored;
       if (failed.length) {
         const plugins = failed.map((p) => `${p.schema}: ${p.message}`).join('; ');
-        void this.confirmation.alert({ title: this.translate.instant('system.restore_backup'), message: this.translate.instant('system.restore_plugins_not_restored', { plugins }), variant: 'warning' });
+        await this.confirmation.alert({ title: this.translate.instant('system.restore_backup'), message: this.translate.instant('system.restore_plugins_not_restored', { plugins }), variant: 'warning' });
       } else {
         void this.confirmation.alert({ title: this.translate.instant('common.success'), message: this.translate.instant(result.restarting ? 'system.restore_restarting' : 'system.restore_ok'), variant: 'info' });
       }
@@ -65,8 +66,7 @@ export class SystemBackupsComponent implements OnInit {
         location.reload();
       }
     } catch (err: unknown) {
-      const httpErr = err as { error?: { message?: string } };
-      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: httpErr.error?.message ?? this.translate.instant('system.restore_failed'), variant: 'danger' });
+      void this.confirmation.alert({ title: this.translate.instant('common.error'), message: serverMessage(err, this.translate, 'system.restore_failed'), variant: 'danger' });
     }
   }
 

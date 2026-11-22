@@ -218,7 +218,8 @@ async fn dump(cfg: &Config, pool: &PgPool, dir: &Path, filename: String) -> Resu
         let file = create_private(&tmp)
             .map_err(|e| internal(format!("cannot write the backup: {e}{}", chown_hint(&e))))?;
         let mut args = conn_args(cfg);
-        args.push("-Fc".to_owned());
+        // No large objects: `-N` cannot filter them and the core pass would replay `lo_create` of any role's.
+        args.extend(["-Fc", "-B"].map(String::from));
         args.extend(skipped.iter().map(|s| format!("--exclude-schema={s}")));
         match exec("pg_dump", &args, cfg.db_password.expose(), file.into()).await {
             Ok(_) => break,

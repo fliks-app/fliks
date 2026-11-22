@@ -143,6 +143,11 @@ async fn plugin_schemas_restore_under_their_own_logins() {
     let cfg = config_for(&s.url, &s.name);
     script(&h, SETUP, "0100_setup").await;
     let users = rows(&s.pool, "SELECT count(*) FROM public.users").await;
+    // A large object survives the replay's schema drops: the archive must not carry it.
+    sqlx::query("SELECT lo_create(0)")
+        .execute(&s.pool)
+        .await
+        .unwrap();
     let made = backup::create(&cfg, &s.pool, &backup::dir()).await.unwrap();
     assert!(made.plugins_skipped.is_empty());
     let own = as_plugin(&s).await;
@@ -241,7 +246,174 @@ async fn plugin_schemas_restore_under_their_own_logins() {
     assert_eq!(fks, ["t2_t_id_fkey"], "the key into public is skipped");
     assert_eq!(plugin_rows(&s, "t").await, 2);
 
+    // A refused file stops nothing: the same plugin host is still running after the 409.
+    until("plugin running", Duration::from_secs(60), async || {
+        h.st.plugins.rt("fliks.fixture").is_some()
+    })
+    .await;
+    let before = h.st.plugins.rt("fliks.fixture").expect("running");
+    let plain = legacy_sql(&s, "refused.sql");
+    let err = restore::restore(
+        &cfg,
+        &s.pool,
+        &h.st.jobs,
+        &h.st.plugins,
+        &plain,
+        "refused.sql",
+        false,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.status(), 409, "{err}");
+    let after = h.st.plugins.rt("fliks.fixture").expect("still running");
+    assert!(std::sync::Arc::ptr_eq(&before, &after));
+
+    // A dump taken before this build's columns of `plugin_packages` restores its plugin schema.
+    sqlx::raw_sql(r#"ALTER TABLE plugin_packages DROP COLUMN "heldUpdate""#)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    let early = backup::create(&cfg, &s.pool, &backup::dir()).await.unwrap();
+    sqlx::raw_sql(r#"ALTER TABLE plugin_packages ADD COLUMN "heldUpdate" jsonb"#)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    let Some(c) = Scratch::create("rstrold").await else {
+        return h.finish().await;
+    };
+    let failed = restore::offline(
+        &config_for(&c.url, &c.name),
+        &c.pool,
+        &path(&early.filename),
+    )
+    .await
+    .unwrap();
+    assert!(failed.is_empty(), "{failed:?}");
+    c.finish().await;
+
     h.finish().await;
+    s.finish().await;
+}
+
+/// A plain-SQL dump as earlier builds wrote them.
+fn legacy_sql(s: &Scratch, name: &str) -> PathBuf {
+    let plain = backup::dir().join(name);
+    let dump = Command::new("pg_dump")
+        .args(["--clean", "--if-exists", "--no-owner", "--no-privileges"])
+        .args(["-h", s.pool.connect_options().get_host()])
+        .args(["-p", &s.pool.connect_options().get_port().to_string()])
+        .args(["-U", "fliks", "-d", &s.name])
+        .env("PGPASSWORD", "fliks")
+        .output()
+        .unwrap();
+    assert!(dump.status.success());
+    std::fs::write(&plain, &dump.stdout).unwrap();
+    plain
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_schema_the_backup_left_out_is_reported_and_its_plugin_disabled() {
+    if !tools() {
+        return;
+    }
+    let Some((s, h)) = install("rstrskip").await else {
+        return;
+    };
+    let cfg = config_for(&s.url, &s.name);
+    script(&h, SETUP, "0100_setup").await;
+    let name = "left-out.dump";
+    let dump = Command::new("pg_dump")
+        .args(["-Fc", "-B", &format!("--exclude-schema={SCHEMA}")])
+        .args(["-h", s.pool.connect_options().get_host()])
+        .args(["-p", &s.pool.connect_options().get_port().to_string()])
+        .args(["-U", "fliks", "-d", &s.name])
+        .env("PGPASSWORD", "fliks")
+        .output()
+        .unwrap();
+    assert!(dump.status.success());
+    std::fs::write(path(name), &dump.stdout).unwrap();
+    let out = restore::restore(
+        &cfg,
+        &s.pool,
+        &h.st.jobs,
+        &h.st.plugins,
+        &path(name),
+        name,
+        false,
+    )
+    .await
+    .unwrap();
+    assert_eq!(out.plugins_not_restored.len(), 1, "{out:?}");
+    assert_eq!(out.plugins_not_restored[0].schema, SCHEMA);
+    let enabled: bool = sqlx::query_scalar(
+        r#"SELECT enabled FROM plugin_packages WHERE "pluginId" = 'fliks.fixture'"#,
+    )
+    .fetch_one(&s.pool)
+    .await
+    .unwrap();
+    assert!(!enabled);
+    h.finish().await;
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_offline_restore_refuses_while_another_session_holds_the_instance_lock() {
+    use sqlx::Connection;
+    let Some(s) = Scratch::create("rstrlock").await else {
+        return;
+    };
+    let mut held = sqlx::PgConnection::connect_with(&*s.pool.connect_options())
+        .await
+        .unwrap();
+    assert!(
+        fliks_server::system::instance::claim(&mut held)
+            .await
+            .unwrap()
+    );
+    let file = std::env::temp_dir().join(format!("fliks-lock-{}.dump", std::process::id()));
+    std::fs::write(&file, b"x").unwrap();
+    let err = fliks_server::restore(&config_for(&s.url, &s.name), &file)
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("is running"), "{err}");
+    let _ = std::fs::remove_file(file);
+    drop(held);
+    s.finish().await;
+}
+
+/// Below 17 the shipped `pg_restore` cannot run: the restore is refused with the version, nothing replayed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_server_before_17_refuses_a_restore_untouched() {
+    if !tools() {
+        return;
+    }
+    let Some(s) = Scratch::create("rstrold17").await else {
+        return;
+    };
+    let version: i32 = sqlx::query_scalar("SELECT current_setting('server_version_num')::int")
+        .fetch_one(&s.pool)
+        .await
+        .unwrap();
+    if version >= 170_000 {
+        return s.finish().await;
+    }
+    let cfg = config_for(&s.url, &s.name);
+    let made = backup::create(&cfg, &s.pool, &backup::dir()).await.unwrap();
+    sqlx::query("INSERT INTO app_settings (key, value) VALUES ('rstr_marker', 'after')")
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    let err = restore::offline(&cfg, &s.pool, &path(&made.filename))
+        .await
+        .unwrap_err();
+    assert_eq!(err.status(), 400);
+    assert!(err.text().contains("PostgreSQL 17"), "{err}");
+    let kept = rows(
+        &s.pool,
+        "SELECT count(*) FROM app_settings WHERE key = 'rstr_marker'",
+    )
+    .await;
+    assert_eq!(kept, 1, "nothing was replayed");
     s.finish().await;
 }
 
@@ -307,17 +479,7 @@ async fn a_plugin_pass_that_fails_is_reported_and_leaves_core_restored() {
     assert!(reason.unwrap_or_default().starts_with("restore-failed: "));
 
     // A plain dump holding plugin data is refused before anything runs.
-    let plain = backup::dir().join("legacy.sql");
-    let dump = Command::new("pg_dump")
-        .args(["--clean", "--if-exists", "--no-owner", "--no-privileges"])
-        .args(["-h", s.pool.connect_options().get_host()])
-        .args(["-p", &s.pool.connect_options().get_port().to_string()])
-        .args(["-U", "fliks", "-d", &s.name])
-        .env("PGPASSWORD", "fliks")
-        .output()
-        .unwrap();
-    assert!(dump.status.success());
-    std::fs::write(&plain, &dump.stdout).unwrap();
+    let plain = legacy_sql(&s, "legacy.sql");
     let err = restore::restore(
         &cfg,
         &s.pool,

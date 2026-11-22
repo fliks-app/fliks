@@ -185,20 +185,25 @@ impl PluginDb {
             // Checked first: IF NOT EXISTS on an existing table logs a NOTICE on every boot.
             if !exists && !migrations.is_empty() {
                 let tx = c.transaction().await.map_err(pg_err)?;
-                tx.batch_execute(&format!(
-                    "{timeout};
-                     CREATE TABLE IF NOT EXISTS \"_migrations\" (
-                       \"name\" text PRIMARY KEY,
-                       \"appliedAt\" timestamptz NOT NULL DEFAULT now())"
-                ))
-                .await
-                .map_err(pg_err)?;
-                tx.commit().await.map_err(pg_err)?;
+                let made = tx
+                    .batch_execute(&format!(
+                        "{timeout};
+                         CREATE TABLE IF NOT EXISTS \"_migrations\" (
+                           \"name\" text PRIMARY KEY,
+                           \"appliedAt\" timestamptz NOT NULL DEFAULT now())"
+                    ))
+                    .await;
+                // Two hosts creating it at once: the loser finds the table the winner made.
+                match made.map_err(pg_err) {
+                    Ok(()) => tx.commit().await.map_err(pg_err)?,
+                    Err(e) if matches!(e.code.as_str(), "42P07" | "23505") => {}
+                    Err(e) => return Err(e),
+                }
             }
             let mut applied = Vec::new();
             for (name, up) in migrations {
                 let tx = c.transaction().await.map_err(pg_err)?;
-                // The ledger's own table lock serialises two hosts: plugins hold no advisory locks.
+                // The ledger's own table lock serialises two hosts (plugins hold no advisory locks).
                 tx.batch_execute(&format!(
                     "{timeout}; LOCK TABLE \"_migrations\" IN SHARE ROW EXCLUSIVE MODE"
                 ))
