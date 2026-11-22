@@ -1,6 +1,7 @@
 //! `/api/system/*` rest (`docs/spec/system.md`): health, restart, version, update, stats, backups, logs.
 pub mod backup;
 pub mod logs;
+pub mod restore;
 mod routes;
 mod supervisor;
 mod update;
@@ -24,19 +25,31 @@ pub struct Shared {
     update: update::Cache,
     started: Instant,
     restarting: AtomicBool,
+    supervisor: Option<&'static str>,
 }
 
 impl Default for Shared {
     fn default() -> Self {
-        Self {
-            update: update::Cache::default(),
-            started: Instant::now(),
-            restarting: AtomicBool::new(false),
-        }
+        Self::supervised_by(supervisor::current())
     }
 }
 
 impl Shared {
+    /// For a host (or a test) that knows its supervisor instead of reading the environment.
+    pub fn supervised_by(supervisor: Option<&'static str>) -> Self {
+        Self {
+            update: update::Cache::default(),
+            started: Instant::now(),
+            restarting: AtomicBool::new(false),
+            supervisor,
+        }
+    }
+
+    /// The process supervisor that restarts us after an exit (rule 6), if any.
+    pub fn supervisor(&self) -> Option<&'static str> {
+        self.supervisor
+    }
+
     /// True once `POST /restart` has begun the shutdown: the process must then exit non-zero.
     pub fn restarting(&self) -> bool {
         self.restarting.load(Ordering::SeqCst)

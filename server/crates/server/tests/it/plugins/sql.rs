@@ -778,6 +778,40 @@ async fn a_plugin_login_cannot_become_core_or_another_plugin() {
     s.finish().await;
 }
 
+/// A plugin holds no advisory lock core could wait on; releasing is still allowed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_plugin_login_takes_no_advisory_lock() {
+    use sqlx::Connection;
+    let Some(s) = Scratch::create("advlock").await else {
+        return;
+    };
+    fliks_server::plugins::db::provision(&s.pool, "fliks.one", &[])
+        .await
+        .unwrap();
+    let opts = fliks_server::plugins::db::login(&s.pool, "fliks.one")
+        .await
+        .unwrap();
+    let mut c = sqlx::PgConnection::connect_with(&opts).await.unwrap();
+    for stmt in [
+        "SELECT pg_advisory_lock(1)",
+        "SELECT pg_try_advisory_lock(1, 2)",
+        "SELECT pg_advisory_xact_lock_shared(3)",
+    ] {
+        let e = sqlx::raw_sql(stmt).execute(&mut c).await.unwrap_err();
+        assert_eq!(
+            e.as_database_error().and_then(|d| d.code()).as_deref(),
+            Some("42501"),
+            "{stmt}: {e}"
+        );
+    }
+    sqlx::raw_sql("SELECT pg_advisory_unlock_all()")
+        .execute(&mut c)
+        .await
+        .unwrap();
+    drop(c);
+    s.finish().await;
+}
+
 /// Provision hands routines and types a restore left to core back to the plugin role, the
 /// stand-alone composite included (an `ALTER TABLE` on it would fail).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

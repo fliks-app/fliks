@@ -590,35 +590,6 @@ impl Plugins {
         }
     }
 
-    /// After a restore (success or failure): adopt every schema, drop the dump's foreign roles,
-    /// then register the enabled plugins as at boot.
-    pub async fn after_restore(self: &Arc<Self>, roles: &[String]) {
-        if let Ok(pkgs) = packages::all(&self.db).await {
-            for p in pkgs
-                .iter()
-                .filter(|p| p.is_process() && p.manifest["database"]["schema"] == Value::Bool(true))
-            {
-                let refs: Vec<String> = p.manifest["database"]["coreRefs"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|v| v.as_str().map(str::to_owned))
-                    .collect();
-                if let Err(e) = db::provision(&self.db, &p.plugin_id, &refs).await {
-                    tracing::warn!(
-                        "plugin \"{}\" schema adoption after restore: {}",
-                        p.plugin_id,
-                        e.message
-                    );
-                }
-            }
-        }
-        if let Err(e) = db::drop_foreign_roles(&self.db, roles).await {
-            tracing::warn!("restore: dropping foreign plugin roles failed: {e}");
-        }
-        self.boot().await;
-    }
-
     /// Rule 51: the winning `ui.player.preRollRoute`, 3 s including the queue; `None` on any failure.
     pub async fn pre_roll(&self, body: Value, user: i32) -> Option<Value> {
         let (id, route) = self.registry.pre_roll()?;

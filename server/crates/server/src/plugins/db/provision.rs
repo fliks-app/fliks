@@ -72,7 +72,7 @@ pub async fn database_oid(core: &PgPool) -> sqlx::Result<String> {
     .await
 }
 
-pub(super) fn quote(ident: &str) -> String {
+pub fn quote(ident: &str) -> String {
     format!("\"{}\"", ident.replace('"', "\"\""))
 }
 
@@ -323,6 +323,7 @@ pub async fn provision(
         ));
     }
     sqlx::Executor::execute(&mut *tx, sqlx::raw_sql(sqlx::AssertSqlSafe(sql))).await?;
+    revoke_advisory_locks(&mut tx, &role).await?;
     drop_core_fks(&mut tx, &schema, &qs).await?;
     tx.commit().await?;
     Ok(password)
@@ -448,27 +449,43 @@ pub async fn orphan(core: &PgPool, plugin_id: &str, signer: Option<&str>) -> sql
     tx.commit().await
 }
 
-/// After a restore (rule 44): every role the dump named that is not one of this database's.
-pub async fn drop_foreign_roles(core: &PgPool, roles: &[String]) -> sqlx::Result<()> {
-    let ours = format!("fp_{}_", database_oid(core).await?);
-    let mut tx = core.begin().await?;
-    let foreign: Vec<String> = roles
-        .iter()
-        .filter(|r| !r.starts_with(&ours))
-        .cloned()
-        .collect();
-    for r in foreign {
-        let exists = role_exists(&mut tx, &r).await?;
-        if exists {
-            sqlx::Executor::execute(
-                &mut *tx,
-                sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP OWNED BY {}", quote(&r)))),
-            )
-            .await?;
-            drop_role_tolerant(&mut tx, &r).await?;
-        }
+/// Core serialises on predictable advisory keys, so a lock a plugin holds would stall it: plugins take none.
+/// Only the owner of `pg_catalog` can revoke, so a core that is not a superuser warns once and goes on.
+async fn revoke_advisory_locks(tx: &mut Tx, role: &str) -> sqlx::Result<()> {
+    const OPEN: &str = r"SELECT count(*) FROM pg_proc p
+         WHERE p.pronamespace = 'pg_catalog'::regnamespace
+           AND p.proname ~ '^pg_(try_)?advisory_(xact_)?lock(_shared)?$'
+           AND has_function_privilege($1, p.oid, 'EXECUTE')";
+    static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if sqlx::query_scalar::<_, i64>(OPEN)
+        .bind(role)
+        .fetch_one(&mut **tx)
+        .await?
+        == 0
+    {
+        return Ok(());
     }
-    tx.commit().await
+    sqlx::raw_sql(
+        r"DO $$ DECLARE f regprocedure; BEGIN
+            FOR f IN SELECT p.oid::regprocedure FROM pg_proc p
+                      WHERE p.pronamespace = 'pg_catalog'::regnamespace
+                        AND p.proname ~ '^pg_(try_)?advisory_(xact_)?lock(_shared)?$'
+            LOOP EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', f); END LOOP;
+          END $$",
+    )
+    .execute(&mut **tx)
+    .await?;
+    let open = sqlx::query_scalar::<_, i64>(OPEN)
+        .bind(role)
+        .fetch_one(&mut **tx)
+        .await?;
+    if open > 0 && !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        tracing::warn!(
+            "plugins can still take advisory locks: REVOKE EXECUTE ON the pg_advisory_*lock functions \
+             FROM PUBLIC needs a superuser"
+        );
+    }
+    Ok(())
 }
 
 /// Routines and types a `--no-owner` restore left to the core role go to the plugin's role.

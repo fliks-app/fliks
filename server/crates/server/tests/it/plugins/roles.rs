@@ -161,9 +161,8 @@ async fn orphan_keeps_the_data_and_a_reprovision_reuses_it() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn template_copy_and_restore_take_their_own_names() {
+async fn a_template_copy_takes_its_own_names() {
     let (id, leg) = unique_id();
-    let dead = format!("fp_deadbeef_{}", id.replace('.', "_"));
     let Some(a) = Scratch::create("copya").await else {
         return;
     };
@@ -217,18 +216,6 @@ async fn template_copy_and_restore_take_their_own_names() {
         exists(&b, &a_role).await,
         "the source database still uses its role"
     );
-    // A restore names roles from another database: they are adopted, then dropped here.
-    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-        r#"CREATE ROLE "{dead}" LOGIN; CREATE SCHEMA "plugin_acme_other" AUTHORIZATION "{dead}";"#
-    )))
-    .execute(&b)
-    .await
-    .unwrap();
-    db::drop_foreign_roles(&b, &[dead.clone(), b_role.clone()])
-        .await
-        .unwrap();
-    assert!(!exists(&b, &dead).await);
-    assert!(exists(&b, &b_role).await, "this database's own role stays");
     b.close().await;
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         "DROP DATABASE {copy} WITH (FORCE)"

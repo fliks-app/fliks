@@ -135,7 +135,7 @@ ln -s ../../../lib "$PG_ROOT/$PG_KEG/lib"
 ln -s postgresql "$PG_ROOT/lib/postgresql@18"
 
 # Only copy the binaries we actually use.
-for pgbin in initdb pg_ctl postgres pg_isready createdb psql pg_dump; do
+for pgbin in initdb pg_ctl postgres pg_isready createdb psql pg_dump pg_restore; do
     cp "$PG_PREFIX/bin/$pgbin" "$PG_BIN/"
 done
 

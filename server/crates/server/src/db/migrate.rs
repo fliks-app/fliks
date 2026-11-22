@@ -7,6 +7,26 @@ pub use sqlx::migrate::MigrateError;
 
 static MIGRATOR: Migrator = sqlx::migrate!("../../migrations");
 
+/// Whether this build ships migration `version`.
+pub fn known_version(version: i64) -> bool {
+    migration_for_version(version).is_some()
+}
+
+/// A ledger row this build has no file for was written by a newer Fliks: say so instead of sqlx's raw text.
+fn newer_database(e: MigrateError) -> MigrateError {
+    match e {
+        MigrateError::VersionMissing(v) => MigrateError::Source(
+            format!(
+                "the database holds migration {v}, which this version of Fliks does not know: it was \
+                 migrated by a newer version. Start that version, or put back a backup taken before \
+                 the upgrade (`fliks-server restore <file>`, then start the older version)"
+            )
+            .into(),
+        ),
+        e => e,
+    }
+}
+
 fn migration_for_version(version: i64) -> Option<&'static sqlx::migrate::Migration> {
     MIGRATOR.iter().find(|m| m.version == version)
 }
@@ -137,7 +157,7 @@ pub async fn migrate(pool: &PgPool) -> Result<(), MigrateError> {
         .connect_with(opts)
         .await
         .map_err(MigrateError::Execute)?;
-    let result = run_logged(&quiet).await;
+    let result = run_logged(&quiet).await.map_err(newer_database);
     quiet.close().await;
     result
 }

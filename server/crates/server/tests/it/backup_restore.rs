@@ -2,10 +2,13 @@
 //! Skipped locally without `DATABASE_URL`, `pg_dump` or `psql` (a failure under CI); refuses to touch a database named `fliks`.
 use crate::{fakes::skip, session};
 use axum::{Router, body::Body, http::Request};
+use fliks_server::system::Shared;
 use fliks_server::{app, config::Config, db, state::AppState};
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection, PgPool, postgres::PgPoolOptions};
-use std::{collections::HashMap, os::unix::fs::PermissionsExt, path::PathBuf, process::Command};
+use std::{
+    collections::HashMap, os::unix::fs::PermissionsExt, path::PathBuf, process::Command, sync::Arc,
+};
 use tower::ServiceExt;
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
@@ -27,6 +30,33 @@ fn db_env(url: &str, name: &str) -> HashMap<String, String> {
     .into_iter()
     .map(|(k, v)| (k.to_owned(), v.to_owned()))
     .collect()
+}
+
+/// A plain-SQL dump of `name` as earlier builds wrote them.
+fn plain_dump(url: &str, name: &str) -> String {
+    let env = db_env(url, name);
+    let out = Command::new("pg_dump")
+        .args([
+            "-h",
+            &env["DB_HOST"],
+            "-p",
+            &env["DB_PORT"],
+            "-U",
+            &env["DB_USERNAME"],
+        ])
+        .args([
+            "-d",
+            name,
+            "--clean",
+            "--if-exists",
+            "--no-owner",
+            "--no-privileges",
+        ])
+        .env("PGPASSWORD", &env["DB_PASSWORD"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    String::from_utf8(out.stdout).unwrap()
 }
 
 fn have(tool: &str) -> bool {
@@ -95,11 +125,12 @@ impl Scratch {
 /// authenticate anyone, so requests are served against `c`'s database with the env of `old`.
 fn backing_up(c: &Ctx, old: &Scratch, url: &str) -> Ctx {
     let env = db_env(url, &old.name);
-    let st = AppState::new(
+    let mut st = AppState::new(
         c.st.db.clone(),
         Config::from_lookup(|k| env.get(k).cloned()),
         SECRET,
     );
+    st.system = Arc::new(Shared::supervised_by(None));
     Ctx {
         app: app::router(st.clone(), None, "/nonexistent".into(), None),
         st,
@@ -119,11 +150,13 @@ struct Ctx {
 
 async fn ctx(s: &Scratch, url: &str) -> Ctx {
     let env = db_env(url, &s.name);
-    let st = AppState::new(
+    let mut st = AppState::new(
         s.pool.clone(),
         Config::from_lookup(|k| env.get(k).cloned()),
         SECRET,
     );
+    // The test process must not restart itself after a restore, whatever supervises the runner.
+    st.system = Arc::new(Shared::supervised_by(None));
     sqlx::query(
         r#"INSERT INTO roles (name, permissions) VALUES ('limited', '["settings.access"]')"#,
     )
@@ -211,8 +244,8 @@ async fn backup_and_restore_on_a_scratch_database() {
     let Ok(url) = std::env::var("DATABASE_URL") else {
         return skip("DATABASE_URL unset");
     };
-    if !have("pg_dump") || !have("psql") {
-        return skip("pg_dump or psql missing");
+    if !have("pg_dump") || !have("psql") || !have("pg_restore") {
+        return skip("pg_dump, psql or pg_restore missing");
     }
     let _ = std::fs::remove_dir_all(fliks_server::system::backup::dir());
     let scratch = Scratch::create(&url, None).await;
@@ -230,7 +263,15 @@ async fn backup_and_restore_on_a_scratch_database() {
     let body = tokio::spawn({
         let (url, role) = (url.clone(), role.clone());
         async move {
-            run(&c, &c_old, &scratch.pool, &old.pool, &role).await;
+            run(
+                &c,
+                &c_old,
+                &scratch.pool,
+                &old.pool,
+                &role,
+                (&url, &scratch.name),
+            )
+            .await;
             (scratch, old, url)
         }
     })
@@ -255,7 +296,7 @@ async fn backup_and_restore_on_a_scratch_database() {
         .unwrap();
 }
 
-async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str) {
+async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str, db: (&str, &str)) {
     // settings.access alone is not enough, and nothing exists yet.
     assert_eq!(
         call(c, "GET", "/api/system/backups", &c.limited, Value::Null)
@@ -283,13 +324,15 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str)
     let name = made["filename"].as_str().unwrap().to_owned();
     assert!(
         name.starts_with("fliks-backup-")
-            && name.ends_with("Z.sql")
-            && !name[..name.len() - 4].contains([':', '.'])
+            && name.ends_with("Z.dump")
+            && !name[..name.len() - 5].contains([':', '.'])
     );
     let file = c.dir.join(&name);
-    let text = std::fs::read_to_string(&file).unwrap();
-    assert_eq!(made["size"].as_u64().unwrap(), text.len() as u64);
-    assert!(text.contains("CREATE TABLE") && text.contains("s5_marker"));
+    let bytes = std::fs::read(&file).unwrap();
+    assert_eq!(made["size"].as_u64().unwrap(), bytes.len() as u64);
+    assert!(bytes.starts_with(b"PGDMP"));
+    assert!(made.get("pluginsSkipped").is_none());
+    let text = plain_dump(db.0, db.1);
     assert_eq!(
         std::fs::metadata(&file).unwrap().permissions().mode() & 0o777,
         0o600
@@ -308,8 +351,11 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str)
         Value::Null,
     )
     .await;
-    assert_eq!((s, bytes.as_slice()), (200, text.as_bytes()));
-    assert_eq!(h["content-type"], "application/sql");
+    assert_eq!(
+        (s, bytes.as_slice()),
+        (200, std::fs::read(&file).unwrap().as_slice())
+    );
+    assert_eq!(h["content-type"], "application/octet-stream");
     assert_eq!(
         h["content-disposition"],
         format!("attachment; filename=\"{name}\"")
@@ -324,7 +370,7 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str)
         &[("range", "bytes=0-9")],
     )
     .await;
-    assert_eq!((s, part.as_slice()), (206, &text.as_bytes()[..10]));
+    assert_eq!((s, part.as_slice()), (206, &bytes[..10]));
     assert_eq!(
         call(
             c,
@@ -383,7 +429,10 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str)
         json!({"filename": name}),
     )
     .await;
-    assert_eq!((s, b.len()), (201, 0));
+    assert_eq!(
+        (s, json_of(&b)),
+        (201, json!({"pluginsNotRestored": [], "restarting": false}))
+    );
     assert_eq!(setting(pool, "s5_marker").await.as_deref(), Some("before"));
 
     // bad bodies and names
@@ -479,25 +528,27 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str)
         201
     );
 
-    // a dump granting to a plugin role the cluster lacks (rule 23)
+    // a plain dump holding plugin data is refused (rule 23), and no role is made
     std::fs::write(
         &corrupt,
         format!("{text}GRANT SELECT ON public.app_settings TO {role};\n"),
     )
     .unwrap();
-    assert_eq!(
-        call(
-            c,
-            "POST",
-            "/api/system/restore",
-            &c.admin,
-            json!({"filename": "corrupt.sql"})
-        )
-        .await
-        .0,
-        201
+    let (s, _, b) = call(
+        c,
+        "POST",
+        "/api/system/restore",
+        &c.admin,
+        json!({"filename": "corrupt.sql"}),
+    )
+    .await;
+    assert_eq!(s, 409, "{}", String::from_utf8_lossy(&b));
+    assert!(
+        json_of(&b)["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("BACKUP_HAS_PLUGIN_DATA")
     );
-    // The replay could create the role, and the host drops it as not this database's.
     let kept: bool = sqlx::query_scalar("SELECT EXISTS (SELECT FROM pg_roles WHERE rolname = $1)")
         .bind(role)
         .fetch_one(pool)

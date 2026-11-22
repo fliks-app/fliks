@@ -1,19 +1,14 @@
-//! Database backups (`docs/spec/system.md` rules 14-25): `pg_dump` to a file, `psql` replay.
-use crate::{config::Config, db, http::AppError, jobs, paths};
+//! Database backups (`docs/spec/system.md` rules 14-21, 31-35): `pg_dump` to a file; the restore is `restore.rs`.
+use crate::{config::Config, db, http::AppError, paths};
 use chrono::Utc;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::PgPool;
 use std::{
-    collections::BTreeSet,
     path::{Path, PathBuf},
     process::Stdio,
-    sync::Arc,
 };
-use tokio::{
-    io::{AsyncBufReadExt, BufReader},
-    process::Command,
-};
+use tokio::process::Command;
 
 /// The `Backup` job keeps this many (rule 20).
 pub const KEEP: usize = 7;
@@ -27,9 +22,13 @@ pub fn dir() -> PathBuf {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Made {
     pub filename: String,
     pub size: u64,
+    /// Plugin schemas left out of the archive (rule 17), so a restore cannot bring them back.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub plugins_skipped: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -39,18 +38,23 @@ pub struct Entry {
     pub date: String,
 }
 
-fn internal(msg: impl Into<String>) -> AppError {
+pub(super) fn internal(msg: impl Into<String>) -> AppError {
     AppError::internal(msg.into())
 }
 
-/// `^[A-Za-z0-9_.-]+\.sql$` over ASCII, so no separator or NUL can pass (rule 15).
+/// The extensions of a backup: `.dump` archives and the plain `.sql` files of earlier builds.
+const EXTS: [&str; 2] = [".dump", ".sql"];
+
+/// `^[A-Za-z0-9_.-]+\.(sql|dump)$` over ASCII, so no separator or NUL can pass (rule 15).
 pub fn valid_name(name: &str) -> bool {
-    name.strip_suffix(".sql").is_some_and(|stem| {
-        !stem.is_empty()
-            && stem
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
-    })
+    EXTS.iter()
+        .find_map(|e| name.strip_suffix(e))
+        .is_some_and(|stem| {
+            !stem.is_empty()
+                && stem
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+        })
 }
 
 /// Rule 15: validate, then require the file; returns its path.
@@ -67,7 +71,11 @@ pub async fn locate(dir: &Path, name: &str) -> Result<PathBuf, AppError> {
     }
 }
 
-fn conn_args(cfg: &Config) -> Vec<String> {
+pub(super) fn conn_args(cfg: &Config) -> Vec<String> {
+    conn_args_as(cfg, cfg.db.get_username())
+}
+
+pub(super) fn conn_args_as(cfg: &Config, user: &str) -> Vec<String> {
     let db = &cfg.db;
     vec![
         "-h".into(),
@@ -75,46 +83,75 @@ fn conn_args(cfg: &Config) -> Vec<String> {
         "-p".into(),
         db.get_port().to_string(),
         "-U".into(),
-        db.get_username().into(),
+        user.into(),
         "-d".into(),
         db.get_database().unwrap_or_default().into(),
     ]
 }
 
+/// A failed tool run: the last stderr line for an answer, the whole stderr for callers that read it.
+pub(super) struct ToolFail {
+    pub message: String,
+    pub stderr: String,
+}
+
 /// Rule 18: no shell, the password in `PGPASSWORD`, stderr captured, the last stderr line as the message.
-async fn run_tool(cfg: &Config, cmd: &str, args: &[String], stdout: Stdio) -> Result<(), AppError> {
+/// Returns the stdout bytes when `stdout` is piped.
+pub(super) async fn exec(
+    cmd: &str,
+    args: &[String],
+    password: &str,
+    stdout: Stdio,
+) -> Result<Vec<u8>, ToolFail> {
+    let fail = |message: String| ToolFail {
+        message,
+        stderr: String::new(),
+    };
     let child = Command::new(cmd)
         .args(args)
-        .env("PGPASSWORD", cfg.db_password.expose())
+        .env("PGPASSWORD", password)
         .stdin(Stdio::null())
         .stdout(stdout)
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn()
         .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => {
-                internal(format!("{cmd} is not available on this server"))
-            }
-            _ => internal(format!("{cmd} failed: {e}")),
+            std::io::ErrorKind::NotFound => fail(format!("{cmd} is not available on this server")),
+            _ => fail(format!("{cmd} failed: {e}")),
         })?;
     let out = child
         .wait_with_output()
         .await
-        .map_err(|e| internal(format!("{cmd} failed: {e}")))?;
+        .map_err(|e| fail(format!("{cmd} failed: {e}")))?;
     if out.status.success() {
-        return Ok(());
+        return Ok(out.stdout);
     }
-    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
     let code = out
         .status
         .code()
         .map_or_else(|| "a signal".to_owned(), |c| c.to_string());
     tracing::error!("{cmd} exited with {code}: {}", stderr.trim_end());
     let last = stderr.lines().rev().find(|l| !l.trim().is_empty());
-    Err(internal(last.map_or_else(
-        || format!("{cmd} exited with code {code}"),
-        |l| l.trim().to_owned(),
-    )))
+    Err(ToolFail {
+        message: last.map_or_else(
+            || format!("{cmd} exited with code {code}"),
+            |l| l.trim().to_owned(),
+        ),
+        stderr,
+    })
+}
+
+pub(super) async fn run_tool(
+    cfg: &Config,
+    cmd: &str,
+    args: &[String],
+    stdout: Stdio,
+) -> Result<(), AppError> {
+    exec(cmd, args, cfg.db_password.expose(), stdout)
+        .await
+        .map(drop)
+        .map_err(|f| internal(f.message))
 }
 
 fn stamp() -> String {
@@ -122,28 +159,73 @@ fn stamp() -> String {
 }
 
 /// Rule 17.
-pub async fn create(cfg: &Config, dir: &Path) -> Result<Made, AppError> {
-    let name = format!("fliks-backup-{}.sql", stamp());
-    dump(cfg, dir, name, &["--clean", "--if-exists"]).await
+pub async fn create(cfg: &Config, pool: &PgPool, dir: &Path) -> Result<Made, AppError> {
+    let name = format!("fliks-backup-{}.dump", stamp());
+    dump(cfg, pool, dir, name).await
 }
 
-async fn dump(
-    cfg: &Config,
-    dir: &Path,
-    filename: String,
-    format_args: &[&str],
-) -> Result<Made, AppError> {
+/// Plugin schemas a non-superuser core cannot read: a FORCE RLS table applies to its owner, and core is a member.
+async fn unreadable_schemas(pool: &PgPool) -> Result<Vec<String>, AppError> {
+    Ok(sqlx::query_scalar(
+        r"SELECT n.nspname::text FROM pg_namespace n
+           WHERE n.nspname LIKE 'plugin\_%'
+             AND NOT (SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user)
+             AND EXISTS (SELECT 1 FROM pg_class c WHERE c.relnamespace = n.oid AND c.relforcerowsecurity)
+           ORDER BY n.nspname",
+    )
+    .fetch_all(pool)
+    .await?)
+}
+
+/// The plugin schema a failed `pg_dump` names (its `Query was: COPY plugin_x.t ...` line), not yet excluded.
+async fn named_schema(pool: &PgPool, stderr: &str, excluded: &[String]) -> Option<String> {
+    let all: Vec<String> = sqlx::query_scalar(
+        r"SELECT nspname::text FROM pg_namespace WHERE nspname LIKE 'plugin\_%'",
+    )
+    .fetch_all(pool)
+    .await
+    .ok()?;
+    all.into_iter()
+        .find(|s| !excluded.contains(s) && stderr.contains(&format!("{s}.")))
+}
+
+async fn dump(cfg: &Config, pool: &PgPool, dir: &Path, filename: String) -> Result<Made, AppError> {
     tracing::info!("Creating backup: {filename}");
     mkdir_private(dir).map_err(|e| internal(format!("cannot create the backup directory: {e}")))?;
     let path = dir.join(&filename);
     let tmp = dir.join(format!("{filename}{PARTIAL}"));
-    let file =
-        create_private(&tmp).map_err(|e| internal(format!("cannot write the backup: {e}")))?;
     let mut partial = Partial(Some(&tmp));
-    let mut args = conn_args(cfg);
-    args.extend(format_args.iter().map(|a| (*a).to_owned()));
-    args.extend(["--no-owner", "--no-privileges"].map(String::from));
-    run_tool(cfg, "pg_dump", &args, file.into()).await?;
+    let mut skipped = unreadable_schemas(pool).await?;
+    let mut retried = false;
+    loop {
+        let file =
+            create_private(&tmp).map_err(|e| internal(format!("cannot write the backup: {e}")))?;
+        let mut args = conn_args(cfg);
+        args.push("-Fc".to_owned());
+        args.extend(skipped.iter().map(|s| format!("--exclude-schema={s}")));
+        match exec("pg_dump", &args, cfg.db_password.expose(), file.into()).await {
+            Ok(_) => break,
+            // A plugin may set FORCE RLS between the pre-check and the dump: one retry without its schema.
+            Err(f) => match named_schema(pool, &f.stderr, &skipped).await {
+                Some(s) if !retried => {
+                    tracing::warn!(
+                        "Backup: skipping {s}, pg_dump could not read it: {}",
+                        f.message
+                    );
+                    skipped.push(s);
+                    retried = true;
+                    let _ = tokio::fs::remove_file(&tmp).await;
+                }
+                _ => return Err(internal(f.message)),
+            },
+        }
+    }
+    if !skipped.is_empty() {
+        tracing::warn!(
+            "Backup {filename} leaves out plugin schemas: {}",
+            skipped.join(", ")
+        );
+    }
     let size = tokio::fs::metadata(&tmp)
         .await
         .map_err(|e| internal(e.to_string()))?
@@ -153,7 +235,11 @@ async fn dump(
         .map_err(|e| internal(format!("cannot write the backup: {e}")))?;
     partial.0 = None;
     tracing::info!("Backup created: {filename} ({size} bytes)");
-    Ok(Made { filename, size })
+    Ok(Made {
+        filename,
+        size,
+        plugins_skipped: skipped,
+    })
 }
 
 /// Rules 31-35: dump before pending migrations, so a destructive one can be rolled back by a restore.
@@ -182,22 +268,22 @@ pub async fn before_migration_in(
     };
     let filename = format!("fliks-pre-migration-v{version}-{}.dump", stamp());
     tracing::info!("Migrations pending, backing up to {}", dir.display());
-    dump(cfg, dir, filename, &["-Fc"]).await.map_err(|e| {
+    dump(cfg, pool, dir, filename).await.map_err(|e| {
         format!(
             "pre-migration backup failed, migrations not applied: {e} \
              (set FLIKS_SKIP_PRE_MIGRATION_BACKUP=1 to skip it)"
         )
     })?;
-    prune(dir, PRE_MIGRATION_KEEP, ".dump").await?;
+    prune(dir, PRE_MIGRATION_KEEP, &[".dump"]).await?;
     // Plain-SQL dumps written by earlier 6.0 builds.
-    for e in list_ext(dir, ".sql").await {
+    for e in list_ext(dir, &[".sql"]).await {
         tokio::fs::remove_file(dir.join(e.filename)).await?;
     }
     Ok(())
 }
 
 /// A dump is written under this suffix and renamed once complete, so no list or prune sees a cut file.
-const PARTIAL: &str = ".partial";
+pub(super) const PARTIAL: &str = ".partial";
 
 /// Deletes the unfinished dumps a killed process left behind.
 async fn sweep_partials(dir: &Path) {
@@ -227,7 +313,7 @@ impl Drop for Partial<'_> {
 }
 
 /// A `0700` directory (when created here) and `0600` files.
-fn mkdir_private(dir: &Path) -> std::io::Result<()> {
+pub(super) fn mkdir_private(dir: &Path) -> std::io::Result<()> {
     let mut b = std::fs::DirBuilder::new();
     b.recursive(true);
     #[cfg(unix)]
@@ -235,7 +321,7 @@ fn mkdir_private(dir: &Path) -> std::io::Result<()> {
     b.create(dir)
 }
 
-fn create_private(path: &Path) -> std::io::Result<std::fs::File> {
+pub(super) fn create_private(path: &Path) -> std::io::Result<std::fs::File> {
     let mut o = std::fs::OpenOptions::new();
     o.write(true).create_new(true);
     #[cfg(unix)]
@@ -245,10 +331,10 @@ fn create_private(path: &Path) -> std::io::Result<std::fs::File> {
 
 /// Rule 14: newest first by `date`, then `filename` descending.
 pub async fn list(dir: &Path) -> Vec<Entry> {
-    list_ext(dir, ".sql").await
+    list_ext(dir, &EXTS).await
 }
 
-async fn list_ext(dir: &Path, ext: &str) -> Vec<Entry> {
+async fn list_ext(dir: &Path, exts: &[&str]) -> Vec<Entry> {
     let Ok(mut rd) = tokio::fs::read_dir(dir).await else {
         return vec![];
     };
@@ -258,7 +344,7 @@ async fn list_ext(dir: &Path, ext: &str) -> Vec<Entry> {
         let Ok(meta) = e.metadata().await else {
             continue;
         };
-        if !filename.ends_with(ext) || !meta.is_file() {
+        if !exts.iter().any(|e| filename.ends_with(e)) || !meta.is_file() {
             continue;
         }
         let date = meta.modified().map_or_else(
@@ -276,8 +362,8 @@ async fn list_ext(dir: &Path, ext: &str) -> Vec<Entry> {
 }
 
 /// Rules 20 and 33: delete all but the newest `keep`, sparing the oldest dump of the newest `v<version>`.
-pub async fn prune(dir: &Path, keep: usize, ext: &str) -> std::io::Result<usize> {
-    let all = list_ext(dir, ext).await;
+pub async fn prune(dir: &Path, keep: usize, exts: &[&str]) -> std::io::Result<usize> {
+    let all = list_ext(dir, exts).await;
     let anchor = all
         .first()
         .and_then(|e| version_of(&e.filename))
@@ -315,137 +401,6 @@ pub async fn delete(dir: &Path, name: &str) -> Result<(), AppError> {
 /// `String(value)` of a JSON value, for the 400 text of rule 22.
 pub fn js_string(v: Option<&Value>) -> String {
     v.map_or_else(|| "undefined".into(), fliks_domain::js::js_string)
-}
-
-/// `^GRANT .+ TO (plugin_[a-z0-9_]{1,56}|fp_[0-9a-f]{8}_[a-z0-9_]{1,51});$`: the only guard of
-/// the role statement (rule 23).
-fn plugin_role(line: &str) -> Option<&str> {
-    let body = line.strip_prefix("GRANT ")?.strip_suffix(';')?;
-    let (head, role) = body.rsplit_once(" TO ")?;
-    let tail_ok = |t: &str, max: usize| {
-        (1..=max).contains(&t.len())
-            && t.bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
-    };
-    let ok = match (role.strip_prefix("plugin_"), role.strip_prefix("fp_")) {
-        (Some(t), _) => tail_ok(t, 56),
-        (_, Some(r)) => {
-            r.get(..9).is_some_and(|h| {
-                h.ends_with('_')
-                    && h[..8]
-                        .bytes()
-                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-            }) && tail_ok(&r[9..], 51)
-        }
-        _ => false,
-    };
-    (!head.is_empty() && ok).then_some(role)
-}
-
-/// Rule 23 in one pass: refuses a line-start psql meta-command outside a COPY block (best effort, no
-/// SQL lexing), collects the plugin roles.
-async fn screen(path: &Path) -> Result<BTreeSet<String>, AppError> {
-    let file = tokio::fs::File::open(path)
-        .await
-        .map_err(|e| internal(e.to_string()))?;
-    let mut lines = BufReader::new(file).split(b'\n');
-    let (mut roles, mut in_copy) = (BTreeSet::new(), false);
-    while let Some(raw) = lines
-        .next_segment()
-        .await
-        .map_err(|e| internal(e.to_string()))?
-    {
-        let line = String::from_utf8_lossy(&raw);
-        let line = line.strip_suffix('\r').unwrap_or(&line);
-        if in_copy {
-            in_copy = line != "\\.";
-        } else if line.starts_with('\\') {
-            let key = line
-                .strip_prefix("\\restrict ")
-                .or_else(|| line.strip_prefix("\\unrestrict "));
-            if line != "\\."
-                && !key.is_some_and(|k| !k.is_empty() && !k.contains(char::is_whitespace))
-            {
-                return Err(AppError::bad_request("Backup contains psql meta-commands"));
-            }
-        } else if line.starts_with("COPY ") && line.ends_with(" FROM stdin;") {
-            in_copy = true;
-        } else if let Some(role) = plugin_role(line) {
-            roles.insert(role.to_owned());
-        }
-    }
-    Ok(roles)
-}
-
-fn create_roles_sql(roles: &BTreeSet<String>) -> String {
-    let each: Vec<String> = roles
-        .iter()
-        .map(|r| {
-            format!(
-                "IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{r}') THEN CREATE ROLE \"{r}\" LOGIN; END IF;"
-            )
-        })
-        .collect();
-    format!("DO $$ BEGIN {} END $$", each.join(" "))
-}
-
-/// Rule 24: in the replay's transaction, drops `public` and every plugin schema so a dump older than
-/// the database restores into an empty schema.
-const CLEAN_SCHEMAS: &str = r"DO $$ DECLARE s text; BEGIN
-FOR s IN SELECT nspname FROM pg_namespace WHERE nspname = 'public' OR nspname LIKE 'plugin\_%' LOOP
-EXECUTE format('DROP SCHEMA %I CASCADE', s);
-END LOOP;
-CREATE SCHEMA public;
-GRANT USAGE ON SCHEMA public TO PUBLIC;
-END $$";
-
-/// Rules 22-25. `name` is already validated and located.
-pub async fn restore(
-    cfg: &Config,
-    db: &PgPool,
-    running: &Arc<jobs::Running>,
-    plugins: &Arc<crate::plugins::Plugins>,
-    path: &Path,
-    name: &str,
-) -> Result<(), AppError> {
-    let busy = || AppError::conflict("A command is running");
-    let _claim = running.claim(jobs::RESTORE).ok_or_else(busy)?;
-    if jobs::any_active(db).await? {
-        return Err(busy());
-    }
-    tracing::warn!("Restoring backup: {name}");
-    let roles = screen(path).await?;
-    plugins.stop_all().await;
-    let r = replay(cfg, db, path, name, &roles).await;
-    let roles: Vec<String> = roles.into_iter().collect();
-    plugins.after_restore(&roles).await;
-    r
-}
-
-async fn replay(
-    cfg: &Config,
-    db: &PgPool,
-    path: &Path,
-    name: &str,
-    roles: &BTreeSet<String>,
-) -> Result<(), AppError> {
-    if !roles.is_empty() {
-        let mut args = vec!["-X".to_owned()];
-        args.extend(conn_args(cfg));
-        args.extend(["-v", "ON_ERROR_STOP=1", "-c"].map(String::from));
-        args.push(create_roles_sql(roles));
-        run_tool(cfg, "psql", &args, Stdio::null()).await?;
-    }
-    let mut args = vec!["-X".to_owned()];
-    args.extend(conn_args(cfg));
-    args.extend(["--single-transaction", "-v", "ON_ERROR_STOP=1", "-c"].map(String::from));
-    args.extend([CLEAN_SCHEMAS.to_owned(), "-f".to_owned()]);
-    args.push(path.to_string_lossy().into_owned());
-    run_tool(cfg, "psql", &args, Stdio::null()).await?;
-    tracing::info!("Backup restored: {name}");
-    db::migrate(db).await.map_err(|e| internal(e.to_string()))?;
-    jobs::sweep(db).await?;
-    Ok(())
 }
 
 #[cfg(test)]
@@ -497,7 +452,7 @@ mod tests {
                 &format!("fliks-pre-migration-v123-{stamp}.sql"),
                 700 - i as u64 * 100,
             );
-            prune(&dir, 3, ".sql").await.unwrap();
+            prune(&dir, 3, &[".sql"]).await.unwrap();
             assert!(names(&dir).contains(&"fliks-pre-migration-v123-a.sql".into()));
         }
         assert_eq!(
@@ -518,7 +473,7 @@ mod tests {
                 90 - i as u64 * 10,
             );
         }
-        prune(&dir, 3, ".sql").await.unwrap();
+        prune(&dir, 3, &[".sql"]).await.unwrap();
         assert_eq!(
             names(&dir),
             [
@@ -529,7 +484,7 @@ mod tests {
             ]
         );
         // keep = 0 still spares it.
-        assert_eq!(prune(&dir, 0, ".sql").await.unwrap(), 3);
+        assert_eq!(prune(&dir, 0, &[".sql"]).await.unwrap(), 3);
         assert_eq!(names(&dir), ["fliks-pre-migration-v124-a.sql"]);
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -540,7 +495,7 @@ mod tests {
         for i in 0..5u64 {
             put(&dir, &format!("fliks-backup-{i}.sql"), 500 - i * 100);
         }
-        assert_eq!(prune(&dir, 3, ".sql").await.unwrap(), 2);
+        assert_eq!(prune(&dir, 3, &[".sql"]).await.unwrap(), 2);
         assert_eq!(
             names(&dir),
             [
@@ -576,12 +531,14 @@ mod tests {
             "fliks-backup-2026-10-16T02-00-00-123Z.sql",
             "A_b.c-d.sql",
             "a.sql.sql",
+            "fliks-backup-2026-10-16T02-00-00-123Z.dump",
+            "a.sql.dump",
         ] {
             assert!(valid_name(ok), "{ok}");
         }
         for bad in [
-            "", ".sql", "é.sql", "a/b.sql", "a.sql\n", "a.SQL", "a.sql ", "a b.sql", "../a.sql",
-            "a.sqlx",
+            "", ".sql", ".dump", "é.dump", "a/b.dump", "a.dump\n", "a.DUMP", "é.sql", "a/b.sql",
+            "a.sql\n", "a.SQL", "a.sql ", "a b.sql", "../a.sql", "a.sqlx", "a.dumps",
         ] {
             assert!(!valid_name(bad), "{bad:?}");
         }
@@ -597,70 +554,5 @@ mod tests {
         assert_eq!(js_string(Some(&j(r#"["a.sql","b"]"#))), "a.sql,b");
         assert_eq!(js_string(Some(&j("[null,1]"))), ",1");
         assert_eq!(js_string(Some(&j("{}"))), "[object Object]");
-    }
-
-    #[test]
-    fn plugin_roles_are_matched_tightly() {
-        assert_eq!(
-            plugin_role("GRANT SELECT ON x TO plugin_a1;"),
-            Some("plugin_a1")
-        );
-        for bad in [
-            "GRANT SELECT ON x TO plugin_;",
-            "GRANT SELECT ON x TO plugin_A;",
-            "GRANT SELECT ON x TO plugin_a;--",
-            "GRANT  TO plugin_a;",
-            "grant select on x to plugin_a;",
-            "GRANT SELECT ON x TO plugin_a b;",
-            "GRANT SELECT ON x TO plugin_a\";DROP;",
-        ] {
-            assert_eq!(plugin_role(bad), None, "{bad}");
-        }
-        let long = format!("GRANT a TO plugin_{};", "x".repeat(57));
-        assert_eq!(plugin_role(&long), None);
-        assert_eq!(
-            plugin_role("GRANT USAGE ON SCHEMA public TO fp_0000a1b2_fliks_notify;"),
-            Some("fp_0000a1b2_fliks_notify")
-        );
-        for bad in [
-            "GRANT a TO fp_0000a1b_x;",
-            "GRANT a TO fp_0000A1B2_x;",
-            "GRANT a TO fp_0000a1b2_;",
-        ] {
-            assert_eq!(plugin_role(bad), None, "{bad}");
-        }
-        assert_eq!(
-            plugin_role(&format!("GRANT a TO fp_0000a1b2_{};", "x".repeat(52))),
-            None
-        );
-    }
-
-    #[tokio::test]
-    async fn screening_refuses_meta_commands_outside_copy_blocks() {
-        let dir = std::env::temp_dir().join(format!("fliks-screen-{}", std::process::id()));
-        tokio::fs::create_dir_all(&dir).await.unwrap();
-        let n = std::sync::atomic::AtomicUsize::new(0);
-        let check = |body: &'static str| {
-            let p = dir.join(format!(
-                "{}.sql",
-                n.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            ));
-            async move {
-                tokio::fs::write(&p, body).await.unwrap();
-                screen(&p).await
-            }
-        };
-        let ok = check("\\restrict abc123\nCOPY t (a) FROM stdin;\n\\! ls\n\\.\nGRANT x ON y TO plugin_p;\n\\unrestrict abc123\n").await;
-        assert_eq!(ok.unwrap().into_iter().collect::<Vec<_>>(), ["plugin_p"]);
-        for bad in [
-            "\\! ls\n",
-            "SELECT 1;\n\\i /etc/passwd\n",
-            "\\copy t to program 'x'\n",
-            "COPY t FROM stdin;\n\\.\n\\!x\n",
-            "\\restrict\n",
-        ] {
-            assert!(check(bad).await.is_err(), "{bad:?}");
-        }
-        let _ = tokio::fs::remove_dir_all(dir).await;
     }
 }

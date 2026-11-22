@@ -96,6 +96,29 @@ pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
 /// Longest wait for open connections after a stop signal; under Docker's `stop_grace_period`.
 const DRAIN: Duration = Duration::from_secs(20);
 
+/// `fliks-server restore <file>` (`system.md` rule 40): the server is stopped, and nothing migrates.
+pub async fn restore(cfg: &Config, file: &std::path::Path) -> Result<(), BoxError> {
+    if healthcheck(cfg.port) {
+        return Err("the server is running: stop it before restoring".into());
+    }
+    let file = std::path::absolute(file)?;
+    if !tokio::fs::metadata(&file).await.is_ok_and(|m| m.is_file()) {
+        return Err(format!("{} is not a file", file.display()).into());
+    }
+    let pool = connect(cfg).await?;
+    let failed = system::restore::offline(cfg, &pool, &file).await;
+    pool.close().await;
+    let failed = failed.map_err(|e| e.to_string())?;
+    for f in &failed {
+        tracing::warn!("plugin schema {} not restored: {}", f.schema, f.message);
+    }
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("{} plugin schema(s) not restored, see above", failed.len()).into())
+    }
+}
+
 pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let listener = tokio::net::TcpListener::bind((cfg.bind, cfg.port)).await?;
     tracing::info!("listening on {}", listener.local_addr()?);
