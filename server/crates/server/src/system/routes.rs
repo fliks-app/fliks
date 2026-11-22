@@ -44,6 +44,8 @@ pub struct Health {
     installed_plugins: i64,
     running_plugins: i64,
     restart_supervisor: Option<&'static str>,
+    conf_persistent: bool,
+    data_persistent: bool,
 }
 
 #[utoipa::path(get, path = "/api/system/health", responses((status = 200)))]
@@ -70,6 +72,8 @@ pub async fn health(State(st): State<AppState>, a: Authed) -> Result<Json<Health
         installed_plugins: count("SELECT count(*) FROM plugin_packages").await,
         running_plugins: count("SELECT count(*) FROM plugin_packages WHERE enabled = true").await,
         restart_supervisor: supervisor::current(),
+        conf_persistent: crate::jwt_secret::conf_persistent(),
+        data_persistent: crate::paths::data_persistent(),
     }))
 }
 

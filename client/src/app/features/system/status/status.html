@@ -37,6 +37,12 @@
       </div>
     </div>
   </div>
+  @if (!h.confPersistent) {
+    <div role="alert" class="alert alert-error mt-3 text-sm">{{ 'system.conf_not_persistent' | translate }}</div>
+  }
+  @if (!h.dataPersistent) {
+    <div role="alert" class="alert alert-error mt-3 text-sm">{{ 'system.data_not_persistent' | translate }}</div>
+  }
 }
 
 <!-- Activity: running + queued tasks, live over SSE -->

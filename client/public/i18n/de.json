@@ -1754,6 +1754,8 @@
     "health_db": "Datenbank",
     "health_plugins": "Installierte Plugins",
     "health_plugins_running": "{{count}} aktiv",
+    "conf_not_persistent": "Der Konfigurationsordner ist nicht nutzbar. Geheimnisse liegen in einem temporären Ordner und gehen beim Neuerstellen des Containers verloren.",
+    "data_not_persistent": "Der Datenordner ist nicht beschreibbar. Bilder und Avatare liegen in einem temporären Ordner und gehen beim Neuerstellen des Containers verloren.",
     "uptime": "Uptime",
     "logs_title": "Logs",
     "logs_all_levels": "Alle Stufen",

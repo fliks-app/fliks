@@ -81,6 +81,7 @@ services:
       CARGO_TARGET_DIR: /cargo-target
       SQLX_OFFLINE: 'true'
       FLIKS_DATA_DIR: /src/data
+      FLIKS_CONF_DIR: /src/data/conf
     volumes:
       - ./server:/src/server
       - ${FLIKS_ENGINE_SRC:-../fliks-engine}:/engine:ro

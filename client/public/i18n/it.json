@@ -1754,6 +1754,8 @@
     "health_db": "Database",
     "health_plugins": "Plugin installati",
     "health_plugins_running": "{{count}} in esecuzione",
+    "conf_not_persistent": "La cartella di configurazione non è utilizzabile. I segreti sono in una cartella temporanea e si perdono quando il contenitore viene ricreato.",
+    "data_not_persistent": "La cartella dei dati non è scrivibile. Immagini e avatar sono in una cartella temporanea e si perdono quando il contenitore viene ricreato.",
     "uptime": "Uptime",
     "logs_title": "Log",
     "logs_all_levels": "Tutti i livelli",
