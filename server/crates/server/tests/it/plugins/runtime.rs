@@ -1261,7 +1261,7 @@ async fn domain_events_reach_only_plugins_holding_events_receive() {
     tokio::time::sleep(Duration::from_millis(500)).await;
     assert_eq!(seen(), before, "no events:receive, no event");
     sqlx::query(
-        r#"UPDATE plugin_registrations SET scopes = scopes || 'events:receive' WHERE "pluginId" = $1"#,
+        r#"UPDATE plugin_registrations SET scopes = array_append(scopes, 'events:receive') WHERE "pluginId" = $1"#,
     )
     .bind(ID)
     .execute(&s.pool)

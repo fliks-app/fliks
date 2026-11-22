@@ -64,12 +64,33 @@ async fn the_block_and_the_export_come_together() {
     blocked["provider"] = m["provider"].clone();
     blocked["database"] = m["database"].clone();
     blocked["provider"]["namespaces"][0]["name"] = json!("fliks.fixture:aid");
-    for (tag, m, w) in [("noblock", &bare, &w), ("noexport", &blocked, &gw)] {
-        let Some((reason, r)) = outcome(tag, false, m, w).await else {
-            return;
-        };
-        assert_eq!(reason.as_deref(), Some("invalid-component"), "{tag}: {r}");
-    }
+    let Some((reason, r)) = outcome("noblock", false, &bare, &w).await else {
+        return;
+    };
+    assert_eq!(reason.as_deref(), Some("invalid-component"), "noblock: {r}");
+    // A block without its export does not link: refused at the install, nothing is stored.
+    let Some(s) = Scratch::create("noexport").await else {
+        return;
+    };
+    let h = harness(&s, "noexport", |_| {}).await;
+    allow_unsigned(&h).await;
+    let (st, r) = h.upload(&pack(&blocked, "0.1.0", &gw, None)).await;
+    assert_eq!(st, 201, "{r}");
+    let (st, r) = h
+        .call(
+            "POST",
+            "/api/plugins/import/confirm",
+            Some(&h.admin),
+            Some(json!({"stagingId": r["stagingId"], "sha256": r["sha256"]})),
+        )
+        .await;
+    assert_eq!(
+        (st, r["code"].as_str()),
+        (422, Some("PLUGIN_INCOMPATIBLE_API")),
+        "{r}"
+    );
+    h.finish().await;
+    s.finish().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
