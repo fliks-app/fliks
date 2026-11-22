@@ -526,8 +526,9 @@ mod tests {
         assert_eq!(parse(&interleaved), NfoData::default());
         let past = format!("<m>{}<title>late</title></m>", " ".repeat(MAX_BYTES));
         assert_eq!(parse(&past).title, None);
-        let n = parse(&format!("{}<title>T</title>", "<w>".repeat(MAX_DEPTH + 10)));
-        assert_eq!(n.title.as_deref(), Some("T"));
+        let nested = |depth: usize| parse(&format!("{}<title>T</title>", "<w>".repeat(depth)));
+        assert_eq!(nested(MAX_DEPTH - 1).title.as_deref(), Some("T"));
+        assert_eq!(nested(MAX_DEPTH + 10).title, None);
     }
 
     #[test]
