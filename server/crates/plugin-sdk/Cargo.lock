@@ -1418,6 +1418,7 @@ dependencies = [
  "nodejs-semver",
  "p256",
  "percent-encoding",
+ "postgres-protocol",
  "quick-xml",
  "regex",
  "reqwest",

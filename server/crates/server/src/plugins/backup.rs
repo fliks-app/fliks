@@ -1,14 +1,15 @@
-//! Plugin export and import (`plugins.md` rules 53-54), under `SET LOCAL ROLE` of the
-//! plugin's role: its triggers, defaults and policies are plugin code and stay in the rule-35 sandbox.
+//! Plugin export and import (`plugins.md` rules 53-54), on connections logged in as the
+//! plugin's own role: its triggers, defaults and policies are plugin code and never run as core.
 use super::Plugins;
-use super::db::{database_oid, role, schema};
+use super::db::{MIGRATE_DEADLINE, login, schema};
 use super::install::{InstallError, ie};
 use crate::settings::plugin_secret_keys;
 use axum::{body::Body, body::Bytes, http::StatusCode};
 use futures_util::{TryStreamExt, stream};
 use serde_json::{Map, Value, json};
-use sqlx::PgConnection;
+use sqlx::{PgConnection, PgPool, Postgres, Transaction, postgres::PgPoolOptions};
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 
 fn quote(i: &str) -> String {
     format!("\"{}\"", i.replace('"', "\"\""))
@@ -230,35 +231,46 @@ impl Plugins {
         m["kind"] == "process" && m["database"]["schema"] == Value::Bool(true)
     }
 
-    /// From here to the end of the transaction every statement runs as the plugin's role.
-    async fn as_plugin(&self, c: &mut PgConnection, id: &str) -> Result<(), InstallError> {
-        let oid = database_oid(&self.db).await.map_err(internal)?;
+    /// A transaction on a private connection logged in as the plugin's role; the caller holds the per-id lock.
+    async fn plugin_tx(
+        &self,
+        id: &str,
+        mode: Option<&str>,
+        timeout: Duration,
+    ) -> Result<Transaction<'static, Postgres>, InstallError> {
+        let opts = login(&self.db, id).await.map_err(internal)?;
+        let pool: PgPool = PgPoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await
+            .map_err(internal)?;
+        let mut tx = pool.begin().await.map_err(internal)?;
+        if let Some(mode) = mode {
+            sqlx::query(sqlx::AssertSqlSafe(format!("SET TRANSACTION {mode}")))
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+        }
         sqlx::query(sqlx::AssertSqlSafe(format!(
-            "SET LOCAL ROLE {}",
-            quote(&role(&oid, id))
+            "SET LOCAL statement_timeout = {}",
+            timeout.as_millis()
         )))
-        .execute(c)
+        .execute(&mut *tx)
         .await
-        .map_err(internal)
-        .map(drop)
+        .map_err(internal)?;
+        Ok(tx)
     }
 
     /// Row count per table of the plugin's schema, for the uninstall confirmation.
     pub async fn data_usage(&self, id: &str) -> Result<Vec<(String, i64)>, InstallError> {
+        let _lock = self.lock(id).await;
         let pkg = self.find_installed(id).await?;
         if !Self::has_schema(&pkg.manifest) {
             return Ok(vec![]);
         }
-        let mut tx = self.db.begin().await.map_err(internal)?;
-        sqlx::query("SET TRANSACTION READ ONLY")
-            .execute(&mut *tx)
-            .await
-            .map_err(internal)?;
-        sqlx::query("SET LOCAL statement_timeout = 10000")
-            .execute(&mut *tx)
-            .await
-            .map_err(internal)?;
-        self.as_plugin(&mut tx, id).await?;
+        let mut tx = self
+            .plugin_tx(id, Some("READ ONLY"), Duration::from_secs(10))
+            .await?;
         let s = schema(id);
         let mut out = vec![];
         for t in tables(&mut tx, &s).await.map_err(internal)? {
@@ -301,12 +313,13 @@ impl Plugins {
             let _ = out.try_send(Ok(Bytes::from(format!("{head}}}}}"))));
             return Ok(body(rx));
         }
-        let mut tx = self.db.begin().await.map_err(internal)?;
-        sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-            .execute(&mut *tx)
-            .await
-            .map_err(internal)?;
-        self.as_plugin(&mut tx, id).await?;
+        let mut tx = self
+            .plugin_tx(
+                id,
+                Some("ISOLATION LEVEL REPEATABLE READ READ ONLY"),
+                MIGRATE_DEADLINE,
+            )
+            .await?;
         let s = schema(id);
         let mut names = tables(&mut tx, &s).await.map_err(internal)?;
         names.sort();
@@ -383,16 +396,29 @@ impl Plugins {
             .iter()
             .map(|(k, v)| (k.clone(), v.as_str().map(str::to_owned)))
             .collect();
+        // Rows first, deferred triggers included, so a failure writes nothing; a commit that
+        // still fails (a trigger re-deferred) leaves the settings written and the import retryable.
+        let mut plugin_tx = if has {
+            let mut tx = self.plugin_tx(id, None, MIGRATE_DEADLINE).await?;
+            counts = self.restore_tables(&mut tx, id, tables_doc).await?;
+            sqlx::query("SET CONSTRAINTS ALL IMMEDIATE")
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+            Some(tx)
+        } else {
+            None
+        };
         let mut tx = st.db.begin().await.map_err(internal)?;
         for (k, v) in &entries {
             crate::settings::set_in(&mut tx, k, v.as_deref())
                 .await
                 .map_err(internal)?;
         }
-        if has {
-            counts = self.restore_tables(&mut tx, id, tables_doc).await?;
-        }
         tx.commit().await.map_err(internal)?;
+        if let Some(tx) = plugin_tx.take() {
+            tx.commit().await.map_err(internal)?;
+        }
         let keys: Vec<String> = entries.iter().map(|(k, _)| k.clone()).collect();
         crate::settings::notify_changed(&st, &keys, Some(&format!("plugin-import:{id}"))).await;
         Ok(json!({"pluginId": id, "tablesRestored": counts, "settingsRestored": entries.len()}))
@@ -406,8 +432,6 @@ impl Plugins {
         tables_doc: &Map<String, Value>,
     ) -> Result<Map<String, Value>, InstallError> {
         let mut counts = Map::new();
-        // Deferred triggers fire at commit with the role still set, so the sandbox holds there too.
-        self.as_plugin(tx, id).await?;
         let s = schema(id);
         let known = tables(tx, &s).await.map_err(internal)?;
         for t in &known {
