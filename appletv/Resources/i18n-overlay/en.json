@@ -78,8 +78,6 @@
   "display_settings.language_hint": "Interface language. Defaults to your device's language.",
   "playback_settings.player_use_default": "Use default audio track",
   "playback_settings.player_use_default_hint": "Ignore language preferences and always use the file's default audio track.",
-  "playback_settings.player_eco_default": "Low bandwidth by default",
-  "playback_settings.player_eco_default_hint": "Only shows low-bandwidth qualities and selects one by default. Overrides the option above.",
   "playback_settings.sub_mode_hint": "Subtitles matching the preferred language will be shown when the audio is in a foreign language.",
   "home_settings.sections_hint": "Choose which sections to show and their order. Use the arrows to reorder.",
   "home_settings.visible": "Shown",

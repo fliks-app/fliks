@@ -64,8 +64,7 @@ struct MediaDetailView: View {
 
                 if !cast.isEmpty {
                     Rail(title: tr("media_detail.cast"), items: cast) { entry in
-                        MediaCard(imagePath: entry.person.avatarUrl, title: entry.person.name,
-                                  subtitle: entry.character) {}
+                        CastCard(imagePath: entry.person.avatarUrl, name: entry.person.name, character: entry.character)
                     }
                 }
             }

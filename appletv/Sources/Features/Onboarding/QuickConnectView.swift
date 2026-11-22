@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import UIKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
@@ -115,11 +116,14 @@ struct QuickConnectView: View {
                 let res = try await auth.pairingStatus(pairingId: pairingId)
                 switch res.status {
                 case "approved":
-                    if let token = res.accessToken {
-                        try await auth.loginWithToken(access: token, refresh: res.refreshToken,
-                                                      refreshExpiresAt: res.refreshTokenExpiresAt)
+                    // The server hands the tokens out once: an approval without them means they were lost.
+                    guard let token = res.accessToken else {
+                        viewState = .error
                         return
                     }
+                    try await auth.loginWithToken(access: token, refresh: res.refreshToken,
+                                                  refreshExpiresAt: res.refreshTokenExpiresAt)
+                    return
                 case "denied":
                     viewState = .denied
                     return
@@ -131,6 +135,7 @@ struct QuickConnectView: View {
                 }
             } catch {
                 // Network blip — keep polling, the server is the source of truth.
+                Log.auth.error("pairing poll failed: \(String(describing: error), privacy: .public)")
             }
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             secondsLeft -= 2

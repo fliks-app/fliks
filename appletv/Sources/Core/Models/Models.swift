@@ -1,12 +1,47 @@
 import Foundation
+import os
 
 // MARK: - Paging
 
 /// Matches the backend's `{ data, total }` list envelope (MediaService.getAll
 /// and friends) — NOT `{ items, ... }` like some other Fliks list endpoints.
-struct Paginated<T: Codable>: Codable {
+struct Paginated<T: Decodable>: Decodable {
     let data: [T]
     let total: Int
+
+    private enum CodingKeys: String, CodingKey { case data, total }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        data = try c.decode(LossyArray<T>.self, forKey: .data).elements
+        total = try c.decode(Int.self, forKey: .total)
+    }
+}
+
+/// A list where one row that no longer fits its model is dropped and logged instead of emptying the whole list.
+struct LossyArray<T: Decodable>: Decodable {
+    let elements: [T]
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var rows: [T] = []
+        var dropped = 0
+        while !container.isAtEnd {
+            do {
+                rows.append(try container.decode(T.self))
+            } catch {
+                dropped += 1
+                Log.api.error("dropped a \(String(describing: T.self), privacy: .public) row: \(String(describing: error), privacy: .public)")
+                _ = try container.decode(AnyRow.self)
+            }
+        }
+        elements = rows
+    }
+
+    /// Consumes one element of any shape, so the container moves past a failed row.
+    private struct AnyRow: Decodable {
+        init(from decoder: Decoder) throws {}
+    }
 }
 
 // MARK: - Auth
@@ -42,8 +77,8 @@ struct User: Codable, Identifiable, Hashable {
     let permissions: [String]
     let avatar: String?
     let requirePasswordChange: Bool
-    let libraryOrder: [Int]
-    let hiddenLibraryIds: [Int]
+    var libraryOrder: [Int]
+    var hiddenLibraryIds: [Int]
     /// "public" | "private" — ProfileVisibility enum, kept as raw string.
     let profileVisibility: String
     let shareTastes: Bool
@@ -60,6 +95,18 @@ struct User: Codable, Identifiable, Hashable {
     let libraryIds: [Int]?
     /// Capability flags of the server build; present on live responses only.
     let features: [String]?
+}
+
+extension User {
+    /// The profile a stored session kept, standing in until the next `/auth/me` answers.
+    init(restoring profile: StoredProfile) {
+        self.init(id: profile.id, username: profile.username, email: nil, role: nil, roleId: nil,
+                  isAdmin: profile.isAdmin, permissions: profile.permissions, avatar: profile.avatar,
+                  requirePasswordChange: false, libraryOrder: profile.libraryOrder,
+                  hiddenLibraryIds: profile.hiddenLibraryIds, profileVisibility: "private",
+                  shareTastes: false, shareRecommendations: false, shareWatchHistory: false, shareLikes: false,
+                  shareStats: false, shareDisabled: false, edlAutoSkipCommercials: nil, libraryIds: nil, features: nil)
+    }
 }
 
 /// GET /auth/users-public — pre-login picker. Deliberately thin: no email,
@@ -181,9 +228,9 @@ struct MediaFileInfo: Codable, Hashable {
 
 struct MediaFile: Codable, Identifiable, Hashable {
     let id: Int
-    let quality: String
+    let quality: String?
     let relativePath: String
-    let size: Int
+    let size: Int?
     let episodeId: Int?
     let streamInfo: MediaFileInfo?
 }
@@ -223,6 +270,22 @@ struct Episode: Codable, Identifiable, Hashable {
     let hasFile: Bool
     let runtime: Int?
     let stillUrl: String?
+}
+
+extension Media {
+    /// The episode after `episodeId` among those with a file, in season and episode order, specials left out:
+    /// the rule of the web client's `resolveNextEpisodeItem`.
+    func episodeAfter(_ episodeId: Int) -> (mediaFileId: Int, episodeId: Int)? {
+        let playable = (seasons ?? [])
+            .filter { $0.seasonNumber > 0 }
+            .sorted { $0.seasonNumber < $1.seasonNumber }
+            .flatMap { $0.episodes.sorted { $0.episodeNumber < $1.episodeNumber } }
+            .compactMap { episode in
+                files?.first { $0.episodeId == episode.id }.map { (mediaFileId: $0.id, episodeId: episode.id) }
+            }
+        guard let index = playable.firstIndex(where: { $0.episodeId == episodeId }) else { return nil }
+        return playable.indices.contains(index + 1) ? playable[index + 1] : nil
+    }
 }
 
 extension Episode {
@@ -315,15 +378,6 @@ struct MediaCastEntry: Codable, Identifiable, Hashable {
     let person: MediaPerson
 }
 
-/// GET /media/:id/crew row. Not currently rendered anywhere (only the cast
-/// Rail is) — modelled for parity now that the endpoint shape is confirmed.
-struct MediaCrewEntry: Codable, Identifiable, Hashable {
-    let id: Int
-    let job: String
-    let department: String
-    let person: MediaPerson
-}
-
 // MARK: - Continue watching / recommendations
 
 struct ContinueWatchingItem: Codable, Identifiable {
@@ -331,7 +385,8 @@ struct ContinueWatchingItem: Codable, Identifiable {
     let mediaFileId: Int?
     let episodeId: Int?
     let positionSeconds: Double
-    let durationSeconds: Double
+    /// The server types it nullable: a null row must not empty the rail.
+    let durationSeconds: Double?
     let progressPercent: Double
     let lastPlayedAt: Date
     let mediaTitle: String
@@ -464,7 +519,6 @@ struct Playlist: Codable, Identifiable {
     let itemCount: Int
     /// First up-to-4 poster URLs for the card mosaic.
     let posters: [String]
-    let updatedAt: Date
     /// Present for a smart playlist, whose entries follow its rules.
     let rules: SmartRules?
 }

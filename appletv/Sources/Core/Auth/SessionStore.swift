@@ -1,11 +1,45 @@
 import Foundation
+import os
+
+/// What a stored session keeps of the server's `User`: the picker and the offline boot need no more, and
+/// a field a later release adds to `User` cannot make every stored session unreadable.
+struct StoredProfile: Codable, Hashable {
+    let id: Int
+    let username: String
+    let avatar: String?
+    let isAdmin: Bool
+    let permissions: [String]
+    let libraryOrder: [Int]
+    let hiddenLibraryIds: [Int]
+
+    init(_ user: User) {
+        id = user.id
+        username = user.username
+        avatar = user.avatar
+        isAdmin = user.isAdmin
+        permissions = user.permissions
+        libraryOrder = user.libraryOrder
+        hiddenLibraryIds = user.hiddenLibraryIds
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        username = try c.decode(String.self, forKey: .username)
+        avatar = try c.decodeIfPresent(String.self, forKey: .avatar)
+        isAdmin = try c.decodeIfPresent(Bool.self, forKey: .isAdmin) ?? false
+        permissions = try c.decodeIfPresent([String].self, forKey: .permissions) ?? []
+        libraryOrder = try c.decodeIfPresent([Int].self, forKey: .libraryOrder) ?? []
+        hiddenLibraryIds = try c.decodeIfPresent([Int].self, forKey: .hiddenLibraryIds) ?? []
+    }
+}
 
 /// Credentials of one account on one server, kept so the user can leave it and
 /// come back without re-authenticating. `user` is the last known profile: it
 /// drives the picker and the offline boot.
 struct StoredSession: Codable, Identifiable, Hashable {
     var serverUrl: String
-    var user: User
+    var user: StoredProfile
     var accessToken: String?
     var refreshToken: String
     /// UNIX ms, nil when the server reported no expiry.
@@ -98,9 +132,27 @@ struct StoredSession: Codable, Identifiable, Hashable {
             list.map { session in
                 guard session.id == Self.key(serverUrl, userId) else { return session }
                 var next = session
-                next.user = user
+                next.user = StoredProfile(user)
                 return next
             }
+        }
+    }
+
+    /// The server's address changed (http to https): its sessions follow, the older of two for one
+    /// account is dropped, and the active pointer moves with them.
+    func rekey(from previous: String, to current: String) {
+        guard previous != current else { return }
+        if let active, active.serverUrl == previous { activeKey = Self.key(current, active.user.id) }
+        var seen = Set<String>()
+        mutate { list in
+            list.map { session in
+                guard session.serverUrl == previous else { return session }
+                var next = session
+                next.serverUrl = current
+                return next
+            }
+            .sorted { $0.lastUsedAt > $1.lastUsedAt }
+            .filter { seen.insert($0.id).inserted }
         }
     }
 
@@ -128,9 +180,13 @@ struct StoredSession: Codable, Identifiable, Hashable {
     }
 
     private static func decode(_ raw: String?) -> [StoredSession] {
-        guard let raw, let data = raw.data(using: .utf8),
-              let list = try? JSONDecoder().decode([StoredSession].self, from: data) else { return [] }
-        return list
+        guard let raw, let data = raw.data(using: .utf8) else { return [] }
+        do {
+            return try JSONDecoder().decode(LossyArray<StoredSession>.self, from: data).elements
+        } catch {
+            Log.auth.error("stored sessions unreadable: \(String(describing: error), privacy: .public)")
+            return []
+        }
     }
 
     /// Drop what can no longer be resumed, keep the newest within `maxSessions`.

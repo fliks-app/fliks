@@ -73,7 +73,6 @@ enum MusicTransport: Equatable {
     @ObservationIgnored private let player = AVQueuePlayer()
     @ObservationIgnored private var uidOfItem: [ObjectIdentifier: UUID] = [:]
     @ObservationIgnored private var resolved: [Int: Resolved] = [:]
-    @ObservationIgnored private var streamTokens: [Int: (token: String, expiresAt: Date)] = [:]
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var pitchSemitones = 0
     @ObservationIgnored private var pitchedUid: UUID?
@@ -263,7 +262,6 @@ enum MusicTransport: Equatable {
         uidOfItem = [:]
         lastItem = nil
         endSessions(keeping: [])
-        streamTokens = [:]
         queue.clear()
         position = 0
         duration = 0
@@ -271,7 +269,7 @@ enum MusicTransport: Equatable {
         isBuffering = false
         publishNowPlaying()
         onTrackChange?(nil)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        AppAudioSession.release(.music)
     }
 
     private func resume() {
@@ -416,18 +414,9 @@ enum MusicTransport: Equatable {
         playMethod == "DirectPlay" && !pitched ? partUrl ?? playUrl : playUrl
     }
 
-    /// A stream token bound to one media file, reused while it has 30 min of life left.
-    func streamToken(mediaFileId: Int) async -> String? {
-        struct Minted: Decodable { let streamToken: String; let expiresAt: Double }
-        if let known = streamTokens[mediaFileId], known.expiresAt.timeIntervalSinceNow > 30 * 60 { return known.token }
-        guard let minted: Minted = try? await api.post("/api/auth/stream-token", body: ["mediaFileId": mediaFileId]) else { return nil }
-        streamTokens[mediaFileId] = (minted.streamToken, Date(timeIntervalSince1970: minted.expiresAt / 1000))
-        return minted.streamToken
-    }
-
     /// The stream URL, bound to its file by a stream token reused while it has 30 min of life left.
     private func streamUrl(_ r: Resolved) async -> URL? {
-        let token = await streamToken(mediaFileId: r.mediaFileId)
+        let token = await AuthService.shared.ensureStreamToken(mediaFileId: r.mediaFileId)
         guard token != nil else { return nil }
         var comps = URLComponents(string: ServerStore.shared.resolveUrl(r.path))
         comps?.queryItems = [URLQueryItem(name: "token", value: token)]
@@ -519,7 +508,7 @@ enum MusicTransport: Equatable {
         recoveredUid = track.uid
         if let r = resolved.removeValue(forKey: track.itemId) {
             if let sid = r.sessionId { end(session: sid) }
-            streamTokens[r.mediaFileId] = nil
+            AuthService.shared.discardStreamToken(mediaFileId: r.mediaFileId)
         }
         begin(startAt: max(player.currentTime().seconds, 0), autoplay: player.timeControlStatus != .paused)
     }
@@ -604,11 +593,7 @@ enum MusicTransport: Equatable {
         player.volume = stemsActive ? 0 : ReplayGain.volume(replayGain, track, oneAlbum: queue.singleAlbum)
     }
 
-    private func activateSession() {
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .default)
-        try? session.setActive(true)
-    }
+    private func activateSession() { AppAudioSession.acquire(.music) }
 
     // MARK: - Now Playing and Siri Remote
 

@@ -35,6 +35,8 @@ struct MediaCard: View {
     var missing: Bool = false
     /// Short top-left tag (episode number), drawn after the missing mark.
     var cornerLabel: String? = nil
+    /// Listings with their own ambient backdrop (search, playlists) leave it alone.
+    var pushesBackdrop = true
     var onSelect: () -> Void
 
     @FocusState private var focused: Bool
@@ -52,6 +54,19 @@ struct MediaCard: View {
         if let progressPercent { return progressPercent }
         guard let mediaId else { return nil }
         return watched.progress(mediaId: mediaId, episodeId: episodeId)
+    }
+
+    /// What VoiceOver adds after the title: the subtitle, the watched state or the resume progress.
+    private var accessibilityValue: String {
+        var parts: [String] = []
+        if let subtitle, !subtitle.isEmpty { parts.append(subtitle) }
+        if isWatched {
+            parts.append(tr("media_info.watched"))
+        } else if let progress, progress > 0 {
+            parts.append("\(Int(progress.rounded())) %")
+        }
+        if missing { parts.append(tr("media_card.missing_files")) }
+        return parts.joined(separator: ", ")
     }
 
     var body: some View {
@@ -76,6 +91,8 @@ struct MediaCard: View {
             .buttonStyle(.card)
             .cardActions(mediaId: mediaId, episodeId: episodeId)
             .focused($focused)
+            .accessibilityLabel(title ?? "")
+            .accessibilityValue(accessibilityValue)
 
             if let title, !title.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
@@ -102,8 +119,39 @@ struct MediaCard: View {
             // A card with no artwork (a playlist with no posters, a request
             // without a poster) keeps the current backdrop rather than
             // flashing the bare black root.
-            if let path = backdropPath ?? imagePath { backdrop.url = path }
+            if pushesBackdrop, let path = backdropPath ?? imagePath { backdrop.url = path }
         }
+    }
+}
+
+/// A cast member. There is nothing to open (no person page yet), so it is a focus stop without an action,
+/// which is what lets the remote scroll the rail.
+struct CastCard: View {
+    let imagePath: String?
+    let name: String
+    let character: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            PosterImage(path: imagePath)
+                .frame(width: 220, height: 330)
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .scaleEffect(focused ? 1.06 : 1)
+            Text(name)
+                .font(.callout)
+                .lineLimit(1)
+                .foregroundStyle(focused ? .primary : .secondary)
+            Text(character).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        }
+        .frame(width: 220, alignment: .leading)
+        .focusable()
+        .focused($focused)
+        .animation(.easeOut(duration: 0.15), value: focused)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(name)
+        .accessibilityValue(character)
     }
 }
 
@@ -196,68 +244,6 @@ private struct CardActions: ViewModifier {
 extension View {
     func cardActions(mediaId: Int?, episodeId: Int? = nil) -> some View {
         modifier(CardActions(mediaId: mediaId, episodeId: episodeId))
-    }
-}
-
-/// Bare-bones poster card (no subtitle/backdrop push) for simpler listings —
-/// search results, playlist items.
-struct PosterCard: View {
-    let imagePath: String?
-    let title: String?
-    /// A second line under the title.
-    var caption: String? = nil
-    var portrait: Bool = true
-    var progressPercent: Double? = nil
-    var mediaId: Int? = nil
-    var episodeId: Int? = nil
-    var missing: Bool = false
-    var onSelect: () -> Void
-    @FocusState private var focused: Bool
-    @Environment(WatchedStore.self) private var watched
-
-    private var size: CGSize { portrait ? CGSize(width: 220, height: 330) : CGSize(width: 360, height: 202) }
-
-    private var isWatched: Bool {
-        guard let mediaId else { return false }
-        return watched.isWatched(mediaId: mediaId, episodeId: episodeId)
-    }
-
-    private var progress: Double? {
-        if let progressPercent { return progressPercent }
-        guard let mediaId else { return nil }
-        return watched.progress(mediaId: mediaId, episodeId: episodeId)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button(action: onSelect) {
-                ZStack(alignment: .bottom) {
-                    PosterImage(path: imagePath)
-                        .frame(width: size.width, height: size.height)
-                        .clipped()
-                    if let progress, progress > 0 {
-                        ProgressBar(percent: progress).padding(8)
-                    }
-                }
-                .overlay(alignment: .topTrailing) { if isWatched { WatchedBadge() } }
-                .overlay(alignment: .topLeading) { if missing { MissingBadge() } }
-            }
-            .buttonStyle(.card)
-            .cardActions(mediaId: mediaId, episodeId: episodeId)
-            .focused($focused)
-            if let title, !title.isEmpty {
-                Text(title).font(.callout).lineLimit(1)
-                    .foregroundStyle(focused ? .primary : .secondary)
-                    .offset(y: focused ? 16 : 0)
-                    .animation(.easeOut(duration: 0.15), value: focused)
-            }
-            if let caption {
-                Text(caption).font(.caption).lineLimit(1).foregroundStyle(.secondary)
-                    .offset(y: focused ? 16 : 0)
-                    .animation(.easeOut(duration: 0.15), value: focused)
-            }
-        }
-        .frame(width: size.width, alignment: .leading)
     }
 }
 
@@ -355,83 +341,10 @@ struct SkeletonRail: View {
     }
 }
 
-struct SkeletonHero: View {
-    var body: some View {
-        SkeletonBox(cornerRadius: 18).frame(height: 480).frame(maxWidth: .infinity)
-    }
-}
-
-// MARK: - Hero (unused by Home's all-rail layout; ready for a future banner zone)
-
-/// One full-bleed hero slide (poster + gradient + title). The whole slide is
-/// the focusable button so the carousel can page with left/right moves.
-struct HeroSlide: View {
-    let imagePath: String?
-    let title: String
-    var onSelect: () -> Void
-
-    var body: some View {
-        Button(action: onSelect) {
-            ZStack(alignment: .bottomLeading) {
-                PosterImage(path: imagePath, size: .full)
-                    .frame(height: 480)
-                    .frame(maxWidth: .infinity)
-                    .clipped()
-                LinearGradient(colors: [.clear, .black.opacity(0.85)],
-                               startPoint: .center, endPoint: .bottom)
-                Text(title)
-                    .font(.system(size: 48, weight: .bold))
-                    .padding(44)
-            }
-            .frame(height: 480)
-        }
-        .buttonStyle(HeroSlideStyle())
-    }
-}
-
 /// No system focus decoration — for controls that draw their own.
 struct FlatButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.opacity(configuration.isPressed ? 0.7 : 1)
-    }
-}
-
-/// Custom style so the full-width hero gets no system focus float/border.
-private struct HeroSlideStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-            .opacity(configuration.isPressed ? 0.92 : 1)
-    }
-}
-
-/// Multi-item hero carousel (paged `TabView`). Selection drives the ambient backdrop.
-struct HeroCarousel<Item: Identifiable>: View {
-    let items: [Item]
-    let imagePath: (Item) -> String?
-    let title: (Item) -> String
-    var onSelect: (Item) -> Void
-
-    @State private var selection = 0
-    @Environment(Backdrop.self) private var backdrop
-
-    var body: some View {
-        TabView(selection: $selection) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
-                HeroSlide(imagePath: imagePath(item), title: title(item)) { onSelect(item) }
-                    .padding(.horizontal, 12)
-                    .tag(idx)
-            }
-        }
-        .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .always : .never))
-        .frame(height: 500)
-        .onChange(of: selection) { _, i in updateBackdrop(i) }
-        .task { updateBackdrop(0) }
-    }
-
-    private func updateBackdrop(_ i: Int) {
-        guard items.indices.contains(i) else { return }
-        backdrop.url = imagePath(items[i])
     }
 }
 

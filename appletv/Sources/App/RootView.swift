@@ -12,6 +12,7 @@ struct RootView: View {
     @State private var backdrop = Backdrop()
     @State private var homeRefresh = HomeRefresh.shared
     @State private var watched = WatchedStore.shared
+    @State private var libraryStore = LibraryStore.shared
     @State private var playlistPicker = PlaylistPicker.shared
     @State private var party = PartyService.shared
     @State private var remote = RemoteControlService.shared
@@ -33,9 +34,14 @@ struct RootView: View {
             .task(id: homeRefresh.tick) {
                 if auth.state == .signedIn { await watched.loadOverview() }
             }
-            .onChange(of: scenePhase) { _, _ in
+            .onChange(of: scenePhase) { old, new in
                 updateRemotePolling()
                 updateToastStream()
+                // Waking after a long background: what moved meanwhile (the phone's progress, the server's version) shows now.
+                if old == .background, new == .active, auth.state == .signedIn {
+                    homeRefresh.bump()
+                    Task { await ServerVersion.shared.refresh() }
+                }
             }
             .onChange(of: locale.lang) { _, _ in
                 toasts.stop()
@@ -104,6 +110,7 @@ struct RootView: View {
             .environment(backdrop)
             .environment(homeRefresh)
             .environment(watched)
+            .environment(libraryStore)
             .environment(playlistPicker)
             .environment(party)
             .id(locale.lang)
@@ -154,14 +161,6 @@ struct RootView: View {
                 .navigationDestination(for: Route.self) { route in
                     Group {
                     switch route {
-                    case .home:
-                        HomeView(
-                            onSelectMedia: { path.append(Route.mediaDetail(id: $0)) },
-                            onSelectEpisode: { path.append(Route.episodeDetail(mediaId: $0, episodeId: $1)) },
-                            onSelectLibrary: { path.append(Route.library(id: $0)) },
-                            onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) },
-                            onSelectParty: { path.append(Route.partyDetail(id: $0)) }
-                        )
                     case let .library(id):
                         LibraryView(libraryId: id, onSelectMedia: { path.append(Route.forMedia($0, $1)) },
                                     onSelectArtist: { path.append(Route.artist(id: $0)) })
@@ -250,7 +249,7 @@ struct RootView: View {
 struct Sidebar: View {
     @Binding var path: NavigationPath
     @Environment(AuthService.self) private var auth
-    @State private var libraries: [Library] = []
+    @Environment(LibraryStore.self) private var libraryStore
     @FocusState private var focused: String?
     @State private var accountActions = false
     @State private var music = MusicPlayer.shared
@@ -268,14 +267,14 @@ struct Sidebar: View {
                 path.append(Route.search)
             }
 
-            if !libraries.isEmpty {
+            if !libraryStore.visible.isEmpty {
                 Text(tr("home.libraries"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 16)
                     .padding(.top, 14)
                     .padding(.bottom, 2)
-                ForEach(libraries) { lib in
+                ForEach(libraryStore.visible) { lib in
                     SidebarRow(label: lib.name, systemImage: lib.symbol, focusID: "lib:\(lib.id)",
                                indent: true, focused: $focused) {
                         path.append(Route.library(id: lib.id))
@@ -317,13 +316,7 @@ struct Sidebar: View {
         .padding(.top, 40)
         .frame(maxHeight: .infinity, alignment: .top)
         .animation(.easeInOut(duration: 0.15), value: focused)
-        .task { await loadLibraries() }
-    }
-
-    private func loadLibraries() async {
-        let all: [Library] = (try? await APIClient.shared.get("/api/libraries/mine")) ?? []
-        let hidden = Set(auth.currentUser?.hiddenLibraryIds ?? [])
-        libraries = all.filter { !hidden.contains($0.id) && $0.isPlayable }
+        .task { await libraryStore.load() }
     }
 }
 

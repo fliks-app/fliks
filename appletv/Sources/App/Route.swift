@@ -6,9 +6,7 @@ enum Route: Hashable {
     case quickConnect(userId: Int?, username: String?)
     case login(username: String?)
 
-    // Main shell. `.home` is unused for now — the shell's root content
-    // already is Home; kept so a future "jump to Home" action has a target.
-    case home
+    // Main shell: its root content is Home, so there is no route for it.
     case library(id: Int)
     case mediaDetail(id: Int)
     case episodeDetail(mediaId: Int, episodeId: Int)

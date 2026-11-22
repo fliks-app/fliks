@@ -58,7 +58,7 @@ enum KaraokeMode: String, CaseIterable {
         live = [:]
         openRelay()
         guard await KaraokeAPI.status()?.ready == true, var state = await KaraokeAPI.state(itemId: itemId) else { return phase = .unavailable }
-        if state.cdg == true, let token = await player.streamToken(mediaFileId: state.fileId) {
+        if state.cdg == true, let token = await AuthService.shared.ensureStreamToken(mediaFileId: state.fileId) {
             cdg = await fetch("/api/media-files/\(state.fileId)/cdg", token: token)
         }
         if cdg != nil, !state.hasStems { return phase = .ready }
@@ -73,7 +73,7 @@ enum KaraokeMode: String, CaseIterable {
                 state = next
             }
         }
-        guard !Task.isCancelled, let token = await player.streamToken(mediaFileId: state.fileId) else { return }
+        guard !Task.isCancelled, let token = await AuthService.shared.ensureStreamToken(mediaFileId: state.fileId) else { return }
         let ok = await mixer.load { kind in self.url("/api/media-files/\(state.fileId)/stems/\(kind.rawValue)", token: token) }
         guard !Task.isCancelled else { return }
         phase = ok ? .ready : .failed

@@ -44,13 +44,16 @@ struct PlayerView: View {
             if coordinator.showSkipCommercial {
                 SkipIntroButton(progress: coordinator.skipCommercialProgress,
                                 secondsLeft: coordinator.skipCommercialSecondsLeft,
-                                label: "player.edl.skip_commercial") { coordinator.skipCommercial() }
+                                label: "player.edl.skip_commercial", onDismiss: { coordinator.dismissSkipCue() }) {
+                    coordinator.skipCommercial()
+                }
                     .id(coordinator.skipCommercialOrdinal)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(60)
             } else if coordinator.showSkipIntro {
                 SkipIntroButton(progress: coordinator.skipIntroProgress,
-                                secondsLeft: coordinator.skipIntroSecondsLeft) { coordinator.skipIntro() }
+                                secondsLeft: coordinator.skipIntroSecondsLeft,
+                                onDismiss: { coordinator.dismissSkipCue() }) { coordinator.skipIntro() }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                     .padding(60)
             }
@@ -103,6 +106,12 @@ struct PlayerView: View {
             }
             loading = false
         }
+        .onChange(of: coordinator.showSkipIntro || coordinator.showSkipCommercial) { _, showing in
+            // The cue held the focus: give it back to the player's own controls.
+            guard !showing else { return }
+            coordinator.playerViewController?.setNeedsFocusUpdate()
+            coordinator.playerViewController?.updateFocusIfNeeded()
+        }
         .confirmationDialog(tr("party.tv_leave"), isPresented: Binding(get: { party.leaveConfirm }, set: { party.leaveConfirm = $0 }),
                             titleVisibility: .visible) {
             Button(tr("party.tv_leave_host_confirm"), role: .destructive) { Task { await party.endParty() } }
@@ -142,6 +151,7 @@ private struct SkipIntroButton: View {
     let progress: Double      // 0..1 elapsed
     let secondsLeft: Int
     var label = "player.skip_intro"
+    var onDismiss: () -> Void
     var action: () -> Void
     @FocusState private var focused: Bool
 
@@ -171,6 +181,7 @@ private struct SkipIntroButton: View {
         .scaleEffect(focused ? 1.06 : 1)
         .focused($focused)
         .onAppear { focused = true }
+        .onExitCommand(perform: onDismiss)
         .animation(.easeOut(duration: 0.15), value: focused)
     }
 }

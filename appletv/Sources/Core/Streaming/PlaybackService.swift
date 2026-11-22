@@ -29,6 +29,8 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
     private var episodeId: Int?
     private(set) var sessionId: String?
     private var destroyed = false
+    /// Bumped by `start` and `stop`: a request that answers under an older one belongs to a playback that is gone.
+    private var generation = 0
     /// One per viewing: survives the sid changes of recover() and quality switches.
     private var playbackId = UUID().uuidString
 
@@ -112,9 +114,12 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
         self.mediaFileId = mediaFileId
         self.mediaId = mediaId
         self.episodeId = episodeId
+        generation += 1
         destroyed = false
         failed = false
         recoverAttempts = 0
+        recoveringGuard = false
+        recovering = false
         playbackId = UUID().uuidString
         stallCount = 0; stallMs = 0; recoveryReloads = 0; pendingEvents = []
         let settings = AppSettingsStore.shared
@@ -132,7 +137,7 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
             bitmap: TrackSelection.bitmapSubtitleTracks(rows),
             remembered: settings.rememberedSubtitle(for: mediaId)
         )
-        let started = try await requestPlaybackInfo(startAt: startAt)
+        let started = try await requestPlaybackInfo(startAt: startAt, generation: generation)
         lastProgressPos = started.startAt
         lastProgressAt = Date()
         lastSeekAt = lastProgressAt
@@ -143,6 +148,7 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
     /// session was ever minted (matches the backend's 204-on-unknown-sid).
     /// `pending` is a final heartbeat the release must follow, so the DELETE cannot overtake it.
     func stop(after pending: Task<Void, Never>? = nil) {
+        generation += 1
         destroyed = true
         guard let sid = sessionId else { return }
         sessionId = nil
@@ -177,8 +183,8 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
 
     // MARK: - Playback-info + play URL
 
-    private func requestPlaybackInfo(startAt: Double?) async throws -> (url: URL, startAt: Double) {
-        guard let token = await AuthService.shared.ensureStreamToken() else {
+    private func requestPlaybackInfo(startAt: Double?, generation gen: Int) async throws -> (url: URL, startAt: Double) {
+        guard let token = await AuthService.shared.ensureStreamToken(mediaFileId: mediaFileId) else {
             throw APIError.badStatus(401)
         }
         var query: [(String, String)] = [("token", token)]
@@ -199,6 +205,11 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
                 supportsMuxedAudioRendition: AuthService.shared.hasServerFeature("muxedAudioRendition")
             )
         )
+        // Stopped or restarted while the server answered: its session is nobody's, so release it.
+        guard gen == generation else {
+            Task { try? await api.delete("/api/stream/sessions/\(response.sessionId)") }
+            throw CancellationError()
+        }
         info = response
         sessionId = response.sessionId
         if let quality = response.quality { qualityId = quality }
@@ -501,6 +512,7 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
             giveUp(position: position)
             return
         }
+        let gen = generation
         let waitStart = waitStart ?? (countAsRecovery ? onRecoveryStart?(reason) : nil) ?? frozenSince ?? Date()
         recoveringGuard = true
         recovering = true
@@ -510,8 +522,7 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
             try? await api.delete("/api/stream/sessions/\(sid)")
         }
         do {
-            let url = try await requestPlaybackInfo(startAt: position).url
-            guard !destroyed else { return }
+            let url = try await requestPlaybackInfo(startAt: position, generation: gen).url
             lastProgressPos = position
             lastProgressAt = Date()
             lastSeekAt = lastProgressAt
@@ -528,12 +539,15 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
             }
             onReload?(url, position)
         } catch {
+            // A newer playback owns the guard now.
+            guard gen == generation else { return }
             recoveringGuard = false
             if recoverAttempts >= maxRecoverAttempts {
                 giveUp(position: position)
             } else {
                 let backoffSeconds = 2 * recoverAttempts // 2s, 4s
                 try? await Task.sleep(for: .seconds(backoffSeconds))
+                guard gen == generation else { return }
                 await recover(
                     position: position, countAsRecovery: countAsRecovery, reason: reason,
                     frozenSince: frozenSince, waitStart: waitStart

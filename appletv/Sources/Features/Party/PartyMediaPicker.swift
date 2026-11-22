@@ -72,7 +72,7 @@ struct PartyMediaPicker: View {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 200, maximum: 240), spacing: 30, alignment: .top)], spacing: 30) {
                     ForEach(results) { media in
-                        PosterCard(imagePath: media.posterUrl, title: media.title, missing: media.isMissing) { choose(media) }
+                        MediaCard(imagePath: media.posterUrl, title: media.title, missing: media.isMissing, pushesBackdrop: false) { choose(media) }
                     }
                 }
                 .padding(30)

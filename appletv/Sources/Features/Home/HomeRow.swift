@@ -217,7 +217,7 @@ private struct ContinueWatchingRow: View {
             state = next
             backdrop.seed(next.items.first?.fanartUrl)
         }) {
-            try await APIClient.shared.get("/api/playback/continue-watching")
+            try await APIClient.shared.list("/api/playback/continue-watching")
         }
     }
 }
@@ -246,7 +246,7 @@ private struct RecommendationsRow: View {
             state = next
             backdrop.seed(next.items.first?.media.fanartUrl)
         }) {
-            let items: [RecommendationItem] = try await APIClient.shared.get("/api/playback/recommendations")
+            let items: [RecommendationItem] = try await APIClient.shared.list("/api/playback/recommendations")
             return items.filter(\.media.type.isPlayable)
         }
     }
@@ -276,7 +276,7 @@ private struct LikesRow: View {
             state = next
             backdrop.seed(next.items.first?.fanartUrl)
         }) {
-            try await APIClient.shared.get("/api/likes")
+            try await APIClient.shared.list("/api/likes")
         }
     }
 }
@@ -310,7 +310,7 @@ private struct RecentlyAddedRow: View {
             state = next
             backdrop.seed(next.items.first?.fanartUrl)
         }) {
-            let items: [Media] = try await APIClient.shared.get("/api/media/recently-added", query: query)
+            let items: [Media] = try await APIClient.shared.list("/api/media/recently-added", query: query)
             return items.filter(\.type.isPlayable)
         }
     }
@@ -336,8 +336,8 @@ private struct PlaylistsRow: View {
 
     private func load() async {
         await revalidateZone("playlists", apply: { state = $0 }) {
-            let items: [Playlist] = try await APIClient.shared.get("/api/playlists")
-            return Array(items.sorted { $0.updatedAt > $1.updatedAt }.prefix(20))
+            let items: [Playlist] = try await APIClient.shared.list("/api/playlists")
+            return Array(items.prefix(20))
         }
     }
 }
@@ -366,7 +366,7 @@ private struct ComingSoonRow: View {
         let start = Calendar.current.date(byAdding: .day, value: -3, to: today) ?? today
         let end = Calendar.current.date(byAdding: .day, value: 30, to: today) ?? today
         await revalidateZone("coming-soon", apply: { state = $0 }) {
-            let entries: [CalendarEntry] = try await APIClient.shared.get(
+            let entries: [CalendarEntry] = try await APIClient.shared.list(
                 "/api/media/calendar",
                 query: ["start": df.string(from: start), "end": df.string(from: end), "monitoredOnly": "true"]
             )
@@ -388,11 +388,18 @@ private struct RequestsRecentRow: View {
 
     var body: some View {
         ZoneRow(title: tr("home.requests_recent"), state: state, onRetry: { Task { await load() } }) { req in
-            MediaCard(imagePath: req.posterUrl ?? req.fanartUrl, title: req.title, subtitle: req.status) {
+            MediaCard(imagePath: req.posterUrl ?? req.fanartUrl, title: req.title, subtitle: Self.statusLabel(req.status)) {
                 if let mediaId = req.mediaId { onSelect(mediaId) }
             }
         }
         .task(id: refresh.tick) { await load() }
+    }
+
+    /// The web's translated status, the raw one for a status this build does not know.
+    private static func statusLabel(_ status: String) -> String {
+        let key = "requests.status.\(status)"
+        let label = tr(key)
+        return label == key ? status : label
     }
 
     private func load() async {

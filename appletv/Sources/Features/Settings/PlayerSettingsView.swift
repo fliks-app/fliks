@@ -45,9 +45,6 @@ struct PlayerSettingsView: View {
 
                 Section {
                     Toggle(tr("playback_settings.player_show_eco"), isOn: $settings.showEcoQualities)
-                    Toggle(tr("playback_settings.player_eco_default"), isOn: $settings.ecoByDefault)
-                } footer: {
-                    Text(tr("playback_settings.player_eco_default_hint"))
                 }
 
                 Section {

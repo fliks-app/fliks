@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Party-wide state: join, leave, the member list, chat and the server's `party.*` events. The player's
 /// `PartyController` drives the engine from `live`.
@@ -213,6 +214,14 @@ import Foundation
         onGoHome?()
     }
 
+    /// The account is gone: leave the room locally and close the events stream, there is no session to tell the server with.
+    func resetForSignOut() {
+        reset()
+        stream.stop()
+        homeParties = []
+        preview = nil
+    }
+
     func leave() async {
         let id = party?.id
         reset()
@@ -408,7 +417,7 @@ import Foundation
         do {
             homeParties = try await APIClient.shared.get("/api/parties")
         } catch {
-            print("party: home rail fetch failed: \(error)")
+            Log.party.error("home rail fetch failed: \(String(describing: error), privacy: .public)")
         }
     }
 

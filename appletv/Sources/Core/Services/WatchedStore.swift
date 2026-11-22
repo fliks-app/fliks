@@ -27,7 +27,7 @@ import Foundation
     @MainActor
     func loadOverview() async {
         async let ids: [Int] = APIClient.shared.get("/api/playback/watched-ids")
-        async let inProgress: [ContinueWatchingItem] = APIClient.shared.get("/api/playback/continue-watching")
+        async let inProgress: [ContinueWatchingItem] = APIClient.shared.list("/api/playback/continue-watching")
         if let ids = try? await ids { watchedMedia = Set(ids) }
         if let items = try? await inProgress {
             mediaProgress = Dictionary(items.map { ($0.mediaId, $0.progressPercent) }, uniquingKeysWith: max)

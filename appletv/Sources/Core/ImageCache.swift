@@ -47,15 +47,6 @@ enum ImageCache {
         memory.setObject(img, forKey: url as NSURL, cost: cg.bytesPerRow * cg.height)
         return img
     }
-
-    /// Warm the cache for URLs not yet loaded (e.g. an upcoming rail's posters).
-    /// Runs at low priority off the main thread.
-    static func prefetch(_ urls: [String]) {
-        for str in urls {
-            guard let u = URL(string: str), memory.object(forKey: u as NSURL) == nil else { continue }
-            Task.detached(priority: .utility) { _ = await load(u) }
-        }
-    }
 }
 
 /// Drop-in async image using the shared cache. Renders the decoded image

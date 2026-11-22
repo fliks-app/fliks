@@ -75,8 +75,6 @@
   "display_settings.language_hint": "Idioma da interface. Usa por predefinição o idioma do seu dispositivo.",
   "playback_settings.player_use_default": "Utilizar a faixa de áudio predefinida",
   "playback_settings.player_use_default_hint": "Ignorar as preferências de idioma e utilizar sempre a faixa de áudio predefinida do ficheiro.",
-  "playback_settings.player_eco_default": "Baixo consumo por predefinição",
-  "playback_settings.player_eco_default_hint": "Mostra apenas as qualidades de baixo consumo e seleciona uma por predefinição. Substitui a opção acima.",
   "playback_settings.sub_mode_hint": "As legendas correspondentes ao idioma preferido serão apresentadas quando o áudio estiver num idioma estrangeiro.",
   "home_settings.sections_hint": "Escolha as secções a apresentar e a sua ordem. Utilize as setas para reordenar.",
   "home_settings.visible": "Visível",
