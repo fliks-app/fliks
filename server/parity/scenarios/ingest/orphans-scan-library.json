@@ -71,8 +71,8 @@
                   "episodeNumber": null,
                   "filePath": "/tmp/fliks-parity/s5-ingest/work/movies/Orphan Film (2018)/Orphan Film (2018).mkv",
                   "filename": "Orphan Film (2018).mkv",
-                  "qualityId": 10,
-                  "qualityName": "Bluray-480p",
+                  "qualityId": 7,
+                  "qualityName": "SDTV",
                   "seasonNumber": null,
                   "size": 27383
                 }
@@ -114,8 +114,8 @@
                   "episodeNumber": 1,
                   "filePath": "/tmp/fliks-parity/s5-ingest/work/series/Orphan Show/Season 01/Orphan Show - S01E01.mkv",
                   "filename": "Orphan Show - S01E01.mkv",
-                  "qualityId": 10,
-                  "qualityName": "Bluray-480p",
+                  "qualityId": 7,
+                  "qualityName": "SDTV",
                   "seasonNumber": 1,
                   "size": 27383
                 }
