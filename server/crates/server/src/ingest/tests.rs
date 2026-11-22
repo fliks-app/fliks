@@ -6953,3 +6953,211 @@ mod music_ingest {
 
 mod album_acquisition;
 mod replace_existing;
+
+mod keeps_user_data {
+    use super::*;
+    use crate::metadata::service::{EpisodeDetails, SeasonDetails};
+
+    fn season(n: i32, eps: &[i32]) -> SeasonDetails {
+        SeasonDetails {
+            season_number: n,
+            overview: None,
+            air_date: None,
+            poster_url: None,
+            episodes: eps
+                .iter()
+                .map(|e| EpisodeDetails {
+                    episode_number: *e,
+                    title: format!("E{e}"),
+                    ..Default::default()
+                })
+                .collect(),
+        }
+    }
+
+    async fn item(c: &Ctx, media: i32, season: i32, n: i32) -> i32 {
+        sqlx::query_scalar(
+            r#"SELECT i.id FROM items i JOIN item_groups g ON g.id = i."groupId"
+               WHERE g."mediaId" = $1 AND g."number" = $2 AND i."number" = $3"#,
+        )
+        .bind(media)
+        .bind(season)
+        .bind(n)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap()
+    }
+
+    async fn touched_by_a_user(c: &Ctx, media: i32, item: i32) {
+        for sql in [
+            r#"INSERT INTO playback_states ("userId", "itemId", "positionSeconds") VALUES (1, $2, 42)"#,
+            r#"INSERT INTO playback_history ("userId", "itemId") VALUES (1, $2)"#,
+            r#"INSERT INTO likes ("userId", "mediaId", "itemId") VALUES (1, $1, $2)"#,
+        ] {
+            sqlx::query(sql)
+                .bind(media)
+                .bind(item)
+                .execute(&c.st.db)
+                .await
+                .unwrap();
+        }
+    }
+
+    async fn rows(c: &Ctx, item: i32) -> i64 {
+        count(
+            c,
+            &format!(
+                r#"SELECT (SELECT count(*) FROM playback_states WHERE "itemId" = {item})
+                        + (SELECT count(*) FROM playback_history WHERE "itemId" = {item})
+                        + (SELECT count(*) FROM likes WHERE "itemId" = {item})"#
+            ),
+        )
+        .await
+    }
+
+    async fn setup(pool: PgPool, files: &[&str]) -> (Ctx, i32) {
+        let c = ctx(pool).await;
+        let lib = c.dir.join("series");
+        let l = library(&c, "S", &lib, r#"["series"]"#).await;
+        let s = media(&c, l, "Show", "series").await;
+        for f in files {
+            touch(&lib.join("Show").join(f), b"x");
+        }
+        rescan(&c, s).await.unwrap();
+        (c, s)
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_refresh_that_stops_listing_an_episode_keeps_the_one_with_a_file(pool: PgPool) {
+        let (c, s) = setup(pool, &["Show - S01E01.mkv", "Show - S01E03.mkv"]).await;
+        let all = [season(1, &[1, 2, 3, 9])];
+        crate::media::write::apply_seasons(&c.st, s, &all, false)
+            .await
+            .unwrap();
+        let (e3, e9) = (item(&c, s, 1, 3).await, item(&c, s, 1, 9).await);
+        touched_by_a_user(&c, s, e3).await;
+        touched_by_a_user(&c, s, e9).await;
+        let reordered = [season(1, &[1, 2])];
+        crate::media::write::apply_seasons(&c.st, s, &reordered, false)
+            .await
+            .unwrap();
+        assert_eq!(
+            rows(&c, e3).await,
+            3,
+            "the episode with a file keeps progress, history and likes"
+        );
+        assert_eq!(
+            count(
+                &c,
+                &format!("SELECT count(*) FROM item_parts WHERE \"itemId\" = {e3}")
+            )
+            .await,
+            1
+        );
+        assert_eq!(
+            count(&c, &format!("SELECT count(*) FROM items WHERE id = {e9}")).await,
+            0,
+            "no file, deleted as before"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_provider_switch_keeps_the_season_that_holds_a_file(pool: PgPool) {
+        let (c, s) = setup(pool, &["Show - S01E01.mkv", "Show - S02E01.mkv"]).await;
+        let tmdb = [season(1, &[1]), season(2, &[1]), season(3, &[1])];
+        crate::media::write::apply_seasons(&c.st, s, &tmdb, false)
+            .await
+            .unwrap();
+        let (e2, e3) = (item(&c, s, 2, 1).await, item(&c, s, 3, 1).await);
+        touched_by_a_user(&c, s, e2).await;
+        touched_by_a_user(&c, s, e3).await;
+        let tvdb = [season(1, &[1])];
+        crate::media::write::drop_absent(&c.st, s, &tvdb)
+            .await
+            .unwrap();
+        assert_eq!(
+            rows(&c, e2).await,
+            3,
+            "the season with a file stays with its rows"
+        );
+        assert_eq!(
+            count(&c, r#"SELECT count(*) FROM item_groups WHERE "number" = 3"#).await,
+            0
+        );
+        assert_eq!(
+            rows(&c, e3).await,
+            0,
+            "the season without a file goes with its rows"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_item_whose_file_moved_hands_its_rows_to_the_heir(pool: PgPool) {
+        let (c, s) = setup(pool, &["Show - S01E01.mkv"]).await;
+        crate::media::write::apply_seasons(&c.st, s, &[season(1, &[1, 5])], false)
+            .await
+            .unwrap();
+        let (old, heir) = (item(&c, s, 1, 1).await, item(&c, s, 1, 5).await);
+        touched_by_a_user(&c, s, old).await;
+        let file: i32 =
+            sqlx::query_scalar(r#"SELECT "mediaFileId" FROM item_parts WHERE "itemId" = $1"#)
+                .bind(old)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        sqlx::query(r#"UPDATE item_parts SET "itemId" = $1 WHERE "itemId" = $2"#)
+            .bind(heir)
+            .bind(old)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        assert!(
+            crate::media::items::settle_held(&c.st.db, s, &[(old, file)])
+                .await
+                .unwrap()
+        );
+        assert_eq!(rows(&c, heir).await, 3);
+        assert_eq!(
+            count(&c, &format!("SELECT count(*) FROM items WHERE id = {old}")).await,
+            0
+        );
+        assert!(
+            !crate::media::items::settle_held(&c.st.db, s, &[(heir, file)])
+                .await
+                .unwrap(),
+            "an item that still holds its file stays"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_replaced_file_rearms_the_detected_markers_only(pool: PgPool) {
+        let (c, s) = setup(pool, &["Show - S01E01.mkv"]).await;
+        crate::media::write::apply_seasons(&c.st, s, &[season(1, &[1])], false)
+            .await
+            .unwrap();
+        let e = item(&c, s, 1, 1).await;
+        sqlx::query(r#"UPDATE items SET "markersScannedAt" = now() WHERE id = $1"#)
+            .bind(e)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO item_markers ("itemId", kind, "startSeconds", "endSeconds", manual) VALUES ($1, 'intro', 1, 9, false), ($1, 'outro', 90, 99, true)"#)
+            .bind(e).execute(&c.st.db).await.unwrap();
+        super::super::library::rearm_markers(&c.st.db, e)
+            .await
+            .unwrap();
+        assert_eq!(
+            count(
+                &c,
+                r#"SELECT count(*) FROM items WHERE "markersScannedAt" IS NOT NULL"#
+            )
+            .await,
+            0
+        );
+        let kinds: Vec<String> = sqlx::query_scalar(r#"SELECT kind FROM item_markers"#)
+            .fetch_all(&c.st.db)
+            .await
+            .unwrap();
+        assert_eq!(kinds, ["outro"], "the manual marker stays");
+    }
+}

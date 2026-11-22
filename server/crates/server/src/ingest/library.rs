@@ -1136,6 +1136,9 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
             crate::media::write::delete_media_file(st, media, old.id, true)
                 .await
                 .map_err(|e| format!("{e:?}"))?;
+            if let Some(ep) = old.episode_id {
+                rearm_markers(&st.db, ep).await.map_err(|e| e.to_string())?;
+            }
             let ep_has_range = imported
                 .iter()
                 .any(|i| i.episode_id == old.episode_id && i.episode_end.is_some());
@@ -1155,6 +1158,24 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
         }
     }
     carried
+}
+
+/// The cut changed: the episodes `ep` covers are scanned again and lose their detected intro and outro.
+pub(super) async fn rearm_markers(db: &sqlx::PgPool, ep: i32) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"WITH hit AS (
+             UPDATE items i SET "markersScannedAt" = NULL
+             FROM items o
+             WHERE o.id = $1 AND (i.id = o.id OR (i."groupId" = o."groupId"
+               AND i."number" >= o."number" AND i."number" <= COALESCE(o."endNumber", o."number")))
+             RETURNING i.id)
+           DELETE FROM item_markers WHERE "itemId" IN (SELECT id FROM hit)
+             AND kind IN ('intro', 'outro') AND NOT manual"#,
+        ep
+    )
+    .execute(db)
+    .await
+    .map(drop)
 }
 
 /// `epNums` from a caller's season and episode (both present).
