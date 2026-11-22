@@ -277,6 +277,7 @@ jobs:
           --partition count:${{ matrix.shard }}/3 --no-fail-fast --profile ci
 
   # The shipped tools are PostgreSQL 18's and run against user servers 15 to 17: one pairing the shards do not cover.
+  # No `initdb -c` here: Postgres 15 predates it, so the default 100 connections stay and the run uses two threads.
   restore-pg15:
     needs: build
     runs-on: ubuntu-latest
@@ -288,7 +289,6 @@ jobs:
           POSTGRES_USER: fliks
           POSTGRES_PASSWORD: fliks
           POSTGRES_DB: fliks
-          POSTGRES_INITDB_ARGS: -c max_connections=500 -c fsync=off -c synchronous_commit=off -c full_page_writes=off
         ports:
           - 5432:5432
         options: >-
@@ -321,7 +321,7 @@ jobs:
           DB_NAME=template1 "$RUNNER_TEMP/target/debug/fliks-server" migrate
       - run: >-
           cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
-          -E 'test(restore)' --no-fail-fast --profile ci
+          -E 'test(restore)' --no-fail-fast --profile ci -j 2
 
   plugin-sdk:
     needs: changes
