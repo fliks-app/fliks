@@ -1,8 +1,7 @@
 import Foundation
 
-/// The libraries of the signed-in account, fetched once and read by Home, the sidebar, the library page
-/// and the Home layout settings. The hidden set and the order come from the profile (`hiddenLibraryIds`,
-/// `libraryOrder`), so a change to either reaches every screen at once.
+/// The signed-in account's libraries, read by Home, the sidebar, the library page and the Home layout settings;
+/// every `load()` refreshes them. The hidden set and the order come from the profile, so a change reaches every screen.
 @MainActor
 @Observable final class LibraryStore {
     static let shared = LibraryStore()

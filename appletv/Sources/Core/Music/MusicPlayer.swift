@@ -269,7 +269,7 @@ enum MusicTransport: Equatable {
         isBuffering = false
         publishNowPlaying()
         onTrackChange?(nil)
-        AppAudioSession.release(.music)
+        AppAudioSession.release(.music, by: self)
     }
 
     private func resume() {
@@ -434,7 +434,8 @@ enum MusicTransport: Equatable {
 
     private func end(session sid: String) {
         guard let encoded = sid.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else { return }
-        Task { try? await api.delete("/api/stream/sessions/\(encoded)") }
+        let bearer = APIClient.bearerHeader
+        Task { try? await api.delete("/api/stream/sessions/\(encoded)", headers: bearer) }
     }
 
     // MARK: - Player events
@@ -579,8 +580,9 @@ enum MusicTransport: Equatable {
                         targetId: RemoteControlService.shared.targetId,
                         lastCmdId: RemoteControlService.shared.lastAppliedCmdId,
                         queue: queueToSend(sid: r.sessionId))
+        let bearer = APIClient.bearerHeader
         Task {
-            let answer: BeatAnswer? = try? await api.put("/api/playback/media/\(track.mediaId)/state", body: body)
+            let answer: BeatAnswer? = try? await api.put("/api/playback/media/\(track.mediaId)/state", body: body, headers: bearer)
             if answer?.superseded == true, let sid = r.sessionId, holds(sessionId: sid) { return stop() }
             if answer?.sessionLost == true { resolved[track.itemId]?.sessionId = nil; queueSent = nil }
         }
@@ -593,7 +595,7 @@ enum MusicTransport: Equatable {
         player.volume = stemsActive ? 0 : ReplayGain.volume(replayGain, track, oneAlbum: queue.singleAlbum)
     }
 
-    private func activateSession() { AppAudioSession.acquire(.music) }
+    private func activateSession() { AppAudioSession.acquire(.music, by: self) }
 
     // MARK: - Now Playing and Siri Remote
 

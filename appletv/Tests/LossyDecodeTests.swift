@@ -10,6 +10,17 @@ final class LossyDecodeTests: XCTestCase {
         XCTAssertEqual(rows.map(\.id), [1, 4])
     }
 
+    func testLossyArrayThrowsWhenNoRowDecodes() {
+        let json = Data(#"[{"id":"x"},{"nope":true}]"#.utf8)
+        XCTAssertThrowsError(try JSONDecoder().decode(LossyArray<Row>.self, from: json))
+        XCTAssertEqual(try JSONDecoder().decode(LossyArray<Row>.self, from: Data("[]".utf8)).elements.count, 0)
+    }
+
+    func testPaginatedCountsTheRowsTheServerSent() throws {
+        let json = Data(#"{"data":[{"id":1},{"id":null}],"total":5}"#.utf8)
+        XCTAssertEqual(try JSONDecoder().decode(Paginated<Row>.self, from: json).received, 2)
+    }
+
     func testPaginatedKeepsTheTotalAndTheGoodRows() throws {
         let json = Data(#"{"data":[{"id":1},{"id":null}],"total":2}"#.utf8)
         let page = try JSONDecoder().decode(Paginated<Row>.self, from: json)
@@ -39,6 +50,13 @@ final class LossyDecodeTests: XCTestCase {
         XCTAssertEqual(sessions[0].user.id, 7)
         XCTAssertEqual(sessions[0].user.hiddenLibraryIds, [2])
         XCTAssertEqual(User(restoring: sessions[0].user).permissions, ["requests.create"])
+    }
+
+    func testRestoredProfileKeepsTheServerFeatures() throws {
+        let json = Data(#"{"id":7,"username":"ana","features":["hlsSubtitleRequest"],"edlAutoSkipCommercials":false}"#.utf8)
+        let user = User(restoring: try JSONDecoder().decode(StoredProfile.self, from: json))
+        XCTAssertEqual(user.features, ["hlsSubtitleRequest"])
+        XCTAssertEqual(user.edlAutoSkipCommercials, false)
     }
 
     func testStoredProfileSurvivesAMissingOptionalField() throws {

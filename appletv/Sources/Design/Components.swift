@@ -63,7 +63,7 @@ struct MediaCard: View {
         if isWatched {
             parts.append(tr("media_info.watched"))
         } else if let progress, progress > 0 {
-            parts.append("\(Int(progress.rounded())) %")
+            parts.append(trp("qoe.percent", ["value": String(Int(progress.rounded()))]))
         }
         if missing { parts.append(tr("media_card.missing_files")) }
         return parts.joined(separator: ", ")
@@ -124,7 +124,7 @@ struct MediaCard: View {
     }
 }
 
-/// A cast member. There is nothing to open (no person page yet), so it is a focus stop without an action,
+/// A card with nothing to open (a cast member, a request not in the library): a focus stop without an action,
 /// which is what lets the remote scroll the rail.
 struct CastCard: View {
     let imagePath: String?

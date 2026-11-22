@@ -1,12 +1,7 @@
 import Foundation
 
-/// Display/Player/Subtitle preferences, persisted in UserDefaults — the
-/// tvOS counterpart of the Angular `DisplaySettingsService` /
-/// `PlayerSettingsService`. Desktop-only prefs aren't ported here; this covers the
-/// settings the plan calls out, plus the per-media remembered audio/subtitle picks.
-///
-/// Everything but the display language is kept per (server, account): `rescope()` reloads it when the
-/// signed-in account changes. A value the account never saved falls back to the unscoped key.
+/// Display, player and subtitle preferences in UserDefaults, plus the per-media remembered audio and subtitle picks.
+/// All but the display language are kept per (server, account): `rescope()` reloads them when the account changes.
 @Observable final class AppSettingsStore {
     static let shared = AppSettingsStore()
 
@@ -87,7 +82,7 @@ import Foundation
     }
 
     private func selections(_ base: String) -> [String: String] {
-        (d.dictionary(forKey: Self.scoped(base)) ?? d.dictionary(forKey: base)) as? [String: String] ?? [:]
+        d.dictionary(forKey: Self.scoped(base)) as? [String: String] ?? [:]
     }
 
     private func store(_ value: String, for mediaId: Int, in base: String) {
@@ -107,12 +102,33 @@ import Foundation
     }
 
     private func read(_ base: String) -> Any? {
-        d.object(forKey: Self.scoped(base)) ?? d.object(forKey: base)
+        d.object(forKey: Self.scoped(base))
     }
 
-    /// Reloads the per-account preferences for the account now signed in.
-    func rescope() { load() }
+    /// Reloads the per-account preferences for the account now signed in. What was saved before preferences
+    /// were per-account goes to the first account that signs in, then the unscoped keys are gone.
+    func rescope() {
+        for base in Keys.scoped { Self.adoptUnscoped(base) }
+        load()
+    }
 
+    static func adoptUnscoped(_ base: String) {
+        let d = UserDefaults.standard
+        guard AuthService.shared.scope != nil, let legacy = d.object(forKey: base) else { return }
+        if d.object(forKey: scoped(base)) == nil { d.set(legacy, forKey: scoped(base)) }
+        d.removeObject(forKey: base)
+    }
+
+    /// The server moved from `previous` to `current` (http to https): its accounts' preferences follow.
+    static func moveScopes(from previous: String, to current: String) {
+        let d = UserDefaults.standard
+        let from = "\(previous)::", to = "\(current)::"
+        for key in d.dictionaryRepresentation().keys where key.hasPrefix(from) {
+            let target = to + key.dropFirst(from.count)
+            if d.object(forKey: target) == nil { d.set(d.object(forKey: key), forKey: target) }
+            d.removeObject(forKey: key)
+        }
+    }
     private func load() {
         loading = true
         defer { loading = false }
@@ -150,5 +166,11 @@ import Foundation
         // Same names as the web client's localStorage maps.
         static let audioSelections = "player.audioSelections"
         static let subtitleSelections = "player.subtitleSelections"
+
+        static let scoped = [
+            homeBackground, preferredAudioLanguage, useDefaultAudioStream, forceDisableHdr, showEcoQualities,
+            playerQualityId, autoSkipIntro, autoPlayNext, preferredSubtitleLanguage, subtitleMode,
+            rememberAudioSelections, rememberSubtitleSelections, audioSelections, subtitleSelections,
+        ]
     }
 }

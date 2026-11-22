@@ -128,7 +128,7 @@ struct SearchView: View {
             let data = res.data.filter { $0.type.isPlayable && $0.type != .album }
             results = page == 1 ? data : results + data
             total = res.total
-            fetched = page == 1 ? res.data.count : fetched + res.data.count
+            fetched = page == 1 ? res.received : fetched + res.received
             self.page = page
             loadError = false
             backdrop.seed(results.first?.fanartUrl)

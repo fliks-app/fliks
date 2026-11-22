@@ -130,7 +130,7 @@ import UIKit
         self.mediaId = mediaId
         self.episodeId = episodeId
         // Before the profile is built: the output channel count is only reported under an active session.
-        AppAudioSession.acquire(.video)
+        AppAudioSession.acquire(.video, by: self)
         // Independent of each other: media, subtitle rows and the file's stream token go out together.
         async let mediaFetch = Self.fetchMedia(mediaId)
         async let subtitleFetch = Self.fetchSubtitles(mediaId)
@@ -256,7 +256,7 @@ import UIKit
         rateObservation = nil
         player?.pause()
         player = nil
-        AppAudioSession.release(.video)
+        AppAudioSession.release(.video, by: self)
         if RemoteControlService.shared.activeCoordinator === self { RemoteControlService.shared.activeCoordinator = nil }
     }
 
@@ -370,16 +370,17 @@ import UIKit
     private func advance(to next: (mediaFileId: Int, episodeId: Int)) async {
         let duration = player?.currentItem?.duration.seconds ?? 0
         if duration.isFinite, duration > 0 { playback.markComplete(duration: duration) }
-        let started = await openItem(mediaFileId: next.mediaFileId, mediaId: mediaId, episodeId: next.episodeId, play: true)
-        // `player` is nil once the viewer left: that start was cancelled, not failed.
-        if !started, player != nil {
+        if await openItem(mediaFileId: next.mediaFileId, mediaId: mediaId, episodeId: next.episodeId, play: true) == .failed {
             Log.player.error("the next episode could not start")
             fatalError = true
         }
     }
 
-    /// Switches to another file, of another media when a party moves on; false when it cannot start.
-    func openItem(mediaFileId: Int, mediaId newMediaId: Int, episodeId: Int?, play: Bool) async -> Bool {
+    enum OpenResult { case started, failed, superseded }
+
+    /// Switches to another file, of another media when a party moves on. `superseded`: the viewer left
+    /// or a newer start took over, which is no failure.
+    func openItem(mediaFileId: Int, mediaId newMediaId: Int, episodeId: Int?, play: Bool) async -> OpenResult {
         playback.stop()
         launchTracks = nil
         self.mediaFileId = mediaFileId
@@ -402,17 +403,28 @@ import UIKit
             mediaId = newMediaId
             async let mediaFetch = Self.fetchMedia(newMediaId)
             async let subtitleFetch = Self.fetchSubtitles(newMediaId)
-            guard let fetched = try? await mediaFetch else { return false }
+            let fetched = try? await mediaFetch
+            let subtitles = await subtitleFetch
+            // A teardown during the fetch stopped the service: starting it again would mint a session nobody stops.
+            guard player != nil else { return .superseded }
+            guard let fetched else { return .failed }
             media = fetched
-            externalSubtitles = await subtitleFetch
+            externalSubtitles = subtitles
         }
         resolveNextEpisode()
-        guard let started = try? await playback.start(
-            mediaFileId: mediaFileId, mediaId: newMediaId, episodeId: episodeId,
-            startAt: 0, streamInfo: currentFileInfo, subtitleRows: externalSubtitles
-        ) else { return false }
+        let started: (url: URL, startAt: Double)
+        do {
+            started = try await playback.start(
+                mediaFileId: mediaFileId, mediaId: newMediaId, episodeId: episodeId,
+                startAt: 0, streamInfo: currentFileInfo, subtitleRows: externalSubtitles
+            )
+        } catch is CancellationError {
+            return .superseded
+        } catch {
+            return .failed
+        }
         reload(url: started.url, position: 0, forcePlay: play, holdPaused: !play)
-        return true
+        return .started
     }
 
     // MARK: - Observers

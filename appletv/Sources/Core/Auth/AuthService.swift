@@ -350,7 +350,7 @@ import os
     func logout() async {
         struct Body: Encodable { let refreshToken: String? }
         let body = Body(refreshToken: tokens.refreshToken)
-        let bearer = tokens.accessToken.map { ["Authorization": "Bearer \($0)"] } ?? [:]
+        let bearer = APIClient.bearerHeader
         dropActiveSession()
         // Revoking server-side is best effort: signing out never waits on the server.
         Task { [api] in try? await api.post("/api/auth/logout", body: body, headers: bearer) }
@@ -422,7 +422,7 @@ import os
 
     /// The preference stores follow the account that is signed in.
     @MainActor
-    private func rescopeStores() {
+    func rescopeStores() {
         AppSettingsStore.shared.rescope()
         HomeSettingsStore.shared.rescope()
     }

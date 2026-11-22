@@ -6,6 +6,7 @@ import SwiftUI
 struct RootView: View {
     @State private var auth = AuthService.shared
     @State private var server = ServerStore.shared
+    @State private var wasBackgrounded = false
     @State private var settings = AppSettingsStore.shared
     @State private var locale = LocaleStore.shared
     @State private var homeSettings = HomeSettingsStore.shared
@@ -34,13 +35,17 @@ struct RootView: View {
             .task(id: homeRefresh.tick) {
                 if auth.state == .signedIn { await watched.loadOverview() }
             }
-            .onChange(of: scenePhase) { old, new in
+            .onChange(of: scenePhase) { _, new in
                 updateRemotePolling()
                 updateToastStream()
-                // Waking after a long background: what moved meanwhile (the phone's progress, the server's version) shows now.
-                if old == .background, new == .active, auth.state == .signedIn {
-                    homeRefresh.bump()
-                    Task { await ServerVersion.shared.refresh() }
+                if new == .background { wasBackgrounded = true }
+                // A wake goes background, inactive, active: what moved meanwhile (the phone's progress, the server's version) shows now.
+                if new == .active, wasBackgrounded {
+                    wasBackgrounded = false
+                    if auth.state == .signedIn {
+                        homeRefresh.bump()
+                        Task { await ServerVersion.shared.refresh() }
+                    }
                 }
             }
             .onChange(of: locale.lang) { _, _ in

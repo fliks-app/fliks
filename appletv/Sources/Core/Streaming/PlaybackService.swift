@@ -521,6 +521,7 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
             await postEvents(takeEvents(), sid: sid)
             try? await api.delete("/api/stream/sessions/\(sid)")
         }
+        guard gen == generation else { return }
         do {
             let url = try await requestPlaybackInfo(startAt: position, generation: gen).url
             lastProgressPos = position

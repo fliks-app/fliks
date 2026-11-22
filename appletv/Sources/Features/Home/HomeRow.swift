@@ -337,7 +337,7 @@ private struct PlaylistsRow: View {
     private func load() async {
         await revalidateZone("playlists", apply: { state = $0 }) {
             let items: [Playlist] = try await APIClient.shared.list("/api/playlists")
-            return Array(items.prefix(20))
+            return Array(items.sorted { $0.updatedAt > $1.updatedAt }.prefix(20))
         }
     }
 }
@@ -388,8 +388,12 @@ private struct RequestsRecentRow: View {
 
     var body: some View {
         ZoneRow(title: tr("home.requests_recent"), state: state, onRetry: { Task { await load() } }) { req in
-            MediaCard(imagePath: req.posterUrl ?? req.fanartUrl, title: req.title, subtitle: Self.statusLabel(req.status)) {
-                if let mediaId = req.mediaId { onSelect(mediaId) }
+            if let mediaId = req.mediaId {
+                MediaCard(imagePath: req.posterUrl ?? req.fanartUrl, title: req.title, subtitle: Self.statusLabel(req.status)) {
+                    onSelect(mediaId)
+                }
+            } else {
+                CastCard(imagePath: req.posterUrl ?? req.fanartUrl, name: req.title, character: Self.statusLabel(req.status))
             }
         }
         .task(id: refresh.tick) { await load() }

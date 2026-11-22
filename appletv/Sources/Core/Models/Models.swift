@@ -7,20 +7,26 @@ import os
 /// and friends) — NOT `{ items, ... }` like some other Fliks list endpoints.
 struct Paginated<T: Decodable>: Decodable {
     let data: [T]
+    /// Rows the server sent, dropped ones included: what paging counts against `total`.
+    let received: Int
     let total: Int
 
     private enum CodingKeys: String, CodingKey { case data, total }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        data = try c.decode(LossyArray<T>.self, forKey: .data).elements
+        let rows = try c.decode(LossyArray<T>.self, forKey: .data)
+        data = rows.elements
+        received = rows.received
         total = try c.decode(Int.self, forKey: .total)
     }
 }
 
 /// A list where one row that no longer fits its model is dropped and logged instead of emptying the whole list.
+/// A list whose every row fails is a contract break, not an empty list: it throws.
 struct LossyArray<T: Decodable>: Decodable {
     let elements: [T]
+    let received: Int
 
     init(from decoder: Decoder) throws {
         var container = try decoder.unkeyedContainer()
@@ -35,7 +41,12 @@ struct LossyArray<T: Decodable>: Decodable {
                 _ = try container.decode(AnyRow.self)
             }
         }
+        guard dropped == 0 || !rows.isEmpty else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                                                    debugDescription: "none of the \(dropped) rows decodes as \(T.self)"))
+        }
         elements = rows
+        received = rows.count + dropped
     }
 
     /// Consumes one element of any shape, so the container moves past a failed row.
@@ -105,7 +116,8 @@ extension User {
                   requirePasswordChange: false, libraryOrder: profile.libraryOrder,
                   hiddenLibraryIds: profile.hiddenLibraryIds, profileVisibility: "private",
                   shareTastes: false, shareRecommendations: false, shareWatchHistory: false, shareLikes: false,
-                  shareStats: false, shareDisabled: false, edlAutoSkipCommercials: nil, libraryIds: nil, features: nil)
+                  shareStats: false, shareDisabled: false, edlAutoSkipCommercials: profile.edlAutoSkipCommercials,
+                  libraryIds: nil, features: profile.features)
     }
 }
 
@@ -228,9 +240,9 @@ struct MediaFileInfo: Codable, Hashable {
 
 struct MediaFile: Codable, Identifiable, Hashable {
     let id: Int
-    let quality: String?
+    let quality: String
     let relativePath: String
-    let size: Int?
+    let size: Int
     let episodeId: Int?
     let streamInfo: MediaFileInfo?
 }
@@ -517,6 +529,7 @@ struct Playlist: Codable, Identifiable {
     let id: Int
     let name: String
     let itemCount: Int
+    let updatedAt: Date
     /// First up-to-4 poster URLs for the card mosaic.
     let posters: [String]
     /// Present for a smart playlist, whose entries follow its rules.

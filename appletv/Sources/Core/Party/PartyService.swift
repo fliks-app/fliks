@@ -214,8 +214,13 @@ import os
         onGoHome?()
     }
 
-    /// The account is gone: leave the room locally and close the events stream, there is no session to tell the server with.
+    /// The account is going: leave the room on the server with the bearer it still holds, then close the events stream.
     func resetForSignOut() {
+        if let id = party?.id {
+            let bearer = APIClient.bearerHeader
+            let device = deviceId
+            Task { try? await APIClient.shared.post("/api/parties/\(id)/leave", body: ["deviceId": device], headers: bearer) }
+        }
         reset()
         stream.stop()
         homeParties = []
@@ -512,7 +517,7 @@ import os
         guard let id = party?.id else { return }
         let wasLobby = lobby
         let seen = proposalEvents
-        guard let dto: Party = try? await APIClient.shared.get("/api/parties/\(id)") else { return }
+        guard let dto: Party = try? await APIClient.shared.get("/api/parties/\(id)"), party?.id == id else { return }
         applySnapshot(dto, proposals: seen == proposalEvents)
         if wasLobby, dto.status == "live", let item = dto.item { await openPlayer(item) }
     }

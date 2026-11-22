@@ -146,7 +146,7 @@ struct LibraryView: View {
                 let data = res.data.filter(\.type.isPlayable)
                 items += data
                 total = res.total
-                fetched += res.data.count
+                fetched += res.received
                 page = next
                 backdrop.seed(items.first?.fanartUrl)
                 if data.isEmpty, !res.data.isEmpty, fetched < total {
