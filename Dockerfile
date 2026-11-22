@@ -43,7 +43,7 @@ RUN SQLX_OFFLINE=true cargo build --release --locked -p fliks-server \
 FROM ${ENGINE_IMAGE} AS runtime-base
 ENTRYPOINT []
 
-# postgres client tools from PGDG: Ubuntu ships 16 and pg_dump refuses a
+# postgres client tools from PGDG, pinned to 18 (system.md rule 18): Ubuntu ships 16 and pg_dump refuses a
 # server newer than itself, which is every supported deployment.
 # The shared libraries libarchive (built into fliks-server) links, whatever the engine image ships.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
@@ -51,7 +51,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
   && wget -q -O /usr/share/keyrings/pgdg.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
   && echo "deb [signed-by=/usr/share/keyrings/pgdg.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
   && apt-get update \
-  && apt-get install -y --no-install-recommends postgresql-client \
+  && apt-get install -y --no-install-recommends postgresql-client-18 \
   && apt-get purge -y wget \
   && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*

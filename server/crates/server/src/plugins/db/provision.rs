@@ -163,9 +163,7 @@ impl From<sqlx::Error> for ProvisionError {
 /// Core joins the role before it creates anything for it: `CREATE SCHEMA ... AUTHORIZATION` and
 /// `ALTER ... OWNER` need membership of a non-superuser core.
 async fn grant_membership(tx: &mut Tx, qr: &str) -> Result<(), ProvisionError> {
-    let v: i32 = sqlx::query_scalar("SELECT current_setting('server_version_num')::int")
-        .fetch_one(&mut **tx)
-        .await?;
+    let v = crate::db::server_version(&mut **tx).await?;
     let options = if v >= 160_000 {
         " WITH INHERIT TRUE, SET TRUE"
     } else {
@@ -493,6 +491,13 @@ async fn revoke_advisory_locks(tx: &mut Tx, role: &str) -> sqlx::Result<()> {
            AND p.proname ~ '^pg_(try_)?advisory_(xact_)?lock(_shared)?$'
            AND has_function_privilege($1, p.oid, 'EXECUTE')";
     static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let open: i64 = sqlx::query_scalar(OPEN)
+        .bind(role)
+        .fetch_one(&mut **tx)
+        .await?;
+    if open == 0 {
+        return Ok(());
+    }
     let superuser: bool =
         sqlx::query_scalar("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")
             .fetch_one(&mut **tx)
@@ -504,13 +509,6 @@ async fn revoke_advisory_locks(tx: &mut Tx, role: &str) -> sqlx::Result<()> {
                  FROM PUBLIC needs a superuser"
             );
         }
-        return Ok(());
-    }
-    let open: i64 = sqlx::query_scalar(OPEN)
-        .bind(role)
-        .fetch_one(&mut **tx)
-        .await?;
-    if open == 0 {
         return Ok(());
     }
     sqlx::raw_sql(

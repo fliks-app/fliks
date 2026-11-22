@@ -381,6 +381,49 @@ async fn the_offline_restore_refuses_while_another_session_holds_the_instance_lo
     s.finish().await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_lost_connection_gets_the_instance_lock_back() {
+    use sqlx::Connection;
+    let Some(s) = Scratch::create("rstrkeep").await else {
+        return;
+    };
+    let opts = (*s.pool.connect_options()).clone();
+    let mut held = sqlx::PgConnection::connect_with(&opts).await.unwrap();
+    assert!(
+        fliks_server::system::instance::claim(&mut held)
+            .await
+            .unwrap()
+    );
+    let pid: i32 = sqlx::query_scalar("SELECT pg_backend_pid()")
+        .fetch_one(&mut held)
+        .await
+        .unwrap();
+    fliks_server::system::instance::keep(opts.clone(), held, std::time::Duration::from_millis(100));
+    sqlx::query("SELECT pg_terminate_backend($1)")
+        .bind(pid)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    let mut probe = sqlx::PgConnection::connect_with(&opts).await.unwrap();
+    let mut taken = false;
+    for _ in 0..50 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        if !fliks_server::system::instance::claim(&mut probe)
+            .await
+            .unwrap()
+        {
+            taken = true;
+            break;
+        }
+        sqlx::query("SELECT pg_advisory_unlock_all()")
+            .execute(&mut probe)
+            .await
+            .unwrap();
+    }
+    assert!(taken, "the lock was never taken again");
+    s.finish().await;
+}
+
 /// Below 17 the shipped `pg_restore` cannot run: the restore is refused with the version, nothing replayed.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_server_before_17_refuses_a_restore_untouched() {
@@ -390,10 +433,7 @@ async fn a_server_before_17_refuses_a_restore_untouched() {
     let Some(s) = Scratch::create("rstrold17").await else {
         return;
     };
-    let version: i32 = sqlx::query_scalar("SELECT current_setting('server_version_num')::int")
-        .fetch_one(&s.pool)
-        .await
-        .unwrap();
+    let version = fliks_server::db::server_version(&s.pool).await.unwrap();
     if version >= 170_000 {
         return s.finish().await;
     }
@@ -414,6 +454,13 @@ async fn a_server_before_17_refuses_a_restore_untouched() {
     )
     .await;
     assert_eq!(kept, 1, "nothing was replayed");
+    // The nightly `.sql` of earlier builds carries the same statement.
+    let plain = backup::dir().join("fliks-backup-pg17-setting.sql");
+    std::fs::write(&plain, "SET transaction_timeout = 0;\nSELECT 1;\n").unwrap();
+    let err = restore::offline(&cfg, &s.pool, &plain).await.unwrap_err();
+    let _ = std::fs::remove_file(&plain);
+    assert_eq!(err.status(), 400);
+    assert!(err.text().contains("PostgreSQL 17"), "{err}");
     s.finish().await;
 }
 

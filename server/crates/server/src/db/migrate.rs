@@ -7,9 +7,26 @@ pub use sqlx::migrate::MigrateError;
 
 static MIGRATOR: Migrator = sqlx::migrate!("../../migrations");
 
-/// Whether this build ships migration `version`.
-pub fn known_version(version: i64) -> bool {
-    migration_for_version(version).is_some()
+/// How a backup's ledger row compares with this build's migration of that version.
+#[derive(Debug, PartialEq)]
+pub enum Ledger {
+    /// A later build wrote it.
+    Unknown,
+    /// Same version, other file: an unreleased migration edited since.
+    Edited,
+    Same,
+}
+
+/// `checksum` is the bytea as `COPY` writes it (`\\x<hex>`); absent when the dump has no such column.
+pub fn ledger_row(version: i64, checksum: Option<&str>) -> Ledger {
+    let Some(m) = migration_for_version(version) else {
+        return Ledger::Unknown;
+    };
+    let hex: String = m.checksum.iter().map(|b| format!("{b:02x}")).collect();
+    match checksum {
+        Some(c) if c.strip_prefix("\\\\x") != Some(hex.as_str()) => Ledger::Edited,
+        _ => Ledger::Same,
+    }
 }
 
 /// A ledger row this build has no file for was written by a newer Fliks: say so instead of sqlx's raw text.
@@ -19,7 +36,8 @@ fn newer_database(e: MigrateError) -> MigrateError {
             format!(
                 "the database holds migration {v}, which this version of Fliks does not know: it was \
                  migrated by a newer version. Start that version, or put back a backup taken before \
-                 the upgrade (`fliks-server restore <file>`, then start the older version)"
+                 the upgrade (`fliks-server restore <file>`, which needs PostgreSQL 17 or later, then \
+                 start the older version)"
             )
             .into(),
         ),

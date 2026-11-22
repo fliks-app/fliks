@@ -10,7 +10,7 @@ import { formatBytes } from '../../../core/utils/format-bytes';
 import { serverMessage } from '../../../core/utils/server-message';
 import { waitForServer } from '../../../core/utils/wait-for-server';
 
-interface NotRestored { schema: string; message: string; }
+interface NotRestored { schema: string; message: string; code?: string; }
 interface RestoreResult { pluginsNotRestored: NotRestored[]; restarting: boolean; }
 
 @Component({
@@ -56,7 +56,7 @@ export class SystemBackupsComponent implements OnInit {
       const result = await firstValueFrom(this.http.post<RestoreResult>('/api/system/restore', { filename }));
       const failed = result.pluginsNotRestored;
       if (failed.length) {
-        const plugins = failed.map((p) => `${p.schema}: ${p.message}`).join('; ');
+        const plugins = failed.map((p) => `${p.schema}: ${p.code ? this.translate.instant(`system.restore_${p.code}`) : p.message}`).join('; ');
         await this.confirmation.alert({ title: this.translate.instant('system.restore_backup'), message: this.translate.instant('system.restore_plugins_not_restored', { plugins }), variant: 'warning' });
       } else {
         void this.confirmation.alert({ title: this.translate.instant('common.success'), message: this.translate.instant(result.restarting ? 'system.restore_restarting' : 'system.restore_ok'), variant: 'info' });
