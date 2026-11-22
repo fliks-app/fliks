@@ -21,7 +21,7 @@ RUN node /tmp/precompress-client.mjs dist/client/browser
 # --- Stage 2: Build fliks-server (Rust) ---
 # Dependencies build in their own layer, keyed on the manifests: CI's layer cache keeps it,
 # while a BuildKit cache mount is lost with the runner.
-FROM lukemathwalker/cargo-chef:0.1.78-rust-1.99.0-bookworm AS server-chef
+FROM lukemathwalker/cargo-chef:0.1.78-rust-1.100.0-bookworm AS server-chef
 WORKDIR /server
 # libarchive2-sys builds libarchive with cmake, generates its bindings with libclang and links these libraries.
 RUN apt-get update && apt-get install -y --no-install-recommends cmake libclang-dev liblz4-dev libacl1-dev \
