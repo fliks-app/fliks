@@ -30,9 +30,9 @@ final class LossyDecodeTests: XCTestCase {
 
     func testStoredProfileReadsASessionStoredWithTheWholeUser() throws {
         let legacy = Data("""
-        {"serverUrl":"http://nas","user":{"id":7,"username":"ana","avatar":null,"isAdmin":true,
+        [{"serverUrl":"http://nas","user":{"id":7,"username":"ana","avatar":null,"isAdmin":true,
           "permissions":["requests.create"],"libraryOrder":[3,1],"hiddenLibraryIds":[2],"email":"a@b.c",
-          "shareTastes":true},"accessToken":"a","refreshToken":"r","refreshExpiresAt":null,"lastUsedAt":1}
+          "shareTastes":true},"accessToken":"a","refreshToken":"r","refreshExpiresAt":null,"lastUsedAt":1}]
         """.utf8)
         let sessions = try JSONDecoder().decode(LossyArray<StoredSession>.self, from: legacy).elements
         XCTAssertEqual(sessions.count, 1)

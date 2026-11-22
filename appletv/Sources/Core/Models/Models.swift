@@ -228,9 +228,9 @@ struct MediaFileInfo: Codable, Hashable {
 
 struct MediaFile: Codable, Identifiable, Hashable {
     let id: Int
-    let quality: String
+    let quality: String?
     let relativePath: String
-    let size: Int
+    let size: Int?
     let episodeId: Int?
     let streamInfo: MediaFileInfo?
 }
@@ -519,7 +519,6 @@ struct Playlist: Codable, Identifiable {
     let itemCount: Int
     /// First up-to-4 poster URLs for the card mosaic.
     let posters: [String]
-    let updatedAt: Date
     /// Present for a smart playlist, whose entries follow its rules.
     let rules: SmartRules?
 }

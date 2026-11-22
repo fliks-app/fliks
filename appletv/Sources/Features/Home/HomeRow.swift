@@ -337,7 +337,7 @@ private struct PlaylistsRow: View {
     private func load() async {
         await revalidateZone("playlists", apply: { state = $0 }) {
             let items: [Playlist] = try await APIClient.shared.list("/api/playlists")
-            return Array(items.sorted { $0.updatedAt > $1.updatedAt }.prefix(20))
+            return Array(items.prefix(20))
         }
     }
 }

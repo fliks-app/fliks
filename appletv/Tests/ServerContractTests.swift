@@ -39,10 +39,12 @@ final class ServerContractTests: XCTestCase {
         var decoded = 0
         var failures: [String] = []
         for case let file as URL in files where file.pathExtension == "json" {
+            // Books and comics have no tvOS player: their rows are filtered out of every list.
+            if file.pathComponents.contains("books") { continue }
             guard let scenario = try? JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any],
                   let steps = scenario["steps"] as? [[String: Any]] else { continue }
             for step in steps where step["method"] as? String == "GET" {
-                guard let path = step["path"] as? String,
+                guard let path = step["path"] as? String, !path.contains("type=book"), !path.contains("type=comic"),
                       let expect = step["expect"] as? [String: Any], expect["status"] as? Int == 200,
                       let body = expect["body"], JSONSerialization.isValidJSONObject(body) else { continue }
                 let route = path.split(separator: "?", maxSplits: 1).first.map(String.init) ?? path
