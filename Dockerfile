@@ -95,11 +95,12 @@ ENV SERVE_STATIC_PATH=/app/client
 ENV FLIKS_TRANSCODE_DIR=/app/transcode
 ENV FLIKS_DATA_DIR=/app/data
 
-# Persistent dirs, group=root + g=u: writable by root, by an arbitrary uid
-# with gid 0, or via `--user <uid> --group-add 0` — no USER directive needed.
+# Persistent dirs owned by 568:0 with g=u: a fresh named volume inherits it, and an arbitrary uid
+# with gid 0 (`--user <uid>`) still writes. A volume made by an older image needs `chown -R 568:0`.
 RUN mkdir -p /app/conf /app/data /app/transcode \
- && chgrp -R 0 /app/conf /app/data /app/transcode \
+ && chown -R 568:0 /app/conf /app/data /app/transcode \
  && chmod -R g=u /app/conf /app/data /app/transcode
+USER 568:0
 VOLUME /app/conf /app/data /app/transcode
 
 EXPOSE 4848

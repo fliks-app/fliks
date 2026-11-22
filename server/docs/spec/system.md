@@ -121,3 +121,7 @@ Parity scenarios (`server/parity/scenarios/system/`): `health` (ignore `$..uptim
 - Restart under the engine (rules 6, 8): the fifth detector rung reports `'supervisor'` instead of `null` on bare-metal engine installs, and Docker keeps `'docker'` because `/.dockerenv` is checked first. Confirm exiting `fliks-server` (not PID 1) is the intended restart in Docker, and that macOS (no `FLIKS_SUPERVISED`) should also report `'supervisor'`.
 - `uptimeSeconds` is the `fliks-server` process uptime. Acceptable?
 - After a restore, in-memory state (cached ACL / settings reads, engine config revision, SSE connections of deleted users) is stale: restart the process after a restore (`exit(1)` as in rule 8) instead of keeping the server running? It would change the restore UX (a 60 s outage) but remove a class of stale-cache bugs.
+
+## Boot and shutdown
+
+The listener is bound before the database probe, the pre-migration dump and the migrations. Until the app router is published, `GET /api/system/liveness` answers 200 and every other route answers 503 `starting` (`Retry-After: 5`), so a healthcheck or an orchestrator never sees a long dump as a dead process; readiness keeps its meaning (`/api/system/health`). A stop signal during boot ends the process. After the signal the open connections get 20 s to drain; the buffered QoE samples, the pending pushes and the plugins are then flushed whatever is still open.
