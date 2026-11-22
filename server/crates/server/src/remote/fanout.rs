@@ -1,4 +1,4 @@
-//! Household fan-out of `remote.state|stopped|targets_changed` (spec rules 31-34).
+//! Household fan-out of `remote.state|ack|stopped|targets_changed` (spec rules 31-34).
 use super::db;
 use crate::sync::MutexExt;
 use crate::{
@@ -117,7 +117,9 @@ impl FanOut {
 
     async fn audience(&self, ev: &SseEvent, owner: i32) -> sqlx::Result<Vec<i32>> {
         let viewers = match ev {
-            SseEvent::RemoteState { target_id, .. } | SseEvent::RemoteStopped { target_id, .. } => {
+            SseEvent::RemoteState { target_id, .. }
+            | SseEvent::RemoteAck { target_id, .. }
+            | SseEvent::RemoteStopped { target_id, .. } => {
                 let device = device_id_of(target_id);
                 self.cached(
                     format!("device:{owner}:{device}"),

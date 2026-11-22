@@ -16,7 +16,7 @@ use crate::{
         validate::{PathParams, ValidJson},
     },
     presence::{Beat, LiveSession, now_ms},
-    remote::device_id_of,
+    remote::{device_id_of, dto::REFUSAL_MAX},
     state::AppState,
 };
 use axum::{
@@ -329,6 +329,11 @@ pub fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -
         last_cmd_id: b
             .get("lastCmdId")
             .and_then(Value::as_str)
+            .map(str::to_owned),
+        last_cmd_refused: b
+            .get("lastCmdRefused")
+            .and_then(Value::as_str)
+            .filter(|r| r.encode_utf16().count() <= REFUSAL_MAX)
             .map(str::to_owned),
     }
 }

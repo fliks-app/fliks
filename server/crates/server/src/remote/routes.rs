@@ -1,6 +1,6 @@
 use super::{
     db::{self, Grant},
-    dto::{Claim, Command, CreateCode, Register},
+    dto::{Ack, Claim, Command, CreateCode, Register},
     fanout::device_id_of,
 };
 use crate::presence::{Live, NowPlaying, live_sessions};
@@ -40,6 +40,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/remote/targets", get(targets))
         .route("/api/remote/register", post(register).delete(unregister))
         .route("/api/remote/commands", get(commands))
+        .route("/api/remote/ack", post(ack))
         .route("/api/remote/grants/code", post(grant_code))
         .route("/api/remote/grants/claim", post(grant_claim))
         .route("/api/remote/grants", get(grants))
@@ -319,6 +320,28 @@ pub async fn commands(
         .drain_commands(a.user.id, &target_id)
         .map(Json)
         .ok_or_else(offline)
+}
+
+/// A target with no session answers a command (`remote.md` rule 21e); only the owner's own devices.
+#[utoipa::path(post, path = "/api/remote/ack", responses((status = 204)))]
+pub async fn ack(
+    State(st): State<AppState>,
+    SessionAuthed(a): SessionAuthed,
+    ValidJson(dto): ValidJson<Ack>,
+) -> Result<StatusCode, AppError> {
+    dto.validate()?;
+    if st.hub.resolve_target(a.user.id, &dto.target_id).is_none() {
+        return Err(offline());
+    }
+    st.hub.emit_to_user(
+        a.user.id,
+        SseEvent::RemoteAck {
+            target_id: dto.target_id,
+            cmd_id: dto.cmd_id,
+            refused: dto.refused,
+        },
+    );
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[utoipa::path(post, path = "/api/remote/{targetId}/command", responses((status = 202)))]

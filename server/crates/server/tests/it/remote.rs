@@ -502,3 +502,42 @@ async fn a_revoked_grantee_gets_no_state_frame_after_the_revoke(pool: PgPool) {
     reached(&seen, kept).await;
     assert!(!seen.lock_clean().contains(&gone));
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_target_answers_a_command_with_no_session_and_only_its_owner_may(pool: PgPool) {
+    let c = ctx(pool).await;
+    remote::init(&c.st);
+    let seen: Arc<Mutex<Vec<i32>>> = Arc::default();
+    let sink = seen.clone();
+    c.st.hub.register_users_hook(move |ev, users| {
+        if matches!(ev, SseEvent::RemoteAck { refused: Some(r), .. } if r == "no_player") {
+            sink.lock_clean().extend(users);
+        }
+    });
+    let (owner, owner_token) = c.user("owner", false).await;
+    let (guest, guest_token) = c.user("guest", false).await;
+    c.register(&owner_token, "d1").await;
+    let code = c.mint(&owner_token, "d1").await;
+    assert_eq!(c.claim(&guest_token, &code).await, 201);
+
+    let ack =
+        |refused: Option<&str>| json!({"targetId": "d1#native", "cmdId": "c1", "refused": refused});
+    let post = |token: String, body: Value| {
+        let c = &c;
+        async move {
+            c.call("POST", "/api/remote/ack", &token, Some(body))
+                .await
+                .0
+        }
+    };
+    assert_eq!(post(guest_token.clone(), ack(None)).await, 404);
+    assert_eq!(
+        post(owner_token.clone(), ack(Some(&"x".repeat(65)))).await,
+        400
+    );
+    assert!(seen.lock_clean().is_empty());
+
+    assert_eq!(post(owner_token.clone(), ack(Some("no_player"))).await, 204);
+    reached(&seen, guest).await;
+    assert!(seen.lock_clean().contains(&owner));
+}

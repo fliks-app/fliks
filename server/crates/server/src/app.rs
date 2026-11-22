@@ -166,6 +166,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         remote::register,
         remote::unregister,
         remote::commands,
+        remote::ack,
         remote::command,
         remote::grant_code,
         remote::grant_claim,

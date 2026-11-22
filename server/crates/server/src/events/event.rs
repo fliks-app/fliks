@@ -606,6 +606,15 @@ pub enum SseEvent {
         audio_track_index: Option<i64>,
         subtitle_track_index: Option<i64>,
         last_cmd_id: Option<String>,
+        /// Why the command named by `last_cmd_id` was not applied; null when it was.
+        last_cmd_refused: Option<String>,
+    },
+    /// A command answered with no session: `refused` is the reason, null when applied.
+    #[serde(rename = "remote.ack")]
+    RemoteAck {
+        target_id: String,
+        cmd_id: String,
+        refused: Option<String>,
     },
     #[serde(rename = "remote.targets_changed")]
     RemoteTargetsChanged {},
@@ -763,11 +772,14 @@ impl SseEvent {
         }
     }
 
-    /// The three types the household fan-out hook widens past their owner (rule 18).
+    /// The types the household fan-out hook widens past their owner (rule 18).
     pub fn is_household_scoped(&self) -> bool {
         matches!(
             self,
-            Self::RemoteState { .. } | Self::RemoteTargetsChanged {} | Self::RemoteStopped { .. }
+            Self::RemoteState { .. }
+                | Self::RemoteAck { .. }
+                | Self::RemoteTargetsChanged {}
+                | Self::RemoteStopped { .. }
         )
     }
 }
@@ -963,7 +975,8 @@ mod tests {
                 "mediaTitle":null,"episodeLabel":null,"posterUrl":null,"fanartUrl":null,"positionSeconds":1,"durationSeconds":2,
                 "state":"playing","volume":null,"muted":null,"playbackRate":1.5,"supportsVolume":true,"subtitleId":null,"quality":null,
                 "qualities":[{"id":"i","label":"l","lowBandwidth":true}],"autoplayBlocked":false,"hasNext":false,
-                "audioTrackIndex":null,"subtitleTrackIndex":null,"lastCmdId":null}),
+                "audioTrackIndex":null,"subtitleTrackIndex":null,"lastCmdId":null,"lastCmdRefused":null}),
+            RemoteAck => json!({"type":"remote.ack","targetId":"t","cmdId":"c","refused":"no_player"}),
             LikesChanged => json!({"type":"likes.changed","mediaId":1,"seasonId":2,"itemId":3,"liked":true}),
             RemoteTargetsChanged => json!({"type":"remote.targets_changed"}),
             RemoteStopped => json!({"type":"remote.stopped","targetId":"t","sessionId":"s"}),
