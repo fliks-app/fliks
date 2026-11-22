@@ -137,7 +137,7 @@ CREATE VIEW public.dr_view AS SELECT 1 AS one;
 CREATE MATERIALIZED VIEW public.dr_mat AS SELECT 1 AS one;
 CREATE SEQUENCE public.dr_seq;
 CREATE TEXT SEARCH CONFIGURATION public.dr_cfg (COPY = simple);
-CREATE STATISTICS public.dr_stat ON id, kind FROM public.libraries;
+CREATE STATISTICS public.dr_stat ON id, name FROM public.libraries;
 CREATE COLLATION public.dr_coll (provider = libc, locale = 'C');
 CREATE FUNCTION public.dr_fn(int) RETURNS int LANGUAGE sql AS 'SELECT $1';
 CREATE PROCEDURE public.dr_proc() LANGUAGE sql AS 'SELECT 1';

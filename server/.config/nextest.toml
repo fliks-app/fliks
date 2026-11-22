@@ -21,7 +21,13 @@ priority = 10
 # These tests write the shared cache directory under the same job and file ids, and some wipe it.
 [test-groups]
 karaoke-cache = { max-threads = 1 }
+# These share `<data dir>/backups` and some empty it.
+backup-dir = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = "test(/^karaoke::/) | test(/^queue::remote_tests::/)"
 test-group = "karaoke-cache"
+
+[[profile.default.overrides]]
+filter = "test(/^backup_restore::/) | test(/^plugins::restore::/)"
+test-group = "backup-dir"
