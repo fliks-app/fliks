@@ -524,7 +524,7 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
   });
 });
 
-describe('LayoutComponent dock — libraries sheet', () => {
+describe('LayoutComponent dock, libraries sheet', () => {
   afterEach(() => {
     nativeState.value = false;
   });
