@@ -1,0 +1,6 @@
+test(plugins): watch the state instead of polling it in the health test
+
+A recreated core with no other live instance runs start again and is ready
+at once, so the degraded state after a health timeout lasts about 20 ms.
+The test polled every 50 ms and relied on a resident event instance that
+domain events no longer create for a plugin without events:receive.
