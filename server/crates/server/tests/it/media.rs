@@ -131,7 +131,7 @@ async fn search_folds_accents_in_every_library_language(pool: PgPool) {
           (10, 'Amélie', 'Le Fabuleux Destin d''Amélie Poulain', '["Amelie from Montmartre"]', 'Une jeune serveuse aide ses voisins', 2001, 'movie', 1, 'f10'),
           (11, 'Café Society', NULL, '[]', 'A story of ambitious hearts', 2016, 'movie', 1, 'f11'),
           (12, '100% Wolf', NULL, '[]', NULL, 2020, 'movie', 1, 'f12'),
-          (13, '1000 Wolves', NULL, '[]', NULL, 2020, 'movie', 1, 'f13'),
+          (13, 'a_b Wolves', NULL, '[]', NULL, 2020, 'movie', 1, 'f13'),
           (14, 'Œuvre', NULL, '[]', NULL, 2020, 'movie', 1, 'f14')"#,
     )
     .execute(&pool)
@@ -158,11 +158,8 @@ async fn search_folds_accents_in_every_library_language(pool: PgPool) {
     );
     assert_eq!(find("hearts").await, [11], "an English overview");
     assert_eq!(find("oeuvre").await, [14]);
-    assert_eq!(
-        find("100%25").await,
-        [12],
-        "a percent sign is not a wildcard"
-    );
+    assert_eq!(find("%25").await, [12], "a percent sign is not a wildcard");
+    assert_eq!(find("_").await, [13], "an underscore is not a wildcard");
     sqlx::query("UPDATE media SET title = 'Zoé' WHERE id = 11")
         .execute(&pool)
         .await

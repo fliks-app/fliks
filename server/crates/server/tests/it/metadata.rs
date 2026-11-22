@@ -489,9 +489,9 @@ async fn person_search(pool: PgPool) {
     media(&pool, 1, "movie", Some(11), None, 1).await;
     media(&pool, 2, "movie", Some(22), None, 2).await;
     sqlx::raw_sql(
-        r#"INSERT INTO media_credits (role, position, "mediaId", "personId")
-             SELECT 'cast', id, 1, id FROM persons WHERE id <= 5;
-           INSERT INTO media_credits (role, position, "mediaId", "personId") VALUES ('cast', 1, 2, 6)"#,
+        r#"INSERT INTO media_credits (role, character, position, "mediaId", "personId")
+             SELECT 'cast', 'x', id, 1, id FROM persons WHERE id <= 5;
+           INSERT INTO media_credits (role, character, position, "mediaId", "personId") VALUES ('cast', 'x', 1, 2, 6)"#,
     )
     .execute(&pool)
     .await
@@ -522,8 +522,8 @@ async fn person_search(pool: PgPool) {
     sqlx::raw_sql(
         r#"INSERT INTO persons (id, name) SELECT 10000 + g, 'Zz ' || g FROM generate_series(1, 100) g;
            INSERT INTO person_external_ids SELECT 10000 + g, 'tmdb', (10000 + g)::text FROM generate_series(1, 100) g;
-           INSERT INTO media_credits (role, position, "mediaId", "personId")
-             SELECT 'cast', g, 1, 10000 + g FROM generate_series(1, 100) g"#,
+           INSERT INTO media_credits (role, character, position, "mediaId", "personId")
+             SELECT 'cast', 'x', g, 1, 10000 + g FROM generate_series(1, 100) g"#,
     )
     .execute(&pool)
     .await

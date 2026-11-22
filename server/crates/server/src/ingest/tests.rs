@@ -6438,12 +6438,22 @@ mod music_ingest {
             2,
             "its old ids are aliases of the survivor"
         );
-        // The search finds a person by its sort name.
+        // The search finds a credited person by its sort name.
         sqlx::query(r#"UPDATE persons SET "sortName" = 'Zzyzx, Bo' WHERE id = $1"#)
             .bind(q)
             .execute(&c.st.db)
             .await
             .unwrap();
+        let l = album_lib(&c).await;
+        sqlx::query(
+            r#"WITH m AS (INSERT INTO media (title, type, "libraryId", "folderName") VALUES ('Album', 'album', $1, 'a') RETURNING id)
+               INSERT INTO media_credits (role, position, "mediaId", "personId") SELECT 'artist', 0, m.id, $2 FROM m"#,
+        )
+        .bind(l)
+        .bind(q)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
         let (s, b) = call(
             &c,
             "GET",
