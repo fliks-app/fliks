@@ -56,7 +56,7 @@ export class SystemBackupsComponent implements OnInit {
       const failed = result.pluginsNotRestored;
       if (failed.length) {
         const plugins = failed.map((p) => `${p.schema}: ${p.message}`).join('; ');
-        void this.confirmation.alert({ title: this.translate.instant('system.restore_backup'), message: this.translate.instant('system.restore_plugins_not_restored', { plugins }), variant: 'warning' });
+        await this.confirmation.alert({ title: this.translate.instant('system.restore_backup'), message: this.translate.instant('system.restore_plugins_not_restored', { plugins }), variant: 'warning' });
       } else {
         void this.confirmation.alert({ title: this.translate.instant('common.success'), message: this.translate.instant(result.restarting ? 'system.restore_restarting' : 'system.restore_ok'), variant: 'info' });
       }

@@ -43,6 +43,24 @@ pub async fn all(db: &PgPool) -> sqlx::Result<Vec<Package>> {
     .await
 }
 
+/// `database.coreRefs` of a manifest.
+pub fn core_refs(manifest: &Value) -> Vec<String> {
+    manifest["database"]["coreRefs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .collect()
+}
+
+/// The manifest alone: a restore reads it before the migrations of this build ran on the restored table.
+pub async fn manifest(db: &PgPool, id: &str) -> sqlx::Result<Option<Value>> {
+    sqlx::query_scalar(r#"SELECT manifest FROM plugin_packages WHERE "pluginId" = $1"#)
+        .bind(id)
+        .fetch_optional(db)
+        .await
+}
+
 pub async fn find(db: &PgPool, id: &str) -> sqlx::Result<Option<Package>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT {COLUMNS} FROM plugin_packages WHERE "pluginId" = $1"#

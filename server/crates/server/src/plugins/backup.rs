@@ -350,7 +350,7 @@ impl Plugins {
         Ok(body(rx))
     }
 
-    /// Rule 54: every check before any write; settings and rows in one core transaction.
+    /// Rule 54: every check before any write; the rows in the plugin's transaction, the settings in a core one.
     pub async fn import(&self, id: &str, doc: &Value) -> Result<Value, InstallError> {
         check_document(id, doc)?;
         let st = self

@@ -726,7 +726,11 @@ async fn export_import_and_data_usage_run_plugin_code_as_the_plugin_login() {
             None,
         )
         .await;
-    assert!(usage.to_string().contains('1'), "{usage}");
+    let rows_of_t = usage["tables"]
+        .as_array()
+        .and_then(|t| t.iter().find(|t| t["name"] == "t"))
+        .map(|t| t["rows"].clone());
+    assert_eq!(rows_of_t, Some(json!(1)), "{usage}");
     h.finish().await;
     s.finish().await;
 }
@@ -832,7 +836,10 @@ async fn provision_repairs_core_owned_routines_and_types() {
          CREATE TYPE plugin_fliks_fixture.mood AS ENUM ('ok');
          CREATE TYPE plugin_fliks_fixture.span AS RANGE (subtype = int4);
          CREATE TABLE plugin_fliks_fixture.tt (id int);
-         CREATE FUNCTION plugin_fliks_fixture.f(x int) RETURNS int LANGUAGE sql AS 'SELECT x'",
+         CREATE FUNCTION plugin_fliks_fixture.f(x int) RETURNS int LANGUAGE sql AS 'SELECT x';
+         CREATE AGGREGATE plugin_fliks_fixture.odisc(float8 ORDER BY anyelement) (
+           SFUNC = ordered_set_transition, STYPE = internal,
+           FINALFUNC = percentile_disc_final, FINALFUNC_EXTRA)",
     )
     .execute(&s.pool)
     .await
@@ -848,10 +855,14 @@ async fn provision_repairs_core_owned_routines_and_types() {
     assert_eq!(st, 204, "{r}");
     let role = format!("fp_{}_fliks_fixture", s.oid().await);
     // Before Postgres 17 a multirange stays with core when its range changes owner: it holds no code.
+    let version: i32 = sqlx::query_scalar("SELECT current_setting('server_version_num')::int")
+        .fetch_one(&s.pool)
+        .await
+        .unwrap();
     let stray: Vec<String> = sqlx::query_scalar(
         "SELECT 'type ' || t.typname FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
           WHERE n.nspname = 'plugin_fliks_fixture' AND pg_get_userbyid(t.typowner) <> $1
-            AND t.typname NOT LIKE '%multirange'
+            AND ($2 >= 170000 OR t.typname NOT LIKE '%multirange')
          UNION ALL
          SELECT 'proc ' || p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
           WHERE n.nspname = 'plugin_fliks_fixture' AND pg_get_userbyid(p.proowner) <> $1
@@ -860,6 +871,7 @@ async fn provision_repairs_core_owned_routines_and_types() {
           WHERE n.nspname = 'plugin_fliks_fixture' AND pg_get_userbyid(c.relowner) <> $1",
     )
     .bind(&role)
+    .bind(version)
     .fetch_all(&s.pool)
     .await
     .unwrap();

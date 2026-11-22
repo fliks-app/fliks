@@ -414,29 +414,36 @@ pub fn may_adopt(kept: &Kept, signer: Option<&str>) -> bool {
     }
 }
 
+/// The role stops logging in and its schema is marked kept; nothing when the role is gone.
+async fn hold_orphaned(tx: &mut Tx, plugin_id: &str, role: &str) -> sqlx::Result<bool> {
+    if !role_exists(tx, role).await? {
+        return Ok(false);
+    }
+    sqlx::Executor::execute(
+        &mut **tx,
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "ALTER ROLE {} NOLOGIN; COMMENT ON SCHEMA {} IS 'orphaned: plugin uninstalled, data kept'",
+            quote(role),
+            quote(&schema(plugin_id))
+        ))),
+    )
+    .await?;
+    Ok(true)
+}
+
+/// A restore found a schema without its package: the same hold, the `plugin_kept_data` row came with the dump.
+pub async fn keep_orphaned(core: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
+    let role = role(&database_oid(core).await?, plugin_id);
+    let mut tx = core.begin().await?;
+    hold_orphaned(&mut tx, plugin_id, &role).await?;
+    tx.commit().await
+}
+
 /// Uninstall without `deleteData`: the schema and its rows stay, the role stops logging in.
 pub async fn orphan(core: &PgPool, plugin_id: &str, signer: Option<&str>) -> sqlx::Result<()> {
-    let oid = database_oid(core).await?;
+    let role = role(&database_oid(core).await?, plugin_id);
     let mut tx = core.begin().await?;
-    let r = role(&oid, plugin_id);
-    let exists = role_exists(&mut tx, &r).await?;
-    if exists {
-        sqlx::Executor::execute(
-            &mut *tx,
-            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-                "ALTER ROLE {} NOLOGIN",
-                quote(&r)
-            ))),
-        )
-        .await?;
-        sqlx::Executor::execute(
-            &mut *tx,
-            sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-                "COMMENT ON SCHEMA {} IS 'orphaned: plugin uninstalled, data kept'",
-                quote(&schema(plugin_id))
-            ))),
-        )
-        .await?;
+    if hold_orphaned(&mut tx, plugin_id, &role).await? {
         sqlx::query(
             r#"INSERT INTO plugin_kept_data ("pluginId", "signerKeyId") VALUES ($1, $2)
                ON CONFLICT ("pluginId") DO UPDATE SET "signerKeyId" = EXCLUDED."signerKeyId""#,
@@ -450,19 +457,32 @@ pub async fn orphan(core: &PgPool, plugin_id: &str, signer: Option<&str>) -> sql
 }
 
 /// Core serialises on predictable advisory keys, so a lock a plugin holds would stall it: plugins take none.
-/// Only the owner of `pg_catalog` can revoke, so a core that is not a superuser warns once and goes on.
+/// Only a superuser can revoke; any other core warns once. The revoke strips every non-superuser login
+/// of the database, so a deploy role other than the provisioning login needs its own `GRANT EXECUTE`.
 async fn revoke_advisory_locks(tx: &mut Tx, role: &str) -> sqlx::Result<()> {
     const OPEN: &str = r"SELECT count(*) FROM pg_proc p
          WHERE p.pronamespace = 'pg_catalog'::regnamespace
            AND p.proname ~ '^pg_(try_)?advisory_(xact_)?lock(_shared)?$'
            AND has_function_privilege($1, p.oid, 'EXECUTE')";
     static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if sqlx::query_scalar::<_, i64>(OPEN)
+    let superuser: bool =
+        sqlx::query_scalar("SELECT rolsuper FROM pg_roles WHERE rolname = current_user")
+            .fetch_one(&mut **tx)
+            .await?;
+    if !superuser {
+        if !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            tracing::warn!(
+                "plugins can still take advisory locks: REVOKE EXECUTE ON the pg_advisory_*lock functions \
+                 FROM PUBLIC needs a superuser"
+            );
+        }
+        return Ok(());
+    }
+    let open: i64 = sqlx::query_scalar(OPEN)
         .bind(role)
         .fetch_one(&mut **tx)
-        .await?
-        == 0
-    {
+        .await?;
+    if open == 0 {
         return Ok(());
     }
     sqlx::raw_sql(
@@ -475,16 +495,6 @@ async fn revoke_advisory_locks(tx: &mut Tx, role: &str) -> sqlx::Result<()> {
     )
     .execute(&mut **tx)
     .await?;
-    let open = sqlx::query_scalar::<_, i64>(OPEN)
-        .bind(role)
-        .fetch_one(&mut **tx)
-        .await?;
-    if open > 0 && !WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
-        tracing::warn!(
-            "plugins can still take advisory locks: REVOKE EXECUTE ON the pg_advisory_*lock functions \
-             FROM PUBLIC needs a superuser"
-        );
-    }
     Ok(())
 }
 
@@ -511,8 +521,8 @@ async fn own_routines_and_types(tx: &mut Tx, schema: &str, qs: &str, qr: &str) -
         .execute(&mut **tx)
         .await?;
     }
-    let routines: Vec<String> = sqlx::query_scalar(
-        "SELECT quote_ident(p.proname) || '(' || pg_get_function_identity_arguments(p.oid) || ')'
+    let routines: Vec<(String, bool)> = sqlx::query_as(
+        "SELECT quote_ident(p.proname) || '(' || pg_get_function_identity_arguments(p.oid) || ')', p.prokind = 'a'
            FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
           WHERE n.nspname = $1 AND pg_get_userbyid(p.proowner) = current_user
           ORDER BY p.oid",
@@ -520,9 +530,11 @@ async fn own_routines_and_types(tx: &mut Tx, schema: &str, qs: &str, qr: &str) -
     .bind(schema)
     .fetch_all(&mut **tx)
     .await?;
-    for r in routines {
+    for (r, aggregate) in routines {
+        // An ordered-set aggregate's identity arguments carry `ORDER BY`, which only ALTER AGGREGATE reads.
+        let what = if aggregate { "AGGREGATE" } else { "ROUTINE" };
         sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "ALTER ROUTINE {qs}.{r} OWNER TO {qr}"
+            "ALTER {what} {qs}.{r} OWNER TO {qr}"
         )))
         .execute(&mut **tx)
         .await?;

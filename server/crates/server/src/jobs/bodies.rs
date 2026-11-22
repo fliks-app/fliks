@@ -65,10 +65,20 @@ async fn backup_job(st: &AppState) -> Outcome {
         .await
         .map_err(|e| e.to_string())?;
     let mut line = format!("Backup: wrote {} ({} bytes)", made.filename, made.size);
+    if !made.plugins_skipped.is_empty() {
+        line.push_str(&format!(
+            ", left out plugin schemas: {}",
+            made.plugins_skipped.join(", ")
+        ));
+    }
     if pruned > 0 {
         line.push_str(&format!(", pruned {pruned} older backup(s)"));
     }
-    tracing::info!("{line}");
+    if made.plugins_skipped.is_empty() {
+        tracing::info!("{line}");
+    } else {
+        tracing::warn!("{line}");
+    }
     Ok(())
 }
 
