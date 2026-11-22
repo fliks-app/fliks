@@ -462,7 +462,7 @@ mod tests {
         assert_eq!(group(&parts).len(), 1);
         assert_eq!(group(&parts)[0].versions.len(), 1);
         assert_eq!(
-            group(&p(&["F/03 - Title.m4b", "F/04 - Title.m4b"]))[0]
+            group_whole(&p(&["F/03 - Title.m4b", "F/04 - Title.m4b"]))[0]
                 .versions
                 .len(),
             2
