@@ -4041,7 +4041,7 @@
         "tags": [
           "crate::party"
         ],
-        "summary": "A guest leaves the party for good; the host cannot, and anyone who is not a guest gets the 404.",
+        "summary": "A guest leaves the party for good, a non-owner host handing the role back; the owner cannot, and anyone who is not a guest gets the 404.",
         "operationId": "quit",
         "responses": {
           "204": {}
