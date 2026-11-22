@@ -37,7 +37,7 @@
   } @else {
     <div class="flex gap-2">
       <cdk-virtual-scroll-viewport
-        scrollWindow
+        [pageScrollWindow]="detached"
         [itemSize]="list.grid.rowHeight()"
         [minBufferPx]="list.grid.rowHeight() * 2"
         [maxBufferPx]="list.grid.rowHeight() * 4"

@@ -92,3 +92,9 @@ html.keyboard-open [data-alpha-index] {
      translucent layer and show as a lighter half-circle. */
   clip-path: inset(0 0 52px 0);
 }
+/* Matches the dock bar, which drops its blur for the same fill under reduced effects. */
+body.reduced-effects .dock-with-fab-cradle::before {
+  background: color-mix(in oklab, var(--color-base-100) 95%, transparent);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}

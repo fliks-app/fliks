@@ -418,6 +418,9 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
     const etag = event.headers.get('ETag') ?? undefined;
     const memo = etag ? memos.get(url) : undefined;
     if (memo && memo.etag === etag && !isInvalidated({ url, body: null, timestamp: memo.at })) {
+      // Re-stamp the entry: its TTL restarts at every confirmed revalidation.
+      if (generation === cacheGeneration) remember(url, etag!, memo.body, sentAt);
+      putCacheWhenIdle(url, memo.body, sentAt, generation, etag);
       return event.clone({ body: memo.body });
     }
     if (etag && generation === cacheGeneration) remember(url, etag, event.body, sentAt);

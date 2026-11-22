@@ -1,5 +1,5 @@
 import { CdkVirtualScrollableWindow, VIRTUAL_SCROLLABLE } from '@angular/cdk/scrolling';
-import { Directive, forwardRef, input } from '@angular/core';
+import { Directive, forwardRef, input, Signal } from '@angular/core';
 import { filter, Observable } from 'rxjs';
 
 /** The window scroller of a virtual grid on a cached route: a parked page stops re-ranging off other pages' scrolling. */
@@ -8,10 +8,10 @@ import { filter, Observable } from 'rxjs';
   providers: [{ provide: VIRTUAL_SCROLLABLE, useExisting: forwardRef(() => PageScrollWindowDirective) }],
 })
 export class PageScrollWindowDirective extends CdkVirtualScrollableWindow {
-  /** True while the page is detached (see `keepRouteFresh`). */
-  readonly pageScrollWindow = input<boolean>(false);
+  /** The page's `keepRouteFresh` signal, read per event: a detached view never gets its inputs refreshed. */
+  readonly pageScrollWindow = input.required<Signal<boolean>>();
 
   override elementScrolled(): Observable<Event> {
-    return super.elementScrolled().pipe(filter(() => !this.pageScrollWindow()));
+    return super.elementScrolled().pipe(filter(() => !this.pageScrollWindow()()));
   }
 }

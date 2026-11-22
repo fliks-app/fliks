@@ -8,7 +8,7 @@
     }
   } @else {
     <cdk-virtual-scroll-viewport
-      scrollWindow
+      [pageScrollWindow]="detached()"
       [itemSize]="grid.rowHeight()"
       [minBufferPx]="grid.rowHeight() * 2"
       [maxBufferPx]="grid.rowHeight() * 4"

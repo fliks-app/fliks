@@ -49,9 +49,26 @@ export class ImageCacheService {
   /** Resolve the container path up front. Every cached image otherwise awaits
    *  this one bridge call, which leaves a whole cold-start grid without a src. */
   async warm(): Promise<void> {
-    if (!this.enabled) return;
+    if (!this.enabled) {
+      if (Capacitor.isNativePlatform()) void this.purge();
+      return;
+    }
     this.load();
     await this.resolveBaseUri();
+  }
+
+  /** Drops the directory and index a TV install wrote before the cache was turned off there; a no-op once the index key is gone. */
+  private async purge(): Promise<void> {
+    try {
+      if (localStorage.getItem(INDEX_KEY) === null) return;
+      const { Filesystem, Directory } = await getFs();
+      await Filesystem.rmdir({ path: DIR, directory: Directory.Data, recursive: true }).catch(() => {
+        /* never created */
+      });
+      localStorage.removeItem(INDEX_KEY);
+    } catch {
+      /* retried next launch */
+    }
   }
 
   /** Like {@link resolve} without the bridge so `src` binds in the same frame; null when not already in memory. */
@@ -149,8 +166,9 @@ export class ImageCacheService {
       });
       await Filesystem.writeFile({ path: `${DIR}/${name}`, data, directory: Directory.Data });
       this.index.set(key, [name, Date.now()]);
-      await this.evict();
-      this.persistWhenIdle();
+      // The index is written at once after a batch: a crash must not leave it naming deleted files.
+      if (await this.evict()) this.persist();
+      else this.persistWhenIdle();
       return true;
     } catch {
       return false;
@@ -159,8 +177,8 @@ export class ImageCacheService {
     }
   }
 
-  private async evict(): Promise<void> {
-    if (this.index.size <= MAX_ENTRIES) return;
+  private async evict(): Promise<boolean> {
+    if (this.index.size <= MAX_ENTRIES) return false;
     const stale = [...this.index.entries()]
       .sort((a, b) => a[1][1] - b[1][1])
       .slice(0, this.index.size - EVICT_TO);
@@ -174,6 +192,7 @@ export class ImageCacheService {
         /* already gone */
       });
     }
+    return true;
   }
 
   private resolveBaseUri(): Promise<string | null> {

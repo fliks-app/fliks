@@ -193,7 +193,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   // The modal is a lazy chunk: open it once its @defer block has rendered.
   private readonly updateModalBridge = effect(() => {
     const modal = this.updateModal();
-    if (!modal || !untracked(this.updateModalRequested)) return;
+    if (!modal || !this.updateModalRequested()) return;
     this.updateModalRequested.set(false);
     modal.open();
   });
