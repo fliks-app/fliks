@@ -292,7 +292,16 @@ async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
             .mf,
         None
     );
-    let (_, _, i) = call(
+    let (s, _, _) = call(
+        &c,
+        "POST",
+        "/api/auth/cast-info",
+        &[("authorization", &h)],
+        None,
+    )
+    .await;
+    assert_eq!(s, 400, "cast-info names the file it casts");
+    let (s, _, i) = call(
         &c,
         "POST",
         "/api/auth/cast-info",
@@ -301,10 +310,13 @@ async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
             ("host", "h:1"),
             ("x-forwarded-proto", "https"),
         ],
-        None,
+        Some(json!({"mediaFileId": 42})),
     )
     .await;
-    assert_eq!(i["streamBaseUrl"], "https://h:1");
+    assert_eq!((s, &i["streamBaseUrl"]), (201, &json!("https://h:1")));
+    let claims = c.st.jwt.verify(i["token"].as_str().unwrap()).unwrap();
+    assert_eq!((claims.mf, claims.sub), (Some(42), id));
+    assert!(claims.scope.is_some());
     sqlx::query("INSERT INTO app_settings (key, value) VALUES ('public_url', 'https://x.test//')")
         .execute(&pool)
         .await
@@ -314,7 +326,7 @@ async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
         "POST",
         "/api/auth/cast-info",
         &[("authorization", &h)],
-        None,
+        Some(json!({"mediaFileId": 42})),
     )
     .await;
     assert_eq!(i["streamBaseUrl"], "https://x.test");

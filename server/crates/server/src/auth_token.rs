@@ -5,7 +5,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-/// Cast tokens live a fixed 4 h (`auth.md` rule 5).
+/// Cast tokens live a fixed 4 h (`auth.md` rule 5): one item's whole LOAD, since the receiver bakes the token into its URLs.
 pub const CAST_TTL_SECS: u64 = 4 * 3600;
 
 /// A live token is minted once and never refreshed by released clients, so it keeps the former 12 h.
@@ -196,13 +196,23 @@ impl Jwt {
         )
     }
 
-    pub fn sign_cast(&self, user_id: i32, username: &str, sid: i32) -> Result<Signed, AppError> {
+    /// A file-bound stream credential for one Cast LOAD.
+    pub fn sign_cast(
+        &self,
+        user_id: i32,
+        username: &str,
+        sid: i32,
+        media_file_id: u32,
+    ) -> Result<Signed, AppError> {
         self.sign(
             user_id,
             username,
             Some(TokenScope::Stream),
             CAST_TTL_SECS,
-            Bound::session(sid),
+            Bound {
+                mf: Some(media_file_id),
+                ..Bound::session(sid)
+            },
         )
     }
 
@@ -429,12 +439,13 @@ mod tests {
         let j = jwt();
         let (s, c) = (
             j.sign_stream(1, "a", 2).unwrap(),
-            j.sign_cast(1, "a", 2).unwrap(),
+            j.sign_cast(1, "a", 2, 9).unwrap(),
         );
         assert_eq!(j.verify(&s.token).unwrap().scope, Some(TokenScope::Stream));
         assert_eq!(j.verify(&c.token).unwrap().scope, Some(TokenScope::Stream));
         assert_eq!(c.exp - Utc::now().timestamp(), CAST_TTL_SECS as i64);
         assert_eq!(j.verify(&c.token).unwrap().sid, Some(2));
+        assert_eq!(j.verify(&c.token).unwrap().mf, Some(9));
     }
 
     #[test]

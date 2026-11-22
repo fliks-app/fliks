@@ -628,6 +628,39 @@ async fn a_stored_scan_goes_to_the_engine_and_restores_the_clock_break(pool: PgP
 }
 
 #[sqlx::test(migrations = false)]
+async fn file_info_routes_read_a_stream_token_bound_to_that_file_only(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let sid = session::new(&c.st, c.user).await;
+    let sign = |file: i32| {
+        c.st.jwt
+            .sign_stream_for(c.user, "admin", sid, file as u32)
+            .unwrap()
+            .token
+    };
+    let (own, other) = (sign(c.file), sign(c.file + 1));
+    let unbound = c.st.jwt.sign_stream(c.user, "admin", sid).unwrap().token;
+    let f = c.file;
+    for (method, uri) in [
+        ("GET", format!("/api/stream/{f}/keyframes")),
+        ("GET", format!("/api/stream/{f}/edl")),
+        ("GET", format!("/api/stream/info/qualities/{f}")),
+        ("POST", format!("/api/stream/{f}/playback-info")),
+    ] {
+        let body = (method == "POST").then(device);
+        for token in [&other, &unbound] {
+            let (s, _) = call(&c, method, &uri, token, body.clone()).await;
+            assert_eq!(s, 401, "{uri}");
+        }
+    }
+    for uri in [
+        format!("/api/stream/{f}/keyframes"),
+        format!("/api/stream/{f}/edl"),
+    ] {
+        assert_eq!(call(&c, "GET", &uri, &own, None).await.0, 200, "{uri}");
+    }
+}
+
+#[sqlx::test(migrations = false)]
 async fn keyframes_come_sorted_from_a_matching_scan_only(pool: PgPool) {
     let c = ctx(pool, true).await;
     let uri = format!("/api/stream/{}/keyframes", c.file);

@@ -410,7 +410,7 @@ export class MusicCastOutput {
   }
 
   private async loadStem(t: MusicTrackRequest, fileId: number, url: string, contentType: string, stem: string, position: number, autoplay: boolean) {
-    this.cast.setCastStreamBase((await this.auth.getCastInfo()).streamBaseUrl);
+    this.cast.setCastStreamBase((await this.auth.getCastInfo(fileId)).streamBaseUrl);
     try {
       await this.cast.loadMedia({
         url,
@@ -461,10 +461,8 @@ export class MusicCastOutput {
 
   /** The server's playback info of a music track and the receiver media that plays it. */
   private async prepareTrack(t: MusicTrackRequest, startAt = 0): Promise<{ pi: PlaybackInfoResponse; media: CastMediaInfo }> {
-    const [pi, castInfo] = await Promise.all([
-      this.streaming.getItemPlaybackInfo(t.itemId, this.castPlayer.getCastDeviceProfile(), { startAt }),
-      this.auth.getCastInfo(),
-    ]);
+    const pi = await this.streaming.getItemPlaybackInfo(t.itemId, this.castPlayer.getCastDeviceProfile(), { startAt });
+    const castInfo = await this.auth.getCastInfo(pi.mediaFileId);
     this.cast.setCastStreamBase(castInfo.streamBaseUrl);
     const { url, contentType } = this.streaming.buildAbsolutePlayUrl(pi, castInfo.token, { sid: pi.sessionId });
     const media: CastMediaInfo = {

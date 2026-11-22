@@ -677,7 +677,7 @@ export class CastPlayerService {
         mfId, this.activeBurnInId ?? undefined, audioIdx,
         transcodeQuality, Math.floor(currentPos),
       ),
-      this.authService.getCastInfo(),
+      this.authService.getCastInfo(mfId),
     ]);
 
     if (gen !== this.reloadGen) {
@@ -1069,7 +1069,7 @@ export class CastPlayerService {
     const [mediaResult, subsResult, castInfo] = await Promise.all([
       this.nowPlaying.media(opts.mediaId, opts.media).catch(() => null),
       this.subtitlesApi.getForMedia(opts.mediaId).catch(() => [] as SubtitleFileRow[]),
-      this.authService.getCastInfo(),
+      this.authService.getCastInfo(opts.mediaFileId),
     ]);
 
     let streamInfo = opts.streamInfo;

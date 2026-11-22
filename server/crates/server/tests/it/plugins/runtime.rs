@@ -171,6 +171,15 @@ async fn proxy_routes_and_lifecycle() {
         b,
         json!({"method": "POST", "body": {"a": 1}, "query": [["x", "1"], ["x", "2"]]})
     );
+    let (_, b) = h
+        .call(
+            "POST",
+            "/api/plugins/fliks.fixture/echo?x=1&token=secret",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    assert_eq!(b["query"], json!([["x", "1"]]));
     let (st, b) = h
         .call(
             "POST",

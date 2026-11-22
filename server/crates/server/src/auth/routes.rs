@@ -590,15 +590,22 @@ pub(crate) async fn users_public(
     ))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub(crate) struct CastInfoDto {
+    media_file_id: u32,
+}
+
 #[utoipa::path(post, path = "/api/auth/cast-info", responses((status = 200)))]
 pub(crate) async fn cast_info(
     State(st): State<AppState>,
     a: Authed,
     headers: HeaderMap,
+    ValidJson(dto): ValidJson<CastInfoDto>,
 ) -> Result<Response, AppError> {
     let token = st
         .jwt
-        .sign_cast(a.user.id, &a.user.username, a.session()?)?
+        .sign_cast(a.user.id, &a.user.username, a.session()?, dto.media_file_id)?
         .token;
     let base = crate::http::public_base(&st, &headers).await;
     Ok((

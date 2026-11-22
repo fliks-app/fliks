@@ -1,7 +1,8 @@
 //! Request authentication (`docs/spec/auth.md` section B): `Authed` and its variants.
 //!
 //! Every extractor reads the token from cookie `fliks_access`, else `Authorization: Bearer`, else `?token=`
-//! (first non-empty wins, no fall-through on a bad one), then loads the user, role and live session on every request.
+//! (first non-empty wins, no fall-through on a bad one; a query token must be scoped), then loads the user,
+//! role and live session on every request.
 use super::{
     AppError,
     cookies::{ACCESS_COOKIE, cookie_value},
@@ -302,6 +303,16 @@ pub struct FileBoundAuthed {
     pub bound_file: Option<u32>,
 }
 
+impl FileBoundAuthed {
+    /// 401 when the token is bound to another file than the one the request touches.
+    pub fn covers(&self, file: i64) -> Result<(), AppError> {
+        match self.bound_file {
+            Some(b) if i64::from(b) != file => Err(unauthorized()),
+            _ => Ok(()),
+        }
+    }
+}
+
 /// No credentials at all is `None`; credentials that fail are still 401, never downgraded to anonymous.
 #[derive(Debug, Clone)]
 pub struct OptionalAuthed(pub Option<Authed>);
@@ -329,13 +340,14 @@ fn query_token(parts: &Parts) -> Option<String> {
         .map(|(_, v)| v)
 }
 
-/// First non-empty of cookie, Bearer, `?token=`: an empty cookie is absent, a stale one shadows Bearer.
-fn token_of(parts: &Parts) -> Option<String> {
+/// First non-empty of cookie, Bearer, `?token=` (flagged true): an empty cookie is absent, a stale one shadows Bearer.
+fn token_of(parts: &Parts) -> Option<(String, bool)> {
     cookie_value(&parts.headers, ACCESS_COOKIE)
         .filter(|t| !t.is_empty())
         .or_else(|| bearer(&parts.headers).map(str::to_owned))
-        .or_else(|| query_token(parts))
-        .filter(|t| !t.is_empty())
+        .map(|t| (t, false))
+        .or_else(|| query_token(parts).map(|t| (t, true)))
+        .filter(|(t, _)| !t.is_empty())
 }
 
 /// The token `POST /auth/logout` attributes the SSE drop to (`auth.md` rule 50): the cookie even when
@@ -357,13 +369,14 @@ async fn authenticate_bound(
     parts: &Parts,
     state: &AppState,
 ) -> Result<Option<(Authed, Option<u32>)>, AppError> {
-    let Some(token) = token_of(parts) else {
+    let Some((token, in_query)) = token_of(parts) else {
         return Ok(None);
     };
+    // A URL ends up in logs: only a scoped token may travel there.
     let claims = state
         .jwt
         .verify(&token)
-        .filter(|c| c.live.is_none())
+        .filter(|c| c.live.is_none() && (!in_query || c.scope.is_some()))
         .ok_or_else(unauthorized)?;
     let sid = claims.sid.ok_or_else(unauthorized)?;
     let (user, role) = load_session_user(&state.db, claims.sub, sid)

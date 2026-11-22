@@ -66,12 +66,9 @@ playerManager.addEventListener(cast.framework.events.EventType.MEDIA_STATUS, () 
   cast.framework.events.EventType.ENDED,
 ].forEach((evt) => playerManager.addEventListener(evt, stopEdl));
 
-// Surface any player error on the device's DevTools console with the full
-// CAF event payload (detailedErrorCode, reason, shaka-side error data).
 playerManager.addEventListener(
   cast.framework.events.EventType.ERROR,
   (event) => {
-    console.error('[fliks-cast] ERROR', JSON.stringify(event));
     stopEdl();
     // Forward to web senders so they can refresh the sid and resume; the
     // sender classifies recoverable (network / 410) vs dead-end errors.
@@ -583,12 +580,6 @@ playerBinder.addEventListener(cast.framework.ui.PlayerDataEventType.ANY_CHANGE, 
 playerManager.setMessageInterceptor(
   cast.framework.messages.MessageType.LOAD,
   (loadRequest) => {
-    console.log(
-      '[fliks-cast] LOAD intercepted — contentId=',
-      loadRequest.media?.contentId,
-      'contentType=',
-      loadRequest.media?.contentType,
-    );
     const media = loadRequest.media;
     // CAF runs this for the queued track it preloads too: the playing track and its mix stay as they are.
     if (media && upNextUrl && media.contentId === upNextUrl && playerManager.getPlayerState() !== cast.framework.messages.PlayerState.IDLE) return loadRequest;

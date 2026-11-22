@@ -1,7 +1,11 @@
 //! `info/*`, `:id/edl` and the session stop (spec rules 25-30).
 use super::{edl, engine_err, file::resolve_file};
 use crate::{
-    http::{AppError, auth::StreamAuthed, validate::PathParams},
+    http::{
+        AppError,
+        auth::{FileBoundAuthed, StreamAuthed},
+        validate::PathParams,
+    },
     presence::parse_source_fps,
     state::AppState,
 };
@@ -20,10 +24,11 @@ use serde_json::{Value, json};
 #[utoipa::path(get, path = "/api/stream/info/qualities/{mediaFileId}", responses((status = 200)))]
 pub async fn qualities(
     State(st): State<AppState>,
-    StreamAuthed(a): StreamAuthed,
+    a: FileBoundAuthed,
     PathParams(id): PathParams<i64>,
 ) -> Result<Json<Vec<QualityEstimate>>, AppError> {
-    let file = resolve_file(&st, Some(&a), id).await?;
+    a.covers(id)?;
+    let file = resolve_file(&st, Some(&a.auth), id).await?;
     let sizes = st
         .engine
         .estimate_sizes(file.info.as_ref(), file.size as f64)
@@ -83,11 +88,12 @@ pub async fn gpus(State(st): State<AppState>, _a: StreamAuthed) -> Json<Value> {
 #[utoipa::path(get, path = "/api/stream/{mediaFileId}/edl", responses((status = 200)))]
 pub async fn edl(
     State(st): State<AppState>,
-    StreamAuthed(a): StreamAuthed,
+    a: FileBoundAuthed,
     PathParams(id): PathParams<i64>,
 ) -> Result<Json<Value>, AppError> {
-    let file = resolve_file(&st, Some(&a), id).await?;
-    let ranges: Vec<EdlRange> = if a.user.edl_enabled {
+    a.covers(id)?;
+    let file = resolve_file(&st, Some(&a.auth), id).await?;
+    let ranges: Vec<EdlRange> = if a.auth.user.edl_enabled {
         let fps = file
             .info
             .as_ref()
@@ -107,10 +113,11 @@ pub async fn edl(
 #[utoipa::path(get, path = "/api/stream/{mediaFileId}/keyframes", responses((status = 200)))]
 pub async fn keyframes(
     State(st): State<AppState>,
-    StreamAuthed(a): StreamAuthed,
+    a: FileBoundAuthed,
     PathParams(id): PathParams<i64>,
 ) -> Result<Json<Value>, AppError> {
-    let file = resolve_file(&st, Some(&a), id).await?;
+    a.covers(id)?;
+    let file = resolve_file(&st, Some(&a.auth), id).await?;
     let held = super::scan::lookup(&st, file.id, &file.absolute, None).await;
     let mut times: Vec<f64> = held
         .scan

@@ -1,0 +1,19 @@
+{
+  "name": "events-sse-query-token-refused",
+  "seed": "base",
+  "steps": [
+    {
+      "as": "user",
+      "auth": "query",
+      "expect": {
+        "body": {
+          "message": "Unauthorized",
+          "statusCode": 401
+        },
+        "status": 401
+      },
+      "method": "GET",
+      "path": "/api/system/events"
+    }
+  ]
+}

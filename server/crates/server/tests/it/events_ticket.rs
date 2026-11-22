@@ -106,7 +106,7 @@ async fn minting_needs_a_session_token(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn the_session_token_still_opens_the_stream_for_released_clients(pool: PgPool) {
+async fn the_session_token_opens_the_stream_from_a_header_but_not_the_query(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, token) = c.user("ana").await;
     assert_eq!(
@@ -114,7 +114,7 @@ async fn the_session_token_still_opens_the_stream_for_released_clients(pool: PgP
         200
     );
     let query = format!("/api/system/events?token={token}");
-    assert_eq!(c.call("GET", &query, None).await.0, 200);
+    assert_eq!(c.call("GET", &query, None).await.0, 401);
     assert_eq!(c.call("GET", "/api/system/events", None).await.0, 401);
 }
 

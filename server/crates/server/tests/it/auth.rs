@@ -132,9 +132,15 @@ async fn token_sources_and_precedence(pool: PgPool) {
         .await,
         ok(a)
     );
+    // a full session token is refused in the query string, a scoped one is read
+    let sa = session::stream(&st, a, "a").await;
     assert_eq!(
-        get_with(&app, &format!("/who?x=1&token={ta}"), &[]).await,
-        ok(a)
+        get_with(&app, &format!("/who?x=1&token={ta}"), &[]).await.0,
+        401
+    );
+    assert_eq!(
+        get_with(&app, &format!("/stream?x=1&token={sa}"), &[]).await,
+        (200, format!("{a}:true"))
     );
     // cookie beats Bearer beats query
     let both = [("cookie", cookie(&ta)), ("authorization", bearer(&tb))];
@@ -179,11 +185,11 @@ async fn token_sources_and_precedence(pool: PgPool) {
     assert_eq!(
         get_with(
             &app,
-            &format!("/who?token={ta}"),
+            &format!("/stream?token={sa}"),
             &[("cookie", "fliks_access=")]
         )
         .await,
-        ok(a)
+        (200, format!("{a}:true"))
     );
     assert_eq!(get_with(&app, "/who?token=", &[]).await.0, 401);
     // no usable credential at all
@@ -296,7 +302,7 @@ async fn a_revoked_session_cuts_every_token_minted_on_it(pool: PgPool) {
         jwt.sign_access(id, "a", sid).unwrap().token,
         jwt.sign_stream(id, "a", sid).unwrap().token,
         jwt.sign_stream_for(id, "a", sid, 7).unwrap().token,
-        jwt.sign_cast(id, "a", sid).unwrap().token,
+        jwt.sign_cast(id, "a", sid, 7).unwrap().token,
     ];
     let status = |t: String| {
         let app = app.clone();
