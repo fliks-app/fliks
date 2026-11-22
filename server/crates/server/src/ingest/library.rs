@@ -6,7 +6,10 @@ use super::{
 };
 use crate::scene::Mapping;
 use crate::{
-    events::{DomainEvent, event::ImportSource},
+    events::{
+        DomainEvent,
+        event::{EpisodeRef, ImportSource},
+    },
     media::items::{self, Link},
     state::AppState,
 };
@@ -267,17 +270,29 @@ pub async fn ingest(
     if out.imported.is_empty() {
         return Ok(out);
     }
-    let carried = if req.replace_existing && !book {
+    let (carried, replaced) = if req.replace_existing && !book {
         remove_superseded(st, &media, &out.imported).await
     } else {
-        vec![]
+        (vec![], HashSet::new())
     };
+    let episodes: Vec<EpisodeRef> = out
+        .imported
+        .iter()
+        .filter_map(|i| Some((i.season_number?, i.episode_number?, i.episode_end)))
+        .flat_map(|(s, e, end)| (e..=end.unwrap_or(e).max(e)).map(move |n| (s, n)))
+        .filter(|k| !replaced.contains(k))
+        .map(|(s, e)| EpisodeRef {
+            season_number: i64::from(s),
+            episode_number: i64::from(e),
+        })
+        .collect();
     let one = (out.imported.len() == 1).then(|| &out.imported[0]);
     st.hub.emit_domain(DomainEvent::MediaFilesImported {
         media_id: i64::from(media.id),
         family,
         season_number: one.and_then(|i| i.season_number).map(i64::from),
         episode_number: one.and_then(|i| i.episode_number).map(i64::from),
+        episodes,
         source: if req.release_name.is_some() {
             ImportSource::Download
         } else {
@@ -1073,8 +1088,14 @@ struct Old {
 }
 
 /// Rules 29-31: the files the new ones replace.
-async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported]) -> Vec<i32> {
+/// Returns the subtitle ids carried over and the episodes whose file was replaced (upgrades).
+async fn remove_superseded(
+    st: &AppState,
+    media: &MediaRow,
+    imported: &[Imported],
+) -> (Vec<i32>, HashSet<(i32, i32)>) {
     let mut carried = vec![];
+    let mut replaced = HashSet::new();
     let new_ids: Vec<i32> = imported.iter().map(|i| i.file_id).collect();
     let olds = sqlx::query_as!(
         Old,
@@ -1095,7 +1116,7 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
         Ok(o) => o,
         Err(e) => {
             tracing::warn!("superseded lookup failed: {e}");
-            return carried;
+            return (carried, replaced);
         }
     };
     let covered: HashSet<(i32, i32)> = imported
@@ -1135,6 +1156,9 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
             crate::media::write::delete_media_file(st, media, old.id, true)
                 .await
                 .map_err(|e| format!("{e:?}"))?;
+            if let (Some(s), Some(e)) = (old.season_number, old.episode_number) {
+                replaced.extend((e..=old.end.unwrap_or(e).max(e)).map(|n| (s, n)));
+            }
             if let Some(ep) = old.episode_id
                 && let Err(e) = crate::markers::rearm_markers(&st.db, ep).await
             {
@@ -1158,7 +1182,7 @@ async fn remove_superseded(st: &AppState, media: &MediaRow, imported: &[Imported
             tracing::warn!("could not remove superseded \"{}\": {e}", old.relative_path);
         }
     }
-    carried
+    (carried, replaced)
 }
 
 /// `epNums` from a caller's season and episode (both present).

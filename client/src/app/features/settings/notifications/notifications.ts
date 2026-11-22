@@ -15,6 +15,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { firstValueFrom } from 'rxjs';
 import { SECRETS_SET_KEY } from '@fliks/plugin-ui';
+import { formatRelativeTime } from '../../../core/utils/relative-time';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SECRET_MASK } from '../../../shared/components/schema-form/schema-form';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
@@ -45,6 +46,9 @@ interface NotificationConnection {
   enabled: boolean;
   events: string[];
   settings?: Record<string, unknown>;
+  lastSentAt?: string | null;
+  lastError?: string | null;
+  lastErrorAt?: string | null;
 }
 
 /** The built-in connection that switches mobile push on: it has no settings and cannot be created or deleted. */
@@ -147,6 +151,20 @@ export class NotificationsSettingsComponent implements OnInit {
 
   /** gotify cannot send without a token, so erasing one is never offered there. */
   readonly canClearToken = computed(() => this.tokenStored() && this.formType() !== 'gotify');
+
+  /** The translation key and params of a row's delivery status line. */
+  deliveryStatus(nc: NotificationConnection): { key: string; params: Record<string, string>; failed: boolean } {
+    const lang = this.translate.currentLang() ?? 'en';
+    const prefix = 'settings.notifications.delivery_';
+    if (nc.type === RELAY_TYPE) return { key: prefix + 'per_user', params: {}, failed: false };
+    const sent = nc.lastSentAt ? new Date(nc.lastSentAt).getTime() : null;
+    const err = nc.lastErrorAt ? new Date(nc.lastErrorAt).getTime() : null;
+    if (nc.lastError && (sent === null || (err !== null && err >= sent))) {
+      return { key: prefix + 'failed', params: { when: formatRelativeTime(nc.lastErrorAt, lang), error: nc.lastError }, failed: true };
+    }
+    if (nc.lastSentAt) return { key: prefix + 'sent', params: { when: formatRelativeTime(nc.lastSentAt, lang) }, failed: false };
+    return { key: prefix + 'never', params: {}, failed: false };
+  }
 
   ngOnInit() {
     this.reloadAll();

@@ -14,7 +14,10 @@ use fliks_server::sync::MutexExt;
 use fliks_server::{
     app,
     config::Config,
-    events::{Bus, DomainEvent, Identity, SseEvent},
+    events::{
+        Bus, DomainEvent, Identity, SseEvent,
+        event::{EpisodeRef, ImportSource},
+    },
     push::{self, Notification},
     roles,
     state::AppState,
@@ -148,7 +151,16 @@ async fn make_user(pool: &PgPool, st: &AppState, name: &str, admin: bool) -> (i3
     .fetch_one(pool)
     .await
     .unwrap();
-    (id, session::token(st, id, name).await)
+    let token = session::token(st, id, name).await;
+    sqlx::query(
+        r#"INSERT INTO refresh_tokens ("userId", "tokenHash", "expiresAt", "sessionId")
+           SELECT $1, md5(random()::text), now() + interval '1 day', id FROM sessions WHERE "userId" = $1"#,
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .unwrap();
+    (id, token)
 }
 
 async fn ctx(pool: PgPool) -> Ctx {
@@ -394,10 +406,65 @@ async fn shutdown_sends_the_pending_episode_groups_before_returning(pool: PgPool
         family: fliks_domain::media::family::Family::Video,
         season_number: Some(1),
         episode_number: Some(1),
-        source: fliks_server::events::event::ImportSource::Disk,
+        episodes: vec![EpisodeRef {
+            season_number: 1,
+            episode_number: 1,
+        }],
+        source: ImportSource::Disk,
     });
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    push::flush_pending(&c.st).await;
+    for _ in 0..50 {
+        push::flush_pending(&c.st).await;
+        if !c.relay.seen("POST", "/v1/push").is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(c.relay.seen("POST", "/v1/push").len(), 1);
+}
+
+#[sqlx::test]
+async fn a_season_pack_import_gives_one_grouped_push(pool: PgPool) {
+    let c = ctx(pool).await;
+    set_relay(&c, true).await;
+    c.relay.wait("POST", "/v1/servers", 1).await;
+    assert_eq!(subscribe(&c, &c.user, "apns", 1).await.0, 201);
+    let media: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type) VALUES ('Show', 'series') RETURNING id"#,
+    )
+    .fetch_one(&c.st.db)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ($1, 'video') RETURNING id),
+                i AS (INSERT INTO items ("mediaId", "editionId") SELECT $1, id FROM e RETURNING id)
+           INSERT INTO playback_states ("userId", "itemId") SELECT $2, id FROM i"#,
+    )
+    .bind(media)
+    .bind(c.user_id)
+    .execute(&c.st.db)
+    .await
+    .unwrap();
+    push::init(&c.st);
+    c.st.hub.emit_domain(DomainEvent::MediaFilesImported {
+        media_id: media.into(),
+        family: fliks_domain::media::family::Family::Video,
+        season_number: None,
+        episode_number: None,
+        episodes: (1..=3)
+            .map(|episode_number| EpisodeRef {
+                season_number: 1,
+                episode_number,
+            })
+            .collect(),
+        source: ImportSource::Disk,
+    });
+    for _ in 0..50 {
+        push::flush_pending(&c.st).await;
+        if !c.relay.seen("POST", "/v1/push").is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     assert_eq!(c.relay.seen("POST", "/v1/push").len(), 1);
 }
 

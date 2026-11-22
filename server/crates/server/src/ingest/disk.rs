@@ -8,7 +8,10 @@ use super::{
 };
 use crate::sync::MutexExt;
 use crate::{
-    events::{DomainEvent, Num, SseEvent, Subject as Subj, event::ImportSource},
+    events::{
+        DomainEvent, Num, SseEvent, Subject as Subj,
+        event::{EpisodeRef, ImportSource},
+    },
     http::{
         AppError,
         auth::{Authed, StreamAuthed},

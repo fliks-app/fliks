@@ -12,6 +12,9 @@ pub struct Connection {
     pub settings: Json<Map<String, Value>>,
     pub events: Json<Vec<String>>,
     pub enabled: bool,
+    pub last_sent_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    pub last_error_at: Option<DateTime<Utc>>,
 }
 
 impl Connection {
@@ -27,6 +30,9 @@ impl Connection {
             "settings": redact(&self.typ, &self.settings),
             "events": self.events.0,
             "enabled": self.enabled,
+            "lastSentAt": self.last_sent_at.map(|t| ms(&t)),
+            "lastError": self.last_error,
+            "lastErrorAt": self.last_error_at.map(|t| ms(&t)),
         })
     }
 }
@@ -44,7 +50,9 @@ pub async fn list(pool: &PgPool) -> sqlx::Result<Vec<Connection>> {
         Connection,
         r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, type AS typ,
                   settings AS "settings: Json<Map<String, Value>>",
-                  events AS "events: Json<Vec<String>>", enabled
+                  events AS "events: Json<Vec<String>>", enabled,
+                  "lastSentAt" AS last_sent_at, "lastError" AS last_error,
+                  "lastErrorAt" AS last_error_at
            FROM notification_connections ORDER BY name ASC"#
     )
     .fetch_all(pool)
@@ -56,7 +64,9 @@ pub async fn find(pool: &PgPool, id: i32) -> sqlx::Result<Option<Connection>> {
         Connection,
         r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, type AS typ,
                   settings AS "settings: Json<Map<String, Value>>",
-                  events AS "events: Json<Vec<String>>", enabled
+                  events AS "events: Json<Vec<String>>", enabled,
+                  "lastSentAt" AS last_sent_at, "lastError" AS last_error,
+                  "lastErrorAt" AS last_error_at
            FROM notification_connections WHERE id = $1"#,
         id
     )
@@ -70,7 +80,9 @@ pub async fn subscribed(pool: &PgPool, event: &str) -> sqlx::Result<Vec<Connecti
         Connection,
         r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, type AS typ,
                   settings AS "settings: Json<Map<String, Value>>",
-                  events AS "events: Json<Vec<String>>", enabled
+                  events AS "events: Json<Vec<String>>", enabled,
+                  "lastSentAt" AS last_sent_at, "lastError" AS last_error,
+                  "lastErrorAt" AS last_error_at
            FROM notification_connections
            WHERE enabled AND type <> 'fliks-relay' AND jsonb_exists(events, $1)"#,
         event
@@ -86,7 +98,9 @@ pub async fn insert(pool: &PgPool, w: Write) -> sqlx::Result<Connection> {
            VALUES ($1, $2, $3, $4, $5)
            RETURNING id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, type AS typ,
                      settings AS "settings: Json<Map<String, Value>>",
-                     events AS "events: Json<Vec<String>>", enabled"#,
+                     events AS "events: Json<Vec<String>>", enabled,
+                  "lastSentAt" AS last_sent_at, "lastError" AS last_error,
+                  "lastErrorAt" AS last_error_at"#,
         w.name,
         w.typ,
         Value::Object(w.settings),
@@ -106,7 +120,9 @@ pub async fn update(pool: &PgPool, id: i32, w: Write) -> sqlx::Result<Option<Con
            WHERE id = $1
            RETURNING id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, type AS typ,
                      settings AS "settings: Json<Map<String, Value>>",
-                     events AS "events: Json<Vec<String>>", enabled"#,
+                     events AS "events: Json<Vec<String>>", enabled,
+                  "lastSentAt" AS last_sent_at, "lastError" AS last_error,
+                  "lastErrorAt" AS last_error_at"#,
         id,
         w.name,
         w.typ,
@@ -130,7 +146,9 @@ pub async fn set_enabled(
            WHERE id = $1
            RETURNING id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, type AS typ,
                      settings AS "settings: Json<Map<String, Value>>",
-                     events AS "events: Json<Vec<String>>", enabled"#,
+                     events AS "events: Json<Vec<String>>", enabled,
+                  "lastSentAt" AS last_sent_at, "lastError" AS last_error,
+                  "lastErrorAt" AS last_error_at"#,
         id,
         enabled,
     )
@@ -143,4 +161,21 @@ pub async fn delete(pool: &PgPool, id: i32) -> sqlx::Result<bool> {
         .execute(pool)
         .await?;
     Ok(r.rows_affected() > 0)
+}
+
+/// Records a delivery outcome; `error` is the generic text, never the remote body.
+pub async fn record(pool: &PgPool, id: i32, error: Option<&str>) {
+    let r = sqlx::query!(
+        r#"UPDATE notification_connections
+           SET "lastSentAt" = CASE WHEN $2::text IS NULL THEN now() ELSE "lastSentAt" END,
+               "lastError" = $2, "lastErrorAt" = CASE WHEN $2::text IS NULL THEN NULL ELSE now() END
+           WHERE id = $1"#,
+        id,
+        error
+    )
+    .execute(pool)
+    .await;
+    if let Err(e) = r {
+        tracing::warn!("notification status of #{id}: {e}");
+    }
 }

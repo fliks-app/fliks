@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, type AS typ,\n                  settings AS \"settings: Json<Map<String, Value>>\",\n                  events AS \"events: Json<Vec<String>>\", enabled\n           FROM notification_connections ORDER BY name ASC",
+  "query": "UPDATE notification_connections\n           SET name = $2, type = $3, settings = $4, events = COALESCE($5, events),\n               enabled = COALESCE($6, enabled), \"updatedAt\" = now()\n           WHERE id = $1\n           RETURNING id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, type AS typ,\n                     settings AS \"settings: Json<Map<String, Value>>\",\n                     events AS \"events: Json<Vec<String>>\", enabled,\n                  \"lastSentAt\" AS last_sent_at, \"lastError\" AS last_error,\n                  \"lastErrorAt\" AS last_error_at",
   "describe": {
     "columns": [
       {
@@ -90,10 +90,50 @@
             "name": "enabled"
           }
         }
+      },
+      {
+        "ordinal": 8,
+        "name": "last_sent_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastSentAt"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "last_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastError"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "last_error_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastErrorAt"
+          }
+        }
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Varchar",
+        "Jsonb",
+        "Jsonb",
+        "Bool"
+      ]
     },
     "nullable": [
       false,
@@ -103,8 +143,11 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "44cd8d6dec3743676feeeed794cc98fba9a2f68e0e3ea839d432a08b3b949c60"
+  "hash": "254b17522c9e5dd0e1b72dfa3f79aa7a0e9a402ea12e45857fef40ee018863c4"
 }

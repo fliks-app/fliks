@@ -385,9 +385,7 @@ pub async fn list_sessions(
         r#"SELECT s.id, s.method, p.name AS "provider_name?", s."userAgent" AS user_agent,
                   s."createdAt" AS created_at, s."lastSeenAt" AS last_seen_at
            FROM sessions s LEFT JOIN oidc_providers p ON p.id = s."providerId"
-           WHERE s."userId" = $1 AND s."revokedAt" IS NULL
-             AND EXISTS (SELECT 1 FROM refresh_tokens t WHERE t."sessionId" = s.id
-                         AND t."revokedAt" IS NULL AND t."expiresAt" > $2)
+           WHERE s."userId" = $1 AND session_is_live(s.id, $2)
            ORDER BY s."lastSeenAt" DESC, s.id DESC"#,
         user_id,
         now

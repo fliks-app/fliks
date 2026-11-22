@@ -779,6 +779,14 @@ pub struct RawEvent {
     pub payload: Value,
 }
 
+/// A season and an episode number of a series.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EpisodeRef {
+    pub season_number: i64,
+    pub episode_number: i64,
+}
+
 /// An id of a work in an outside system, as the domain events name it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExternalId {
@@ -820,6 +828,9 @@ pub enum DomainEvent {
         season_number: Option<i64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         episode_number: Option<i64>,
+        /// Every episode that is new to the library: a replaced file's episode is an upgrade, not listed.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        episodes: Vec<EpisodeRef>,
         source: ImportSource,
     },
     #[serde(rename = "media.acquisition.requested")]

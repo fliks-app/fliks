@@ -335,3 +335,19 @@ describe('NotificationsSettingsComponent — provider tokens', () => {
     expect(c.webhookUrlStored()).toBe(false);
   });
 });
+
+describe('NotificationsSettingsComponent: delivery status', () => {
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+  const row = (o: object) => ({ id: 1, name: 'n', type: 'ntfy', enabled: true, events: [], ...o });
+
+  it('picks failed, sent, never or per-user from the timestamps', async () => {
+    const c = await createComponent();
+    const key = (o: object) => c.deliveryStatus(row(o)).key.replace('settings.notifications.delivery_', '');
+    expect(key({ lastError: 'x', lastErrorAt: ago(1000) })).toBe('failed');
+    expect(key({ lastError: 'x', lastErrorAt: ago(1000), lastSentAt: ago(5000) })).toBe('failed');
+    expect(key({ lastError: 'x', lastErrorAt: ago(5000), lastSentAt: ago(1000) })).toBe('sent');
+    expect(key({})).toBe('never');
+    expect(key({ type: 'fliks-relay', lastSentAt: ago(1000) })).toBe('per_user');
+    expect(c.deliveryStatus(row({ lastError: 'boom', lastErrorAt: ago(1000) })).params['error']).toBe('boom');
+  });
+});

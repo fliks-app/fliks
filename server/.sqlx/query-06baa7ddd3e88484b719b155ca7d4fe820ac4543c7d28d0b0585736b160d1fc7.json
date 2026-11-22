@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, type AS typ,\n                  settings AS \"settings: Json<Map<String, Value>>\",\n                  events AS \"events: Json<Vec<String>>\", enabled\n           FROM notification_connections WHERE id = $1",
+  "query": "UPDATE notification_connections SET enabled = $2, \"updatedAt\" = now()\n           WHERE id = $1\n           RETURNING id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, type AS typ,\n                     settings AS \"settings: Json<Map<String, Value>>\",\n                     events AS \"events: Json<Vec<String>>\", enabled,\n                  \"lastSentAt\" AS last_sent_at, \"lastError\" AS last_error,\n                  \"lastErrorAt\" AS last_error_at",
   "describe": {
     "columns": [
       {
@@ -90,11 +90,45 @@
             "name": "enabled"
           }
         }
+      },
+      {
+        "ordinal": 8,
+        "name": "last_sent_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastSentAt"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "last_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastError"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "last_error_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastErrorAt"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Int4",
+        "Bool"
       ]
     },
     "nullable": [
@@ -105,8 +139,11 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "ef0b93636b75cf0ef1aa4a4b500296806cf0ddbf956fd7980f6cde5d528668cd"
+  "hash": "06baa7ddd3e88484b719b155ca7d4fe820ac4543c7d28d0b0585736b160d1fc7"
 }

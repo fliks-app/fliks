@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO notification_connections (name, type, settings, events, enabled)\n           VALUES ($1, $2, $3, $4, $5)\n           RETURNING id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, type AS typ,\n                     settings AS \"settings: Json<Map<String, Value>>\",\n                     events AS \"events: Json<Vec<String>>\", enabled",
+  "query": "INSERT INTO notification_connections (name, type, settings, events, enabled)\n           VALUES ($1, $2, $3, $4, $5)\n           RETURNING id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, type AS typ,\n                     settings AS \"settings: Json<Map<String, Value>>\",\n                     events AS \"events: Json<Vec<String>>\", enabled,\n                  \"lastSentAt\" AS last_sent_at, \"lastError\" AS last_error,\n                  \"lastErrorAt\" AS last_error_at",
   "describe": {
     "columns": [
       {
@@ -90,6 +90,39 @@
             "name": "enabled"
           }
         }
+      },
+      {
+        "ordinal": 8,
+        "name": "last_sent_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastSentAt"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "last_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastError"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "last_error_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastErrorAt"
+          }
+        }
       }
     ],
     "parameters": {
@@ -109,8 +142,11 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "b91bff934660a41d984845895d064a488352317357d319a0de4f1f4a811bef83"
+  "hash": "1964a448dfd373167866d0112866c93cd3e84f565a8bb327f926dc0cebaf7e61"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE notification_connections\n           SET name = $2, type = $3, settings = $4, events = COALESCE($5, events),\n               enabled = COALESCE($6, enabled), \"updatedAt\" = now()\n           WHERE id = $1\n           RETURNING id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, type AS typ,\n                     settings AS \"settings: Json<Map<String, Value>>\",\n                     events AS \"events: Json<Vec<String>>\", enabled",
+  "query": "SELECT id, \"createdAt\" AS created_at, \"updatedAt\" AS updated_at, name, type AS typ,\n                  settings AS \"settings: Json<Map<String, Value>>\",\n                  events AS \"events: Json<Vec<String>>\", enabled,\n                  \"lastSentAt\" AS last_sent_at, \"lastError\" AS last_error,\n                  \"lastErrorAt\" AS last_error_at\n           FROM notification_connections\n           WHERE enabled AND type <> 'fliks-relay' AND jsonb_exists(events, $1)",
   "describe": {
     "columns": [
       {
@@ -90,16 +90,44 @@
             "name": "enabled"
           }
         }
+      },
+      {
+        "ordinal": 8,
+        "name": "last_sent_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastSentAt"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "last_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastError"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "last_error_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notification_connections",
+            "name": "lastErrorAt"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Int4",
-        "Varchar",
-        "Varchar",
-        "Jsonb",
-        "Jsonb",
-        "Bool"
+        "Text"
       ]
     },
     "nullable": [
@@ -110,8 +138,11 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true,
+      true
     ]
   },
-  "hash": "5e17f156c72d48a54a3aae427859785d9cce80c3a713c8e4fdfbbd8de798745b"
+  "hash": "584b624a1442b0630b41c38557d38cb584a8a22e217ef7bf8dea7d22a3c6182d"
 }
