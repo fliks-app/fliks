@@ -19,7 +19,7 @@ const repoRoot = resolve(clientRoot, '..');
 const distBrowser = resolve(clientRoot, 'dist/client/browser');
 if (!existsSync(distBrowser)) {
   console.error(
-    `[webos] missing ${distBrowser}. Run \`npm run build -- --configuration webos\` first.`,
+    `[webos] missing ${distBrowser}. Run \`npm run webos:compile\` first.`,
   );
   process.exit(1);
 }

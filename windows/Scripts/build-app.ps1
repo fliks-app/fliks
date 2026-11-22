@@ -36,7 +36,7 @@ if (-not $SkipWeb) {
     Write-Host '==> Building Angular client'
     Push-Location (Join-Path $repo 'client')
     npm ci
-    npx ng build --configuration=production
+    npm run build
     Pop-Location
 }
 

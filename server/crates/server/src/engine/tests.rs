@@ -454,7 +454,13 @@ mod probe {
 
     #[tokio::test]
     async fn a_transport_error_keeps_its_cause() {
-        let e = reqwest::get("http://127.0.0.1:1/").await.unwrap_err();
+        let e = crate::net::guard::open_builder()
+            .build()
+            .unwrap()
+            .get("http://127.0.0.1:1/")
+            .send()
+            .await
+            .unwrap_err();
         let msg = EngineError::from(e).to_string();
         assert!(msg.starts_with("error sending request: "), "{msg}");
     }

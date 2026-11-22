@@ -89,7 +89,7 @@ jobs:
             absent=0
             for _ in $(seq 180); do
               status=$(gh run list --workflow docker-publish.yml --branch main --event push --commit "$GITHUB_SHA" \
-                --json status --jq '.[0].status // "none"')
+                --json status --jq '.[0].status // "none"') || status=unknown
               [ "$status" = completed ] && break
               # No main run after 3 minutes: the commit only touched ignored paths.
               if [ "$status" = none ]; then absent=$((absent + 1)); [ "$absent" -ge 9 ] && break; fi
@@ -202,7 +202,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=ref,event=branch
-            type=raw,value=sha-${{ github.sha }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=sha-${{ github.sha }},enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=raw,value=manual-{{sha}},enable=${{ github.event_name == 'workflow_dispatch' }}
             type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '' }}
 

@@ -45,7 +45,7 @@ jobs:
       # A tag run publishes that tag; any other run keeps the latest release in place.
       - name: check out the release and main sides
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then release=$GITHUB_REF_NAME; else release=$(git tag --list 'v*' --sort=-v:refname | head -1); fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then release=$GITHUB_REF_NAME; else release=$(git -c versionsort.suffix=- tag --list 'v*' --sort=-v:refname | head -1); fi
           [ -n "$release" ]
           echo "release receiver: $release"
           git worktree add --detach ../release "refs/tags/$release"
