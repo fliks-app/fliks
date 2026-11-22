@@ -10,7 +10,7 @@ use fliks_domain::{
     js::now_ms,
     party::{
         CloseReason, EMPTY_TTL_MS, Effect, Item, LOBBY_OPEN_BEFORE_MS, Live, Member, Message,
-        SCHEDULE_EXPIRY_MS,
+        SCHEDULE_EXPIRY_MS, State,
     },
 };
 use serde_json::{Value, to_value};
@@ -170,6 +170,29 @@ impl Parties {
 
     pub fn forget_notice(&self, id: i32) {
         self.inner().notified.remove(&id);
+    }
+
+    /// The parties that play right now, with their position at `now`.
+    pub fn positions(&self, now: i64) -> Vec<(i32, f64)> {
+        let g = self.inner();
+        g.live
+            .iter()
+            .filter_map(|(id, l)| {
+                let p = l.playback.as_ref()?;
+                (p.state == State::Playing).then(|| (*id, p.position_at(now)))
+            })
+            .collect()
+    }
+
+    /// Drops `files` from the playing item of every machine that pins one of them.
+    fn clear_files(&self, files: &[i32]) {
+        for l in self.inner().live.values_mut() {
+            if let Some(p) = &mut l.playback
+                && p.item.media_file_id.is_some_and(|f| files.contains(&f))
+            {
+                p.item.media_file_id = None;
+            }
+        }
     }
 
     pub fn ids(&self) -> Vec<i32> {
@@ -720,6 +743,24 @@ pub async fn end_playing_items(st: &AppState, items: &[i32]) -> sqlx::Result<()>
     Ok(())
 }
 
+/// Rule 10: stores where the playing parties are, so a restart resumes close to there.
+pub async fn persist_positions(st: &AppState) {
+    let positions = st.parties.positions(now_ms());
+    if positions.is_empty() {
+        return;
+    }
+    if let Err(e) = db::persist_positions(&st.db, &positions).await {
+        tracing::warn!(error = %e, "party positions not saved");
+    }
+}
+
+/// Unpins the deleted `files` from the open parties, rows and machines, which would write them back.
+pub async fn clear_files(st: &AppState, files: &[i32]) -> sqlx::Result<()> {
+    db::clear_file(&st.db, files).await?;
+    st.parties.clear_files(files);
+    Ok(())
+}
+
 /// Ends every open party `owner` owns, before their account (and so the rows) goes.
 pub async fn end_owned(st: &AppState, owner: i32) -> sqlx::Result<()> {
     for id in db::open_ids_owned(&st.db, owner).await? {
@@ -746,10 +787,11 @@ pub fn spawn(st: &AppState) {
             every.tick().await;
             tick(&st).await;
             n += 1;
-            if n.is_multiple_of(10)
-                && let Err(e) = sweep(&st, Utc::now()).await
-            {
-                tracing::warn!(error = %e, "party schedule sweep failed");
+            if n.is_multiple_of(10) {
+                persist_positions(&st).await;
+                if let Err(e) = sweep(&st, Utc::now()).await {
+                    tracing::warn!(error = %e, "party schedule sweep failed");
+                }
             }
         }
     });

@@ -83,6 +83,7 @@ impl Engine {
     async fn connect_loop(&self) {
         let t = self.timing();
         let mut backoff = t.events_min;
+        self.cancel_orphans().await;
         loop {
             if let Err(e) = self.connect_once(&mut backoff).await {
                 tracing::warn!("engine events: {e}");

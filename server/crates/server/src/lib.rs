@@ -168,6 +168,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         }
     };
     qoe.flush_all().await;
+    party::persist_positions(&state).await;
     push::flush_pending(&state).await;
     state.plugins.shutdown().await;
     // Non-zero so the parent supervisor (or `Restart=on-failure`) starts us again.
@@ -243,6 +244,10 @@ async fn boot(cfg: Config) -> Result<(AppState, axum::Router), BoxError> {
     media::write::recover(&state).await;
     ingest::books::backfill_unmatched(&state).await;
     ingest::books::merge::resume_backfills(&state).await;
+    tokio::spawn({
+        let st = state.clone();
+        async move { ingest::post_import::recover(&st).await }
+    });
     party::boot(&state).await?;
     party::spawn(&state);
     requests::spawn(&state);

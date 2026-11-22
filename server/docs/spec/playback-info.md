@@ -139,7 +139,7 @@ Edition ACL (`libraries/acl.rs::assert_file_accessible`, `books-api.md` A6): a f
 
 ### Sprite job
 
-52. `ThumbnailService.generateForFile(file, media, subject, {force?, priority?='low'})`: `null` when `streamInfo.durationSeconds` is falsy or `media.path`/`file.relativePath` is missing; absolute path = `path.join(folder.path, relativePath)` (the file's folder, `ingest.md` rule 1); activity key `GenerateSprite:<fileId>` (an optional `parentId`: the analyze parent, `ingest.md` rule 51; none otherwise; `upsertPending` before, `upsertRunning(pct rounded, 100)` on engine progress, `remove` in `finally`); `engine.runJob({kind:{type:'Sprite', info}, media:{mediaFileId, path}, priority, force})` -> `done.sprite` (`SpriteMeta`); failure -> warn, `null`. `deleteForFile(id)`: engine `POST /v1/invalidate {mediaFileId}` (best effort) and `rm -rf <cacheDir>/thumbnails/<id>` (failure warned). `onModuleInit`: when `cacheDir !== dataDir`, `rm -rf <dataDir>/thumbnails` and `thumbnails-tmp` (host-side thumbnail leftovers). `getSpritePath`/`getMetadataPath` return the host paths `<cacheDir>/thumbnails/<id>/sprite.{jpg,json}` only. `GenerateMissingSprites` passes every file with `force=false` and the engine cache answers (`scheduler.md` rule 28).
+52. `ThumbnailService.generateForFile(file, media, subject, {force?, priority?='low'})`: `null` when `streamInfo.durationSeconds` is falsy or `media.path`/`file.relativePath` is missing; absolute path = `path.join(folder.path, relativePath)` (the file's folder, `ingest.md` rule 1); activity key `GenerateSprite:<fileId>` (an optional `parentId`: the analyze parent, `ingest.md` rule 51; none otherwise; `upsertPending` before, `upsertRunning(pct rounded, 100)` on engine progress, `remove` in `finally`); `engine.runJob({kind:{type:'Sprite', info}, media:{mediaFileId, path}, priority, force})` -> `done.sprite` (`SpriteMeta`); failure -> warn, `null`. `deleteForFile(id)`: engine `POST /v1/invalidate {mediaFileId}` (best effort). `onModuleInit`: when `cacheDir !== dataDir`, `rm -rf <dataDir>/thumbnails` and `thumbnails-tmp` (host-side thumbnail leftovers). The host keeps no sprite path: the engine owns the sheet. **Sprite backfill**: every minute, under the conditions of rule 50 (older than 5 min, no live session) and while `sprites_auto_generate_on_import` is unset or `'true'`, the next file past an in-memory cursor with a video stream is asked for its sprite with `force=false` at `low` priority; the engine answers a cached sheet at once, so a lost or wiped sprite cache refills without an admin trigger. `GenerateMissingSprites` passes every file with `force=false` and the engine cache answers (`scheduler.md` rule 28).
 
 ## SQL
 
@@ -214,6 +214,7 @@ Read through `SettingsService.get(key)` (string or null) by `StreamingSettingsCa
 | Job | Schedule | Behaviour |
 |---|---|---|
 | Scan backfill | every minute | rule 50 |
+| Sprite backfill | every minute | rule 52 |
 | Source scan | on demand (playback-info hint, post-import, backfill) | rule 49 |
 | Stale re-probe | on demand (playback-info hint) | rule 51 |
 | Sprite generation | on demand (rescan, post-import; `GenerateSprites` / `GenerateMissingSprites` triggers, `scheduler.md` rule 28) | rule 52 |

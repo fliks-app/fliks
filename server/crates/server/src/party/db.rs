@@ -571,6 +571,39 @@ pub async fn set_ended(db: &PgPool, id: i32) -> sqlx::Result<()> {
     Ok(())
 }
 
+/// Stores the position of every playing `live` party between two transitions.
+pub async fn persist_positions(db: &PgPool, positions: &[(i32, f64)]) -> sqlx::Result<()> {
+    let (ids, at): (Vec<i32>, Vec<f64>) = positions.iter().copied().unzip();
+    sqlx::query(
+        r#"UPDATE watch_parties p SET position = v.position
+           FROM unnest($1::int[], $2::float8[]) AS v(id, position)
+           WHERE p.id = v.id AND p.status = 'live'"#,
+    )
+    .bind(ids)
+    .bind(at)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Forgets the files `files` on every open party and programme row that pins it.
+pub async fn clear_file(db: &PgPool, files: &[i32]) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"UPDATE watch_parties SET "mediaFileId" = NULL
+           WHERE "mediaFileId" = ANY($1) AND status <> 'ended'"#,
+    )
+    .bind(files)
+    .execute(db)
+    .await?;
+    sqlx::query(
+        r#"UPDATE watch_party_items SET "mediaFileId" = NULL WHERE "mediaFileId" = ANY($1)"#,
+    )
+    .bind(files)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 pub async fn persist(db: &PgPool, id: i32, position: f64, item: &Item) -> sqlx::Result<()> {
     sqlx::query(
         r#"UPDATE watch_parties SET position = $2, "itemId" = COALESCE($6, item_of($3, $5)), "mediaFileId" = $4

@@ -88,6 +88,22 @@ Scope: the `commands` table and its audit wrapper (`run_audited`), the cron runn
 32. Reserved names: a plugin-declared job may not take any core or trigger-only name; registration fails `job-name-conflict` (`job "<name>" collides with a core scheduler job`). It asks `jobs::names` (`plugins.md` rule 9), so every core name is reserved. The name lists of rules 10 and 15 are `jobs::names` (a unit test pins both lists).
 33. Events and activity of these jobs (`task.progress`, `command.started`, `command.completed`, `activity.changed`) go through the Rust hub and registry directly. Progress `current` counts items finished before the current one (`i`, not `i+1`).
 
+### H. Durability tiers
+
+34. Postgres row state is the queue. Work that must survive a restart sits in one of three tiers: a cron job (rules 8, 10), the leased `queue/` (the one place that needs leases), or an in-memory accelerator. An accelerator never holds the only copy of work still to do: it names its durable marker and its reconcile, which runs at boot, on a cron tick and, for a bus consumer, on lag (`events-hub.md`). No generic persistent job framework.
+35. The accelerators and their markers:
+
+    | Accelerator | Marker | Reconcile |
+    |---|---|---|
+    | post-import enrich queue (`ingest.md` rule 34) | `media_files."enrichedAt"` | `post_import::recover`: boot and the daily prune tick |
+    | post-import settle timers (`ingest.md` rule 37) | `media."settledAt"` against the newest file of the media | the same `recover` |
+    | engine background jobs (`engine-glue.md` rule 32) | none: the engine's job state is cache | on adoption the host cancels the open jobs of a previous host; the markers above and the backfills requeue the work |
+    | seek sprites | the engine's own sheet | the sprite backfill (`playback-info.md` rule 52) |
+    | source scans | `media_file_scans` | the scan backfill (`playback-info.md` rule 50) |
+    | party positions (`watch-party.md`) | `watch_parties.position` | written on the 10 s sweep and at shutdown |
+
+    `recover` looks back 7 days and takes at most 1000 files and 500 media per pass.
+
 ## SQL
 
 - Boot sweep: `UPDATE commands SET status = 'failed', "endedOn" = now() WHERE status IN ('running','queued')`.
@@ -112,7 +128,7 @@ None in the `settings` table (the only settings-gated tick is the subtitle one).
 |---|---|---|---|---|---|
 | `Backup` | Rust | `0 02 * * *`, manual | none | rule 22 | `Backup`, `scheduled` / `manual` |
 | `RefreshMetadata` | Rust | `0 04 * * *`, manual | an available provider | rules 23, 24 | `RefreshMetadata` |
-| `PruneOldCommands` | Rust | `0 03 * * *` | none | rule 26 | none |
+| `PruneOldCommands` | Rust | `0 03 * * *` | none | rule 26; the same tick runs `post_import::recover` (rule 35) | none |
 | `RefreshPluginSources` | Rust | `0 3 * * *`, manual | none | rule 30 | `RefreshPluginSources` |
 | `UpdatePlugins` | Rust | `30 3 * * *`, manual | `plugins.auto_update` | rule 30 | `UpdatePlugins`, outcome in `body` |
 | `MediaCleanup` | Rust | `0 05 * * *`, manual | `cleanup_max_per_run` | `cleanup.md` rules 11-18 | `MediaCleanup` |

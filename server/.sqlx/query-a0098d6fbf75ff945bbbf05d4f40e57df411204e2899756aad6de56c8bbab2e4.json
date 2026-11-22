@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id FROM media_files\n           WHERE \"mediaId\" = $1 AND jsonb_typeof(\"streamInfo\" -> 'cover') = 'object'\n             AND \"streamInfo\" -> 'audio' -> 0 IS NOT NULL AND \"streamInfo\" -> 'video' -> 0 IS NULL\n           ORDER BY id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a0098d6fbf75ff945bbbf05d4f40e57df411204e2899756aad6de56c8bbab2e4"
+}

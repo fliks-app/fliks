@@ -1306,6 +1306,9 @@ async fn replace_parts(
         .await
         .map_err(|e| e.to_string())?;
     tx.commit().await.map_err(|e| e.to_string())?;
+    if let Err(e) = crate::party::clear_files(st, &ids).await {
+        tracing::warn!("m4b merge of book #{media}: parties keep a removed part: {e}");
+    }
     // The rows are gone: a file that stays is an orphan, never a loss.
     let (_, root) = output_path(st, parts[0].folder_id, out_rel).await?;
     for (p, path) in parts.iter().zip(abs) {

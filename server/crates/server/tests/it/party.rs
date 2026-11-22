@@ -4233,6 +4233,142 @@ async fn a_transferred_host_role_survives_a_restart(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn the_owner_reclaims_a_transferred_party_and_the_new_host_quits_back_to_it(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let id = party_with(&c, &a, vec![bob]).await;
+    let url = format!("/api/parties/{id}");
+    let _ca = c.connect(alice, "da");
+    let _cb = c.connect(bob, "db");
+    for (t, d) in [(&a, "da"), (&b, "db")] {
+        let body = Some(json!({"deviceId": d}));
+        c.call("POST", &format!("{url}/join"), t, body).await;
+    }
+    let host = format!("{url}/members/{bob}/host");
+    assert_eq!(c.call("POST", &host, &a, None).await.0, 204);
+    let (s, _) = c
+        .call("PATCH", &url, &a, Some(json!({"name": "mine"})))
+        .await;
+    assert_eq!(s, 200, "the owner still edits");
+    let (s, _) = c.call("POST", &format!("{url}/quit"), &a, None).await;
+    assert_eq!(s, 400, "the owner never quits");
+    let (s, _) = c.call("POST", &format!("{url}/quit"), &b, None).await;
+    assert_eq!(s, 204);
+    assert_eq!(c.st.parties.view(id as i32).unwrap().host_id, alice);
+    let stored: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "hostId" FROM watch_parties WHERE id = $1"#)
+            .bind(id as i32)
+            .fetch_one(&c.pool)
+            .await
+            .unwrap();
+    assert_eq!(stored, Some(alice));
+    assert_eq!(
+        c.call("POST", &host, &a, None).await.0,
+        404,
+        "bob is no guest any more"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_owner_ends_a_party_whose_host_is_someone_else(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (alice, a) = c.user("alice", true).await;
+    let (bob, b) = c.user("bob", true).await;
+    c.follow(alice, bob).await;
+    let id = party_with(&c, &a, vec![bob]).await;
+    let url = format!("/api/parties/{id}");
+    let _cb = c.connect(bob, "db");
+    c.call(
+        "POST",
+        &format!("{url}/join"),
+        &b,
+        Some(json!({"deviceId": "db"})),
+    )
+    .await;
+    assert_eq!(
+        c.call("POST", &format!("{url}/members/{bob}/host"), &a, None)
+            .await
+            .0,
+        204
+    );
+    assert_eq!(c.call("DELETE", &url, &a, None).await.0, 204);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_playing_party_is_stored_at_its_current_position_and_boots_paused_there(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = c.user("alice", true).await;
+    let id = party_with(&c, &a, vec![]).await as i32;
+    let now = fliks_domain::js::now_ms();
+    c.st.parties
+        .act(id, |l| {
+            let p = l.playback.as_mut().unwrap();
+            p.state = fliks_domain::party::State::Playing;
+            p.anchor.position = 5.0;
+            p.anchor.server_time_ms = now - 3000;
+            ((), vec![])
+        })
+        .unwrap();
+    party::persist_positions(&c.st).await;
+    let stored: f64 = sqlx::query_scalar("SELECT position FROM watch_parties WHERE id = $1")
+        .bind(id)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert!((8.0..9.0).contains(&stored), "{stored}");
+    let mut st = c.st.clone();
+    st.parties = party::Parties::default();
+    party::boot(&st).await.unwrap();
+    let v = st.parties.view(id).unwrap().playback.unwrap();
+    assert_eq!(v.state, fliks_domain::party::State::Paused);
+    assert_eq!(v.anchor.position, stored);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_deleted_file_is_unpinned_from_the_party_row_and_its_machine(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = c.user("alice", true).await;
+    let file: i32 = sqlx::query_scalar(r#"SELECT id FROM media_files WHERE "mediaId" = 1"#)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    let (s, p) = c
+        .call(
+            "POST",
+            "/api/parties",
+            &a,
+            Some(json!({"name": "n", "mediaId": 1, "mediaFileId": file})),
+        )
+        .await;
+    assert_eq!(s, 201);
+    let id = p["id"].as_i64().unwrap() as i32;
+    let (s, _) = c
+        .call("POST", &format!("/api/parties/{id}/start"), &a, None)
+        .await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        c.st.parties.view(id).unwrap().item.unwrap().media_file_id,
+        Some(file)
+    );
+    party::clear_files(&c.st, &[file]).await.unwrap();
+    assert_eq!(
+        c.st.parties.view(id).unwrap().item.unwrap().media_file_id,
+        None
+    );
+    let rows: Vec<Option<i32>> = sqlx::query_scalar(
+        r#"SELECT "mediaFileId" FROM watch_parties WHERE id = $1
+           UNION ALL SELECT "mediaFileId" FROM watch_party_items WHERE "partyId" = $1"#,
+    )
+    .bind(id)
+    .fetch_all(&c.pool)
+    .await
+    .unwrap();
+    assert!(!rows.is_empty() && rows.iter().all(Option::is_none));
+}
+
+#[sqlx::test(migrations = false)]
 async fn an_ended_party_gets_no_machine_back_from_a_quit(pool: PgPool) {
     let c = ctx(pool).await;
     let (alice, a) = c.user("alice", true).await;

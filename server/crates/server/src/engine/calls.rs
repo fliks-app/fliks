@@ -479,6 +479,11 @@ impl Engine {
         }
     }
 
+    /// Every job the engine holds, the last ended ones included.
+    pub async fn list_jobs(&self) -> Result<Vec<JobSnapshot>, EngineError> {
+        self.get("GET /v1/jobs", "/v1/jobs", &[]).await
+    }
+
     /// Idempotent: an ended or unknown job is fine.
     pub async fn cancel_job(&self, job_id: &str) -> Result<(), EngineError> {
         let reply = self

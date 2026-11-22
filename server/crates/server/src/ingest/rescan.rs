@@ -463,6 +463,9 @@ async fn remove_missing(
         .await
     {
         Ok(_) => {
+            if let Err(e) = crate::party::clear_files(st, &ids).await {
+                tracing::warn!("Rescan[media #{media_id}]: parties keep a removed file: {e}");
+            }
             for id in ids {
                 drop_thumbnails(st, id);
             }

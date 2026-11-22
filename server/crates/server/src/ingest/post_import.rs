@@ -1,4 +1,5 @@
-//! Post-import queue and settle timer (`ingest.md` rules 34-37): in memory, lost on restart.
+//! Post-import queue and settle timer (`ingest.md` rules 34-37): accelerators over the durable markers
+//! `media_files.enrichedAt` and `media.settledAt`, which `recover` replays.
 use super::fsx;
 use crate::sync::MutexExt;
 use crate::{
@@ -6,7 +7,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::media::kind::MediaKind;
-use fliks_engine_core::api::{JobKind, JobPriority, JobRequest, MediaFamily, MediaInfo, MediaRef};
+use fliks_engine_core::api::{JobPriority, MediaInfo};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::Mutex,
@@ -140,8 +141,9 @@ impl Queue {
                 .as_ref()
                 .is_some_and(|s| s.media_type.is_some_and(super::registers));
             progress(st, done, total, subject);
-            if let Err(e) = enrich(st, id).await {
-                tracing::warn!("Post-import enrich of file #{id} failed: {e}");
+            match enrich(st, id).await {
+                Ok(()) => mark_enriched(st, id).await,
+                Err(e) => tracing::warn!("Post-import enrich of file #{id} failed: {e}"),
             }
             // Whatever the probe returned: the embedded tracks and the search still run.
             if !book
@@ -274,18 +276,10 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     if comic {
         return Ok(());
     }
-    if let Some((family, _)) = super::books::classify(&super::library::file_name(&path)) {
-        return enrich_book(st, id, &path, family, info).await;
-    }
-    if super::music::is_music_file(&super::library::file_name(&path)) {
-        return enrich_book(
-            st,
-            id,
-            &path,
-            fliks_domain::media::family::Family::Audio,
-            info,
-        )
-        .await;
+    // An audio file's cover is stored by the settle of its media.
+    let name = super::library::file_name(&path);
+    if super::books::classify(&name).is_some() || super::music::is_music_file(&name) {
+        return Ok(());
     }
     let probed = super::probe_hashed(
         st,
@@ -317,49 +311,68 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     Ok(())
 }
 
-/// A book file keeps the tags and cover its probe stored (`book-ingest.md` rules 14-15): only the
-/// `Cover` job runs, and only where the engine says it applies to the family.
-async fn enrich_book(
-    st: &AppState,
-    id: i32,
-    path: &std::path::Path,
-    family: fliks_domain::media::family::Family,
-    info: Option<MediaInfo>,
-) -> Result<(), String> {
-    let Some(info) = info.filter(|i| i.cover.is_some()) else {
-        return Ok(());
-    };
-    let engine_family = match family {
-        fliks_domain::media::family::Family::Audio => MediaFamily::Audio,
-        _ => return Ok(()),
-    };
-    if !st.engine.job_applies("Cover", engine_family).await {
-        return Ok(());
-    }
-    let req = JobRequest {
-        kind: JobKind::Cover { info },
-        media: MediaRef {
-            media_file_id: id as u32,
-            path: path.to_string_lossy().into_owned(),
-        },
-        priority: Some(JobPriority::Low),
-        force: false,
-    };
-    st.engine
-        .run_job(&req, None)
-        .await
-        .map_err(|e| e.to_string())?;
-    let media = sqlx::query_scalar!(r#"SELECT "mediaId" FROM media_files WHERE id = $1"#, id)
-        .fetch_optional(&st.db)
-        .await
-        .map_err(|e| e.to_string())?
-        .flatten();
-    if let (Some(media), Some(bytes)) =
-        (media, st.engine.cover(id).await.map_err(|e| e.to_string())?)
+async fn mark_enriched(st: &AppState, id: i32) {
+    if let Err(e) = sqlx::query!(
+        r#"UPDATE media_files SET "enrichedAt" = now() WHERE id = $1"#,
+        id
+    )
+    .execute(&st.db)
+    .await
     {
-        super::books::store_cover(st, media, &bytes).await;
+        tracing::warn!("Post-import: file #{id} not marked enriched: {e}");
     }
-    Ok(())
+}
+
+/// Files imported within the last `RECOVER_DAYS` days past the sweep's reach are left alone.
+const RECOVER_DAYS: i32 = 7;
+const RECOVER_FILES: i64 = 1000;
+const RECOVER_MEDIA: i64 = 500;
+
+/// The files to enrich and the media to settle again, oldest first.
+async fn pending(db: &sqlx::PgPool) -> Result<(Vec<i32>, Vec<i32>), sqlx::Error> {
+    let files = sqlx::query_scalar!(
+        r#"SELECT id FROM media_files
+           WHERE "enrichedAt" IS NULL AND "createdAt" > now() - make_interval(days => $1)
+           ORDER BY id LIMIT $2"#,
+        RECOVER_DAYS,
+        RECOVER_FILES
+    )
+    .fetch_all(db)
+    .await?;
+    let media = sqlx::query_scalar!(
+        r#"SELECT m.id FROM media m WHERE EXISTS (
+             SELECT 1 FROM media_files f WHERE f."mediaId" = m.id
+               AND f."createdAt" > now() - make_interval(days => $1)
+               AND f."createdAt" > COALESCE(m."settledAt", '-infinity'))
+           ORDER BY m.id LIMIT $2"#,
+        RECOVER_DAYS,
+        RECOVER_MEDIA
+    )
+    .fetch_all(db)
+    .await?;
+    Ok((files, media))
+}
+
+/// Replays the work a restart lost: the files without `enrichedAt` and the media with a file newer
+/// than their `settledAt`, bounded by age and count. Runs at boot and on the daily prune tick.
+pub async fn recover(st: &AppState) {
+    let (files, media) = match pending(&st.db).await {
+        Ok(p) => p,
+        Err(e) => return tracing::warn!("Post-import recovery not read: {e}"),
+    };
+    if !files.is_empty() || !media.is_empty() {
+        tracing::info!(
+            "Post-import recovery: {} file(s) to enrich, {} media to settle",
+            files.len(),
+            media.len()
+        );
+    }
+    for id in files {
+        st.ingest.queue.enqueue(st, id).await;
+    }
+    for id in media {
+        st.ingest.settle.schedule(st, id);
+    }
 }
 
 /// Per-media timers re-armed by each import of the media (rule 37).
@@ -422,6 +435,25 @@ pub(crate) async fn starts_now(st: &AppState, file_id: i32) -> bool {
 
 async fn settled(st: &AppState, media_id: i32) {
     let _ = tokio::time::timeout(IDLE_CEILING, st.ingest.queue.when_idle()).await;
+    let began = sqlx::query_scalar!(r#"SELECT now() AS "now!""#)
+        .fetch_one(&st.db)
+        .await;
+    if settle(st, media_id).await
+        && let Ok(began) = began
+        && let Err(e) = sqlx::query!(
+            r#"UPDATE media SET "settledAt" = $2 WHERE id = $1"#,
+            media_id,
+            began
+        )
+        .execute(&st.db)
+        .await
+    {
+        tracing::warn!("Post-import[media #{media_id}]: settle not recorded: {e}");
+    }
+}
+
+/// False when the settle asked to run again (a transient identification failure).
+async fn settle(st: &AppState, media_id: i32) -> bool {
     let book = sqlx::query_scalar!(r#"SELECT type FROM media WHERE id = $1"#, media_id)
         .fetch_optional(&st.db)
         .await
@@ -429,19 +461,16 @@ async fn settled(st: &AppState, media_id: i32) {
         .flatten()
         .and_then(|t| MediaKind::parse(&t));
     match book {
-        Some(MediaKind::Book) => {
-            super::books::settled(st, media_id).await;
-            return;
-        }
+        Some(MediaKind::Book) => return super::books::settled(st, media_id).await,
         Some(MediaKind::Album) => {
             super::music::settled(st, media_id).await;
-            return;
+            return true;
         }
         Some(MediaKind::Comic) => {
             if let Err(e) = crate::media::write::fields::merge_unmatched(st, media_id).await {
                 tracing::warn!("Post-import[comic #{media_id}]: file merge failed: {e}");
             }
-            return;
+            return true;
         }
         _ => {
             if let Err(e) = crate::media::write::fields::merge_unmatched(st, media_id).await {
@@ -479,21 +508,15 @@ async fn settled(st: &AppState, media_id: i32) {
     if let Err(e) = crate::markers::auto_detect_missing(st, media_id).await {
         tracing::warn!("Post-import[media #{media_id}]: marker detection failed: {e}");
     }
+    true
 }
 
-/// Queues the seek sprites of a file that has none, when the import setting asks for them.
+/// Asks the engine for the seek sprites of a file (it answers a cached sheet at once), when the import setting asks for them.
 pub(crate) async fn sprite_if_missing(st: &AppState, id: i32) {
     if !super::setting_on(&st.db, "sprites_auto_generate_on_import")
         .await
         .unwrap_or(true)
     {
-        return;
-    }
-    let sheet = crate::paths::cache_dir()
-        .join("thumbnails")
-        .join(id.to_string())
-        .join("sprite.json");
-    if sheet.exists() {
         return;
     }
     if let Err(e) = crate::stream::sprite_file(st, id, false, JobPriority::Low, None).await {
@@ -504,6 +527,26 @@ pub(crate) async fn sprite_if_missing(st: &AppState, id: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[sqlx::test(migrations = false)]
+    async fn recovery_finds_the_recent_files_and_media_a_restart_left_unfinished(db: sqlx::PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name) VALUES (1, 'L');
+               INSERT INTO library_folders (id, "libraryId", path) VALUES (1, 1, '/m');
+               INSERT INTO media (id, title, type, "libraryId", "folderName", "settledAt")
+                 VALUES (1, 'A', 'movie', 1, 'a', now()), (2, 'B', 'movie', 1, 'b', NULL),
+                        (3, 'C', 'movie', 1, 'c', NULL);
+               INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "createdAt", "enrichedAt") VALUES
+                 (1, 1, 1, 'a.mkv', 1, 'x', now() - interval '1 hour', now()),
+                 (2, 2, 1, 'b.mkv', 1, 'x', now() - interval '1 hour', NULL),
+                 (3, 3, 1, 'c.mkv', 1, 'x', now() - interval '30 days', NULL)"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        assert_eq!(pending(&db).await.unwrap(), (vec![2], vec![2]));
+    }
 
     #[sqlx::test(migrations = false)]
     async fn a_panic_drops_only_the_running_file_and_keeps_the_queue(pool: sqlx::PgPool) {

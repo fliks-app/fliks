@@ -243,12 +243,20 @@ pub(super) fn host_of(st: &AppState, row: &Row) -> i32 {
     st.parties.brief(row.id).map_or(row.host(), |b| b.host_id)
 }
 
-/// The host, or a Manage Party holder.
+/// The host, the owner, or a Manage Party holder.
 fn require_host_or_manager(st: &AppState, row: &Row, a: &Authed) -> R<()> {
     if manages(a) {
         return Ok(());
     }
-    require_host(st, row, a.user.id)
+    require_host_or_owner(st, row, a.user.id)
+}
+
+/// The owner keeps its rights after a transfer, so it can reclaim the party.
+fn require_host_or_owner(st: &AppState, row: &Row, me: i32) -> R<()> {
+    if row.owner_id == me {
+        return Ok(());
+    }
+    require_host(st, row, me)
 }
 
 pub(super) fn require_host(st: &AppState, row: &Row, me: i32) -> R<()> {
@@ -1689,7 +1697,7 @@ pub async fn transfer(
     PathParams((id, user)): PathParams<(i32, i32)>,
 ) -> R<StatusCode> {
     let row = member_row(&st, id, a.user.id).await?;
-    require_host(&st, &row, a.user.id)?;
+    require_host_or_owner(&st, &row, a.user.id)?;
     let _held = hold(&st, id).await;
     let (res, delivery) = st
         .parties
@@ -1739,7 +1747,7 @@ pub async fn invite(
     Ok(Json(dto(&st, &row, me, true).await?))
 }
 
-/// A guest leaves the party for good; the host cannot, and anyone who is not a guest gets the 404.
+/// A guest leaves the party for good, a non-owner host handing the role back; the owner cannot, and anyone who is not a guest gets the 404.
 #[utoipa::path(post, path = "/api/parties/{id}/quit", responses((status = 204)))]
 pub async fn quit(
     State(st): State<AppState>,
@@ -1749,7 +1757,7 @@ pub async fn quit(
     let me = a.user.id;
     let row = row_of(&st, id).await?;
     require_open(&row)?;
-    if host_of(&st, &row) == me || row.owner_id == me {
+    if row.owner_id == me {
         return Err(machine_err(PartyErr::Invalid("host")));
     }
     if !db::drop_guest(&st.db, id, me).await? {
@@ -1758,7 +1766,13 @@ pub async fn quit(
     super::proposals::forget_users(&st, &row, &[me]).await?;
     let _held = hold(&st, id).await;
     registry::ensure_held(&st, &row).await?;
-    mutate_held(&st, id, |l| {
+    let handed = mutate_held(&st, id, |l| {
+        let handed = l.room.host_id == me;
+        let mut fx = if handed {
+            l.hand_back(row.owner_id)
+        } else {
+            vec![]
+        };
         let devices: Vec<String> = l
             .room
             .members
@@ -1766,15 +1780,21 @@ pub async fn quit(
             .filter(|m| m.user_id == me)
             .map(|m| m.device_id.clone())
             .collect();
-        let mut fx: Vec<Effect> = devices
-            .iter()
-            .filter_map(|d| l.leave(me, d, now_ms()).ok())
-            .flatten()
-            .collect();
+        fx.extend(
+            devices
+                .iter()
+                .filter_map(|d| l.leave(me, d, now_ms()).ok())
+                .flatten(),
+        );
         fx.extend(l.room.note("quit", &a.user.username, json!({}), now_ms()));
-        ((), fx)
+        (handed, fx)
     })
     .await;
+    if handed == Some(true)
+        && let Err(err) = db::set_host(&st.db, id, row.owner_id).await
+    {
+        tracing::warn!(error = %err, party = id, "party host not saved");
+    }
     notify_updated(&st, &row).await?;
     st.hub.emit_to_users(
         &[me],

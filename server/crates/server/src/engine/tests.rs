@@ -1225,6 +1225,39 @@ mod events {
     }
 
     #[tokio::test]
+    async fn adoption_cancels_only_the_open_jobs_of_a_previous_host() {
+        let f = Fake::start().await;
+        let job = |id: &str, kind: &str, state: &str, created: f64| {
+            json!({"jobId": id, "kind": kind, "mediaFileId": 3, "priority": "low",
+                "state": state, "pct": 0.0, "createdMs": created})
+        };
+        f.script("GET", "/v1/sessions", vec![ok(json!([]))]);
+        f.script(
+            "GET",
+            "/v1/jobs",
+            vec![ok(json!([
+                job("old", "Sprite", "running", 1.0),
+                job("ended", "Sprite", "done", 1.0),
+                job("leased", "Optimize", "running", 1.0),
+                job("fresh", "Sprite", "queued", 9e15),
+            ]))],
+        );
+        f.script("DELETE", "/v1/jobs/old", vec![status(204)]);
+        f.connections(vec![Conn::Hold(vec![])]);
+        runtime_engine(&f, fast()).await;
+        eventually("orphan cancelled", || {
+            !f.seen("DELETE", "/v1/jobs/old").is_empty()
+        })
+        .await;
+        for id in ["ended", "leased", "fresh"] {
+            assert!(
+                f.seen("DELETE", &format!("/v1/jobs/{id}")).is_empty(),
+                "{id}"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn backs_off_while_down_and_starts_over_after_a_good_connection() {
         let f = Fake::start().await;
         f.script("GET", "/v1/sessions", vec![ok(json!([]))]);
