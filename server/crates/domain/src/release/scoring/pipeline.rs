@@ -1,7 +1,7 @@
 //! Score, reject and sort a batch of search hits (`scoreAndSortReleases`).
 use super::rejection::*;
 use super::sizes::*;
-use super::sort::{Sortable, sort_releases_by_relevance};
+use super::sort::{ReleaseLabel, Sortable, sort_releases_by_relevance};
 use crate::language::AppLanguage;
 use crate::release::parsing::attributes::parse_revision;
 use crate::release::parsing::language::{parse_release_language, resolve_unknown_languages};
@@ -45,6 +45,9 @@ pub struct ScoredRelease {
     pub coverage: ReleaseCoverage,
     pub size_deviation: Option<f64>,
     pub video_codec: Option<&'static str>,
+    /// Set by the sort.
+    #[serde(skip)]
+    pub label: ReleaseLabel,
 }
 
 impl Sortable for ScoredRelease {
@@ -86,6 +89,9 @@ impl Sortable for ScoredRelease {
     }
     fn seasons(&self) -> Option<Span> {
         self.coverage.seasons
+    }
+    fn set_label(&mut self, label: ReleaseLabel) {
+        self.label = label;
     }
 }
 
@@ -202,6 +208,7 @@ pub fn score_and_sort_releases(
                     opts.size_by_quality.get(&quality.id),
                 ),
                 video_codec: detect_video_codec(Some(&r.title)),
+                label: ReleaseLabel::default(),
                 coverage,
                 candidate: r,
             }

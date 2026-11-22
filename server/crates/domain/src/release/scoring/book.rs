@@ -4,7 +4,7 @@ use super::rejection::{
     ExpectedTitle, Param, RejectionInput, ReleaseRejection, compute_rejections,
 };
 use super::sizes::{SizeLimits, compute_size_deviation};
-use super::sort::{Sortable, sort_releases_by_relevance};
+use super::sort::{ReleaseLabel, Sortable, sort_releases_by_relevance};
 use crate::books::filename::BookNameGuess;
 use crate::js::round;
 use crate::language::AppLanguage;
@@ -36,6 +36,9 @@ pub struct ScoredBookRelease {
     pub retail: bool,
     pub size_deviation: Option<f64>,
     pub names: BookNameGuess,
+    /// Set by the sort.
+    #[serde(skip)]
+    pub label: ReleaseLabel,
 }
 
 impl Sortable for ScoredBookRelease {
@@ -77,6 +80,9 @@ impl Sortable for ScoredBookRelease {
     }
     fn retail(&self) -> bool {
         self.retail
+    }
+    fn set_label(&mut self, label: ReleaseLabel) {
+        self.label = label;
     }
 }
 
@@ -334,6 +340,7 @@ pub(super) fn score_one(
         retail: p.retail,
         size_deviation,
         names: p.names,
+        label: ReleaseLabel::default(),
         candidate: r,
     }
 }

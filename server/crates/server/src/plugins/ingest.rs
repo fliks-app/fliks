@@ -165,6 +165,7 @@ pub async fn run(
         _ if !files.is_empty() && sources.len() == files.len() => Method::Move,
         t::TransferMode::Copy => Method::Copy,
         t::TransferMode::Move => Method::Move,
+        t::TransferMode::Link => Method::Link,
     };
     let media_id = r.media_id as i32;
     let not_found = || host_err("ERR_NOT_FOUND", format!("Media #{media_id} not found"));
@@ -242,12 +243,6 @@ pub async fn run(
     )
     .await
     .map_err(|e| host_err("ERR", e))?;
-    if !out.retry.is_empty() {
-        return Err(host_err("ERR_RETRY_LATER", out.retry.join("; ")));
-    }
-    if let Some(e) = refusals(&out) {
-        return Err(e);
-    }
     drop(guard);
     if r.transfer == t::TransferMode::Move {
         remove_sources(&data, &ingested(&sources, &out));
@@ -293,22 +288,27 @@ pub async fn run(
             })
             .collect::<Result<_, HostError>>()?,
         already_present: out.already_present.clone(),
+        refused: refusals(&out),
         unit: single.and_then(|i| units::unit_ref(i.season_number, i.episode_number)),
     })
 }
 
-/// A file the ingest turned away fails the call: `ERR_REFUSED` for a verdict on the release, else `ERR`.
-fn refusals(out: &library::Outcome) -> Option<HostError> {
-    if out.refused.is_empty() && out.errors.is_empty() {
-        return None;
-    }
-    let why = [out.refused.as_slice(), out.errors.as_slice()].concat();
-    let code = if out.refused.is_empty() {
-        "ERR"
-    } else {
-        "ERR_REFUSED"
-    };
-    Some(host_err(code, why.join("; ")))
+/// What the ingest turned away, per file and by class.
+fn refusals(out: &library::Outcome) -> Vec<t::Refusal> {
+    [
+        (&out.refused, t::RefusalClass::Release),
+        (&out.errors, t::RefusalClass::Library),
+        (&out.retry, t::RefusalClass::Retry),
+    ]
+    .into_iter()
+    .flat_map(|(turned, class)| {
+        turned.iter().map(move |f| t::Refusal {
+            file: f.file.clone(),
+            class,
+            reason: f.why.clone(),
+        })
+    })
+    .collect()
 }
 
 /// The `/data` files whose staged copy the ingest took or already held; a rejected one stays.
@@ -369,6 +369,7 @@ async fn placed(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ingest::Turned;
     use fliks_domain::external_id::Namespace;
     use serde_json::json;
     use sqlx::PgPool;
@@ -434,7 +435,6 @@ mod tests {
         let path = s.dl.join(file);
         std::fs::write(&path, b"book").unwrap();
         t::IngestRequest {
-            idempotency_key: "k".into(),
             media_id: 1,
             family,
             language: language.map(str::to_owned),
@@ -726,6 +726,42 @@ mod tests {
         s.runtime.join("books").join(rel)
     }
 
+    #[cfg(unix)]
+    #[sqlx::test(migrations = false)]
+    async fn a_link_ingest_shares_the_inode_and_keeps_the_source(db: PgPool) {
+        use std::os::unix::fs::MetadataExt;
+        let s = shelf(db).await;
+        let mut req = request(&s, t::Family::Text, Some("fr"), "dl.epub");
+        req.transfer = t::TransferMode::Link;
+        let r = run(&s.st, "p", &s.runtime, req).await.unwrap();
+        assert_eq!(r.imported.len(), 1, "{r:?}");
+        let src = std::fs::metadata(s.dl.join("dl.epub")).unwrap();
+        let held = std::fs::metadata(library_file(&s).await).unwrap();
+        assert_eq!(src.ino(), held.ino());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_refused_file_comes_back_in_the_result_next_to_the_imported_one(db: PgPool) {
+        let s = shelf(db).await;
+        let mut req = request(&s, t::Family::Text, Some("fr"), "good.epub");
+        let bad = s.dl.join("Bad.epub");
+        std::fs::create_dir(&bad).unwrap();
+        req.paths.push(bad.to_string_lossy().into_owned());
+        let r = run(&s.st, "p", &s.runtime, req).await.unwrap();
+        assert_eq!(r.imported.len(), 1, "{r:?}");
+        let [f] = &r.refused[..] else {
+            panic!("one refusal: {r:?}")
+        };
+        assert_eq!(
+            (f.file.as_str(), f.class, f.reason.as_str()),
+            (
+                "Bad.epub",
+                t::RefusalClass::Release,
+                "source is not a regular file"
+            )
+        );
+    }
+
     /// With declared roots (the host path of `dl` wins) and none, `/data/...` is the plugin's scratch.
     #[cfg(unix)]
     #[sqlx::test(migrations = false)]
@@ -1006,7 +1042,7 @@ mod tests {
         let out = library::Outcome {
             imported: vec![imported("a")],
             already_present: vec![p("b").to_string_lossy().into_owned()],
-            errors: vec!["c.epub: not a book file".into()],
+            errors: vec![Turned::new("c.epub", "not a book file")],
             refused: vec![],
             retry: vec![],
             skipped: vec![],
@@ -1015,16 +1051,36 @@ mod tests {
     }
 
     #[test]
-    fn a_refusal_fails_the_call_even_when_other_files_landed() {
+    fn a_refusal_is_listed_per_file_and_class() {
         let mut out = library::Outcome::default();
-        assert!(refusals(&out).is_none());
-        out.errors.push("a: no free name".into());
-        assert_eq!(refusals(&out).unwrap().code, "ERR");
-        out.refused.push("b: truncated file".into());
-        let e = refusals(&out).unwrap();
+        assert!(refusals(&out).is_empty());
+        out.errors.push(Turned::new("a.epub", "no free name"));
+        out.refused.push(Turned::new("b.epub", "truncated file"));
+        out.retry
+            .push(Turned::new("c.epub", "scene mapping unknown"));
+        let got: Vec<_> = refusals(&out)
+            .into_iter()
+            .map(|r| (r.file, r.class, r.reason))
+            .collect();
         assert_eq!(
-            (e.code.as_str(), e.message.as_str()),
-            ("ERR_REFUSED", "b: truncated file; a: no free name")
+            got,
+            [
+                (
+                    "b.epub".into(),
+                    t::RefusalClass::Release,
+                    "truncated file".into()
+                ),
+                (
+                    "a.epub".into(),
+                    t::RefusalClass::Library,
+                    "no free name".into()
+                ),
+                (
+                    "c.epub".into(),
+                    t::RefusalClass::Retry,
+                    "scene mapping unknown".into()
+                ),
+            ]
         );
     }
 

@@ -618,23 +618,31 @@ fn test_route(req: &Request) -> Result<Response, String> {
         }
         "ingest" => {
             let paths: Vec<String> = req.query("path").map(str::to_owned).into_iter().collect();
-            host_result(
-                host::library_ingest(&t::IngestRequest {
-                    idempotency_key: "k".into(),
-                    media_id: req
-                        .query("media")
-                        .map(str::to_owned)
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(1),
-                    family: family_of(req).unwrap_or(t::Family::Video),
-                    language: language_of(req).map(str::to_owned),
-                    paths,
-                    transfer: t::TransferMode::Copy,
-                    fallback_quality: None,
-                    source_label: "fixture".into(),
-                })
-                .map(|r| r.imported.len()),
-            )
+            let transfer = match req.query("transfer") {
+                Some("link") => t::TransferMode::Link,
+                Some("move") => t::TransferMode::Move,
+                _ => t::TransferMode::Copy,
+            };
+            let r = host::library_ingest(&t::IngestRequest {
+                media_id: req
+                    .query("media")
+                    .map(str::to_owned)
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(1),
+                family: family_of(req).unwrap_or(t::Family::Video),
+                language: language_of(req).map(str::to_owned),
+                paths,
+                transfer,
+                fallback_quality: None,
+                source_label: "fixture".into(),
+            });
+            match r {
+                Ok(r) => ok(json!({
+                    "ok": r.imported.len(),
+                    "refused": r.refused.iter().map(|f| json!([f.file, format!("{:?}", f.class).to_lowercase(), f.reason])).collect::<Vec<_>>(),
+                })),
+                Err(e) => ok(json!({ "error": e.code, "message": e.message })),
+            }
         }
         _ => Ok(not_found()),
     }

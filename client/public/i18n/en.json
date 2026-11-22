@@ -1484,6 +1484,7 @@
       "size": "Passed over: size",
       "language": "Passed over: other language",
       "full_season": "Passed over: full season",
+      "order": "Passed over: tied, listed after",
       "other": "Passed over"
     },
     "downloads_title": "Downloads",

@@ -296,12 +296,16 @@ pub(crate) fn busy(e: &io::Error) -> bool {
         || (cfg!(windows) && e.kind() == io::ErrorKind::PermissionDenied)
 }
 
-/// Copies `src` next to `dest` under a temp name and `fsync`s it (W2 first half).
+/// Copies `src` into a new file next to `dest` under a temp name and `fsync`s it (W2 first half); the
+/// new file gets the process's default mode, not the source's.
 fn copy_to_tmp(src: &Path, dest: &Path) -> io::Result<PathBuf> {
     let dir = dest.parent().ok_or(io::ErrorKind::InvalidInput)?;
     let tmp = dir.join(tmp_name());
-    let r =
-        fs::copy(src, &tmp).and_then(|_| fs::OpenOptions::new().write(true).open(&tmp)?.sync_all());
+    let r = (|| {
+        let mut to = fs::File::create_new(&tmp)?;
+        io::copy(&mut fs::File::open(src)?, &mut to)?;
+        to.sync_all()
+    })();
     match r {
         Ok(()) => Ok(tmp),
         Err(e) => {
@@ -423,6 +427,30 @@ pub fn link_new(src: &Path, dest: &Path) -> io::Result<Option<bool>> {
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(Some(false)),
         Err(_) => Ok(None),
     }
+}
+
+/// A hard link of `src` at `dest`, else a copy when the filesystem refuses to link; `src` stays. A
+/// replacing link goes through a temp name so readers see the old file or the new one.
+/// `Ok(false)` when a no-replace call found `dest`.
+pub fn link_file(src: &Path, dest: &Path, replace: bool) -> io::Result<bool> {
+    if !replace {
+        return match link_new(src, dest)? {
+            Some(done) => Ok(done),
+            None => copy_noreplace(src, dest),
+        };
+    }
+    let tmp = dest
+        .parent()
+        .ok_or(io::ErrorKind::InvalidInput)?
+        .join(tmp_name());
+    if fs::hard_link(src, &tmp).is_err() {
+        return copy_replace(src, dest).map(|()| true);
+    }
+    let r = rename_retry(&tmp, dest);
+    if r.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    r.map(|()| true)
 }
 
 /// A copy of `src` at `dest` that leaves `src` alone and never replaces: W2 carrying the mtime.
@@ -705,5 +733,85 @@ mod tests {
         let n = tmp_name();
         assert_eq!(n.len(), ".fliks-tmp-".len() + 36);
         assert_eq!(&n[11 + 14..11 + 15], "4");
+    }
+
+    #[cfg(unix)]
+    mod unix_transfer {
+        use super::*;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+        fn scratch(base: &Path, tag: &str) -> PathBuf {
+            let d = base.join(format!("fliks-fsx-{tag}-{}", tmp_name()));
+            fs::create_dir_all(&d).unwrap();
+            d
+        }
+
+        #[test]
+        fn a_link_shares_the_inode_on_one_device() {
+            let d = scratch(&std::env::temp_dir(), "link");
+            let src = d.join("src.mkv");
+            fs::write(&src, b"bytes").unwrap();
+            assert!(link_file(&src, &d.join("a.mkv"), false).unwrap());
+            assert_eq!(
+                fs::metadata(&src).unwrap().ino(),
+                fs::metadata(d.join("a.mkv")).unwrap().ino()
+            );
+            assert!(
+                !link_file(&src, &d.join("a.mkv"), false).unwrap(),
+                "no replace"
+            );
+            fs::write(d.join("b.mkv"), b"old").unwrap();
+            assert!(link_file(&src, &d.join("b.mkv"), true).unwrap());
+            assert_eq!(
+                fs::metadata(&src).unwrap().ino(),
+                fs::metadata(d.join("b.mkv")).unwrap().ino()
+            );
+            assert_eq!(fs::read(&src).unwrap(), b"bytes", "the source stays");
+            assert_eq!(fs::read_dir(&d).unwrap().count(), 3, "no temp left");
+            fs::remove_dir_all(&d).unwrap();
+        }
+
+        #[test]
+        fn a_link_across_devices_copies() {
+            let (shm, tmp) = (Path::new("/dev/shm"), std::env::temp_dir());
+            if !shm.is_dir()
+                || fs::metadata(shm).unwrap().dev() == fs::metadata(&tmp).unwrap().dev()
+            {
+                return;
+            }
+            let (from, to) = (scratch(shm, "from"), scratch(&tmp, "to"));
+            let src = from.join("src.mkv");
+            fs::write(&src, b"bytes").unwrap();
+            assert!(link_file(&src, &to.join("a.mkv"), false).unwrap());
+            let (a, s) = (
+                fs::metadata(to.join("a.mkv")).unwrap(),
+                fs::metadata(&src).unwrap(),
+            );
+            assert_ne!(a.ino(), s.ino());
+            assert_eq!(fs::read(to.join("a.mkv")).unwrap(), b"bytes");
+            assert!(link_file(&src, &to.join("a.mkv"), true).unwrap());
+            assert_eq!(fs::read(&src).unwrap(), b"bytes", "the source stays");
+            fs::remove_dir_all(&from).unwrap();
+            fs::remove_dir_all(&to).unwrap();
+        }
+
+        #[test]
+        fn a_copy_takes_the_default_mode_not_the_sources() {
+            let d = scratch(&std::env::temp_dir(), "mode");
+            let (src, fresh) = (d.join("src.mkv"), d.join("fresh"));
+            fs::write(&src, b"x").unwrap();
+            fs::set_permissions(&src, fs::Permissions::from_mode(0o600)).unwrap();
+            fs::write(&fresh, b"x").unwrap();
+            let default = fs::metadata(&fresh).unwrap().mode() & 0o777;
+            assert!(copy_noreplace(&src, &d.join("a.mkv")).unwrap());
+            assert_eq!(
+                fs::metadata(d.join("a.mkv")).unwrap().mode() & 0o777,
+                default
+            );
+            fs::set_permissions(d.join("a.mkv"), fs::Permissions::from_mode(0o640)).unwrap();
+            copy_replace(&src, &d.join("a.mkv")).unwrap();
+            assert_eq!(fs::metadata(d.join("a.mkv")).unwrap().mode() & 0o777, 0o640);
+            fs::remove_dir_all(&d).unwrap();
+        }
     }
 }

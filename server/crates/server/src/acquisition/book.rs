@@ -463,6 +463,8 @@ pub(super) fn wit_scored(
             size_deviation: s.size_deviation,
             video_codec: None,
             rejections: wit_rejections(s.rejections),
+            label: s.label.wire().0.to_owned(),
+            lost_on: s.label.wire().1.map(str::to_owned),
         })
         .collect()
 }

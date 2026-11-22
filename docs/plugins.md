@@ -229,6 +229,16 @@ manifest `i18n`, shown in each device's language with English as the fallback, a
 the plugin's category. A plugin sends at most 10 per hour, then gets `ERR_RATE_LIMITED`. The import
 is new in a release: a plugin that uses it states that release as the lower bound of its `fliks` range.
 
+### Ingest and scoring shapes
+
+`library.ingest` and `releases.score` changed shape in the same release: `transfer` has a third
+mode `link` (hard link on the same device, copy across), the request has no idempotency key, the
+result lists `refused` files with a class (`release`, `library`, `retry`) instead of failing the call,
+and a scored release carries `label` and `lost-on`. Unlike a new import, a changed record breaks a
+component built before it: it fails to link on this core. A plugin that calls either function is
+rebuilt on this SDK and states this release as the lower bound of its `fliks` range; the other
+plugins link and run unchanged.
+
 ### The sandbox
 
 There are no sockets, pid files or uids: the component only has what the host links in.

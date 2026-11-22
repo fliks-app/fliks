@@ -192,7 +192,7 @@ async fn relink_in_place(
             {
                 Ok(done) => {
                     linked += done.files.len() as i64;
-                    errors.extend(done.conflicts);
+                    errors.extend(done.conflicts.iter().map(ToString::to_string));
                     if let Some(first) = done.files.first() {
                         st.hub.emit_domain(DomainEvent::MediaFilesImported {
                             media_id: i64::from(media.id),
@@ -408,9 +408,12 @@ fn tally(
         Ok(o) => {
             *imported += o.imported.len() as i64;
             *present += o.already_present.len() as i64;
-            errors.extend(o.errors);
-            errors.extend(o.refused);
-            errors.extend(o.retry);
+            errors.extend(
+                [&o.errors, &o.refused, &o.retry]
+                    .into_iter()
+                    .flatten()
+                    .map(ToString::to_string),
+            );
             if !o.imported.is_empty() {
                 crate::media_servers::dispatch_detached(st, "library.rescan");
             }
