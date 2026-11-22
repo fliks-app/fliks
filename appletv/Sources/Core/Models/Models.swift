@@ -572,6 +572,8 @@ struct PlaybackInfoResponse: Codable {
     let edl: [EdlRange]?
     let sessionId: String
     let profileHash: String?
+    /// Where the server opened the session: the saved position when the request named none.
+    let startAtSeconds: Double?
 }
 
 /// Skip/mute range from a sidecar EDL. `action` is "cut" | "mute" | "commercial";

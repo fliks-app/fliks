@@ -6,7 +6,7 @@ import SwiftUI
 /// carries no `files`, so a fresh GET /api/media/:id backs the lookup.
 struct PlaylistDetailView: View {
     let playlistId: Int
-    var onPlay: (_ mediaFileId: Int, _ mediaId: Int, _ episodeId: Int?, _ startAt: Double) -> Void
+    var onPlay: (_ mediaFileId: Int, _ mediaId: Int, _ episodeId: Int?, _ startAt: Double?) -> Void
 
     private enum LoadState {
         case loading
@@ -147,6 +147,6 @@ struct PlaylistDetailView: View {
               let fileId = media.fileId(episodeId: item.episode?.id) else {
             return // ponytail: silent no-op — no toast/error-banner system on tvOS yet
         }
-        onPlay(fileId, item.media.id, item.episode?.id, 0)
+        onPlay(fileId, item.media.id, item.episode?.id, nil)
     }
 }

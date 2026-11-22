@@ -6,6 +6,9 @@ import Foundation
 /// stall-watchdog recovery. Mirrors client/src/app/features/player/player.ts.
 /// Doesn't hold an AVPlayer — PlayerView's coordinator feeds live playhead
 /// state via `tick`/`notifyStateChange` and reacts to `onReload`.
+/// Where playback begins: `nil` lets the server resume, a value (0 included) overrides it.
+func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? server ?? 0 }
+
 @MainActor @Observable final class PlaybackService {
     private let api = APIClient.shared
 
@@ -103,9 +106,9 @@ import Foundation
     /// `streamInfo` is the source file's own track list: the viewer's audio preferences pick
     /// the master playlist's DEFAULT rendition, and with `subtitleRows` the subtitle to show.
     func start(
-        mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double,
+        mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double?,
         streamInfo: MediaFileInfo?, subtitleRows: [SubtitleFileRow]
-    ) async throws -> URL {
+    ) async throws -> (url: URL, startAt: Double) {
         self.mediaFileId = mediaFileId
         self.mediaId = mediaId
         self.episodeId = episodeId
@@ -129,11 +132,11 @@ import Foundation
             bitmap: TrackSelection.bitmapSubtitleTracks(rows),
             remembered: settings.rememberedSubtitle(for: mediaId)
         )
-        let url = try await requestPlaybackInfo(startAt: startAt)
-        lastProgressPos = startAt
+        let started = try await requestPlaybackInfo(startAt: startAt)
+        lastProgressPos = started.startAt
         lastProgressAt = Date()
         lastSeekAt = lastProgressAt
-        return url
+        return started
     }
 
     /// Release the live session server-side. Idempotent — safe even when no
@@ -174,12 +177,12 @@ import Foundation
 
     // MARK: - Playback-info + play URL
 
-    private func requestPlaybackInfo(startAt: Double) async throws -> URL {
+    private func requestPlaybackInfo(startAt: Double?) async throws -> (url: URL, startAt: Double) {
         guard let token = await AuthService.shared.ensureStreamToken() else {
             throw APIError.badStatus(401)
         }
         var query: [(String, String)] = [("token", token)]
-        if startAt > 0 { query.append(("startAt", String(Int(startAt)))) }
+        if let startAt { query.append(("startAt", String(Int(startAt)))) }
         if let audioStreamIndex { query.append(("audioStreamIndex", String(audioStreamIndex))) }
         if qualityId != "auto" { query.append(("startQuality", qualityId)) }
         var needsHlsSubtitles = false
@@ -199,7 +202,8 @@ import Foundation
         info = response
         sessionId = response.sessionId
         if let quality = response.quality { qualityId = quality }
-        return try buildStreamUrl(response, token: token, startAt: startAt)
+        let resolved = resolveStart(startAt, server: response.startAtSeconds)
+        return (try buildStreamUrl(response, token: token, startAt: resolved), resolved)
     }
 
     /// The play URL is built here, not read off `response.playUrl` — every
@@ -506,7 +510,7 @@ import Foundation
             try? await api.delete("/api/stream/sessions/\(sid)")
         }
         do {
-            let url = try await requestPlaybackInfo(startAt: position)
+            let url = try await requestPlaybackInfo(startAt: position).url
             guard !destroyed else { return }
             lastProgressPos = position
             lastProgressAt = Date()

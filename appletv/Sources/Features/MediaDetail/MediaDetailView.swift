@@ -6,7 +6,7 @@ import SwiftUI
 struct MediaDetailView: View {
     let mediaId: Int
     /// P5 owns actual playback — this only hands off the resolved target.
-    var onPlay: (_ mediaFileId: Int, _ episodeId: Int?, _ startAt: Double) -> Void
+    var onPlay: (_ mediaFileId: Int, _ episodeId: Int?, _ startAt: Double?) -> Void
     var onSelectEpisode: (_ episodeId: Int) -> Void
     /// The media is an album: its own page replaces this one.
     var onAlbum: (() -> Void)?
@@ -113,10 +113,16 @@ struct MediaDetailView: View {
             HStack(spacing: 24) {
                 let target = playTarget(media)
                 if let target {
-                    Button(action: { onPlay(target.mediaFileId, target.episodeId, target.startAt) }) {
+                    Button(action: { onPlay(target.mediaFileId, target.episodeId, nil) }) {
                         Label(target.resume ? tr("common.resume") : tr("common.play"), systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
+                    if target.resume {
+                        Button(action: { onPlay(target.mediaFileId, target.episodeId, 0) }) {
+                            Label(tr("player.play_from_start"), systemImage: "gobackward")
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
 
                 Button(action: { Task { await toggleFavorite() } }) {
@@ -154,7 +160,6 @@ struct MediaDetailView: View {
     private struct PlayTarget {
         let mediaFileId: Int
         let episodeId: Int?
-        let startAt: Double
         let resume: Bool
     }
 
@@ -170,16 +175,15 @@ struct MediaDetailView: View {
                 return nil
             }
             let position = resumeInfo?.positionSeconds ?? 0
-            return PlayTarget(mediaFileId: fileId, episodeId: nil, startAt: position, resume: position > 0)
+            return PlayTarget(mediaFileId: fileId, episodeId: nil, resume: position > 0)
         }
         if let info = resumeInfo, let episodeId = info.episodeId {
-            return PlayTarget(mediaFileId: info.mediaFileId, episodeId: episodeId,
-                               startAt: info.positionSeconds, resume: info.positionSeconds > 0)
+            return PlayTarget(mediaFileId: info.mediaFileId, episodeId: episodeId, resume: info.positionSeconds > 0)
         }
         for season in (media.seasons ?? []).sorted(by: { $0.seasonNumber < $1.seasonNumber }) {
             for ep in season.episodes.sorted(by: { $0.episodeNumber < $1.episodeNumber }) where ep.hasFile {
                 if let file = media.files?.first(where: { $0.episodeId == ep.id }) {
-                    return PlayTarget(mediaFileId: file.id, episodeId: ep.id, startAt: 0, resume: false)
+                    return PlayTarget(mediaFileId: file.id, episodeId: ep.id, resume: false)
                 }
             }
         }

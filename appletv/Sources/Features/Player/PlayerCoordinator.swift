@@ -104,7 +104,7 @@ import UIKit
 
     // MARK: - Load / reload / teardown
 
-    func load(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double, autoplay: Bool = true,
+    func load(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double?, autoplay: Bool = true,
               prerollPaused: Bool = false, launch: LaunchTracks? = nil) async throws {
         prerollOnReady = prerollPaused
         launchTracks = launch
@@ -121,7 +121,7 @@ import UIKit
         externalSubtitles = subtitleRows ?? []
         resolveNextEpisode()
 
-        let url = try await playback.start(
+        let (url, start) = try await playback.start(
             mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId,
             startAt: startAt, streamInfo: currentFileInfo, subtitleRows: externalSubtitles
         )
@@ -130,8 +130,8 @@ import UIKit
         applyMetadata(to: item)
         let p = AVPlayer(playerItem: item)
         player = p
-        let initialSeek = edlStart(startAt, duration: edlDuration(item))
-        attachObservers(to: p, item: item, initialSeek: initialSeek, exact: initialSeek != startAt)
+        let initialSeek = edlStart(start, duration: edlDuration(item))
+        attachObservers(to: p, item: item, initialSeek: initialSeek, exact: initialSeek != start)
         armEdl()
         applyPreferredSubtitle(to: item, player: p)
         if autoplay { p.play() } else { p.pause() }
@@ -394,11 +394,11 @@ import UIKit
             externalSubtitles = (try? await APIClient.shared.get("/api/media/\(newMediaId)/subtitles")) ?? []
         }
         resolveNextEpisode()
-        guard let url = try? await playback.start(
+        guard let started = try? await playback.start(
             mediaFileId: mediaFileId, mediaId: newMediaId, episodeId: episodeId,
             startAt: 0, streamInfo: currentFileInfo, subtitleRows: externalSubtitles
         ) else { return false }
-        reload(url: url, position: 0, forcePlay: play, holdPaused: !play)
+        reload(url: started.url, position: 0, forcePlay: play, holdPaused: !play)
         return true
     }
 

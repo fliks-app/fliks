@@ -22,9 +22,9 @@ enum Route: Hashable {
     case partyDetail(id: Int)
     case settings
 
-    // `episodeId` is nil for a movie; `startAt` is the resume position in
-    // seconds (0 = from start); `startPaused` and `launch` carry a remote handoff's pause and track picks.
-    case player(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double, startPaused: Bool = false,
+    // `episodeId` is nil for a movie; `startAt` is an explicit start in seconds
+    // (0 = from start, nil = the server resumes); `startPaused` and `launch` carry a remote handoff's pause and track picks.
+    case player(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double?, startPaused: Bool = false,
                 launch: LaunchTracks? = nil)
 }
 
