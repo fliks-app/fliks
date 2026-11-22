@@ -23,13 +23,15 @@ enum ProcessRunner {
     ///   - environment: Merged into the inherited environment.
     ///   - currentDirectory: Working directory for the child process.
     ///   - timeout: Maximum wall-clock time. `nil` = no limit.
+    ///   - stdin: Written to the child's standard input, then closed (keeps secrets out of argv).
     /// - Returns: `ProcessResult` with captured stdout, stderr, and exit code.
     static func run(
         executable: URL,
         arguments: [String] = [],
         environment: [String: String]? = nil,
         currentDirectory: URL? = nil,
-        timeout: TimeInterval? = 30
+        timeout: TimeInterval? = 30,
+        stdin: String? = nil
     ) async throws -> ProcessResult {
         let process = Process()
         process.executableURL = executable
@@ -50,10 +52,16 @@ enum ProcessRunner {
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
+        let stdinPipe = stdin == nil ? nil : Pipe()
+        if let stdinPipe { process.standardInput = stdinPipe }
 
         logger.debug("exec: \(executable.lastPathComponent) \(arguments.joined(separator: " "))")
 
         try process.run()
+        if let stdin, let stdinPipe {
+            try? stdinPipe.fileHandleForWriting.write(contentsOf: Data(stdin.utf8))
+            try? stdinPipe.fileHandleForWriting.close()
+        }
 
         // Timeout handling via a detached task.
         let timeoutTask: Task<Void, Never>?

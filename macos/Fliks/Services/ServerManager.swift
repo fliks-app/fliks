@@ -15,7 +15,6 @@ actor ServerManager {
     private var stderrPipe: Pipe?
     private var logFileHandle: FileHandle?
     private var isIntentionallyStopping = false
-    private var restartDelay: TimeInterval = 1
 
     /// Callback fired on the main actor when the server crashes unexpectedly.
     var onCrash: (@Sendable (Int32) -> Void)?
@@ -25,7 +24,6 @@ actor ServerManager {
     /// Spawn the engine, which runs fliks-server behind it.
     func start(config: ServerEnvironment) async throws {
         isIntentionallyStopping = false
-        restartDelay = 1
 
         try prepareWorkingDirectory()
 
@@ -95,6 +93,9 @@ actor ServerManager {
         logger.info("Server is ready at http://localhost:\(config.port)")
     }
 
+    /// The engine gives its server 10 s to drain before killing it; this adds a margin.
+    private static let stopGrace: TimeInterval = 15
+
     /// Gracefully stop the engine and its server.
     func stop() async {
         isIntentionallyStopping = true
@@ -103,8 +104,7 @@ actor ServerManager {
         logger.info("Stopping the engine (PID \(proc.processIdentifier))...")
         proc.terminate() // SIGTERM
 
-        // Wait up to 5 seconds for graceful exit.
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(Self.stopGrace)
         while proc.isRunning && Date() < deadline {
             try? await Task.sleep(for: .milliseconds(200))
         }
@@ -183,6 +183,7 @@ actor ServerManager {
 struct ServerEnvironment {
     let port: UInt16
     let dbPort: UInt16
+    let dbPassword: String
 
     var asEnvironment: [String: String] {
         // Build PATH: resolved ffmpeg + pg_dump/psql + Homebrew + system essentials.
@@ -196,7 +197,7 @@ struct ServerEnvironment {
             "DB_HOST": "localhost",
             "DB_PORT": String(dbPort),
             "DB_USERNAME": "fliks",
-            "DB_PASSWORD": "fliks",
+            "DB_PASSWORD": dbPassword,
             "DB_NAME": "fliks",
             "SERVE_STATIC_PATH": Paths.effectiveClientDir.path,
             "FLIKS_CONF_DIR": Paths.confDir.path,

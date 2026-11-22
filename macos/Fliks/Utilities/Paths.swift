@@ -23,6 +23,8 @@ enum Paths {
     static let pgLogFile  = appSupport.appendingPathComponent("postgresql/pg.log")
     /// JWT secret and other auto-generated config (maps to FLIKS_CONF_DIR).
     static let confDir    = appSupport.appendingPathComponent("conf")
+    /// Generated password of the bundled Postgres role; read by the tray only.
+    static let dbPasswordFile = confDir.appendingPathComponent(".db-password")
     /// Working directory of the server — `images/` and `backups/` of
     /// existing installs live here.
     static let dataDir    = appSupport.appendingPathComponent("data")
@@ -135,6 +137,17 @@ enum Paths {
     static func ensureAppSupportStructure() throws {
         for dir in [appSupport, pgDataDir.deletingLastPathComponent(), confDir, dataDir, logsDir] {
             try ensureDirectory(dir)
+        }
+    }
+
+    /// Delete `*.log` files of `logsDir` not written for `days` days (server, Postgres).
+    static func pruneLogs(keepingDays days: Int = 14) {
+        let fm = FileManager.default
+        let cutoff = Date().addingTimeInterval(-Double(days) * 86_400)
+        let files = (try? fm.contentsOfDirectory(at: logsDir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        for file in files where file.pathExtension == "log" {
+            let modified = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+            if let modified, modified < cutoff { try? fm.removeItem(at: file) }
         }
     }
 

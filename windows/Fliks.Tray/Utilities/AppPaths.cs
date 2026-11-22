@@ -17,6 +17,8 @@ internal static class AppPaths
     public static readonly string PgDataDir = Path.Combine(AppData, "postgresql", "data");
     public static readonly string PgLogFile = Path.Combine(AppData, "postgresql", "pg.log");
     public static readonly string ConfDir = Path.Combine(AppData, "conf");
+    /// <summary>Generated password of the bundled Postgres role; read by the tray only.</summary>
+    public static readonly string DbPasswordFile = Path.Combine(ConfDir, ".db-password");
     public static readonly string DataDir = Path.Combine(AppData, "data");
     public static readonly string LogsDir = Path.Combine(AppData, "logs");
     public static readonly string TranscodeDir = Path.Combine(AppData, "transcode");
@@ -68,6 +70,21 @@ internal static class AppPaths
         {
             Directory.CreateDirectory(dir);
         }
+    }
+
+    /// <summary>Delete <c>*.log</c> files of the log folder not written for <paramref name="days"/> days (tray, server, Postgres).</summary>
+    public static void PruneLogs(int days = 14)
+    {
+        var cutoff = DateTime.UtcNow.AddDays(-days);
+        try
+        {
+            foreach (var file in new DirectoryInfo(LogsDir).EnumerateFiles("*.log"))
+            {
+                try { if (file.LastWriteTimeUtc < cutoff) file.Delete(); }
+                catch (IOException) { /* in use: kept */ }
+            }
+        }
+        catch (DirectoryNotFoundException) { /* nothing logged yet */ }
     }
 
     private static string? FindRepoRoot()

@@ -50,6 +50,7 @@ internal sealed class AppState
         try
         {
             AppPaths.EnsureStructure();
+            AppPaths.PruneLogs();
             Log.Info($"startup: exe={Environment.ProcessPath} repoRoot={AppPaths.RepoRoot ?? "(installed)"}");
             Log.Info($"paths: bin={AppPaths.BinDir} pgBin={AppPaths.PgBinDir} client={AppPaths.ClientDir} data={AppPaths.AppData}");
 
@@ -65,7 +66,7 @@ internal sealed class AppState
             State = ServerState.StartingServer;
             Log.Info("server: start");
             ct.ThrowIfCancellationRequested();
-            await _server.StartAsync(new ServerEnvironment(Config.Port, Config.PgPort), ct);
+            await _server.StartAsync(new ServerEnvironment(Config.Port, Config.PgPort, _postgres.DbPassword), ct);
 
             State = ServerState.Running;
             Log.Info("running");
@@ -144,7 +145,7 @@ internal sealed class AppState
             State = ServerState.StartingServer;
             try
             {
-                await _server.StartAsync(new ServerEnvironment(Config.Port, Config.PgPort), ct);
+                await _server.StartAsync(new ServerEnvironment(Config.Port, Config.PgPort, _postgres.DbPassword), ct);
                 State = ServerState.Running;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { }

@@ -111,10 +111,16 @@ Use `--skip-web` to skip rebuilding the client if unchanged:
 | Path | Contents |
 |------|----------|
 | `~/Library/Application Support/Fliks Server/postgresql/` | Database cluster |
-| `~/Library/Application Support/Fliks Server/conf/` | JWT secret (auto-generated) |
+| `~/Library/Application Support/Fliks Server/conf/` | JWT secret and `.db-password`, the generated Postgres password (auto-generated) |
 | `~/Library/Application Support/Fliks Server/data/images/` | Cached posters & fanart |
-| `~/Library/Application Support/Fliks Server/logs/` | PostgreSQL and server logs (`server-<date>.log`) |
+| `~/Library/Application Support/Fliks Server/logs/` | PostgreSQL and server logs (`server-<date>.log`), kept 14 days |
 | `/tmp/transcode/` | HLS transcode cache (ephemeral) |
+
+## Database access
+
+The bundled Postgres only listens on TCP loopback (no unix socket) and every login needs the password in
+`conf/.db-password`. A manual `psql` needs `-h localhost -p 5433 -U fliks` and `PGPASSWORD`; a future `pg_upgrade`
+needs its own `--socketdir`. Deleting `.db-password` is safe: the next launch resets the role password.
 
 ## Clean reset
 

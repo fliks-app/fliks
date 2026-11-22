@@ -19,6 +19,7 @@ internal static class ProcessRunner
     /// stream EOF until the timeout and the process-tree kill takes postgres
     /// down with it. Without redirection, pg_ctl detaches postgres and returns
     /// immediately.</param>
+    /// <param name="stdin">Written to the child's standard input, then closed (keeps secrets out of argv).</param>
     public static async Task<ProcessResult> RunAsync(
         string executable,
         IEnumerable<string> arguments,
@@ -26,7 +27,8 @@ internal static class ProcessRunner
         string? workingDirectory = null,
         TimeSpan? timeout = null,
         bool captureOutput = true,
-        JobObject? job = null)
+        JobObject? job = null,
+        string? stdin = null)
     {
         using var process = new Process();
         process.StartInfo.FileName = executable;
@@ -35,6 +37,8 @@ internal static class ProcessRunner
         process.StartInfo.CreateNoWindow = true;
         process.StartInfo.RedirectStandardOutput = captureOutput;
         process.StartInfo.RedirectStandardError = captureOutput;
+        process.StartInfo.RedirectStandardInput = stdin is not null;
+        if (stdin is not null) process.StartInfo.StandardInputEncoding = new UTF8Encoding(false);
         if (captureOutput)
         {
             // Decode tool output as UTF-8, not the Windows ANSI code page.
@@ -56,6 +60,12 @@ internal static class ProcessRunner
         process.Start();
         try { job?.Assign(process); }
         catch (System.ComponentModel.Win32Exception ex) { Log.Error($"job assignment failed for {executable}: {ex.Message}"); }
+        if (stdin is not null)
+        {
+            try { await process.StandardInput.WriteAsync(stdin); }
+            catch (IOException) { /* the child exited before reading it: the exit code tells */ }
+            finally { process.StandardInput.Close(); }
+        }
         if (captureOutput)
         {
             process.BeginOutputReadLine();
