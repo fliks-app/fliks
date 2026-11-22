@@ -1614,6 +1614,10 @@ async fn identify_series(c: &Ctx, listed: &[i32]) {
 async fn identify_keeps_the_unlisted_episodes_a_file_or_a_user_holds(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     media(&pool, 5, "series", Some(500), None, 1).await;
+    sqlx::query(r#"INSERT INTO editions ("mediaId", family) VALUES (5, 'video')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
     c.stub.ok(
         "work/series/500",
         json!({"tmdbId": 500, "title": "Show", "year": 2020}),
@@ -1642,7 +1646,7 @@ async fn identify_keeps_the_unlisted_episodes_a_file_or_a_user_holds(pool: PgPoo
     sqlx::query(
         r#"WITH f AS (INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality)
                       VALUES (5, 1, 'Show - S01E03.mkv', 1, 'WEBDL-1080p') RETURNING id)
-           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId") SELECT $1, f.id, 5 FROM f"#,
+           INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version) SELECT $1, f.id, 5, 0 FROM f"#,
     )
     .bind(id(3))
     .execute(&pool)

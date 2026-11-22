@@ -4648,7 +4648,7 @@ mod scene_import {
             .execute(&c.st.db)
             .await
             .unwrap();
-        let path = c.dir.join("dl").join("Show.S01E01.1080p.mkv");
+        let path = c.dir.join("dl").join("Show.S01E01.1080p.mp4");
         touch(&path, b"better");
         let guard = c.st.ingest.media.lock(m).await;
         let out = library::ingest(

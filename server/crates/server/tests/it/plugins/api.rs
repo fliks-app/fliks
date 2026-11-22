@@ -63,7 +63,11 @@ async fn install_pipeline_refusals_and_signatures() {
             "scope:acquisition:candidates",
             "scope:releases:score",
             "job:FixtureJob",
-            "job:FixtureHidden"
+            "job:FixtureHidden",
+            "coreref:item_groups",
+            "coreref:items",
+            "coreref:media",
+            "coreref:users"
         ])
     );
     assert_eq!(r["compatible"], true);

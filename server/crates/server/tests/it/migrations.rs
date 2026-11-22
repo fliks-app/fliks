@@ -374,8 +374,9 @@ async fn track_search_text_follows_a_rename_and_a_move(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn the_plugin_fk_migration_drops_foreign_keys_into_core(pool: PgPool) {
+async fn the_plugin_fk_migration_drops_foreign_keys_into_core(admin: PgPool) {
     const BEFORE: i64 = 1_789_000_001_070;
+    let pool = empty(&admin).await;
     MIGRATOR.run_to(BEFORE, &pool).await.unwrap();
     sql(
         &pool,
