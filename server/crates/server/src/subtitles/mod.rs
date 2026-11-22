@@ -84,6 +84,8 @@ pub struct Shared {
     pub http: reqwest::Client,
     /// No redirects: YIFY treats any 3xx as no result.
     pub plain: reqwest::Client,
+    /// The server's own listeners, which a translation endpoint is never allowed to reach.
+    pub own_ports: std::sync::Arc<[u16]>,
     pub os_tokens: Mutex<HashMap<String, (String, i64)>>,
     pub sync: sync::Queue,
     pub pacing: translation::Pacing,
@@ -104,6 +106,7 @@ impl Shared {
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .expect("plain client"),
+            own_ports: std::sync::Arc::default(),
             os_tokens: Mutex::default(),
             sync: sync::Queue::default(),
             pacing: translation::Pacing::default(),
@@ -112,6 +115,11 @@ impl Shared {
             searching: crate::busy::Claims::default(),
             progress: Mutex::default(),
         }
+    }
+
+    pub fn with_own_ports(mut self, ports: std::sync::Arc<[u16]>) -> Self {
+        self.own_ports = ports;
+        self
     }
 
     /// The percent of a running translation, absent when none runs.

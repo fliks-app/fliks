@@ -56,8 +56,12 @@ pub async fn public_base(st: &AppState, headers: &HeaderMap) -> String {
     if let Some(u) = settings::public_url(&st.db).await.ok().flatten() {
         return u;
     }
+    base_of(headers, st.cfg.port)
+}
+
+fn base_of(headers: &HeaderMap, port: u16) -> String {
     request_host(headers).map_or_else(
-        || format!("http://localhost:{}", st.cfg.port),
+        || format!("http://localhost:{port}"),
         |host| scheme_host(headers, host),
     )
 }
@@ -69,12 +73,10 @@ pub fn request_origin(headers: &HeaderMap) -> String {
 
 /// The host the client asked for: `X-Forwarded-Host` (first value) else `Host`.
 fn request_host(headers: &HeaderMap) -> Option<&str> {
-    ["x-forwarded-host", "host"]
-        .iter()
-        .find_map(|k| headers.get(*k).and_then(|v| v.to_str().ok()))
-        .and_then(|v| v.split(',').next())
-        .map(str::trim)
-        .filter(|h| !h.is_empty())
+    ["x-forwarded-host", "host"].iter().find_map(|k| {
+        let v = headers.get(*k)?.to_str().ok()?;
+        Some(v.split(',').next()?.trim()).filter(|h| !h.is_empty())
+    })
 }
 
 fn scheme_host(headers: &HeaderMap, host: &str) -> String {
@@ -140,6 +142,15 @@ mod tests {
         h.insert("x-forwarded-proto", "https".parse().unwrap());
         assert_eq!(request_origin(&h), "https://fliks.example");
         assert_eq!(request_host(&HeaderMap::new()), None);
+    }
+
+    #[test]
+    fn a_blank_forwarded_host_falls_back_to_host_and_then_localhost() {
+        let mut h = HeaderMap::new();
+        h.insert("x-forwarded-host", " ".parse().unwrap());
+        h.insert("host", "nas.lan:4848".parse().unwrap());
+        assert_eq!(base_of(&h, 4849), "http://nas.lan:4848");
+        assert_eq!(base_of(&HeaderMap::new(), 4849), "http://localhost:4849");
     }
 
     #[test]

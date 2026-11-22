@@ -96,22 +96,6 @@ pub struct Options {
     pub ready_wait: Duration,
 }
 
-/// The server's own listeners: its API, the engine's public gateway and control plane, and Postgres.
-fn own_ports(cfg: &crate::config::Config) -> Arc<[u16]> {
-    let engine = reqwest::Url::parse(&cfg.engine_url)
-        .ok()
-        .and_then(|u| u.port_or_known_default());
-    [
-        Some(cfg.port),
-        cfg.public_port,
-        engine,
-        Some(cfg.db.get_port()),
-    ]
-    .into_iter()
-    .flatten()
-    .collect()
-}
-
 impl Options {
     pub fn from_config(cfg: &crate::config::Config) -> Self {
         let runtime = std::env::var("FLIKS_RUNTIME_DIR")
@@ -136,7 +120,7 @@ impl Options {
                 port: cfg.db.get_port(),
                 dbname: cfg.db.get_database().unwrap_or("fliks").to_owned(),
             },
-            own_ports: own_ports(cfg),
+            own_ports: cfg.own_ports(),
             tune: None,
             fetch: fetch::Fetcher::default(),
             keys: trust::official_keys(),
@@ -657,25 +641,6 @@ mod runtime_dir_tests {
         );
         assert!(legacy.join("data/q").exists());
         std::fs::remove_dir_all(root).unwrap();
-    }
-}
-
-#[cfg(test)]
-mod own_ports_tests {
-    use super::*;
-
-    #[test]
-    fn the_engine_gateway_port_is_one_of_the_servers_own() {
-        let env = |k: &str| match k {
-            "PORT" => Some("4849".to_owned()),
-            "FLIKS_PUBLIC_PORT" => Some("4848".to_owned()),
-            "FLIKS_ENGINE_URL" => Some("http://127.0.0.1:7400".to_owned()),
-            _ => None,
-        };
-        let ports = own_ports(&crate::config::Config::from_lookup(env));
-        for p in [4848, 4849, 7400, 5432] {
-            assert!(ports.contains(&p), "{p} in {ports:?}");
-        }
     }
 }
 

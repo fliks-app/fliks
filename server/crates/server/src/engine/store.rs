@@ -40,14 +40,7 @@ pub async fn write_engine_settings(
     rows.push((MAPPINGS_KEY, json));
     let mut tx = db.begin().await?;
     for (key, value) in &rows {
-        sqlx::query!(
-            r#"INSERT INTO app_settings ("key", "value") VALUES ($1, $2)
-               ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value", "updatedAt" = now()"#,
-            *key,
-            value.as_deref()
-        )
-        .execute(&mut *tx)
-        .await?;
+        crate::settings::set_in(&mut tx, key, value.as_deref()).await?;
     }
     tx.commit().await?;
     Ok(rows.into_iter().map(|(k, _)| k.to_owned()).collect())

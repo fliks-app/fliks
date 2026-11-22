@@ -5,10 +5,11 @@ use std::{sync::OnceLock, time::Duration};
 pub const TEST_TIMEOUT: Duration = Duration::from_secs(15);
 pub const LIST_TIMEOUT: Duration = Duration::from_secs(60);
 pub const ITEM_TIMEOUT: Duration = Duration::from_secs(30);
-const MAX_REDIRECTS: usize = 5;
+pub const MAX_REDIRECTS: usize = 5;
 
 /// Follows a redirect only to the scheme, host and port of the previous URL, or the https upgrade of an
-/// `http` URL on its default port, so `X-Api-Key` never leaves the host.
+/// `http` URL on its default port, so `X-Api-Key` never leaves the host. reqwest drops `Authorization`
+/// on the upgrade (the port changes): a caller that sends one follows by hand with `no_redirect_client` and `follows`.
 pub fn client() -> &'static Client {
     static C: OnceLock<Client> = OnceLock::new();
     C.get_or_init(|| {
@@ -28,15 +29,37 @@ pub fn client() -> &'static Client {
     })
 }
 
-fn follows(from: &Url, to: &Url) -> bool {
-    let same_host = from.host_str() == to.host_str();
-    let same =
-        from.scheme() == to.scheme() && from.port_or_known_default() == to.port_or_known_default();
-    let upgrade = from.scheme() == "http"
+/// A client that never follows a redirect, for a caller that follows by hand.
+pub fn no_redirect_client() -> &'static Client {
+    static C: OnceLock<Client> = OnceLock::new();
+    C.get_or_init(|| {
+        crate::net::guard::open_builder()
+            .redirect(redirect::Policy::none())
+            .build()
+            .expect("outbound client")
+    })
+}
+
+/// Whether a redirect from `from` to `to` may be followed.
+pub fn follows(from: &Url, to: &Url) -> bool {
+    same_origin(from, to) || upgrade(from, to)
+}
+
+fn same_origin(from: &Url, to: &Url) -> bool {
+    from.host_str() == to.host_str()
+        && from.scheme() == to.scheme()
+        && from.port_or_known_default() == to.port_or_known_default()
+}
+
+/// The https upgrade of an `http` URL on its default port; a Basic userinfo would be dropped by it.
+fn upgrade(from: &Url, to: &Url) -> bool {
+    from.host_str() == to.host_str()
+        && from.scheme() == "http"
         && to.scheme() == "https"
         && from.port().is_none()
-        && to.port().is_none();
-    same_host && (same || upgrade)
+        && to.port().is_none()
+        && from.username().is_empty()
+        && from.password().is_none()
 }
 
 /// A transport error as text, without the request URL that `Display` would embed.
@@ -80,6 +103,7 @@ mod tests {
         assert!(!follows(&u("https://h/a"), &u("http://h/b")));
         assert!(!follows(&u("http://h/a"), &u("https://h:8443/b")));
         assert!(!follows(&u("http://h/a"), &u("https://other/b")));
+        assert!(!follows(&u("http://user:pw@h/a"), &u("https://h/b")));
     }
 
     #[test]

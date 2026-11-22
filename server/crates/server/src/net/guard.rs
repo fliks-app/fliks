@@ -81,6 +81,11 @@ pub fn system() -> Arc<dyn Net> {
     NET.get_or_init(|| Arc::new(SystemNet::new())).clone()
 }
 
+/// Whether this host owns `ip`: only a local address can be bound.
+pub fn is_local(ip: IpAddr) -> bool {
+    std::net::UdpSocket::bind((ip, 0)).is_ok()
+}
+
 /// Why a host is refused, or could not be resolved.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Refused {
@@ -102,7 +107,7 @@ fn not_found(e: &io::Error) -> bool {
 }
 
 /// Resolves once and vets every address; an IP literal is vetted as is. A metadata address is refused
-/// always, loopback on `own_ports` (this server's listeners) even when `internal` lifts the private class.
+/// always, an address of this host on `own_ports` (this server's listeners) even when `internal` lifts the private class.
 pub async fn vet(
     net: &dyn Net,
     host: &str,
@@ -131,7 +136,7 @@ pub async fn vet(
         if class == Class::Refused || (class == Class::Private && !internal) {
             return Err(Refused::Address(class.name(), ip));
         }
-        if own_ports.contains(&a.port()) && is_loopback_or_metadata(ip) {
+        if own_ports.contains(&a.port()) && (is_loopback_or_metadata(ip) || is_local(ip)) {
             return Err(Refused::Address("own", ip));
         }
     }
@@ -164,5 +169,23 @@ mod tests {
             Err(Refused::Address("metadata", _))
         ));
         assert!(ok("192.168.1.5", 4849).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn an_own_port_is_refused_on_every_address_the_host_owns() {
+        // A UDP connect sends nothing; it only picks the local address of the default route.
+        let Ok(s) = std::net::UdpSocket::bind("0.0.0.0:0").and_then(|s| {
+            s.connect("192.0.2.1:9")?;
+            Ok(s)
+        }) else {
+            return;
+        };
+        let ip = s.local_addr().unwrap().ip().to_string();
+        let net = SystemNet::new();
+        assert!(matches!(
+            vet(&net, &ip, 4849, true, &[4849]).await,
+            Err(Refused::Address("own", _))
+        ));
+        assert!(vet(&net, &ip, 8080, true, &[4849]).await.is_ok());
     }
 }

@@ -282,6 +282,8 @@ pub struct Reply {
     pub status: u16,
     pub retry_after: Option<String>,
     pub body: String,
+    /// The body may reach the caller's error text; false for an endpoint on a private network.
+    pub echo: bool,
 }
 
 pub enum Attempt<R> {
@@ -355,6 +357,11 @@ pub async fn post_with_retry<P: Post>(p: &mut P, label: &str) -> Result<P::Resp,
             Attempt::Failed(r) => r,
         };
         let err = &reply.body;
+        let shown = if reply.echo {
+            format!(": {}", slice16(err, UPSTREAM_TEXT))
+        } else {
+            String::new()
+        };
         let quota =
             reply.status == 429 || rx!(i r"rate.?limit|per minute|\bTPM\b|quota").is_match(err);
         let daily = quota && rx!(i r"PerDay|per day|requests per day").is_match(err);
@@ -363,8 +370,7 @@ pub async fn post_with_retry<P: Post>(p: &mut P, label: &str) -> Result<P::Resp,
                 || rx!(i r"context[_ ]length|too large|max_tokens").is_match(err))
         {
             return Err(TranslationError::TooLarge(format!(
-                "{label} rejected the request as too large: {}",
-                slice16(err, UPSTREAM_TEXT)
+                "{label} rejected the request as too large{shown}"
             )));
         }
         let retryable = matches!(reply.status, 429 | 500 | 502 | 503 | 504);
@@ -398,17 +404,15 @@ pub async fn post_with_retry<P: Post>(p: &mut P, label: &str) -> Result<P::Resp,
             });
             return Err(TranslationError::RateLimit {
                 message: format!(
-                    "{label} quota/rate limit exceeded (scope={}{delay}): {}",
-                    scope.as_str(),
-                    slice16(err, UPSTREAM_TEXT)
+                    "{label} quota/rate limit exceeded (scope={}{delay}){shown}",
+                    scope.as_str()
                 ),
                 scope,
             });
         }
         return Err(TranslationError::Other(format!(
-            "{label} API error {}: {}",
-            reply.status,
-            slice16(err, UPSTREAM_TEXT)
+            "{label} API error {}{shown}",
+            reply.status
         )));
     }
     Err(TranslationError::Other(format!(
