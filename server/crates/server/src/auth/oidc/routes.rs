@@ -6,11 +6,12 @@ use super::{
 use crate::{
     auth::{
         db::OidcSession,
-        routes::{SessionKind, client_ip, sign_in},
+        routes::{SessionKind, sign_in},
     },
     http::{
         AppError,
         auth::{SessionAuthed, session_from_headers},
+        client_ip,
         validate::{PathParams, ValidJson},
     },
     state::AppState,
@@ -91,17 +92,12 @@ pub(crate) async fn info(State(st): State<AppState>) -> Result<Json<Info>, AppEr
         .into_iter()
         .filter(|p| p.enabled)
         .collect();
-    let setting = |k: &'static str| {
-        sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, k)
-    };
-    let auto: Option<i32> = setting("oidc_auto_launch")
-        .fetch_optional(&st.db)
+    let auto: Option<i32> = crate::settings::text(&st.db, "oidc_auto_launch")
         .await?
-        .flatten()
         .and_then(|v| v.trim().parse().ok())
         .filter(|id| providers.iter().any(|p| p.id == *id));
     let admins = db::password_login_admins_only(&st.db).await?;
-    let origin = db::public_url(&st.db)
+    let origin = crate::settings::public_url(&st.db)
         .await?
         .map(|u| origin_of(&u))
         .unwrap_or_default();
@@ -210,7 +206,7 @@ pub(crate) async fn start(
     } else {
         None
     };
-    let public = db::public_url(&st.db)
+    let public = crate::settings::public_url(&st.db)
         .await?
         .ok_or_else(|| AppError::conflict("public_url is not set"))?;
     let d = st.oidc.discover(&p).await.map_err(|e| {
@@ -276,7 +272,9 @@ pub(crate) async fn callback(
     PathParams(id): PathParams<i32>,
     Query(q): Query<HashMap<String, String>>,
 ) -> Result<Response, AppError> {
-    let public = db::public_url(&st.db).await?.unwrap_or_default();
+    let public = crate::settings::public_url(&st.db)
+        .await?
+        .unwrap_or_default();
     let state = q.get("state").map(String::as_str).unwrap_or_default();
     let fail = |rt: ReturnTo, kind: Kind| {
         let params: Vec<(&str, &str)> = [("error", kind.as_str())]
@@ -417,7 +415,7 @@ pub(crate) async fn exchange(
     if !is_verifier(&dto.verifier) || dto.code.is_empty() || dto.code.len() > 4096 {
         return Ok(refusal(Kind::Idp));
     }
-    let Some(public) = db::public_url(&st.db).await? else {
+    let Some(public) = crate::settings::public_url(&st.db).await? else {
         return Ok(refusal(Kind::Expired));
     };
     let idp = |why: String| refused(p.id, Kind::Idp, &why);
@@ -533,7 +531,7 @@ pub(crate) async fn end_session(
     let Ok(mut url) = reqwest::Url::parse(endpoint) else {
         return none();
     };
-    let public = db::public_url(&st.db).await?;
+    let public = crate::settings::public_url(&st.db).await?;
     {
         let mut q = url.query_pairs_mut();
         if let Some(t) = &id_token {

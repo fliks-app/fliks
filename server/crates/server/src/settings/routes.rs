@@ -85,7 +85,7 @@ async fn drop_stale_secret(
     let Some(secret) = secret_of_endpoint(key).filter(|_| !secret_replaced) else {
         return Ok(None);
     };
-    let old = db::value(&st.db, key).await.map_err(db_err)?;
+    let old = db::text(&st.db, key).await.map_err(db_err)?;
     if !endpoint_changed(old.as_deref(), new) {
         return Ok(None);
     }
@@ -198,6 +198,9 @@ fn validate(key: &str, value: &str) -> Result<(), AppError> {
         crate::karaoke::aligner::validate_mode(value)
             .map_err(|m| AppError::bad_request(vec![m]))?;
     }
+    if key == crate::party::ICE_KEY && !value.trim().is_empty() {
+        crate::party::parse_ice_servers(value).map_err(|m| AppError::bad_request(vec![m]))?;
+    }
     crate::email::validate_setting(key, value).map_err(|m| AppError::bad_request(vec![m]))?;
     crate::engine::validate_streaming_setting(key, Some(value))
         .map_err(|m| AppError::bad_request(vec![m]))
@@ -209,7 +212,7 @@ pub(crate) async fn list(
     authed: Authed,
 ) -> Result<Json<Value>, AppError> {
     authed.require(Action::Manage, Subject::Settings)?;
-    let rows = db::list(&st.db).await.map_err(db_err)?;
+    let rows = db::all(&st.db).await.map_err(db_err)?;
     let secrets = Secrets::load(&st.db, rows.iter().map(|(k, _)| k.as_str()))
         .await
         .map_err(db_err)?;

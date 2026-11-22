@@ -10,6 +10,7 @@ use axum::{
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD as B64};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use fliks_server::sync::MutexExt;
 use fliks_server::{
     app,
     config::Config,
@@ -44,8 +45,7 @@ struct Seen {
 impl Relay {
     fn seen(&self, method: &str, path_prefix: &str) -> Vec<Seen> {
         self.0
-            .lock()
-            .unwrap()
+            .lock_clean()
             .iter()
             .filter(|s| s.method == method && s.path.starts_with(path_prefix))
             .cloned()
@@ -61,7 +61,7 @@ impl Relay {
         }
         panic!(
             "relay never saw {n} x {method} {path_prefix}: {:?}",
-            self.0.lock().unwrap()
+            self.0.lock_clean()
         );
     }
 }
@@ -97,7 +97,7 @@ async fn spawn_relay() -> (String, Relay) {
             }
             _ => false,
         };
-        relay.0.lock().unwrap().push(Seen {
+        relay.0.lock_clean().push(Seen {
             method: method.to_string(),
             path: uri.path().to_owned(),
             body: body.to_vec(),

@@ -213,11 +213,7 @@ async fn write_tables(
 impl Plugins {
     async fn owned_settings(&self, id: &str) -> sqlx::Result<Map<String, Value>> {
         let ids = super::imports::installed_ids(&self.db).await?;
-        let rows: Vec<(String, Option<String>)> =
-            sqlx::query_as(r#"SELECT "key"::text, "value" FROM app_settings WHERE starts_with("key", $1) ORDER BY "key""#)
-                .bind(format!("plugin.{id}."))
-                .fetch_all(&self.db)
-                .await?;
+        let rows = crate::settings::with_prefix(&self.db, &format!("plugin.{id}.")).await?;
         Ok(rows
             .into_iter()
             .filter(|(k, _)| {

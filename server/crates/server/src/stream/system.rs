@@ -570,7 +570,7 @@ pub async fn purge_file(
     let owner = q
         .user_id
         .as_deref()
-        .and_then(super::info::parse_int)
+        .and_then(fliks_domain::js::parse_int)
         .map(|n| n.to_string());
     let Ok(file) = u32::try_from(id) else {
         return Ok(Json(json!({"ok": true, "entries": 0, "bytes": 0})));

@@ -147,6 +147,8 @@ pub struct HostConfig {
     pub http_queue: usize,
     pub task_max: usize,
     pub upstream_override: Arc<super::outbound::Override>,
+    /// Listener ports of this server, which a plugin never reaches on loopback.
+    pub own_ports: Arc<[u16]>,
     /// The image the compile child runs (`/proc/self/exe` in production).
     pub compiler: PathBuf,
     pub compile_kill: Duration,
@@ -183,6 +185,7 @@ impl HostConfig {
             http_queue: 32,
             task_max: 2,
             upstream_override: Arc::new(super::outbound::Override::from_env()),
+            own_ports: Arc::default(),
             compiler: super::compile::own_image(),
             compile_kill: Duration::from_secs(600),
             compile_cache: None,
@@ -714,6 +717,7 @@ impl PluginRt {
                 plugin_id: id.clone(),
                 internal: self.internal,
                 net: env.cfg.net.clone(),
+                own_ports: env.cfg.own_ports.clone(),
                 permits: self.sh.outbound.clone(),
                 gate: self.sh.gate.clone(),
                 last: None,

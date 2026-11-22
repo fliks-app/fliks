@@ -91,7 +91,7 @@ pub struct Client {
 impl Client {
     pub fn new(url: &str, token: &str) -> Self {
         let build = |timeout: Option<Duration>| {
-            let mut b = reqwest::Client::builder().connect_timeout(CONNECT_TIMEOUT);
+            let mut b = crate::net::guard::open_builder().connect_timeout(CONNECT_TIMEOUT);
             if let Some(t) = timeout {
                 b = b.timeout(t);
             }

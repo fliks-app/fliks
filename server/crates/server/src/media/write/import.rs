@@ -286,10 +286,10 @@ pub(super) async fn folder_format(
         MediaKind::Series => "{Series Title}",
         MediaKind::Book | MediaKind::Comic | MediaKind::Album => "{Title}",
     };
-    let stored = sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
-        .fetch_optional(db)
-        .await?
-        .flatten();
+    let stored = match key {
+        Some(k) => crate::settings::text(db, k).await?,
+        None => None,
+    };
     Ok(stored.unwrap_or_else(|| default.to_owned()))
 }
 

@@ -2,6 +2,7 @@
 //! (`docs/spec/music.md` rule 69).
 use super::providers;
 use crate::state::AppState;
+use crate::sync::MutexExt;
 use fliks_domain::metadata::limiter::Priority;
 use std::{
     collections::{HashSet, VecDeque},
@@ -27,7 +28,7 @@ pub struct Queue(Mutex<Inner>);
 impl Queue {
     /// Nothing waits and no worker runs.
     pub fn idle(&self) -> bool {
-        let g = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let g = self.0.lock_clean();
         g.queued.is_empty() && g.workers == 0
     }
 }
@@ -35,7 +36,7 @@ impl Queue {
 /// Queues tracks for `providers::fetch` and starts the workers a backlog needs.
 pub fn enqueue(st: &AppState, items: impl IntoIterator<Item = i32>) {
     let spawn = {
-        let mut g = st.lyrics.0.lock().unwrap_or_else(|e| e.into_inner());
+        let mut g = st.lyrics.0.lock_clean();
         for i in items {
             if g.queued.insert(i) {
                 g.pending.push_back(i);
@@ -59,7 +60,7 @@ struct FreeOnPanic<'a> {
 impl Drop for FreeOnPanic<'_> {
     fn drop(&mut self) {
         if std::thread::panicking() {
-            let mut g = self.queue.0.lock().unwrap_or_else(|e| e.into_inner());
+            let mut g = self.queue.0.lock_clean();
             g.workers -= 1;
             if let Some(i) = self.item {
                 g.queued.remove(&i);
@@ -75,7 +76,7 @@ async fn work(st: AppState) {
     };
     loop {
         let next = {
-            let mut g = st.lyrics.0.lock().unwrap_or_else(|e| e.into_inner());
+            let mut g = st.lyrics.0.lock_clean();
             let next = g.pending.pop_front();
             if next.is_none() {
                 g.workers -= 1;
@@ -87,12 +88,7 @@ async fn work(st: AppState) {
         if let Err(e) = providers::fetch(&st, item, false, Priority::Background).await {
             tracing::warn!("lyrics of track #{item} not fetched: {e}");
         }
-        st.lyrics
-            .0
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .queued
-            .remove(&item);
+        st.lyrics.0.lock_clean().queued.remove(&item);
         slot.item = None;
     }
 }

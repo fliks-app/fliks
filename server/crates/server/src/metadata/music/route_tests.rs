@@ -1,5 +1,6 @@
 //! The album preview and the artist's popular list against a fake music provider (`docs/spec/music.md`).
 use super::tests::{ARTIST, GROUP, MusicFake, RELEASE};
+use crate::sync::MutexExt;
 use crate::{auth::testing as session, config::Config, state::AppState};
 use axum::{Router, body::Body, http::Request};
 use serde_json::{Value, json};
@@ -66,16 +67,16 @@ async fn get(app: &Router, t: &str, uri: &str) -> (u16, Value) {
 
 fn fake() -> MusicFake {
     let f = MusicFake::default();
-    f.works.lock().unwrap().insert(
+    f.works.lock_clean().insert(
         GROUP.into(),
         json!({"externalId": GROUP, "title": "Alpha", "primaryType": "album", "year": 1999, "mediaType": "album",
                "artists": [{"name": "Ana", "id": ARTIST, "joinPhrase": " & "}]}),
     );
-    f.children.lock().unwrap().insert(
+    f.children.lock_clean().insert(
         GROUP.into(),
         vec![json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "status": "official", "trackCount": 2})],
     );
-    f.editions.lock().unwrap().insert(
+    f.editions.lock_clean().insert(
         RELEASE.into(),
         json!({"externalId": RELEASE, "releaseGroupId": GROUP, "title": "Alpha", "country": "FR",
                "status": "official", "media": "cd", "trackCount": 2, "tracks": [
@@ -137,7 +138,7 @@ async fn the_preview_lists_a_release_or_the_one_a_group_picks_and_marks_an_owned
 #[sqlx::test(migrations = false)]
 async fn popular_recordings_carry_the_owned_track(pool: PgPool) {
     let f = fake();
-    *f.top.lock().unwrap() = vec![
+    *f.top.lock_clean() = vec![
         json!({"recordingId": OWNED, "title": "One", "listenCount": 9, "albumExternalId": GROUP}),
         json!({"recordingId": OTHER, "title": "Two", "listenCount": 5, "albumExternalId": GROUP}),
     ];
@@ -196,7 +197,7 @@ async fn the_picker_lists_the_release_a_group_or_a_release_would_be(pool: PgPool
 async fn the_album_detail_lists_its_release_its_versions_and_the_tracks_it_shares(pool: PgPool) {
     let f = fake();
     let deluxe = "44444444-4444-4444-8444-444444444444";
-    f.children.lock().unwrap().insert(
+    f.children.lock_clean().insert(
         GROUP.into(),
         vec![
             json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "status": "official", "trackCount": 2}),

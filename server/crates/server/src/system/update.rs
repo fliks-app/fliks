@@ -115,7 +115,7 @@ impl Cache {
 }
 
 async fn fetch() -> Option<UpdateStatus> {
-    let client = reqwest::Client::builder()
+    let client = crate::net::guard::open_builder()
         .user_agent("fliks-server")
         .timeout(Duration::from_secs(15))
         .build()

@@ -71,16 +71,9 @@ impl LanguageCache {
             }
             s.epoch
         };
-        let rows = sqlx::query!(
-            r#"SELECT "key", "value" FROM app_settings WHERE "key" IN ('metadata_language', 'metadata_region')"#
-        )
-        .fetch_all(&self.db)
-        .await?;
-        let get = |k: &str| {
-            rows.iter()
-                .find(|r| r.key == k)
-                .and_then(|r| r.value.clone())
-        };
+        let rows =
+            crate::settings::texts(&self.db, &["metadata_language", "metadata_region"]).await?;
+        let get = |k: &str| rows.get(k).cloned();
         let v: Global = Arc::new((get("metadata_language"), get("metadata_region")));
         let mut s = self.slot.lock_clean();
         if s.epoch == epoch {

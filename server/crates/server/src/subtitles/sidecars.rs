@@ -11,7 +11,6 @@ use fliks_domain::{
 };
 use std::{
     collections::{HashMap, HashSet},
-    fs,
     path::{Path, PathBuf},
 };
 
@@ -301,8 +300,10 @@ pub async fn carry_over(st: &AppState, media_id: i32, from_file: i32, to_file: i
         let (Some(src), Some(dest)) = (dirs.resolve(stored), dirs.resolve(&rel)) else {
             continue;
         };
-        if fs::symlink_metadata(&dest).is_ok()
-            || !fs::symlink_metadata(&src).is_ok_and(|m| m.is_file())
+        if tokio::fs::symlink_metadata(&dest).await.is_ok()
+            || !tokio::fs::symlink_metadata(&src)
+                .await
+                .is_ok_and(|m| m.is_file())
         {
             continue;
         }

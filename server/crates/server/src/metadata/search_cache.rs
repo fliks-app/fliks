@@ -1,4 +1,5 @@
 //! The in-process cache of search answers (`docs/spec/metadata.md` rule 11).
+use crate::sync::MutexExt;
 use serde_json::Value;
 use std::{
     collections::HashMap,
@@ -36,7 +37,7 @@ impl SearchCache {
     }
 
     pub(crate) fn get(&self, key: &str, now: Instant) -> Option<Vec<Value>> {
-        let mut e = self.entries.lock().unwrap_or_else(|p| p.into_inner());
+        let mut e = self.entries.lock_clean();
         match e.get(key) {
             Some((at, hits)) if now.duration_since(*at) < self.ttl => Some(hits.clone()),
             Some(_) => {
@@ -49,7 +50,7 @@ impl SearchCache {
 
     /// Makes room by dropping the expired entries, then the oldest.
     pub(crate) fn put(&self, key: String, hits: Vec<Value>, now: Instant) {
-        let mut e = self.entries.lock().unwrap_or_else(|p| p.into_inner());
+        let mut e = self.entries.lock_clean();
         if e.len() >= self.capacity && !e.contains_key(&key) {
             e.retain(|_, (at, _)| now.duration_since(*at) < self.ttl);
             while e.len() >= self.capacity {
@@ -67,15 +68,12 @@ impl SearchCache {
     }
 
     pub(crate) fn clear(&self) {
-        self.entries
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .clear();
+        self.entries.lock_clean().clear();
     }
 
     #[cfg(test)]
     fn len(&self) -> usize {
-        self.entries.lock().unwrap().len()
+        self.entries.lock_clean().len()
     }
 }
 

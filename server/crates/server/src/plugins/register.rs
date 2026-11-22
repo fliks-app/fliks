@@ -1,5 +1,6 @@
 //! Registering a package with the host: checks, database provisioning, settling and activation.
 use super::*;
+use crate::sync::MutexExt;
 use fliks_domain::external_id::ExternalProvider;
 use fliks_domain::plugins::provider;
 
@@ -153,7 +154,7 @@ impl Plugins {
         }
         let range = m["fliks"].as_str().unwrap_or_default();
         // the archive embedded in this build is pinned by providers.lock; bump-providers.sh checks its range
-        let embedded = self.embedded.lock().unwrap().contains(&sha);
+        let embedded = self.embedded.lock_clean().contains(&sha);
         if !embedded && !manifest::fliks_satisfied(range, &self.opts.version) {
             let detail = format!(
                 "manifest requires fliks \"{range}\", running {}",

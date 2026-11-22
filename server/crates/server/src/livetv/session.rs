@@ -327,8 +327,7 @@ pub async fn open(
     let Some(primary) = streams.first() else {
         return Err(unavailable(channel_name));
     };
-    let grace =
-        grace_of(crate::settings::setting_value(&st.db, "livetv_slot_release_seconds").await?);
+    let grace = grace_of(crate::settings::text(&st.db, "livetv_slot_release_seconds").await?);
     let cap = super::sync::setting_int(&st.db, "livetv_max_viewers_per_user", 0).await?;
     let token = crate::events::uuid_v4();
     let (verdict, vetoes): (Option<AtCapacity>, Vec<bool>) = {

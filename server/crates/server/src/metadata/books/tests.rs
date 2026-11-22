@@ -4,6 +4,7 @@ use super::{
     identify::{BookHints, BookMatch, identify},
     link::{attach, attach_with, stored},
 };
+use crate::sync::MutexExt;
 use crate::{
     config::Config,
     metadata::{
@@ -70,7 +71,7 @@ impl Fake {
     }
 
     fn log(&self, what: &str) {
-        self.calls.lock().unwrap().push(what.into());
+        self.calls.lock_clean().push(what.into());
     }
 }
 

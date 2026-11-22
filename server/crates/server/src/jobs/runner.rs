@@ -68,7 +68,7 @@ pub fn spawn(st: &AppState) {
     }
     let st = st.clone();
     cron::spawn(names::PRUNE_CRON, tz, chrono::Utc::now, move || {
-        let db = st.db.clone();
+        let (db, qoe) = (st.db.clone(), st.qoe.clone());
         tokio::spawn(async move {
             if let Err(e) = audit::prune(&db).await {
                 tracing::error!("PruneOldCommands: {e}");
@@ -76,6 +76,8 @@ pub fn spawn(st: &AppState) {
             if let Err(e) = crate::email::prune(&db).await {
                 tracing::error!("book_sends prune: {e}");
             }
+            crate::auth::prune_refresh_tokens(&db).await;
+            qoe.purge_old().await;
         });
     });
 }

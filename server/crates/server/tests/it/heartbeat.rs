@@ -3,6 +3,7 @@
 use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_engine_core::api::SessionKind;
+use fliks_server::sync::MutexExt;
 use fliks_server::{
     config::Config,
     events::{Identity, SseEvent},
@@ -24,7 +25,7 @@ async fn fake_engine() -> (String, Arc<Mutex<Vec<String>>>) {
         let log = log.clone();
         async move {
             let (method, path) = (req.method().to_string(), req.uri().path().to_owned());
-            log.lock().unwrap().push(format!("{method} {path}"));
+            log.lock_clean().push(format!("{method} {path}"));
             let ok = |v: Value| axum::Json(v).into_response();
             match (method.as_str(), path.as_str()) {
                 ("GET", "/v1/hello") => ok(json!({"engineVersion": "0.2.0", "protocolVersion": 1, "instanceId": "x",
@@ -325,7 +326,7 @@ async fn presence_beats_update_emit_every_time_and_a_state_change_flushes(pool: 
     let seen: Arc<Mutex<Vec<SseEvent>>> = Arc::default();
     let sink = seen.clone();
     c.st.hub
-        .register_household_fan_out(move |ev, _| sink.lock().unwrap().push(ev.clone()));
+        .register_household_fan_out(move |ev, _| sink.lock_clean().push(ev.clone()));
     let beat = |mut extra: Value| {
         extra["sessionId"] = "s1".into();
         c.beat(extra)
@@ -343,7 +344,7 @@ async fn presence_beats_update_emit_every_time_and_a_state_change_flushes(pool: 
     assert!(b["state"].is_object(), "state change forces a write");
     let live = c.st.presence.peek("s1").unwrap();
     assert_eq!((live.position, live.volume), (111.0, Some(0.5)));
-    let events = seen.lock().unwrap();
+    let events = seen.lock_clean();
     assert_eq!(events.len(), 3, "remote.state on every beat");
     let SseEvent::RemoteState {
         target_id,
@@ -374,7 +375,7 @@ async fn an_unknown_state_is_kept_verbatim_and_absent_body_fields_stay_absent(po
     let seen: Arc<Mutex<Vec<SseEvent>>> = Arc::default();
     let sink = seen.clone();
     c.st.hub
-        .register_household_fan_out(move |ev, _| sink.lock().unwrap().push(ev.clone()));
+        .register_household_fan_out(move |ev, _| sink.lock_clean().push(ev.clone()));
     let body = json!({"sessionId": "s1", "positionSeconds": 5, "state": "seeking"});
     let (status, _) = c.put(c.media, body).await;
     assert_eq!(
@@ -386,7 +387,7 @@ async fn an_unknown_state_is_kept_verbatim_and_absent_body_fields_stay_absent(po
         live.state,
         fliks_server::events::event::PlayState::Other("seeking".into())
     );
-    let ev = serde_json::to_value(&seen.lock().unwrap()[0]).unwrap();
+    let ev = serde_json::to_value(&seen.lock_clean()[0]).unwrap();
     assert_eq!(ev["state"], "seeking");
     assert!(
         ev.get("mediaFileId").is_none() && ev.get("durationSeconds").is_none(),
@@ -408,13 +409,13 @@ async fn history_goes_to_the_launcher_and_no_target_means_no_emit(pool: PgPool) 
     let seen: Arc<Mutex<usize>> = Arc::default();
     let n = seen.clone();
     c.st.hub
-        .register_household_fan_out(move |_, _| *n.lock().unwrap() += 1);
+        .register_household_fan_out(move |_, _| *n.lock_clean() += 1);
     c.beat(json!({"sessionId": "s2", "state": "playing"})).await;
     let owner: i32 = sqlx::query_scalar(r#"SELECT "userId" FROM playback_states"#)
         .fetch_one(&c.pool)
         .await
         .unwrap();
-    assert_eq!((owner, *seen.lock().unwrap()), (launcher, 0));
+    assert_eq!((owner, *seen.lock_clean()), (launcher, 0));
 }
 
 #[sqlx::test(migrations = false)]
@@ -423,8 +424,7 @@ async fn engine_answers_decide_the_session_and_the_ownership(pool: PgPool) {
     let c = ctx_with(pool, Some(&url)).await;
     let heartbeats = || {
         calls
-            .lock()
-            .unwrap()
+            .lock_clean()
             .iter()
             .filter(|p| p.ends_with("/heartbeat"))
             .count()

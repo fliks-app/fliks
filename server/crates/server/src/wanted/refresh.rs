@@ -546,6 +546,7 @@ pub async fn run(st: &AppState) -> Result<(), String> {
 mod artist_tests {
     use super::*;
     use crate::metadata::music::tests::{ARTIST, GROUP, MusicFake, RELEASE};
+    use crate::sync::MutexExt;
     use serde_json::json;
     use sqlx::PgPool;
     use std::sync::Arc;
@@ -554,21 +555,21 @@ mod artist_tests {
 
     fn fake() -> Arc<MusicFake> {
         let f = Arc::new(MusicFake::default());
-        *f.albums.lock().unwrap() = vec![
+        *f.albums.lock_clean() = vec![
             json!({"externalId": GROUP, "title": "Alpha", "primaryType": "album", "firstReleaseDate": "1999-05-01"}),
             json!({"externalId": SINGLE, "title": "Beta", "primaryType": "single", "firstReleaseDate": "2001"}),
         ];
-        f.works.lock().unwrap().insert(
+        f.works.lock_clean().insert(
             GROUP.into(),
             json!({"externalId": GROUP, "title": "Alpha", "primaryType": "album", "year": 1999,
                    "firstReleaseDate": "1999-05-01", "mediaType": "album",
                    "artists": [{"name": "Ana", "id": ARTIST}]}),
         );
-        f.children.lock().unwrap().insert(
+        f.children.lock_clean().insert(
             GROUP.into(),
             vec![json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "status": "official", "trackCount": 2})],
         );
-        f.editions.lock().unwrap().insert(
+        f.editions.lock_clean().insert(
             RELEASE.into(),
             json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "status": "official", "media": "cd",
                    "trackCount": 2, "tracks": [

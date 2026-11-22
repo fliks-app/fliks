@@ -97,7 +97,7 @@ pub async fn list(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, 
         }
     });
     let done = futures_util::future::join_all(checks).await;
-    let gone = dismissed(super::setting_value(&st.db, KEY).await?.as_deref());
+    let gone = dismissed(super::text(&st.db, KEY).await?.as_deref());
     let items: Vec<Value> = ITEMS
         .iter()
         .zip(done)

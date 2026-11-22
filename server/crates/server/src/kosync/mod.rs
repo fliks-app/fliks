@@ -1,10 +1,10 @@
 //! KOReader progress sync (`docs/spec/kosync.md`), authenticated by a `kosync` device token.
 use crate::{
-    auth::client_ip,
     device_tokens,
     http::{
         AppError,
         auth::Authed,
+        client_ip,
         validate::{PathParams, ValidJson},
     },
     libraries::{accessible_library_ids, readable_file},

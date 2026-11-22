@@ -264,10 +264,7 @@ pub async fn run(
         if let Some(title) = title {
             let payload =
                 json!({"title": title, "quality": first.quality, "sourceTitle": r.source_label});
-            let notify = st.clone();
-            tokio::spawn(async move {
-                crate::subtitles::events::notify(&notify, "download.complete", payload).await
-            });
+            crate::notifications::dispatch(&st.db, "download.complete", payload);
             crate::media_servers::dispatch_detached(st, "download.complete");
         }
     }

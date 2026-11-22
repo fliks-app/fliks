@@ -117,7 +117,7 @@ impl Settings {
 
 /// A missing or unreadable document is the defaults.
 pub async fn load(pool: &PgPool) -> sqlx::Result<Settings> {
-    let raw = settings::setting_value(pool, KEY).await?;
+    let raw = settings::text(pool, KEY).await?;
     Ok(raw
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default())

@@ -26,7 +26,7 @@ pub fn spawn(st: &AppState) {
     let jobs = Jobs::default();
     let (probe_jobs, sessions) = (jobs.clone(), st.presence.clone());
     st.qoe.set_load_probe(move || {
-        let n = probe_jobs.lock().map_or(0, |j| j.len());
+        let n = probe_jobs.lock_clean().len();
         (
             u32::try_from(n).unwrap_or(u32::MAX),
             u32::try_from(sessions.size()).unwrap_or(u32::MAX),

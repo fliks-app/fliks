@@ -62,7 +62,6 @@ Environment variables read by `fliks-server`, with defaults and parsing rules.
 |---|---|---|
 | `TMDB_API_KEY` | `''` | read once at boot and imported into the plugin setting (`provider-plugins.md` rule 40) |
 | `TVDB_API_KEY` | `''` | as `TMDB_API_KEY` |
-| `METADATA_STALE_AFTER_MONTHS` | `'3'` | `Math.max(1, parseInt(raw, 10) \|\| 3)` |
 
 ## Streaming lifetimes
 

@@ -87,14 +87,23 @@ fn embedded_v4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
     in_v6(ip, 0x0064_ff9b_0001 << 80, 48).then(|| Ipv4Addr::new(o[6], o[7], o[9], o[10]))
 }
 
-/// Loopback or a cloud metadata service (`100.100.100.200`, `fd00:ec2::254`), embedded IPv4 included.
-pub fn is_loopback_or_metadata(ip: IpAddr) -> bool {
-    const AWS_V6: Ipv6Addr = Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254);
-    let ip = match ip {
+fn unmapped(ip: IpAddr) -> IpAddr {
+    match ip {
         IpAddr::V6(v6) => embedded_v4(v6).map_or(ip, IpAddr::V4),
         v4 => v4,
-    };
-    ip.is_loopback() || ip == IpAddr::from([100, 100, 100, 200]) || ip == IpAddr::V6(AWS_V6)
+    }
+}
+
+/// A cloud metadata service (`100.100.100.200`, `fd00:ec2::254`), embedded IPv4 included.
+pub fn is_metadata(ip: IpAddr) -> bool {
+    const AWS_V6: Ipv6Addr = Ipv6Addr::new(0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254);
+    let ip = unmapped(ip);
+    ip == IpAddr::from([100, 100, 100, 200]) || ip == IpAddr::V6(AWS_V6)
+}
+
+/// Loopback or a cloud metadata service, embedded IPv4 included.
+pub fn is_loopback_or_metadata(ip: IpAddr) -> bool {
+    unmapped(ip).is_loopback() || is_metadata(ip)
 }
 
 fn classify_v6(ip: Ipv6Addr) -> Class {
@@ -186,5 +195,74 @@ mod never_tests {
         assert!(!is_loopback_or_metadata(
             "64:ff9b::808:808".parse().unwrap()
         ));
+    }
+
+    fn internal(ip: IpAddr) -> bool {
+        classify(ip) != Class::Public
+    }
+
+    #[test]
+    fn internal_ranges() {
+        for ip in [
+            "0.1.2.3",
+            "10.1.1.1",
+            "100.64.0.1",
+            "100.127.255.255",
+            "127.0.0.1",
+            "169.254.169.254",
+            "172.16.0.1",
+            "172.31.255.255",
+            "192.0.0.1",
+            "192.0.2.5",
+            "192.168.1.1",
+            "198.18.0.1",
+            "198.19.255.255",
+            "198.51.100.1",
+            "203.0.113.9",
+            "224.0.0.1",
+            "240.0.0.1",
+            "255.255.255.255",
+            "::",
+            "::1",
+            "fe80::1",
+            "febf::1",
+            "fc00::1",
+            "fd12::1",
+            "ff02::1",
+            "::ffff:127.0.0.1",
+            "0:0:0:0:0:ffff:7f00:1",
+            "64:ff9b::a00:1",
+            "::ffff:192.168.0.1",
+        ] {
+            assert!(internal(ip.parse().unwrap()), "{ip}");
+        }
+        for ip in [
+            "fec0::1",
+            "2002:7f00:1::1",
+            "2002:0a00:1::",
+            "2002:0808:0808::1",
+            "2001:0:4136:e378:8000:63bf:3fff:fdd2",
+            "::7f00:1",
+            "::a00:1",
+        ] {
+            assert!(internal(ip.parse().unwrap()), "{ip}");
+        }
+        assert!(!internal("::808:808".parse().unwrap()));
+        for ip in [
+            "8.8.8.8",
+            "100.63.255.255",
+            "100.128.0.1",
+            "172.15.0.1",
+            "172.32.0.1",
+            "192.0.1.1",
+            "198.17.0.1",
+            "198.20.0.1",
+            "223.255.255.255",
+            "2001:4860:4860::8888",
+            "::ffff:8.8.8.8",
+            "64:ff9b::808:808",
+        ] {
+            assert!(!internal(ip.parse().unwrap()), "{ip}");
+        }
     }
 }

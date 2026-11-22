@@ -8,7 +8,7 @@ mod routes;
 pub(crate) mod testing;
 mod throttle;
 
-pub use jobs::spawn as spawn_jobs;
+pub use jobs::{prune_refresh_tokens, spawn as spawn_jobs};
 pub use password::hash_password;
 pub use routes::*;
 pub use throttle::LoginThrottle;

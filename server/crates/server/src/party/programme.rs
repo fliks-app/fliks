@@ -33,7 +33,7 @@ pub(super) fn router() -> Router<AppState> {
 }
 
 async fn queue_cap(st: &AppState) -> usize {
-    crate::settings::setting_value(&st.db, "karaoke.queue_cap")
+    crate::settings::text(&st.db, "karaoke.queue_cap")
         .await
         .ok()
         .flatten()

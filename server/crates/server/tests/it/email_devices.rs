@@ -1,6 +1,7 @@
 //! `/api/email-devices` and the send (`docs/spec/email-devices.md`), against a fake SMTP server.
 use crate::session;
 use axum::{Router, body::Body, http::Request};
+use fliks_server::sync::MutexExt;
 use fliks_server::{config::Config, email, settings, state::AppState};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -131,7 +132,7 @@ async fn smtp(data_reply: &'static str) -> (u16, Mails) {
                             mail.push_str(&line);
                         }
                         if data_reply.starts_with('2') {
-                            seen.lock().unwrap().push(mail);
+                            seen.lock_clean().push(mail);
                         }
                         w.write_all(format!("{data_reply}\r\n").as_bytes())
                             .await
@@ -390,7 +391,7 @@ async fn a_book_is_mailed_with_its_file_and_logged(pool: PgPool) {
         c.settled(sent["id"].as_i64().unwrap()).await,
         ("sent".into(), None)
     );
-    let mail = mails.lock().unwrap().remove(0);
+    let mail = mails.lock_clean().remove(0);
     let (head, _) = mail.split_once("\r\n\r\n").unwrap();
     assert!(
         head.contains("To: me@kindle.com") && head.contains("From: Fliks <books@example.com>"),
@@ -462,7 +463,7 @@ async fn only_readable_files_in_an_accepted_format_under_the_limit_go_out(pool: 
         .fetch_one(&c.pool)
         .await
         .unwrap();
-    assert_eq!((n, mails.lock().unwrap().len()), (0, 0));
+    assert_eq!((n, mails.lock_clean().len()), (0, 0));
 }
 
 #[sqlx::test(migrations = false)]
@@ -513,7 +514,7 @@ async fn a_server_that_stalls_on_quit_still_counts_as_sent(pool: PgPool) {
         c.settled(sent["id"].as_i64().unwrap()).await,
         ("sent".into(), None)
     );
-    assert_eq!(mails.lock().unwrap().len(), 1);
+    assert_eq!(mails.lock_clean().len(), 1);
 }
 
 #[sqlx::test(migrations = false)]
@@ -565,7 +566,7 @@ async fn the_admin_test_reports_the_outcome(pool: PgPool) {
     );
     let (s, b) = c.call("POST", "/api/email/test", &c.admin, body()).await;
     assert_eq!((s, b["ok"].clone()), (200, json!(true)));
-    assert_eq!(mails.lock().unwrap().len(), 1);
+    assert_eq!(mails.lock_clean().len(), 1);
     c.set("smtp_username", "u").await;
     let (s, b) = c.call("POST", "/api/email/test", &c.admin, body()).await;
     assert_eq!(

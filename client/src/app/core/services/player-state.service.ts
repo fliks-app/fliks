@@ -127,7 +127,7 @@ export class PlayerStateService {
     const err = e as { category?: number; severity?: number; data?: unknown[]; message?: string } | null | undefined;
     // The server's reason (missing file, no root folder) says more than a generic line.
     const userMessage =
-      (e instanceof HttpErrorResponse ? translatedServerMessage(e.error?.message, this.translate) : null) ??
+      (e instanceof HttpErrorResponse ? translatedServerMessage(e.error?.message, this.translate, e.error) : null) ??
       this.translate.instant(
         userMessageKeyFor({ source, code, category: err?.category, dolbyVision: opts?.dolbyVision }),
       );

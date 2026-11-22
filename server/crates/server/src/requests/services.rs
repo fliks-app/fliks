@@ -258,10 +258,5 @@ pub fn notify(
     if let Some(r) = user {
         crate::push::request_event(st, event, &payload, r);
     }
-    let db = st.db.clone();
-    tokio::spawn(async move {
-        if let Err(e) = notifications::dispatch(&db, event, &payload).await {
-            tracing::warn!("notification {event}: {e}");
-        }
-    });
+    notifications::dispatch(&st.db, event, payload);
 }

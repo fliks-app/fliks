@@ -8,6 +8,7 @@ use fliks_domain::{
         limiter::{Limits, Priority},
     },
 };
+use fliks_server::sync::MutexExt;
 use fliks_server::{
     images::ImageStore,
     metadata::{Call, Credits, MetadataProvider, PersonDetails, Search, Target, Upstream},
@@ -54,31 +55,31 @@ impl Scripted {
     }
 
     pub fn ok(&self, key: &str, body: Value) {
-        self.routes.lock().unwrap().insert(key.into(), Ok(body));
+        self.routes.lock_clean().insert(key.into(), Ok(body));
     }
 
     pub fn fail(&self, key: &str, status: u16) {
-        self.routes.lock().unwrap().insert(key.into(), Err(status));
+        self.routes.lock_clean().insert(key.into(), Err(status));
     }
 
     /// Also describes the people of `ns` for the albums, as a provider listing `ns` in its `findBy` does.
     pub fn serve_persons_of(&self, ns: Namespace) {
-        self.person_of.lock().unwrap().push(ns);
+        self.person_of.lock_clean().push(ns);
     }
 
     /// Every later answer waits this long first.
     pub fn slow(&self, by: std::time::Duration) {
-        *self.delay.lock().unwrap() = by;
+        *self.delay.lock_clean() = by;
     }
 
     /// Answers the keys the table does not hold; `None` is a 404.
     pub fn otherwise(&self, f: impl Fn(&str) -> Option<Answer> + Send + Sync + 'static) {
-        *self.fallback.lock().unwrap() = Some(Arc::new(f));
+        *self.fallback.lock_clean() = Some(Arc::new(f));
     }
 
     /// Calls whose key (with its parameters) starts with `prefix`.
     pub fn seen(&self, prefix: &str) -> Vec<String> {
-        let log = self.log.lock().unwrap();
+        let log = self.log.lock_clean();
         log.iter()
             .filter(|l| l.starts_with(prefix))
             .cloned()
@@ -91,16 +92,16 @@ impl Scripted {
         logged: String,
         map: impl FnOnce(Value) -> T,
     ) -> Call<'static, T> {
-        self.log.lock().unwrap().push(logged);
-        let found = self.routes.lock().unwrap().get(&key).cloned();
-        let fallback = self.fallback.lock().unwrap().clone();
+        self.log.lock_clean().push(logged);
+        let found = self.routes.lock_clean().get(&key).cloned();
+        let fallback = self.fallback.lock_clean().clone();
         let r = found
             .or_else(|| fallback.and_then(|f| f(&key)))
             .unwrap_or(Err(404));
         let r = r
             .map(map)
             .map_err(|s| Upstream::new(Some(s), format!("HTTP {s}")));
-        let delay = *self.delay.lock().unwrap();
+        let delay = *self.delay.lock_clean();
         Box::pin(async move {
             if !delay.is_zero() {
                 tokio::time::sleep(delay).await;
@@ -129,7 +130,7 @@ impl MetadataProvider for Scripted {
         true
     }
     fn serves_persons_of(&self, kind: MediaKind, ns: Namespace) -> bool {
-        kind == MediaKind::Album && (ns == self.id || self.person_of.lock().unwrap().contains(&ns))
+        kind == MediaKind::Album && (ns == self.id || self.person_of.lock_clean().contains(&ns))
     }
     fn limits(&self) -> Limits {
         Limits::new(1000.0, 1000)
@@ -283,18 +284,18 @@ impl Images {
         let me = Arc::new(Self::default());
         me.any.store(any, Ordering::SeqCst);
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        *me.port.lock().unwrap() = l.local_addr().unwrap().port();
+        *me.port.lock_clean() = l.local_addr().unwrap().port();
         let app = Router::new().fallback(serve).with_state(me.clone());
         tokio::spawn(async { axum::serve(l, app).await.unwrap() });
         me
     }
 
     pub fn put(&self, path: &str, bytes: Vec<u8>) {
-        self.files.lock().unwrap().insert(path.into(), bytes);
+        self.files.lock_clean().insert(path.into(), bytes);
     }
 
     pub fn seen(&self, prefix: &str) -> Vec<String> {
-        let log = self.log.lock().unwrap();
+        let log = self.log.lock_clean();
         log.iter()
             .filter(|l| l.starts_with(prefix))
             .cloned()
@@ -304,7 +305,7 @@ impl Images {
     /// A store on `data` whose `image.tmdb.org` is this server.
     pub fn store(self: &Arc<Self>, data: PathBuf) -> ImageStore {
         let net = Arc::new(Dns {
-            port: *self.port.lock().unwrap(),
+            port: *self.port.lock_clean(),
             tls: SystemNet::new(),
         });
         let s = ImageStore::with_root(data).with_net(net);
@@ -314,8 +315,8 @@ impl Images {
 }
 
 async fn serve(State(i): State<Arc<Images>>, uri: Uri) -> impl IntoResponse {
-    i.log.lock().unwrap().push(uri.path().to_owned());
-    let held = i.files.lock().unwrap().get(uri.path()).cloned();
+    i.log.lock_clean().push(uri.path().to_owned());
+    let held = i.files.lock_clean().get(uri.path()).cloned();
     match held.or_else(|| i.any.load(Ordering::SeqCst).then(jpeg)) {
         Some(b) => ([("content-type", "image/jpeg")], b).into_response(),
         None => axum::http::StatusCode::NOT_FOUND.into_response(),

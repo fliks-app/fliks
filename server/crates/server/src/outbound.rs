@@ -11,7 +11,7 @@ const MAX_REDIRECTS: usize = 5;
 pub fn client() -> &'static Client {
     static C: OnceLock<Client> = OnceLock::new();
     C.get_or_init(|| {
-        Client::builder()
+        crate::net::guard::open_builder()
             .redirect(redirect::Policy::custom(|a| {
                 let same = a.previous().last().is_some_and(|p| {
                     p.scheme() == a.url().scheme()

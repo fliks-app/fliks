@@ -9,6 +9,8 @@ pub struct AppError {
     status: StatusCode,
     message: Value,
     with_message: bool,
+    /// A translation key and its params, beside `message` and never under `error`.
+    key: Option<(String, Value)>,
 }
 
 impl AppError {
@@ -18,6 +20,7 @@ impl AppError {
             status,
             message: status.canonical_reason().unwrap_or_default().into(),
             with_message: false,
+            key: None,
         }
     }
 
@@ -27,6 +30,7 @@ impl AppError {
             status,
             message: message.into(),
             with_message: false,
+            key: None,
         }
     }
 
@@ -36,7 +40,14 @@ impl AppError {
             status,
             message: message.into(),
             with_message: true,
+            key: None,
         }
+    }
+
+    /// Adds `key` and `params` to the body: the client translates them, `message` stays the fallback.
+    pub fn keyed(mut self, key: &str, params: Value) -> Self {
+        self.key = Some((key.to_owned(), params));
+        self
     }
 
     pub fn bad_request(message: impl Into<Value>) -> Self {
@@ -91,6 +102,10 @@ impl IntoResponse for AppError {
         if self.with_message {
             body["error"] = self.status.canonical_reason().unwrap_or_default().into();
         }
+        if let Some((key, params)) = self.key {
+            body["key"] = key.into();
+            body["params"] = params;
+        }
         (self.status, Json(body)).into_response()
     }
 }
@@ -114,6 +129,20 @@ mod tests {
             .await
             .unwrap();
         (status, serde_json::from_slice(&bytes).unwrap())
+    }
+
+    #[tokio::test]
+    async fn a_keyed_error_carries_key_and_params_beside_message() {
+        let e = AppError::bad_request("Quota exceeded").keyed("requests.quota", json!({"n": 3}));
+        let (s, b) = body(e).await;
+        assert_eq!(
+            (s, b),
+            (
+                400,
+                json!({"statusCode": 400, "message": "Quota exceeded", "error": "Bad Request",
+                       "key": "requests.quota", "params": {"n": 3}})
+            )
+        );
     }
 
     #[tokio::test]

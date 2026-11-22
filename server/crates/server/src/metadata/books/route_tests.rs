@@ -1,6 +1,7 @@
 //! The book metadata routes against fake providers (`docs/spec/book-metadata.md` rules 18-25).
 use super::tests::{Fake, ISBN, anchor, state};
 use crate::auth::testing as session;
+use crate::sync::MutexExt;
 use crate::{media, state::AppState};
 use axum::{Router, body::Body, http::Request};
 use fliks_domain::external_id::Namespace;
@@ -804,11 +805,11 @@ async fn the_bibliography_lists_the_anchor_works_of_an_author(pool: PgPool) {
         Value::Null,
         "library 2 is hidden from the reader"
     );
-    let searches = calls.lock().unwrap().len();
+    let searches = calls.lock_clean().len();
     assert_eq!(c.get("/api/persons/2/bibliography").await, (200, json!([])));
     assert_eq!(c.get("/api/persons/3/bibliography").await, (200, json!([])));
     assert_eq!(c.get("/api/persons/9/bibliography").await.0, 404);
-    assert_eq!(calls.lock().unwrap().len(), searches, "no provider call");
+    assert_eq!(calls.lock_clean().len(), searches, "no provider call");
 }
 
 #[sqlx::test(migrations = false)]

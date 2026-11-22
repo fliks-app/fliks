@@ -144,7 +144,7 @@ async fn check_permissions(st: &AppState, a: &Authed, perms: &[String]) -> Res<(
 
 async fn grantable(st: &AppState) -> Res<Vec<String>> {
     let mut out: Vec<String> = grants::PERMISSIONS.iter().map(|p| p.to_string()).collect();
-    if std::env::var("FLIKS_PLUGINS_DISABLED").as_deref() != Ok("1") {
+    if !st.plugins.opts.disabled {
         out.extend(grants::plugin_grants(&db::plugin_manifests(&st.db).await?));
     }
     Ok(out)

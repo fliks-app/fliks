@@ -71,27 +71,13 @@ pub async fn role_mappings(
     Ok(rows.into_iter().map(|r| (r.grp, r.role_id)).collect())
 }
 
-/// The base URL the provider's URIs are built on, without a trailing slash.
-pub async fn public_url(db: impl sqlx::PgExecutor<'_>) -> Result<Option<String>, sqlx::Error> {
-    Ok(
-        sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = 'public_url'"#)
-            .fetch_optional(db)
-            .await?
-            .flatten()
-            .map(|u| u.trim().trim_end_matches('/').to_owned())
-            .filter(|u| !u.is_empty()),
-    )
-}
-
-pub async fn password_login_admins_only(db: &PgPool) -> Result<bool, sqlx::Error> {
-    Ok(
-        sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = 'password_login'"#)
-            .fetch_optional(db)
-            .await?
-            .flatten()
-            .as_deref()
-            == Some("admins"),
-    )
+pub async fn password_login_admins_only(
+    db: impl sqlx::PgExecutor<'_>,
+) -> Result<bool, sqlx::Error> {
+    Ok(crate::settings::text(db, "password_login")
+        .await?
+        .as_deref()
+        == Some("admins"))
 }
 
 pub struct Login {

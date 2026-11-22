@@ -18,6 +18,7 @@ pub(crate) fn cut_users(st: &crate::state::AppState, users: &[i32]) {
 }
 
 use crate::net::guard::{self, Net};
+use crate::sync::MutexExt;
 use axum::Router;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use fliks_domain::net::{Class, classify};
@@ -167,14 +168,8 @@ impl Oidc {
 
     /// Forgets a provider's discovery and keys: its row changed or is gone.
     pub fn invalidate(&self, id: i32) {
-        self.cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&id);
-        self.failed
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&id);
+        self.cache.lock_clean().remove(&id);
+        self.failed.lock_clean().remove(&id);
     }
 
     /// One guarded request: one lookup, vetted addresses (private ones allowed, metadata and
@@ -196,7 +191,7 @@ impl Oidc {
             .trim_end_matches(']')
             .to_owned();
         let port = u.port_or_known_default().unwrap_or(443);
-        let addrs = guard::vet(&*self.net, &host, port, true)
+        let addrs = guard::vet(&*self.net, &host, port, true, &[])
             .await
             .map_err(|_| "address refused".to_owned())?;
         if u.scheme() == "http" && addrs.iter().any(|a| classify(a.ip()) != Class::Private) {
@@ -298,15 +293,11 @@ impl Oidc {
 
     pub async fn discover(&self, p: &Provider) -> Result<Arc<Discovery>, Fail> {
         {
-            let c = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            let c = self.cache.lock_clean();
             if let Some(e) = c.get(&p.id).filter(|e| e.at.elapsed() < CACHE_TTL) {
                 return Ok(e.discovery.clone());
             }
-            if let Some((at, why)) = self
-                .failed
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .get(&p.id)
+            if let Some((at, why)) = self.failed.lock_clean().get(&p.id)
                 && at.elapsed() < FAIL_TTL
             {
                 return Err(why.clone());
@@ -316,13 +307,12 @@ impl Oidc {
             Ok(d) => Arc::new(d),
             Err(e) => {
                 self.failed
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
+                    .lock_clean()
                     .insert(p.id, (Instant::now(), e.clone()));
                 return Err(e);
             }
         };
-        self.cache.lock().unwrap_or_else(|e| e.into_inner()).insert(
+        self.cache.lock_clean().insert(
             p.id,
             Entry {
                 discovery: d.clone(),
@@ -337,7 +327,7 @@ impl Oidc {
     /// The provider's key set; `force` refetches, at most once a minute.
     async fn jwks(&self, p: &Provider, d: &Discovery, force: bool) -> Result<Arc<JwkSet>, Fail> {
         let stale = {
-            let mut c = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            let mut c = self.cache.lock_clean();
             let Some(e) = c.get_mut(&p.id) else {
                 return Err("no discovery".into());
             };
@@ -360,12 +350,7 @@ impl Oidc {
             Ok(s) => Arc::new(s),
             Err(e) => return stale.ok_or(e),
         };
-        if let Some(e) = self
-            .cache
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get_mut(&p.id)
-        {
+        if let Some(e) = self.cache.lock_clean().get_mut(&p.id) {
             e.jwks = Some(set.clone());
         }
         Ok(set)

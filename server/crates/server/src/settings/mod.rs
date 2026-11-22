@@ -7,7 +7,7 @@ mod secrets;
 use crate::state::AppState;
 use axum::{Router, routing::get};
 
-pub use db::value as setting_value;
+pub use db::{flag, list, number, number_of, public_url, text, texts, with_prefix};
 pub use routes::*;
 pub use secrets::plugin_secret_keys;
 

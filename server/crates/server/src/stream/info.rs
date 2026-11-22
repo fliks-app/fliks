@@ -22,6 +22,7 @@ use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
 };
+use fliks_domain::js::parse_int;
 use fliks_domain::{edl::shift_ranges, track_markers};
 use fliks_engine_core::{
     api::{
@@ -45,21 +46,6 @@ pub struct Params {
     pub pre_roll_first: bool,
     pub version: Option<i32>,
     pub pitch_semitones: Option<i32>,
-}
-
-/// JS `parseInt(v, 10)`: the leading integer, `None` for NaN.
-pub(super) fn parse_int(raw: &str) -> Option<i64> {
-    let t = raw.trim_start();
-    let (neg, digits) = match t.strip_prefix('-') {
-        Some(rest) => (true, rest),
-        None => (false, t.strip_prefix('+').unwrap_or(t)),
-    };
-    let end = digits.bytes().take_while(u8::is_ascii_digit).count();
-    let n: i64 = digits[..end]
-        .parse()
-        .ok()
-        .or((end > 0).then_some(i64::MAX))?;
-    Some(if neg { -n } else { n })
 }
 
 /// A `startAt` that is not a finite number is a 400, not `NaN` on the wire.

@@ -49,6 +49,10 @@ export class GeneralSettingsComponent implements OnInit {
   readonly companionFileExtensions = signal('');
   readonly savingAutomation = signal(false);
 
+  // Watch party voice
+  readonly partyIceServers = signal('');
+  readonly savingParty = signal(false);
+
   // Kobo
   readonly koboStoreProxy = signal('false');
   readonly savingKobo = signal(false);
@@ -67,6 +71,7 @@ export class GeneralSettingsComponent implements OnInit {
       this.usersPublicMode.set(map['users_public_mode'] ?? 'everyone');
       this.metadataLanguage.set(map['metadata_language'] ?? 'en');
       this.metadataRegion.set(map['metadata_region'] ?? 'US');
+      this.partyIceServers.set(map['party_voice_ice_servers'] ?? '');
       this.koboStoreProxy.set(map['kobo_store_proxy'] === 'true' ? 'true' : 'false');
       this.autoDetectMarkersOnImport.set(map['markers_auto_detect_on_import'] ?? 'true');
       this.autoGenerateSpritesOnImport.set(map['sprites_auto_generate_on_import'] ?? 'true');
@@ -114,6 +119,18 @@ export class GeneralSettingsComponent implements OnInit {
       });
       this.toast.success(this.translate.instant('settings.general.saved'));
     } catch { /* interceptor */ } finally { this.savingAutomation.set(false); }
+  }
+
+  async saveParty() {
+    this.savingParty.set(true);
+    try {
+      await this.api.setBulk({ party_voice_ice_servers: this.partyIceServers().trim() });
+      this.toast.success(this.translate.instant('settings.general.saved'));
+    } catch {
+      // Errors are surfaced by the global HTTP interceptor.
+    } finally {
+      this.savingParty.set(false);
+    }
   }
 
   async saveKobo() {

@@ -14,7 +14,7 @@ use crate::{
         },
         walk,
     },
-    settings::setting_value,
+    settings,
     state::AppState,
 };
 use fliks_domain::{
@@ -57,33 +57,14 @@ pub enum Outcome {
     Nothing,
 }
 
-/// A float setting, `default` when unset or unreadable.
-async fn number(st: &AppState, key: &str, default: f64) -> f64 {
-    setting_value(&st.db, key)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|v| v.trim().parse().ok())
-        .unwrap_or(default)
-}
-
-async fn list(st: &AppState, key: &str) -> Vec<String> {
-    setting_value(&st.db, key)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|v| serde_json::from_str(&v).ok())
-        .unwrap_or_default()
-}
-
 /// The thresholds and the pressing preferences of the settings `music.match.auto` and `music.match.review`
 /// (percent, 90 and 80), `music.pressing.countries` and `music.pressing.media` (JSON arrays).
 pub async fn config(st: &AppState) -> Config {
     Config::from_percent(
-        number(st, "music.match.auto", 90.0).await,
-        number(st, "music.match.review", 80.0).await,
-        list(st, "music.pressing.countries").await,
-        list(st, "music.pressing.media").await,
+        settings::number(&st.db, "music.match.auto", 90.0).await,
+        settings::number(&st.db, "music.match.review", 80.0).await,
+        settings::list(&st.db, "music.pressing.countries").await,
+        settings::list(&st.db, "music.pressing.media").await,
     )
 }
 

@@ -1,10 +1,12 @@
 //! Separation on optimization workers: leasing, eligibility and the commit of a worker's stems
 //! (`docs/spec/karaoke.md` rules 16-17, `library-optimize-workers.md`).
-use super::{flag, run, store, verified_providers};
+use super::{run, store, verified_providers};
+use crate::sync::MutexExt;
 use crate::{
     events::SseEvent,
     http::AppError,
     queue::{self, Principal, Worker, enqueue::snapshot, store as jobs, watch},
+    settings,
     state::AppState,
 };
 use axum::Json;
@@ -38,13 +40,13 @@ pub async fn eligible(st: &AppState, key: &str, w: &Worker) -> bool {
     {
         return false;
     }
-    let enabled =
-        flag(st, "karaoke.enabled", false).await && flag(st, "karaoke.background", true).await;
+    let enabled = settings::flag(&st.db, "karaoke.enabled", false).await
+        && settings::flag(&st.db, "karaoke.background", true).await;
     eligible_now(
         w,
         st.queue.karaoke_blocked(key),
         enabled,
-        flag(st, "karaoke.background_cpu", false).await,
+        settings::flag(&st.db, "karaoke.background_cpu", false).await,
         &verified_providers(st).await,
     )
 }
@@ -250,11 +252,7 @@ async fn after_failure(st: &AppState, id: i64, file: Option<i32>) {
         && let Some(file) = file
         && let Ok(Some(item)) = item_of(st, file).await
     {
-        st.karaoke
-            .failed
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(item);
+        st.karaoke.failed.lock_clean().insert(item);
     }
 }
 
@@ -362,7 +360,7 @@ async fn commit(
     for o in old {
         let _ = tokio::fs::remove_file(o).await;
     }
-    if out.provider == "cpu" && !flag(st, "karaoke.background_cpu", false).await {
+    if out.provider == "cpu" && !settings::flag(&st.db, "karaoke.background_cpu", false).await {
         st.queue.block_karaoke(key);
     }
     for name in STEM_NAMES {

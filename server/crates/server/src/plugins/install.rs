@@ -155,6 +155,15 @@ async fn drop_snapshots(
 }
 
 impl Plugins {
+    async fn remove_data_dir(&self, id: &str) {
+        let dir = super::runtime::data_dir(&self.opts.runtime_dir, id);
+        if let Err(e) = tokio::fs::remove_dir_all(&dir).await
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::warn!("plugin \"{id}\": cannot remove {}: {e}", dir.display());
+        }
+    }
+
     pub fn summary(&self, p: &Package) -> Summary {
         let process = p.is_process();
         Summary {
@@ -191,7 +200,7 @@ impl Plugins {
     }
 
     pub async fn allow_unsigned(&self) -> bool {
-        crate::settings::setting_value(&self.db, "plugins.allow_unsigned")
+        crate::settings::text(&self.db, "plugins.allow_unsigned")
             .await
             .ok()
             .flatten()
@@ -538,20 +547,15 @@ impl Plugins {
             if delete_data && fliks_domain::plugins::legal_plugin_id(id) {
                 super::db::deprovision(&self.db, id).await?;
                 super::namespaces::delete_data(&self.db, &self.namespaces, id).await?;
-                let _ =
-                    std::fs::remove_dir_all(super::runtime::data_dir(&self.opts.runtime_dir, id));
+                self.remove_data_dir(id).await;
             }
             return Ok(());
         };
         let ids = super::imports::installed_ids(&self.db).await?;
-        let keys: Vec<String> = sqlx::query_scalar(
-            r#"SELECT "key"::text FROM app_settings WHERE starts_with("key", $1)"#,
-        )
-        .bind(format!("plugin.{id}."))
-        .fetch_all(&self.db)
-        .await?;
+        let keys = crate::settings::with_prefix(&self.db, &format!("plugin.{id}.")).await?;
         let owned: Vec<String> = keys
             .into_iter()
+            .map(|(k, _)| k)
             .filter(|k| {
                 fliks_domain::plugins::setting_owner(k, ids.iter().map(String::as_str)) == Some(id)
             })
@@ -589,7 +593,7 @@ impl Plugins {
         packages::delete(&self.db, id).await?;
         drop_snapshots(&self.db, [&pkg.manifest]).await?;
         if delete_data {
-            let _ = std::fs::remove_dir_all(super::runtime::data_dir(&self.opts.runtime_dir, id));
+            self.remove_data_dir(id).await;
         }
         Ok(())
     }

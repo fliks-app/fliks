@@ -99,7 +99,9 @@ pub struct Request<'a> {
 
 pub async fn send(r: Request<'_>) -> Outcome {
     let client =
-        match crate::vetted::client_for(r.url, reqwest::Client::builder().timeout(TIMEOUT)).await {
+        match crate::vetted::client_for(r.url, crate::net::guard::open_builder().timeout(TIMEOUT))
+            .await
+        {
             Ok(c) => c,
             Err(e) => return Outcome::Failed(e),
         };

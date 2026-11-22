@@ -246,11 +246,10 @@ mod tests {
 
     fn stub(ids: &[&str], mapped: bool) -> Arc<SceneStub> {
         let s = Arc::new(SceneStub::default());
-        *s.ids.lock().unwrap() = ids.iter().map(|i| (*i).to_owned()).collect();
+        *s.ids.lock_clean() = ids.iter().map(|i| (*i).to_owned()).collect();
         if mapped {
             s.maps
-                .lock()
-                .unwrap()
+                .lock_clean()
                 .insert(TVDB.to_string(), fixture().entries);
         }
         s

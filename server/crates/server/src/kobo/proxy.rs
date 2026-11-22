@@ -1,6 +1,6 @@
 //! Everything the server does not handle (`kobo.md` rules 6 and 25): the optional store proxy, else stubs.
 use super::{BOOK_PREFIX, Kobo, json_response, original_path, parse_uuid};
-use crate::{http::AppError, settings::setting_value, state::AppState};
+use crate::{http::AppError, settings, state::AppState};
 use axum::{
     body::to_bytes,
     extract::{Request, State},
@@ -18,7 +18,7 @@ const MAX_BODY: usize = 1 << 20;
 const MAX_ANSWER: usize = 8 << 20;
 
 pub async fn enabled(st: &AppState) -> Result<bool, sqlx::Error> {
-    Ok(setting_value(&st.db, SETTING).await?.as_deref() == Some("true"))
+    Ok(settings::text(&st.db, SETTING).await?.as_deref() == Some("true"))
 }
 
 /// Whether `id` is a store book the proxy must answer: not one of ours, and the proxy is on.
@@ -42,7 +42,7 @@ pub fn store_cover(id: &str, w: &str, h: &str) -> Response {
 fn client() -> &'static Client {
     static C: OnceLock<Client> = OnceLock::new();
     C.get_or_init(|| {
-        Client::builder()
+        crate::net::guard::open_builder()
             .redirect(redirect::Policy::none())
             .build()
             .expect("store client")

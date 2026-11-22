@@ -107,7 +107,7 @@ fn parse_put(body: &Value) -> Result<PutDto, Vec<String>> {
 
 /// The GET shape: the token is never returned, `secretsSet` says whether one is stored.
 async fn snapshot(st: &AppState) -> Result<Value, AppError> {
-    let v = store::values(
+    let v = crate::settings::texts(
         &st.db,
         &[store::URL_KEY, store::TOKEN_KEY, store::MAPPINGS_KEY],
     )

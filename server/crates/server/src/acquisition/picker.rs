@@ -137,7 +137,7 @@ impl Plugins {
 
     /// Reads the provider order setting.
     pub async fn load_acquisition_settings(&self) {
-        let order = crate::settings::setting_value(&self.db, ORDER_KEY)
+        let order = crate::settings::text(&self.db, ORDER_KEY)
             .await
             .ok()
             .flatten()

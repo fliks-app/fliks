@@ -474,7 +474,7 @@ impl Plugins {
 
     /// The `acquisition.sweepInterval` setting, in minutes.
     pub async fn sweep_interval_minutes(&self) -> i64 {
-        crate::settings::setting_value(&self.db, picker::INTERVAL_KEY)
+        crate::settings::text(&self.db, picker::INTERVAL_KEY)
             .await
             .ok()
             .flatten()

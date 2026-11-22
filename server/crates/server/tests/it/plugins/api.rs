@@ -6,6 +6,7 @@ use ed25519_dalek::{Signer, SigningKey};
 use fliks_server::jobs::{Trigger, run_audited};
 use fliks_server::plugins::fetch::Fetcher;
 use fliks_server::plugins::{archive, packages};
+use fliks_server::sync::MutexExt;
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -409,11 +410,11 @@ async fn catalog() -> Catalog {
     let archives: Archives = Arc::default();
     let (d, a) = (doc.clone(), archives.clone());
     let reply: Reply = Arc::new(move |path| {
-        let body = d.lock().unwrap().clone();
+        let body = d.lock_clean().clone();
         match path {
             "/catalog.json" => (200, vec![], body),
             "/catalog.json.sig" => (200, vec![], sign(&body).into_bytes()),
-            p => match a.lock().unwrap().iter().find(|(n, _)| n == p) {
+            p => match a.lock_clean().iter().find(|(n, _)| n == p) {
                 Some((_, b)) => (200, vec![], b.clone()),
                 None => (404, vec![], vec![]),
             },
@@ -502,8 +503,7 @@ async fn sources_catalog_denylist_and_auto_update() {
         .unwrap();
     let sha = archive::sha256_hex(&signed);
     cat.archives
-        .lock()
-        .unwrap()
+        .lock_clean()
         .push(("/fixture-0.1.0.fkplugin".into(), signed.clone()));
     let entry = |v: &str, sha: &str| {
         json!({"version": v, "pluginApi": 3, "fliks": ">=5.0.0 <7.0.0",
@@ -515,7 +515,7 @@ async fn sources_catalog_denylist_and_auto_update() {
         &[0; 8],
     ]
     .concat();
-    cat.archives.lock().unwrap().extend([
+    cat.archives.lock_clean().extend([
         ("/ok.png".to_owned(), png.clone()),
         (
             "/evil.svg".to_owned(),
@@ -530,7 +530,7 @@ async fn sources_catalog_denylist_and_auto_update() {
     let doc = json!({"plugins": [{"id": "fliks.fixture", "name": "Fixture", "description": "", "author": "a", "kind": "process",
         "logo": logo("ok.png"), "versions": [entry("0.1.0", &sha)]},
         other("fliks.evil", "evil.svg"), other("fliks.big", "big.png"), other("fliks.gone", "gone.png")]});
-    *cat.doc.lock().unwrap() = serde_json::to_vec(&doc).unwrap();
+    *cat.doc.lock_clean() = serde_json::to_vec(&doc).unwrap();
     let (st, r) = h
         .call(
             "POST",
@@ -600,10 +600,10 @@ async fn sources_catalog_denylist_and_auto_update() {
     let mut netm = m.clone();
     netm["network"] = json!({"internal": true});
     let net_signed = pack(&netm, "0.1.0", &w, Some(&test_key()));
-    cat.archives.lock().unwrap()[0].1 = net_signed.clone();
+    cat.archives.lock_clean()[0].1 = net_signed.clone();
     let doc = json!({"plugins": [{"id": "fliks.fixture", "name": "Fixture", "description": "", "author": "a", "kind": "process",
         "versions": [entry("0.1.0", &archive::sha256_hex(&net_signed))]}]});
-    *cat.doc.lock().unwrap() = serde_json::to_vec(&doc).unwrap();
+    *cat.doc.lock_clean() = serde_json::to_vec(&doc).unwrap();
     h.call(
         "POST",
         &format!("/api/plugins/sources/{id}/refresh"),
@@ -651,7 +651,7 @@ async fn sources_catalog_denylist_and_auto_update() {
     // A deny entry from the verifying key fails the installed package at once.
     let doc =
         json!({"plugins": [], "denyList": [{"pluginId": "fliks.fixture", "reason": "pulled"}]});
-    *cat.doc.lock().unwrap() = serde_json::to_vec(&doc).unwrap();
+    *cat.doc.lock_clean() = serde_json::to_vec(&doc).unwrap();
     sqlx::query(r#"UPDATE plugin_packages SET "verifiedByKeyId" = 'source'"#)
         .execute(&s.pool)
         .await
@@ -954,7 +954,7 @@ async fn progress_of_two_plugins_is_their_union() {
                 && *media_id == i64::from(media)
             {
                 let refs: Vec<String> = downloads.iter().map(|d| d.r#ref.clone()).collect();
-                sink.lock().unwrap().push(refs);
+                sink.lock_clean().push(refs);
             }
         }
     });
@@ -964,7 +964,7 @@ async fn progress_of_two_plugins_is_their_union() {
     tokio::time::sleep(Duration::from_millis(500)).await;
     collect.abort();
     assert_eq!(
-        *seen.lock().unwrap(),
+        *seen.lock_clean(),
         [vec!["b1"], vec!["a1", "b1"], vec!["a1"]],
         "each emission is the union of the plugins' sets"
     );
@@ -1315,14 +1315,14 @@ async fn auto_update_rolls_back_and_holds_new_scopes() {
         let bytes = pack(mf, version, wasm, Some(&test_key()));
         let path = format!("/fixture-{version}.fkplugin");
         {
-            let mut a = cat.archives.lock().unwrap();
+            let mut a = cat.archives.lock_clean();
             a.retain(|(p, _)| *p != path);
             a.push((path.clone(), bytes.clone()));
         }
         let doc = json!({"plugins": [{"id": "fliks.fixture", "name": "Fixture", "description": "", "author": "a",
             "kind": "process", "versions": [{"version": version, "pluginApi": 3, "fliks": ">=5.0.0 <7.0.0",
             "zipUrl": format!("https://localhost:{}{path}", cat.port), "sha256": archive::sha256_hex(&bytes)}]}]});
-        *cat.doc.lock().unwrap() = serde_json::to_vec(&doc).unwrap();
+        *cat.doc.lock_clean() = serde_json::to_vec(&doc).unwrap();
         h.call(
             "POST",
             &format!("/api/plugins/sources/{id}/refresh"),
@@ -1436,13 +1436,12 @@ async fn failed_registration_at_boot_updates_at_once() {
         base64::engine::general_purpose::STANDARD.encode(test_key().verifying_key().to_bytes());
     let bytes = pack(&m, "0.1.0", &w, Some(&test_key()));
     cat.archives
-        .lock()
-        .unwrap()
+        .lock_clean()
         .push(("/fixture.fkplugin".into(), bytes.clone()));
     let doc = json!({"plugins": [{"id": "fliks.fixture", "name": "Fixture", "description": "", "author": "a",
         "kind": "process", "versions": [{"version": "0.1.0", "pluginApi": 3, "fliks": ">=5.0.0 <7.0.0",
         "zipUrl": format!("https://localhost:{}/fixture.fkplugin", cat.port), "sha256": archive::sha256_hex(&bytes)}]}]});
-    *cat.doc.lock().unwrap() = serde_json::to_vec(&doc).unwrap();
+    *cat.doc.lock_clean() = serde_json::to_vec(&doc).unwrap();
     let url = format!("https://localhost:{}/catalog.json", cat.port);
     h.call(
         "POST",

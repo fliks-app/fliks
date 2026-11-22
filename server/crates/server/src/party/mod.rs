@@ -10,6 +10,7 @@ mod registry;
 mod routes;
 
 pub use cover::{DIR as COVER_DIR, owned_uploads};
+pub use dto::parse_ice_servers;
 pub use karaoke_ws::{__path_karaoke_ws, Relay, karaoke_ws};
 pub use programme::{__path_add_items, __path_remove_item, add_items, remove_item};
 pub use proposals::*;

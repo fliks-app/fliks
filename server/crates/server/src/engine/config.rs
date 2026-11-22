@@ -1,5 +1,5 @@
 //! Config owner (`engine-glue.md` section C): the one process that `PUT /v1/config`s the engine.
-use super::{Engine, EngineError, store};
+use super::{Engine, EngineError};
 use fliks_engine_core::{
     api::{EngineConfig, LifetimeConfig, LiveTvConfig, QsvPreset, StreamingConfig},
     jsnum,
@@ -154,7 +154,9 @@ pub fn lifetime(env: impl Fn(&str) -> Option<String>) -> LifetimeConfig {
 
 /// The saved `streaming_*` settings, resolved like the config push does.
 pub async fn load_streaming(db: &sqlx::PgPool) -> sqlx::Result<StreamingConfig> {
-    Ok(streaming(&store::values(db, &STREAMING_KEYS).await?))
+    Ok(streaming(
+        &crate::settings::texts(db, &STREAMING_KEYS).await?,
+    ))
 }
 
 /// What the settings PUT must refuse: a stored value the engine would reject (and with it the whole config).
@@ -203,13 +205,13 @@ impl Engine {
         };
         let streaming = match self.db() {
             Some(db) => {
-                let raw = store::values(db, &STREAMING_KEYS).await?;
+                let raw = crate::settings::texts(db, &STREAMING_KEYS).await?;
                 streaming(&raw)
             }
             None => StreamingConfig::default(),
         };
         let livetv = match self.db() {
-            Some(db) => match store::values(db, &LIVETV_KEYS).await {
+            Some(db) => match crate::settings::texts(db, &LIVETV_KEYS).await {
                 Ok(raw) => livetv(&raw),
                 Err(e) => {
                     tracing::warn!("live TV settings unreadable, engine defaults used: {e}");

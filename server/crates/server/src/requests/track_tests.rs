@@ -1,6 +1,7 @@
 //! Track-scoped album requests (`docs/spec/requests.md` rule 52) through the real routers over a fake MusicBrainz.
 use crate::auth::testing as session;
 use crate::metadata::music::tests::{GROUP, MusicFake, RELEASE};
+use crate::sync::MutexExt;
 use crate::{config::Config, media, state::AppState};
 use axum::{Router, body::Body, http::Request};
 use serde_json::{Value, json};
@@ -29,19 +30,19 @@ async fn ctx(pool: PgPool) -> Ctx {
         "0123456789abcdef0123456789abcdef",
     );
     let fake = MusicFake::default();
-    fake.works.lock().unwrap().insert(
+    fake.works.lock_clean().insert(
         GROUP.into(),
         json!({"externalId": GROUP, "title": "Alpha", "primaryType": "album", "year": 1999, "mediaType": "album",
                "artists": [{"name": "Ana", "id": crate::metadata::music::tests::ARTIST}]}),
     );
-    fake.children.lock().unwrap().insert(
+    fake.children.lock_clean().insert(
         GROUP.into(),
         vec![
             json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "status": "official", "trackCount": 2}),
             json!({"externalId": BONUS_RELEASE, "title": "Alpha", "country": "XW", "status": "official", "trackCount": 3}),
         ],
     );
-    fake.editions.lock().unwrap().insert(
+    fake.editions.lock_clean().insert(
         BONUS_RELEASE.into(),
         json!({"externalId": BONUS_RELEASE, "releaseGroupId": GROUP, "title": "Alpha", "country": "XW",
                "status": "official", "media": "cd", "trackCount": 3, "tracks": [
@@ -50,10 +51,9 @@ async fn ctx(pool: PgPool) -> Ctx {
             {"title": "Three", "discNumber": 1, "position": 3, "number": 3, "durationMs": 70000, "recordingId": THREE}]}),
     );
     fake.holders
-        .lock()
-        .unwrap()
+        .lock_clean()
         .insert(THREE.into(), vec![BONUS_RELEASE.into()]);
-    fake.editions.lock().unwrap().insert(
+    fake.editions.lock_clean().insert(
         RELEASE.into(),
         json!({"externalId": RELEASE, "releaseGroupId": GROUP, "title": "Alpha", "country": "FR",
                "status": "official", "media": "cd", "trackCount": 2, "tracks": [

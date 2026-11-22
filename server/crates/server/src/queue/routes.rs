@@ -261,9 +261,7 @@ async fn reach_of(st: &AppState, who: Principal) -> Result<Reach, AppError> {
         return Ok(Reach::Path(a.mappings));
     }
     // A worker without the library reads over the main engine's public data plane.
-    let base = crate::auth::oidc::db::public_url(&st.db)
-        .await
-        .map_err(db)?;
+    let base = crate::settings::public_url(&st.db).await.map_err(db)?;
     Ok(Reach::Http(base.unwrap_or_default()))
 }
 

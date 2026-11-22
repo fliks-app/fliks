@@ -30,7 +30,7 @@ fn notify(st: &AppState, event: &'static str, payload: Value) {
 
 pub async fn run(st: &AppState) -> Result<(), String> {
     let flagged = flag(st).await.map_err(|e| e.to_string())?;
-    let max = settings::setting_value(&st.db, MAX_PER_RUN_KEY)
+    let max = settings::text(&st.db, MAX_PER_RUN_KEY)
         .await
         .map_err(|e| e.to_string())?
         .and_then(|v| v.trim().parse::<i64>().ok())

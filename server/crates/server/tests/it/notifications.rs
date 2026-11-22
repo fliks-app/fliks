@@ -9,6 +9,7 @@ use axum::{
     response::{IntoResponse, Redirect},
     routing::{any, get},
 };
+use fliks_server::sync::MutexExt;
 use fliks_server::{app, config::Config, roles, state::AppState};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -35,7 +36,7 @@ async fn spawn_mock() -> (String, Mock) {
         headers: HeaderMap,
         body: Bytes,
     ) -> axum::response::Response {
-        m.0.lock().unwrap().push(Seen {
+        m.0.lock_clean().push(Seen {
             uri: uri.to_string(),
             headers,
             body: String::from_utf8_lossy(&body).into(),
@@ -137,9 +138,7 @@ async fn admin(c: &Ctx, method: &str, uri: &str, body: Option<Value>) -> (u16, V
 
 async fn dispatch(c: &Ctx, body: Value) -> (u16, Value) {
     let payload = body["payload"].as_object().cloned().unwrap_or_default();
-    fliks_server::notifications::dispatch(&c.pool, body["event"].as_str().unwrap(), &payload)
-        .await
-        .unwrap();
+    fliks_server::notifications::dispatch(&c.pool, body["event"].as_str().unwrap(), payload);
     (204, Value::Null)
 }
 
@@ -468,7 +467,13 @@ async fn dispatch_reaches_enabled_subscribed_connections(pool: PgPool) {
         204
     );
 
-    let seen = mock.0.lock().unwrap().clone();
+    for _ in 0..200 {
+        if mock.0.lock_clean().len() >= 6 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    let seen = mock.0.lock_clean().clone();
     let at = |p: &str| {
         seen.iter()
             .find(|s| s.uri == p)
@@ -527,7 +532,7 @@ async fn test_route_reports_results_never_errors(pool: PgPool) {
             json!({"ok": true, "message": "Test notification sent"})
         )
     );
-    let sent: Value = serde_json::from_str(&mock.0.lock().unwrap()[0].body).unwrap();
+    let sent: Value = serde_json::from_str(&mock.0.lock_clean()[0].body).unwrap();
     assert_eq!(
         sent,
         json!({"event": "health.issue", "test": true, "message": "Test notification from Fliks"})

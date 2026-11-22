@@ -125,10 +125,10 @@ const PAGE: usize = 50;
 
 async fn import(db: &PgPool) -> Result<Stats, String> {
     let (url, key) = (
-        crate::settings::setting_value(db, "seerr_url")
+        crate::settings::text(db, "seerr_url")
             .await
             .map_err(|e| e.to_string())?,
-        crate::settings::setting_value(db, "seerr_api_key")
+        crate::settings::text(db, "seerr_api_key")
             .await
             .map_err(|e| e.to_string())?,
     );

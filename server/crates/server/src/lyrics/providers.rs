@@ -2,7 +2,7 @@
 use super::store::{self, New};
 use crate::{
     metadata::{LyricsHit, LyricsQuery, MetadataProvider},
-    settings::setting_value,
+    settings,
     state::AppState,
 };
 use fliks_domain::{
@@ -15,29 +15,12 @@ use tokio::io::AsyncWriteExt;
 /// A miss or an instrumental answer is not asked again of the same provider for this long.
 const MISS_DAYS: i32 = 30;
 
-async fn flag(st: &AppState, key: &str, default: bool) -> bool {
-    match setting_value(&st.db, key).await.ok().flatten().as_deref() {
-        Some("true") => true,
-        Some("false") => false,
-        _ => default,
-    }
-}
-
-async fn list(st: &AppState, key: &str) -> Vec<String> {
-    setting_value(&st.db, key)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|v| serde_json::from_str(&v).ok())
-        .unwrap_or_default()
-}
-
 /// The available lyrics providers in `lyrics.provider_order`, less those of `lyrics.disabled_providers`.
 async fn providers(st: &AppState) -> Vec<Arc<dyn MetadataProvider>> {
-    let off = list(st, "lyrics.disabled_providers").await;
+    let off = settings::list(&st.db, "lyrics.disabled_providers").await;
     let mut all = st
         .metadata
-        .lyrics_providers(&list(st, "lyrics.provider_order").await);
+        .lyrics_providers(&settings::list(&st.db, "lyrics.provider_order").await);
     all.retain(|p| !off.iter().any(|n| n == p.id().as_str()));
     all
 }
@@ -245,7 +228,7 @@ async fn keep(
 
 /// Rule 70: the row next to its file when the setting asks for it, never over an existing sidecar.
 pub async fn write_back(st: &AppState, id: i32) {
-    if !flag(st, "lyrics.write_back", false).await {
+    if !settings::flag(&st.db, "lyrics.write_back", false).await {
         return;
     }
     let Ok(Some(row)) = store::get(&st.db, id).await else {
@@ -322,7 +305,7 @@ pub async fn write_back(st: &AppState, id: i32) {
 /// Rule 69: the tracks of `media` (every album when `None`) with a file, no synced main document and a provider
 /// that has not answered within the negative cache, queued for the fetch worker.
 pub async fn enqueue_missing(st: &AppState, media: Option<i32>) {
-    if !flag(st, "lyrics.auto_fetch", true).await {
+    if !settings::flag(&st.db, "lyrics.auto_fetch", true).await {
         return;
     }
     let ns: Vec<String> = providers(st)

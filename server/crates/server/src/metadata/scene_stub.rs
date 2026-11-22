@@ -1,5 +1,6 @@
 //! A scene provider answering from a table, for the tests of the scene numbering.
 use crate::metadata::{Call, Credits, MetadataProvider, PersonDetails, Search, Upstream};
+use crate::sync::MutexExt;
 use fliks_domain::{
     external_id::Namespace,
     media::kind::MediaKind,
@@ -54,7 +55,7 @@ impl MetadataProvider for SceneStub {
         let r = if self.down.load(Ordering::SeqCst) {
             Err(Upstream::new(Some(503), "scene stub down"))
         } else {
-            Ok(self.ids.lock().unwrap().clone())
+            Ok(self.ids.lock_clean().clone())
         };
         Box::pin(async move { r })
     }
@@ -63,7 +64,7 @@ impl MetadataProvider for SceneStub {
         let r = if self.down.load(Ordering::SeqCst) {
             Err(Upstream::new(Some(503), "scene stub down"))
         } else {
-            Ok(self.maps.lock().unwrap().get(id).cloned())
+            Ok(self.maps.lock_clean().get(id).cloned())
         };
         Box::pin(async move { r })
     }

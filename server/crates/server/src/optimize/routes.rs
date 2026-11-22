@@ -2,6 +2,7 @@
 use super::diff;
 use super::profile::{Preset, Profile};
 use super::select::{self, Context, Preview};
+use crate::sync::MutexExt;
 use crate::{
     http::{
         AppError,
@@ -351,8 +352,7 @@ pub async fn summary(
     let lib = library(&st, &a, id, None).await?;
     let slot = (id, lib.profile_id);
     let hit = COUNTERS
-        .lock()
-        .expect("counter cache")
+        .lock_clean()
         .get(&slot)
         .filter(|(k, at, _)| *k == lib.key && at.elapsed() < COUNTER_TTL)
         .map(|e| e.2.clone());
@@ -373,8 +373,7 @@ pub async fn summary(
         computed_at: Utc::now(),
     };
     COUNTERS
-        .lock()
-        .expect("counter cache")
+        .lock_clean()
         .insert(slot, (lib.key, Instant::now(), s.clone()));
     Ok(Json(s))
 }

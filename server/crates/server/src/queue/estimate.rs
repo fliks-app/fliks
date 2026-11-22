@@ -96,6 +96,7 @@ pub struct Estimate {
     /// Wall seconds until the queue is empty, the closed hours of the window included; none when a level
     /// with jobs has no history yet.
     pub eta_seconds: Option<f64>,
+    #[serde(with = "crate::http::json::iso_ms::opt")]
     pub ends_at: Option<DateTime<Utc>>,
 }
 

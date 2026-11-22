@@ -1,5 +1,6 @@
 //! Comic providers against a fake provider (`docs/spec/comics.md` rules 38-44).
 use crate::auth::testing as session;
+use crate::sync::MutexExt;
 use crate::{
     config::Config,
     media,
@@ -72,7 +73,7 @@ impl MetadataProvider for Arc<Fake> {
         _: &'a Resolved,
         _: Priority,
     ) -> Call<'a, Value> {
-        *self.work_calls.lock().unwrap() += 1;
+        *self.work_calls.lock_clean() += 1;
         let r = self.works.get(id).cloned();
         Box::pin(async move { r.ok_or_else(|| Upstream::new(Some(404), "no work")) })
     }
@@ -661,7 +662,7 @@ async fn a_second_work_call_inside_the_ttl_is_a_snapshot_not_a_call(pool: PgPool
     // the fake keeps the default zero TTL: every read calls the provider
     c.get(&format!("/api/metadata/{NS}/comic/42")).await;
     c.get(&format!("/api/metadata/{NS}/comic/42")).await;
-    assert_eq!(*c.fake.work_calls.lock().unwrap(), 2);
+    assert_eq!(*c.fake.work_calls.lock_clean(), 2);
 }
 
 async fn add_issue(

@@ -236,7 +236,7 @@ There are no sockets, pid files or uids: the component only has what the host li
   vetted by the host: `http` and `https` only, the name resolved once and every address checked, no
   redirect followed for it. Private ranges are refused unless the manifest declares `network:
   {internal: true}` and an admin consented at install; reserved, multicast and link-local (cloud
-  metadata) ranges stay refused either way. At most 32 requests per plugin are in flight.
+  metadata) ranges and loopback on Fliks's own ports stay refused either way. At most 32 requests per plugin are in flight.
 - **Filesystem**: one directory, `/data`, private to the plugin and kept across restarts and
   upgrades. Uninstall keeps it unless the admin asks to delete the plugin's data. Nothing else is
   visible.

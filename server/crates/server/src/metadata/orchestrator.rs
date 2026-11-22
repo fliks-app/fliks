@@ -1,5 +1,6 @@
 //! The snapshot cache and single-flight in front of the providers (`metadata-orchestrator.md` rules 29-33).
 use super::{EditionRef, MetaError, Metadata, Upstream};
+use crate::sync::MutexExt;
 use fliks_domain::{
     external_id::Namespace,
     media::kind::MediaKind,
@@ -12,7 +13,7 @@ use futures_util::{
 use serde_json::Value;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, PoisonError},
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -38,7 +39,7 @@ struct Release {
 
 impl Drop for Release {
     fn drop(&mut self) {
-        let mut flights = self.flights.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut flights = self.flights.lock_clean();
         flights.remove(&self.key);
     }
 }
@@ -237,7 +238,7 @@ impl Metadata {
             return Ok(body);
         }
         let flight = {
-            let mut flights = self.flights.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut flights = self.flights.lock_clean();
             flights
                 .entry((key.clone(), prio))
                 .or_insert_with(|| {

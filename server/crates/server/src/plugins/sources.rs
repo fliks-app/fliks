@@ -230,7 +230,7 @@ impl Plugins {
     pub async fn auto_update_of(&self, only: Option<&[String]>) -> Value {
         let mut updated = vec![];
         let mut skipped = vec![];
-        let off = match crate::settings::setting_value(&self.db, "plugins.auto_update").await {
+        let off = match crate::settings::text(&self.db, "plugins.auto_update").await {
             Ok(v) => v.as_deref() == Some("false"),
             Err(e) => {
                 tracing::warn!("auto-update skipped, plugins.auto_update unreadable: {e}");

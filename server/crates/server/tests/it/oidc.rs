@@ -12,6 +12,7 @@ use base64::{
     Engine,
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD as B64},
 };
+use fliks_server::sync::MutexExt;
 use fliks_server::{
     auth::{self, oidc::Oidc},
     config::Config,
@@ -108,7 +109,7 @@ async fn discovery(State(s): State<Arc<IdpSt>>) -> Json<Value> {
 }
 
 fn discovery_doc(s: &IdpSt) -> Value {
-    let base = s.base.lock().unwrap().clone();
+    let base = s.base.lock_clean().clone();
     let pkce = if s.s256.load(Ordering::SeqCst) {
         "S256"
     } else {
@@ -121,15 +122,15 @@ fn discovery_doc(s: &IdpSt) -> Value {
         "jwks_uri": format!("{base}/jwks"),
         "userinfo_endpoint": format!("{base}/userinfo"),
         "end_session_endpoint": format!("{base}/logout"),
-        "id_token_signing_alg_values_supported": *s.algs.lock().unwrap(),
-        "token_endpoint_auth_methods_supported": *s.methods.lock().unwrap(),
+        "id_token_signing_alg_values_supported": *s.algs.lock_clean(),
+        "token_endpoint_auth_methods_supported": *s.methods.lock_clean(),
         "code_challenge_methods_supported": [pkce],
         "backchannel_logout_supported": true,
     })
 }
 
 async fn redirected(State(s): State<Arc<IdpSt>>) -> Response {
-    let base = s.base.lock().unwrap().clone();
+    let base = s.base.lock_clean().clone();
     (
         StatusCode::FOUND,
         [(
@@ -142,7 +143,7 @@ async fn redirected(State(s): State<Arc<IdpSt>>) -> Response {
 
 async fn jwks(State(s): State<Arc<IdpSt>>) -> Json<Value> {
     s.jwks_hits.fetch_add(1, Ordering::SeqCst);
-    let published = s.published.lock().unwrap().clone();
+    let published = s.published.lock_clean().clone();
     let keys: Vec<Value> = s
         .keys
         .iter()
@@ -153,7 +154,7 @@ async fn jwks(State(s): State<Arc<IdpSt>>) -> Json<Value> {
 }
 
 async fn userinfo(State(s): State<Arc<IdpSt>>) -> Response {
-    match s.userinfo.lock().unwrap().clone() {
+    match s.userinfo.lock_clean().clone() {
         Some(v) => Json(v).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
     }
@@ -190,11 +191,8 @@ async fn token(
         )
             .into_response();
     };
-    s.token_auth.lock().unwrap().push(style);
-    let Some(code) = f
-        .get("code")
-        .and_then(|c| s.codes.lock().unwrap().remove(c))
-    else {
+    s.token_auth.lock_clean().push(style);
+    let Some(code) = f.get("code").and_then(|c| s.codes.lock_clean().remove(c)) else {
         return grant("unknown code");
     };
     let verifier = f.get("code_verifier").cloned().unwrap_or_default();
@@ -238,7 +236,7 @@ impl Idp {
             .await
             .unwrap();
         let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
-        *st.base.lock().unwrap() = base.clone();
+        *st.base.lock_clean() = base.clone();
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
         Idp { base, st }
     }
@@ -286,8 +284,8 @@ impl Idp {
     /// Registers an authorization code that redeems to a token with `patch` applied to the claims.
     fn issue(&self, f: &Flow, patch: Value, how: Signing) -> String {
         let id_token = self.sign(&self.claims(&f.nonce, &patch), how);
-        let code = format!("code-{}", self.st.codes.lock().unwrap().len() + 1);
-        self.st.codes.lock().unwrap().insert(
+        let code = format!("code-{}", self.st.codes.lock_clean().len() + 1);
+        self.st.codes.lock_clean().insert(
             code.clone(),
             Code {
                 challenge: f.challenge.clone(),
@@ -690,7 +688,7 @@ async fn login_creates_a_session_and_answers_like_password_login(pool: PgPool) {
             Some("sub-1".into())
         )
     );
-    assert_eq!(c.idp.st.token_auth.lock().unwrap().as_slice(), ["basic"]);
+    assert_eq!(c.idp.st.token_auth.lock_clean().as_slice(), ["basic"]);
 
     let (s, _, r) = c
         .call("POST", "/api/auth/refresh", None, Some(refreshed(&b)))
@@ -720,10 +718,10 @@ async fn login_creates_a_session_and_answers_like_password_login(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn client_secret_goes_in_the_body_when_only_that_is_advertised(pool: PgPool) {
     let c = ctx(pool).await;
-    *c.idp.st.methods.lock().unwrap() = vec!["client_secret_post"];
+    *c.idp.st.methods.lock_clean() = vec!["client_secret_post"];
     let pid = c.provider(json!({})).await;
     assert_eq!(c.login(pid, json!({})).await.0, 201);
-    assert_eq!(c.idp.st.token_auth.lock().unwrap().as_slice(), ["post"]);
+    assert_eq!(c.idp.st.token_auth.lock_clean().as_slice(), ["post"]);
 }
 
 #[sqlx::test(migrations = false)]
@@ -954,9 +952,9 @@ async fn a_userinfo_failure_is_fatal_whenever_userinfo_was_needed(pool: PgPool) 
         error(&c.login(pid, patch.clone()).await),
         (400, "idp".into())
     );
-    *c.idp.st.userinfo.lock().unwrap() = Some(json!({"sub": "sub-1", "email_verified": true}));
+    *c.idp.st.userinfo.lock_clean() = Some(json!({"sub": "sub-1", "email_verified": true}));
     assert_eq!(c.login(pid, patch).await.0, 201);
-    *c.idp.st.userinfo.lock().unwrap() = None;
+    *c.idp.st.userinfo.lock_clean() = None;
     let r = c.login(pid, json!({"sub": "sub-2", "email": null})).await;
     assert_eq!(error(&r), (400, "idp".into()));
     let linked = c.login(pid, json!({"email": null})).await;
@@ -1143,7 +1141,7 @@ async fn a_username_clash_adds_a_counter(pool: PgPool) {
         (a["user"]["username"].clone(), b["user"]["username"].clone()),
         (json!("ann-2"), json!("ann-3"))
     );
-    *c.idp.st.userinfo.lock().unwrap() = Some(json!({"sub": "s-c"}));
+    *c.idp.st.userinfo.lock_clean() = Some(json!({"sub": "s-c"}));
     let (_, _, nameless) = c
         .login(
             pid,
@@ -1294,15 +1292,15 @@ async fn userinfo_fills_the_claims_the_id_token_lacks(pool: PgPool) {
     let pid = c
         .provider(json!({"groupsClaim": "groups", "adminGroups": ["admins"]}))
         .await;
-    *c.idp.st.userinfo.lock().unwrap() = Some(json!({"sub": "sub-1", "groups": ["admins"]}));
+    *c.idp.st.userinfo.lock_clean() = Some(json!({"sub": "sub-1", "groups": ["admins"]}));
     let (s, _, b) = c.login(pid, json!({})).await;
     assert_eq!((s, b["user"]["isAdmin"].clone()), (201, json!(true)));
-    *c.idp.st.userinfo.lock().unwrap() = Some(json!({"sub": "someone-else", "groups": ["admins"]}));
+    *c.idp.st.userinfo.lock_clean() = Some(json!({"sub": "someone-else", "groups": ["admins"]}));
     assert_eq!(
         error(&c.login(pid, json!({"sub": "sub-2"})).await),
         (400, "idp".into())
     );
-    *c.idp.st.userinfo.lock().unwrap() = None;
+    *c.idp.st.userinfo.lock_clean() = None;
     assert_eq!(
         error(&c.login(pid, json!({"sub": "sub-3"})).await),
         (400, "idp".into())
@@ -1490,7 +1488,7 @@ async fn a_manager_unlinks_a_user_but_not_an_admin(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn every_id_token_check_refuses(pool: PgPool) {
     let c = ctx(pool).await;
-    *c.idp.st.algs.lock().unwrap() = vec!["ES256", "HS256"];
+    *c.idp.st.algs.lock_clean() = vec!["ES256", "HS256"];
     let pid = c.provider(json!({})).await;
     let cases: Vec<(&str, Value, Signing)> = vec![
         ("bad signature", json!({}), Signing::Foreign),
@@ -1534,7 +1532,7 @@ async fn every_id_token_check_refuses(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn an_algorithm_the_provider_does_not_advertise_is_refused(pool: PgPool) {
     let c = ctx(pool).await;
-    *c.idp.st.algs.lock().unwrap() = vec!["RS256"];
+    *c.idp.st.algs.lock_clean() = vec!["RS256"];
     let pid = c.provider(json!({})).await;
     assert_eq!(error(&c.login(pid, json!({})).await), (400, "idp".into()));
 }
@@ -1560,7 +1558,7 @@ async fn a_rotated_key_is_found_by_one_refetch(pool: PgPool) {
     .await;
     let pid = c.provider(json!({})).await;
     assert_eq!(c.login(pid, json!({})).await.0, 201);
-    c.idp.st.published.lock().unwrap().push("k2".into());
+    c.idp.st.published.lock_clean().push("k2".into());
     let hits = c.idp.st.jwks_hits.load(Ordering::SeqCst);
     let r = c
         .login_with(pid, json!({"sub": "sub-2"}), Signing::Key(1))
@@ -1650,7 +1648,7 @@ async fn a_private_ca_is_trusted_only_when_the_provider_carries_it(pool: PgPool)
     let port: Arc<Mutex<u16>> = Arc::default();
     let p = port.clone();
     let reply: tls::Reply = Arc::new(move |_| {
-        let base = format!("https://127.0.0.1:{}", p.lock().unwrap());
+        let base = format!("https://127.0.0.1:{}", p.lock_clean());
         let doc = json!({"issuer": base, "authorization_endpoint": format!("{base}/a"),
             "token_endpoint": format!("{base}/t"), "jwks_uri": format!("{base}/k"),
             "code_challenge_methods_supported": ["S256"]});
@@ -1661,7 +1659,7 @@ async fn a_private_ca_is_trusted_only_when_the_provider_carries_it(pool: PgPool)
         )
     });
     let (stub_port, _) = tls::stub(pki.server.clone(), reply).await;
-    *port.lock().unwrap() = stub_port;
+    *port.lock_clean() = stub_port;
     let issuer = format!("https://127.0.0.1:{stub_port}");
     assert_eq!(c.probe(&issuer, None).await["error"], "network error");
     let b = c.probe(&issuer, Some(&pki.ca_pem)).await;

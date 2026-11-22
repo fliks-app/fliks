@@ -200,6 +200,7 @@ pub async fn want_many(
 pub(crate) mod tests {
     use super::*;
     use crate::metadata::music::tests::{GROUP, MusicFake};
+    use crate::sync::MutexExt;
     use fliks_domain::metadata::limiter::Priority;
     use serde_json::json;
     use std::sync::Arc;
@@ -232,7 +233,7 @@ pub(crate) mod tests {
     /// take of "Song", and a 2-track one.
     pub(crate) fn fake() -> Arc<MusicFake> {
         let f = Arc::new(MusicFake::default());
-        f.works.lock().unwrap().insert(
+        f.works.lock_clean().insert(
             GROUP.into(),
             json!({"externalId": GROUP, "title": "Alpha", "primaryType": "album", "year": 2019,
                    "mediaType": "album", "artists": [{"name": "Ana"}]}),
@@ -295,15 +296,15 @@ pub(crate) mod tests {
                 json!({"externalId": id, "title": "Alpha", "country": "GB", "status": "official",
                                  "trackCount": n, "releaseDate": date}),
             );
-            f.editions.lock().unwrap().insert(
+            f.editions.lock_clean().insert(
                 id.into(),
                 json!({"externalId": id, "releaseGroupId": GROUP, "title": "Alpha", "country": "GB",
                        "status": "official", "media": "cd", "trackCount": n, "releaseDate": date,
                        "tracks": list}),
             );
         }
-        f.children.lock().unwrap().insert(GROUP.into(), children);
-        let mut h = f.holders.lock().unwrap();
+        f.children.lock_clean().insert(GROUP.into(), children);
+        let mut h = f.holders.lock_clean();
         h.insert(LIVE.into(), vec![PLUS.into(), DELUXE.into()]);
         h.insert(BONUS.into(), vec![PLUS.into(), DELUXE.into()]);
         h.insert(EXTRA.into(), vec![DELUXE.into()]);
@@ -453,7 +454,7 @@ pub(crate) mod tests {
     #[sqlx::test(migrations = false)]
     async fn a_group_whose_picked_release_cannot_be_read_creates_nothing(db: PgPool) {
         let f = fake();
-        f.editions.lock().unwrap().remove(STD);
+        f.editions.lock_clean().remove(STD);
         let st = state(&db, f).await;
         let (status, _, _) = post(
             &st,

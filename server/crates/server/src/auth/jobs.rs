@@ -1,12 +1,11 @@
-//! Boot-time loops: hourly pairing and sign-in-row cleanup, daily refresh-token prune at 03:30 local.
+//! Boot-time loop: hourly pairing and sign-in-row cleanup; the refresh-token prune runs in the daily prune tick.
 use super::db;
-use chrono::{Duration as Span, Local, NaiveDateTime, Utc};
+use chrono::Utc;
 use sqlx::PgPool;
 use std::time::Duration;
-use tokio::time::{Instant, MissedTickBehavior, interval_at, sleep};
+use tokio::time::{Instant, MissedTickBehavior, interval_at};
 
-pub fn spawn(db: PgPool) {
-    let pool = db.clone();
+pub fn spawn(pool: PgPool) {
     tokio::spawn(async move {
         let hour = Duration::from_secs(3600);
         let mut tick = interval_at(Instant::now() + hour, hour);
@@ -21,40 +20,12 @@ pub fn spawn(db: PgPool) {
             }
         }
     });
-    tokio::spawn(async move {
-        loop {
-            sleep(until_next(Local::now().naive_local())).await;
-            match db::prune_refresh_tokens(&db, Utc::now()).await {
-                Ok(n) => tracing::info!(rows = n, "refresh tokens pruned"),
-                Err(e) => tracing::warn!(error = %e, "refresh token prune failed"),
-            }
-            // Avoid re-firing within the same second.
-            sleep(Duration::from_secs(1)).await;
-        }
-    });
 }
 
-/// Wait until the next 03:30 wall-clock; a DST change shifts one run by an hour at most.
-fn until_next(now: NaiveDateTime) -> Duration {
-    let mut at = now.date().and_hms_opt(3, 30, 0).expect("valid time");
-    if at <= now {
-        at += Span::days(1);
-    }
-    (at - now).to_std().unwrap_or_default()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn at(s: &str) -> NaiveDateTime {
-        NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S").unwrap()
-    }
-
-    #[test]
-    fn next_run_is_the_coming_0330() {
-        assert_eq!(until_next(at("2026-01-01 03:00:00")).as_secs(), 1800);
-        assert_eq!(until_next(at("2026-01-01 03:30:00")).as_secs(), 86400);
-        assert_eq!(until_next(at("2026-01-01 23:30:00")).as_secs(), 4 * 3600);
+/// The refresh tokens past their lifetime, pruned once a day by the jobs runner.
+pub async fn prune_refresh_tokens(db: &PgPool) {
+    match db::prune_refresh_tokens(db, Utc::now()).await {
+        Ok(n) => tracing::info!(rows = n, "refresh tokens pruned"),
+        Err(e) => tracing::warn!(error = %e, "refresh token prune failed"),
     }
 }

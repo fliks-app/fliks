@@ -8,6 +8,7 @@ use crate::{
     http::{
         AppError,
         auth::{Authed, SessionAuthed, UserRow, load_enabled, logout_token},
+        client_ip,
         cookies::{access_cookie, clear_cookie},
         json::iso_ms,
         validate::{PathParams, ValidJson, from_value},
@@ -151,26 +152,6 @@ pub(crate) struct LoginDto {
     username: String,
     password: String,
     server_type: Option<String>,
-}
-
-/// The client address (`auth.md` rule 63): `X-Forwarded-For` entries then the socket peer, walked
-/// from the right past private hops (trusted proxies) to the first public one.
-pub(crate) fn client_ip(headers: &HeaderMap, peer: Option<&SocketAddr>) -> Option<IpAddr> {
-    let hops: Vec<IpAddr> = headers
-        .get_all("x-forwarded-for")
-        .iter()
-        .filter_map(|v| v.to_str().ok())
-        .flat_map(|v| v.split(','))
-        .filter_map(|h| h.trim().parse::<IpAddr>().ok())
-        .map(|ip| ip.to_canonical())
-        .collect();
-    let peer = peer.map(|a| a.ip().to_canonical());
-    hops.iter()
-        .copied()
-        .chain(peer)
-        .rev()
-        .find(|ip| classify(*ip) == Class::Public)
-        .or_else(|| hops.last().copied().or(peer))
 }
 
 fn is_lan(headers: &HeaderMap, peer: Option<&SocketAddr>) -> bool {
@@ -573,11 +554,7 @@ pub(crate) async fn users_public(
     peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, AppError> {
-    let mode =
-        sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = 'users_public_mode'"#)
-            .fetch_optional(&st.db)
-            .await?
-            .flatten();
+    let mode = crate::settings::text(&st.db, "users_public_mode").await?;
     let shown = match mode.as_deref() {
         Some("hidden") => false,
         Some("lan") => is_lan(&headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a)),
@@ -608,27 +585,7 @@ pub(crate) async fn cast_info(
         .jwt
         .sign_cast(a.user.id, &a.user.username, a.session()?)?
         .token;
-    let public = sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = 'public_url'"#)
-        .fetch_optional(&st.db)
-        .await?
-        .flatten()
-        .filter(|u| !u.is_empty());
-    let header_str = |n: &str| {
-        headers
-            .get(n)
-            .and_then(|v| v.to_str().ok())
-            .filter(|v| !v.is_empty())
-    };
-    let base = match (public, header_str("host")) {
-        (Some(u), _) => u.trim_end_matches('/').to_owned(),
-        (None, Some(host)) => {
-            format!(
-                "{}://{host}",
-                header_str("x-forwarded-proto").unwrap_or("http")
-            )
-        }
-        (None, None) => format!("http://localhost:{}", st.cfg.port),
-    };
+    let base = crate::http::public_base(&st, &headers).await;
     Ok((
         StatusCode::CREATED,
         Json(json!({"token": token, "streamBaseUrl": base})),
@@ -962,53 +919,4 @@ pub(crate) async fn pairing_cancel(
         );
     }
     Ok(StatusCode::NO_CONTENT)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn ip(xff: &[&str], peer: &str) -> Option<IpAddr> {
-        let mut h = HeaderMap::new();
-        for x in xff {
-            h.append("x-forwarded-for", x.parse().unwrap());
-        }
-        client_ip(&h, Some(&format!("{peer}:1").parse().unwrap()))
-    }
-
-    #[test]
-    fn the_client_is_the_first_public_hop_from_the_right() {
-        let want = Some("8.8.8.8".parse().unwrap());
-        assert_eq!(ip(&[], "8.8.8.8"), want);
-        assert_eq!(ip(&["8.8.8.8"], "172.18.0.2"), want, "docker gateway");
-        assert_eq!(
-            ip(&["8.8.8.8, 10.0.0.1"], "127.0.0.1"),
-            want,
-            "lan proxy chain"
-        );
-        assert_eq!(
-            ip(&["1.1.1.1", "8.8.8.8"], "10.0.0.1"),
-            want,
-            "forged left entry"
-        );
-        assert_eq!(
-            ip(&["1.1.1.1"], "8.8.8.8"),
-            want,
-            "forged entry, public peer"
-        );
-        assert_eq!(ip(&["::ffff:8.8.8.8"], "10.0.0.1"), want);
-    }
-
-    #[test]
-    fn a_lan_client_is_the_nearest_reported_hop() {
-        assert_eq!(
-            ip(&["192.168.1.7"], "127.0.0.1"),
-            Some("192.168.1.7".parse().unwrap())
-        );
-        assert_eq!(ip(&[], "192.168.1.7"), Some("192.168.1.7".parse().unwrap()));
-        assert_eq!(
-            ip(&["garbage"], "10.0.0.1"),
-            Some("10.0.0.1".parse().unwrap())
-        );
-    }
 }

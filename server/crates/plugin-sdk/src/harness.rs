@@ -5,6 +5,7 @@ use crate::build::Crate;
 use fliks_server::net::guard::{Net, SystemNet};
 use fliks_server::plugins::runtime::{CallError, HostConfig, PluginRt, State};
 use fliks_server::plugins::{HealthReport, HttpRequest, HttpResponse, Options, Plugins, Principal};
+use fliks_server::sync::MutexExt;
 use fliks_server::{config::Config, state::AppState};
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
@@ -101,13 +102,13 @@ impl Targets {
     /// `name` resolves to `ips`; an unknown name is not found (`DNS-error`).
     pub fn answer(&self, name: &str, ips: &[&str]) {
         let ips = ips.iter().map(|i| i.parse().expect("an IP")).collect();
-        self.names.lock().unwrap().insert(name.to_owned(), ips);
+        self.names.lock_clean().insert(name.to_owned(), ips);
     }
 
     /// Connections to `to` (as vetted) go to `local` instead, e.g. a stub server.
     pub fn route(&self, to: &str, local: SocketAddr) {
         let to = to.parse().expect("ip:port");
-        self.routes.lock().unwrap().insert(to, local);
+        self.routes.lock_clean().insert(to, local);
     }
 }
 
@@ -117,7 +118,7 @@ impl Net for Targets {
         host: &str,
         port: u16,
     ) -> BoxFuture<'static, std::io::Result<Vec<SocketAddr>>> {
-        let r = match self.names.lock().unwrap().get(host) {
+        let r = match self.names.lock_clean().get(host) {
             Some(ips) => Ok(ips.iter().map(|ip| SocketAddr::new(*ip, port)).collect()),
             None => Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -128,14 +129,8 @@ impl Net for Targets {
     }
 
     fn connect(&self, addr: SocketAddr) -> BoxFuture<'static, std::io::Result<TcpStream>> {
-        self.connects.lock().unwrap().push(addr);
-        let to = self
-            .routes
-            .lock()
-            .unwrap()
-            .get(&addr)
-            .copied()
-            .unwrap_or(addr);
+        self.connects.lock_clean().push(addr);
+        let to = self.routes.lock_clean().get(&addr).copied().unwrap_or(addr);
         Box::pin(TcpStream::connect(to))
     }
 
@@ -296,6 +291,7 @@ impl Harness {
                     port: opts.get_port(),
                     dbname: db.clone(),
                 },
+                own_ports: Arc::default(),
                 tune: Some(Arc::new(move |c: &mut HostConfig| {
                     c.compile_in_process = true;
                     if let Some(t) = &user_tune {

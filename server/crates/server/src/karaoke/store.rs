@@ -1,4 +1,5 @@
 //! `derived_audio`: rows, eviction, invalidation and the file sweep (`docs/spec/karaoke.md` rules 11-15).
+use crate::sync::MutexExt;
 use crate::{paths, state::AppState};
 use sqlx::PgPool;
 use std::path::{Path, PathBuf};
@@ -379,13 +380,7 @@ pub async fn sweep(st: &AppState) -> std::io::Result<()> {
         else {
             continue;
         };
-        if st
-            .karaoke
-            .separating
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .contains(&file)
-        {
+        if st.karaoke.separating.lock_clean().contains(&file) {
             continue;
         }
         let known: Vec<String> =

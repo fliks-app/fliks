@@ -2,7 +2,7 @@
 //! files carry what the library knows. A file whose tags already match is left alone, a symlink is never followed and
 //! every write goes through a copy renamed over the file, so a hard link keeps its bytes (a seeding torrent stays valid).
 use super::super::rescan::mtime_ms;
-use crate::{settings::setting_value, state::AppState};
+use crate::{settings, state::AppState};
 use lofty::{
     config::WriteOptions,
     file::TaggedFileExt,
@@ -29,7 +29,7 @@ struct Facts {
 }
 
 pub async fn enabled(st: &AppState) -> bool {
-    setting_value(&st.db, "music.write_tags")
+    settings::text(&st.db, "music.write_tags")
         .await
         .ok()
         .flatten()

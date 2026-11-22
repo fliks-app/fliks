@@ -271,15 +271,6 @@ pub async fn purge(db: &PgPool, cutoff: DateTime<Utc>) -> sqlx::Result<u64> {
     .map(|r| r.rows_affected())
 }
 
-pub async fn setting(db: &PgPool, key: &str) -> sqlx::Result<Option<String>> {
-    Ok(
-        sqlx::query_scalar!(r#"SELECT "value" FROM app_settings WHERE "key" = $1"#, key)
-            .fetch_optional(db)
-            .await?
-            .flatten(),
-    )
-}
-
 pub async fn page(db: &PgPool, f: &PageFilter<'_>) -> sqlx::Result<Vec<PageRow>> {
     sqlx::query_as!(
         PageRow,

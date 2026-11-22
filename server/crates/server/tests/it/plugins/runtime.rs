@@ -2,6 +2,7 @@
 use super::harness::*;
 use fliks_server::plugins::runtime::{HttpRequest, Principal, State};
 use fliks_server::plugins::{compile, packages};
+use fliks_server::sync::MutexExt;
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 
@@ -846,7 +847,7 @@ async fn component_cache_and_compile_child() {
     };
     let rt = h.st.plugins.rt(ID).unwrap();
     assert!(
-        !rt.timings.lock().unwrap().cache_hit,
+        !rt.timings.lock_clean().cache_hit,
         "the first install compiles"
     );
     h.call(
@@ -857,13 +858,7 @@ async fn component_cache_and_compile_child() {
     )
     .await;
     assert!(
-        h.st.plugins
-            .rt(ID)
-            .unwrap()
-            .timings
-            .lock()
-            .unwrap()
-            .cache_hit,
+        h.st.plugins.rt(ID).unwrap().timings.lock_clean().cache_hit,
         "a restart deserialises"
     );
     let files: Vec<_> = std::fs::read_dir(h.dir.join("cwasm"))
@@ -882,7 +877,7 @@ async fn component_cache_and_compile_child() {
     .await;
     let rt = h.st.plugins.rt(ID).unwrap();
     assert!(
-        !rt.timings.lock().unwrap().cache_hit,
+        !rt.timings.lock_clean().cache_hit,
         "a .cwasm whose sha256 differs from the row is recompiled"
     );
     assert_eq!(rt.state(), State::Ready);
@@ -898,14 +893,7 @@ async fn component_cache_and_compile_child() {
     )
     .await;
     assert!(
-        !h.st
-            .plugins
-            .rt(ID)
-            .unwrap()
-            .timings
-            .lock()
-            .unwrap()
-            .cache_hit,
+        !h.st.plugins.rt(ID).unwrap().timings.lock_clean().cache_hit,
         "an engine fingerprint change recompiles"
     );
     let fp = compile::fingerprint(
@@ -1013,7 +1001,7 @@ impl Relay {
                     continue;
                 }
                 let to = to.clone();
-                c.lock().unwrap().push(tokio::spawn(async move {
+                c.lock_clean().push(tokio::spawn(async move {
                     if let Ok(mut b) = tokio::net::TcpStream::connect(to).await {
                         let _ = tokio::io::copy_bidirectional(&mut a, &mut b).await;
                     }
@@ -1026,7 +1014,7 @@ impl Relay {
     fn set(&self, up: bool) {
         self.up.store(up, std::sync::atomic::Ordering::SeqCst);
         if !up {
-            self.conns.lock().unwrap().drain(..).for_each(|h| h.abort());
+            self.conns.lock_clean().drain(..).for_each(|h| h.abort());
         }
     }
 }

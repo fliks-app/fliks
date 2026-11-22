@@ -159,11 +159,15 @@ async fn compile(env: &Env, wasm: &[u8]) -> Result<Vec<u8>, LoadError> {
     }
     let bytes = compile_in_child(&env.cfg.compiler, env.cfg.compile_kill, wasm).await?;
     let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
-    if std::fs::create_dir_all(path.parent().expect("cwasm dir")).is_ok()
-        && std::fs::write(&tmp, &bytes).is_ok()
-    {
-        let _ = std::fs::rename(&tmp, &path);
-    }
+    let cached = bytes.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        if std::fs::create_dir_all(path.parent().expect("cwasm dir")).is_ok()
+            && std::fs::write(&tmp, &cached).is_ok()
+        {
+            let _ = std::fs::rename(&tmp, &path);
+        }
+    })
+    .await;
     Ok(bytes)
 }
 

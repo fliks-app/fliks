@@ -67,12 +67,7 @@ impl Relay {
     }
 
     fn add(&self, party: i32, id: u64, tx: Sink) {
-        self.0
-            .lock()
-            .unwrap()
-            .entry(party)
-            .or_default()
-            .push((id, tx));
+        self.0.lock_clean().entry(party).or_default().push((id, tx));
     }
 
     fn remove(&self, party: i32, id: u64) {

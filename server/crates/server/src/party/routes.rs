@@ -1603,14 +1603,22 @@ pub async fn signal(
     Ok(StatusCode::NO_CONTENT)
 }
 
+pub const ICE_KEY: &str = "party_voice_ice_servers";
 const DEFAULT_ICE: &str = "stun:stun.l.google.com:19302";
 
 /// The `party_voice_ice_servers` array when it parses, else the public STUN default.
 #[utoipa::path(get, path = "/api/parties/ice", responses((status = 200)))]
 pub async fn ice(State(st): State<AppState>, SessionAuthed(_): SessionAuthed) -> R<Json<Value>> {
-    let stored = db::setting(&st.db, "party_voice_ice_servers").await?;
-    let servers = stored
-        .and_then(|s| serde_json::from_str::<Vec<IceServer>>(&s).ok())
+    let stored = crate::settings::text(&st.db, ICE_KEY).await?;
+    let parsed = stored
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .map(parse_ice_servers);
+    if let Some(Err(e)) = &parsed {
+        tracing::warn!("{e}; voice falls back to {DEFAULT_ICE}");
+    }
+    let servers = parsed
+        .and_then(Result::ok)
         .map_or_else(|| json!([{ "urls": DEFAULT_ICE }]), |v| json!(v));
     Ok(Json(json!({ "iceServers": servers })))
 }

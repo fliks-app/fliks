@@ -2,6 +2,7 @@
 //! `/tmp/fliks-parity/s5-ingest/tests`, a fake engine for the probes, a throwaway DB.
 use super::fsx;
 use crate::auth::testing as session;
+use crate::sync::MutexExt;
 use crate::{
     app,
     config::Config,
@@ -2274,7 +2275,7 @@ mod book_ingest {
         let m = merge_setup(&c, true, 1).await;
         books::merge::settle(&c.st, m).await.unwrap();
         books::merge::settle(&c.st, m).await.unwrap();
-        assert_eq!(c.st.ingest.merge_waiting.lock().unwrap().len(), 1);
+        assert_eq!(c.st.ingest.merge_waiting.lock_clean().len(), 1);
         assert!(c.fake.seen("POST", "/v1/jobs").is_empty());
     }
 
@@ -2333,8 +2334,8 @@ mod book_ingest {
         assert_eq!(merge_state(&c, m).await, None);
         books::merge::spawn_library(&c.st, lib);
         books::merge::spawn_library(&c.st, lib);
-        assert_eq!(c.st.ingest.backfills.lock().unwrap().len(), 1);
-        while !c.st.ingest.backfills.lock().unwrap().is_empty() {
+        assert_eq!(c.st.ingest.backfills.lock_clean().len(), 1);
+        while !c.st.ingest.backfills.lock_clean().is_empty() {
             tokio::task::yield_now().await;
         }
     }
@@ -4765,23 +4766,22 @@ mod music_ingest {
 
     fn provider() -> Arc<MusicFake> {
         let f = Arc::new(MusicFake::default());
-        f.works.lock().unwrap().insert(
+        f.works.lock_clean().insert(
             GROUP.into(),
             json!({"externalId": GROUP, "title": "Alpha (Provider)", "primaryType": "album", "year": 1999,
                 "firstReleaseDate": "1999-05-01", "genres": ["Provider Genre"], "popularity": 7.0,
                 "artists": [{"name": "Ana", "id": ARTIST, "sortName": "Ana"}], "mediaType": "album"}),
         );
-        f.children.lock().unwrap().insert(
+        f.children.lock_clean().insert(
             GROUP.into(),
             vec![
                 json!({"externalId": RELEASE, "title": "Alpha", "country": "FR", "trackCount": 3}),
             ],
         );
         f.editions
-            .lock()
-            .unwrap()
+            .lock_clean()
             .insert(RELEASE.into(), edition_release(RELEASE, tracklist()));
-        let mut h = f.holders.lock().unwrap();
+        let mut h = f.holders.lock_clean();
         for rec in [
             "11111111-1111-4111-8111-111111111111",
             "11111111-1111-4111-8111-111111111112",
@@ -5210,7 +5210,7 @@ mod music_ingest {
             lang: Some("en".into()),
             source_ref: Some("42".into()),
         };
-        *fake.lyrics.lock().unwrap() = Some(Some(hit.clone()));
+        *fake.lyrics.lock_clean() = Some(Some(hit.clone()));
         let c = ctx_music(pool, Some(fake.clone())).await;
         let l = album_lib(&c).await;
         let m = album(&c, l, "Alpha").await;
@@ -5240,9 +5240,9 @@ mod music_ingest {
             .execute(&c.st.db)
             .await
             .unwrap();
-        *fake.lyrics.lock().unwrap() = Some(None);
+        *fake.lyrics.lock_clean() = Some(None);
         call(&c, "POST", &fetch, &c.admin, json!({})).await;
-        *fake.lyrics.lock().unwrap() = Some(Some(hit));
+        *fake.lyrics.lock_clean() = Some(Some(hit));
         let (_, v) = call(&c, "POST", &fetch, &c.admin, json!({})).await;
         assert_eq!(v["structuredLyrics"].as_array().unwrap().len(), 0);
         assert_eq!(asked(&fake), 2);
@@ -5255,8 +5255,8 @@ mod music_ingest {
         pool: PgPool,
     ) {
         let fake = Arc::new(MusicFake::default());
-        *fake.key.lock().unwrap() = Namespace::parse("fliks.lrclib:lrclib");
-        *fake.lyrics.lock().unwrap() = Some(Some(crate::metadata::LyricsHit {
+        *fake.key.lock_clean() = Namespace::parse("fliks.lrclib:lrclib");
+        *fake.lyrics.lock_clean() = Some(Some(crate::metadata::LyricsHit {
             format: "lrc".into(),
             document: "[00:01.00]hello\n[00:02.00]world".into(),
             instrumental: false,
@@ -5360,7 +5360,7 @@ mod music_ingest {
     #[sqlx::test(migrations = false)]
     async fn the_sweep_retries_a_provider_error_and_leaves_a_cached_miss(pool: PgPool) {
         let fake = Arc::new(MusicFake::default());
-        *fake.lyrics.lock().unwrap() = Some(None);
+        *fake.lyrics.lock_clean() = Some(None);
         fake.lyrics_down
             .store(true, std::sync::atomic::Ordering::SeqCst);
         let c = ctx_music(pool, Some(fake.clone())).await;
@@ -5771,7 +5771,7 @@ mod music_ingest {
         };
         // A shrunk tracklist flags the track the release dropped.
         {
-            let mut e = f.editions.lock().unwrap();
+            let mut e = f.editions.lock_clean();
             let v = e.get_mut(RELEASE).unwrap();
             v["tracks"].as_array_mut().unwrap().pop();
         }
@@ -5786,8 +5786,7 @@ mod music_ingest {
         );
         // The track comes back with the release.
         f.editions
-            .lock()
-            .unwrap()
+            .lock_clean()
             .insert(RELEASE.into(), edition_release(RELEASE, tracklist()));
         meta::refresh(&c.st, m, Priority::Background).await.unwrap();
         assert_eq!(
@@ -5795,7 +5794,7 @@ mod music_ingest {
             0
         );
         // A 404 flags the album and removes nothing.
-        f.works.lock().unwrap().clear();
+        f.works.lock_clean().clear();
         assert!(meta::refresh(&c.st, m, Priority::Background).await.unwrap());
         assert_eq!(
             orphans(r#"SELECT count(*) FROM album_details WHERE "orphanedAt" IS NOT NULL"#).await,
@@ -5804,17 +5803,10 @@ mod music_ingest {
         assert_eq!(count(&c, "SELECT count(*) FROM items").await, items);
         assert_eq!(count(&c, "SELECT count(*) FROM editions").await, 1);
         // A merged id: the provider answers another id for the release; the old one becomes an alias.
-        let w = provider()
-            .works
-            .lock()
-            .unwrap()
-            .get(GROUP)
-            .cloned()
-            .unwrap();
-        f.works.lock().unwrap().insert(GROUP.into(), w);
+        let w = provider().works.lock_clean().get(GROUP).cloned().unwrap();
+        f.works.lock_clean().insert(GROUP.into(), w);
         f.editions
-            .lock()
-            .unwrap()
+            .lock_clean()
             .insert(RELEASE.into(), edition_release(MERGED, tracklist()));
         meta::refresh(&c.st, m, Priority::Background).await.unwrap();
         let live: String = sqlx::query_scalar(
@@ -5933,8 +5925,7 @@ mod music_ingest {
     async fn a_search_applies_a_close_release_and_offers_a_far_one_for_review(pool: PgPool) {
         let f = provider();
         f.found
-            .lock()
-            .unwrap()
+            .lock_clean()
             .push(json!({"externalId": GROUP, "title": "Alpha", "year": 1999,
             "artists": [{"name": "Ana"}], "mediaType": "album"}));
         let c = ctx_music(pool, Some(f.clone())).await;
@@ -6144,8 +6135,7 @@ mod music_ingest {
     ) {
         let f = provider();
         f.editions
-            .lock()
-            .unwrap()
+            .lock_clean()
             .insert(MERGED.into(), edition_release(RELEASE, tracklist()));
         let c = ctx_music(pool, Some(f)).await;
         let l = album_lib(&c).await;
@@ -6332,8 +6322,7 @@ mod music_ingest {
     async fn the_candidates_of_an_album_are_listed_without_applying_any(pool: PgPool) {
         let f = provider();
         f.found
-            .lock()
-            .unwrap()
+            .lock_clean()
             .push(json!({"externalId": GROUP, "title": "Alpha", "year": 1999,
             "artists": [{"name": "Ana"}], "mediaType": "album"}));
         let c = ctx_music(pool, Some(f)).await;
@@ -6388,8 +6377,7 @@ mod music_ingest {
     async fn an_album_is_never_folded_into_another_librarys(pool: PgPool) {
         let f = provider();
         f.found
-            .lock()
-            .unwrap()
+            .lock_clean()
             .push(json!({"externalId": GROUP, "title": "Alpha", "year": 1999,
             "artists": [{"name": "Ana"}], "mediaType": "album"}));
         let c = ctx_music(pool, Some(f)).await;
@@ -6450,8 +6438,7 @@ mod music_ingest {
     async fn a_release_the_found_group_does_not_list_falls_back_to_the_search(pool: PgPool) {
         let f = provider();
         f.found
-            .lock()
-            .unwrap()
+            .lock_clean()
             .push(json!({"externalId": GROUP, "title": "Alpha", "year": 1999,
             "artists": [{"name": "Ana"}], "mediaType": "album"}));
         let c = ctx_music(pool, Some(f.clone())).await;
@@ -6490,8 +6477,7 @@ mod music_ingest {
     async fn a_manual_pick_matches_the_files_to_a_release(pool: PgPool) {
         let f = provider();
         f.found
-            .lock()
-            .unwrap()
+            .lock_clean()
             .push(json!({"externalId": GROUP, "title": "Alpha", "year": 1999,
             "artists": [{"name": "Ana"}], "mediaType": "album"}));
         let c = ctx_music(pool, Some(f)).await;

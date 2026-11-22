@@ -82,6 +82,8 @@ pub struct Outbound {
     pub plugin_id: Arc<str>,
     pub internal: bool,
     pub net: Arc<dyn Net>,
+    /// This server's own listener ports, refused on loopback even with `network.internal`.
+    pub own_ports: Arc<[u16]>,
     pub permits: Arc<Semaphore>,
     /// Set for a plugin with a `provider` block (`provider-plugins.md` rule 54): one limiter and breaker per
     /// upstream host.
@@ -113,6 +115,7 @@ impl WasiHttpHooks for Outbound {
     ) -> Box<dyn Future<Output = Sent> + Send> {
         drop(fut);
         let net = self.net.clone();
+        let own_ports = self.own_ports.clone();
         let id = self.plugin_id.clone();
         let permits = self.permits.clone();
         let gate = self.gate.clone();
@@ -128,7 +131,8 @@ impl WasiHttpHooks for Outbound {
             // The call's deadline aborts a guest still queued here, like any other host wait.
             let permit = Arc::new(permits.acquire_owned().await.expect("never closed"));
             let Some(gate) = gate else {
-                let (res, io) = send(net, id, internal, request, options, permit).await?;
+                let (res, io) =
+                    send(net, own_ports, id, internal, request, options, permit).await?;
                 return Ok((res.map(BodyExt::boxed_unsync), Box::new(io) as IoFuture));
             };
             let (parts, body) = request.into_parts();
@@ -150,13 +154,16 @@ impl WasiHttpHooks for Outbound {
                 *req.uri_mut() = parts.uri.clone();
                 *req.version_mut() = parts.version;
                 *req.headers_mut() = parts.headers.clone();
-                let (net, id, permit) = (net.clone(), id.clone(), permit.clone());
+                let (net, ports, id, permit) =
+                    (net.clone(), own_ports.clone(), id.clone(), permit.clone());
                 let limit = gate.timeout;
                 async move {
-                    let sent =
-                        tokio::time::timeout(limit, send(net, id, internal, req, options, permit))
-                            .await
-                            .map_err(|_| Error::ConnectionTimeout)??;
+                    let sent = tokio::time::timeout(
+                        limit,
+                        send(net, ports, id, internal, req, options, permit),
+                    )
+                    .await
+                    .map_err(|_| Error::ConnectionTimeout)??;
                     let (res, io) = sent;
                     let retry_after_ms = res
                         .headers()
@@ -784,15 +791,16 @@ impl Override {
 /// The addresses a guest request may connect to, or the `wasi:http` error it sees.
 pub async fn vet(
     net: &dyn Net,
+    own_ports: &[u16],
     id: &str,
     internal: bool,
     host: &str,
     port: u16,
 ) -> Result<Vec<SocketAddr>, Error> {
-    guard::vet(net, host, port, internal)
+    guard::vet(net, host, port, internal, own_ports)
         .await
         .map_err(|r| match r {
-            Refused::Address(class) => {
+            Refused::Address(class, _) => {
                 tracing::warn!(
                     "plugin \"{id}\" outbound refused: {host} resolves to {class} address"
                 );
@@ -819,6 +827,7 @@ const BETWEEN_BYTES: Duration = Duration::from_secs(60);
 
 async fn send(
     net: Arc<dyn Net>,
+    own_ports: Arc<[u16]>,
     id: Arc<str>,
     internal: bool,
     mut req: http::Request<WasiBody>,
@@ -847,7 +856,7 @@ async fn send(
     let first_byte = pick(|o| o.first_byte_timeout, FIRST_BYTE);
     let between = pick(|o| o.between_bytes_timeout, BETWEEN_BYTES).max(Duration::new(0, 1));
 
-    let addrs = vet(&*net, &id, internal, &host, port).await?;
+    let addrs = vet(&*net, &own_ports, &id, internal, &host, port).await?;
     let mut last = None;
     let mut stream = None;
     for a in addrs {
@@ -983,7 +992,7 @@ mod tests {
         }
 
         fn sleep(&self, ms: u64) -> BoxFuture<'_, ()> {
-            self.sleeps.lock().unwrap().push(ms);
+            self.sleeps.lock_clean().push(ms);
             self.now.fetch_add(ms, Ordering::Relaxed);
             Box::pin(std::future::ready(()))
         }
@@ -1032,11 +1041,11 @@ mod tests {
     }
 
     fn sleeps(c: &Fake) -> Vec<u64> {
-        c.sleeps.lock().unwrap().clone()
+        c.sleeps.lock_clean().clone()
     }
 
     fn failures(g: &Gate) -> u32 {
-        g.breaker.lock().unwrap().failures
+        g.breaker.lock_clean().failures
     }
 
     fn hits(h: &AtomicU32) -> u32 {
@@ -1179,7 +1188,7 @@ mod tests {
         g.record_checked(false);
         assert_eq!(failures(&g), 0);
         g.record_checked(false);
-        assert!(!g.breaker.lock().unwrap().allow(clock.now_ms()));
+        assert!(!g.breaker.lock_clean().allow(clock.now_ms()));
     }
 
     #[tokio::test]
@@ -1363,7 +1372,7 @@ mod tests {
         assert!(matches!(&d, Done::Refused(r) if r.status == 503));
         assert_eq!(hits(&h), 3);
         // the fourth burst token is still there: three calls took three
-        assert!(g.limiter.lock().unwrap().take(0, 0, Interactive).is_ok());
+        assert!(g.limiter.lock_clean().take(0, 0, Interactive).is_ok());
     }
 
     #[tokio::test]
@@ -1377,7 +1386,7 @@ mod tests {
 
     async fn ok_after(g: &Gate, queued: Option<&Arc<RateWait>>, done: &Mutex<Vec<u8>>, n: u8) {
         let attempt = || async {
-            done.lock().unwrap().push(n);
+            done.lock_clean().push(n);
             Ok::<_, ()>(Reply {
                 status: 200,
                 retry_after_ms: None,
@@ -1405,7 +1414,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(80)).await;
         ok_after(&g, None, &done, 2).await;
         early.await.unwrap();
-        assert_eq!(*done.lock().unwrap(), [0, 1, 2]);
+        assert_eq!(*done.lock_clean(), [0, 1, 2]);
     }
 
     #[tokio::test]
@@ -1525,7 +1534,7 @@ mod tests {
         for (n, replayable) in [(3, true), (MAX_REPLAY, true), (MAX_REPLAY + 1, false)] {
             let rec = Arc::new(Mutex::new(Recorded::default()));
             Tee::new(body(n), rec.clone()).collect().await.unwrap();
-            let rec = rec.lock().unwrap();
+            let rec = rec.lock_clean();
             assert_eq!(rec.replayable(), replayable, "{n} bytes");
             assert_eq!(rec.buf.len(), if replayable { n } else { 0 });
         }
@@ -1559,8 +1568,7 @@ mod tests {
                     let n = s.read(&mut chunk).await.unwrap();
                     buf.extend_from_slice(&chunk[..n]);
                 }
-                log.lock()
-                    .unwrap()
+                log.lock_clean()
                     .push(String::from_utf8_lossy(&buf[split..]).into_owned());
                 let extra = if after.is_empty() {
                     String::new()
@@ -1581,6 +1589,7 @@ mod tests {
             plugin_id: "p".into(),
             internal: true,
             net: Arc::new(crate::net::guard::SystemNet::new()),
+            own_ports: Arc::default(),
             permits: Arc::new(Semaphore::new(4)),
             gate,
             last: None,
@@ -1609,11 +1618,11 @@ mod tests {
         let mut h = hook(Some(Arc::new(Gates::of("127.0.0.1", g))));
         let (port, seen) = serve(&[(429, "2")]).await;
         assert_eq!(post(&mut h, port, 3).await, 200);
-        assert_eq!(*seen.lock().unwrap(), ["aaa", "aaa"]);
+        assert_eq!(*seen.lock_clean(), ["aaa", "aaa"]);
         assert_eq!(sleeps(&clock), [2_000]);
         let (port, seen) = serve(&[(429, "1")]).await;
         assert_eq!(post(&mut h, port, MAX_REPLAY + 1).await, 429);
-        assert_eq!(seen.lock().unwrap().len(), 1);
+        assert_eq!(seen.lock_clean().len(), 1);
     }
 
     #[tokio::test]
@@ -1633,7 +1642,7 @@ mod tests {
         let io: IoFuture = Box::new(std::future::ready(Ok(())));
         let sent = Box::into_pin(h.send_request(req, None, io)).await;
         assert_eq!(sent.unwrap().0.status().as_u16(), 200);
-        assert_eq!(seen.lock().unwrap().len(), 2);
+        assert_eq!(seen.lock_clean().len(), 2);
     }
 
     #[tokio::test]
@@ -1641,7 +1650,7 @@ mod tests {
         let mut h = hook(None);
         let (port, seen) = serve(&[(429, "2")]).await;
         assert_eq!(post(&mut h, port, 3).await, 429);
-        assert_eq!(seen.lock().unwrap().len(), 1);
+        assert_eq!(seen.lock_clean().len(), 1);
     }
 
     #[tokio::test]
@@ -1651,7 +1660,7 @@ mod tests {
         let mut h = hook(Some(Arc::new(Gates::of("127.0.0.1", g))));
         let (port, seen) = serve(&[]).await;
         assert_eq!(post(&mut h, port, 3).await, 429);
-        assert!(seen.lock().unwrap().is_empty());
+        assert!(seen.lock_clean().is_empty());
         // the plugin echoing this 429 as `rate-limited` must not pause the gate again
         assert!(h.last_refused.load(Ordering::SeqCst));
     }

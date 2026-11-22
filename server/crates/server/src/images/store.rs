@@ -288,7 +288,7 @@ impl ImageStore {
         if !internal && !self.listed(&host) {
             return Err("host not allowed".into());
         }
-        let addrs = guard::vet(&*self.dns, &host, port, internal)
+        let addrs = guard::vet(&*self.dns, &host, port, internal, &[])
             .await
             .map_err(|e| format!("address refused: {e:?}"))?;
         if !over
@@ -1204,7 +1204,7 @@ mod tests {
         let lan = format!("http://lan.test:{port}/f/poster.jpg");
         assert_eq!(
             s.download(&lan, false).await.unwrap_err(),
-            "address refused: Address(\"private\")"
+            "address refused: Address(\"private\", 192.168.1.50)"
         );
         // a redirect keeps to the list
         let hop = format!("http://cdn.test:{port}/to-other");

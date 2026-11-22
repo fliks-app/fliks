@@ -15,6 +15,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{delete, get, post},
 };
+use fliks_domain::js::parse_int;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -68,20 +69,6 @@ pub fn router() -> Router<AppState> {
 
 fn param<'a>(q: &'a [(String, String)], key: &str) -> Option<&'a str> {
     q.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
-}
-
-/// JS `parseInt(s, 10)`: `None` for NaN.
-fn parse_int(s: &str) -> Option<i64> {
-    let s = s.trim_start();
-    let (neg, digits) = match s.strip_prefix('-') {
-        Some(r) => (true, r),
-        None => (false, s.strip_prefix('+').unwrap_or(s)),
-    };
-    let end = digits
-        .find(|c: char| !c.is_ascii_digit())
-        .unwrap_or(digits.len());
-    let n: i64 = digits[..end].parse().ok()?;
-    Some(if neg { -n } else { n })
 }
 
 /// JS `Number(s) || default`, then `clamp`; a fractional result is a 400.

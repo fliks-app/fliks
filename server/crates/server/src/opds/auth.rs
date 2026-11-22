@@ -1,9 +1,8 @@
 //! The OPDS credential (`docs/spec/opds.md` rules 1-3): a Basic device token of kind `opds`.
 use crate::{
-    auth::client_ip,
     device_tokens::{self, Reject},
     engine::resolve::basic,
-    http::auth::Authed,
+    http::{auth::Authed, client_ip},
     state::AppState,
 };
 use axum::{

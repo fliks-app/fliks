@@ -9,9 +9,8 @@ mod sync;
 pub use sync::WINDOW as SCAN_WINDOW;
 
 use crate::{
-    auth::client_ip,
     device_tokens::{self, Reject},
-    http::{AppError, auth::Authed, cookies::is_secure},
+    http::{AppError, auth::Authed, client_ip},
     libraries::accessible_library_ids,
     state::AppState,
 };
@@ -99,16 +98,6 @@ pub fn original_path(p: &Parts) -> String {
         .to_owned()
 }
 
-/// `http(s)://host` of the request as the device reached it.
-fn base_of(h: &HeaderMap) -> String {
-    let host = ["x-forwarded-host", "host"]
-        .iter()
-        .find_map(|k| h.get(*k).and_then(|v| v.to_str().ok()))
-        .and_then(|v| v.split(',').next())
-        .map_or("localhost", str::trim);
-    format!("{}://{host}", if is_secure(h) { "https" } else { "http" })
-}
-
 impl FromRequestParts<AppState> for Kobo {
     type Rejection = Reject;
 
@@ -140,7 +129,7 @@ impl FromRequestParts<AppState> for Kobo {
             a,
             token_id,
             token,
-            base: base_of(&parts.headers),
+            base: crate::http::request_origin(&parts.headers),
             acl,
         })
     }

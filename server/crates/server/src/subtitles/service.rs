@@ -4,7 +4,7 @@ use super::{
     model::{self, Inserted, New},
     providers::{Provider, Query, redact},
 };
-use crate::{http::AppError, state::AppState};
+use crate::{http::AppError, settings, state::AppState};
 use chrono::{DateTime, Utc};
 use fliks_domain::{
     language::normalize_language_code,
@@ -141,16 +141,9 @@ pub async fn search(st: &AppState, s: &Search) -> Result<Vec<Scored>, AppError> 
     ))
 }
 
-pub async fn flag_on(st: &AppState, key: &str) -> Result<bool, AppError> {
-    Ok(crate::settings::setting_value(&st.db, key)
-        .await?
-        .as_deref()
-        == Some("true"))
-}
-
 pub async fn clean_options(st: &AppState, ads: bool) -> Result<CleanOptions, AppError> {
-    let remove_hi_tags = flag_on(st, "subtitle_remove_hi_tags").await?;
-    let exclusions = crate::settings::setting_value(&st.db, "subtitle_custom_exclusions")
+    let remove_hi_tags = settings::flag(&st.db, "subtitle_remove_hi_tags", false).await;
+    let exclusions = settings::text(&st.db, "subtitle_custom_exclusions")
         .await?
         .unwrap_or_default();
     let custom_exclusions: Vec<String> = exclusions
