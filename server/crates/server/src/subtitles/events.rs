@@ -1,6 +1,5 @@
 //! `subtitle.*` events go to the media's viewers and their notifications and Emby refreshes.
 use crate::{events::SseEvent, state::AppState};
-use serde_json::{Map, Value};
 
 /// Enabled users who can see the media's library, plus those who see every library.
 pub async fn viewers_for_media(st: &AppState, media_id: i32) -> Vec<i32> {
@@ -36,13 +35,4 @@ pub async fn list_changed(st: &AppState, media_id: i32) {
         },
     )
     .await;
-}
-
-/// `NotificationsService.dispatch`: never raises.
-pub async fn notify(st: &AppState, event: &str, payload: Value) {
-    let Value::Object(map) = payload else { return };
-    let map: Map<String, Value> = map;
-    if let Err(e) = crate::notifications::dispatch(&st.db, event, &map).await {
-        tracing::warn!(event, error = %e, "notification dispatch");
-    }
 }

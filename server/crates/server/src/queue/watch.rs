@@ -119,9 +119,7 @@ async fn sweep(
             }
             _ => continue,
         };
-        if let Err(e) = notifications::dispatch(&st.db, event, &p).await {
-            tracing::warn!("notification {event} not sent: {e}");
-        }
+        notifications::dispatch(&st.db, event, p);
     }
     Ok(latest)
 }

@@ -949,7 +949,7 @@ async fn parity() {
     let target = env("PARITY_TARGET", "http://127.0.0.1:4849");
     let record = env("PARITY_RECORD", "") == "1";
     let filter = env("PARITY_FILTER", "");
-    let http = Client::new();
+    let http = fliks_server::net::guard::open_builder().build().unwrap();
     let (db, base_tpl) = (
         env("PARITY_DB", "fliks_parity"),
         env("PARITY_TPL", "fliks_parity_tpl"),

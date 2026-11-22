@@ -23,7 +23,7 @@ use fliks_domain::livetv::sync::{
     account_state, classify_entries, plan_upsert,
 };
 use serde::Serialize;
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Transaction};
 
 /// A refresh returning less than this share of the known lineup is a truncated response.
@@ -561,22 +561,11 @@ fn notify_account(
         AccountState::Expiring => "livetv.account_expiring",
         AccountState::Ok => return,
     };
-    dispatch(
-        st,
+    notifications::dispatch(
+        &st.db,
         event,
         json!({"sourceName": source.name, "expiresAt": expires.map(iso)}),
     );
-}
-
-/// Fire and forget: a failing sender never touches the sync.
-pub fn dispatch(st: &AppState, event: &'static str, payload: Value) {
-    let db = st.db.clone();
-    tokio::spawn(async move {
-        let map: Map<String, Value> = payload.as_object().cloned().unwrap_or_default();
-        if let Err(e) = notifications::dispatch(&db, event, &map).await {
-            tracing::warn!("notification {event} not sent: {e}");
-        }
-    });
 }
 
 async fn adult_guard(st: &AppState, source: &Source, groups: Vec<String>) {
@@ -587,8 +576,8 @@ async fn adult_guard(st: &AppState, source: &Source, groups: Vec<String>) {
                 "Adult-group restriction pass failed for \"{}\": {e}",
                 source.name
             );
-            dispatch(
-                st,
+            notifications::dispatch(
+                &st.db,
                 "livetv.adult_guard_failed",
                 json!({"sourceName": source.name}),
             );

@@ -42,7 +42,7 @@ pub fn store_cover(id: &str, w: &str, h: &str) -> Response {
 fn client() -> &'static Client {
     static C: OnceLock<Client> = OnceLock::new();
     C.get_or_init(|| {
-        Client::builder()
+        crate::net::guard::open_builder()
             .redirect(redirect::Policy::none())
             .build()
             .expect("store client")

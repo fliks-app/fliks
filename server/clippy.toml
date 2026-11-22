@@ -1,0 +1,4 @@
+disallowed-methods = [
+  { path = "reqwest::Client::builder", reason = "build outbound clients through net::guard (open_builder, or client_builder to pin vetted addresses)", allow-invalid = true },
+  { path = "reqwest::Client::new", reason = "build outbound clients through net::guard (open_builder, or client_builder to pin vetted addresses)", allow-invalid = true },
+]

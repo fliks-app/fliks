@@ -1,6 +1,6 @@
 //! The outbound guard (`plugins.md` "Outbound HTTP guard"): one lookup, every address
 //! vetted by `fliks_domain::net`, the connection made to the vetted addresses.
-use fliks_domain::net::{Class, classify};
+use fliks_domain::net::{Class, classify, is_loopback_or_metadata, is_metadata};
 use futures_util::future::BoxFuture;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
@@ -64,9 +64,16 @@ impl Net for SystemNet {
     }
 }
 
-/// The one client builder of the guard: no proxy, which would dial instead of the pinned addresses.
+/// The builder of a client that pins vetted addresses: no proxy, which would dial instead of them.
 pub fn client_builder() -> reqwest::ClientBuilder {
-    reqwest::Client::builder().no_proxy()
+    open_builder().no_proxy()
+}
+
+/// The builder of a client to a destination the operator or the app fixes, proxy environment honoured.
+/// The only `reqwest::Client::builder` of the crate (`clippy.toml`).
+#[allow(clippy::disallowed_methods)]
+pub fn open_builder() -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
 }
 
 pub fn system() -> Arc<dyn Net> {
@@ -78,7 +85,7 @@ pub fn system() -> Arc<dyn Net> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Refused {
     /// One address of the answer is in a refused class (`class` names it).
-    Address(&'static str),
+    Address(&'static str, IpAddr),
     /// Not found, or no address: final.
     NotFound,
     /// Any other resolver failure.
@@ -94,12 +101,14 @@ fn not_found(e: &io::Error) -> bool {
         || m.contains("nodename nor servname")
 }
 
-/// Resolves once and vets every address; an IP literal is vetted as is.
+/// Resolves once and vets every address; an IP literal is vetted as is. A metadata address is refused
+/// always, loopback on `own_ports` (this server's listeners) even when `internal` lifts the private class.
 pub async fn vet(
     net: &dyn Net,
     host: &str,
     port: u16,
     internal: bool,
+    own_ports: &[u16],
 ) -> Result<Vec<SocketAddr>, Refused> {
     let addrs = match host.parse::<IpAddr>() {
         Ok(ip) => vec![SocketAddr::new(ip, port)],
@@ -114,10 +123,46 @@ pub async fn vet(
         return Err(Refused::NotFound);
     }
     for a in &addrs {
-        let class = classify(a.ip());
+        let ip = a.ip();
+        let class = classify(ip);
+        if is_metadata(ip) {
+            return Err(Refused::Address("metadata", ip));
+        }
         if class == Class::Refused || (class == Class::Private && !internal) {
-            return Err(Refused::Address(class.name()));
+            return Err(Refused::Address(class.name(), ip));
+        }
+        if own_ports.contains(&a.port()) && is_loopback_or_metadata(ip) {
+            return Err(Refused::Address("own", ip));
         }
     }
     Ok(addrs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn internal_lifts_the_private_class_but_not_metadata_or_own_ports() {
+        let net = SystemNet::new();
+        let ok = |h: &'static str, p| vet(&net, h, p, true, &[4849]);
+        assert!(ok("127.0.0.1", 8080).await.is_ok());
+        assert!(matches!(
+            ok("127.0.0.1", 4849).await,
+            Err(Refused::Address("own", _))
+        ));
+        assert!(matches!(
+            ok("::1", 4849).await,
+            Err(Refused::Address("own", _))
+        ));
+        assert!(matches!(
+            ok("100.100.100.200", 80).await,
+            Err(Refused::Address("metadata", _))
+        ));
+        assert!(matches!(
+            ok("fd00:ec2::254", 80).await,
+            Err(Refused::Address("metadata", _))
+        ));
+        assert!(ok("192.168.1.5", 4849).await.is_ok());
+    }
 }

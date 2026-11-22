@@ -493,12 +493,11 @@ pub async fn do_sync(st: &AppState, id: i32, o: &Options) -> Result<(), String> 
         .execute(&st.db)
         .await
         .map_err(|e| e.to_string())?;
-    events::notify(
-        st,
+    crate::notifications::dispatch(
+        &st.db,
         "subtitle.synced",
         json!({"language": row.language, "subtitleId": id}),
-    )
-    .await;
+    );
     events::emit(
         st,
         media.id,

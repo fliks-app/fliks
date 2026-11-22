@@ -2,7 +2,7 @@
 //! Errors never carry the request URL, userinfo or query.
 use crate::vetted;
 use reqwest::{
-    Client, ClientBuilder, Response, StatusCode, Url,
+    ClientBuilder, Response, StatusCode, Url,
     header::{
         ETAG, HeaderMap, IF_MODIFIED_SINCE, IF_NONE_MATCH, LAST_MODIFIED, REFERER, USER_AGENT,
     },
@@ -131,7 +131,7 @@ pub fn target_of(url: &Url) -> String {
 }
 
 fn builder(idle: Duration) -> ClientBuilder {
-    Client::builder()
+    crate::net::guard::open_builder()
         .connect_timeout(idle)
         .read_timeout(idle)
         .gzip(true)

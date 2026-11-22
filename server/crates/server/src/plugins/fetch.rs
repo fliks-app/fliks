@@ -82,7 +82,7 @@ impl Fetcher {
             .trim_end_matches(']')
             .to_owned();
         let port = url.port_or_known_default().unwrap_or(443);
-        let addrs = guard::vet(&*self.net, &host, port, false).await?;
+        let addrs = guard::vet(&*self.net, &host, port, false, &[]).await?;
         #[cfg(any(test, feature = "parity"))]
         let addrs: Vec<_> = addrs.into_iter().map(|a| self.net.route(a)).collect();
         Ok(self

@@ -194,6 +194,7 @@ pub fn options(
             port: opts.get_port(),
             dbname: s.name.clone(),
         },
+        own_ports: Arc::default(),
         tune: Some(Arc::new(move |c: &mut HostConfig| {
             c.compiler = crate::server_bin();
             c.compile_cache = Some(compile_cache_dir());

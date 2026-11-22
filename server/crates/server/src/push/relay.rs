@@ -131,7 +131,7 @@ impl Relay {
         let seed: [u8; 32] = super::identity::unhex(seed_hex)
             .and_then(|b| b.try_into().ok())
             .ok_or("bad relay seed")?;
-        let http = reqwest::Client::builder()
+        let http = crate::net::guard::open_builder()
             .timeout(TIMEOUT)
             .redirect(reqwest::redirect::Policy::none())
             .user_agent("fliks-server")

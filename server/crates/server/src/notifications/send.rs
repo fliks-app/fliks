@@ -4,28 +4,18 @@ use fliks_domain::notifications::{Body, build_request};
 use reqwest::header::CONTENT_TYPE;
 use serde_json::{Map, Value};
 use sqlx::PgPool;
-use std::{error::Error, sync::OnceLock, time::Duration};
+use std::time::Duration;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-fn client() -> &'static reqwest::Client {
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    CLIENT.get_or_init(|| reqwest::Client::builder().build().expect("reqwest client"))
-}
-
-/// Error text without the request URL: the gotify token and the webhook secret travel in it.
+/// The `test` message names no host, port or resolver answer: it must not map the network behind a URL.
 fn describe(e: reqwest::Error) -> String {
+    let e = e.without_url();
+    tracing::debug!("notification transport error: {e:?}");
     if e.is_timeout() {
         return format!("timeout of {}ms exceeded", TIMEOUT.as_millis());
     }
-    let e = e.without_url();
-    let mut text = e.to_string();
-    let mut source = e.source();
-    while let Some(s) = source {
-        text = format!("{text}: {s}");
-        source = s.source();
-    }
-    text
+    "Could not reach the endpoint".to_owned()
 }
 
 /// `send` of the spec (rule 14): the error is the `test` response message.
@@ -50,7 +40,7 @@ async fn deliver(
         tracing::warn!("Unknown notification type: {}", conn.typ);
         return Ok(());
     };
-    let mut r = client().post(req.url).timeout(TIMEOUT);
+    let mut r = crate::outbound::client().post(req.url).timeout(TIMEOUT);
     for (k, v) in req.headers {
         r = r.header(k, v);
     }
@@ -68,14 +58,20 @@ async fn deliver(
     }
 }
 
-/// Sends to every enabled connection subscribed to `event`; returns once all settled, a failing
-/// sender affects neither the others nor the result.
-pub async fn dispatch(
-    pool: &PgPool,
-    event: &str,
-    payload: &Map<String, Value>,
-) -> sqlx::Result<()> {
-    let conns = db::subscribed(pool, event).await?;
-    futures_util::future::join_all(conns.iter().map(|c| send(c, event, payload))).await;
-    Ok(())
+/// Spawned: sends to every enabled connection subscribed to `event`. A failing sender affects
+/// neither the others nor the caller, and everything that fails is logged.
+pub fn dispatch(pool: &PgPool, event: &str, payload: impl Into<Value>) {
+    let Value::Object(payload) = payload.into() else {
+        return;
+    };
+    let (pool, event) = (pool.clone(), event.to_owned());
+    tokio::spawn(async move {
+        match db::subscribed(&pool, &event).await {
+            Ok(conns) => {
+                futures_util::future::join_all(conns.iter().map(|c| send(c, &event, &payload)))
+                    .await;
+            }
+            Err(e) => tracing::warn!("notification {event} not sent: {e}"),
+        }
+    });
 }

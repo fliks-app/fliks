@@ -440,9 +440,8 @@ impl host::Host for Ctx {
                 else {
                     return Err(host_err("ERR_VALIDATION", "payload must be an object"));
                 };
-                crate::notifications::dispatch(&app.db, "grab.started", &map)
-                    .await
-                    .map_err(db_err)
+                crate::notifications::dispatch(&app.db, "grab.started", map);
+                Ok(())
             }
         )
     }

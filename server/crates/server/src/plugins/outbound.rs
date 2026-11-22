@@ -82,6 +82,8 @@ pub struct Outbound {
     pub plugin_id: Arc<str>,
     pub internal: bool,
     pub net: Arc<dyn Net>,
+    /// This server's own listener ports, refused on loopback even with `network.internal`.
+    pub own_ports: Arc<[u16]>,
     pub permits: Arc<Semaphore>,
     /// Set for a plugin with a `provider` block (`provider-plugins.md` rule 54): one limiter and breaker per
     /// upstream host.
@@ -113,6 +115,7 @@ impl WasiHttpHooks for Outbound {
     ) -> Box<dyn Future<Output = Sent> + Send> {
         drop(fut);
         let net = self.net.clone();
+        let own_ports = self.own_ports.clone();
         let id = self.plugin_id.clone();
         let permits = self.permits.clone();
         let gate = self.gate.clone();
@@ -128,7 +131,8 @@ impl WasiHttpHooks for Outbound {
             // The call's deadline aborts a guest still queued here, like any other host wait.
             let permit = Arc::new(permits.acquire_owned().await.expect("never closed"));
             let Some(gate) = gate else {
-                let (res, io) = send(net, id, internal, request, options, permit).await?;
+                let (res, io) =
+                    send(net, own_ports, id, internal, request, options, permit).await?;
                 return Ok((res.map(BodyExt::boxed_unsync), Box::new(io) as IoFuture));
             };
             let (parts, body) = request.into_parts();
@@ -150,13 +154,16 @@ impl WasiHttpHooks for Outbound {
                 *req.uri_mut() = parts.uri.clone();
                 *req.version_mut() = parts.version;
                 *req.headers_mut() = parts.headers.clone();
-                let (net, id, permit) = (net.clone(), id.clone(), permit.clone());
+                let (net, ports, id, permit) =
+                    (net.clone(), own_ports.clone(), id.clone(), permit.clone());
                 let limit = gate.timeout;
                 async move {
-                    let sent =
-                        tokio::time::timeout(limit, send(net, id, internal, req, options, permit))
-                            .await
-                            .map_err(|_| Error::ConnectionTimeout)??;
+                    let sent = tokio::time::timeout(
+                        limit,
+                        send(net, ports, id, internal, req, options, permit),
+                    )
+                    .await
+                    .map_err(|_| Error::ConnectionTimeout)??;
                     let (res, io) = sent;
                     let retry_after_ms = res
                         .headers()
@@ -784,15 +791,16 @@ impl Override {
 /// The addresses a guest request may connect to, or the `wasi:http` error it sees.
 pub async fn vet(
     net: &dyn Net,
+    own_ports: &[u16],
     id: &str,
     internal: bool,
     host: &str,
     port: u16,
 ) -> Result<Vec<SocketAddr>, Error> {
-    guard::vet(net, host, port, internal)
+    guard::vet(net, host, port, internal, own_ports)
         .await
         .map_err(|r| match r {
-            Refused::Address(class) => {
+            Refused::Address(class, _) => {
                 tracing::warn!(
                     "plugin \"{id}\" outbound refused: {host} resolves to {class} address"
                 );
@@ -819,6 +827,7 @@ const BETWEEN_BYTES: Duration = Duration::from_secs(60);
 
 async fn send(
     net: Arc<dyn Net>,
+    own_ports: Arc<[u16]>,
     id: Arc<str>,
     internal: bool,
     mut req: http::Request<WasiBody>,
@@ -847,7 +856,7 @@ async fn send(
     let first_byte = pick(|o| o.first_byte_timeout, FIRST_BYTE);
     let between = pick(|o| o.between_bytes_timeout, BETWEEN_BYTES).max(Duration::new(0, 1));
 
-    let addrs = vet(&*net, &id, internal, &host, port).await?;
+    let addrs = vet(&*net, &own_ports, &id, internal, &host, port).await?;
     let mut last = None;
     let mut stream = None;
     for a in addrs {
@@ -1581,6 +1590,7 @@ mod tests {
             plugin_id: "p".into(),
             internal: true,
             net: Arc::new(crate::net::guard::SystemNet::new()),
+            own_ports: Arc::default(),
             permits: Arc::new(Semaphore::new(4)),
             gate,
             last: None,

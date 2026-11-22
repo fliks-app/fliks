@@ -100,7 +100,7 @@ impl Shared {
             limiter: Limiter::default(),
             bases,
             http: crate::outbound::client().clone(),
-            plain: reqwest::Client::builder()
+            plain: crate::net::guard::open_builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .expect("plain client"),

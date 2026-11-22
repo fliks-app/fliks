@@ -288,7 +288,7 @@ impl ImageStore {
         if !internal && !self.listed(&host) {
             return Err("host not allowed".into());
         }
-        let addrs = guard::vet(&*self.dns, &host, port, internal)
+        let addrs = guard::vet(&*self.dns, &host, port, internal, &[])
             .await
             .map_err(|e| format!("address refused: {e:?}"))?;
         if !over

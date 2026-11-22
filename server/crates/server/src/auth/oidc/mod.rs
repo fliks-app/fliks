@@ -196,7 +196,7 @@ impl Oidc {
             .trim_end_matches(']')
             .to_owned();
         let port = u.port_or_known_default().unwrap_or(443);
-        let addrs = guard::vet(&*self.net, &host, port, true)
+        let addrs = guard::vet(&*self.net, &host, port, true, &[])
             .await
             .map_err(|_| "address refused".to_owned())?;
         if u.scheme() == "http" && addrs.iter().any(|a| classify(a.ip()) != Class::Private) {

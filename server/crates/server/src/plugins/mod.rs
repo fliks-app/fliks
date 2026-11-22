@@ -89,10 +89,22 @@ pub struct Options {
     pub runtime_dir: PathBuf,
     pub disabled: bool,
     pub pg: db::PgTarget,
+    pub own_ports: Arc<[u16]>,
     pub tune: Option<Tune>,
     pub fetch: fetch::Fetcher,
     pub keys: trust::Keys,
     pub ready_wait: Duration,
+}
+
+/// The server's own listeners: its API, the engine's control plane and Postgres.
+fn own_ports(cfg: &crate::config::Config) -> Arc<[u16]> {
+    let engine = reqwest::Url::parse(&cfg.engine_url)
+        .ok()
+        .and_then(|u| u.port_or_known_default());
+    [Some(cfg.port), engine, Some(cfg.db.get_port())]
+        .into_iter()
+        .flatten()
+        .collect()
 }
 
 impl Options {
@@ -119,6 +131,7 @@ impl Options {
                 port: cfg.db.get_port(),
                 dbname: cfg.db.get_database().unwrap_or("fliks").to_owned(),
             },
+            own_ports: own_ports(cfg),
             tune: None,
             fetch: fetch::Fetcher::default(),
             keys: trust::official_keys(),
@@ -254,6 +267,7 @@ impl Plugins {
             self.opts.pg.clone(),
             self.opts.fetch.net.clone(),
         );
+        cfg.own_ports.clone_from(&self.opts.own_ports);
         if let Some(t) = &self.opts.tune {
             t(&mut cfg);
         }

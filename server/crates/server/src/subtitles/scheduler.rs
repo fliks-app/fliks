@@ -1,6 +1,6 @@
 //! The `SubtitleSearch` and `SubtitleUpgrade` passes and their 6 h tick (`subtitles.md` rules 34-43, 55).
 use super::{
-    embedded, events,
+    embedded,
     files::{self, MediaCtx},
     model::{self, Row},
     ocr,
@@ -203,7 +203,11 @@ async fn do_search_missing(
         };
         match one.await {
             Ok(Some((provider, score))) => {
-                events::notify(st, "subtitle.downloaded", json!({"title": media.title, "language": item.iso_code, "provider": provider, "score": score as i64})).await;
+                crate::notifications::dispatch(
+                    &st.db,
+                    "subtitle.downloaded",
+                    json!({"title": media.title, "language": item.iso_code, "provider": provider, "score": score as i64}),
+                );
                 crate::media_servers::dispatch_detached(st, "subtitle.downloaded");
                 downloaded.push(item.iso_code.clone());
                 tracing::info!(
@@ -220,12 +224,11 @@ async fn do_search_missing(
                     media.title,
                     item.iso_code
                 );
-                events::notify(
-                    st,
+                crate::notifications::dispatch(
+                    &st.db,
                     "subtitle.failed",
                     json!({"title": media.title, "language": item.iso_code, "error": text}),
-                )
-                .await;
+                );
             }
         }
     }
@@ -485,12 +488,11 @@ async fn upgrade_batch(st: &AppState, rows: &[Row], opts: &Opts) -> Result<(), S
         };
         match one.await {
             Ok(Some((provider, new))) => {
-                events::notify(
-                    st,
+                crate::notifications::dispatch(
+                    &st.db,
                     "subtitle.upgraded",
                     json!({"title": media.title, "language": sub.language, "oldScore": sub.score, "newScore": new.round() as i64, "provider": provider}),
-                )
-                .await;
+                );
                 crate::media_servers::dispatch_detached(st, "subtitle.upgraded");
                 tracing::info!(
                     "SubtitleUpgrade: upgraded {} for \"{}\"{} ({} -> {new})",

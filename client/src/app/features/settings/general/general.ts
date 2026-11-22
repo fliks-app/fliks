@@ -126,7 +126,11 @@ export class GeneralSettingsComponent implements OnInit {
     try {
       await this.api.setBulk({ party_voice_ice_servers: this.partyIceServers().trim() });
       this.toast.success(this.translate.instant('settings.general.saved'));
-    } catch { /* interceptor */ } finally { this.savingParty.set(false); }
+    } catch {
+      // Errors are surfaced by the global HTTP interceptor.
+    } finally {
+      this.savingParty.set(false);
+    }
   }
 
   async saveKobo() {
