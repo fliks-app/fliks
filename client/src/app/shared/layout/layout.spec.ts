@@ -2,7 +2,7 @@ import { CORE_NAV_CONTRIBUTIONS } from '../../core/plugin-ui/core-contributions'
 import { provideZonelessChangeDetection, signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
-import { RouterLink, RouterLinkActive, RouterOutlet, provideRouter } from '@angular/router';
+import { RouterLink, RouterLinkActive, RouterOutlet, Router, provideRouter } from '@angular/router';
 import { TranslateLoader, TranslatePipe, provideTranslateService } from '@ngx-translate/core';
 import { Subject, of } from 'rxjs';
 import { vi } from 'vitest';
@@ -521,6 +521,26 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
 
     expect(downloads?.labelKey).toBe('downloads.title');
     expect(downloads?.shortLabelKey).toBeUndefined();
+  });
+});
+
+describe('LayoutComponent dock — libraries sheet', () => {
+  afterEach(() => {
+    nativeState.value = false;
+  });
+
+  it('a search tap on the search page only dismisses the open sheet, then focuses the input', async () => {
+    const layout = (await createFixture(NATIVE_PHONE)).componentInstance;
+    vi.spyOn(TestBed.inject(Router), 'url', 'get').mockReturnValue('/search');
+    const focus = vi.spyOn(TestBed.inject(SearchStateService), 'requestFocus');
+
+    layout.toggleLibrarySheet();
+    layout.onSearchNavClick();
+    expect(layout.librarySheetOpen()).toBe(false);
+    expect(focus).not.toHaveBeenCalled();
+
+    layout.onSearchNavClick();
+    expect(focus).toHaveBeenCalledOnce();
   });
 });
 

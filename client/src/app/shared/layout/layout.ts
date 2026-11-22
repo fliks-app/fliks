@@ -593,7 +593,20 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   /** Bottom-dock search button: a same-URL navigation no-ops, so the click signals the search page via {@link SearchStateService.requestFocus}. */
   onSearchNavClick(): void {
+    if (this.dismissLibrarySheet()) return;
     if (this.router.url.split('?')[0] === '/search') this.searchState.requestFocus();
+  }
+
+  /** Every dock tap closes the libraries sheet; the return value tells a tap that only dismissed it from one that acts. */
+  dismissLibrarySheet(): boolean {
+    const wasOpen = this.librarySheetOpen();
+    this.librarySheetOpen.set(false);
+    return wasOpen;
+  }
+
+  toggleLibrarySheet(): void {
+    this.bottomMenuOpen.set(false);
+    this.librarySheetOpen.update((v) => !v);
   }
 
   toggleBottomMenu() {
