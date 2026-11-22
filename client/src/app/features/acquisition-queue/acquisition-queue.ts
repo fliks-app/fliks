@@ -1,4 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { LucideX } from '@lucide/angular';
 import { map } from 'rxjs';
 import { SseService } from '../../core/services/sse.service';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -21,13 +23,23 @@ import {
 /** The core-owned queue and history of every download provider (`route.data.view`). */
 @Component({
   selector: 'app-acquisition-queue',
-  imports: [TranslatePipe, DataTableComponent],
+  imports: [TranslatePipe, DataTableComponent, LucideX],
   templateUrl: './acquisition-queue.html',
 })
 export class AcquisitionQueueComponent {
   private readonly router = inject(Router);
 
-  protected readonly isHistory = inject(ActivatedRoute).snapshot.data['view'] === 'history';
+  private readonly route = inject(ActivatedRoute);
+
+  protected readonly isHistory = this.route.snapshot.data['view'] === 'history';
+  /** `?mediaId=` narrows both lists to one title; anything but an id is ignored. */
+  private readonly mediaId = toSignal(this.route.queryParamMap.pipe(map((q) => q.get('mediaId'))), {
+    initialValue: this.route.snapshot.queryParamMap.get('mediaId'),
+  });
+  protected readonly fixedParams = computed((): Record<string, string> => {
+    const id = this.mediaId() ?? '';
+    return /^\d+$/.test(id) ? { mediaId: id } : {};
+  });
   protected readonly queueUrl = QUEUE_URL;
   protected readonly queueColumns = QUEUE_COLUMNS;
   protected readonly queueActions = QUEUE_ACTIONS;
@@ -44,6 +56,10 @@ export class AcquisitionQueueComponent {
       return Array.isArray(rows) ? (rows as TableRow[]) : null;
     }),
   );
+
+  protected clearMedia(): void {
+    void this.router.navigate([], { queryParams: { mediaId: null }, queryParamsHandling: 'merge', replaceUrl: true });
+  }
 
   /** The title cell opens the row's media page; no media type, no link. */
   protected readonly resolveAction = (

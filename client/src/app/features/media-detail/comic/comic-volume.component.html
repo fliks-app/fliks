@@ -22,6 +22,9 @@
     </a>
   }
   <app-provider-attribution [providers]="m.providers" />
+  @if (isWanted(m)) {
+    <app-last-search class="mt-4 block" [search]="m.lastSearch" />
+  }
 </app-detail-hero>
 
 <ng-template #issueRows let-issues let-kind="kind">

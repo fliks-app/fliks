@@ -10,6 +10,8 @@ import type { MovieRelease } from '../../media-detail-release-picker.service';
 const TRANSLATIONS = {
   media_detail: {
     rejection: { QUALITY_NOT_ALLOWED: 'Quality outside profile' },
+    release_best: 'Best match',
+    passed_over: { seeders: 'Passed over: fewer seeders', other: 'Passed over' },
     grab_rejected_confirm_title: 'Download anyway?',
     grab_rejected_confirm: "This release doesn't match the quality profile:\n{{reason}}",
   },
@@ -150,5 +152,26 @@ describe('ReleasesTableComponent languages', () => {
     const text = Array.from(fixture.nativeElement.querySelectorAll('.badge-info')).map((e) => (e as HTMLElement).textContent?.trim());
     expect(text).toContain('Italian');
     expect(text).toContain('French');
+  });
+});
+
+describe('ReleasesTableComponent picker labels', () => {
+  const texts = (fixture: { nativeElement: HTMLElement }, sel: string) =>
+    Array.from(fixture.nativeElement.querySelectorAll(sel)).map((e) => (e as HTMLElement).textContent?.trim());
+
+  it('badges the best match and the reason a release was passed over', async () => {
+    const { fixture } = await createFixture([
+      makeRelease({ downloadUrl: 'a', label: 'best' }),
+      makeRelease({ downloadUrl: 'b', label: 'passed_over', lostOn: 'seeders' }),
+      makeRelease({ downloadUrl: 'c', label: 'passed_over' }),
+    ]);
+    expect(texts(fixture, '.badge-success')).toContain('Best match');
+    expect(texts(fixture, '.badge-ghost')).toEqual(expect.arrayContaining(['Passed over: fewer seeders', 'Passed over']));
+  });
+
+  it('adds no badge for a rejected or blocked release, which keep their own', async () => {
+    const { fixture } = await createFixture([makeRelease({ label: 'rejected' }), makeRelease({ downloadUrl: 'b', label: 'blocked' })]);
+    expect(texts(fixture, '.badge-success')).toEqual([]);
+    expect(texts(fixture, '.badge-ghost').filter((t) => t?.startsWith('Passed'))).toEqual([]);
   });
 });

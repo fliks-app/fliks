@@ -43,6 +43,7 @@
             <div class="flex items-start justify-between gap-2 mt-1 sm:hidden">
               <div class="flex flex-col gap-1 min-w-0 flex-1">
                 <div class="flex flex-nowrap gap-1 items-center overflow-x-auto overflow-y-hidden">
+                  <ng-container *ngTemplateOutlet="pickLabel; context: { $implicit: r, cls: 'shrink-0' }" />
                   <span class="badge badge-sm badge-ghost shrink-0">{{ r.qualityName }}</span>
                   @if (r.videoCodec) {
                     <span class="badge badge-sm badge-secondary shrink-0">{{ r.videoCodec }}</span>
@@ -107,6 +108,7 @@
           </td>
           <td class="hidden sm:table-cell whitespace-nowrap">
             <div class="flex flex-wrap gap-1 items-center">
+              <ng-container *ngTemplateOutlet="pickLabel; context: { $implicit: r, cls: '' }" />
               <span class="badge badge-sm badge-ghost">{{ r.qualityName }}</span>
               @if (r.videoCodec) {
                 <span class="badge badge-sm badge-secondary">{{ r.videoCodec }}</span>
@@ -182,3 +184,12 @@
     </tbody>
   </table>
 </div>
+
+<!-- The picker's verdict on a release; rejected and blocked releases keep their own badges and warning below. -->
+<ng-template #pickLabel let-r let-cls="cls">
+  @if (r.label === 'best') {
+    <span class="badge badge-sm badge-success" [class]="cls">{{ 'media_detail.release_best' | translate }}</span>
+  } @else if (r.label === 'passed_over') {
+    <span class="badge badge-sm badge-ghost" [class]="cls">{{ 'media_detail.passed_over.' + (r.lostOn ?? 'other') | translate }}</span>
+  }
+</ng-template>

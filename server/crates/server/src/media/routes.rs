@@ -214,6 +214,14 @@ pub async fn get_media(
             .into();
         media["album"] = album;
     }
+    media["lastSearch"] = crate::acquisition::attempts::latest_of(
+        &st.db,
+        &[id],
+        crate::acquisition::attempts::show_failed(&a),
+    )
+    .await?
+    .remove(&id)
+    .unwrap_or_default();
     media["providers"] = attribution::providers(&st.db, id).await?.into();
     media["fieldSources"] = attribution::field_sources(&st.db, id).await?;
     Ok(Json(media))

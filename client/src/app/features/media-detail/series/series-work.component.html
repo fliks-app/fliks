@@ -159,6 +159,9 @@
         <app-request-watch heroActions [state]="state" [canManage]="host.requestFlow.canManage()" (changed)="host.requestFlow.onSubmitted()" />
       }
     }
+    @if (isWanted(m)) {
+      <app-last-search class="mt-4 block" [search]="m.lastSearch" />
+    }
   </app-detail-hero>
 
   @if (m.seasons?.length) {
@@ -194,6 +197,8 @@
   }
 
   <app-media-info-extra [media]="m" [directors]="directors()" />
+
+  <app-media-downloads [mediaId]="m.id" />
 
   <app-media-cast [cast]="castMembers()" />
 }

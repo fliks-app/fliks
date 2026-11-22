@@ -1,7 +1,7 @@
 //! The acquisition queue and history (`plugins.md` rules 69-75) through the fixture plugin.
 use super::harness::*;
 use fliks_server::acquisition::queue;
-use fliks_server::events::{Bus, SseEvent};
+use fliks_server::events::{Bus, DomainEvent, SseEvent};
 use fliks_server::plugins::runtime::fliks::plugin::types::{
     GrabMethod, QueueEntry, QueueState, UnitRef,
 };
@@ -131,6 +131,7 @@ async fn a_provider_reports_its_queue_and_the_core_proxies_actions() {
         .await;
     assert_eq!(st, 204);
     assert_eq!(setting(&h, "qaction.pause").await.unwrap()["ref"], "a");
+    let mut domain = h.st.hub.subscribe_domain();
     let (st, _) = h
         .call(
             "DELETE",
@@ -144,6 +145,30 @@ async fn a_provider_reports_its_queue_and_the_core_proxies_actions() {
         setting(&h, "qaction.remove").await.unwrap(),
         json!({"ref": "a", "blocklist": true})
     );
+    // A blocklisted removal searches again; a plain one does not.
+    let requested = |rx: &mut tokio::sync::broadcast::Receiver<std::sync::Arc<DomainEvent>>| {
+        let mut out = vec![];
+        while let Ok(ev) = rx.try_recv() {
+            if let DomainEvent::MediaAcquisitionRequested { media_ids, reason } = &*ev {
+                out.push((media_ids.clone(), reason.clone()));
+            }
+        }
+        out
+    };
+    assert_eq!(
+        requested(&mut domain),
+        [(vec![i64::from(media)], "blocklisted".to_owned())]
+    );
+    let (st, _) = h
+        .call(
+            "DELETE",
+            &format!("/api/acquisition/queue/{id}"),
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    assert_eq!(st, 204);
+    assert!(requested(&mut domain).is_empty());
     let (st, _) = h
         .call(
             "POST",
@@ -178,6 +203,27 @@ async fn a_provider_reports_its_queue_and_the_core_proxies_actions() {
     assert!(rows(&h, "queue").await.is_empty());
     let hist = rows(&h, "history").await;
     assert_eq!(hist.iter().filter(|r| r["state"] == "imported").count(), 1);
+    // The history of one media.
+    let (_, mine) = h
+        .call(
+            "GET",
+            &format!("/api/acquisition/history?mediaId={media}"),
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    let (_, other) = h
+        .call(
+            "GET",
+            "/api/acquisition/history?mediaId=999999",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    assert_eq!(
+        (mine["total"].as_i64().unwrap() > 0, other["total"].clone()),
+        (true, json!(0))
+    );
     let (_, imported) = h
         .call(
             "GET",

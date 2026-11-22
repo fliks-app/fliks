@@ -1,0 +1,15 @@
+<app-detail-section [heading]="'media_detail.downloads_title' | translate" persistKey="downloads" [defaultOpen]="false">
+  <ul class="flex flex-col gap-2" data-testid="downloads-rows">
+    @for (r of rows(); track r.id) {
+      <li class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
+        <span class="shrink-0 text-sm text-base-content/60 sm:w-40">{{ r.date | localeDate: { dateStyle: 'medium', timeStyle: 'short' } }}</span>
+        <span class="min-w-0 flex-1 truncate text-sm" [attr.title]="r.sourceTitle">{{ r.sourceTitle }}</span>
+        <span class="badge badge-sm shrink-0" [class]="badge(r.state)">{{ (stateLabels[r.state] ?? r.state) | translate }}</span>
+        @if (r.statusMessage) {
+          <span class="min-w-0 text-sm text-base-content/60 sm:max-w-64 sm:truncate" [attr.title]="r.statusMessage">{{ r.statusMessage }}</span>
+        }
+      </li>
+    }
+  </ul>
+  <a class="link link-hover mt-3 inline-block text-sm" routerLink="/acquisition/history" [queryParams]="{ mediaId: mediaId() }">{{ 'media_detail.downloads_see_all' | translate }}</a>
+</app-detail-section>

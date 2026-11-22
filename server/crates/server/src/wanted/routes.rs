@@ -112,8 +112,8 @@ pub async fn wanted(
         &a.kinds.names(),
         kind,
         released,
-        offset,
-        limit,
+        (offset, limit),
+        crate::acquisition::attempts::show_failed(&a),
     )
     .await?;
     Ok(Json(json!({"data": data, "total": total})))

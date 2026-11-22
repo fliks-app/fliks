@@ -14,7 +14,7 @@ use fliks_server::sync::MutexExt;
 use fliks_server::{
     app,
     config::Config,
-    events::{Bus, DomainEvent},
+    events::{Bus, DomainEvent, SseEvent},
     requests::{Lifecycle, MediaRef, TitleFacts},
     state::AppState,
 };
@@ -1054,6 +1054,86 @@ async fn approve_imports_for_the_requester_links_and_announces_once(pool: PgPool
     )
     .await;
     assert_eq!(s, 409);
+}
+
+/// `request.changed` frames as (request, status, sorted audience).
+type Seen = Mutex<Vec<(SseEvent, Vec<i32>)>>;
+
+fn frames(seen: &Seen) -> Vec<(i64, String, Vec<i32>)> {
+    // The claim and the adoption of an import both announce `approved`.
+    let mut out: Vec<_> = seen
+        .lock_clean()
+        .drain(..)
+        .filter_map(|(ev, mut users)| match ev {
+            SseEvent::RequestChanged {
+                request_id, status, ..
+            } => {
+                users.sort_unstable();
+                Some((request_id, status, users))
+            }
+            _ => None,
+        })
+        .collect();
+    out.dedup();
+    out
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_request_status_change_reaches_the_requester_and_the_managers_only(pool: PgPool) {
+    let c = ctx(pool).await;
+    let seen: Arc<Seen> = Arc::default();
+    let sink = seen.clone();
+    c.st.hub
+        .register_users_hook(move |ev, users| sink.lock_clean().push((ev.clone(), users.to_vec())));
+    let id_of = async |name: &str| -> i32 {
+        sqlx::query_scalar("SELECT id FROM users WHERE username = $1")
+            .bind(name)
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap()
+    };
+    let mut audience = vec![
+        id_of("admin").await,
+        id_of("user").await,
+        id_of("validator").await,
+    ];
+    audience.sort_unstable();
+    assert!(!audience.contains(&id_of("other").await));
+
+    let (_, a) = call(&c, "POST", "/api/requests", &c.user, movie(90)).await;
+    let a = rid(&a);
+    assert_eq!(
+        frames(&seen),
+        [(a, "pending".to_owned(), audience.clone())],
+        "the create announces itself"
+    );
+    let (s, _) = call(
+        &c,
+        "POST",
+        &format!("/api/requests/{a}/approve"),
+        &c.admin,
+        json!(null),
+    )
+    .await;
+    assert_eq!(s, 201);
+    assert_eq!(
+        frames(&seen),
+        [(a, "approved".to_owned(), audience.clone())]
+    );
+
+    let (_, b) = call(&c, "POST", "/api/requests", &c.user, movie(91)).await;
+    let b = rid(&b);
+    let _ = frames(&seen);
+    let (_, d) = call(
+        &c,
+        "POST",
+        &format!("/api/requests/{b}/decline"),
+        &c.admin,
+        json!({"reason": "no"}),
+    )
+    .await;
+    assert_eq!(d["status"], "declined");
+    assert_eq!(frames(&seen), [(b, "declined".to_owned(), audience)]);
 }
 
 #[sqlx::test(migrations = false)]

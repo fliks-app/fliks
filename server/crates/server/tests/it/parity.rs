@@ -699,6 +699,7 @@ const ADDITIVE: &[&str] = &[
     "$..trackMarkers",
     "$.providers",
     "$.fieldSources",
+    "$..lastSearch",
     "$..identities",
     "$..accessManagedBy",
     "$..hasPassword",

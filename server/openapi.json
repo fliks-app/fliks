@@ -5344,6 +5344,17 @@
         }
       }
     },
+    "/api/requests/allowance": {
+      "get": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "allowance",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/requests/comments/{commentId}": {
       "delete": {
         "tags": [

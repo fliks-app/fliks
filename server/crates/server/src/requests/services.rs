@@ -260,3 +260,32 @@ pub fn notify(
     }
     notifications::dispatch(&st.db, event, payload);
 }
+
+/// `request.changed` for each row (`requests.md` rule 54), the status read after the write.
+pub async fn announce(st: &AppState, ids: &[i32]) {
+    if ids.is_empty() {
+        return;
+    }
+    let rows: Vec<(i32, String, String, Option<i32>)> = sqlx::query_as(
+        r#"SELECT id, status::text, kind::text, "userId" FROM requests WHERE id = ANY($1)"#,
+    )
+    .bind(ids)
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    let managers = crate::push::approvers(st, None).await;
+    for (id, status, kind, user) in rows {
+        let mut to = crate::push::request_recipients(&st.db, id, user).await;
+        to.extend(&managers);
+        to.sort_unstable();
+        to.dedup();
+        st.hub.emit_to_users(
+            &to,
+            crate::events::SseEvent::RequestChanged {
+                request_id: i64::from(id),
+                status,
+                kind,
+            },
+        );
+    }
+}

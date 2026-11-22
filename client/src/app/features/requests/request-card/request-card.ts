@@ -9,10 +9,11 @@ import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { LucideTrash2 } from '@lucide/angular';
+import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
 import { RequestPosterComponent } from '../request-poster';
 import { RequestWantsComponent } from '../request-wants/request-wants';
 import { RequestStatusBadgeComponent } from '../request-status-badge/request-status-badge.component';
-import { FliksRequestRow, isTrackRequest, requestAddLink } from '../../../core/services/api/requests.service';
+import { FliksRequestRow, awaitsSearch, isTrackRequest, requestAddLink } from '../../../core/services/api/requests.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { clearPosterStamps } from '../../../shared/utils/view-transition';
 import { KIND_REGISTRY, kindOf } from '../../../core/media-kinds';
@@ -22,6 +23,7 @@ import { KIND_REGISTRY, kindOf } from '../../../core/media-kinds';
 @Component({
   selector: 'app-request-card',
   imports: [
+    LastSearchComponent,
     LocaleDatePipe,
     RouterLink,
     TranslatePipe,
@@ -62,6 +64,7 @@ export class RequestCardComponent {
   readonly badgeClick = output<void>();
 
   protected readonly trackRequest = computed(() => isTrackRequest(this.request()));
+  protected readonly awaitsSearch = computed(() => awaitsSearch(this.request()));
 
   protected readonly ariaLabel = computed(
     () => this.request().media?.title ?? this.request().title,

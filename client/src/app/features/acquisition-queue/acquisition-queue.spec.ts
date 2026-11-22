@@ -1,18 +1,20 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { vi } from 'vitest';
 import { By } from '@angular/platform-browser';
 import { SseService } from '../../core/services/sse.service';
 import { DataTableComponent } from '../../shared/components/data-table/data-table';
 import { AcquisitionQueueComponent } from './acquisition-queue';
 
-function setup(view: 'queue' | 'history') {
+function setup(view: 'queue' | 'history', query: Record<string, string> = {}) {
   const navigateByUrl = vi.fn();
+  const navigate = vi.fn();
+  const params = new BehaviorSubject(convertToParamMap(query));
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -22,13 +24,13 @@ function setup(view: 'queue' | 'history') {
         lang: 'en',
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
-      { provide: ActivatedRoute, useValue: { snapshot: { data: { view } } } },
-      { provide: Router, useValue: { navigateByUrl } },
+      { provide: ActivatedRoute, useValue: { snapshot: { data: { view }, queryParamMap: params.value }, queryParamMap: params } },
+      { provide: Router, useValue: { navigateByUrl, navigate } },
     ],
   });
   const fixture = TestBed.createComponent(AcquisitionQueueComponent);
   fixture.detectChanges();
-  return { fixture, http: TestBed.inject(HttpTestingController), navigateByUrl };
+  return { fixture, http: TestBed.inject(HttpTestingController), navigateByUrl, navigate, params };
 }
 
 describe('AcquisitionQueueComponent', () => {
@@ -47,6 +49,25 @@ describe('AcquisitionQueueComponent', () => {
       .expectOne((r) => r.url === '/api/acquisition/history')
       .flush({ data: [], total: 0, page: 1, pageSize: 25 });
     http.verify();
+  });
+
+  it('narrows the history to one title from the query string, with a chip that removes the filter', async () => {
+    const { fixture, http, navigate, params } = setup('history', { mediaId: '42' });
+    http.expectOne((r) => r.url === '/api/acquisition/history' && r.params.get('mediaId') === '42').flush({ data: [], total: 0, page: 1, pageSize: 25 });
+    const chip = fixture.nativeElement.querySelector('[data-testid="media-filter"] button') as HTMLButtonElement;
+    chip.click();
+    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { mediaId: null } }));
+
+    params.next(convertToParamMap({}));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    http.expectOne((r) => r.url === '/api/acquisition/history' && !r.params.has('mediaId')).flush({ data: [], total: 0, page: 1, pageSize: 25 });
+    expect(fixture.nativeElement.querySelector('[data-testid="media-filter"]')).toBeNull();
+  });
+
+  it('ignores a mediaId that is not an id', () => {
+    const { http } = setup('history', { mediaId: 'x' });
+    http.expectOne((r) => r.url === '/api/acquisition/history' && !r.params.has('mediaId')).flush({ data: [], total: 0, page: 1, pageSize: 25 });
   });
 
   it('opens the media page of a row, and nothing without a media type', () => {

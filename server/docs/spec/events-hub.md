@@ -176,8 +176,9 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 51 | `party.programme` | C (members) | `{partyId, rev, item: PartyItem|null}` (`watch-party.md`) |
 | 52 | `party.proposals` | Us(owner + guests), one payload each | `{partyId, proposals: {id, item: PartyItem, proposedBy, upvoterIds, downvoterIds}[]}` (`watch-party.md`, Proposals) |
 | 53 | `pairing.cancelled` | U(hinted user, none without `userId`) | `{userId: number, pairingId: string}` |
+| 40c | `request.changed` | Us(the requester, the request's watchers, every user who can manage requests) | `{requestId: number, status: string, kind: 'add'|'delete'}` (`requests.md` rule 54): a request was created or changed status; a hint to refetch, the status read after the write |
 
-Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 53 of the 54 `SseEvent` types (`subtitle.sync_failed` has no row; the union writes the three `social.followed|follow_request|follow_accepted` as one member at); the round-trip test holds one sample of each of the 54. All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
+Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent` union, so the table lists 54 of the 71 `SseEvent` types (`subtitle.sync_failed` has no row; the union writes the three `social.followed|follow_request|follow_accepted` as one member at); the round-trip test holds one sample of each of the 71. All `*.started/completed/failed/progress` rows are fire-and-forget; none is retried.
 
 `RemoteCommandAction` = `'load'|'play'|'pause'|'playpause'|'stop'|'seek'|'volume'|'mute'|'next'|'prev'|'shuffle'|'repeat'|'queue'|'enqueue'|'audio'|'subtitle'|'quality'|'browse'`; all absolute except `playpause`, `next` and `prev`.
 

@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import type { MediaType } from '../../enums/media-type.enum';
 import type { MediaFamily } from '../../media-kinds';
+import type { LastSearch } from './last-search.model';
 
 export type WantFamily = 'text' | 'audio';
 
@@ -61,6 +62,7 @@ export interface WantedRow {
   family: string;
   language: string | null;
   wantId: number;
+  lastSearch: LastSearch | null;
 }
 export interface WantedPage {
   data: WantedRow[];

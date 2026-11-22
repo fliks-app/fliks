@@ -1470,7 +1470,23 @@
     "subtitle_sync_failed": "Sync failed",
     "delete_no_folder": "This title has no folder of its own: only the library entry will be removed, the file stays on disk.",
     "delete_success": "Title removed from the library.",
-    "edit_details": "Edit details"
+    "edit_details": "Edit details",
+    "release_best": "Best match",
+    "passed_over": {
+      "seeders": "Passed over: fewer seeders",
+      "rank": "Passed over: lower rank",
+      "score": "Passed over: lower score",
+      "revision": "Passed over: older revision",
+      "retail": "Passed over: not retail",
+      "freeleech": "Passed over: not freeleech",
+      "swarm": "Passed over: smaller swarm",
+      "size": "Passed over: size",
+      "language": "Passed over: other language",
+      "full_season": "Passed over: full season",
+      "other": "Passed over"
+    },
+    "downloads_title": "Downloads",
+    "downloads_see_all": "See all"
   },
   "requests": {
     "approve_album": "Approve the whole album",
@@ -5466,7 +5482,46 @@
     "upcoming": "Upcoming",
     "load_error": "Unable to load the wanted list.",
     "empty": "Nothing is wanted.",
-    "more": "Show more"
+    "more": "Show more",
+    "col_last_search": "Last search",
+    "not_searched": "Not yet",
+    "last_search": "{{when}} · {{eligible}} of {{found}}"
+  },
+  "last_search": {
+    "never": "Not searched yet.",
+    "found_none": "Searched {{when}}: no releases found.",
+    "none_matched_one": "Searched {{when}}: {{count}} release, none matched.",
+    "none_matched_other": "Searched {{when}}: {{count}} releases, none matched.",
+    "none_matched_why_one": "Searched {{when}}: {{count}} release, none matched ({{reasons}}).",
+    "none_matched_why_other": "Searched {{when}}: {{count}} releases, none matched ({{reasons}}).",
+    "grabbed": "Found {{when}}.",
+    "unanswered": "Searched {{when}}. A source did not answer, trying again later.",
+    "failed": "{{names}} did not answer.",
+    "next": "Next search {{when}}.",
+    "reason_other": "other reasons",
+    "reason": {
+      "BLOCKLISTED": "blocked",
+      "LANGUAGE_NOT_ALLOWED": "wrong language",
+      "QUALITY_NOT_ALLOWED": "wrong quality",
+      "SIZE_TOO_LOW": "too small",
+      "SIZE_TOO_HIGH": "too large",
+      "SIZE_NOT_PREFERRED": "size off target",
+      "MIN_SEEDERS": "too few seeders",
+      "TITLE_MISMATCH": "other title",
+      "EPISODE_MISMATCH": "other episode",
+      "FULL_SEASON_FOR_EPISODE": "full season",
+      "SCENE_UNRESOLVED": "unreadable numbering",
+      "RESOLUTION_NOT_UPGRADED": "no resolution upgrade",
+      "SEQUEL_MISMATCH": "other sequel",
+      "YEAR_MISMATCH": "other year",
+      "COLLECTION_PACK": "multi-film pack",
+      "COLLECTED_EDITION": "collected edition",
+      "CUSTOM_FORMAT_SCORE_TOO_LOW": "low format score",
+      "RANK_NOT_AN_UPGRADE": "no upgrade",
+      "RANK_ABOVE_CUTOFF": "above cutoff",
+      "ARTIST_MISMATCH": "other artist",
+      "DISCOGRAPHY": "discography"
+    }
   },
   "oidc": {
     "completing": "Signing you in...",
@@ -5971,7 +6026,9 @@
     "filter_all": "All states",
     "load_error": "Unable to load the list.",
     "empty_queue": "Nothing in the queue.",
-    "empty_history": "The history is empty."
+    "empty_history": "The history is empty.",
+    "filter_media": "One title only",
+    "filter_media_clear": "Show all titles"
   },
   "carplay": {
     "signed_out": "Not signed in to Fliks",

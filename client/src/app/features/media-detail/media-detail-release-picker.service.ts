@@ -9,6 +9,10 @@ import type { ReleasePickerPair } from '@fliks/plugin-ui';
 import type { AcquisitionProvider } from '../../core/plugin-ui/plugin-ui-response';
 import type { AcquisitionTarget } from '../../core/acquisition/acquisition';
 
+/** The picker's verdict on a release, and for a passed-over one the criterion that lost it. */
+export type ReleaseLabel = 'best' | 'passed_over' | 'rejected' | 'blocked';
+export type LostOn = 'seeders' | 'rank' | 'score' | 'revision' | 'retail' | 'freeleech' | 'swarm' | 'size' | 'language' | 'full_season';
+
 export interface MovieRelease {
   title: string;
   downloadUrl: string;
@@ -37,6 +41,8 @@ export interface MovieRelease {
   isFullSeason: boolean;
   sizeDeviation: number | null;
   videoCodec: 'AV1' | 'HEVC' | 'VP9' | 'x264' | null;
+  label?: ReleaseLabel;
+  lostOn?: LostOn;
 }
 
 export interface GrabBody {

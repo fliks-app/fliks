@@ -7,6 +7,7 @@ import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { WantsApiService, type WantedRow } from '../../core/services/api/wants-api.service';
 import { localizeLanguage } from '../../core/utils/language.utils';
+import { formatRelativeTime } from '../../core/utils/relative-time';
 import { LoadFailedComponent } from '../../shared/components/load-failed/load-failed';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 
@@ -47,6 +48,14 @@ export class WantedComponent {
 
   protected language(code: string | null) {
     return code ? localizeLanguage(code, this.translate) : null;
+  }
+
+  /** Age of the last search, then how many of the releases it found were eligible; "not yet" before the first one. */
+  protected lastSearch(r: WantedRow): string {
+    const s = r.lastSearch;
+    if (!s) return this.translate.instant('wanted.not_searched');
+    const when = formatRelativeTime(s.at, this.translate.currentLang() || 'en');
+    return this.translate.instant('wanted.last_search', { when, eligible: s.eligible, found: s.found });
   }
 
   protected setKind(k: MediaType | null) {

@@ -22,6 +22,8 @@ import { BookSourcesComponent } from './book-sources.component';
 import { BookSeriesFormComponent } from './book-series-form.component';
 import { MediaWantsComponent } from '../../../shared/components/media-wants/media-wants';
 import { BookWorksRowComponent, type WorkItem } from './book-works-row.component';
+import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
+import { isWanted } from '../media-wanted';
 
 
 function toItem(e: CollectionDetail['entries'][number]): WorkItem {
@@ -38,6 +40,7 @@ function toItem(e: CollectionDetail['entries'][number]): WorkItem {
 @Component({
   selector: 'app-book-work',
   imports: [
+    LastSearchComponent,
     ProviderAttributionComponent,
     RouterLink,
     TranslatePipe,
@@ -56,6 +59,7 @@ function toItem(e: CollectionDetail['entries'][number]): WorkItem {
 export class BookWorkComponent {
   /** The card handoff (list shape) until the full book lands. */
   readonly media = input.required<Media>();
+  protected readonly isWanted = isWanted;
 
   private readonly api = inject(BooksApiService);
   protected readonly like = new LikeController(

@@ -53,7 +53,9 @@
               {{ 'families.' + r.family | translate }}@if (language(r.language); as l) { · {{ l }} }
               @if (r.releaseDate) { · {{ r.releaseDate | localeDate: { dateStyle: 'medium' } }} }
             </span>
+            <span class="block text-sm text-base-content/60 sm:hidden">{{ lastSearch(r) }}</span>
           </span>
+          <span class="hidden sm:block w-40 shrink-0 text-sm text-base-content/60 text-right tabular-nums" data-testid="wanted-last-search" [attr.title]="'wanted.col_last_search' | translate">{{ lastSearch(r) }}</span>
           <span class="badge badge-sm badge-ghost">{{ registry[r.type].requestLabelKey | translate }}</span>
         </a>
       </li>

@@ -157,7 +157,8 @@ pub async fn remove_media(
     }
     crate::party::end_playing(st, id).await?;
     let mut tx = st.db.begin().await?;
-    crate::requests::Lifecycle::of(st)
+    let lifecycle = crate::requests::Lifecycle::of(st);
+    let moved = lifecycle
         .on_media_removed(&mut tx, &media.lifecycle_ref())
         .await?;
     let external_ids = external_ids::refs(&mut *tx, id).await?;
@@ -166,6 +167,7 @@ pub async fn remove_media(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    lifecycle.announce(&moved).await;
     for f in files {
         drop_thumbnails(st, f);
     }

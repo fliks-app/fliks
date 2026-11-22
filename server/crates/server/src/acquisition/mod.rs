@@ -434,6 +434,7 @@ pub async fn score_any(
 }
 
 mod album;
+pub mod attempts;
 mod book;
 mod candidates;
 mod comic;

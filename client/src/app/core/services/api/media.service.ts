@@ -8,6 +8,7 @@ import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { abortable } from '../../utils/abortable';
 import { saveFile } from '../../plugins/save-file.plugin';
 import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
+import type { LastSearch } from './last-search.model';
 
 export interface QualityProfileBrief {
   id: number;
@@ -145,6 +146,8 @@ export interface Media {
   metadata?: MediaMetadataBrief | null;
   /** Set only while the media is flagged for cleanup with a date. */
   deleteAt?: string | null;
+  /** The last automatic search, on the detail only; `null` is never searched. */
+  lastSearch?: LastSearch | null;
 }
 
 export type CutoffState =

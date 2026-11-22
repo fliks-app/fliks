@@ -29,6 +29,8 @@ import { EpisodeViewController } from '../episode-view-controller';
 import { filterSeasonEpisodesOnDisk, seasonsVisibleWithDiskFilter } from '../media-detail.utils';
 import { VideoWorkBase, type TitlePlaybackState } from '../video-work';
 import type { MediaResumeInfo } from '../../../core/services/api/streaming-api.service';
+import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
+import { MediaDownloadsComponent } from '../components/media-downloads/media-downloads.component';
 
 const LS_EPISODES_HAS_FILE_ONLY = 'fliks.mediaDetail.episodesHasFileOnly';
 
@@ -45,6 +47,8 @@ function readEpisodesHasFileOnlyFromStorage(): boolean {
 @Component({
   selector: 'app-series-work',
   imports: [
+    LastSearchComponent,
+    MediaDownloadsComponent,
     RequestWatchComponent,
     TranslatePipe,
     SeasonLabelPipe,

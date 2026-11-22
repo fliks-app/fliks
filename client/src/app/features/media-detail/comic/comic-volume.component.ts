@@ -23,11 +23,14 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { readRoute } from '../../../core/services/media-start.service';
 import { asComicMedia, nextIssue } from './comic-media';
 import { issuePatch, issueReset, volumePatch, volumeReset } from './comic-edit';
+import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
+import { isWanted } from '../media-wanted';
 
 /** The page of a comic volume, rendered by the media detail page for the `comic` kind. */
 @Component({
   selector: 'app-comic-volume',
   imports: [
+    LastSearchComponent,
     RouterLink,
     DatePipe,
     NgTemplateOutlet,
@@ -46,6 +49,7 @@ import { issuePatch, issueReset, volumePatch, volumeReset } from './comic-edit';
 export class ComicVolumeComponent {
   /** The card handoff (list shape) until the full volume lands. */
   readonly media = input.required<Media>();
+  protected readonly isWanted = isWanted;
 
   private readonly api = inject(ComicsApiService);
   protected readonly like = new LikeController(
