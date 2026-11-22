@@ -18,7 +18,7 @@
       layers().sheet + ' ' +
       (fullHeight()
         ? 'inset-x-0 top-0 flex flex-col bg-base-100 text-base-content'
-        : 'bg-neutral/95 rounded-t-2xl max-h-[70vh] portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
+        : layers().bg + ' rounded-t-2xl max-h-[70vh] portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
           (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto'))
     "
     [class.animate-slide-up]="!dismissing()"
@@ -34,7 +34,7 @@
     <div
       data-sheet-handle
       class="sticky top-0 z-10 pb-1 mb-1 cursor-grab"
-      [class]="fullHeight() ? 'bg-base-100 shrink-0' : 'bg-neutral'"
+      [class]="fullHeight() ? 'bg-base-100 shrink-0' : layers().handleBg"
       [class.tv:hidden]="fullHeight() && !heading()"
       [style.padding-top]="fullHeight() ? 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' : '0.75rem'"
     >

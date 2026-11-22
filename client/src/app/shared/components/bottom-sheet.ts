@@ -41,10 +41,10 @@ export class BottomSheetComponent {
   readonly aboveDock = input(false);
   protected readonly layers = computed(() =>
     this.aboveDock()
-      ? { backdrop: 'z-[38]', sheet: 'z-[39]' }
+      ? { backdrop: 'z-[38]', sheet: 'z-[39]', bg: 'bg-base-100', handleBg: 'bg-base-100' }
       : this.fullHeight()
-        ? { backdrop: 'z-[94]', sheet: 'z-[95]' }
-        : { backdrop: 'z-[100]', sheet: 'z-[101]' },
+        ? { backdrop: 'z-[94]', sheet: 'z-[95]', bg: 'bg-base-100', handleBg: 'bg-base-100' }
+        : { backdrop: 'z-[100]', sheet: 'z-[101]', bg: 'bg-neutral/95', handleBg: 'bg-neutral' },
   );
   readonly closed = output<void>();
 
