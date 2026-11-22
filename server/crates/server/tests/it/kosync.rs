@@ -358,3 +358,66 @@ async fn concurrent_puts_leave_one_state(pool: PgPool) {
         .unwrap();
     assert_eq!(n, 1);
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_push_below_a_write_koreader_has_not_seen_keeps_the_state(pool: PgPool) {
+    let (c, key, _) = ctx(pool).await;
+    let progression = |c: &Ctx| {
+        let p = c.pool.clone();
+        async move {
+            sqlx::query_scalar::<_, Option<f64>>(
+                r#"SELECT progression FROM playback_states WHERE "userId" = 1 AND "itemId" = 1"#,
+            )
+            .fetch_one(&p)
+            .await
+            .unwrap()
+        }
+    };
+    let own = |c: &Ctx| {
+        let p = c.pool.clone();
+        async move {
+            sqlx::query_scalar::<_, f64>(
+                r#"SELECT percentage FROM kosync_progress WHERE "userId" = 1"#,
+            )
+            .fetch_one(&p)
+            .await
+            .unwrap()
+        }
+    };
+    // The web reader finished the book; KOReader, which never saw it, pushes 40%.
+    sqlx::query(
+        r#"INSERT INTO playback_states ("userId", "itemId", progression, completed) VALUES (1, 1, 1.0, true)"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(c.put(&key, H_TEXT, json!("a"), 0.4).await.0, 200);
+    assert_eq!(progression(&c).await, Some(1.0), "the state is kept");
+    assert_eq!(c.state().await.map(|s| s.2), Some(true));
+    assert_eq!(own(&c).await, 0.4, "KOReader's own row holds its position");
+    // Still below it, still unseen.
+    assert_eq!(c.put(&key, H_TEXT, json!("b"), 0.9).await.0, 200);
+    assert_eq!(progression(&c).await, Some(1.0), "still below the state");
+    // The state moves down elsewhere; a push above it lands, and from then on KOReader has seen it.
+    sqlx::query(
+        r#"UPDATE playback_states SET progression = 0.5, completed = false WHERE "userId" = 1"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(c.put(&key, H_TEXT, json!("c"), 0.6).await.0, 200);
+    assert_eq!(progression(&c).await, Some(0.6), "forward progress lands");
+    assert_eq!(c.put(&key, H_TEXT, json!("d"), 0.55).await.0, 200);
+    assert_eq!(
+        progression(&c).await,
+        Some(0.55),
+        "no write it has not seen"
+    );
+    // Another source writes: the next lower push is held again.
+    sqlx::query(r#"UPDATE playback_states SET progression = 0.8 WHERE "userId" = 1"#)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(c.put(&key, H_TEXT, json!("e"), 0.3).await.0, 200);
+    assert_eq!(progression(&c).await, Some(0.8));
+}

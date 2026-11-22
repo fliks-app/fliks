@@ -1463,6 +1463,14 @@ mod book_ingest {
         media(c, l, folder, "book").await
     }
 
+    async fn book_in(c: &Ctx, folder: &str) -> i32 {
+        let l: i32 = sqlx::query_scalar("SELECT id FROM libraries ORDER BY id LIMIT 1")
+            .fetch_one(&c.st.db)
+            .await
+            .unwrap();
+        media(c, l, folder, "book").await
+    }
+
     fn placed(c: &Ctx, rels: &[&str]) -> Vec<Placed> {
         rels.iter()
             .map(|r| Placed {
@@ -1742,6 +1750,61 @@ mod book_ingest {
             held().await,
             want,
             "a rescan keeps each file in its edition"
+        );
+    }
+
+    /// Registers `names` (under the media's folder) and returns the layout `(path, version, position)`.
+    async fn layout_of(c: &Ctx, m: i32, folder: &str, names: &[&str]) -> Vec<(String, i32, i32)> {
+        let full: Vec<String> = names.iter().map(|n| format!("{folder}/{n}")).collect();
+        for r in &full {
+            touch(&c.dir.join("books").join(r), r.as_bytes());
+        }
+        let reg = books::register(
+            &c.st,
+            m,
+            &placed(c, &full.iter().map(String::as_str).collect::<Vec<_>>()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(reg.conflicts.len(), 0, "{:?}", reg.conflicts);
+        parts(c, m).await
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_m4b_of_a_split_audiobook_are_the_parts_of_one_version(pool: PgPool) {
+        let c = ctx(pool).await;
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let m = book(&c, "Orfaline").await;
+        let got = layout_of(&c, m, "Orfaline", &["Title Part 2.m4b", "Title Part 1.m4b"]).await;
+        let at = |p: &str, v: i32, n: i32| (format!("Orfaline/{p}"), v, n);
+        let one = vec![at("Title Part 1.m4b", 0, 0), at("Title Part 2.m4b", 0, 1)];
+        assert_eq!(got, one, "two parts, one version, in order");
+        // A library laid out before the rule holds two versions of one part each: a rescan merges them.
+        sqlx::query(
+            r#"UPDATE item_parts p SET version = 1, position = 0
+               FROM media_files f WHERE f.id = p."mediaFileId" AND f."relativePath" LIKE '%Part 2.m4b'"#,
+        )
+        .execute(&c.st.db)
+        .await
+        .unwrap();
+        let again = layout_of(&c, m, "Orfaline", &["Title Part 1.m4b", "Title Part 2.m4b"]).await;
+        assert_eq!(again, one, "a rescan lays the old layout out again");
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_m4b_of_disc_folders_are_one_version_and_numbered_ones_are_not(pool: PgPool) {
+        let c = ctx(pool).await;
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let m = book(&c, "Orfaline").await;
+        let got = layout_of(&c, m, "Orfaline", &["CD2/Title.m4b", "CD1/Title.m4b"]).await;
+        let at = |p: &str, v: i32, n: i32| (format!("Orfaline/{p}"), v, n);
+        assert_eq!(got, [at("CD1/Title.m4b", 0, 0), at("CD2/Title.m4b", 0, 1)]);
+        let n = book_in(&c, "Other").await;
+        let got = layout_of(&c, n, "Other", &["03 - Title.m4b", "04 - Title.m4b"]).await;
+        let at = |p: &str, v: i32, n: i32| (format!("Other/{p}"), v, n);
+        assert_eq!(
+            got,
+            [at("03 - Title.m4b", 0, 0), at("04 - Title.m4b", 1, 0)]
         );
     }
 

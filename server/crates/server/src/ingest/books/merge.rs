@@ -387,27 +387,37 @@ async fn record(
     .map(drop)
 }
 
+/// A state write that must not stop the merge: its failure is logged.
+fn log_err<T>(what: &str, r: sqlx::Result<T>) {
+    if let Err(e) = r {
+        tracing::warn!("m4b merge: {what}: {e}");
+    }
+}
+
 /// A failure the parts explain: no retry until they change.
 async fn failed(st: &AppState, edition: i32, why: &str) {
-    let _ = sqlx::query!(
-        r#"UPDATE book_merges SET state = 'failed', error = $2 WHERE "editionId" = $1"#,
-        edition,
-        why
-    )
-    .execute(&st.db)
-    .await;
+    log_err(
+        "mark failed",
+        sqlx::query!(
+            r#"UPDATE book_merges SET state = 'failed', error = $2 WHERE "editionId" = $1"#,
+            edition,
+            why
+        )
+        .execute(&st.db)
+        .await,
+    );
 }
 
 /// The merge is over: its record stays as `done` (so a deleted m4b is not merged again for the
 /// same parts), but for a replace waiting for the listeners.
 async fn forget(st: &AppState, edition: i32) {
-    let _ = sqlx::query!(
+    log_err("mark done", sqlx::query!(
         r#"UPDATE book_merges SET state = 'done', error = NULL, "jobId" = NULL, "nextAttemptAt" = NULL
            WHERE "editionId" = $1 AND state <> 'replace'"#,
         edition
     )
     .execute(&st.db)
-    .await;
+    .await);
 }
 
 /// Failed attempts after which only the next settle or backfill tries again.
@@ -439,14 +449,17 @@ async fn retry(st: &AppState, (media, edition): (i32, i32), why: &str, job_faile
     }
     let n = row.attempts;
     let secs = backoff(n);
-    let _ = sqlx::query!(
-        r#"UPDATE book_merges SET "nextAttemptAt" = now() + make_interval(secs => $2::float8)
+    log_err(
+        "schedule retry",
+        sqlx::query!(
+            r#"UPDATE book_merges SET "nextAttemptAt" = now() + make_interval(secs => $2::float8)
            WHERE "editionId" = $1"#,
-        edition,
-        secs as f64
-    )
-    .execute(&st.db)
-    .await;
+            edition,
+            secs as f64
+        )
+        .execute(&st.db)
+        .await,
+    );
     if n <= AUTO_RETRIES {
         later(st, media, secs as u64 + 1);
     }
@@ -728,12 +741,15 @@ async fn resume_replace(st: &AppState, media: i32) {
             }
             Ok(()) => {}
         }
-        let _ = sqlx::query!(
-            r#"DELETE FROM book_merges WHERE "editionId" = $1"#,
-            h.edition
-        )
-        .execute(&st.db)
-        .await;
+        log_err(
+            "drop record",
+            sqlx::query!(
+                r#"DELETE FROM book_merges WHERE "editionId" = $1"#,
+                h.edition
+            )
+            .execute(&st.db)
+            .await,
+        );
     }
 }
 
@@ -920,14 +936,17 @@ pub fn spawn_library(st: &AppState, library: i32) {
                 }
             };
             if finished {
-                let _ = sqlx::query!(
-                    r#"UPDATE libraries SET "mergeM4bBackfill" = 0
+                log_err(
+                    "end backfill",
+                    sqlx::query!(
+                        r#"UPDATE libraries SET "mergeM4bBackfill" = 0
                        WHERE id = $1 AND "mergeM4bBackfill" = $2"#,
-                    library,
-                    round
-                )
-                .execute(&st.db)
-                .await;
+                        library,
+                        round
+                    )
+                    .execute(&st.db)
+                    .await,
+                );
                 break;
             }
         }
@@ -1057,13 +1076,16 @@ async fn execute(
     };
     // The engine answers an identical open job with its id; the id is kept for a run a restart cuts.
     let job = st.engine.submit_job(&req).await.map_err(engine)?;
-    let _ = sqlx::query!(
-        r#"UPDATE book_merges SET "jobId" = $2 WHERE "editionId" = $1"#,
-        parts[0].edition,
-        job
-    )
-    .execute(&st.db)
-    .await;
+    log_err(
+        "record job",
+        sqlx::query!(
+            r#"UPDATE book_merges SET "jobId" = $2 WHERE "editionId" = $1"#,
+            parts[0].edition,
+            job
+        )
+        .execute(&st.db)
+        .await,
+    );
     let result = st.engine.wait_job(job, &req, None).await.map_err(engine)?;
     let JobResult::Merge { merge } = result else {
         return Err(sticky("engine answered another result".into()));
@@ -1154,14 +1176,17 @@ impl From<&str> for Skip {
 
 /// Keeps the merge result of an edition whose replace waits for the listeners.
 async fn hold(st: &AppState, edition: i32, merge: &MergeMeta) {
-    let _ = sqlx::query!(
-        r#"UPDATE book_merges SET state = 'replace', "jobId" = NULL, merge = $2
+    log_err(
+        "hold replace",
+        sqlx::query!(
+            r#"UPDATE book_merges SET state = 'replace', "jobId" = NULL, merge = $2
            WHERE "editionId" = $1"#,
-        edition,
-        serde_json::to_value(merge).ok()
-    )
-    .execute(&st.db)
-    .await;
+            edition,
+            serde_json::to_value(merge).ok()
+        )
+        .execute(&st.db)
+        .await,
+    );
 }
 
 /// The parts and the output are still at the paths the merge used: a library folder re-pointed

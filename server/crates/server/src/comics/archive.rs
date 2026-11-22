@@ -256,6 +256,13 @@ pub struct Listing {
     pub solid: Option<Vec<Vec<u8>>>,
 }
 
+/// What an import learns from one archive: its page count, its `ComicInfo.xml` and its first page.
+pub struct Probe {
+    pub pages: usize,
+    pub info: Option<Vec<u8>>,
+    pub first: Option<Vec<u8>>,
+}
+
 /// Whether reading one page decodes what precedes it (7z, RAR).
 pub fn is_solid(path: &Path) -> Result<bool, Error> {
     Ok(sniff(path)? == Kind::Lib)
@@ -406,6 +413,40 @@ pub(super) mod local {
         Ok(found)
     }
 
+    fn probe_name(raw: &str) -> Option<String> {
+        page_name(raw).or_else(|| info_name(raw))
+    }
+
+    /// The page count, `ComicInfo.xml` and first page in reading order, in one pass.
+    pub fn probe(src: &Src<'_>) -> Result<Probe, Error> {
+        let (mut pages, mut info) = (0usize, None);
+        let mut first: Option<(String, Vec<u8>)> = None;
+        each(src, MAX_TOTAL_BYTES, probe_name, |_, name, size, r| {
+            if info_name(&name).is_some() {
+                if size <= MAX_INFO_BYTES && info.is_none() {
+                    info = Some(take(r, size, MAX_INFO_BYTES)?);
+                }
+                return Ok(true);
+            }
+            pages += 1;
+            if pages > MAX_PAGES {
+                return Err(Error::TooLarge);
+            }
+            if first
+                .as_ref()
+                .is_none_or(|f| natural(&name, &f.0) == Ordering::Less)
+            {
+                first = Some((name, take(r, size, MAX_ENTRY_BYTES)?));
+            }
+            Ok(true)
+        })?;
+        Ok(Probe {
+            pages,
+            info,
+            first: first.map(|f| f.1),
+        })
+    }
+
     /// Page `index` alone: a pass for the order, then one for the page.
     pub fn page(src: &Src<'_>, index: usize) -> Result<Vec<u8>, Error> {
         let at = names(src)?.get(index).ok_or(Error::Missing)?.0;
@@ -431,6 +472,10 @@ pub(super) mod local {
     }
 
     pub fn info(_: &Path) -> Result<Option<Vec<u8>>, Error> {
+        Err(Error::Unsupported("libarchive"))
+    }
+
+    pub fn probe(_: &Path) -> Result<Probe, Error> {
         Err(Error::Unsupported("libarchive"))
     }
 
@@ -474,6 +519,14 @@ mod lib {
             sandbox::info(path)
         } else {
             local::info(&Src::Path(path))
+        }
+    }
+
+    pub fn probe(path: &Path) -> Result<Probe, Error> {
+        if sandbox::enabled() {
+            sandbox::probe(path)
+        } else {
+            local::probe(&Src::Path(path))
         }
     }
 
@@ -568,6 +621,23 @@ pub fn info(path: &Path) -> Result<Option<Vec<u8>>, Error> {
             Ok(None)
         }
         Kind::Lib => lib::info(path),
+    }
+}
+
+/// The page count, `ComicInfo.xml` and first page of an archive: a solid one is decoded once.
+pub fn probe(path: &Path) -> Result<Probe, Error> {
+    let probe = match sniff(path)? {
+        Kind::Zip => Probe {
+            pages: page_count(path)?,
+            info: info(path).ok().flatten(),
+            first: page(path, 0).ok(),
+        },
+        Kind::Lib => lib::probe(path)?,
+    };
+    if probe.pages == 0 {
+        Err(Error::NoPages)
+    } else {
+        Ok(probe)
     }
 }
 

@@ -515,14 +515,93 @@ async fn metadata_and_state_follow_the_acl(pool: PgPool) {
 }
 
 fn state_put(n: i32, pct: f64, status: &str, loc: &str) -> Value {
+    state_put_at(n, pct, status, loc, &chrono::Utc::now().to_rfc3339())
+}
+
+fn state_put_at(n: i32, pct: f64, status: &str, loc: &str, at: &str) -> Value {
     json!({"ReadingStates": [{
-        "EntitlementId": book(n), "Created": "2026-11-03T10:00:00Z", "LastModified": "2026-11-03T10:00:00Z",
-        "PriorityTimestamp": "2026-11-03T10:00:00Z",
-        "StatusInfo": {"Status": status, "TimesStartedReading": 1},
+        "EntitlementId": book(n), "Created": "2026-11-03T10:00:00Z", "LastModified": at,
+        "PriorityTimestamp": at,
+        "StatusInfo": {"Status": status, "TimesStartedReading": 1, "LastModified": at},
         "Statistics": {"SpentReadingMinutes": 3, "RemainingTimeMinutes": 9},
         "CurrentBookmark": {"ProgressPercent": pct, "ContentSourceProgressPercent": 10.0,
+            "LastModified": at,
             "Location": {"Value": loc, "Type": "KoboSpan", "Source": "OEBPS/ch2.xhtml"}},
     }]})
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_state_older_than_the_servers_is_dropped_and_the_device_is_told_the_newer_one(
+    pool: PgPool,
+) {
+    let (c, _) = ctx(pool).await;
+    let path = format!("/v1/library/{}/state", book(1));
+    let t = c.sync(None).await.sync_token.unwrap();
+    let t = c.sync(Some(&t)).await.sync_token.unwrap();
+    // Read to the end on the web, then the Kobo uploads what it read offline before that.
+    sqlx::query(
+        r#"INSERT INTO playback_states ("userId", "itemId", progression, completed) VALUES (1, 1, 1.0, true)"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let old = c
+        .call(
+            "PUT",
+            &path,
+            Some(state_put_at(
+                1,
+                40.0,
+                "Reading",
+                "kobo.1.1",
+                "2026-11-03T10:00:00Z",
+            )),
+        )
+        .await;
+    assert_eq!(old.status, 200);
+    let row: (f64, bool) = sqlx::query_as(
+        r#"SELECT progression, completed FROM playback_states WHERE "userId" = 1 AND "itemId" = 1"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        row,
+        (1.0, true),
+        "the newer state and its completion are kept"
+    );
+    let r = c.sync(Some(&t)).await;
+    assert_eq!(
+        ids(&r),
+        ["ChangedReadingState 1"],
+        "the device learns the server's state"
+    );
+    assert_eq!(
+        r.body[0]["ChangedReadingState"]["ReadingState"]["StatusInfo"]["Status"],
+        "Finished"
+    );
+    // A state dated in the future is taken as now and lands; marking a finished book unread unfinishes it.
+    let unread = c
+        .call(
+            "PUT",
+            &path,
+            Some(state_put_at(
+                1,
+                0.0,
+                "ReadyToRead",
+                "kobo.1.1",
+                "2999-01-01T00:00:00Z",
+            )),
+        )
+        .await;
+    assert_eq!(unread.status, 200);
+    let row: (f64, bool) = sqlx::query_as(
+        r#"SELECT progression, completed FROM playback_states WHERE "userId" = 1 AND "itemId" = 1"#,
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(row, (0.0, false));
 }
 
 #[sqlx::test(migrations = false)]

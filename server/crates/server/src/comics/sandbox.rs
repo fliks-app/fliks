@@ -3,7 +3,8 @@
 use super::{
     ar::Src,
     archive::{
-        Error, Listing, MAX_ENTRY_BYTES, MAX_INFO_BYTES, MAX_PAGES, Page, SOLID_CACHE_BYTES, local,
+        Error, Listing, MAX_ENTRY_BYTES, MAX_INFO_BYTES, MAX_PAGES, Page, Probe, SOLID_CACHE_BYTES,
+        local,
     },
 };
 use crate::sync::MutexExt;
@@ -71,7 +72,7 @@ fn error_of(c: u8) -> Error {
 
 // ---- the child ----
 
-/// The hidden subcommand: `comic-archive <list|count|page|page-at|info> <n>`, the archive on stdin, the
+/// The hidden subcommand: `comic-archive <list|count|page|page-at|info|probe> <n>`, the archive on stdin, the
 /// answer on stdout.
 pub fn child_main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(2).collect();
@@ -91,6 +92,7 @@ pub fn child_main() -> ExitCode {
             Some(b) => w.write_all(&[1]).and_then(|()| write_bytes(w, b)),
             None => w.write_all(&[0]),
         }),
+        Some("probe") => answer(&mut out, local::probe(path), write_probe),
         Some("page-at") => answer(&mut out, local::page_at(path, n), |w, b| write_bytes(w, b)),
         _ => return ExitCode::from(2),
     };
@@ -117,6 +119,17 @@ fn answer<T>(
 fn write_bytes(w: &mut dyn Write, b: &[u8]) -> io::Result<()> {
     w.write_all(&(b.len() as u64).to_le_bytes())?;
     w.write_all(b)
+}
+
+fn write_probe(w: &mut dyn Write, p: &Probe) -> io::Result<()> {
+    w.write_all(&(p.pages as u64).to_le_bytes())?;
+    for b in [&p.info, &p.first] {
+        match b {
+            Some(b) => w.write_all(&[1]).and_then(|()| write_bytes(w, b))?,
+            None => w.write_all(&[0])?,
+        }
+    }
+    Ok(())
 }
 
 fn write_listing(w: &mut dyn Write, l: &Listing) -> io::Result<()> {
@@ -339,5 +352,28 @@ pub fn info(path: &Path) -> Result<Option<Vec<u8>>, Error> {
             1 => bytes_of(r, MAX_INFO_BYTES).map(Some),
             _ => Ok(None),
         }
+    })
+}
+
+/// The page count, `ComicInfo.xml` and first page in one pass.
+pub fn probe(path: &Path) -> Result<Probe, Error> {
+    let limit = MAX_INFO_BYTES + MAX_ENTRY_BYTES + (1 << 20);
+    call("probe", path, 0, limit, |r| {
+        status(r)?;
+        let pages = u64_of(r)?;
+        if pages > MAX_PAGES as u64 {
+            return Err(Error::Corrupt);
+        }
+        let mut opt = |max| match u8_of(r)? {
+            1 => bytes_of(r, max).map(Some),
+            _ => Ok(None),
+        };
+        let info = opt(MAX_INFO_BYTES)?;
+        let first = opt(MAX_ENTRY_BYTES)?;
+        Ok(Probe {
+            pages: pages as usize,
+            info,
+            first,
+        })
     })
 }

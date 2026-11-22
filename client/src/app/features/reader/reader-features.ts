@@ -40,6 +40,6 @@ export const READER_FEATURES: Record<ReaderFormat, ReaderFeatures> = {
     listen: true,
     runningHead: true,
   },
-  pdf: { ...NONE, appearance: ['theme'], zoom: true, listen: true },
+  pdf: { ...NONE, contents: true, bookmarks: true, appearance: ['theme'], zoom: true, listen: true },
   comic: { ...NONE, appearance: ['comic'], zoom: true },
 };

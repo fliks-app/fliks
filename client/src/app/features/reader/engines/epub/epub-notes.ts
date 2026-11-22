@@ -3,6 +3,7 @@ import { TranslateService } from '@ngx-translate/core';
 import { DecorationStyleType } from '@readium/navigator';
 import type { Locator } from '@readium/shared';
 import { safeFileName, saveFile } from '../../../../core/plugins/save-file.plugin';
+import { OfflineBookStoreService } from '../../../../core/services/offline-book-store.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import {
   ANNOTATION_COLOURS,
@@ -25,6 +26,7 @@ export class EpubNotes implements ReaderNotes {
   private readonly session = inject(ReaderSession);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
+  private readonly store = inject(OfflineBookStoreService);
   private marking = false;
 
   readonly list = signal<Annotation[]>([]);
@@ -42,11 +44,16 @@ export class EpubNotes implements ReaderNotes {
   }
 
   async load(): Promise<void> {
+    const itemId = this.session.target().itemId;
     try {
-      const list = await this.api.list(this.session.target().itemId);
-      if (!this.book.destroyed) this.list.set(list);
+      const list = await this.api.list(itemId);
+      if (this.book.destroyed) return;
+      this.list.set(list);
+      void this.store.refreshAnnotations(itemId, list);
     } catch {
-      // Offline or refused: the book reads without its marks.
+      // Offline or refused: the marks kept with the download, if any, are shown.
+      const kept = await this.store.annotations<Annotation>(itemId);
+      if (kept && !this.book.destroyed) this.list.set(kept);
     }
   }
 

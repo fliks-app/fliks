@@ -261,6 +261,18 @@ pub async fn toggle_season_watched(
     Ok(())
 }
 
+const STRIPES: usize = 64;
+
+/// One write per `(user, book)` at a time, holding no connection while it waits.
+// ponytail: per process; an advisory lock if the server ever runs as several instances.
+pub async fn serialise(user: i32, item: i32) -> tokio::sync::MutexGuard<'static, ()> {
+    static LOCKS: std::sync::OnceLock<Vec<tokio::sync::Mutex<()>>> = std::sync::OnceLock::new();
+    let locks = LOCKS.get_or_init(|| (0..STRIPES).map(|_| tokio::sync::Mutex::new(())).collect());
+    locks[(user as usize).wrapping_mul(31).wrapping_add(item as usize) % STRIPES]
+        .lock()
+        .await
+}
+
 /// What a heartbeat flush records (`heartbeat.md` rule 15).
 #[derive(Clone)]
 pub struct Watch {
@@ -279,6 +291,8 @@ pub struct Watch {
     pub locator: Option<Value>,
     /// Stores a NULL locator: the position came from a source that cannot express one.
     pub clear_locator: bool,
+    /// The state a device kept on its own: a later one replaces `completed`, an offline replay keeps it.
+    pub external: bool,
 }
 
 /// The video rule: also the zone in which every beat of any family is written.
@@ -426,7 +440,8 @@ pub async fn record_watch(
         last_chapter_start: w.last_chapter_start,
         music,
     };
-    let completed = finish::finished(w.family, &standing) || (replay.is_some() && was_completed);
+    let completed =
+        finish::finished(w.family, &standing) || (replay.is_some() && !w.external && was_completed);
     let watched = w.position >= 5.0 || w.progression.is_some_and(|p| p > 0.0);
     // A track keeps no resume position: the next play starts over.
     let tracked;

@@ -172,19 +172,27 @@ pub(crate) async fn file_cover(path: &Path) -> Option<Vec<u8>> {
     }
 }
 
-/// The picture becomes the work's poster when it has none.
-pub async fn store_cover(st: &AppState, media: i32, bytes: &[u8]) {
-    let _one = st.ingest.covers.lock(media).await;
-    let has = sqlx::query_scalar!(
+/// Whether the media has a poster; a missing media or a failed read counts as one, with a log.
+pub(crate) async fn has_poster(db: &PgPool, media: i32) -> bool {
+    match sqlx::query_scalar!(
         r#"SELECT "posterUrl" IS NOT NULL AS "has!" FROM media WHERE id = $1"#,
         media
     )
-    .fetch_optional(&st.db)
+    .fetch_optional(db)
     .await
-    .ok()
-    .flatten()
-    .unwrap_or(true);
-    if has {
+    {
+        Ok(has) => has.unwrap_or(true),
+        Err(e) => {
+            tracing::warn!("poster of media #{media} not read: {e}");
+            true
+        }
+    }
+}
+
+/// The picture becomes the work's poster when it has none.
+pub async fn store_cover(st: &AppState, media: i32, bytes: &[u8]) {
+    let _one = st.ingest.covers.lock(media).await;
+    if has_poster(&st.db, media).await {
         return;
     }
     let url = st

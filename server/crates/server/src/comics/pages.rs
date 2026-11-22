@@ -85,8 +85,7 @@ struct Source {
 impl Source {
     /// Changes with the file's bytes: the file row, its size and mtime.
     fn tag(&self) -> String {
-        let k = &self.key;
-        format!("{}-{}-{}-{}-{}", k.file, k.size, k.mtime, k.ino, k.ctime)
+        self.key.tag()
     }
 }
 
@@ -102,7 +101,7 @@ async fn source(
         r#"SELECT mf.id, mf."relativePath" FROM items i
            JOIN media m ON m.id = i."mediaId" AND m."libraryId" = ANY($2)
            JOIN editions e ON e.id = i."editionId" AND (e.family = 'image'
-             OR (e.family = 'text' AND lower(e.format) IN ('cbz', 'cb7', 'cbr')))
+             OR (e.family = 'text' AND lower(e.format) = 'cbz'))
            JOIN media_files mf ON mf.id = comic_part(i.id, $3)
            WHERE i.id = $1 AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = mf.id)"#
     )))
@@ -126,33 +125,10 @@ async fn source(
             e
         }
     })?;
-    let meta = tokio::fs::metadata(&f.absolute).await.ok();
-    let since_epoch = |t: Option<std::time::SystemTime>| {
-        t.and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map_or(0, |d| d.as_millis())
-    };
-    let mtime = since_epoch(meta.as_ref().and_then(|m| m.modified().ok()));
-    #[cfg(unix)]
-    let (ino, ctime) = {
-        use std::os::unix::fs::MetadataExt;
-        meta.as_ref().map_or((0, 0), |m| {
-            (
-                m.ino(),
-                i128::from(m.ctime()) * 1_000_000_000 + i128::from(m.ctime_nsec()),
-            )
-        })
-    };
-    #[cfg(not(unix))]
-    let (ino, ctime) = (0, 0);
+    let key = Key::of(file, &f).await;
     Ok(Source {
         path: f.absolute,
-        key: Key {
-            file,
-            size: f.size,
-            mtime,
-            ino,
-            ctime,
-        },
+        key,
     })
 }
 
@@ -450,9 +426,14 @@ fn cover(bytes: &[u8], width: u32) -> Option<Vec<u8>> {
 
 const COVER_WIDTH: u32 = 1000;
 
+/// The poster a first page gives, as a JPEG; blocking.
+pub(crate) fn poster_of(page: &[u8]) -> Option<Vec<u8>> {
+    cover(page, COVER_WIDTH)
+}
+
 /// The poster an archive gives: its first page as a JPEG; blocking.
 pub(crate) fn first_page_cover(path: &std::path::Path) -> Option<Vec<u8>> {
-    cover(&super::archive::page(path, 0).ok()?, COVER_WIDTH)
+    poster_of(&super::archive::page(path, 0).ok()?)
 }
 
 #[cfg(test)]

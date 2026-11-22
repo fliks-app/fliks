@@ -70,6 +70,15 @@ describe('OfflineBookStoreService', () => {
     vi.unstubAllGlobals();
   });
 
+  it('keeps the marks of a stored EPUB only, and hands them back offline', async () => {
+    (svc as unknown as Priv).put = async (key, blob) => void blobs.set(key, blob);
+    await svc.refreshAnnotations(7, [{ id: 1 }]);
+    expect(await svc.annotations(7)).toBeNull();
+    keep('manifest.json', '{}', 'application/webpub+json');
+    await svc.refreshAnnotations(7, [{ id: 1 }]);
+    expect(await svc.annotations(7)).toEqual([{ id: 1 }]);
+  });
+
   const native = () => ((TestBed.inject(ServerConfigService) as { isNative: boolean }).isNative = true);
   const CHAPTER = '<html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" href="../s.css"/></head><body><img src="a.png"/><img src="https://elsewhere/x.png"/><img src="/api/users/me"/></body></html>';
   const server = () => {
@@ -127,7 +136,7 @@ describe('OfflineBookStoreService', () => {
     expect(await (await svc.fetch(`${BASE}ch1.xhtml`)).text()).toContain('blob:local/2');
   });
 
-  it('stores the manifest and every resource it names, once each', async () => {
+  it('stores the manifest, the marks and every resource it names, once each', async () => {
     const body = (url: string) =>
       url.endsWith('manifest.json')
         ? JSON.stringify({
@@ -142,7 +151,7 @@ describe('OfflineBookStoreService', () => {
     (svc as unknown as Priv).put = async (key) => void puts.push(key);
     const progress = vi.fn();
     await svc.storeEpub(7, progress);
-    expect(puts.map((k) => k.replace(BASE, '')).sort()).toEqual(['s|ch1.xhtml', 's|img/a.png', 's|manifest.json', 's|positions.json']);
+    expect(puts.map((k) => k.replace(BASE, '')).sort()).toEqual(['s|annotations|7', 's|ch1.xhtml', 's|img/a.png', 's|manifest.json', 's|positions.json']);
     expect(progress).toHaveBeenLastCalledWith(1);
     vi.unstubAllGlobals();
   });

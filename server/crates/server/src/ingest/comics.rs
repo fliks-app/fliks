@@ -38,21 +38,43 @@ async fn count_pages(abs: &Path, format: &str) -> Option<i32> {
         .and_then(|n| i32::try_from(n).ok())
 }
 
+/// A `ComicInfo.xml` read: ignored with a log when unusable.
+fn parse_info(abs: &Path, xml: &[u8]) -> Option<ComicInfo> {
+    info::parse(xml)
+        .inspect_err(|e| tracing::warn!(file = %abs.display(), "ComicInfo.xml ignored: {e}"))
+        .ok()
+}
+
 /// The `ComicInfo.xml` of an archive: one bounded read, ignored with a log when absent or unusable.
 pub(crate) async fn read_info(abs: &Path, format: &str) -> Option<ComicInfo> {
     if format == "pdf" {
         return None;
     }
     let p = abs.to_path_buf();
-    let read = crate::comics::blocking_ingest(move || archive::info(&p)).await?;
-    let parsed = match read {
-        Ok(Some(xml)) => info::parse(&xml),
-        Ok(None) => return None,
-        Err(e) => Err(format!("{e:?}")),
+    match crate::comics::blocking_ingest(move || archive::info(&p)).await? {
+        Ok(xml) => parse_info(abs, &xml?),
+        Err(e) => {
+            tracing::warn!(file = %abs.display(), "ComicInfo.xml ignored: {e:?}");
+            None
+        }
+    }
+}
+
+/// An archive's page count, `ComicInfo.xml` and first page from one read; nothing for a PDF or an
+/// archive that cannot be read.
+async fn probe(abs: &Path, format: &str) -> (Option<i32>, Option<ComicInfo>, Option<Vec<u8>>) {
+    if format == "pdf" {
+        return (None, None, None);
+    }
+    let p = abs.to_path_buf();
+    let Some(Ok(read)) = crate::comics::blocking_ingest(move || archive::probe(&p)).await else {
+        return (None, None, None);
     };
-    parsed
-        .inspect_err(|e| tracing::warn!(file = %abs.display(), "ComicInfo.xml ignored: {e}"))
-        .ok()
+    (
+        i32::try_from(read.pages).ok(),
+        read.info.and_then(|xml| parse_info(abs, &xml)),
+        read.first,
+    )
 }
 
 struct Row {
@@ -67,6 +89,8 @@ struct Row {
 pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Registration, String> {
     let mut rows = vec![];
     let mut conflicts = vec![];
+    let mut poster: Option<(f64, Vec<u8>)> = None;
+    let wants_poster = !super::books::has_poster(&st.db, media).await;
     for f in files {
         let n = file_name(&f.abs);
         let Some(format) = format_of(&n) else {
@@ -79,8 +103,19 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
                 continue;
             }
         };
-        let pages = count_pages(&f.abs, format).await;
-        let info = read_info(&f.abs, format).await;
+        let (pages, info, first) = probe(&f.abs, format).await;
+        if let Some(first) = first.filter(|_| wants_poster) {
+            let n = name::parse_path(&n);
+            let key = n.sort.and_then(|s| s.parse().ok()).unwrap_or(f64::MAX);
+            if poster.as_ref().is_none_or(|p| key < p.0)
+                && let Some(jpeg) =
+                    crate::comics::blocking_ingest(move || crate::comics::poster_of(&first))
+                        .await
+                        .flatten()
+            {
+                poster = Some((key, jpeg));
+            }
+        }
         let Some(file) = sqlx::query_scalar!(
             r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality, "mtimeMs")
                VALUES ($1, $2, $3, $4, $5, $6)
@@ -114,7 +149,9 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
         lay_out(&st.db, media, &rows)
             .await
             .map_err(|e| e.to_string())?;
-        cover(st, media, files, &rows).await;
+        if let Some((_, jpeg)) = poster {
+            super::books::store_cover(st, media, &jpeg).await;
+        }
     }
     Ok(Registration {
         files: rows
@@ -128,42 +165,6 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
             .collect(),
         conflicts,
     })
-}
-
-/// The first page of the lowest issue becomes the poster of a volume that has none.
-async fn cover(st: &AppState, media: i32, files: &[Placed], rows: &[Row]) {
-    let has = sqlx::query_scalar!(
-        r#"SELECT "posterUrl" IS NOT NULL AS "has!" FROM media WHERE id = $1"#,
-        media
-    )
-    .fetch_optional(&st.db)
-    .await
-    .ok()
-    .flatten()
-    .unwrap_or(true);
-    if has {
-        return;
-    }
-    let mut paged: Vec<(f64, &Placed)> = rows
-        .iter()
-        .filter(|r| r.format != "pdf")
-        .filter_map(|r| {
-            let f = files.iter().find(|f| f.rel.replace('\\', "/") == r.rel)?;
-            let n = name::parse_path(&file_name(&f.abs));
-            Some((n.sort.and_then(|s| s.parse().ok()).unwrap_or(f64::MAX), f))
-        })
-        .collect();
-    paged.sort_by(|a, b| a.0.total_cmp(&b.0));
-    for (_, f) in paged {
-        let p = f.abs.clone();
-        let jpeg = crate::comics::blocking_ingest(move || crate::comics::first_page_cover(&p))
-            .await
-            .flatten();
-        if let Some(b) = jpeg {
-            super::books::store_cover(st, media, &b).await;
-            return;
-        }
-    }
 }
 
 /// The volume's `image` edition, created when it has none.

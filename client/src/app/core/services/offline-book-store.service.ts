@@ -85,6 +85,7 @@ export class OfflineBookStoreService {
       .map((l) => new URL(l.href!, manifestUrl).href.split('#')[0]))].filter((u) => u !== manifestUrl);
     await this.put(this.key(manifestUrl), manifest, signal);
     let bytes = manifest.size;
+    bytes += await this.storeAnnotations(itemId, signal);
     let done = 0;
     for (let i = 0; i < urls.length; i += PARALLEL) {
       await Promise.all(
@@ -97,6 +98,35 @@ export class OfflineBookStoreService {
       );
     }
     return bytes;
+  }
+
+  /** The caller's bookmarks and highlights of an EPUB on the device, so its marks show offline; `null` when it has none stored. */
+  async annotations<T>(itemId: number): Promise<T[] | null> {
+    const blob = await this.get(this.annotationsKey(itemId)).catch(() => null);
+    return blob ? (JSON.parse(await blob.text()) as T[]) : null;
+  }
+
+  /** Keeps a fresh copy of the marks of an EPUB that is stored on the device; nothing for any other book. */
+  async refreshAnnotations(itemId: number, list: unknown[]): Promise<void> {
+    if (!(await this.get(this.key(this.manifestUrl(itemId))).catch(() => null))) return;
+    await this.put(this.annotationsKey(itemId), new Blob([JSON.stringify(list)], { type: 'application/json' })).catch(() => undefined);
+  }
+
+  /** The marks are a convenience: a download does not fail for them. Returns the bytes kept. */
+  private async storeAnnotations(itemId: number, signal?: AbortSignal): Promise<number> {
+    try {
+      const url = new URL(this.serverConfig.resolveUrl(`/api/items/${itemId}/annotations`), document.baseURI).href;
+      const blob = await (await this.ok(url, signal)).blob();
+      await this.put(this.annotationsKey(itemId), blob, signal);
+      return blob.size;
+    } catch {
+      signal?.throwIfAborted();
+      return 0;
+    }
+  }
+
+  private annotationsKey(itemId: number): string {
+    return this.key(`annotations|${itemId}`);
   }
 
   /** Stores one file of a book under `key` from `url` (it carries its own token). Returns the bytes kept. */
@@ -208,6 +238,7 @@ export class OfflineBookStoreService {
       if (book.family === 'text' && book.format === 'epub') {
         const prefix = this.key(this.manifestUrl(book.itemId).replace(/manifest\.json$/, ''));
         await this.tx('readwrite', (s) => s.delete(IDBKeyRange.bound(prefix, `${prefix}\uffff`)));
+        await this.tx('readwrite', (s) => s.delete(this.annotationsKey(book.itemId)));
       }
       for (const f of book.files) {
         if (this.desktop && this.onDisk(book)) {
