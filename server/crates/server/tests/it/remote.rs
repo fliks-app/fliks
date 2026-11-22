@@ -1,9 +1,14 @@
 //! `/api/remote/*`: grants lifecycle and `canControl` outcomes on a fresh database.
 use crate::session;
 use axum::{Router, body::Body, http::Request};
-use fliks_server::{config::Config, remote, state::AppState};
+use fliks_server::sync::MutexExt;
+use fliks_server::{config::Config, events::SseEvent, remote, state::AppState};
 use serde_json::{Value, json};
 use sqlx::PgPool;
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tower::ServiceExt;
 
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
@@ -390,4 +395,58 @@ async fn a_claim_that_finds_its_code_is_not_counted_as_a_failure(pool: PgPool) {
         let code = c.mint(&owner, device).await;
         assert_eq!(c.claim(&guest, &code).await, 201);
     }
+}
+
+fn state(target_id: &str) -> SseEvent {
+    serde_json::from_value(
+        json!({"type":"remote.state","targetId":target_id,"sessionId":"s",
+        "mediaId":null,"mediaFileId":1,"episodeId":null,"mediaTitle":null,"episodeLabel":null,
+        "posterUrl":null,"fanartUrl":null,"positionSeconds":1,"durationSeconds":2,
+        "state":"playing","volume":null,"muted":null,"supportsVolume":true,"subtitleId":null,
+        "quality":null,"qualities":null,"autoplayBlocked":false,"hasNext":false,
+        "audioTrackIndex":null,"subtitleTrackIndex":null,"lastCmdId":null}),
+    )
+    .unwrap()
+}
+
+async fn reached(seen: &Mutex<Vec<i32>>, user: i32) {
+    for _ in 0..200 {
+        if seen.lock_clean().contains(&user) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    panic!("user {user} never received the frame");
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_revoked_grantee_gets_no_state_frame_after_the_revoke(pool: PgPool) {
+    let c = ctx(pool).await;
+    remote::init(&c.st);
+    let seen: Arc<Mutex<Vec<i32>>> = Arc::default();
+    let sink = seen.clone();
+    c.st.hub.register_users_hook(move |ev, users| {
+        if matches!(ev, SseEvent::RemoteState { .. }) {
+            sink.lock_clean().extend(users);
+        }
+    });
+    let (owner, owner_token) = c.user("owner", false).await;
+    let (gone, gone_token) = c.user("gone", false).await;
+    let (kept, kept_token) = c.user("kept", false).await;
+    for token in [&gone_token, &kept_token] {
+        let code = c.mint(&owner_token, "d1").await;
+        assert_eq!(c.claim(token, &code).await, 201);
+    }
+    c.st.hub.emit_to_user(owner, state("d1#tab"));
+    reached(&seen, gone).await;
+    reached(&seen, kept).await;
+
+    let (_, list) = c.call("GET", "/api/remote/grants", &gone_token, None).await;
+    let id = list["held"][0]["id"].as_i64().unwrap();
+    let uri = format!("/api/remote/grants/{id}");
+    assert_eq!(c.call("DELETE", &uri, &owner_token, None).await.0, 204);
+    seen.lock_clean().clear();
+    c.st.hub.emit_to_user(owner, state("d1#tab"));
+    reached(&seen, kept).await;
+    assert!(!seen.lock_clean().contains(&gone));
 }
