@@ -9,17 +9,17 @@
         {{ 'media_detail.subtitle_view_failed' | translate }}
       </p>
     } @else if (!cues().length) {
-      <p class="py-10 text-center text-sm text-base-content/50">
+      <p class="py-10 text-center text-sm text-base-content/60">
         {{ 'media_detail.subtitle_view_empty' | translate }}
       </p>
     } @else {
-      <p class="text-xs text-base-content/50 mb-2">
+      <p class="text-sm text-base-content/60 mb-2">
         {{ 'media_detail.subtitle_view_count' | translate: { count: cues().length } }}
       </p>
       <div class="max-h-[60vh] overflow-y-auto flex flex-col gap-2 pr-1">
         @for (cue of cues(); track $index) {
           <div class="rounded-lg bg-base-200 px-3 py-2">
-            <p class="font-mono text-xs text-base-content/50">
+            <p class="font-mono text-sm text-base-content/60">
               {{ formatTime(cue.start) }} → {{ formatTime(cue.end) }}
             </p>
             <p class="text-sm leading-snug" [appCueText]="cue.text"></p>

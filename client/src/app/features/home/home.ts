@@ -234,6 +234,13 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.sections().filter((s) => s.visible),
   );
 
+  /** The most frequent TV action is resuming: land on Continue watching when it shows, else on the first library. */
+  protected readonly defaultFocus = computed(() =>
+    this.continueWatching().length && this.visibleSections().some((s) => s.type === 'continue-watching')
+      ? "[data-home-focus^='cw:']"
+      : "a[data-home-focus^='library:']",
+  );
+
   qualityProfileDisplay(id: number | null): string {
     if (id == null) return '-';
     return this.qualityProfileNames().get(id) ?? `#${id}`;

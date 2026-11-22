@@ -1,4 +1,4 @@
-import { Component, booleanAttribute, input, output } from '@angular/core';
+import { Component, ElementRef, afterNextRender, booleanAttribute, inject, input, output } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideX } from '@lucide/angular';
 
@@ -18,4 +18,16 @@ export class ModalHeaderComponent {
   readonly title = input('');
   readonly flush = input(false, { transform: booleanAttribute });
   readonly closed = output<void>();
+
+  private static nextId = 0;
+  protected readonly titleId = `modal-title-${ModalHeaderComponent.nextId++}`;
+
+  constructor() {
+    const host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    // The title names the enclosing dialog, so no `<dialog>` repeats its own title as an attribute.
+    afterNextRender(() => {
+      const dialog = host.closest('dialog');
+      if (dialog && this.title() && !dialog.hasAttribute('aria-label')) dialog.setAttribute('aria-labelledby', this.titleId);
+    });
+  }
 }

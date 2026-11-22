@@ -80,10 +80,10 @@
 
           <div class="min-w-0 flex flex-col gap-0.5 sm:gap-1">
             <p class="text-base sm:text-lg font-medium">
-              <span class="text-base-content/50 tabular-nums mr-1.5">{{ ep.episodeNumber }}</span>
+              <span class="text-base-content/60 tabular-nums mr-1.5">{{ ep.episodeNumber }}</span>
               {{ ep.title }}
             </p>
-            <span class="text-sm text-base-content/50 tabular-nums">
+            <span class="text-sm text-base-content/60 tabular-nums">
               @if (ep.airDate) { {{ ep.airDate | localeDate:{ dateStyle: 'medium' } }} }
               @if (ep.airDate && ep.runtime) { · }
               @if (ep.runtime) { {{ ep.runtime }}min }
@@ -108,7 +108,7 @@
                 </button>
               }
             } @else {
-              <p class="text-sm sm:text-base text-base-content/35 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
+              <p class="text-sm sm:text-base text-base-content/60 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
             }
           </div>
         </li>

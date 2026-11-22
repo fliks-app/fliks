@@ -71,7 +71,7 @@
     <ng-container [ngTemplateOutlet]="actions" />
   </div>
 
-  <dialog #settings class="modal" [class.modal-bottom]="sheet()" [class.modal-end]="!sheet()" data-testid="karaoke-settings-sheet">
+  <dialog #settings class="modal" [class.modal-bottom]="sheet()" [class.modal-end]="!sheet()" data-testid="karaoke-settings-sheet" [attr.aria-label]="'karaoke.settings' | translate">
     <div class="modal-box flex flex-col gap-4" [class.w-[360px]]="!sheet()">
       <div class="flex items-center justify-between gap-2">
         <h3 class="text-lg font-bold">{{ 'karaoke.settings' | translate }}</h3>
@@ -131,7 +131,7 @@
     <form method="dialog" class="modal-backdrop"><button tabindex="-1">{{ 'karaoke.close' | translate }}</button></form>
   </dialog>
 
-  <dialog #board class="modal" (close)="karaoke.dismissBoard()" data-testid="karaoke-board">
+  <dialog #board class="modal" (close)="karaoke.dismissBoard()" data-testid="karaoke-board" [attr.aria-label]="'karaoke.scoreboard' | translate">
     <div class="modal-box">
       @if (karaoke.board(); as b) {
         <h3 class="text-xl font-bold">{{ 'karaoke.scoreboard' | translate }}</h3>

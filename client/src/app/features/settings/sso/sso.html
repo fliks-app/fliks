@@ -42,7 +42,7 @@
                 <button
                   type="button"
                   cdkDragHandle
-                  class="cursor-grab text-base-content/40 hover:text-base-content/70"
+                  class="cursor-grab text-base-content/60 hover:text-base-content/70"
                   [attr.aria-label]="'settings.sso.drag' | translate"
                 >
                   <svg lucideGripVertical class="h-4 w-4"></svg>
@@ -50,10 +50,10 @@
               }
               <span class="flex flex-1 min-w-0 flex-col">
                 <span class="font-medium truncate">{{ p.name }}</span>
-                <span class="text-sm text-base-content/50 truncate">{{ p.issuer }}</span>
+                <span class="text-sm text-base-content/60 truncate">{{ p.issuer }}</span>
               </span>
               <span class="text-sm text-base-content/60 whitespace-nowrap" data-testid="sso-linked">
-                {{ 'settings.sso.linked_users' | translate: { count: p.linkedUsers } }}
+                {{ 'settings.sso.linked_users' | translatePlural: p.linkedUsers }}
               </span>
               <app-enabled-switch
                 [enabled]="p.enabled"
@@ -88,7 +88,7 @@
             <option value="everyone">{{ 'settings.sso.password_login_everyone' | translate }}</option>
             <option value="admins">{{ 'settings.sso.password_login_admins' | translate }}</option>
           </select>
-          <span class="text-sm text-base-content/50">{{ 'settings.sso.password_login_hint' | translate }}</span>
+          <span class="text-sm text-base-content/60">{{ 'settings.sso.password_login_hint' | translate }}</span>
         </label>
 
         <label class="form-control w-full max-w-md">
@@ -105,7 +105,7 @@
               <option [value]="'' + p.id">{{ p.name }}</option>
             }
           </select>
-          <span class="text-sm text-base-content/50">{{ 'settings.sso.auto_launch_hint' | translate }}</span>
+          <span class="text-sm text-base-content/60">{{ 'settings.sso.auto_launch_hint' | translate }}</span>
         </label>
 
         <div class="card-actions justify-end">

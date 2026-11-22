@@ -120,7 +120,7 @@ impl Conn {
         match self.send(rb, TEST_TIMEOUT).await {
             Ok(v) => (
                 true,
-                format!("Connecte a {}", v["ServerName"].as_str().unwrap_or(LABEL)),
+                format!("Connected to {}", v["ServerName"].as_str().unwrap_or(LABEL)),
             ),
             Err(e) => (false, e),
         }

@@ -35,7 +35,7 @@
       <span class="loading loading-spinner loading-lg"></span>
     </div>
   } @else if (list.total() === 0) {
-    <div class="text-center py-12 text-base-content/50">
+    <div class="text-center py-12 text-base-content/60">
       <svg lucideUsers class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
       <p class="text-lg">{{ 'persons.empty' | translate }}</p>
       <p class="text-sm mt-2">{{ 'persons.empty_hint' | translate }}</p>
@@ -73,7 +73,7 @@
         @for (letter of alphabet; track letter) {
           <button
             type="button"
-            class="text-[10px] font-medium w-4 h-4 flex items-center justify-center rounded transition-colors pointer-events-auto"
+            class="text-sm font-medium w-5 h-5 flex items-center justify-center rounded transition-colors pointer-events-auto"
             [class.bg-primary]="list.activeLetter() === letter"
             [class.text-primary-content]="list.activeLetter() === letter"
             [class.text-base-content/60]="list.activeLetter() !== letter && list.availableLetters().has(letter)"

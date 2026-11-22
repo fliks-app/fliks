@@ -12,6 +12,7 @@
     "build:dev": "npm run cast-app-id && ng build --configuration development",
     "watch": "npm run cast-app-id && ng build --watch --configuration development",
     "lint": "eslint src",
+    "check:i18n": "node scripts/check-i18n-keys.mjs",
     "test": "ng test",
     "cap:sync": "npx cap sync android",
     "cap:sync:ios": "npx cap sync ios",

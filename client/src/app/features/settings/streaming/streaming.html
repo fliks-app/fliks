@@ -16,7 +16,7 @@
         <option value="directplay">{{ 'settings.streaming.auto_quality_mode_directplay' | translate }} ({{ 'settings.streaming.default' | translate }})</option>
         <option value="abr">{{ 'settings.streaming.auto_quality_mode_abr' | translate }}</option>
       </select>
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.auto_quality_mode_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.auto_quality_mode_help' | translate }}</span></label>
       <div class="mt-1 rounded-lg bg-base-200 p-3 text-sm text-base-content/70">
         {{ ('settings.streaming.auto_quality_mode_' + autoQualityMode() + '_help') | translate }}
       </div>
@@ -32,7 +32,7 @@
         <option value="4">4s</option>
         <option value="6">6s</option>
       </select>
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.segment_duration_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.segment_duration_help' | translate }}</span></label>
     </div>
 
     <div class="divider">{{ 'settings.streaming.transcoding_title' | translate }}</div>
@@ -63,7 +63,7 @@
         <input
           type="number" min="60" step="5" class="input input-bordered w-full"
           [ngModel]="throttleThresholdSeconds()" (ngModelChange)="throttleThresholdSeconds.set($event)" />
-        <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.throttle_threshold_help' | translate }}</span></label>
+        <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.throttle_threshold_help' | translate }}</span></label>
       </div>
     }
 
@@ -80,7 +80,7 @@
         <option value="slower">slower</option>
         <option value="veryslow">veryslow</option>
       </select>
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.qsv_preset_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.qsv_preset_help' | translate }}</span></label>
     </div>
 
     <!-- Background ffmpeg budget (scans, thumbnails, marker detection).
@@ -91,7 +91,7 @@
         type="number" min="1" step="1" class="input input-bordered w-full"
         [placeholder]="'settings.streaming.ffmpeg_slots_auto' | translate: { count: ffmpegSlotsAuto() }"
         [ngModel]="ffmpegSlots()" (ngModelChange)="ffmpegSlots.set($event)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.ffmpeg_slots_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.ffmpeg_slots_help' | translate }}</span></label>
     </div>
 
     <!-- HDR → SDR tone-mapping algorithm. Hidden when the server reports
@@ -105,7 +105,7 @@
             <option [value]="algo">{{ ('settings.streaming.tonemap_algo_' + algo) | translate }}@if (algo === 'auto') { ({{ 'settings.streaming.default' | translate }}) }</option>
           }
         </select>
-        <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.tonemap_algo_help' | translate }}</span></label>
+        <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.tonemap_algo_help' | translate }}</span></label>
       </div>
     }
 
@@ -119,7 +119,7 @@
         <option value="hable">hable</option>
         <option value="reinhard">reinhard</option>
       </select>
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.tonemap_curve_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.tonemap_curve_help' | translate }}</span></label>
     </div>
 
     <!-- GPU device pinning. Hidden on single-GPU hosts: nothing to choose. -->
@@ -133,7 +133,7 @@
             <option [value]="g.renderNode">{{ g.label }}</option>
           }
         </select>
-        <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.gpu_device_help' | translate }}</span></label>
+        <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.gpu_device_help' | translate }}</span></label>
       </div>
     }
 
@@ -147,7 +147,7 @@
       <input
         type="number" min="1" step="1" class="input input-bordered w-full"
         [ngModel]="cacheMaxGb()" (ngModelChange)="cacheMaxGb.set($event)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.cache_max_gb_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.cache_max_gb_help' | translate }}</span></label>
     </div>
 
     <div class="form-control">
@@ -155,7 +155,7 @@
       <input
         type="number" min="1" step="1" class="input input-bordered w-full"
         [ngModel]="cacheTtlHours()" (ngModelChange)="cacheTtlHours.set($event)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.cache_ttl_hours_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.cache_ttl_hours_help' | translate }}</span></label>
     </div>
 
     <div class="card-actions justify-end">
@@ -170,13 +170,13 @@
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.cache_usage' | translate }}</span></label>
       <p class="text-base-content/70">
         @if (cacheStatsLoaded()) {
-          {{ 'settings.streaming.cache_usage_value' | translate: { entries: cacheEntries(), size: formatBytes(cacheBytes()) } }}
+          {{ 'settings.streaming.cache_usage_value' | translatePlural: cacheEntries() : { size: formatBytes(cacheBytes()) } }}
         } @else {
           <span class="loading loading-spinner loading-xs align-middle"></span>
           <span class="ml-2">{{ 'settings.streaming.cache_usage_loading' | translate }}</span>
         }
       </p>
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'settings.streaming.cache_purge_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.cache_purge_help' | translate }}</span></label>
     </div>
 
     <button

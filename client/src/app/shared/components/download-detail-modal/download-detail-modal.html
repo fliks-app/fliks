@@ -41,7 +41,7 @@
                     <app-progress-bar [percent]="l.percent" [variant]="l.variant" />
                   }
                   @if (l.speed || l.eta) {
-                    <div class="flex flex-wrap items-center gap-x-3 text-xs text-base-content/50">
+                    <div class="flex flex-wrap items-center gap-x-3 text-sm text-base-content/60">
                       @if (l.speed) {
                         <span>↓ {{ l.speed }}</span>
                       }
@@ -57,7 +57,7 @@
         </div>
       }
     } @else {
-      <p class="text-sm text-base-content/50 py-4 text-center">
+      <p class="text-sm text-base-content/60 py-4 text-center">
         {{ 'activity.queue_empty' | translate }}
       </p>
     }

@@ -10,7 +10,7 @@
       },
       "expect": {
         "body": {
-          "message": "Connecté à Radarr Parity",
+          "message": "Connected to Radarr Parity",
           "ok": true
         },
         "status": 201

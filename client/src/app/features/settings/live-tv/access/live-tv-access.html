@@ -112,7 +112,7 @@
                         {{ 'liveTv.admin.access.full_access_badge' | translate }}
                       </span>
                     } @else if (user.groups.length === 0) {
-                      <span class="text-base-content/40">-</span>
+                      <span class="text-base-content/60">-</span>
                     } @else {
                       <div class="flex flex-wrap gap-1">
                         @for (name of user.groups; track name) {

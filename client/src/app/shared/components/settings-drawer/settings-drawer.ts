@@ -16,6 +16,7 @@ import {
   NavigationEnd,
 } from '@angular/router';
 import { Title } from '@angular/platform-browser';
+import { TranslatePipe } from '@ngx-translate/core';
 import { Location } from '@angular/common';
 import { Subscription, filter } from 'rxjs';
 import { LucideChevronLeft, LucideMenu } from '@lucide/angular';
@@ -24,7 +25,7 @@ import { PageScrollerService } from '../../../core/services/page-scroller.servic
 
 @Component({
   selector: 'app-settings-drawer',
-  imports: [RouterOutlet, RouterLink, LucideChevronLeft, LucideMenu],
+  imports: [RouterOutlet, RouterLink, TranslatePipe, LucideChevronLeft, LucideMenu],
   templateUrl: './settings-drawer.html',
 })
 export class SettingsDrawerComponent implements OnInit, OnDestroy {

@@ -117,7 +117,7 @@
   <app-smart-playlist-editor #rulesEditor [playlist]="pl" (saved)="onRulesSaved()" />
 
   @if (!items().length) {
-    <div class="text-center py-12 text-base-content/50">
+    <div class="text-center py-12 text-base-content/60">
       <p class="text-lg">{{ 'playlists.no_items' | translate }}</p>
     </div>
   } @else {
@@ -461,7 +461,7 @@
   <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
 </dialog>
 
-<dialog #membersDialog class="modal">
+<dialog #membersDialog class="modal" [attr.aria-label]="'playlists.members' | translate">
   <div class="modal-box max-w-md">
     <app-modal-header>
       <div>

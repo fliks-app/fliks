@@ -26,7 +26,7 @@ export interface ResolvedNavItem {
 
 /** Items pinned to the native-phone dock's limited primary row — excluded
  *  from the overflow "more" sheet so they aren't shown twice. */
-export const DOCK_PINNED_IDS: readonly string[] = ['core.home', 'core.downloads', 'core.requests'];
+export const DOCK_PINNED_IDS: readonly string[] = ['core.home', 'core.requests'];
 /** Never shown on the native-phone dock or its sheet: Search is its own FAB,
  *  My profile is reachable from the always-visible user menu instead. */
 export const MOBILE_HIDDEN_IDS: readonly string[] = ['core.search', 'core.my_profile'];

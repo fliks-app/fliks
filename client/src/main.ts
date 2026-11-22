@@ -2,58 +2,20 @@ import './polyfills';
 import { bootstrapApplication } from '@angular/platform-browser';
 import { appConfig } from './app/app.config';
 import { App } from './app/app';
+import { applyDeviceOverrideFromUrl, detectDevice } from './app/core/services/device.service';
 
-// Pre-bootstrap TV detection poses `body.tv` before Angular renders to avoid flashing the mobile/desktop layout; strict, DeviceService re-runs it later.
+// Pre-bootstrap TV detection poses `body.tv` before Angular renders to avoid flashing the mobile/desktop layout.
 (function applyTvBootstrapTweaks() {
-  const ua = navigator.userAgent;
-  const matchMedia = typeof window.matchMedia === 'function' ? window.matchMedia : null;
-  let override: string | null = null;
-  let tvPlatformOverride: string | null = null;
-  try {
-    override = window.localStorage.getItem('fliks.deviceOverride');
-    tvPlatformOverride = window.localStorage.getItem('fliks.tvPlatformOverride');
-  } catch {
-    /* ignore */
-  }
-  const params = new URLSearchParams(window.location.search);
-  const queryOverride = (['tv', 'tablet', 'phone', 'desktop'] as const).find((k) => params.has(k));
-  const effectiveOverride = queryOverride ?? override;
-  if (effectiveOverride && effectiveOverride !== 'tv') return;
-
-  let platform: 'androidtv' | 'tizen' | 'webos' | null = null;
-  if (/AndroidTV\/\d/.test(ua)) platform = 'androidtv';
-  else if (/\bTizen\b|SMART-TV/i.test(ua)) platform = 'tizen';
-  else if (/Web0S|webOS/.test(ua)) platform = 'webos';
-  else if (/Android.*TV|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV/i.test(ua)) platform = 'androidtv';
-
-  const queryTvPlatform = params.get('tvplatform');
-  if (
-    queryTvPlatform === 'androidtv' ||
-    queryTvPlatform === 'tizen' ||
-    queryTvPlatform === 'webos'
-  ) {
-    platform = queryTvPlatform;
-  } else if (
-    !platform &&
-    (tvPlatformOverride === 'androidtv' ||
-      tvPlatformOverride === 'tizen' ||
-      tvPlatformOverride === 'webos')
-  ) {
-    platform = tvPlatformOverride;
-  }
-
-  const isTv =
-    effectiveOverride === 'tv' ||
-    platform !== null ||
-    (matchMedia && matchMedia('(pointer: none)').matches);
-  if (!isTv) return;
+  applyDeviceOverrideFromUrl();
+  const { formFactor, tvPlatform } = detectDevice();
+  if (formFactor !== 'tv') return;
   document.documentElement.classList.add('tv-host');
   document.body.classList.add('tv');
-  if (platform) document.body.classList.add(`tv-${platform}`);
+  if (tvPlatform) document.body.classList.add(`tv-${tvPlatform}`);
 
   // The 10-foot UI is authored for 1280; the Android TV WebView lays out at
   // device-width, which falls below Tailwind's `lg` breakpoint.
-  if (platform === 'androidtv') {
+  if (tvPlatform === 'androidtv') {
     document
       .querySelector('meta[name="viewport"]')
       ?.setAttribute('content', 'width=1280, viewport-fit=cover');

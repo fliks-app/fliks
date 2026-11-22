@@ -32,7 +32,7 @@ import { PwaAutoUpdateService } from './core/services/pwa-auto-update.service';
 import { AppResumeService } from './core/services/app-resume.service';
 import { OfflinePlaybackSyncService } from './core/services/offline-playback-sync.service';
 import { RemoteService } from './core/services/remote.service';
-import { TIZEN_MEDIA_KEYS } from './features/player/player-keymap';
+import { TIZEN_MEDIA_KEYS, isBackKey } from './features/player/player-keymap';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { BlockingOverlayComponent } from './shared/components/blocking-overlay/blocking-overlay';
@@ -199,12 +199,7 @@ export class App implements OnInit, OnDestroy {
     const platform = this.tv.tvPlatform();
     if (platform === 'tizen' || platform === 'webos') {
       const handler = (e: KeyboardEvent) => {
-        if (
-          e.keyCode === 10009 ||
-          e.keyCode === 461 ||
-          e.key === 'XF86Back' ||
-          e.key === 'GoBack'
-        ) {
+        if (isBackKey(e)) {
           e.preventDefault();
           this.handleBackButton();
         }

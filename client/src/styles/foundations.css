@@ -435,3 +435,15 @@ body.native.hero-page {
 .player-floating-cue.controls-seek {
   --cue-bottom: 7rem;
 }
+
+/* One global reduced-motion switch; TV keeps its focus lift, and spinners keep turning so a wait still reads as one. */
+@media (prefers-reduced-motion: reduce) {
+  html:not(.tv-host) *:not(.loading),
+  html:not(.tv-host) *:not(.loading)::before,
+  html:not(.tv-host) *:not(.loading)::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

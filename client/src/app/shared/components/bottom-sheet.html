@@ -2,29 +2,32 @@
   <!-- Backdrop: CSS @starting-style fades it in. Preventing the pointerdown default keeps the tap from blurring the opener (its ring flickered). -->
   <div
     [class]="
-      'bottom-sheet-backdrop fixed inset-0 transition-opacity duration-150 ' + (fullHeight() ? 'z-[94] ' : 'z-[100] ') +
+      'bottom-sheet-backdrop fixed inset-0 transition-opacity duration-150 ' + layers().backdrop + ' ' +
       (showBackdrop() ? 'bg-black/60' : '')
     "
     [class.opacity-0]="dismissing()"
     (pointerdown)="$event.preventDefault()"
     (click)="dismiss()"
   ></div>
-  <!-- Sheet -->
+  <!-- Resting on the dock, the sheet slides inside a box that ends where the dock begins, so it never crosses it. -->
+  <ng-template #sheetTpl>
   <div
     #sheet
     data-tv-modal
     [class]="
-      'fixed bottom-0 shadow-2xl overflow-y-auto overscroll-contain ' +
-      (fullHeight() ? 'z-[95] ' : 'z-[101] ') +
+      (aboveDock() ? 'pointer-events-auto absolute' : 'fixed') + ' bottom-0 shadow-2xl overflow-y-auto overscroll-contain ' +
+      layers().sheet + ' ' +
       (fullHeight()
         ? 'inset-x-0 top-0 flex flex-col bg-base-100 text-base-content'
-        : 'bg-neutral/95 rounded-t-2xl max-h-[70vh] portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
-          (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto'))
+        : aboveDock()
+          ? layers().bg + ' inset-x-0 rounded-t-2xl max-h-[70vh] border-b border-base-content/10'
+          : layers().bg + ' rounded-t-2xl max-h-[70vh] portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
+            (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto'))
     "
     [class.animate-slide-up]="!dismissing()"
     [style.transform]="sheetTransform()"
     [style.transition]="dragging() ? 'none' : 'transform 0.18s ease-out'"
-    [style.padding-bottom]="'env(safe-area-inset-bottom)'"
+    [style.padding-bottom]="aboveDock() ? null : 'env(safe-area-inset-bottom)'"
     (touchstart)="onTouchStart($event)"
     (touchmove)="onTouchMove($event)"
     (touchend)="onTouchEnd()"
@@ -33,7 +36,7 @@
     <div
       data-sheet-handle
       class="sticky top-0 z-10 pb-1 mb-1 cursor-grab"
-      [class]="fullHeight() ? 'bg-base-100 shrink-0' : 'bg-neutral'"
+      [class]="fullHeight() ? 'bg-base-100 shrink-0' : layers().handleBg"
       [class.tv:hidden]="fullHeight() && !heading()"
       [style.padding-top]="fullHeight() ? 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' : '0.75rem'"
     >
@@ -42,7 +45,7 @@
         <div class="w-10 h-1 rounded-full bg-white/20"></div>
       </div>
       @if (heading()) {
-        <div class="menu-heading px-4 text-white/60">{{ heading() }}</div>
+        <h2 class="px-5 pb-2 pt-1 text-left text-lg font-bold">{{ heading() }}</h2>
       }
     </div>
     <!-- Content -->
@@ -50,4 +53,12 @@
       <ng-content></ng-content>
     </div>
   </div>
+  </ng-template>
+  @if (aboveDock()) {
+    <div class="pointer-events-none fixed inset-x-0 top-0 overflow-hidden" [class]="layers().sheet" style="bottom: var(--dock-h, 0px)">
+      <ng-container [ngTemplateOutlet]="sheetTpl" />
+    </div>
+  } @else {
+    <ng-container [ngTemplateOutlet]="sheetTpl" />
+  }
 }

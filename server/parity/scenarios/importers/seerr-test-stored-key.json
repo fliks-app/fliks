@@ -9,7 +9,7 @@
       },
       "expect": {
         "body": {
-          "message": "Connecté à Parity Seerr",
+          "message": "Connected to Parity Seerr",
           "ok": true
         },
         "status": 201

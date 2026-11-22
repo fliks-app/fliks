@@ -566,7 +566,7 @@ async fn test_connection_modes(pool: PgPool) {
     let (s, b) = check("ok").await;
     assert_eq!(
         (s, b["ok"].clone(), b["message"].as_str()),
-        (201, json!(true), Some("Connecte a Parity Emby"))
+        (201, json!(true), Some("Connected to Parity Emby"))
     );
     let (_, b) = check("401").await;
     assert_eq!(
@@ -600,7 +600,7 @@ async fn test_connection_modes(pool: PgPool) {
         (s, b),
         (
             201,
-            json!({"ok": false, "message": "Type \"plex\" non supporte"})
+            json!({"ok": false, "message": "Type \"plex\" is not supported"})
         )
     );
     assert_eq!(

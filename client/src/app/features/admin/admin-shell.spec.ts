@@ -51,6 +51,7 @@ const BASELINE_SIDEBAR = [
     { label: 'liveTv.admin.title', href: '/admin/settings/live-tv' },
   ] },
   { label: 'admin.section_integrations', links: [
+    { label: 'settings.nav.plugins', href: '/admin/settings/plugins' },
     { label: 'settings.nav.media_servers', href: '/admin/settings/media-servers' },
     { label: 'settings.nav.data_imports', href: '/admin/settings/data-imports' },
     { label: 'settings.nav.notifications', href: '/admin/settings/notifications' },
@@ -68,7 +69,6 @@ const BASELINE_SIDEBAR = [
     { label: 'settings.nav.schedulers', href: '/admin/settings/schedulers' },
     { label: 'settings.nav.streaming', href: '/admin/settings/streaming' },
     { label: 'settings.nav.engine', href: '/admin/settings/engine' },
-    { label: 'settings.nav.plugins', href: '/admin/settings/plugins' },
   ] },
 ];
 

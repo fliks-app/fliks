@@ -62,7 +62,7 @@
       </button>
     }
     <app-dropdown-menu placement="bottom-end" class="order-last" [class.ms-auto]="!showViewToggle && !canSelect() && !selSeason">
-      <button trigger type="button" class="btn btn-ghost btn-circle max-sm:btn-sm shrink-0">
+      <button trigger type="button" class="btn btn-ghost btn-circle max-sm:btn-sm shrink-0" [attr.aria-label]="'common.more' | translate">
         <svg lucideEllipsisVertical class="h-5 w-5"></svg>
       </button>
       <label class="dropdown-item text-white">
@@ -252,7 +252,7 @@
   }
 
   @if (episodesHasFileOnly() && displaySeasons().length === 0) {
-    <p class="text-sm text-base-content/50 py-6 text-center">
+    <p class="text-sm text-base-content/60 py-6 text-center">
       {{ 'media_detail.seasons_filter_empty' | translate }}
     </p>
   }
@@ -292,7 +292,7 @@
       </div>
     }
     @if (filteredEpisodes().length === 0 && episodesHasFileOnly() && selSeason.episodes.length > 0) {
-      <p class="text-sm text-base-content/50 py-8 text-center">
+      <p class="text-sm text-base-content/60 py-8 text-center">
         {{ 'media_detail.episodes_filter_empty' | translate }}
       </p>
     } @else if (filteredEpisodes().length > 0 && showEpisodeList()) {
@@ -358,7 +358,7 @@
                     class="flex-1 text-base sm:text-lg font-medium hover:underline line-clamp-2"
                   >{{ episodeTitle(ep) }}</a>
                 </div>
-                <span class="text-sm text-base-content/50 tabular-nums">
+                <span class="text-sm text-base-content/60 tabular-nums">
                   {{ episodeCardSubtitle((ep.airDate | localeDate), ep.runtime) }}
                 </span>
               </div>
@@ -375,7 +375,7 @@
                     toggleClass="mt-0.5"
                   />
                 } @else {
-                  <p class="text-sm sm:text-base text-base-content/35 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
+                  <p class="text-sm sm:text-base text-base-content/60 italic">{{ 'media_detail.ep_no_overview' | translate }}</p>
                 }
               </div>
           </li>

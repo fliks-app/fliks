@@ -13,6 +13,7 @@ import { parseDeviceLabel } from '../../../core/utils/format-device-label';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { QoeBadgeComponent } from '../qoe-badge/qoe-badge';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { formatBitrate } from '../../../core/utils/format-bytes';
 
 @Component({
   selector: 'app-system-streams',
@@ -170,11 +171,7 @@ export class SystemStreamsComponent implements OnInit, OnDestroy {
     return this.translate.instant(label.key, label.params);
   }
 
-  formatBitrate(bps: number): string {
-    if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(0)} Mbps`;
-    if (bps >= 1_000) return `${(bps / 1_000).toFixed(0)} kbps`;
-    return `${bps} bps`;
-  }
+  protected readonly formatBitrate = formatBitrate;
 
   /** Display label for a hardware-acceleration code (the per-session value the
    *  backend ships), falling back to the upper-cased code for unknowns. */

@@ -20,7 +20,7 @@
       <span class="loading loading-spinner loading-md"></span>
     </div>
   } @else if (rules().length === 0) {
-    <p class="text-base-content/50 text-center py-8">
+    <p class="text-base-content/60 text-center py-8">
       {{ 'settings.auto_approval.empty' | translate }}
     </p>
   } @else {
@@ -77,7 +77,7 @@
   }
 </div>
 
-<dialog #editorDialog class="modal">
+<dialog #editorDialog class="modal" [attr.aria-label]="'settings.auto_approval.who' | translate">
   <div class="modal-box max-w-4xl">
     <app-modal-header
       [title]="
@@ -124,7 +124,7 @@
         <section class="flex flex-col gap-3 flex-1 min-w-0">
           <div>
             <h3 class="font-semibold">{{ 'settings.auto_approval.who' | translate }}</h3>
-            <p class="text-xs leading-tight text-base-content/50">
+            <p class="text-sm leading-tight text-base-content/60">
               {{ 'settings.auto_approval.who_hint' | translate }}
             </p>
           </div>
@@ -140,7 +140,7 @@
             />
           </div>
 
-          <div class="divider my-0 text-xs text-base-content/50">
+          <div class="divider my-0 text-sm text-base-content/60">
             {{ 'settings.auto_approval.or' | translate }}
           </div>
           }
@@ -164,7 +164,7 @@
         <section class="flex flex-col gap-3 flex-1 min-w-0">
           <div>
             <h3 class="font-semibold">{{ 'settings.auto_approval.what' | translate }}</h3>
-            <p class="text-xs leading-tight text-base-content/50">
+            <p class="text-sm leading-tight text-base-content/60">
               {{ 'settings.auto_approval.what_hint' | translate }}
             </p>
           </div>
@@ -231,7 +231,7 @@
                 [(value)]="formLanguages"
                 [placeholder]="'settings.auto_approval.any_language' | translate"
               />
-              <span class="block text-sm leading-tight text-base-content/50 mt-1">
+              <span class="block text-sm leading-tight text-base-content/60 mt-1">
                 {{ 'settings.auto_approval.book_criteria_hint' | translate }}
               </span>
             </div>
@@ -250,7 +250,7 @@
                 [ngModel]="formMaxSeasons()"
                 (ngModelChange)="setNumber('maxSeasons', $event)"
               />
-              <span class="block text-xs leading-tight text-base-content/50 mt-1">
+              <span class="block text-sm leading-tight text-base-content/60 mt-1">
                 {{ 'settings.auto_approval.max_seasons_hint' | translate }}
               </span>
             </label>
@@ -282,7 +282,7 @@
               />
             </label>
           </div>
-          <p class="text-xs leading-tight text-base-content/50 -mt-2">
+          <p class="text-sm leading-tight text-base-content/60 -mt-2">
             {{ 'settings.auto_approval.year_hint' | translate }}
           </p>
         </section>
@@ -291,7 +291,7 @@
       <section class="flex flex-col gap-3 rounded-box border border-error/40 bg-error/5 p-4">
         <div>
           <h3 class="font-semibold text-error">{{ 'settings.auto_approval.except' | translate }}</h3>
-          <p class="text-xs leading-tight text-base-content/50">
+          <p class="text-sm leading-tight text-base-content/60">
             {{ 'settings.auto_approval.except_hint' | translate }}
           </p>
         </div>

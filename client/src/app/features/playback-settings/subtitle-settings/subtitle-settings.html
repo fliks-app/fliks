@@ -17,7 +17,7 @@
     appTvSelect class="select select-bordered w-full" [ngModel]="subtitleMode()" (ngModelChange)="subtitleMode.set($event)">
         @for (m of subtitleModeOptions; track m.value) { <option [value]="m.value">{{ m.labelKey | translate }}</option> }
       </select>
-      <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_mode_hint' | translate }}</span></div>
+      <div class="label"><span class="label-text-alt text-base-content/60">{{ 'playback_settings.sub_mode_hint' | translate }}</span></div>
     </label>
 
     <label class="form-control w-full max-w-xs">
@@ -26,7 +26,7 @@
     appTvSelect class="select select-bordered w-full" [ngModel]="subtitleHearingImpaired()" (ngModelChange)="subtitleHearingImpaired.set($event)">
         @for (h of hearingImpairedOptions; track h.value) { <option [value]="h.value">{{ h.labelKey | translate }}</option> }
       </select>
-      <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_hi_hint' | translate }}</span></div>
+      <div class="label"><span class="label-text-alt text-base-content/60">{{ 'playback_settings.sub_hi_hint' | translate }}</span></div>
     </label>
 
     <div class="divider my-0"></div>
@@ -78,7 +78,7 @@
     appTvSelect class="select select-bordered w-full" [ngModel]="subtitleBottomMargin()" (ngModelChange)="subtitleBottomMargin.set(+$event)">
         @for (v of bottomMarginOptions; track v) { <option [ngValue]="v">{{ v }}%</option> }
       </select>
-      <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_bottom_margin_hint' | translate }}</span></div>
+      <div class="label"><span class="label-text-alt text-base-content/60">{{ 'playback_settings.sub_bottom_margin_hint' | translate }}</span></div>
     </label>
 
     <label class="form-control w-full max-w-xs">
@@ -87,7 +87,7 @@
     appTvSelect class="select select-bordered w-full" [ngModel]="subtitleTopMargin()" (ngModelChange)="subtitleTopMargin.set(+$event)">
         @for (v of topMarginOptions; track v) { <option [ngValue]="v">{{ v }}%</option> }
       </select>
-      <div class="label"><span class="label-text-alt text-base-content/50">{{ 'playback_settings.sub_top_margin_hint' | translate }}</span></div>
+      <div class="label"><span class="label-text-alt text-base-content/60">{{ 'playback_settings.sub_top_margin_hint' | translate }}</span></div>
     </label>
   </div>
 </div>

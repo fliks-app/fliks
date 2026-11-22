@@ -300,7 +300,7 @@ export class MetadataService {
       case 'movie': return this.discoverMovies(opts);
       case 'series': return this.discoverTv(opts);
       case 'book': throw new Error('Books go through BooksApiService');
-      case 'comic': throw new Error('Comics have no external metadata provider yet');
+      case 'comic': throw new Error('Comics have no lists');
       case 'album': throw new Error('Albums go through the music metadata routes');
       default: return assertNever(type);
     }
@@ -311,7 +311,7 @@ export class MetadataService {
       case 'movie': return this.getMovieGenres();
       case 'series': return this.getTvGenres();
       case 'book': throw new Error('Books go through BooksApiService');
-      case 'comic': throw new Error('Comics have no external metadata provider yet');
+      case 'comic': throw new Error('Comics have no lists');
       case 'album': throw new Error('Albums go through the music metadata routes');
       default: return assertNever(type);
     }
@@ -322,7 +322,7 @@ export class MetadataService {
       case 'movie': return this.getTrendingMovies(window);
       case 'series': return this.getTrendingTv(window);
       case 'book': throw new Error('Books go through BooksApiService');
-      case 'comic': throw new Error('Comics have no external metadata provider yet');
+      case 'comic': throw new Error('Comics have no lists');
       case 'album': throw new Error('Albums go through the music metadata routes');
       default: return assertNever(type);
     }
@@ -333,7 +333,7 @@ export class MetadataService {
       case 'movie': return this.getPopularMovies();
       case 'series': return this.getPopularTv();
       case 'book': throw new Error('Books go through BooksApiService');
-      case 'comic': throw new Error('Comics have no external metadata provider yet');
+      case 'comic': throw new Error('Comics have no lists');
       case 'album': throw new Error('Albums go through the music metadata routes');
       default: return assertNever(type);
     }

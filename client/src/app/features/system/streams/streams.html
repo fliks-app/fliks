@@ -10,7 +10,7 @@
     </div>
   } @else {
     @if (playing().length === 0) {
-      <div class="text-center text-base-content/50 py-12">
+      <div class="text-center text-base-content/60 py-12">
         {{ 'system.streams_empty' | translate }}
       </div>
     } @else {
@@ -52,7 +52,7 @@
               >
             }
             @if (!s.download) {
-              <div class="text-xs text-base-content/50 tabular-nums mt-1">
+              <div class="text-sm text-base-content/60 tabular-nums mt-1">
                 @if (s.mediaType === 'livetv') {
                   {{ 'system.streams_watching_for' | translate: { duration: watchedFor(s) } }}
                 } @else {
@@ -86,7 +86,7 @@
         <!-- Stream details -->
         <div class="px-3 py-2 space-y-1.5 text-xs">
           <div class="flex gap-2">
-            <span class="text-base-content/40 w-10 shrink-0">{{
+            <span class="text-base-content/60 w-10 shrink-0">{{
               'system.streams_label_stream' | translate
             }}</span>
             <div>
@@ -95,11 +95,11 @@
                 ({{ formatBitrate(s.videoBitrate) }})
               }
               @if (s.mode === 'directplay') {
-                <div class="text-base-content/50">
+                <div class="text-base-content/60">
                   &rarr; {{ 'system.streams_container_direct' | translate }}
                 </div>
               } @else if (s.outputContainer) {
-                <div class="text-base-content/50">
+                <div class="text-base-content/60">
                   &rarr; {{ s.outputContainer }}
                   @if (s.outputBitrate) {
                     ({{ formatBitrate(s.outputBitrate) }})
@@ -112,12 +112,12 @@
             </div>
           </div>
           <div class="flex gap-2">
-            <span class="text-base-content/40 w-10 shrink-0">{{
+            <span class="text-base-content/60 w-10 shrink-0">{{
               'system.streams_label_video' | translate
             }}</span>
             <div>
               <span class="font-medium">{{ videoLabel(s) }}</span>
-              <div class="text-base-content/50">
+              <div class="text-base-content/60">
                 &rarr;
                 @switch (s.mode) {
                   @case ('transcode') {
@@ -129,7 +129,7 @@
                 }
               </div>
               @if (s.clientTonemap) {
-                <div class="text-base-content/50 italic">
+                <div class="text-base-content/60 italic">
                   {{ 'system.streams_video_client_tonemap' | translate }}
                 </div>
               }
@@ -139,7 +139,7 @@
             </div>
           </div>
           <div class="flex gap-2">
-            <span class="text-base-content/40 w-10 shrink-0">{{
+            <span class="text-base-content/60 w-10 shrink-0">{{
               'system.streams_label_audio' | translate
             }}</span>
             <div>
@@ -152,7 +152,7 @@
                   {{ s.audioChannels }}
                 }
               </span>
-              <div class="text-base-content/50">
+              <div class="text-base-content/60">
                 &rarr;
                 @switch (s.audioMode) {
                   @case ('direct') {
@@ -203,7 +203,7 @@
         <div class="text-center text-xs text-base-content/60 py-1.5">
           {{ s.username ?? '-' }}
           @if (formatDevice(s.device, s.systemName); as deviceLabel) {
-            <div class="text-base-content/40">
+            <div class="text-base-content/60">
               {{ deviceLabel }}
               @if (s.appVersion) {
                 <span class="opacity-70">

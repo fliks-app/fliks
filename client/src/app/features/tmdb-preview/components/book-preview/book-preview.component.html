@@ -56,7 +56,7 @@
     @if (book()) {
       <app-facts-grid class="mt-6" [facts]="facts()" />
       @if (book()!.unofficial) {
-        <p class="text-sm text-base-content/50 mt-4">{{ 'books_search.unofficial' | translate }}</p>
+        <p class="text-sm text-base-content/60 mt-4">{{ 'books_search.unofficial' | translate }}</p>
       }
     } @else {
       <div class="animate-pulse mt-4" aria-hidden="true">

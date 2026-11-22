@@ -1,4 +1,4 @@
-<dialog #dialog class="modal" (cancel)="$event.preventDefault()">
+<dialog #dialog class="modal" [attr.aria-label]="message()" (cancel)="$event.preventDefault()">
   <div class="modal-box flex max-w-sm flex-col items-center gap-4 text-center">
     @if (progress() === null) {
       <span class="loading loading-spinner loading-lg"></span>

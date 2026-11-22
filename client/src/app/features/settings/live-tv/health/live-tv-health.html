@@ -7,7 +7,7 @@
         <span class="loading loading-spinner loading-lg"></span>
       </div>
     } @else if (sources().length === 0) {
-      <p class="text-center py-8 text-base-content/50">{{ 'liveTv.admin.sources.empty' | translate }}</p>
+      <p class="text-center py-8 text-base-content/60">{{ 'liveTv.admin.sources.empty' | translate }}</p>
     } @else {
       <div class="flex flex-col gap-2">
         @for (s of sourcesSorted(); track s.id) {
@@ -49,7 +49,7 @@
         <span class="loading loading-spinner loading-lg"></span>
       </div>
     } @else if (channelRows().length === 0) {
-      <p class="text-center py-8 text-base-content/50">{{ 'liveTv.admin.channels.empty' | translate }}</p>
+      <p class="text-center py-8 text-base-content/60">{{ 'liveTv.admin.channels.empty' | translate }}</p>
     } @else {
       <div class="flex flex-col gap-2">
         @for (row of pageRows(); track row.channel.id) {
@@ -82,7 +82,7 @@
                         {{ s.stream.lastOkAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
                       </span>
                     } @else {
-                      <span class="text-base-content/40">{{ 'liveTv.admin.health.never_ok' | translate }}</span>
+                      <span class="text-base-content/60">{{ 'liveTv.admin.health.never_ok' | translate }}</span>
                     }
                     @if (s.stream.lastError) {
                       <app-error-badge

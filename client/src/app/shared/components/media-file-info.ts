@@ -17,6 +17,7 @@ import { TvService } from '../../core/services/tv.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { CompanionFilesModalComponent } from './companion-files-modal/companion-files-modal';
 import { DetailSectionComponent } from './detail-section/detail-section';
+import { formatBitrate, formatBytes } from '../../core/utils/format-bytes';
 
 type FileInput = {
   relativePath: string;
@@ -117,9 +118,7 @@ export class MediaFileInfoComponent {
   formatSize(bytes?: number): string {
     const n = Number(bytes);
     if (!n || n <= 0) return '0 GB';
-    if (n >= 1_073_741_824) return (n / 1_073_741_824).toFixed(2) + ' GB';
-    if (n >= 1_048_576) return (n / 1_048_576).toFixed(1) + ' MB';
-    return (n / 1024).toFixed(0) + ' KB';
+    return formatBytes(n);
   }
 
   formatAddedAt(iso?: string): string {
@@ -137,9 +136,7 @@ export class MediaFileInfoComponent {
 
   formatBitrate(bps?: number): string {
     if (!bps) return '';
-    if (bps >= 1_000_000) return (bps / 1_000_000).toFixed(1) + ' Mbps';
-    if (bps >= 1_000) return (bps / 1_000).toFixed(0) + ' kbps';
-    return bps + ' bps';
+    return formatBitrate(bps);
   }
 
   formatResolution(v: VideoStreamInfo): string {

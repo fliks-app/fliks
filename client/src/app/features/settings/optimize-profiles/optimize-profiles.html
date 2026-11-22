@@ -16,7 +16,7 @@
   } @else if (loadError()) {
     <div role="alert" class="alert alert-error">{{ 'settings.optimize.profiles.load_error' | translate }}</div>
   } @else if (profiles().length === 0) {
-    <p class="text-center py-12 text-base-content/50">{{ 'settings.optimize.profiles.empty' | translate }}</p>
+    <p class="text-center py-12 text-base-content/60">{{ 'settings.optimize.profiles.empty' | translate }}</p>
   } @else {
     <div class="grid gap-4 md:grid-cols-2 scroll-ring-safe">
       @for (p of profiles(); track p.id) {
@@ -27,7 +27,7 @@
                 {{ p.name }}
               </a>
               <span class="badge badge-ghost shrink-0">
-                {{ 'settings.optimize.profiles.libraries_count' | translate: { count: p.libraryCount } }}
+                {{ 'settings.optimize.profiles.libraries_count' | translatePlural: p.libraryCount }}
               </span>
             </div>
             <ul class="text-sm text-base-content/70 flex flex-col gap-1">
@@ -68,7 +68,7 @@
   }
 </div>
 
-<dialog #presetDialog class="modal">
+<dialog #presetDialog class="modal" [attr.aria-label]="'settings.optimize.profiles.preset_title' | translate">
   <div class="modal-box max-w-xl flex flex-col">
     <app-modal-header class="shrink-0">
       <h3 class="text-lg font-bold">{{ 'settings.optimize.profiles.preset_title' | translate }}</h3>

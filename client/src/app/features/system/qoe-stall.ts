@@ -1,4 +1,5 @@
 import type { TranslateService } from '@ngx-translate/core';
+import { translatePlural } from '../../core/pipes/translate-plural.pipe';
 import type { QoeEventRow, QoePipeline, QoeServerLoad, QoeSessionRow, QoeStallCause } from '../../core/services/api/qoe-api.service';
 import { QOE_VERDICT_BAR_CLASS } from './qoe-health';
 import { rungOf } from './qoe-timeline';
@@ -18,12 +19,13 @@ export const QOE_CAUSE_TEXT_CLASS: Record<QoeStallCause, string> = {
   server: 'text-error',
   network: 'text-warning',
   device: 'text-info',
-  unknown: 'text-base-content/40',
+  unknown: 'text-base-content/60',
 };
 
 /** Translation and number formatting in the admin's language. */
 export interface Fmt {
   t(key: string, params?: Record<string, string>): string;
+  plural(key: string, count: number, params?: Record<string, string>): string;
   n(v: number, digits?: number): string;
 }
 
@@ -31,6 +33,7 @@ export function translateFmt(translate: TranslateService): Fmt {
   const lang = () => translate.currentLang() || translate.fallbackLang() || 'en';
   return {
     t: (key, params) => translate.instant(key, params),
+    plural: (key, count, params) => translatePlural(translate, key, count, params),
     n: (v, digits = 1) => v.toLocaleString(lang(), { minimumFractionDigits: digits, maximumFractionDigits: digits }),
   };
 }

@@ -9,7 +9,7 @@
       },
       "expect": {
         "body": {
-          "message": "Connecté à Sonarr Parity",
+          "message": "Connected to Sonarr Parity",
           "ok": true
         },
         "status": 201

@@ -17,7 +17,7 @@
         </div>
       } @else {
         <p class="text-sm text-base-content/60">
-          {{ 'optimize.action.files' | translate: { count: fileIds().length } }}
+          {{ 'optimize.action.files' | translatePlural: fileIds().length }}
         </p>
         @if (summary(); as s) {
           <div class="flex flex-wrap gap-2">
@@ -26,10 +26,10 @@
                 <span class="badge badge-lg badge-ghost">
                   {{
                     'optimize.action.per_level'
-                      | translate
+                      | translatePlural
+                        : s.perLevel[l].count
                         : {
                             level: ('optimize.queue.level.' + l | translate),
-                            count: s.perLevel[l].count,
                             size: formatBytes(s.perLevel[l].bytes),
                           }
                   }}
@@ -38,11 +38,11 @@
             }
           </div>
           @if (s.conform > 0) {
-            <p class="text-sm">{{ 'optimize.action.conform' | translate: { count: s.conform } }}</p>
+            <p class="text-sm">{{ 'optimize.action.conform' | translatePlural: s.conform }}</p>
           }
           @if (s.excluded > 0) {
             <p class="text-sm">
-              {{ 'optimize.action.excluded' | translate: { count: s.excluded } }}
+              {{ 'optimize.action.excluded' | translatePlural: s.excluded }}
             </p>
           }
           <p class="text-sm text-base-content/60">
@@ -50,7 +50,7 @@
           </p>
           @if (s.removed > 0) {
             <div role="alert" class="alert alert-warning text-sm">
-              {{ 'optimize.action.removed' | translate: { count: s.removed } }}
+              {{ 'optimize.action.removed' | translatePlural: s.removed }}
             </div>
           }
           @if (s.lossless > 0) {

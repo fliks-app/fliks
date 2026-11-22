@@ -5,17 +5,17 @@
     <!-- File info from DB (always available) -->
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
       @if (fullPath()) {
-        <div class="col-span-full"><span class="text-base-content/50">{{ 'file_info.path' | translate }} :&nbsp;</span><span class="font-medium break-all">{{ fullPath() }}</span></div>
+        <div class="col-span-full"><span class="text-base-content/60">{{ 'file_info.path' | translate }} :&nbsp;</span><span class="font-medium break-all">{{ fullPath() }}</span></div>
       }
       @if (formatAddedAt(f.createdAt); as added) {
-        <div class="col-span-full"><span class="text-base-content/50">{{ 'file_info.added_at' | translate }} :&nbsp;</span><span class="font-medium">{{ added }}</span></div>
+        <div class="col-span-full"><span class="text-base-content/60">{{ 'file_info.added_at' | translate }} :&nbsp;</span><span class="font-medium">{{ added }}</span></div>
       }
       @if (f.quality) {
-        <div><span class="text-base-content/50">{{ 'file_info.quality' | translate }} :&nbsp;</span><span class="font-medium">{{ f.quality }}</span></div>
+        <div><span class="text-base-content/60">{{ 'file_info.quality' | translate }} :&nbsp;</span><span class="font-medium">{{ f.quality }}</span></div>
       }
-      <div><span class="text-base-content/50">{{ 'file_info.size' | translate }} :&nbsp;</span><span class="font-medium">{{ formatSize(f.size) }}</span></div>
+      <div><span class="text-base-content/60">{{ 'file_info.size' | translate }} :&nbsp;</span><span class="font-medium">{{ formatSize(f.size) }}</span></div>
       @if (originalFileBitrate(); as br) {
-        <div><span class="text-base-content/50">{{ 'file_info.original_file_bitrate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatBitrate(br) }}</span></div>
+        <div><span class="text-base-content/60">{{ 'file_info.original_file_bitrate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatBitrate(br) }}</span></div>
       }
     </div>
 
@@ -32,36 +32,36 @@
         </h3>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
           @if (v.codec) {
-            <div><span class="text-base-content/50">{{ 'file_info.codec' | translate }} :&nbsp;</span><span class="font-medium">{{ v.codec }}</span></div>
+            <div><span class="text-base-content/60">{{ 'file_info.codec' | translate }} :&nbsp;</span><span class="font-medium">{{ v.codec }}</span></div>
           }
           @if (v.profile) {
-            <div><span class="text-base-content/50">{{ 'file_info.profile' | translate }} :&nbsp;</span><span class="font-medium">{{ v.profile }}</span></div>
+            <div><span class="text-base-content/60">{{ 'file_info.profile' | translate }} :&nbsp;</span><span class="font-medium">{{ v.profile }}</span></div>
           }
           @if (v.width && v.height) {
-            <div><span class="text-base-content/50">{{ 'file_info.resolution' | translate }} :&nbsp;</span><span class="font-medium">{{ formatResolution(v) }}</span></div>
-            <div><span class="text-base-content/50">{{ 'file_info.aspect_ratio' | translate }} :&nbsp;</span><span class="font-medium">{{ formatAspectRatio(v) }}</span></div>
+            <div><span class="text-base-content/60">{{ 'file_info.resolution' | translate }} :&nbsp;</span><span class="font-medium">{{ formatResolution(v) }}</span></div>
+            <div><span class="text-base-content/60">{{ 'file_info.aspect_ratio' | translate }} :&nbsp;</span><span class="font-medium">{{ formatAspectRatio(v) }}</span></div>
           }
           @if (v.frameRate) {
-            <div><span class="text-base-content/50">{{ 'file_info.frame_rate' | translate }} :&nbsp;</span><span class="font-medium">{{ v.frameRate }} fps</span></div>
+            <div><span class="text-base-content/60">{{ 'file_info.frame_rate' | translate }} :&nbsp;</span><span class="font-medium">{{ v.frameRate }} fps</span></div>
           }
           @if (v.bitRate) {
-            <div><span class="text-base-content/50">{{ 'file_info.bitrate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatBitrate(v.bitRate) }}</span></div>
+            <div><span class="text-base-content/60">{{ 'file_info.bitrate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatBitrate(v.bitRate) }}</span></div>
           }
           @if (v.pixelFormat) {
-            <div><span class="text-base-content/50">{{ 'file_info.pixel_format' | translate }} :&nbsp;</span><span class="font-medium">{{ v.pixelFormat }}</span></div>
+            <div><span class="text-base-content/60">{{ 'file_info.pixel_format' | translate }} :&nbsp;</span><span class="font-medium">{{ v.pixelFormat }}</span></div>
           }
           @if (v.bitDepth) {
-            <div><span class="text-base-content/50">{{ 'file_info.bit_depth' | translate }} :&nbsp;</span><span class="font-medium">{{ v.bitDepth }} bit</span></div>
+            <div><span class="text-base-content/60">{{ 'file_info.bit_depth' | translate }} :&nbsp;</span><span class="font-medium">{{ v.bitDepth }} bit</span></div>
           }
-          <div><span class="text-base-content/50">{{ 'file_info.video_range' | translate }} :&nbsp;</span><span class="font-medium">{{ videoRange() }}</span></div>
+          <div><span class="text-base-content/60">{{ 'file_info.video_range' | translate }} :&nbsp;</span><span class="font-medium">{{ videoRange() }}</span></div>
           @if (v.dvProfile != null) {
-            <div><span class="text-base-content/50">{{ 'file_info.dolby_profile' | translate }} :&nbsp;</span><span class="font-medium">{{ formatDolbyProfile(v) }}</span></div>
+            <div><span class="text-base-content/60">{{ 'file_info.dolby_profile' | translate }} :&nbsp;</span><span class="font-medium">{{ formatDolbyProfile(v) }}</span></div>
           }
           @if (v.colorSpace) {
-            <div><span class="text-base-content/50">{{ 'file_info.color_space' | translate }} :&nbsp;</span><span class="font-medium">{{ v.colorSpace }}</span></div>
+            <div><span class="text-base-content/60">{{ 'file_info.color_space' | translate }} :&nbsp;</span><span class="font-medium">{{ v.colorSpace }}</span></div>
           }
           @if (v.colorPrimaries) {
-            <div><span class="text-base-content/50">{{ 'file_info.color_primaries' | translate }} :&nbsp;</span><span class="font-medium">{{ v.colorPrimaries }}</span></div>
+            <div><span class="text-base-content/60">{{ 'file_info.color_primaries' | translate }} :&nbsp;</span><span class="font-medium">{{ v.colorPrimaries }}</span></div>
           }
         </div>
       </div>
@@ -79,18 +79,18 @@
             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
               @if (a.title || a.codec) {
                 <!-- `break-all` like the path above: a track title is often one dotted release name, and `main` stays visible-x on hero pages so overflow can't be clipped. -->
-                <div class="min-w-0"><span class="text-base-content/50">{{ 'file_info.track_title' | translate }} :&nbsp;</span><span class="font-medium break-all">{{ a.title ?? formatAudioTitle(a) }}</span></div>
+                <div class="min-w-0"><span class="text-base-content/60">{{ 'file_info.track_title' | translate }} :&nbsp;</span><span class="font-medium break-all">{{ a.title ?? formatAudioTitle(a) }}</span></div>
               }
-              <div><span class="text-base-content/50">{{ 'file_info.language' | translate }} :&nbsp;</span><span class="font-medium">{{ a.language }}</span></div>
-              <div><span class="text-base-content/50">{{ 'file_info.codec' | translate }} :&nbsp;</span><span class="font-medium">{{ a.codec }}</span></div>
+              <div><span class="text-base-content/60">{{ 'file_info.language' | translate }} :&nbsp;</span><span class="font-medium">{{ a.language }}</span></div>
+              <div><span class="text-base-content/60">{{ 'file_info.codec' | translate }} :&nbsp;</span><span class="font-medium">{{ a.codec }}</span></div>
               @if (a.channels) {
-                <div><span class="text-base-content/50">{{ 'file_info.channels' | translate }} :&nbsp;</span><span class="font-medium">{{ formatChannels(a) }}</span></div>
+                <div><span class="text-base-content/60">{{ 'file_info.channels' | translate }} :&nbsp;</span><span class="font-medium">{{ formatChannels(a) }}</span></div>
               }
               @if (a.bitRate) {
-                <div><span class="text-base-content/50">{{ 'file_info.bitrate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatBitrate(a.bitRate) }}</span></div>
+                <div><span class="text-base-content/60">{{ 'file_info.bitrate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatBitrate(a.bitRate) }}</span></div>
               }
               @if (a.sampleRate) {
-                <div><span class="text-base-content/50">{{ 'file_info.sample_rate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatSampleRate(a.sampleRate) }}</span></div>
+                <div><span class="text-base-content/60">{{ 'file_info.sample_rate' | translate }} :&nbsp;</span><span class="font-medium">{{ formatSampleRate(a.sampleRate) }}</span></div>
               }
               @if (a.isDefault) {
                 <div><span class="badge badge-sm badge-ghost">{{ 'file_info.default_track' | translate }}</span></div>

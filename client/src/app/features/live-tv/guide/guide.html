@@ -54,13 +54,13 @@
     </div>
   } @else if (loadError() && rows().length === 0) {
     <div class="flex flex-col items-center gap-3 py-12">
-      <p class="text-base-content/50">{{ 'liveTv.guide.load_error' | translate }}</p>
+      <p class="text-base-content/60">{{ 'liveTv.guide.load_error' | translate }}</p>
       <button type="button" class="btn btn-sm" (click)="loadWindow(true)">
         {{ 'common.retry' | translate }}
       </button>
     </div>
   } @else if (rows().length === 0) {
-    <p class="text-center py-12 text-base-content/50">{{ 'liveTv.guide.empty' | translate }}</p>
+    <p class="text-center py-12 text-base-content/60">{{ 'liveTv.guide.empty' | translate }}</p>
   } @else if (isGrid()) {
     <div #scrollArea class="overflow-auto rounded-lg border border-base-200 max-h-[70vh]">
       <div class="relative" [style.width.px]="176 + timelineWidthPx()">
@@ -135,10 +135,10 @@
                 {{ now.title }}
               </button>
             } @else {
-              <p class="text-base-content/40">{{ 'liveTv.guide.no_program' | translate }}</p>
+              <p class="text-base-content/60">{{ 'liveTv.guide.no_program' | translate }}</p>
             }
             @if (row.nextProgram; as next) {
-              <p class="text-base-content/40 truncate">
+              <p class="text-base-content/60 truncate">
                 {{ 'liveTv.on_now.next_label' | translate }} {{ next.title }}
               </p>
             }

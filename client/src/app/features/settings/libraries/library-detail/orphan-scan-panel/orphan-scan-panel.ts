@@ -9,6 +9,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { UpperCasePipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe, translatePlural } from '../../../../../core/pipes/translate-plural.pipe';
 import { LucideCheck, LucideChevronsDownUp, LucideChevronsUpDown } from '@lucide/angular';
 import { MediaType } from '../../../../../core/enums/media-type.enum';
 import { PaginationComponent } from '../../../../../shared/components/pagination/pagination';
@@ -87,7 +88,7 @@ interface GroupVM {
   imports: [
     FormsModule,
     UpperCasePipe,
-    TranslatePipe,
+    TranslatePipe, TranslatePluralPipe,
     ResolveUrlPipe,
     LucideCheck,
     LucideChevronsDownUp,
@@ -452,9 +453,7 @@ export class OrphanScanPanelComponent {
         // Every file already sits at its destination: a no-op re-run, not a failure.
         this.patch(index, { linking: false, done: true });
         if (!quiet) this.toast.info(
-          this.translate.instant('settings.libraries.scan_already_present', {
-            count: res.alreadyPresent,
-          }),
+          translatePlural(this.translate, 'settings.libraries.scan_already_present', res.alreadyPresent),
         );
       } else {
         // Nothing linked — typically a duplicate of a file already attached
@@ -479,9 +478,10 @@ export class OrphanScanPanelComponent {
 
   private toastLinked(count: number) {
     this.toast.success(
-      this.translate.instant(
+      translatePlural(
+        this.translate,
         this.transfer() ? 'import_disk.imported' : 'settings.libraries.scan_linked',
-        { count },
+        count,
       ),
     );
   }

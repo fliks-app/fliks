@@ -48,7 +48,7 @@
           placeholder="••••••••"
         />
         <div class="label">
-          <span class="label-text-alt text-base-content/50">
+          <span class="label-text-alt text-base-content/60">
             {{ (state.user()?.hasPassword === false ? 'settings.user_detail.no_password_sso' : 'settings.users.password_hint') | translate }}
           </span>
         </div>
@@ -139,7 +139,7 @@
     <!-- Request quotas: requests per period and kind, counted while pending or approved. -->
     <div class="flex flex-col gap-2" data-testid="user-quotas">
       <span class="label-text font-semibold">{{ 'settings.users.quotas' | translate }}</span>
-      <p class="text-sm text-base-content/50">{{ 'settings.users.quotas_hint' | translate }}</p>
+      <p class="text-sm text-base-content/60">{{ 'settings.users.quotas_hint' | translate }}</p>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
         @for (k of quotaKinds; track k.key) {
           <label class="form-control w-full">
@@ -171,7 +171,7 @@
     <div class="flex flex-col gap-2">
       <span class="label-text font-semibold">{{ 'settings.user_detail.library_access' | translate }}</span>
       @if (libraries().length === 0) {
-        <p class="text-sm text-base-content/50">{{ 'settings.user_detail.library_access_empty' | translate }}</p>
+        <p class="text-sm text-base-content/60">{{ 'settings.user_detail.library_access_empty' | translate }}</p>
       } @else {
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           @for (lib of libraries(); track lib.id) {
@@ -197,7 +197,7 @@
     @if (canSignOutEverywhere()) {
     <div class="flex flex-col gap-1">
       <span class="label-text font-semibold">{{ 'settings.users.sign_out_everywhere' | translate }}</span>
-      <p class="text-sm text-base-content/50">{{ 'settings.users.sign_out_everywhere_hint' | translate }}</p>
+      <p class="text-sm text-base-content/60">{{ 'settings.users.sign_out_everywhere_hint' | translate }}</p>
       <div>
         <button type="button" class="btn btn-outline btn-error btn-sm" (click)="signOutEverywhere()">
           {{ 'settings.users.sign_out_everywhere' | translate }}

@@ -23,7 +23,7 @@
   @if (!scanning() && !scanError()) {
     <p class="text-sm text-base-content/60">
       {{ (deferLink() || transfer() ? 'settings.libraries.scan_found_count' : 'settings.libraries.scan_orphan_count')
-        | translate: { count: orphanCount() } }}
+        | translatePlural: orphanCount() }}
     </p>
   }
 
@@ -34,7 +34,7 @@
         <p class="text-sm text-base-content/60">{{ 'settings.libraries.scan_scanning' | translate }}</p>
         @if (scanProgress(); as p) {
           <progress class="progress progress-primary w-64" [value]="p.current" [max]="p.total"></progress>
-          <p class="text-xs text-base-content/50">
+          <p class="text-sm text-base-content/60">
             {{ 'settings.libraries.scan_progress' | translate: { done: p.current, total: p.total } }}
           </p>
         }
@@ -42,7 +42,7 @@
     } @else if (scanError()) {
       <div role="alert" class="alert alert-error">{{ scanError() }}</div>
     } @else if (groups().length === 0) {
-      <p class="text-center py-10 text-base-content/50">
+      <p class="text-center py-10 text-base-content/60">
         {{ (deferLink() || transfer() ? 'settings.libraries.scan_no_files' : 'settings.libraries.scan_no_orphans') | translate }}
       </p>
     } @else {
@@ -59,8 +59,8 @@
                   {{ groupLabelKeys[vm.group.mediaType] | translate }}
                 </span>
                 <span class="font-mono text-sm text-base-content/70 truncate">{{ vm.group.folderName || vm.group.files[0].filename }}</span>
-                <span class="text-xs text-base-content/50 shrink-0">
-                  {{ 'settings.libraries.scan_files' | translate: { count: vm.group.files.length } }}
+                <span class="text-sm text-base-content/60 shrink-0">
+                  {{ 'settings.libraries.scan_files' | translatePlural: vm.group.files.length }}
                 </span>
               </div>
               @if (vm.done) {
@@ -75,7 +75,7 @@
               <div class="flex flex-col gap-3 pt-1">
                 <div class="flex flex-col gap-0.5">
                   @for (f of vm.group.files; track f.filePath) {
-                    <p class="font-mono text-xs text-base-content/50 break-all">{{ f.filePath }}</p>
+                    <p class="font-mono text-sm text-base-content/60 break-all">{{ f.filePath }}</p>
                   }
                 </div>
 
@@ -107,7 +107,7 @@
                   }
 
                   @if (vm.searched && vm.results.length === 0 && !vm.searching) {
-                    <p class="text-sm text-base-content/50 italic">{{ 'settings.libraries.scan_no_match' | translate }}</p>
+                    <p class="text-sm text-base-content/60 italic">{{ 'settings.libraries.scan_no_match' | translate }}</p>
                   }
 
                   <div class="flex flex-col gap-1 max-h-60 overflow-auto">
@@ -130,7 +130,7 @@
                           </div>
                           <div class="min-w-0">
                             <span class="font-medium truncate">{{ vm.group.guessTitle || vm.group.files[0].filename }}</span>
-                            <div class="text-sm text-base-content/50">
+                            <div class="text-sm text-base-content/60">
                               @if (vm.group.guessAuthors?.length) { {{ vm.group.guessAuthors!.join(', ') }} · }
                               @if (vm.group.guessYear) { {{ vm.group.guessYear }} · }
                               @if (bookFileId(vm.group); as id) { {{ id.provider | uppercase }} {{ id.externalId }} · }
@@ -172,7 +172,7 @@
                               <span class="badge badge-ghost badge-xs">{{ 'settings.libraries.scan_from_file' | translate }}</span>
                             }
                           </div>
-                          <div class="text-sm text-base-content/50">
+                          <div class="text-sm text-base-content/60">
                             @if (r.authors?.length) { {{ r.authors!.join(', ') }} · }
                             @if (r.year) { {{ r.year }} · } {{ r.provider | uppercase }}
                             @if (r.existingMediaId) {

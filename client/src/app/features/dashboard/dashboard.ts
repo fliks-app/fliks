@@ -12,6 +12,7 @@ import { SubtitlesApiService, SubtitleStats } from '../../core/services/api/subt
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { episodeLabel } from '../../shared/utils/episode-label';
 import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
+import { formatBytes } from '../../core/utils/format-bytes';
 
 interface DiskSpaceEntry {
   path: string;
@@ -55,13 +56,7 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  formatBytes(bytes: number): string {
-    if (bytes < 0) return '-';
-    if (bytes === 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-    return `${(bytes / Math.pow(1024, i)).toFixed(i >= 3 ? 1 : 0)} ${units[i]}`;
-  }
+  protected readonly formatBytes = formatBytes;
 
   diskUsedPercent(entry: DiskSpaceEntry): number {
     if (entry.totalSpace <= 0) return 0;

@@ -15,7 +15,7 @@
       (blur)="onInputBlur()"
     />
     @if (state.hasQuery()) {
-      <button type="button" class="btn btn-ghost btn-circle btn-sm absolute right-1 top-1/2 -translate-y-1/2 z-10" (click)="clearQuery()">
+      <button type="button" class="btn btn-ghost btn-circle btn-sm absolute right-1 top-1/2 -translate-y-1/2 z-10" [attr.aria-label]="'common.clear' | translate" (click)="clearQuery()">
         <svg lucideX class="h-4 w-4"></svg>
       </button>
     }
@@ -55,11 +55,11 @@
         }
       </div>
     } @else {
-      <p class="text-base-content/50 text-center py-12">{{ (state.hasQuery() ? 'social.no_people_results' : 'search.discover_people_hint') | translate }}</p>
+      <p class="text-base-content/60 text-center py-12">{{ (state.hasQuery() ? 'social.no_people_results' : 'search.discover_people_hint') | translate }}</p>
     }
   } @else if (!state.hasQuery() && state.scope() === 'book') {
     <ng-container *ngTemplateOutlet="externalToggle" />
-    <p class="text-base-content/50 text-center py-12">{{ 'books_search.hint' | translate }}</p>
+    <p class="text-base-content/60 text-center py-12">{{ 'books_search.hint' | translate }}</p>
   } @else if (isMusic()) {
     <ng-container *ngTemplateOutlet="externalToggle" />
     <ng-container *ngTemplateOutlet="musicResults" />
@@ -91,7 +91,7 @@
                 }
               </div>
             } @else {
-              <p class="text-base-content/50 text-center py-12">{{ 'search.no_results' | translate }}</p>
+              <p class="text-base-content/60 text-center py-12">{{ 'search.no_results' | translate }}</p>
             }
           } @else {
             @if (state.localLoading()) {
@@ -109,7 +109,7 @@
                 }
               </div>
             } @else {
-              <p class="text-base-content/50 text-center py-12">{{ 'search.no_results' | translate }}</p>
+              <p class="text-base-content/60 text-center py-12">{{ 'search.no_results' | translate }}</p>
             }
           }
         } @else {
@@ -156,7 +156,7 @@
                 }
               </app-horizontal-scroller>
             } @else {
-              <p class="text-base-content/50 text-center py-12">{{ 'search.hint_local' | translate }}</p>
+              <p class="text-base-content/60 text-center py-12">{{ 'search.hint_local' | translate }}</p>
             }
           }
         }
@@ -215,7 +215,7 @@
           }
 
           @if (!state.localLoading() && libraryCount() === 0 && !(state.scope() === 'all' && !musicEmpty())) {
-            <p class="text-base-content/50" data-testid="library-empty">{{ 'search.no_results' | translate }}</p>
+            <p class="text-base-content/60" data-testid="library-empty">{{ 'search.no_results' | translate }}</p>
           }
         </section>
 
@@ -255,10 +255,10 @@
 
 
             @if (!state.externalLoading() && providerCount() === 0) {
-              <p class="text-base-content/50" data-testid="provider-empty">{{ 'search.no_results' | translate }}</p>
+              <p class="text-base-content/60" data-testid="provider-empty">{{ 'search.no_results' | translate }}</p>
             }
             @if (state.externalFailed()) {
-              <p class="text-sm text-base-content/50" data-testid="provider-partial">{{ 'search.partial' | translate }}</p>
+              <p class="text-sm text-base-content/60" data-testid="provider-partial">{{ 'search.partial' | translate }}</p>
             }
           }
         </section>
@@ -308,7 +308,7 @@
 </ng-template>
 
 <!-- Mobile filter sheet — top-level so it opens during discovery and search alike -->
-<dialog #filterSheet class="modal">
+<dialog #filterSheet class="modal" [attr.aria-label]="'search.filters' | translate">
   <div class="modal-box">
     <app-modal-header />
     <ng-container *ngTemplateOutlet="filterPanel" />
@@ -331,14 +331,14 @@
 <!-- One list for a query and for the trends; each skeleton reserves its section's height until every source answered -->
 <ng-template #musicResults>
   @if (!state.hasQuery() && !state.externalEnabled()) {
-    <p class="text-base-content/50 text-center py-12">{{ 'music.search_hint' | translate }}</p>
+    <p class="text-base-content/60 text-center py-12">{{ 'music.search_hint' | translate }}</p>
   } @else {
     <div class="flex flex-col gap-6" data-testid="music-results">
       @if (!state.hasQuery()) {
         <h2 class="text-xl font-semibold">{{ 'search.discover_trending' | translate }}</h2>
       }
       @if (musicEmpty()) {
-        <p class="text-base-content/50" data-testid="music-empty">{{ 'search.no_results' | translate }}</p>
+        <p class="text-base-content/60" data-testid="music-empty">{{ 'search.no_results' | translate }}</p>
       }
 
       @if (topItem(); as top) {
@@ -423,7 +423,7 @@
       }
 
       @if (catalogDown()) {
-        <p class="text-sm text-base-content/50" data-testid="catalog-down">{{ 'search.catalog_unavailable' | translate }}</p>
+        <p class="text-sm text-base-content/60" data-testid="catalog-down">{{ 'search.catalog_unavailable' | translate }}</p>
       }
     </div>
   }
@@ -483,7 +483,7 @@
 
 <!-- The placeholder stays under the image: it shows while the image loads and when it fails. -->
 <ng-template #cover let-url let-cls="cls" let-round="round" let-name="name">
-  <span class="relative flex shrink-0 items-center justify-center overflow-hidden bg-base-300 font-bold text-base-content/40" [class]="(cls ?? 'size-10') + (round ? ' rounded-full' : ' rounded')">
+  <span class="relative flex shrink-0 items-center justify-center overflow-hidden bg-base-300 font-bold text-base-content/60" [class]="(cls ?? 'size-10') + (round ? ' rounded-full' : ' rounded')">
     @if (round) {
       {{ name.charAt(0) }}
     } @else {

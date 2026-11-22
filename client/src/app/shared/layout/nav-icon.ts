@@ -10,6 +10,8 @@ import {
   LucideCalendar,
   LucideTv,
   LucideCircle,
+  LucideLibrary,
+  LucideTarget,
 } from '@lucide/angular';
 
 /** Renders a nav contribution's icon by name; a plugin can name any string, so unknown names fall back to a generic circle. */
@@ -18,6 +20,7 @@ import {
   imports: [
     LucideHome, LucideSearch, LucideUserRound, LucideListVideo,
     LucideDownload, LucideHistory, LucideClipboardList, LucideCalendar, LucideTv, LucideCircle,
+    LucideLibrary, LucideTarget,
   ],
   templateUrl: './nav-icon.html',
   styles: [`:host { display: inline-flex; } svg { width: 100%; height: 100%; }`],

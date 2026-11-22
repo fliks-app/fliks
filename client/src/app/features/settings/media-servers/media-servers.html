@@ -18,7 +18,7 @@
   } @else if (listError()) {
     <div role="alert" class="alert alert-error">{{ listError() }}</div>
   } @else if (rows().length === 0) {
-    <p class="text-center py-12 text-base-content/50">
+    <p class="text-center py-12 text-base-content/60">
       {{ 'settings.media_servers.empty' | translate }}
     </p>
   } @else {
@@ -46,7 +46,7 @@
                 <span class="badge badge-ghost badge-sm">{{ typeLabel(row.type) }}</span>
               </td>
               <td class="text-sm text-base-content/60 truncate max-w-[12rem]">{{ row.url }}</td>
-              <td class="text-sm text-base-content/60">{{ row.events.length }} event(s)</td>
+              <td class="text-sm text-base-content/60">{{ 'settings.notifications.event_count' | translatePlural: row.events.length }}</td>
               <td class="text-center">
                 <app-enabled-switch
                   [enabled]="row.enabled"
@@ -129,7 +129,7 @@
           (ngModelChange)="formApiKey.set($event)"
         />
         @if (editingId() !== null && formApiKeySet()) {
-          <span class="label-text-alt text-base-content/50 mt-1">{{
+          <span class="label-text-alt text-base-content/60 mt-1">{{
             'settings.media_servers.field_api_key_unchanged' | translate
           }}</span>
         }

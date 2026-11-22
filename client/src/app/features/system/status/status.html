@@ -14,14 +14,14 @@
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body py-4 px-5 gap-1">
-        <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_app' | translate }}</p>
+        <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'system.health_app' | translate }}</p>
         <p class="text-lg font-bold">v{{ h.version }}</p>
         <p class="text-sm text-base-content/60">{{ 'system.uptime' | translate }}: {{ formatUptime(h.uptimeSeconds) }}</p>
       </div>
     </div>
     <div class="card bg-base-100 border" [class.border-base-200]="h.database.ok" [class.border-error]="!h.database.ok">
       <div class="card-body py-4 px-5 gap-1">
-        <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_db' | translate }}</p>
+        <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'system.health_db' | translate }}</p>
         <div class="flex items-center gap-2">
           <span class="inline-block w-2 h-2 rounded-full" [class.bg-success]="h.database.ok" [class.bg-error]="!h.database.ok"></span>
           <span class="font-medium">{{ h.database.name }}</span>
@@ -31,7 +31,7 @@
     </div>
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body py-4 px-5 gap-2">
-        <p class="text-sm text-base-content/50 uppercase tracking-wide">{{ 'system.health_plugins' | translate }}</p>
+        <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'system.health_plugins' | translate }}</p>
         <p class="text-lg font-semibold">{{ h.installedPlugins | number }}</p>
         <p class="text-sm text-base-content/60">{{ 'system.health_plugins_running' | translate: { count: h.runningPlugins } }}</p>
       </div>
@@ -79,7 +79,7 @@
                     <span class="badge badge-ghost badge-sm">{{ item.subject.quality }}</span>
                   }
                   @if (episodeLine(item.subject); as episode) {
-                    <div class="text-sm text-base-content/50 truncate max-w-64">
+                    <div class="text-sm text-base-content/60 truncate max-w-64">
                       @if (episodeRouterLink(item.subject); as epLink) {
                         <a [routerLink]="epLink" class="link link-hover">{{ episode }}</a>
                       } @else {
@@ -93,7 +93,7 @@
                 @if (item.status === 'running') {
                   <div class="flex items-center gap-2">
                     @if ((item.total ?? 0) > 1) {
-                      <span class="text-xs text-base-content/50 tabular-nums whitespace-nowrap">{{ item.current ?? 0 }}/{{ item.total }}</span>
+                      <span class="text-sm text-base-content/60 tabular-nums whitespace-nowrap">{{ item.current ?? 0 }}/{{ item.total }}</span>
                     }
                     <progress class="progress progress-primary flex-1 min-w-32" [value]="item.current ?? 0" [max]="item.total || 1"></progress>
                     <span class="text-xs text-base-content/60 tabular-nums w-10 text-right">{{ activityPercent(item) }}%</span>
@@ -122,7 +122,7 @@
                       <span class="badge badge-ghost badge-sm">{{ child.subject.quality }}</span>
                     }
                     @if (episodeLine(child.subject); as episode) {
-                      <div class="text-base-content/50 truncate max-w-64">
+                      <div class="text-base-content/60 truncate max-w-64">
                         @if (episodeRouterLink(child.subject); as epLink) {
                           <a [routerLink]="epLink" class="link link-hover">{{ episode }}</a>
                         } @else {
@@ -143,7 +143,7 @@
               </tr>
             }
             @if (hiddenChildrenCount(item); as hidden) {
-              <tr class="text-sm text-base-content/50">
+              <tr class="text-sm text-base-content/60">
                 <td></td>
                 <td class="pl-6" colspan="2">{{ 'system.activity_more_children' | translate: { count: hidden } }}</td>
               </tr>
@@ -153,7 +153,7 @@
       </table>
     </div>
     @if (activityDropped() > 0) {
-      <p class="text-xs text-warning mt-2">{{ 'system.activity_dropped' | translate: { count: activityDropped() } }}</p>
+      <p class="text-sm text-warning mt-2">{{ 'system.activity_dropped' | translatePlural: activityDropped() }}</p>
     }
     @if (activityTotalPages > 1) {
       <app-pagination
@@ -212,7 +212,7 @@
   @if (loading()) {
     <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
   } @else if (commands().length === 0) {
-    <p class="text-center py-8 text-base-content/50">{{ 'system.no_commands' | translate }}</p>
+    <p class="text-center py-8 text-base-content/60">{{ 'system.no_commands' | translate }}</p>
   } @else {
     <div class="overflow-x-auto rounded-lg border border-base-200">
       <table class="table">
@@ -231,7 +231,7 @@
               <td class="font-medium">
                 {{ commandLabelKey(cmd.name) | translate }}
                 @if (cmd.body?.['mediaTitle']) {
-                  <span class="text-sm text-base-content/50 ml-1">- {{ cmd.body?.['mediaTitle'] }}</span>
+                  <span class="text-sm text-base-content/60 ml-1">- {{ cmd.body?.['mediaTitle'] }}</span>
                 }
                 @if (pluginUpdates(cmd); as updates) {
                   <div class="text-sm font-normal text-base-content/60">{{ 'system.plugins_updated' | translate: { plugins: updates } }}</div>

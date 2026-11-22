@@ -4,7 +4,7 @@
     <!-- Header -->
     <div class="flex items-center justify-between gap-4">
       <div class="flex items-center gap-4">
-        <a routerLink="/admin/settings/users" class="btn btn-ghost btn-sm btn-circle">
+        <a routerLink="/admin/settings/users" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.back' | translate">
           <svg lucideChevronLeft class="h-5 w-5"></svg>
         </a>
         <div class="flex items-center gap-3">
@@ -16,7 +16,7 @@
             <div class="flex items-center gap-2 mt-0.5">
               <span class="badge badge-sm badge-ghost">{{ u.role ?? '-' }}</span>
               @if (u.isAdmin) {
-                <span class="badge badge-sm badge-error">Admin</span>
+                <span class="badge badge-sm badge-error">{{ 'roles.admin' | translate }}</span>
               }
               @if (u.enabled) {
                 <span class="badge badge-sm badge-success">{{ 'common.active' | translate }}</span>
@@ -74,7 +74,7 @@
   </div>
 } @else {
   <div class="text-center py-16">
-    <p class="text-lg text-base-content/50">{{ 'settings.user_detail.not_found' | translate }}</p>
+    <p class="text-lg text-base-content/60">{{ 'settings.user_detail.not_found' | translate }}</p>
     <a routerLink="/admin/settings/users" class="btn btn-ghost btn-sm mt-4">{{ 'settings.user_detail.back' | translate }}</a>
   </div>
 }

@@ -12,7 +12,7 @@
         <span class="loading loading-spinner loading-lg"></span>
       </div>
     } @else if (rows().length === 0) {
-      <p class="text-center py-8 text-base-content/50">{{ 'liveTv.admin.guide.empty' | translate }}</p>
+      <p class="text-center py-8 text-base-content/60">{{ 'liveTv.admin.guide.empty' | translate }}</p>
     } @else {
       <div class="overflow-x-auto rounded-lg border border-base-200">
         <table class="table table-zebra">
@@ -85,7 +85,7 @@
       </p>
 
       @if (r.unmatched.length === 0) {
-        <p class="text-sm text-base-content/50">{{ 'liveTv.admin.guide.no_unmatched' | translate }}</p>
+        <p class="text-sm text-base-content/60">{{ 'liveTv.admin.guide.no_unmatched' | translate }}</p>
       } @else {
         <datalist id="liveTvGuideCandidates">
           @for (c of r.candidates; track c.id) {

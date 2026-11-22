@@ -1,6 +1,7 @@
 import { Component, input } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import type { PluginMetricsEntry } from '../../../../core/services/api/plugins-api.service';
+import { formatBytes } from '../../../../core/utils/format-bytes';
 
 /** One plugin's row from `GET /plugins/metrics`. `entry().metrics` is null for a `data`
  *  plugin or a `process` plugin that isn't running — rendered as "not applicable", never as zeros. */
@@ -12,8 +13,5 @@ import type { PluginMetricsEntry } from '../../../../core/services/api/plugins-a
 export class PluginMetricsPanelComponent {
   readonly entry = input.required<PluginMetricsEntry>();
 
-  /** Matches the MB formatting already used in `libraries.ts` / `streaming.ts`. */
-  formatBytes(bytes: number): string {
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
+  protected readonly formatBytes = formatBytes;
 }

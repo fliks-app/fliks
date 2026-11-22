@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, ElementRef, computed, inject, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import { kindOf } from '../../../core/media-kinds';
 import { BooksApiService } from '../../../core/services/api/books-api.service';
@@ -39,7 +40,7 @@ import {
  *  it, else this dialog (library, folder, profiles; seasons for a series; editions for a book). */
 @Component({
   selector: 'app-add-dialog',
-  imports: [FormsModule, TranslatePipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, SeasonPickerComponent, LibraryFolderSelectComponent, WantsEditorComponent, RequestWantsComponent],
+  imports: [FormsModule, TranslatePipe, TranslatePluralPipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, SeasonPickerComponent, LibraryFolderSelectComponent, WantsEditorComponent, RequestWantsComponent],
   templateUrl: './add-dialog.html',
 })
 export class AddDialogComponent {

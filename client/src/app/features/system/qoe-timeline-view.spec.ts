@@ -5,6 +5,7 @@ import { buildTimeline, type TimelineTransition } from './qoe-timeline';
 
 const f = {
   t: (k: string, p?: Record<string, string>) => `${k}${p ? JSON.stringify(p) : ''}`,
+  plural: (k: string, c: number, p?: Record<string, string>) => `${k}_${c === 1 ? 'one' : 'other'}${JSON.stringify({ ...p, count: c })}`,
   n: (v: number, d = 1) => v.toFixed(d),
 };
 const s = (o: Partial<QoeSessionRow> & { served?: string } = {}) =>
@@ -35,7 +36,7 @@ describe('blockSummary', () => {
 
   it('counts stalls with their total, singular apart', () => {
     expect(blockSummary({ stallCount: 1, stallMs: 9600 }, f)).toContain('qoe.block.stalls_one');
-    expect(blockSummary({ stallCount: 2, stallMs: 11_500 }, f)).toContain('"count":"2"');
+    expect(blockSummary({ stallCount: 2, stallMs: 11_500 }, f)).toContain('qoe.block.stalls_other');
   });
 });
 

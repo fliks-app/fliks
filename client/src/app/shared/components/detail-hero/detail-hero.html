@@ -32,23 +32,23 @@
 
     <!-- Quality / language profiles and tags. -->
     @if (desktop) {
-      @if (qualityProfileName() || languageProfileName() || tags().length) {
+      @if ((canSeeProfiles() && (qualityProfileName() || languageProfileName())) || tags().length) {
         <div class="hidden lg:flex flex-wrap gap-x-8 gap-y-2 mt-4">
-          @if (qualityProfileName()) {
+          @if (canSeeProfiles() && qualityProfileName()) {
             <div class="flex flex-col">
-              <span class="text-base-content/40 text-sm">{{ 'media_detail.quality_profile_label' | translate }}</span>
+              <span class="text-base-content/60 text-sm">{{ 'media_detail.quality_profile_label' | translate }}</span>
               <span>{{ qualityProfileName() }}</span>
             </div>
           }
-          @if (languageProfileName()) {
+          @if (canSeeProfiles() && languageProfileName()) {
             <div class="flex flex-col">
-              <span class="text-base-content/40 text-sm">{{ 'media_detail.language_profile_label' | translate }}</span>
+              <span class="text-base-content/60 text-sm">{{ 'media_detail.language_profile_label' | translate }}</span>
               <span>{{ languageProfileName() }}</span>
             </div>
           }
           @if (tags().length) {
             <div class="flex flex-col">
-              <span class="text-base-content/40 text-sm">{{ 'media_detail.tags_label' | translate }}</span>
+              <span class="text-base-content/60 text-sm">{{ 'media_detail.tags_label' | translate }}</span>
               <span>{{ tags().join(', ') }}</span>
             </div>
           }
@@ -57,7 +57,7 @@
     } @else if (tags().length) {
       <div class="flex flex-wrap gap-x-6 gap-y-2 mt-4">
         <div class="flex flex-col">
-          <span class="text-base-content/40 text-sm">{{ 'media_detail.tags_label' | translate }}</span>
+          <span class="text-base-content/60 text-sm">{{ 'media_detail.tags_label' | translate }}</span>
           <span>{{ tags().join(', ') }}</span>
         </div>
       </div>
@@ -102,7 +102,7 @@
                 </button>
               } @else {
                 <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'downloads.downloading' | translate" [title]="'downloads.downloading' | translate" (click)="openDownload.emit()">
-                  <div class="radial-progress text-info text-[0.6rem] font-semibold shadow-[inset_0_0_0_3px_color-mix(in_oklab,var(--color-base-content)_15%,transparent)]" [style.--value]="d.progress" style="--size: 2rem; --thickness: 3px" role="progressbar" [attr.aria-valuenow]="d.progress">{{ d.progress }}</div>
+                  <div class="radial-progress text-info text-sm font-semibold shadow-[inset_0_0_0_3px_color-mix(in_oklab,var(--color-base-content)_15%,transparent)]" [style.--value]="d.progress" style="--size: 2.5rem; --thickness: 3px" role="progressbar" [attr.aria-valuenow]="d.progress">{{ d.progress }}</div>
                 </button>
               }
             } @else {
@@ -246,7 +246,7 @@
     <div appTvRow class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-5 min-h-8">
       <!-- Cells shrink and values wrap: a long track label would exceed the phone, and this page can't clip overflow (`main` stays visible-x for the fanart). -->
       <div class="flex items-center gap-2 min-w-0">
-        <span class="shrink-0 text-base-content/50">{{ 'common.label_colon' | translate: { label: ('media_info.video' | translate) } }}</span>
+        <span class="shrink-0 text-base-content/60">{{ 'common.label_colon' | translate: { label: ('media_info.video' | translate) } }}</span>
         @if (multipleFiles()) {
           <select class="select select-bordered select-sm w-fit" [appTvSelect]="'media_info.video' | translate" [ngModel]="selectedFileId()" (ngModelChange)="selectedFileIdChange.emit($event)">
             @for (f of files(); track f.id) {
@@ -259,7 +259,7 @@
       </div>
       @if (audioTracks().length) {
         <div class="flex items-center gap-2 min-w-0">
-          <span class="shrink-0 text-base-content/50">{{ 'common.label_colon' | translate: { label: ('media_info.audio' | translate) } }}</span>
+          <span class="shrink-0 text-base-content/60">{{ 'common.label_colon' | translate: { label: ('media_info.audio' | translate) } }}</span>
           @if (audioTracks().length === 1) {
             <span class="min-w-0 break-words">{{ audioTracks()[0].label }}</span>
           } @else {
@@ -281,7 +281,7 @@
       }
       @if (subtitles().length) {
         <div class="flex items-center gap-2 min-w-0">
-          <span class="shrink-0 text-base-content/50">{{ 'common.label_colon' | translate: { label: ('media_info.subtitles' | translate) } }}</span>
+          <span class="shrink-0 text-base-content/60">{{ 'common.label_colon' | translate: { label: ('media_info.subtitles' | translate) } }}</span>
           <app-dropdown-menu placement="bottom-end" [heading]="'media_info.subtitles' | translate">
             <button trigger type="button" class="select select-bordered select-sm w-fit max-w-full truncate text-left cursor-pointer transition-colors hover:bg-base-content/10">
               {{ selectedSubtitle()?.head || selectedSubtitle()?.label || ('player.off' | translate) }}

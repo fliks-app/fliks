@@ -28,7 +28,7 @@
         }
         <div class="flex items-center justify-between gap-2 mt-0.5">
           <div class="min-w-0">
-            <p class="text-sm text-base-content/50">
+            <p class="text-sm text-base-content/60">
               {{ task.quality }}@if (task.sizeBytes) { · {{ formatBytes(task.sizeBytes) }} }
             </p>
             @if (task.status === 'failed') {
@@ -43,7 +43,7 @@
           @if (!selectMode()) {
             <div class="flex items-center gap-1 shrink-0">
               @if (task.status === 'ready') {
-                <button class="btn btn-ghost btn-sm btn-square" (click)="playOffline(task)">
+                <button class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'player.play' | translate" (click)="playOffline(task)">
                   <svg lucidePlay class="h-4 w-4"></svg>
                 </button>
               } @else if (task.status === 'paused') {
@@ -70,7 +70,7 @@
                   }
                 </button>
               }
-              <button class="btn btn-ghost btn-sm btn-square text-error" (click)="deleteItem(task)">
+              <button class="btn btn-ghost btn-sm btn-square text-error" [attr.aria-label]="'common.delete' | translate" (click)="deleteItem(task)">
                 <svg lucideTrash2 class="h-4 w-4"></svg>
               </button>
             </div>
@@ -80,15 +80,15 @@
     </div>
     @if (task.status === 'queued') {
       <progress class="progress progress-info w-full h-1.5 mt-2"></progress>
-      <p class="text-sm text-base-content/50 mt-1">{{ 'downloads.queued' | translate }}</p>
+      <p class="text-sm text-base-content/60 mt-1">{{ 'downloads.queued' | translate }}</p>
     } @else if (task.status === 'paused' || task.status === 'waiting_wifi') {
       <progress class="progress w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
-      <p class="flex justify-between gap-2 text-sm text-base-content/50 mt-1">
+      <p class="flex justify-between gap-2 text-sm text-base-content/60 mt-1">
         <span class="truncate">{{ (task.status === 'paused' ? 'downloads.paused' : 'downloads.waiting_wifi') | translate }}</span><span class="tabular-nums">{{ task.progress }}%</span>
       </p>
     } @else if (isTransferring(task)) {
       <progress class="progress progress-info w-full h-1.5 mt-2" [value]="task.progress" max="100"></progress>
-      <p class="flex justify-between gap-2 text-sm text-base-content/50 mt-1">
+      <p class="flex justify-between gap-2 text-sm text-base-content/60 mt-1">
         <span class="truncate">{{ 'downloads.downloading' | translate }}</span><span class="tabular-nums">{{ task.progress }}%</span>
       </p>
     }
@@ -131,7 +131,7 @@
   </div>
 
   @if (items().length === 0) {
-    <div class="text-center py-12 text-base-content/50">
+    <div class="text-center py-12 text-base-content/60">
       <svg lucideDownload class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
       <p class="text-lg">{{ 'downloads.empty' | translate }}</p>
       <p class="text-sm mt-2">{{ 'downloads.empty_hint' | translate }}</p>
@@ -162,7 +162,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <h3 class="font-medium text-base line-clamp-1">{{ album.title }}</h3>
-                <p class="text-sm text-base-content/50 mt-0.5 truncate">
+                <p class="text-sm text-base-content/60 mt-0.5 truncate">
                   {{ 'music.track_count' | translatePlural: album.tasks.length }}@if (album.sizeBytes) { · {{ formatBytes(album.sizeBytes) }} }
                 </p>
               </div>
@@ -202,7 +202,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <h3 class="font-medium text-base line-clamp-1">{{ show.title }}</h3>
-                <p class="text-sm text-base-content/50 mt-0.5 truncate">
+                <p class="text-sm text-base-content/60 mt-0.5 truncate">
                   {{ (show.tasks.length === 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: show.tasks.length } }}@if (show.sizeBytes) { · {{ formatBytes(show.sizeBytes) }} }
                 </p>
                 @if (auto.enabled && auto.seriesKeep(show.mediaId); as keep) {
@@ -237,7 +237,7 @@
                       } @else {
                         {{ season.seasonNumber | seasonLabel }}
                       }
-                      <span class="text-sm font-normal text-base-content/50">
+                      <span class="text-sm font-normal text-base-content/60">
                         · {{ (season.tasks.length === 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: season.tasks.length } }}@if (season.sizeBytes) { · {{ formatBytes(season.sizeBytes) }} }
                       </span>
                     </span>

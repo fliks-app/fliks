@@ -33,7 +33,7 @@
         </div>
 
         @if (embyServers().length === 0) {
-          <p class="text-sm text-base-content/50">
+          <p class="text-sm text-base-content/60">
             {{ 'settings.data_imports.emby.empty' | translate }}
           </p>
         } @else {
@@ -179,7 +179,7 @@
 
         @if (seerrLastSummary(); as s) {
           <div role="alert" class="alert alert-info text-sm py-2">
-            {{ 'settings.data_imports.seerr.import_completed' | translate: s }}
+            {{ seerrSummaryText(s) }}
           </div>
         }
       </div>
@@ -323,31 +323,29 @@
                 [class.alert-warning]="r.errors.length > 0"
               >
                 <div>
-                  <p>{{ 'import.result_imported' | translate: { count: r.imported } }}</p>
+                  <p>{{ 'import.result_imported' | translatePlural: r.imported }}</p>
                   @if (r.subtitlesImported) {
                     <p class="mt-1">
-                      {{ 'import.result_subtitles' | translate: { count: r.subtitlesImported } }}
+                      {{ 'import.result_subtitles' | translatePlural: r.subtitlesImported }}
                     </p>
                   }
                   @if (r.qualityProfilesCreated.length) {
                     <p class="mt-1">
                       {{
-                        'import.quality_profiles_created'
-                          | translate: { count: r.qualityProfilesCreated.length }
+                        'import.quality_profiles_created' | translatePlural: r.qualityProfilesCreated.length
                       }}: {{ r.qualityProfilesCreated.join(', ') }}
                     </p>
                   }
                   @if (r.rootFoldersCreated.length) {
                     <p class="mt-1">
                       {{
-                        'import.root_folders_created'
-                          | translate: { count: r.rootFoldersCreated.length }
+                        'import.root_folders_created' | translatePlural: r.rootFoldersCreated.length
                       }}: {{ r.rootFoldersCreated.join(', ') }}
                     </p>
                   }
                   @if (r.errors.length) {
                     <p class="mt-1">
-                      {{ r.errors.length }} {{ 'import.result_errors' | translate }}:
+                      {{ 'import.result_errors' | translatePlural: r.errors.length }}:
                       {{ r.errors.slice(0, 5).join(', ') }}
                     </p>
                   }
@@ -397,7 +395,7 @@
                     <code class="text-sm bg-base-300 px-2 py-1 rounded sm:flex-1 truncate">{{
                       m.remotePath
                     }}</code>
-                    <span class="text-base-content/40 hidden sm:inline">→</span>
+                    <span class="text-base-content/60 hidden sm:inline">→</span>
                     <select
       appTvSelect
                       class="select select-bordered select-sm sm:flex-1"

@@ -12,6 +12,7 @@ import { TvSelectDirective } from '../../../shared/directives/tv-select.directiv
 import { HttpClient } from '@angular/common/http';
 import { LucideX } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { firstValueFrom } from 'rxjs';
 import { SECRETS_SET_KEY } from '@fliks/plugin-ui';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
@@ -67,7 +68,7 @@ interface CreateNotificationBody {
     ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,
-    TranslatePipe,
+    TranslatePipe, TranslatePluralPipe,
     EnabledSwitchComponent,
   ],
   templateUrl: './notifications.html',

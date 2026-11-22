@@ -24,7 +24,7 @@
     <span class="loading loading-spinner loading-md"></span>
   </div>
 } @else if (requests().length === 0) {
-  <p class="text-sm text-base-content/50 py-4">{{ 'settings.user_detail.no_requests' | translate }}</p>
+  <p class="text-sm text-base-content/60 py-4">{{ 'settings.user_detail.no_requests' | translate }}</p>
 } @else {
   <div class="overflow-x-auto rounded-lg border border-base-200">
     <table class="table">
@@ -56,7 +56,7 @@
                 {{ req.status }}
               </span>
               @if (req.declinedReason) {
-                <span class="text-sm text-base-content/50 ml-1" [title]="req.declinedReason">- {{ req.declinedReason }}</span>
+                <span class="text-sm text-base-content/60 ml-1" [title]="req.declinedReason">- {{ req.declinedReason }}</span>
               }
             </td>
             <td class="text-sm text-base-content/60">{{ req.createdAt | localeDate }}</td>

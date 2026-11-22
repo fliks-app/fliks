@@ -158,10 +158,10 @@
         <p class="text-base-content/70 truncate mt-1">{{ entry.now.title }}</p>
         <progress class="progress progress-primary h-1 mt-1" [value]="progressPercent(entry.now)" max="100"></progress>
       } @else {
-        <p class="text-base-content/40 mt-1">{{ 'liveTv.guide.no_program' | translate }}</p>
+        <p class="text-base-content/60 mt-1">{{ 'liveTv.guide.no_program' | translate }}</p>
       }
       @if (entry.next) {
-        <p class="text-base-content/40 truncate mt-0.5">
+        <p class="text-base-content/60 truncate mt-0.5">
           {{ 'liveTv.on_now.next_label' | translate }} {{ entry.next.title }}
         </p>
       }

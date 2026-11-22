@@ -9,7 +9,7 @@
             <span class="flex flex-1 min-w-0 flex-col">
               <span class="font-medium truncate">{{ i.name }}</span>
               @if (i.email) {
-                <span class="text-sm text-base-content/50 truncate">{{ i.email }}</span>
+                <span class="text-sm text-base-content/60 truncate">{{ i.email }}</span>
               }
             </span>
             @if (i.accountUrl) {
@@ -29,10 +29,10 @@
           </div>
         }
         @if (lastMethod()) {
-          <p class="text-sm text-base-content/50">{{ 'account.sso_last_method' | translate }}</p>
+          <p class="text-sm text-base-content/60">{{ 'account.sso_last_method' | translate }}</p>
         }
         @if (linkBlocked()) {
-          <p class="text-sm text-base-content/50" data-testid="account-link-origin">{{ 'account.sso_link_origin' | translate }}</p>
+          <p class="text-sm text-base-content/60" data-testid="account-link-origin">{{ 'account.sso_link_origin' | translate }}</p>
         }
         @if (hasPassword() && linkable().length) {
           <label for="account-link-password" class="label-text">{{ 'account.sso_link_password' | translate }}</label>
@@ -86,7 +86,7 @@
             placeholder="••••••••"
           />
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'account.password_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'account.password_hint' | translate }}</span>
           </div>
         </label>
 

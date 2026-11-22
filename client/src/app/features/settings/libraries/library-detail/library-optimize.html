@@ -21,7 +21,7 @@
         @if (summary(); as s) {
           <div class="rounded-lg border border-base-200 p-4 flex flex-col gap-1">
             <p class="font-semibold">
-              {{ 'settings.optimize.library.difference' | translate: { count: s.filesWithDifference } }}
+              {{ 'settings.optimize.library.difference' | translatePlural: s.filesWithDifference }}
             </p>
             <p class="text-sm text-base-content/60">{{ 'settings.optimize.library.difference_hint' | translate }}</p>
           </div>
@@ -46,17 +46,17 @@
             <div class="flex flex-wrap gap-2">
               @for (l of levels; track l) {
                 <span class="badge badge-lg badge-ghost">
-                  {{ 'settings.optimize.library.per_level.' + l | translate: { count: pv.perLevel[l] } }}
+                  {{ 'settings.optimize.library.per_level.' + l | translatePlural: pv.perLevel[l] }}
                 </span>
               }
             </div>
             <ul class="text-sm flex flex-col gap-1">
-              <li>{{ 'settings.optimize.library.conform' | translate: { count: pv.conform } }}</li>
+              <li>{{ 'settings.optimize.library.conform' | translatePlural: pv.conform }}</li>
               @if (pv.skippedContainer > 0) {
-                <li>{{ 'settings.optimize.library.skipped_container' | translate: { count: pv.skippedContainer } }}</li>
+                <li>{{ 'settings.optimize.library.skipped_container' | translatePlural: pv.skippedContainer }}</li>
               }
               @if (pv.ocr > 0) {
-                <li>{{ 'settings.optimize.library.ocr' | translate: { count: pv.ocr } }}</li>
+                <li>{{ 'settings.optimize.library.ocr' | translatePlural: pv.ocr }}</li>
               }
             </ul>
             @if (pv.removed.length > 0) {
@@ -66,7 +66,7 @@
                   <ul class="mt-1">
                     @for (r of pv.removed; track $index) {
                       <li>
-                        {{ 'settings.optimize.library.removed.' + r.kind | translate: { count: r.count, language: r.language ?? '?' } }}
+                        {{ 'settings.optimize.library.removed.' + r.kind | translatePlural: r.count : { language: r.language ?? '?' } }}
                       </li>
                     }
                   </ul>

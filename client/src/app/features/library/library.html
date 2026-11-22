@@ -11,10 +11,12 @@
   }
 
   <!-- View tabs: a spatial-nav row so `↑` from below lands on them instead of bridging to the fixed topbar. -->
-  <nav appTvRow class="flex items-center gap-1 overflow-x-auto py-2 -my-2 px-2 -mx-2">
+  <nav appTvRow role="tablist" class="flex items-center gap-1 overflow-x-auto py-2 -my-2 px-2 -mx-2">
     @for (t of tabs(); track t.mode) {
       <button
         type="button"
+        role="tab"
+        [attr.aria-selected]="viewMode() === t.mode"
         class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
         [class.bg-base-300]="viewMode() === t.mode"
         [class.text-base-content/70]="viewMode() !== t.mode"
@@ -124,9 +126,9 @@
 
           <div class="p-3 min-w-56 space-y-4 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-x-6 lg:gap-y-4 lg:min-w-md">
           <!-- Section: Surveillance -->
-          @if (!bookOnly()) {
+          @if (!bookOnly() && canFilterMonitoring()) {
           <div>
-            <h4 class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">
+            <h4 class="text-sm font-semibold uppercase tracking-wide text-base-content/60 mb-2">
               {{ 'library.filter_monitoring_label' | translate }}
             </h4>
             <div class="space-y-1">
@@ -163,7 +165,7 @@
 
           <!-- Section: Vu -->
           <div>
-            <h4 class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">
+            <h4 class="text-sm font-semibold uppercase tracking-wide text-base-content/60 mb-2">
               {{ 'library.filter_watched_label' | translate }}
             </h4>
             <div class="space-y-1">
@@ -211,7 +213,7 @@
           <!-- Section: Statut -->
           @if (!bookOnly()) {
           <div>
-            <h4 class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">
+            <h4 class="text-sm font-semibold uppercase tracking-wide text-base-content/60 mb-2">
               {{ 'library.filter_status_label' | translate }}
             </h4>
             <div class="space-y-1">
@@ -258,7 +260,7 @@
           <!-- Section: book format, language, people -->
           @if (bookOnly()) {
             <div>
-              <h4 class="text-sm font-semibold uppercase tracking-wide text-base-content/50 mb-2">
+              <h4 class="text-sm font-semibold uppercase tracking-wide text-base-content/60 mb-2">
                 {{ 'books_library.filter_format' | translate }}
               </h4>
               <div class="space-y-1">
@@ -277,7 +279,7 @@
             </div>
             <div class="space-y-3">
               <label class="flex flex-col gap-1">
-                <span class="text-sm font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_language' | translate }}</span>
+                <span class="text-sm font-semibold uppercase tracking-wide text-base-content/60">{{ 'books_library.filter_language' | translate }}</span>
                 <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="bookFilters()['language'] ?? ''" (ngModelChange)="setBookFilter('language', $event)">
                   <option value="">{{ 'books_library.filter_any' | translate }}</option>
                   @for (code of languageCodes; track code) {
@@ -286,7 +288,7 @@
                 </select>
               </label>
               <label class="flex flex-col gap-1">
-                <span class="text-sm font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_author' | translate }}</span>
+                <span class="text-sm font-semibold uppercase tracking-wide text-base-content/60">{{ 'books_library.filter_author' | translate }}</span>
                 <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="bookFilters()['authorId'] ?? ''" (ngModelChange)="setBookFilter('authorId', $event)">
                   <option value="">{{ 'books_library.filter_any' | translate }}</option>
                   @for (p of authorsList(); track p.id) {
@@ -295,7 +297,7 @@
                 </select>
               </label>
               <label class="flex flex-col gap-1">
-                <span class="text-sm font-semibold uppercase tracking-wide text-base-content/50">{{ 'books_library.filter_narrator' | translate }}</span>
+                <span class="text-sm font-semibold uppercase tracking-wide text-base-content/60">{{ 'books_library.filter_narrator' | translate }}</span>
                 <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="bookFilters()['narratorId'] ?? ''" (ngModelChange)="setBookFilter('narratorId', $event)">
                   <option value="">{{ 'books_library.filter_any' | translate }}</option>
                   @for (p of narratorsList(); track p.id) {
@@ -317,7 +319,7 @@
         @for (letter of alphabet; track letter) {
           <button
             type="button"
-            class="text-[0.625rem] font-medium w-4 h-4 flex items-center justify-center rounded transition-colors pointer-events-auto"
+            class="text-sm font-medium w-5 h-5 flex items-center justify-center rounded transition-colors pointer-events-auto"
             [class.bg-primary]="list.activeLetter() === letter"
             [class.text-primary-content]="list.activeLetter() === letter"
             [class.text-base-content/60]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
@@ -343,7 +345,7 @@
         }
       </div>
     } @else if (list.all().length === 0) {
-      <div class="text-center py-12 text-base-content/50">
+      <div class="text-center py-12 text-base-content/60">
         <p class="text-lg">{{ 'library.empty' | translate }}</p>
         <p class="text-sm mt-2">{{ 'library.empty_hint' | translate }}</p>
       </div>
@@ -572,7 +574,7 @@
           }
         </div>
       } @else if (!suggestionsContinue().length && !suggestionsFromFollowing().length && !recommendedForYou().length) {
-        <div class="text-center py-24 text-base-content/50">
+        <div class="text-center py-24 text-base-content/60">
           <p class="text-lg">{{ 'library.suggestions_empty' | translate }}</p>
           <p class="text-sm mt-2">{{ 'library.suggestions_empty_hint' | translate }}</p>
         </div>
@@ -591,7 +593,7 @@
         }
       </div>
     } @else if (!genresList().length) {
-      <div class="text-center py-24 text-base-content/50">
+      <div class="text-center py-24 text-base-content/60">
         <p class="text-lg">{{ 'library.genres_empty' | translate }}</p>
       </div>
     } @else {
@@ -618,8 +620,8 @@
       </cdk-virtual-scroll-viewport>
     }
   } @else if (viewMode() === 'collections') {
-    <p class="text-sm text-base-content/50 mb-4">
-      {{ 'library.collections_count' | translate:{ count: collectionsList().length } }}
+    <p class="text-sm text-base-content/60 mb-4">
+      {{ 'library.collections_count' | translatePlural: collectionsList().length }}
     </p>
     @if (collectionsLoading() && !collectionsList().length) {
       <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-3 sm:gap-4 tv:gap-8 animate-pulse">
@@ -628,7 +630,7 @@
         }
       </div>
     } @else if (!collectionsList().length) {
-      <div class="flex flex-col items-center justify-center py-16 gap-3 text-base-content/40">
+      <div class="flex flex-col items-center justify-center py-16 gap-3 text-base-content/60">
         <svg lucideFilm class="w-12 h-12" [strokeWidth]="1.5"></svg>
         <p class="text-lg">{{ 'library.collections_empty' | translate }}</p>
       </div>
@@ -655,7 +657,7 @@
       </cdk-virtual-scroll-viewport>
     }
   } @else if (viewMode() === 'series') {
-    <p class="text-sm text-base-content/50 mb-4">
+    <p class="text-sm text-base-content/60 mb-4">
       {{ (seriesList().length <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate:{ count: seriesList().length } }}
     </p>
     @if (seriesLoading() && !seriesList().length) {
@@ -665,7 +667,7 @@
         }
       </div>
     } @else if (!seriesList().length) {
-      <div class="text-center py-24 text-base-content/50">
+      <div class="text-center py-24 text-base-content/60">
         <p class="text-lg">{{ 'books_library.series_empty' | translate }}</p>
       </div>
     } @else {
@@ -691,7 +693,7 @@
       </cdk-virtual-scroll-viewport>
     }
   } @else if (viewMode() === 'authors') {
-    <p class="text-sm text-base-content/50 mb-4 flex items-center gap-3">
+    <p class="text-sm text-base-content/60 mb-4 flex items-center gap-3">
       <span>{{ (authorsList().length <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate:{ count: authorsList().length } }}</span>
       <a routerLink="/persons" [queryParams]="{ role: 'author' }" class="link link-hover">{{ 'books_library.authors_all' | translate }}</a>
     </p>
@@ -702,7 +704,7 @@
         }
       </div>
     } @else if (!authorsList().length) {
-      <div class="text-center py-24 text-base-content/50">
+      <div class="text-center py-24 text-base-content/60">
         <p class="text-lg">{{ 'books_library.authors_empty' | translate }}</p>
       </div>
     } @else {
@@ -742,7 +744,7 @@
         }
       </div>
     } @else if (!likesList().length) {
-      <div class="text-center py-24 text-base-content/50">
+      <div class="text-center py-24 text-base-content/60">
         <p class="text-lg">{{ 'likes.empty' | translate }}</p>
       </div>
     } @else {

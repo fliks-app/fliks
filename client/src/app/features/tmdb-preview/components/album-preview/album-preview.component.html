@@ -57,7 +57,7 @@
         @for (t of d.tracks; track t.position) {
           <li class="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors duration-500" [attr.data-track-id]="t.recordingId" data-testid="preview-track">
             <app-track-line [title]="t.title" [subtitle]="null" [durationSeconds]="t.durationMs == null ? null : t.durationMs / 1000">
-              <span lead class="w-6 shrink-0 text-right text-sm tabular-nums text-base-content/50">{{ t.number ?? t.position }}</span>
+              <span lead class="w-6 shrink-0 text-right text-sm tabular-nums text-base-content/60">{{ t.number ?? t.position }}</span>
             </app-track-line>
           </li>
         }

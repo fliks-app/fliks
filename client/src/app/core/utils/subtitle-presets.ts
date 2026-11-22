@@ -1,10 +1,6 @@
 /** Subtitle appearance presets shared by NativeEngine and Cast: native `normal: 1.0` honours the OS size,
  *  Cast is calibrated lower (`normal: 0.85`) since its receiver renders ~17% larger; retune Cast, not Native. */
 
-/** Text height at scale 1.0 as a fraction of the surface's short side (orientation-invariant). Hardcoded identically in
- *  SubtitleOverlay.java and SubtitleOverlayView.swift: retune the three together. */
-export const SUBTITLE_HEIGHT_FRACTION = 0.035;
-
 /** Same ladder for DOM cues, one notch lower: the browser path is read from a desktop monitor; TVs default to `large`. */
 export const DOM_SUBTITLE_HEIGHT_FRACTION = 0.03;
 

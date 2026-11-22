@@ -1,4 +1,4 @@
-<dialog #dialog class="modal" (close)="onClosed()">
+<dialog #dialog class="modal" (close)="onClosed()" [attr.aria-label]="'search.discover_suggestions' | translate">
   <div class="modal-box flex h-[90dvh] w-11/12 max-w-6xl flex-col gap-0 overflow-hidden p-0">
     <app-modal-header flush [title]="'media_picker.title_' + verb() | translate" (closed)="close()" />
 
@@ -42,7 +42,7 @@
                 }
               </div>
             } @else {
-              <p class="py-12 text-center text-sm text-base-content/50">{{ 'media_picker.hint' | translate }}</p>
+              <p class="py-12 text-center text-sm text-base-content/60">{{ 'media_picker.hint' | translate }}</p>
             }
           } @else if (loading() && !results().length) {
             <div class="flex justify-center py-8"><span class="loading loading-spinner loading-md"></span></div>
@@ -57,7 +57,7 @@
               }
             </div>
           } @else if (searched()) {
-            <p class="py-12 text-center text-sm text-base-content/50">{{ 'media_picker.no_results' | translate }}</p>
+            <p class="py-12 text-center text-sm text-base-content/60">{{ 'media_picker.no_results' | translate }}</p>
           }
         </div>
       </div>
@@ -171,7 +171,7 @@
             }
           </ul>
         } @else {
-          <p class="py-4 text-center text-sm text-base-content/50">{{ 'media_picker.no_episodes' | translate }}</p>
+          <p class="py-4 text-center text-sm text-base-content/60">{{ 'media_picker.no_episodes' | translate }}</p>
         }
 
         <div class="flex justify-end">

@@ -159,13 +159,6 @@ export type FileOutcome =
   | { status: 'conform'; warnings: Warning[] }
   | { status: 'diff'; level: OptimizeLevel; changes: Change[]; warnings: Warning[] };
 
-/** `PATCH /api/libraries/:id` fields. */
-export interface LibraryOptimizeSettings {
-  optimizeProfileId: number | null;
-  optimizeNewFiles: boolean;
-  allowRename: boolean;
-}
-
 export type OriginalPolicy = 'trash' | 'keep' | 'delete';
 
 /** `GET/PUT /api/optimize/settings`; `window` minutes are since local midnight. */

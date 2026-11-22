@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe, translatePlural } from '../../../../core/pipes/translate-plural.pipe';
 import { ToastService } from '../../../../core/services/toast.service';
 import { LibrariesApiService, UpdateLibraryBody } from '../../../../core/services/api/libraries-api.service';
 import { OptimizeConfirmService } from '../../../../core/services/optimize-confirm.service';
@@ -19,7 +20,7 @@ const LEVELS: OptimizeLevel[] = ['reencode', 'remux', 'metadata'];
 
 @Component({
   selector: 'app-library-optimize',
-  imports: [RouterLink, TranslatePipe, SelectFieldComponent, ToggleFieldComponent],
+  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, SelectFieldComponent, ToggleFieldComponent],
   templateUrl: './library-optimize.html',
 })
 export class LibraryOptimizeComponent implements OnInit {
@@ -101,7 +102,7 @@ export class LibraryOptimizeComponent implements OnInit {
     this.queueBusy.set(true);
     try {
       const { files } = await this.optimize.queueLibrary(lib.id);
-      this.toast.success(this.translate.instant('settings.optimize.library.queued', { count: files }));
+      this.toast.success(translatePlural(this.translate, 'settings.optimize.library.queued', files));
     } catch {
       // The global interceptor toasts the reason.
     } finally {

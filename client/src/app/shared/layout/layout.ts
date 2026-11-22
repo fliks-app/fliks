@@ -64,6 +64,8 @@ import { BackgroundService } from '../../core/services/background.service';
 import { SearchStateService } from '../../core/services/search-state.service';
 import { NavContributionsService, DOCK_PINNED_IDS, MOBILE_HIDDEN_IDS, type ResolvedNavItem } from '../../core/plugin-ui/nav-contributions.service';
 import { NavIconComponent } from './nav-icon';
+import { libraryColorVar } from '../../core/constants/library-appearance';
+import { BottomSheetComponent } from '../components/bottom-sheet';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemotePickerComponent } from '../remote-picker/remote-picker';
@@ -79,8 +81,20 @@ import {
   LucideCloudOff,
   LucideDownload,
   LucideRotateCw,
+  LucideCheck,
 } from '@lucide/angular';
 
+
+interface TvTab {
+  id: string;
+  route: string;
+  exact: boolean;
+  icon: string;
+  labelKey?: string;
+  label?: string;
+  isLibrary?: boolean;
+  color?: string;
+}
 
 /** Coalesces a burst of count-bearing SSE events (e.g. a season-pack import) into one request. */
 const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
@@ -93,7 +107,7 @@ const PAIRING_TTL_MS = 600_000;
     CachedSrcDirective, NgTemplateOutlet,
     RouterOutlet, RouterLink, RouterLinkActive, TranslatePipe,
     LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
-    LucideCloudOff, LucideDownload, LucideRotateCw,
+    LucideCloudOff, LucideDownload, LucideRotateCw, LucideCheck,
     RemotePickerComponent,
     CastOverlayComponent,
     AudioPlayerComponent,
@@ -110,6 +124,7 @@ const PAIRING_TTL_MS = 600_000;
     WhatsNewModalComponent,
     LucideIconComponent,
     NavIconComponent,
+    BottomSheetComponent,
     TvRowDirective,
     ResolveUrlPipe,
   ],
@@ -214,10 +229,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
   /** Published as a CSS var so content still scrolls under the fixed navbar. */
   readonly chromeTop = computed(() => `calc(${this.navbarSpacerHeight()} + ${this.contentGapTop()})`);
   /** The native phone dock is daisyUI's 4rem plus the bottom safe area it pads itself with. */
-  readonly chromeBottom = computed(() => {
-    const dock = this.navbar.phoneDock() ? '4rem + env(safe-area-inset-bottom, 0px)' : '0px';
-    return `calc(${dock} + 1rem)`;
-  });
+  readonly dockHeight = computed(() => (this.navbar.phoneDock() ? 'calc(4rem + env(safe-area-inset-bottom, 0px))' : '0px'));
+  readonly chromeBottom = computed(() => `calc(${this.dockHeight()} + 1rem)`);
   /** `chromeBottom` plus the cast and audio mini-bars (3.5rem, borders, 0.5rem gap each) while they show: what content and sticky bars clear. */
   readonly chromeBottomTotal = computed(() => {
     // The bar of another device's session and the audio mini-player share one slot.
@@ -295,13 +308,44 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly navContrib = inject(NavContributionsService);
   /** `nav.main` items before/after the library block, and `nav.acquisition` —
    *  the sidebar, the phone dock and the more-sheet all read these same lists. */
-  /** The TV tab row shows the whole `nav.main` list; the drawer never opens there. */
-  readonly tvNavItems = this.navContrib.mainItems;
   readonly mainItemsBeforeLibraries = this.navContrib.mainItemsBeforeLibraries;
   readonly mainItemsAfterLibraries = this.navContrib.mainItemsAfterLibraries;
   readonly acquisitionItems = this.navContrib.acquisitionItems;
   readonly dockHome = computed(() => this.mainItemsBeforeLibraries().find((i) => i.id === 'core.home'));
-  readonly dockDownloads = computed(() => this.mainItemsAfterLibraries().find((i) => i.id === 'core.downloads'));
+  /** TV tab row: the sidebar's order, with one tab per library between the two `nav.main` blocks. */
+  readonly tvTabs = computed<TvTab[]>(() => [
+    ...this.mainItemsBeforeLibraries().map((i) => ({ id: i.id, route: i.route, exact: i.exact, icon: i.icon, labelKey: i.labelKey })),
+    ...this.displayLibraries().map((l) => ({ id: `library:${l.id}`, route: this.libraryUrl(l), exact: false, icon: this.libraryIcon(l), label: l.name, isLibrary: true, color: this.libraryColor(l) })),
+    ...this.mainItemsAfterLibraries().map((i) => ({ id: i.id, route: i.route, exact: i.exact, icon: i.icon, labelKey: i.labelKey })),
+  ]);
+  private readonly tvTabsRow = viewChild<ElementRef<HTMLElement>>('tvTabsRow');
+  private readonly tvTabsEdges = signal({ start: true, end: true });
+  /** Fades the row's cut edges so a tab half out of view reads as scrollable. */
+  protected readonly tvTabsMask = computed(() => {
+    const { start, end } = this.tvTabsEdges();
+    return `linear-gradient(to right, ${start ? '#000' : 'transparent'} 0, #000 2.5rem, #000 calc(100% - 2.5rem), ${end ? '#000' : 'transparent'} 100%)`;
+  });
+  private readonly tvTabsObserver = effect((onCleanup) => {
+    const el = this.tvTabsRow()?.nativeElement;
+    this.tvTabs();
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => this.updateTvTabsEdges());
+    ro.observe(el);
+    const raf = requestAnimationFrame(() => this.updateTvTabsEdges());
+    onCleanup(() => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    });
+  });
+  protected updateTvTabsEdges(): void {
+    const el = this.tvTabsRow()?.nativeElement;
+    if (!el) return;
+    this.tvTabsEdges.set({ start: el.scrollLeft <= 1, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 1 });
+  }
+  readonly librarySheetOpen = signal(false);
+  readonly isLibraryRoute = signal(this.router.url.startsWith('/libraries/'));
+  /** The dock's Library cell opens the library itself when there is only one, else a sheet. */
+  readonly soleLibrary = computed(() => (this.displayLibraries().length === 1 ? this.displayLibraries()[0] : null));
   readonly dockRequests = computed(() => this.acquisitionItems().find((i) => i.id === 'core.requests'));
   /** Everything not pinned to the dock's primary row — the more-sheet's content,
    *  so a plugin item always reaches at least one native-phone surface. */
@@ -426,6 +470,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
           this.replayPageEnter();
           this.bottomMenuOpen.set(false);
           this.isHomeRoute.set(e.urlAfterRedirects === '/' || e.urlAfterRedirects.startsWith('/?'));
+          this.isLibraryRoute.set(e.urlAfterRedirects.startsWith('/libraries/'));
+          this.librarySheetOpen.set(false);
           this.isDownloadsRoute.set(e.urlAfterRedirects.split('?')[0] === '/downloads');
           this.syncNavbarTitleFromRoute();
         }
@@ -529,6 +575,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
     }, SIDEBAR_COUNTS_DEBOUNCE_MS);
   }
 
+  libraryColor(lib: LibrarySummary): string {
+    return libraryColorVar(lib.color);
+  }
+
   libraryUrl(lib: LibrarySummary): string {
     return `/libraries/${encodeURIComponent(lib.name)}`;
   }
@@ -543,7 +593,20 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   /** Bottom-dock search button: a same-URL navigation no-ops, so the click signals the search page via {@link SearchStateService.requestFocus}. */
   onSearchNavClick(): void {
+    if (this.dismissLibrarySheet()) return;
     if (this.router.url.split('?')[0] === '/search') this.searchState.requestFocus();
+  }
+
+  /** Every dock tap closes the libraries sheet; the return value tells a tap that only dismissed it from one that acts. */
+  dismissLibrarySheet(): boolean {
+    const wasOpen = this.librarySheetOpen();
+    this.librarySheetOpen.set(false);
+    return wasOpen;
+  }
+
+  toggleLibrarySheet(): void {
+    this.bottomMenuOpen.set(false);
+    this.librarySheetOpen.update((v) => !v);
   }
 
   toggleBottomMenu() {

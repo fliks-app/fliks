@@ -18,7 +18,7 @@
   } @else if (listError()) {
     <div role="alert" class="alert alert-error">{{ listError() }}</div>
   } @else if (rows().length === 0) {
-    <p class="text-center py-12 text-base-content/50">
+    <p class="text-center py-12 text-base-content/60">
       {{ 'settings.notifications.empty' | translate }}
     </p>
   } @else {
@@ -46,7 +46,7 @@
               </td>
               <td class="text-sm text-base-content/60">
                 @if (nc.type !== relayType) {
-                  {{ nc.events.length }} event(s)
+                  {{ 'settings.notifications.event_count' | translatePlural: nc.events.length }}
                 }
               </td>
               <td class="text-center">
@@ -169,7 +169,7 @@
           [placeholder]="webhookUrlStored() ? secretMask : 'https://...'"
         />
         @if (webhookUrlStored()) {
-          <span class="label-text-alt text-base-content/50">
+          <span class="label-text-alt text-base-content/60">
             {{ 'settings.notifications.webhook_url_hint' | translate }}
           </span>
         }
@@ -214,7 +214,7 @@
               </button>
             }
           } @else if (tokenStored()) {
-            <span class="label-text-alt text-base-content/50">
+            <span class="label-text-alt text-base-content/60">
               {{ 'settings.notifications.token_hint' | translate }}
             </span>
           }

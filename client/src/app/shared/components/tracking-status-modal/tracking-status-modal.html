@@ -24,7 +24,7 @@
             <div>
               @if (scope().kind === 'series') {
                 <div
-                  class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-1"
+                  class="text-sm font-semibold uppercase tracking-wide text-base-content/60 mb-1"
                 >
                   {{ 'tracking.season' | translate: { number: s.seasonNumber } }}
                 </div>
@@ -43,14 +43,14 @@
               </div>
             </div>
           } @empty {
-            <p class="text-sm text-base-content/50 py-4 text-center">
+            <p class="text-sm text-base-content/60 py-4 text-center">
               {{ 'tracking.empty' | translate }}
             </p>
           }
         </div>
       }
     } @else {
-      <p class="text-sm text-base-content/50 py-4 text-center">
+      <p class="text-sm text-base-content/60 py-4 text-center">
         {{ 'tracking.empty' | translate }}
       </p>
     }
@@ -68,7 +68,7 @@
   <span class="text-sm shrink-0 inline-flex items-center gap-1">
     @switch (s.state) {
       @case ('unmonitored') {
-        <span class="text-base-content/50 inline-flex items-center gap-1">
+        <span class="text-base-content/60 inline-flex items-center gap-1">
           <svg lucideEyeOff class="h-4 w-4"></svg>{{ 'tracking.not_monitored' | translate }}
         </span>
       }
@@ -88,7 +88,7 @@
         </span>
       }
       @case ('no-profile') {
-        <span class="text-base-content/50">{{ 'tracking.no_profile' | translate }}</span>
+        <span class="text-base-content/60">{{ 'tracking.no_profile' | translate }}</span>
       }
     }
   </span>

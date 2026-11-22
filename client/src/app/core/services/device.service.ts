@@ -13,7 +13,7 @@ const TABLET_MIN_SHORT_SIDE = 600;
 const OVERRIDE_KEY = 'fliks.deviceOverride';
 const TV_PLATFORM_OVERRIDE_KEY = 'fliks.tvPlatformOverride';
 
-function readOverride(): DetectResult | null {
+function readOverride(): Pick<DetectResult, 'input' | 'formFactor' | 'tvPlatform'> | null {
   if (typeof window === 'undefined') return null;
   let value: string | null = null;
   let tvPlatformOverride: TvPlatform = null;
@@ -40,16 +40,67 @@ function readOverride(): DetectResult | null {
   }
   }
 
+/** `?tv=1`/`?tablet=1`/`?phone=1`/`?desktop=1`, `?tvplatform=` and `?reset-device` persist the QA override; also run before bootstrap. */
+export function applyDeviceOverrideFromUrl(): void {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams(window.location.search);
+  const force = (['tv', 'tablet', 'phone', 'desktop'] as const).find(
+    (k) => params.has(k) && params.get(k) !== '0',
+  );
+  if (force) {
+    try {
+      window.localStorage.setItem(OVERRIDE_KEY, force);
+    } catch {
+      /* localStorage may be unavailable (private mode) */
+    }
+  } else if (params.has('reset-device')) {
+    try {
+      window.localStorage.removeItem(OVERRIDE_KEY);
+      window.localStorage.removeItem(TV_PLATFORM_OVERRIDE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+  const tvPlatformParam = params.get('tvplatform');
+  if (
+    tvPlatformParam === 'androidtv' ||
+    tvPlatformParam === 'tizen' ||
+    tvPlatformParam === 'webos' ||
+    tvPlatformParam === 'none'
+  ) {
+    try {
+      if (tvPlatformParam === 'none') {
+        window.localStorage.removeItem(TV_PLATFORM_OVERRIDE_KEY);
+      } else {
+        window.localStorage.setItem(TV_PLATFORM_OVERRIDE_KEY, tvPlatformParam);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** Form factor, input modality and TV OS; module-scope so bootstrap-time providers can branch before the injector exists. */
 export function detectDevice(): DetectResult {
   if (typeof window === 'undefined') {
-    return { input: 'mouse', formFactor: 'desktop', tvPlatform: null };
+    return { input: 'mouse', formFactor: 'desktop', tvPlatform: null, desktopPlatform: null, standalone: false };
   }
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  // Raw platform facts, never the QA override: a forced TV look in a browser must keep the cookie session.
+  // The preload bridge is authoritative for Electron; its UA tag covers the window before it attaches.
+  const desktopPlatform: DesktopPlatform = window.fliksDesktop || /\bElectron\//.test(ua) ? 'electron' : null;
+  const standalone =
+    Capacitor.isNativePlatform() ||
+    desktopPlatform !== null ||
+    /AndroidTV\/\d|\bTizen\b|SMART-TV|Web0S|webOS|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV/i.test(ua);
+  const facts = { desktopPlatform, standalone };
 
   const override = readOverride();
-  if (override) return override;
+  if (override) return { ...override, ...facts };
+  return { ...detectFormFactor(ua), ...facts };
+}
 
-  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+function detectFormFactor(ua: string): Pick<DetectResult, 'input' | 'formFactor' | 'tvPlatform'> {
   const mm = typeof window.matchMedia === 'function' ? window.matchMedia : null;
 
   // 1. AndroidTV marker (Capacitor MainActivity injects it)
@@ -111,6 +162,9 @@ interface DetectResult {
   input: InputMode;
   formFactor: FormFactor;
   tvPlatform: TvPlatform;
+  desktopPlatform: DesktopPlatform;
+  /** No backend serves the shell (Capacitor, Smart TV, Android TV, desktop): the API lives on the picked server with a Bearer token. */
+  standalone: boolean;
 }
 
 /** Single source of truth for input modality and form factor (two orthogonal axes), detected in decreasing confidence order;
@@ -159,12 +213,12 @@ export class DeviceService {
   );
 
   constructor() {
-    this.applyOverrideFromUrl();
+    applyDeviceOverrideFromUrl();
     const detected = detectDevice();
     this.input.set(detected.input);
     this.formFactor.set(detected.formFactor);
     this.tvPlatform.set(detected.tvPlatform);
-    this.desktopPlatform.set(this.detectDesktopPlatform());
+    this.desktopPlatform.set(detected.desktopPlatform);
     this.syncBodyClasses();
     this.bindResize();
     // Visible in remote debug (chrome://inspect) — invisible in normal use.
@@ -179,17 +233,6 @@ export class DeviceService {
   }
 
 
-
-  /** Electron desktop shell: the preload bridge is authoritative; the UA tag
-   *  is a fallback for the brief window before it attaches. */
-  private detectDesktopPlatform(): DesktopPlatform {
-    if (typeof window === 'undefined') return null;
-    if (window.fliksDesktop) return 'electron';
-    if (typeof navigator !== 'undefined' && /\bElectron\//.test(navigator.userAgent)) {
-      return 'electron';
-    }
-    return null;
-  }
 
   /** Re-detect on resize (covers tablet rotation crossing the 768 px breakpoint). */
   private bindResize() {
@@ -221,45 +264,6 @@ export class DeviceService {
       const on = this.tvPlatform() === p;
       body.classList.toggle(`tv-${p}`, on);
       html.classList.toggle(`tv-${p}`, on);
-    }
-  }
-
-  private applyOverrideFromUrl() {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const force = (['tv', 'tablet', 'phone', 'desktop'] as const).find(
-      (k) => params.has(k) && params.get(k) !== '0',
-    );
-    if (force) {
-      try {
-        window.localStorage.setItem(OVERRIDE_KEY, force);
-      } catch {
-        /* localStorage may be unavailable (private mode) */
-      }
-    } else if (params.has('reset-device')) {
-      try {
-        window.localStorage.removeItem(OVERRIDE_KEY);
-        window.localStorage.removeItem(TV_PLATFORM_OVERRIDE_KEY);
-      } catch {
-        /* ignore */
-      }
-    }
-    const tvPlatformParam = params.get('tvplatform');
-    if (
-      tvPlatformParam === 'androidtv' ||
-      tvPlatformParam === 'tizen' ||
-      tvPlatformParam === 'webos' ||
-      tvPlatformParam === 'none'
-    ) {
-      try {
-        if (tvPlatformParam === 'none') {
-          window.localStorage.removeItem(TV_PLATFORM_OVERRIDE_KEY);
-        } else {
-          window.localStorage.setItem(TV_PLATFORM_OVERRIDE_KEY, tvPlatformParam);
-        }
-      } catch {
-        /* ignore */
-      }
     }
   }
 

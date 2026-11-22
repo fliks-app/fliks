@@ -33,7 +33,7 @@
   }
 
   @if (rows().length === 0 && !loading() && !failed()) {
-    <p class="text-base-content/50 text-center py-8" data-testid="wanted-empty">{{ 'wanted.empty' | translate }}</p>
+    <p class="text-base-content/60 text-center py-8" data-testid="wanted-empty">{{ 'wanted.empty' | translate }}</p>
   }
 
   <ul class="flex flex-col gap-1">
@@ -46,7 +46,7 @@
             }
           </span>
           <span class="flex-1 min-w-0">
-            <span class="block font-medium truncate">{{ r.title }}@if (r.year) { <span class="text-base-content/50"> ({{ r.year }})</span> }</span>
+            <span class="block font-medium truncate">{{ r.title }}@if (r.year) { <span class="text-base-content/60"> ({{ r.year }})</span> }</span>
             <span class="block text-sm text-base-content/60">
               {{ 'families.' + r.family | translate }}@if (language(r.language); as l) { · {{ l }} }
               @if (r.releaseDate) { · {{ r.releaseDate | localeDate: { dateStyle: 'medium' } }} }

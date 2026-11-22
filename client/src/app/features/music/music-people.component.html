@@ -4,7 +4,7 @@
     @if (list.loading()) {
       <div class="flex justify-center py-12"><span class="loading loading-spinner loading-lg"></span></div>
     } @else {
-      <p class="text-center py-12 text-base-content/50">{{ (role() === 'artist' ? 'music.no_artists' : 'music.no_composers') | translate }}</p>
+      <p class="text-center py-12 text-base-content/60">{{ (role() === 'artist' ? 'music.no_artists' : 'music.no_composers') | translate }}</p>
     }
   } @else {
     <cdk-virtual-scroll-viewport

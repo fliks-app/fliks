@@ -6,7 +6,7 @@
     <!-- Header -->
     <div class="flex items-center justify-between gap-4">
       <div class="flex items-center gap-4 min-w-0">
-        <a routerLink="/admin/settings/libraries" class="btn btn-ghost btn-sm btn-circle">
+        <a routerLink="/admin/settings/libraries" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.back' | translate">
           <svg lucideChevronLeft class="h-5 w-5"></svg>
         </a>
         <div class="min-w-0">
@@ -68,7 +68,7 @@
   </div>
 } @else {
   <div class="text-center py-16">
-    <p class="text-lg text-base-content/50">{{ 'settings.libraries.not_found' | translate }}</p>
+    <p class="text-lg text-base-content/60">{{ 'settings.libraries.not_found' | translate }}</p>
     <a routerLink="/admin/settings/libraries" class="btn btn-ghost btn-sm mt-4">{{ 'settings.libraries.back' | translate }}</a>
   </div>
 }

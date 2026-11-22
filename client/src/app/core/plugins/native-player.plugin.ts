@@ -190,32 +190,6 @@ export interface NativePlayerPlugin {
   setPlaybackRate(options: { rate: number }): Promise<void>;
 }
 
-// --- Event types (dispatched as CustomEvent on window) ---
-
-/** window event: 'nativePlayerStateChanged' */
-export interface NativePlayerStateEvent {
-  state: NativePlayerState;
-}
-
-/** window event: 'nativePlayerTimeUpdate' */
-export interface NativePlayerTimeEvent {
-  position: number;
-  duration: number;
-  buffered: number;
-}
-
-/** window event: 'nativePlayerError' */
-export interface NativePlayerErrorEvent {
-  code: number;
-  message: string;
-}
-
-/** window event: 'nativePlayerTracksChanged' */
-export interface NativePlayerTracksEvent {
-  audioTracks: NativeAudioTrack[];
-  subtitleTracks: NativeSubtitleTrack[];
-}
-
 // --- Plugin registration ---
 
 export const NativePlayer =

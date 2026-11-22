@@ -113,7 +113,7 @@
         <button type="button" class="btn btn-sm" (click)="retry()">{{ 'common.retry' | translate }}</button>
       </div>
     } @else if (!filled().length) {
-      <p class="text-center py-12 text-base-content/50">{{ 'music.no_albums' | translate }}</p>
+      <p class="text-center py-12 text-base-content/60">{{ 'music.no_albums' | translate }}</p>
     }
   } @else if (failed()) {
     <div role="alert" class="alert alert-error" data-testid="discography-failed">

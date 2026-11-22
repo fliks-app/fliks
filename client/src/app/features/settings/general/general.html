@@ -31,7 +31,7 @@
             placeholder="Fliks"
           />
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.general.server_name_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.general.server_name_hint' | translate }}</span>
           </div>
         </label>
 
@@ -47,7 +47,7 @@
             placeholder="https://fliks.example.com"
           />
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.general.public_url_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.general.public_url_hint' | translate }}</span>
           </div>
         </label>
 
@@ -66,7 +66,7 @@
             <option value="hidden">{{ 'settings.general.users_public_mode_hidden' | translate }}</option>
           </select>
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.general.users_public_mode_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.general.users_public_mode_hint' | translate }}</span>
           </div>
         </label>
 
@@ -99,7 +99,7 @@
             }
           </select>
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.general.metadata_language_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.general.metadata_language_hint' | translate }}</span>
           </div>
         </label>
 
@@ -118,7 +118,7 @@
             }
           </select>
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.general.metadata_region_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.general.metadata_region_hint' | translate }}</span>
           </div>
         </label>
 
@@ -158,7 +158,7 @@
           <span class="label-text">{{ 'settings.general.auto_generate_sprites_on_import' | translate }}</span>
         </label>
         <div class="label -mt-2">
-          <span class="label-text-alt text-base-content/50">{{ 'settings.general.auto_generate_sprites_on_import_hint' | translate }}</span>
+          <span class="label-text-alt text-base-content/60">{{ 'settings.general.auto_generate_sprites_on_import_hint' | translate }}</span>
         </div>
 
         <label class="form-control w-full">
@@ -169,7 +169,7 @@
             [ngModel]="companionFileExtensions()" (ngModelChange)="companionFileExtensions.set($event)"
             placeholder=".nfo,.srt,.ass,.sub,.jpg,.png" />
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.general.companion_extensions_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.general.companion_extensions_hint' | translate }}</span>
           </div>
         </label>
 
@@ -196,7 +196,7 @@
           <span class="label-text">{{ 'settings.general.kobo_store_proxy' | translate }}</span>
         </label>
         <div class="label -mt-2">
-          <span class="label-text-alt text-base-content/50">{{ 'settings.general.kobo_store_proxy_hint' | translate }}</span>
+          <span class="label-text-alt text-base-content/60">{{ 'settings.general.kobo_store_proxy_hint' | translate }}</span>
         </div>
         <div class="card-actions justify-end">
           <button type="button" class="btn btn-primary" (click)="saveKobo()" [disabled]="savingKobo()">

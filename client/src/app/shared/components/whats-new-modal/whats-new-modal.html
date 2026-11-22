@@ -3,7 +3,7 @@
   class="modal"
   (keydown.arrowright)="go(index() + 1)"
   (keydown.arrowleft)="go(index() - 1)"
->
+ [attr.aria-label]="'whats_new.title' | translate: { version: version() }">
   <div class="modal-box w-11/12 max-w-4xl p-0 flex flex-col overflow-hidden">
     <app-modal-header flush>
       <div class="flex items-center gap-2">

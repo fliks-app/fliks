@@ -1,4 +1,4 @@
-<dialog #dialog class="modal" (close)="dismissed()">
+<dialog #dialog class="modal" (close)="dismissed()" [attr.aria-label]="titleKey() | translate">
   <div class="modal-box max-w-2xl">
     <app-modal-header>
       <div>
@@ -107,7 +107,11 @@
         @if (busy()) {
           <span class="loading loading-spinner loading-xs"></span>
         }
-        {{ confirmKey() | translate }}
+        @if (confirmKey() === 'discover.select_seasons') {
+          {{ confirmKey() | translatePlural: selectedSeasons().size }}
+        } @else {
+          {{ confirmKey() | translate }}
+        }
       </button>
     </app-modal-footer>
   </div>

@@ -5,6 +5,7 @@ import type { PlayMethod, PlaybackInfoResponse } from '../services/api/streaming
 import type { EngineStats } from '../services/playback-engine/playback-engine';
 import type { AudioStreamInfo, VideoStreamInfo } from '../services/api/media.service';
 import type { PlayerStats } from '../../features/player/overlay/player-stats-overlay';
+import { formatBitrate } from './format-bytes';
 
 /** Pixel widths per ladder rung id (must match the backend `PROFILES`); ExoPlayer matches tracks by exact width x height.
  *  `original` is absent: callers pass a sentinel resolution (source dimensions, or 99999 if unknown). */
@@ -466,11 +467,6 @@ export function buildPlayerStats(p: BuildPlayerStatsParams): PlayerStats {
   );
   const activeAudioCopy = activeAudioPlan?.copy ?? effectiveAudioCopy;
 
-  const formatBitrateBps = (bps: number): string => {
-    if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`;
-    if (bps >= 1_000) return `${(bps / 1_000).toFixed(0)} kbps`;
-    return `${bps} bps`;
-  };
 
   // --- Container (summary) ---
   const totalContainerBps =
@@ -480,7 +476,7 @@ export function buildPlayerStats(p: BuildPlayerStatsParams): PlayerStats {
       : undefined);
   const containerBitrate =
     totalContainerBps != null && totalContainerBps > 0
-      ? formatBitrateBps(totalContainerBps)
+      ? formatBitrate(totalContainerBps)
       : '?';
 
   const isHls = deliveredKind != null && deliveredKind !== 'direct';
@@ -574,14 +570,14 @@ export function buildPlayerStats(p: BuildPlayerStatsParams): PlayerStats {
   }
 
   if (serverStreamTotalBps != null && serverStreamTotalBps > 0) {
-    videoStreamBitrate = formatBitrateBps(serverStreamTotalBps);
+    videoStreamBitrate = formatBitrate(serverStreamTotalBps);
   } else {
     const trackVbw = activeVariant?.videoBandwidth;
     const shakaStreamBw = engineStats?.streamBandwidth;
     if (validBps(trackVbw)) {
-      videoStreamBitrate = formatBitrateBps(trackVbw);
+      videoStreamBitrate = formatBitrate(trackVbw);
     } else if (validBps(shakaStreamBw)) {
-      videoStreamBitrate = formatBitrateBps(shakaStreamBw);
+      videoStreamBitrate = formatBitrate(shakaStreamBw);
     }
   }
 
@@ -707,13 +703,13 @@ export function buildPlayerStats(p: BuildPlayerStatsParams): PlayerStats {
   const sourceAudioIsActive = !activeAudioPlan && deliveryKnown && activeAudioCopy;
   let audioStreamBitrate = '';
   if (validBps(activeAudioPlan?.bitrateBps)) {
-    audioStreamBitrate = formatBitrateBps(activeAudioPlan!.bitrateBps!);
+    audioStreamBitrate = formatBitrate(activeAudioPlan!.bitrateBps!);
   } else if (sourceAudioIsActive && validBps(sourceA)) {
-    audioStreamBitrate = formatBitrateBps(sourceA);
+    audioStreamBitrate = formatBitrate(sourceA);
   } else if (validBps(activeVariant?.audioBandwidth)) {
-    audioStreamBitrate = formatBitrateBps(activeVariant!.audioBandwidth);
+    audioStreamBitrate = formatBitrate(activeVariant!.audioBandwidth);
   } else if (!activeAudioCopy && selectedRateEntry && validBps(selectedRateEntry.audioBitrateBps)) {
-    audioStreamBitrate = formatBitrateBps(selectedRateEntry.audioBitrateBps);
+    audioStreamBitrate = formatBitrate(selectedRateEntry.audioBitrateBps);
   }
 
   const activeSampleRate =

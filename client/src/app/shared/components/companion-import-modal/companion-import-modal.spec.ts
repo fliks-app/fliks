@@ -112,7 +112,7 @@ describe('CompanionImportModalComponent', () => {
     await cmp.submit();
     expect(confirm.confirm).toHaveBeenCalled();
     expect(media.importEdl.mock.calls.map((c) => c[3])).toEqual([false, true]);
-    expect(toast.success).toHaveBeenCalledWith('file_info.import_edl_success_ignored');
+    expect(toast.success).toHaveBeenCalledWith('file_info.import_edl_success_ignored_one');
   });
 
   it('keeps the dialog open and swallows the error when the upload fails', async () => {

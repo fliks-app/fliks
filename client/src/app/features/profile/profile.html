@@ -40,13 +40,13 @@
       <div class="min-w-0 flex-1">
         <h1 class="text-xl sm:text-2xl font-bold truncate">{{ p.username }}</h1>
         <div class="flex gap-4 text-sm text-base-content/60 mt-1">
-          <a [routerLink]="['/profile', p.id, 'followers']" class="hover:text-base-content">{{ 'social.followers_count' | translate: { n: p.followerCount } }}</a>
-          <a [routerLink]="['/profile', p.id, 'following']" class="hover:text-base-content">{{ 'social.following_count' | translate: { n: p.followingCount } }}</a>
+          <a [routerLink]="['/profile', p.id, 'followers']" class="hover:text-base-content">{{ 'social.followers_count' | translatePlural: p.followerCount }}</a>
+          <a [routerLink]="['/profile', p.id, 'following']" class="hover:text-base-content">{{ 'social.following_count' | translatePlural: p.followingCount }}</a>
         </div>
         @if (p.isSelf && p.avatar) {
           <button
             type="button"
-            class="text-sm text-base-content/50 hover:text-error mt-1"
+            class="text-sm text-base-content/60 hover:text-error mt-1"
             (click)="removeAvatar()"
           >
             {{ 'social.avatar_remove' | translate }}

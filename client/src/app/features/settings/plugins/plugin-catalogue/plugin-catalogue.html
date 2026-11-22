@@ -11,9 +11,9 @@
   } @else if (loadError()) {
     <div role="alert" class="alert alert-error">{{ loadError() }}</div>
   } @else if (!hasAnySource()) {
-    <p class="text-center py-8 text-base-content/50">{{ 'settings.plugins.catalogue.empty_no_sources' | translate }}</p>
+    <p class="text-center py-8 text-base-content/60">{{ 'settings.plugins.catalogue.empty_no_sources' | translate }}</p>
   } @else if (rows().length === 0) {
-    <p class="text-center py-8 text-base-content/50">{{ 'settings.plugins.catalogue.empty_no_catalog' | translate }}</p>
+    <p class="text-center py-8 text-base-content/60">{{ 'settings.plugins.catalogue.empty_no_catalog' | translate }}</p>
   } @else {
     <div class="grid gap-3 sm:grid-cols-2">
       @for (row of rows(); track row.sourceId + ':' + row.plugin.id) {
@@ -24,7 +24,7 @@
             }
             <div class="min-w-0 flex-1">
               <p class="font-medium truncate">{{ row.plugin.name }}</p>
-              <p class="text-xs text-base-content/50 truncate">{{ 'settings.plugins.catalogue.by' | translate: { author: row.plugin.author } }}</p>
+              <p class="text-sm text-base-content/60 truncate">{{ 'settings.plugins.catalogue.by' | translate: { author: row.plugin.author } }}</p>
             </div>
             @if (updateTarget(row)) {
               <span class="badge badge-info badge-sm shrink-0">{{ 'settings.plugins.catalogue.update_available' | translate }}</span>
@@ -36,15 +36,15 @@
           <p class="text-sm text-base-content/70 line-clamp-2">{{ row.plugin.description }}</p>
 
           @if (installedVersion(row); as version) {
-            <p class="text-xs text-base-content/50">
+            <p class="text-sm text-base-content/60">
               {{ 'settings.plugins.catalogue.installed_version' | translate: { version: version } }}
             </p>
           }
 
           <div class="mt-auto pt-2 flex items-center justify-between">
-            <span class="text-xs text-base-content/40 truncate">{{ row.sourceUrl }}</span>
+            <span class="text-sm text-base-content/60 truncate">{{ row.sourceUrl }}</span>
             @if (!row.plugin.installable.length) {
-              <span class="text-xs text-base-content/40 shrink-0">{{ 'settings.plugins.catalogue.no_installable' | translate }}</span>
+              <span class="text-sm text-base-content/60 shrink-0">{{ 'settings.plugins.catalogue.no_installable' | translate }}</span>
             } @else if (!allowOlderVersions()) {
               @if (!isInstalled(row.plugin.id)) {
                 <button type="button" class="btn btn-primary btn-xs shrink-0" [disabled]="isInspecting(row)" (click)="installVersion(row, primaryVersion(row))">
@@ -61,7 +61,7 @@
                     }
                     {{ 'settings.plugins.catalogue.switch_to' | translate: { version: version } }}
                   </button>
-                  <span class="text-[0.7rem] text-base-content/50">{{ 'settings.plugins.catalogue.update_keeps_data' | translate }}</span>
+                  <span class="text-sm text-base-content/60">{{ 'settings.plugins.catalogue.update_keeps_data' | translate }}</span>
                 </div>
               }
             } @else {
@@ -93,7 +93,7 @@
                     </button>
                   </div>
                   <div class="dropdown-content bg-base-200 rounded-box shadow-xl min-w-52 max-h-[70vh] p-1 z-[101] overflow-y-auto">
-                    <p class="px-3 py-2 text-xs text-base-content/50">{{ 'settings.plugins.catalogue.pick_version' | translate }}</p>
+                    <p class="px-3 py-2 text-sm text-base-content/60">{{ 'settings.plugins.catalogue.pick_version' | translate }}</p>
                     @for (entry of versionsFor(row); track entry.version) {
                       <button type="button" class="dropdown-item justify-between"
                         [appSelectedOption]="entry.version === installedVersion(row)"
@@ -107,7 +107,7 @@
                   </div>
                 </div>
                 @if (isInstalled(row.plugin.id)) {
-                  <span class="text-[0.7rem] text-base-content/50">{{ 'settings.plugins.catalogue.update_keeps_data' | translate }}</span>
+                  <span class="text-sm text-base-content/60">{{ 'settings.plugins.catalogue.update_keeps_data' | translate }}</span>
                 }
               </div>
             }
