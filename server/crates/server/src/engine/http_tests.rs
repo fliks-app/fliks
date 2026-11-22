@@ -863,7 +863,7 @@ mod resolve {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn an_opds_token_reads_books_and_comics_only(pool: PgPool) {
+    async fn an_opds_token_reads_every_family_its_catalogue_serves(pool: PgPool) {
         let w = world(pool).await;
         let token = device_token(&w, w.member.0, crate::device_tokens::Kind::Opds).await;
         let credential = basic("r", &token);
@@ -872,7 +872,7 @@ mod resolve {
         in_edition(&w, "video").await;
         for (family, allowed) in [
             ("video", false),
-            ("audio", false),
+            ("audio", true),
             ("text", true),
             ("image", true),
         ] {

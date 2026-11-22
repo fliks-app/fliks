@@ -812,11 +812,44 @@ async fn seerr_import_never_merges_into_a_same_name_local_account(pool: PgPool) 
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_released_shell_reads_an_orphan_cover_with_its_session_token_in_the_url(pool: PgPool) {
+    let c = ctx(pool).await;
+    let get = |uri: String| {
+        let app = c.app.clone();
+        async move {
+            let req = Request::builder().uri(uri).body(Body::empty()).unwrap();
+            app.oneshot(req).await.unwrap().status().as_u16()
+        }
+    };
+    assert_ne!(
+        get(format!(
+            "/api/imports/orphans/cover?path=x&token={}",
+            c.admin
+        ))
+        .await,
+        401
+    );
+    assert_eq!(get(format!("/api/auth/me?token={}", c.admin)).await, 401);
+}
+
+#[sqlx::test(migrations = false)]
 async fn user_mapping_is_admin_only_and_needs_a_known_provider_and_user(pool: PgPool) {
     let c = ctx(pool).await;
     let body = json!({"provider": "seerr", "externalId": "1", "userId": 1});
     let (s, _) = post(&c, "/api/imports/user-mappings", &c.readonly, body.clone()).await;
     assert_eq!(s, 403);
+    let settings_only = token(&c.pool, &c.st, "cfg", r#"["settings.access"]"#, false).await;
+    let (s, _) = post(
+        &c,
+        "/api/imports/user-mappings",
+        &settings_only,
+        body.clone(),
+    )
+    .await;
+    assert_eq!(
+        s, 403,
+        "settings access alone cannot bind an identity to an account"
+    );
     let (s, _) = post(
         &c,
         "/api/imports/user-mappings",

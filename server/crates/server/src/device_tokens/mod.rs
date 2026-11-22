@@ -3,7 +3,7 @@ mod reject;
 mod routes;
 mod sealed;
 
-use fliks_domain::media::family::Family;
+use fliks_domain::media::{family::Family, kind::MediaKind};
 use fliks_engine_core::api::{ResolveCredentialSource as Source, ResolvePurpose as Purpose};
 use md5::{Digest as _, Md5};
 use sha2::Sha256;
@@ -65,11 +65,16 @@ impl Kind {
     }
 
     /// The families of content this kind may read: its token travels in URLs, so it opens the files of its
-    /// catalogue only. `None` is no confinement.
-    pub fn families(self) -> Option<&'static [Family]> {
+    /// catalogue only. `None` is no confinement. An OPDS catalogue serves books and comics.
+    pub fn families(self) -> Option<Vec<Family>> {
         match self {
-            Self::Kobo => Some(&[Family::Text]),
-            Self::Opds => Some(&[Family::Text, Family::Image]),
+            Self::Kobo => Some(vec![Family::Text]),
+            Self::Opds => Some(
+                [MediaKind::Book, MediaKind::Comic]
+                    .into_iter()
+                    .flat_map(|k| k.families().iter().copied())
+                    .collect(),
+            ),
             Self::Kosync | Self::Subsonic => None,
         }
     }

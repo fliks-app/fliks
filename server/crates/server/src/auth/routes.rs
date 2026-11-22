@@ -591,9 +591,20 @@ pub(crate) async fn users_public(
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
-pub(crate) struct CastInfoDto {
-    media_file_id: u32,
+#[serde(rename_all = "camelCase")]
+struct FileDto {
+    media_file_id: Option<u32>,
+}
+
+/// The file a token binds to. Released clients post no body, or `{}`, with or without a JSON
+/// content type: that asks for an unbound token.
+fn bound_file(body: &[u8]) -> Result<Option<u32>, AppError> {
+    if body.is_empty() {
+        return Ok(None);
+    }
+    serde_json::from_slice::<FileDto>(body)
+        .map(|d| d.media_file_id)
+        .map_err(|e| AppError::bad_request(format!("Invalid body: {e}")))
 }
 
 #[utoipa::path(post, path = "/api/auth/cast-info", responses((status = 200)))]
@@ -601,11 +612,12 @@ pub(crate) async fn cast_info(
     State(st): State<AppState>,
     a: Authed,
     headers: HeaderMap,
-    ValidJson(dto): ValidJson<CastInfoDto>,
+    body: axum::body::Bytes,
 ) -> Result<Response, AppError> {
+    let file = bound_file(&body)?;
     let token = st
         .jwt
-        .sign_cast(a.user.id, &a.user.username, a.session()?, dto.media_file_id)?
+        .sign_cast(a.user.id, &a.user.username, a.session()?, file)?
         .token;
     let base = crate::http::public_base(&st, &headers).await;
     Ok((
@@ -615,26 +627,13 @@ pub(crate) async fn cast_info(
         .into_response())
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct StreamTokenDto {
-    media_file_id: Option<u32>,
-}
-
 #[utoipa::path(post, path = "/api/auth/stream-token", responses((status = 200)))]
 pub(crate) async fn stream_token(
     State(st): State<AppState>,
     a: Authed,
     body: axum::body::Bytes,
 ) -> Result<Response, AppError> {
-    // Released clients post no body, some with a JSON content type: an empty body is an unbound token.
-    let file = if body.is_empty() {
-        None
-    } else {
-        serde_json::from_slice::<StreamTokenDto>(&body)
-            .map_err(|e| AppError::bad_request(format!("Invalid body: {e}")))?
-            .media_file_id
-    };
+    let file = bound_file(&body)?;
     let sid = a.session()?;
     let token = match file {
         Some(file) => st

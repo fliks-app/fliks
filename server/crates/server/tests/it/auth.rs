@@ -302,7 +302,7 @@ async fn a_revoked_session_cuts_every_token_minted_on_it(pool: PgPool) {
         jwt.sign_access(id, "a", sid).unwrap().token,
         jwt.sign_stream(id, "a", sid).unwrap().token,
         jwt.sign_stream_for(id, "a", sid, 7).unwrap().token,
-        jwt.sign_cast(id, "a", sid, 7).unwrap().token,
+        jwt.sign_cast(id, "a", sid, Some(7)).unwrap().token,
     ];
     let status = |t: String| {
         let app = app.clone();

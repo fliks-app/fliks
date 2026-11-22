@@ -121,12 +121,14 @@ impl LoginThrottle {
         Self::give_back(&mut m, &address_key(ip));
     }
 
-    /// A success: the pair is forgotten and its own attempt leaves the address budget, which no
-    /// success can reset.
+    /// A success: the pair is forgotten and every attempt it counted leaves the address budget,
+    /// which no success can reset beyond its own pair.
     pub fn clear(&self, ip: Option<IpAddr>, username: &str) {
         let mut m = self.fails.lock_clean();
-        if m.remove(&key(ip, username)).is_some() {
-            Self::give_back(&mut m, &address_key(ip));
+        if let Some((n, _)) = m.remove(&key(ip, username))
+            && let Some(e) = m.get_mut(&address_key(ip))
+        {
+            e.0 = e.0.saturating_sub(n);
         }
     }
 }
@@ -226,9 +228,23 @@ mod tests {
         t.clear(ip("1.1.1.1"), "u0");
         assert!(
             t.attempt(ip("1.1.1.1"), "mine"),
-            "a success frees only its own attempt"
+            "a success frees only its own pair"
         );
         assert!(!t.attempt(ip("1.1.1.1"), "again"));
+    }
+
+    #[test]
+    fn a_success_gives_back_every_attempt_its_pair_counted() {
+        let t = LoginThrottle::default();
+        for _ in 0..ADDRESS_MAX {
+            assert!(t.attempt_with(ip("1.1.1.1"), "oidc:", ADDRESS_MAX));
+        }
+        assert!(!t.attempt(ip("1.1.1.1"), "bob"));
+        t.clear(ip("1.1.1.1"), "oidc:");
+        for _ in 0..ADDRESS_MAX {
+            assert!(t.attempt_with(ip("1.1.1.1"), "oidc:", ADDRESS_MAX));
+        }
+        assert!(!t.attempt(ip("1.1.1.1"), "bob"));
     }
 
     #[test]

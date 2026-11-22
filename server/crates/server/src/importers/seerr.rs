@@ -55,10 +55,12 @@ pub(super) async fn start(st: AppState, a: Authed) -> Res<(StatusCode, Json<Valu
         .ok_or_else(|| AppError::conflict("Import already running"))?;
     st.hub.emit(SseEvent::SeerrImportStarted {});
     tokio::spawn(async move {
-        let _claim = claim;
         let job_state = st.clone();
         let ran = run_audited(&st, "ImportSeerrRequests", Trigger::Manual, async move {
-            match import(&job_state.db).await {
+            let result = import(&job_state.db).await;
+            // Released before the outcome event, so a client reacting to it can start the next run.
+            drop(claim);
+            match result {
                 Ok(s) => {
                     crate::settings::checklist::mark_data_imported(&job_state.db).await;
                     job_state.hub.emit(SseEvent::SeerrImportCompleted {
