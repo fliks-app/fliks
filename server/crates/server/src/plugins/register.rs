@@ -1,8 +1,18 @@
 //! Registering a package with the host: checks, database provisioning, settling and activation.
+use super::install::{InstallError, ie};
+use super::manifest::Inspected;
 use super::*;
 use crate::sync::MutexExt;
+use axum::http::StatusCode;
 use fliks_domain::external_id::ExternalProvider;
 use fliks_domain::plugins::provider;
+
+/// The message of a component that does not link against this core's plugin interface.
+pub(super) fn link_refusal(e: &anyhow::Error) -> String {
+    format!(
+        "the component does not link against this core's plugin interface: {e:#}; install a build of this plugin made for this core"
+    )
+}
 
 impl Plugins {
     pub(super) fn reverify(&self, pkg: &Package) -> Result<(), Fail> {
@@ -54,6 +64,36 @@ impl Plugins {
             },
             &lists,
         ))
+    }
+
+    /// A package this core cannot link is refused before it replaces the installed one.
+    pub(super) async fn check_link(&self, i: &Inspected) -> Result<(), InstallError> {
+        let refuse = |detail: String| {
+            ie(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "PLUGIN_INCOMPATIBLE_API",
+                detail,
+            )
+        };
+        let host = self.host().map_err(|e| {
+            ie(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "PLUGIN_INSTALL_FAILED",
+                e.to_string(),
+            )
+        })?;
+        let wasm = i.archive.get("plugin.wasm").unwrap_or_default();
+        let component = compile::probe(&host.env, wasm).await.map_err(|e| match e {
+            compile::LoadError::Invalid(m) => refuse(m),
+            compile::LoadError::Host(m) => ie(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "PLUGIN_INSTALL_FAILED",
+                m,
+            ),
+        })?;
+        Linked::new(&host.env, &component, &i.manifest)
+            .map(drop)
+            .map_err(|e| refuse(link_refusal(&e)))
     }
 
     /// Rule 7 up to the end of `hello`, under the caller's per-id lock.
@@ -250,20 +290,16 @@ impl Plugins {
             }
             None
         };
-        let strs = |k: &str| -> Vec<String> {
-            m[k].as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(|v| v.as_str().map(str::to_owned))
-                .collect()
-        };
+        let scopes = packages::granted_scopes(&self.db, id)
+            .await
+            .map_err(|e| db_fail("db-provision-failed", e))?
+            .unwrap_or_default();
         defaults::warn_unresolved(id.as_str(), m, pkg.verified_by_key_id.is_some());
         let sh = Arc::new(Shared {
             id: id.as_str().into(),
             env: host.env.clone(),
             db: pool,
-            scopes: strs("scopes"),
-            ingest_roots: strs("ingestRoots"),
+            scopes,
             provider: m.get("provider").is_some(),
             defaults: defaults::for_plugin(m, pkg.verified_by_key_id.is_some()),
             requires_ok: AtomicBool::new(false),
@@ -278,15 +314,9 @@ impl Plugins {
                 .and_then(|b| outbound::Gates::from_block(id, b))
                 .map(Arc::new),
         });
-        let rt = PluginRt::new(sh, m.clone(), &loaded.component, pkg.network_internal)
-            .map_err(|e| {
-                fail(
-                    "incompatible-api",
-                    format!(
-                        "the component does not link against this core's plugin interface: {e:#}; install a build of this plugin made for this core"
-                    ),
-                )
-            })?;
+        let linked = Linked::new(&host.env, &loaded.component, m)
+            .map_err(|e| fail("incompatible-api", link_refusal(&e)))?;
+        let rt = PluginRt::new(sh, m.clone(), linked, pkg.network_internal);
         {
             let mut t = rt.timings.lock_clean();
             t.compile = loaded.elapsed;
@@ -296,7 +326,9 @@ impl Plugins {
         match rt.hello().await {
             Ok(()) => {}
             Err(SpawnError::Mismatch(d)) => return Err(fail("manifest-mismatch", d)),
-            Err(SpawnError::Failed(d)) => return Err(fail("spawn-failed", d)),
+            Err(SpawnError::Failed(d) | SpawnError::Budget(d)) => {
+                return Err(fail("spawn-failed", d));
+            }
         }
         if let Some(block) = m.get("provider") {
             namespaces::claim(
@@ -465,6 +497,7 @@ impl Plugins {
             );
         }
         if let Some(rt) = &p.rt {
+            self.reregister_after_breaker(rt.clone());
             self.watch_acquisition(rt.clone());
             self.registry.set_jobs(&id, p.declared.jobs.clone());
             self.start_crons(&id, &p.declared.jobs);

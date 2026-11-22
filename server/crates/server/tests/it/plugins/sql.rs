@@ -104,6 +104,19 @@ async fn db_driver() {
         call(
             "/test/db/query",
             q(
+                r#"SELECT count(*) FILTER (WHERE "sha256" IS NULL) AS n FROM "_migrations""#,
+                json!([])
+            ),
+            &[]
+        )
+        .await["rows"][0][0],
+        0,
+        "an adopted ledger gets the hash of each applied script"
+    );
+    assert_eq!(
+        call(
+            "/test/db/query",
+            q(
                 "SELECT to_regclass('indexers') IS NULL AS absent",
                 json!([])
             ),

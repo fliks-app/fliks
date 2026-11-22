@@ -57,6 +57,7 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   | `releases:score` | `releases.score` |
   | `ingest:write` | `library.ingest` |
   | `events:emit` | `events.publish`, `notifications.dispatch`, `events.emitOwn`, `counts.set` |
+  | `events:receive` | none: core delivers every domain event to a plugin that declares it, as `event(name, payload)` |
   | `config:rw` | `config.get`, `config.set` |
 
   A method whose scopes you have not all declared rejects with `missing scope "<scope>" required
@@ -275,11 +276,13 @@ scheduled call.
   crash at once.
 - **Crashes**: a crash drops only that instance, and its lane re-creates one after `1, 2, 4, 8, 16,
   30 s` (the ladder resets after 120 s of continuous `ready`). Six crashes in ten minutes trip the
-  breaker.
+  breaker; core registers the plugin again after ten minutes, then every thirty. A refused memory
+  growth against the plugin's budget (twice `memoryMb` for all instances) is not a crash: the call
+  answers `queue full`.
 - **Config changes**: when an admin saves one of the plugin's own settings, every live instance gets
   `config-changed(keys)` before its next call. It names the keys, not the values; call `config.get`.
-- **Events**: every domain event is delivered to every `process` plugin as `event(name, payload)`,
-  unfiltered, at-most-once, through a ring of 64 per plugin (the oldest is dropped when it is full). A
+- **Events**: every domain event is delivered, as `event(name, payload)`, to every `process` plugin
+  that declares the scope `events:receive`, unfiltered, at-most-once, through a ring of 64 per plugin (the oldest is dropped when it is full). A
   plugin's own `events[]` is ignored.
 - **Jobs and scheduled calls**: `jobs[]` are cron entries core runs as `job` calls, with no overlap
   per job. `schedule-call(key, delay-ms, payload)` stores one durable pending call per key in a
@@ -295,7 +298,8 @@ A `process` plugin that asks for a schema gets its own Postgres role
 underscores>`), a password rotated on every start and never handed to the
 guest, and a `SELECT (id)` grant on the core tables it declared (never `REFERENCES`). It reaches them only through the
 `db` interface (`query`, `execute`, `migrate`): the host keeps one pool per plugin, logged in as that
-role with the schema as its whole `search_path`. A plugin runs its own migrations, from `start`.
+role with the schema as its whole `search_path`. A plugin runs its own migrations, from `start`. The host records the sha256 of each applied script
+and logs a warning when one changes afterwards; an applied script is never run again.
 Core never reads those tables.
 
 Uninstalling with `deleteData` drops the role and the schema. A plain uninstall keeps the schema

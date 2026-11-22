@@ -3,12 +3,20 @@
 use super::fetch::ArchiveError;
 use super::install::{InstallError, Report, carries_grant, ie};
 use super::packages::{self, Package, Source};
+use super::runtime::State;
 use super::{Plugins, archive, catalog, trust};
 use crate::state::AppState;
 use axum::http::StatusCode;
 use nodejs_semver::Version;
 use serde_json::{Value, json};
 use std::time::Duration;
+
+/// What became of an upgrade whose start was still running when the install answered.
+enum Late {
+    Ready,
+    Pending,
+    Failed,
+}
 
 const CATALOG_CAP: usize = 1 << 20;
 const STALE: Duration = Duration::from_secs(6 * 3600);
@@ -92,6 +100,9 @@ impl Plugins {
                 )
                 .await;
         };
+        if let Some(older) = catalog::older_than_cached(&parsed, s.cached_catalog.as_ref()) {
+            return self.refresh_failed(s, "stale-catalog", older).await;
+        }
         let mut filtered = catalog::filter(&parsed, &self.opts.version, self.skip_compat().await);
         filtered["signedByKeyId"] = json!(signed_by);
         sqlx::query(
@@ -214,10 +225,34 @@ impl Plugins {
                 prev.version
             );
         }
+        let detail = format!("{why}; migrations the new version ran stay applied");
         if let Err(e) =
-            packages::hold_update(&self.db, &prev.plugin_id, failed, "failed", why).await
+            packages::hold_update(&self.db, &prev.plugin_id, failed, "failed", &detail).await
         {
             tracing::warn!("auto-update: {} not held at {failed}: {e}", prev.plugin_id);
+        }
+    }
+
+    /// A start that outlived the install's wait settles on its own: `ready` is an upgrade, only the
+    /// breaker (`failed`) is a failed one.
+    async fn late_start(&self, id: &str, reason: Option<&str>) -> Late {
+        if reason != Some("spawn-failed") {
+            return Late::Failed;
+        }
+        let (Some(rt), Ok(host)) = (self.rt(id), self.host()) else {
+            return Late::Failed;
+        };
+        let wait = host.env.cfg.deadlines.start + Duration::from_secs(60);
+        let mut w = rt.watch();
+        let settled = tokio::time::timeout(
+            wait,
+            w.wait_for(|s| matches!(s, State::Ready | State::Failed | State::Stopped)),
+        )
+        .await;
+        match settled.as_ref().map(|r| r.as_deref().ok().copied()) {
+            Ok(Some(State::Ready)) => Late::Ready,
+            Ok(Some(State::Failed)) => Late::Failed,
+            _ => Late::Pending,
         }
     }
 
@@ -353,6 +388,16 @@ impl Plugins {
                 .filter_map(|c| c.strip_prefix("coreref:"))
                 .filter(|t| !held_refs.iter().any(|r| r == t))
                 .map(|t| format!("coreref:{t}"));
+            let held_roots: Vec<&str> = pkg.manifest["ingestRoots"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            let new_roots = caps()
+                .filter_map(|c| c.strip_prefix("ingestroot:"))
+                .filter(|r| !held_roots.contains(r))
+                .map(|r| format!("ingestroot:{r}"));
             let new_scopes: Vec<String> = granted
                 .iter()
                 .flat_map(|g| {
@@ -363,6 +408,7 @@ impl Plugins {
                 .map(str::to_owned)
                 .chain(new_namespaces)
                 .chain(new_refs)
+                .chain(new_roots)
                 .collect();
             if !new_scopes.is_empty() {
                 let detail = new_scopes.join(", ");
@@ -377,21 +423,39 @@ impl Plugins {
                 continue;
             }
             match self.confirm(&staging, &sha).await {
-                Ok(r) if r.status == "active" => {
-                    tracing::info!("auto-update: {} {} → {version}", pkg.plugin_id, pkg.version);
-                    updated.push(
-                        json!({"pluginId": pkg.plugin_id, "from": pkg.version, "to": version}),
-                    );
-                }
+                Ok(r) if r.status == "active" => {}
                 Ok(r) => {
                     let why = r
                         .reason
+                        .clone()
                         .unwrap_or_else(|| "install did not activate".into());
-                    self.roll_back(&pkg, &version, &why).await;
-                    skip(format!("{why}; kept {}", pkg.version));
+                    match self.late_start(&id, r.reason.as_deref()).await {
+                        Late::Ready => {}
+                        Late::Pending => {
+                            skip(format!("{why}; its start is still running, {version} kept"));
+                            continue;
+                        }
+                        Late::Failed => {
+                            self.roll_back(&pkg, &version, &why).await;
+                            skip(format!("{why}; kept {}", pkg.version));
+                            continue;
+                        }
+                    }
                 }
-                Err(e) => skip(e.message),
+                Err(e) => {
+                    if e.code == "PLUGIN_INCOMPATIBLE_API"
+                        && let Err(h) =
+                            packages::hold_update(&self.db, &id, &version, "failed", &e.message)
+                                .await
+                    {
+                        tracing::warn!("auto-update: {id} not held at {version}: {h}");
+                    }
+                    skip(e.message);
+                    continue;
+                }
             }
+            tracing::info!("auto-update: {} {} → {version}", pkg.plugin_id, pkg.version);
+            updated.push(json!({"pluginId": pkg.plugin_id, "from": pkg.version, "to": version}));
         }
         if !updated.is_empty() || !skipped.is_empty() {
             tracing::info!(

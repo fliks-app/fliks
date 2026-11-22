@@ -85,7 +85,7 @@ impl Lane {
         self.idle.lock_clean().push((inst, Instant::now()));
     }
 
-    /// Drops the instances idle for `after` (rule 40: `http`, `task`, `job` lanes only).
+    /// Drops the instances idle for `after` (rule 40: every lane but `core`).
     pub(super) fn reap(&self, after: Duration) -> usize {
         let mut idle = self.idle.lock_clean();
         let before = idle.len();
@@ -154,6 +154,10 @@ impl Lane {
                         self.live.fetch_add(1, Ordering::SeqCst);
                         i
                     }
+                    Err(SpawnError::Budget(m)) => {
+                        tracing::warn!("plugin \"{}\" instance refused: {m}", rt.sh.id);
+                        return Err(CallError::Unavailable(QUEUE_FULL.into()));
+                    }
                     Err(e) => {
                         rt.crash(self, &e.to_string());
                         return Err(CallError::Unavailable(e.to_string()));
@@ -171,6 +175,7 @@ impl Lane {
             let d = inst.store.data_mut();
             d.set_deadline(until.into_std());
             d.db_unavailable = false;
+            d.budget_refused = false;
         }
         let cfg_gen = rt.cfg_gen.load(Ordering::SeqCst);
         let keys = (inst.cfg_gen < cfg_gen).then(|| rt.cfg_keys.lock_clean().clone());
@@ -204,6 +209,13 @@ impl Lane {
             .store
             .data()
             .db_unavailable;
+        let refused = slot
+            .inst
+            .as_ref()
+            .expect("held")
+            .store
+            .data()
+            .budget_refused;
         self.last_db.store(db, Ordering::SeqCst);
         let current = rt.sh.era.load(Ordering::SeqCst) == era;
         match res {
@@ -212,6 +224,11 @@ impl Lane {
                     slot.back();
                 }
                 Ok(r)
+            }
+            Ok(Err(trap)) if refused => {
+                drop(slot);
+                tracing::warn!("plugin \"{}\" call refused memory: {trap}", rt.sh.id);
+                Err(CallError::Unavailable(QUEUE_FULL.into()))
             }
             Ok(Err(trap)) => {
                 drop(slot);

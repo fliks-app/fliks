@@ -41,7 +41,7 @@ use crate::sync::{MutexExt, RwLockExt};
 use fliks_domain::media::family::Family;
 use packages::Package;
 use registry::{Fail, Registered, Registry, fail};
-use runtime::{Env, HostConfig, PluginRt, Shared, SpawnError, State};
+use runtime::{Env, HostConfig, Linked, PluginRt, Shared, SpawnError, State};
 use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::{HashMap, HashSet};

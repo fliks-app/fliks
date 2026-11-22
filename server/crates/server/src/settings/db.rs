@@ -62,6 +62,15 @@ pub async fn with_prefix(
     .await
 }
 
+/// Deletes the rows of `keys`.
+pub async fn delete_keys(db: impl PgExecutor<'_>, keys: &[String]) -> sqlx::Result<()> {
+    sqlx::query(r#"DELETE FROM app_settings WHERE "key" = ANY($1)"#)
+        .bind(keys)
+        .execute(db)
+        .await
+        .map(drop)
+}
+
 /// The base URL the server is reached on, trimmed and without a trailing slash.
 pub async fn public_url(db: impl PgExecutor<'_>) -> sqlx::Result<Option<String>> {
     Ok(text(db, "public_url")

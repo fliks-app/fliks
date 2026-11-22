@@ -69,25 +69,15 @@ pub async fn config_for(
     Ok(stored)
 }
 
-/// Re-reads the registration and checks every scope of the method (rule 30).
-async fn bound(sh: &super::runtime::Shared, method: &str, need: &[&str]) -> Result<(), HostError> {
-    let id = &*sh.id;
-    let scopes: Option<Vec<String>> =
-        sqlx::query_scalar(r#"SELECT scopes FROM plugin_registrations WHERE "pluginId" = $1"#)
-            .bind(id)
-            .fetch_optional(&sh.env.core)
-            .await
-            .map_err(db_err)?;
-    let Some(scopes) = scopes else {
-        return Err(host_err(
-            "ERR_NOT_FOUND",
-            format!("plugin \"{id}\" has no active registration"),
-        ));
-    };
-    if let Some(missing) = need.iter().find(|s| !scopes.iter().any(|x| x == *s)) {
+/// Checks every scope of the method against the scopes granted at registration (rule 30).
+fn bound(sh: &super::runtime::Shared, method: &str, need: &[&str]) -> Result<(), HostError> {
+    if let Some(missing) = need.iter().find(|s| !sh.scopes.iter().any(|x| x == *s)) {
         return Err(host_err(
             "ERR_DENIED",
-            format!("plugin \"{id}\" is missing scope \"{missing}\" required for \"{method}\""),
+            format!(
+                "plugin \"{}\" is missing scope \"{missing}\" required for \"{method}\"",
+                sh.id
+            ),
         ));
     }
     Ok(())
@@ -153,7 +143,7 @@ macro_rules! call {
         let started = Instant::now();
         let sh = $self.sh.clone();
         let r = async {
-            bound(&sh, $method, $need).await?;
+            bound(&sh, $method, $need)?;
             match tokio::time::timeout($deadline, $body).await {
                 Ok(r) => r,
                 Err(_) => Err(host_err(
