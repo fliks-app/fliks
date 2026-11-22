@@ -338,10 +338,10 @@ impl Hub {
             );
             return false;
         }
-        self.dispatch(&mut g, Aud::Conn(connection_id), Out::sse(ev));
+        let delivered = self.dispatch(&mut g, Aud::Conn(connection_id), Out::sse(ev));
         drop(g);
         self.announce_evicted();
-        true
+        delivered
     }
 
     /// Registers the connection and queues `sse.connected` (rule 9).
@@ -545,13 +545,13 @@ impl Hub {
         }
         {
             let mut g = self.lock();
+            let now = now_ms();
             if let Some(conn) = newest_web_stream(&g, user, target_id) {
-                for ev in pending {
+                for ev in pending.into_iter().filter(|e| park_deadline(e, now) > now) {
                     self.dispatch(&mut g, Aud::Conn(&conn), Out::sse(ev));
                 }
             } else {
                 sweep_parked(&mut g);
-                let now = now_ms();
                 g.parked
                     .entry((user, device_of(target_id).to_owned()))
                     .or_default()
@@ -776,12 +776,20 @@ impl Hub {
         }
     }
 
-    /// The pending commands, each at most once; `None` for an unknown target or another owner.
+    /// The pending events minus the commands past their `expires_at` on the server clock, each at
+    /// most once; `None` for an unknown target or another owner.
     pub fn drain_commands(&self, user: i32, target_id: &str) -> Option<Vec<SseEvent>> {
         let mut g = self.lock();
         let p = g.polled.get_mut(&(user, format!("polled:{target_id}")))?;
         p.last_poll = Instant::now();
-        Some(std::mem::take(&mut p.queue))
+        let now = now_ms();
+        let queue = std::mem::take(&mut p.queue);
+        Some(
+            queue
+                .into_iter()
+                .filter(|ev| !is_expired_command(ev, now))
+                .collect(),
+        )
     }
 
     /// `user` started this file on `target_id` from elsewhere; one claim per target.
@@ -839,9 +847,11 @@ impl Hub {
         }
     }
 
-    /// The single funnel of every emit: delivers, then feeds the in-process bus.
-    fn dispatch(&self, inner: &mut Inner, aud: Aud<'_>, out: Out) {
+    /// The single funnel of every emit: delivers, then feeds the in-process bus. For an `Aud::Conn`
+    /// it says whether that connection accepted the frame; a full queue closes it.
+    fn dispatch(&self, inner: &mut Inner, aud: Aud<'_>, out: Out) -> bool {
         let mut full = vec![];
+        let mut accepted = false;
         for (id, c) in &inner.conns {
             let to_it = match &aud {
                 Aud::All => true,
@@ -849,8 +859,12 @@ impl Hub {
                 Aud::Conn(only) => only == id,
                 Aud::UserLang(user, lang) => c.user == *user && c.identity.lang.as_deref() == *lang,
             };
-            if to_it && c.tx.try_send(Msg::Event(out.json.clone())).is_err() {
-                full.push(id.clone());
+            if to_it {
+                if c.tx.try_send(Msg::Event(out.json.clone())).is_err() {
+                    full.push(id.clone());
+                } else {
+                    accepted = true;
+                }
             }
         }
         let _ = self.0.bus.send(Arc::new(out.bus));
@@ -861,6 +875,7 @@ impl Hub {
                 inner.evicted.push(user);
             }
         }
+        accepted
     }
 
     fn fan_out(&self, ev: &SseEvent, owner: i32) {
@@ -927,6 +942,10 @@ fn take_parked(inner: &mut Inner, key: &(i32, String)) -> Vec<SseEvent> {
         );
     }
     live.into_iter().map(|p| p.event).collect()
+}
+
+fn is_expired_command(ev: &SseEvent, now: i64) -> bool {
+    matches!(ev, SseEvent::RemoteCommand { expires_at, .. } if *expires_at <= now)
 }
 
 /// A `load` is worth sending until its own `expiresAt`; any other command or event only until the
@@ -1568,6 +1587,80 @@ mod tests {
         let c = hub.connect(1, at("d#a"));
         drop(c);
         assert_eq!(calls.load(Ordering::SeqCst), 3);
+    }
+
+    fn command(action: RemoteAction, expires_at: i64) -> SseEvent {
+        SseEvent::RemoteCommand {
+            cmd_id: "c".into(),
+            expires_at,
+            by_target_id: None,
+            action,
+            media_id: None,
+            media_type: None,
+            media_file_id: None,
+            episode_id: None,
+            item_id: None,
+            position_seconds: None,
+            level: None,
+            muted: None,
+            track_id: None,
+            subtitle_id: None,
+            quality_id: None,
+            paused: None,
+            queue: None,
+            shuffle: None,
+            repeat: None,
+            kind: None,
+            item_ids: None,
+            position: None,
+            stem_mode: None,
+            pitch: None,
+        }
+    }
+
+    #[test]
+    fn a_drain_drops_the_commands_already_expired_on_the_server_clock() {
+        let hub = Hub::new();
+        hub.register_polled_target(1, at("tv#native"), None);
+        let face = hub.resolve_target(1, "tv#native").unwrap();
+        let live = command(RemoteAction::Pause, now_ms() + 5_000);
+        assert!(hub.emit_to_connection(1, &face, command(RemoteAction::Play, now_ms() - 1)));
+        assert!(hub.emit_to_connection(1, &face, live.clone()));
+        assert!(hub.emit_to_connection(1, &face, SseEvent::QueueUpdated {}));
+        assert_eq!(
+            hub.drain_commands(1, "tv#native").unwrap(),
+            [live, SseEvent::QueueUpdated {}]
+        );
+    }
+
+    #[test]
+    fn a_full_stream_queue_is_reported_not_delivered_and_the_stream_closed() {
+        let hub = Hub::new();
+        let tv = hub.connect(1, at("tv#a"));
+        let accepted: Vec<bool> = (0..CONN_QUEUE_MAX)
+            .map(|_| hub.emit_to_connection(1, &tv.id, SseEvent::QueueUpdated {}))
+            .collect();
+        assert!(accepted[..CONN_QUEUE_MAX - 1].iter().all(|ok| *ok));
+        assert!(!accepted[CONN_QUEUE_MAX - 1]);
+        assert!(!hub.has_connection(&tv.id));
+    }
+
+    #[test]
+    fn leaving_the_face_does_not_hand_a_stale_command_to_a_live_stream() {
+        let hub = Hub::new();
+        let mut tab = hub.connect(1, at("dev#tab"));
+        hub.register_polled_target(1, at("dev#native"), None);
+        let face = hub.resolve_target(1, "dev#native").unwrap();
+        // Past the sender's ack budget (6 s) though still inside its 10 s expiry.
+        let stale = command(
+            RemoteAction::Next,
+            now_ms() + COMMAND_TTL_MS - PARK_TTL_MS - 1,
+        );
+        assert!(hub.emit_to_connection(1, &face, stale));
+        assert!(hub.emit_to_connection(1, &face, command(RemoteAction::Play, now_ms() + 9_000)));
+        got(&mut tab);
+        hub.release_polled_target(1, "dev#native");
+        assert_eq!(got(&mut tab), [CHANGED, "remote.command"]);
     }
 
     #[test]
