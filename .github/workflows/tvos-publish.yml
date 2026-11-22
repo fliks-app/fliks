@@ -135,9 +135,12 @@ jobs:
       - name: Build and test tvOS app
         if: env.PUBLISH != 'true'
         run: |
+          xcrun simctl list runtimes
+          xcrun simctl list devices available tvOS
           udid=$(xcrun simctl list devices available tvOS \
             | awk '/Apple TV/ && !found { match($0, /[0-9A-F-]{36}/); print substr($0, RSTART, RLENGTH); found = 1 }')
           test -n "$udid" || { echo "no tvOS simulator available"; exit 1; }
+          xcrun simctl bootstatus "$udid" -b
           xcodebuild \
             -project FliksTV.xcodeproj \
             -scheme FliksTV \
