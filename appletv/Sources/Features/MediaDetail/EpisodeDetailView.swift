@@ -5,7 +5,7 @@ import SwiftUI
 struct EpisodeDetailView: View {
     let mediaId: Int
     let episodeId: Int
-    var onPlay: (_ mediaFileId: Int, _ episodeId: Int?, _ startAt: Double) -> Void
+    var onPlay: (_ mediaFileId: Int, _ episodeId: Int?, _ startAt: Double?) -> Void
     var onSelectEpisode: (_ episodeId: Int) -> Void
 
     private enum LoadState {
@@ -111,14 +111,20 @@ struct EpisodeDetailView: View {
                 HStack(spacing: 20) {
                     let fileId = media.fileId(episodeId: episode.id)
                     if let fileId {
-                        let startAt = resumePosition(episode: episode)
-                        Button(action: { onPlay(fileId, episode.id, startAt) }) {
-                            Label(startAt > 0 ? tr("common.resume") : tr("common.play"),
+                        let resuming = resumePosition(episode: episode) > 0
+                        Button(action: { onPlay(fileId, episode.id, nil) }) {
+                            Label(resuming ? tr("common.resume") : tr("common.play"),
                                   systemImage: "play.fill")
                         }
                         .buttonStyle(.borderedProminent)
                         .focused($playFocused)
                         .onAppear { playFocused = true }
+                        if resuming {
+                            Button(action: { onPlay(fileId, episode.id, 0) }) {
+                                Label(tr("player.play_from_start"), systemImage: "gobackward")
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
                     Button {
                         Task { await watched.toggle(mediaId: mediaId, episodeId: episode.id) }

@@ -10,7 +10,7 @@ struct PlayerView: View {
     let mediaFileId: Int
     let mediaId: Int
     let episodeId: Int?
-    let startAt: Double
+    let startAt: Double?
     var startPaused = false
     var launch: LaunchTracks?
     /// Called when the user dismisses a terminal error card.
