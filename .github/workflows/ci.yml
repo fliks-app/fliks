@@ -215,7 +215,8 @@ jobs:
       # The binary the archive build left in target/: `cargo run` would rebuild the deps without the dev-dependency features.
       - name: openapi.json is current
         run: target/debug/fliks-server openapi | diff - openapi.json
-      # An operation the last release served and a client of that release may call goes only with the `wire-break` label.
+      # An operation the last release served and a client of that release may call goes only with the `wire-break` label
+      # and a line in server/wire-breaks.txt, which keeps later PRs green.
       - name: no operation of the last release is gone
         if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'wire-break')
         env:

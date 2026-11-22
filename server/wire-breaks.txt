@@ -1,0 +1,5 @@
+# Operations removed on purpose since the last release, one `METHOD /path` per line as in openapi.json.
+# .github/scripts/route-retention.sh lets them go; a PR adding a line needs the `wire-break` label and a
+# check that no released client calls the route. Delete the lines once a release no longer serves them.
+GET /api/livetv/programs/{id}
+GET /api/livetv/search
