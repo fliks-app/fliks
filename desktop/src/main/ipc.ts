@@ -6,7 +6,6 @@ import type { PlayerBackend } from './mpv/player-backend';
 import type {
   DesktopLoadOptions,
   DesktopMuteRange,
-  DesktopRect,
   DesktopSubtitleStyle,
 } from '../shared/contract';
 
@@ -15,8 +14,6 @@ export interface PlayerIpcHost {
   readonly player: PlayerBackend;
   setFullscreen(enabled: boolean): void;
   isFullscreen(): boolean;
-  resize(rect: DesktopRect): void;
-  destroy(): Promise<void>;
   /** Absent where the page is the visible surface and its CSS cursor already applies. */
   setCursorVisible?(visible: boolean): void;
   /** Playback was stopped by the renderer. */
@@ -73,6 +70,4 @@ export function registerPlayerIpc(
   ipcMain.handle(IPC.setCursorVisible, (_e, visible: boolean) => session.setCursorVisible?.(visible));
   ipcMain.handle(IPC.setFullscreen, (_e, enabled: boolean) => session.setFullscreen(enabled));
   ipcMain.handle(IPC.isFullscreen, () => session.isFullscreen());
-  ipcMain.handle(IPC.resize, (_e, rect: DesktopRect) => session.resize(rect));
-  ipcMain.handle(IPC.destroy, () => session.destroy());
 }

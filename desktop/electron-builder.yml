@@ -42,6 +42,15 @@ generateUpdatesFilesForAllChannels: true
 directories:
   output: release
   buildResources: build
+# Electron fuses, flipped at pack time: no ELECTRON_RUN_AS_NODE, NODE_OPTIONS or --inspect entry into the
+# signed binary (macOS TCC grants, local network), and the app only loads from its integrity-checked asar.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: true
+  grantFileProtocolExtraPrivileges: false
 # Bundle the bundled main/preload, the compiled native addon, and the vendored
 # mpv runtime into the app. native/** carries the prebuilt addon + libmpv that
 # the main process resolves relative to app.getAppPath().

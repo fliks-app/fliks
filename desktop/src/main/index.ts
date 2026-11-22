@@ -93,8 +93,8 @@ const HEIGHT = 800;
 const nativeRequire = createRequire(__filename);
 
 function webDir(): string {
-  if (process.env.FLIKS_WEB_DIR) return process.env.FLIKS_WEB_DIR;
   if (app.isPackaged) return path.join(process.resourcesPath, 'web');
+  if (process.env.FLIKS_WEB_DIR) return process.env.FLIKS_WEB_DIR;
   return path.resolve(app.getAppPath(), '..', 'client', 'dist', 'client', 'browser');
 }
 
@@ -440,7 +440,8 @@ app.whenReady().then(async () => {
   const nativeBase = app.isPackaged
     ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked')
     : app.getAppPath();
-  if (!process.env.FLIKS_MPV_PATH) {
+  // A packaged build ignores a preset path: the addon dlopens whatever it names.
+  if (app.isPackaged || !process.env.FLIKS_MPV_PATH) {
     process.env.FLIKS_MPV_PATH = path.join(nativeBase, 'native', 'vendor', 'libmpv.so.2');
   }
   const addon = nativeRequire(
@@ -600,8 +601,6 @@ app.whenReady().then(async () => {
     setFullscreen: fullscreen.set,
     isFullscreen: fullscreen.get,
     setCursorVisible: (visible) => addon.setCursorVisible(visible),
-    resize: () => {},
-    destroy: () => player.destroy(),
     onStop: stopOsMediaSession,
   }, ipcHooks);
 

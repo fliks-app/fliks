@@ -53,7 +53,8 @@ export function loadMacAddon(): MacAddon {
   const base = app.isPackaged
     ? app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked')
     : app.getAppPath();
-  if (!process.env.FLIKS_MPV_PATH) {
+  // A packaged build ignores a preset path: the addon dlopens whatever it names.
+  if (app.isPackaged || !process.env.FLIKS_MPV_PATH) {
     // The Mac App Store build ships libmpv in Contents/Frameworks (electron-builder.yml `mas.extraFiles`).
     process.env.FLIKS_MPV_PATH = process.mas
       ? path.join(process.resourcesPath, '..', 'Frameworks', 'libmpv.dylib')

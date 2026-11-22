@@ -64,13 +64,6 @@ export interface DesktopSubtitleStyle {
   topMarginPercent?: number;
 }
 
-export interface DesktopRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export interface DesktopPositionInfo {
   position: number;
   duration: number;
@@ -179,13 +172,11 @@ export interface FliksDesktopApi {
   setCursorVisible(visible: boolean): Promise<void>;
   /** Silences audio inside the ranges (content seconds); [] clears. Absent on older shells. */
   setMuteRanges?(ranges: { start: number; end: number }[]): Promise<void>;
-  resize(rect: DesktopRect): Promise<void>;
   setFullscreen(enabled: boolean): Promise<void>;
   /** Absent on a shell that predates the fullscreen event. */
   isFullscreen?(): Promise<boolean>;
   /** Describes the playback to the OS media widgets; null withdraws it. */
   setMediaSession(meta: { title: string; artist?: string; artworkUrl?: string } | null): Promise<void>;
-  destroy(): Promise<void>;
   /** Native host OS identity (e.g. { systemName: "macOS 26" }). */
   getSystemInfo(): Promise<DesktopSystemInfo>;
   /** Opens an ICS in the OS default calendar app. Absent on older shells. */

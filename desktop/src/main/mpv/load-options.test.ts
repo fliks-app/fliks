@@ -13,6 +13,13 @@ test('start time and audio language ride along as file-local options', () => {
   );
 });
 
+test('an audio language that is not a language code is dropped', () => {
+  for (const bad of ['fre,sid=1', 'fr-FR', 'f', 'frenc', 'fr\n', '']) {
+    assert.deepEqual(mpvLoadFileOptions({ url: 'u', audioLanguage: bad }), ['sid=no'], bad);
+  }
+  assert.deepEqual(mpvLoadFileOptions({ url: 'u', audioLanguage: 'FR' }), ['sid=no', 'alang=fr']);
+});
+
 test('a zero start time and an empty language add nothing', () => {
   assert.deepEqual(mpvLoadFileOptions({ url: 'u', startTime: 0, audioLanguage: '' }), ['sid=no']);
 });
