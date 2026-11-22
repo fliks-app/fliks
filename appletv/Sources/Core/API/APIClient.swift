@@ -132,8 +132,8 @@ final class APIClient {
         try await requestVoid(path, method: "POST", body: nil)
     }
 
-    func put<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
-        try await request(path, method: "PUT", query: [:], body: try JSONEncoder.fliks.encode(body))
+    func put<T: Decodable, B: Encodable>(_ path: String, body: B, headers: [String: String] = [:]) async throws -> T {
+        try await request(path, method: "PUT", query: [:], body: try JSONEncoder.fliks.encode(body), headers: headers)
     }
 
     func patch<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
@@ -144,8 +144,14 @@ final class APIClient {
         try await requestVoid(path, method: "PUT", body: try JSONEncoder.fliks.encode(body))
     }
 
-    func delete(_ path: String) async throws {
-        try await requestVoid(path, method: "DELETE", body: nil)
+    func delete(_ path: String, headers: [String: String] = [:]) async throws {
+        try await requestVoid(path, method: "DELETE", body: nil, headers: headers)
+    }
+
+    /// The session's bearer as it is now, for a request that is sent after the session ended.
+    @MainActor
+    static var bearerHeader: [String: String] {
+        TokenStore.shared.accessToken.map { ["Authorization": "Bearer \($0)"] } ?? [:]
     }
 
     func delete<B: Encodable>(_ path: String, body: B) async throws {

@@ -3,6 +3,7 @@ import XCTest
 
 /// The server's recorded response bodies (the parity scenarios' `expect.body`) decoded into the models tvOS
 /// uses, strictly: a shape change on the server turns red here, where the app would drop the row or the rail.
+/// A recording drops the keys its scenario `ignore`s, so those are put back before decoding.
 final class ServerContractTests: XCTestCase {
     private static let scenarios = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -34,6 +35,50 @@ final class ServerContractTests: XCTestCase {
         let total: Int
     }
 
+    /// Stand-ins for a trimmed key, tried in turn until the model accepts one.
+    private static let standIns: [Any] = ["2000-01-01T00:00:00.000Z", 0, false, [Any]()]
+
+    /// The last key of each `ignore` path (`$..updatedAt`, `$.files[*].id`).
+    private static func trimmedKeys(_ scenario: [String: Any], _ step: [String: Any]) -> Set<String> {
+        let paths = (scenario["ignore"] as? [String] ?? []) + (step["ignore"] as? [String] ?? [])
+        return Set(paths.compactMap { $0.split(separator: ".").last.map(String.init) })
+    }
+
+    private static func set(_ node: Any, _ path: ArraySlice<CodingKey>, to value: Any) -> Any {
+        guard let head = path.first else { return value }
+        if let index = head.intValue, var array = node as? [Any], array.indices.contains(index) {
+            array[index] = set(array[index], path.dropFirst(), to: value)
+            return array
+        }
+        if var object = node as? [String: Any] {
+            object[head.stringValue] = set(object[head.stringValue] ?? NSNull(), path.dropFirst(), to: value)
+            return object
+        }
+        return node
+    }
+
+    /// Decodes `body`; a trimmed key the model requires gets a stand-in of the type it asks for. A key the
+    /// scenario did not trim, or a trimmed one of a type no stand-in fits, still fails.
+    private static func decode(_ body: Any, trimmed: Set<String>, with decode: (Data) throws -> Void) throws {
+        var body = body
+        var tried: [String: Int] = [:]
+        while true {
+            do {
+                return try decode(JSONSerialization.data(withJSONObject: body))
+            } catch let DecodingError.keyNotFound(key, context) where trimmed.contains(key.stringValue) {
+                let path = context.codingPath + [key]
+                tried[path.map(\.stringValue).joined(separator: "/")] = 0
+                body = set(body, path[...], to: standIns[0])
+            } catch let DecodingError.typeMismatch(_, context) where tried[context.codingPath.map(\.stringValue).joined(separator: "/")] != nil {
+                let id = context.codingPath.map(\.stringValue).joined(separator: "/")
+                let next = tried[id]! + 1
+                guard next < standIns.count else { throw DecodingError.typeMismatch(Any.self, context) }
+                tried[id] = next
+                body = set(body, context.codingPath[...], to: standIns[next])
+            }
+        }
+    }
+
     func testRecordedServerBodiesDecode() throws {
         let files = try XCTUnwrap(FileManager.default.enumerator(at: Self.scenarios, includingPropertiesForKeys: nil))
         var decoded = 0
@@ -51,7 +96,7 @@ final class ServerContractTests: XCTestCase {
                 let key = route.replacingOccurrences(of: #"/\d+"#, with: "/:id", options: .regularExpression)
                 guard let decode = Self.routes[key] else { continue }
                 do {
-                    try decode(JSONSerialization.data(withJSONObject: body))
+                    try Self.decode(body, trimmed: Self.trimmedKeys(scenario, step), with: decode)
                     decoded += 1
                 } catch {
                     failures.append("\(file.deletingPathExtension().lastPathComponent) \(path): \(error)")

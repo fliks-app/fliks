@@ -67,12 +67,14 @@ struct ResolvedHomeSection: Identifiable {
 
     private init() { load() }
 
-    /// Reloads the layout of the account now signed in; one that never saved its own starts from the unscoped one.
-    func rescope() { load() }
+    /// Reloads the layout of the account now signed in.
+    func rescope() {
+        AppSettingsStore.adoptUnscoped(Self.storageKey)
+        load()
+    }
 
     private func load() {
-        let d = UserDefaults.standard
-        let data = d.data(forKey: AppSettingsStore.scoped(Self.storageKey)) ?? d.data(forKey: Self.storageKey)
+        let data = UserDefaults.standard.data(forKey: AppSettingsStore.scoped(Self.storageKey))
         loading = true
         defer { loading = false }
         settings = data.flatMap { try? JSONDecoder().decode(HomeSettings.self, from: $0) } ?? Self.defaultSettings

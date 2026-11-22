@@ -15,8 +15,11 @@ enum ZoneCache {
         return base
     }()
 
-    static func read<T: Decodable>(_ key: String) -> [T]? {
-        guard let data = try? Data(contentsOf: url(for: key)) else { return nil }
+    /// The account the cache entries belong to, taken before a fetch so its answer cannot land under the next one.
+    static var scope: String { "\(ServerStore.shared.url)|\(AuthService.shared.currentUser?.id ?? 0)" }
+
+    static func read<T: Decodable>(_ key: String, scope: String) -> [T]? {
+        guard let data = try? Data(contentsOf: url(for: key, scope: scope)) else { return nil }
         do {
             return try JSONDecoder.fliks.decode([T].self, from: data)
         } catch {
@@ -25,17 +28,16 @@ enum ZoneCache {
         }
     }
 
-    static func write<T: Encodable>(_ key: String, _ value: [T]) {
+    static func write<T: Encodable>(_ key: String, _ value: [T], scope: String) {
         do {
-            try JSONEncoder.fliks.encode(value).write(to: url(for: key), options: .atomic)
+            try JSONEncoder.fliks.encode(value).write(to: url(for: key, scope: scope), options: .atomic)
         } catch {
             Log.zones.error("cache write for \(key, privacy: .public) failed: \(String(describing: error), privacy: .public)")
         }
     }
 
-    private static func url(for key: String) -> URL {
-        let scope = "\(ServerStore.shared.url)|\(AuthService.shared.currentUser?.id ?? 0)|\(key)"
-        return directory.appendingPathComponent("\(fingerprint(scope)).json")
+    private static func url(for key: String, scope: String) -> URL {
+        directory.appendingPathComponent("\(fingerprint("\(scope)|\(key)")).json")
     }
 
     /// FNV-1a — `hashValue` is seeded per process, so it can't name a file
@@ -58,8 +60,9 @@ func revalidateZone<T: Codable>(
     apply: (ZoneState<T>) -> Void,
     fetch: () async throws -> [T]
 ) async {
+    let scope = ZoneCache.scope
     var painted = false
-    if let cached: [T] = ZoneCache.read(key) {
+    if let cached: [T] = ZoneCache.read(key, scope: scope) {
         apply(.loaded(cached))
         painted = true
     } else {
@@ -68,7 +71,7 @@ func revalidateZone<T: Codable>(
     do {
         let items = try await fetch()
         apply(.loaded(items))
-        ZoneCache.write(key, items)
+        ZoneCache.write(key, items, scope: scope)
     } catch {
         Log.zones.error("\(key, privacy: .public) refresh failed (cache painted: \(painted, privacy: .public)): \(String(describing: error), privacy: .public)")
         if !painted { apply(.failed) }

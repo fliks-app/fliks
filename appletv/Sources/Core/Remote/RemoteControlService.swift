@@ -7,7 +7,7 @@ import UIKit
 /// SSE) this polls for pending commands every 2s: same cadence as
 /// `QuickConnectView`: instead of duplicating reconnect/backoff/token
 /// rotation for a second transport.
-@Observable final class RemoteControlService {
+@MainActor @Observable final class RemoteControlService {
     static let shared = RemoteControlService()
 
     private let api = APIClient.shared
@@ -107,8 +107,7 @@ import UIKit
         coordinator.onStopRequested?()
     }
 
-    /// A command this target cannot apply is logged and still acked: the next beat tells the controller it was
-    /// received and refused, not lost.
+    /// A command this target cannot apply is logged and acked by the next beat, which only a running player sends.
     private func refuse(_ cmd: RemoteCommand, _ reason: String) {
         Log.remote.notice("refusing \(cmd.cmdId, privacy: .public): \(reason, privacy: .public)")
         lastAppliedCmdId = cmd.cmdId

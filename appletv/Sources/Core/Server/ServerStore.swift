@@ -64,8 +64,11 @@ struct KnownServer: Codable, Identifiable, Hashable {
         comps.port = target.port
         guard let upgraded = comps.string else { return }
         let known = knownServers.first { $0.url == previous }
-        SessionStore.shared.rekey(from: previous, to: Self.trimTrailingSlashes(upgraded))
+        let current = Self.trimTrailingSlashes(upgraded)
+        SessionStore.shared.rekey(from: previous, to: current)
+        AppSettingsStore.moveScopes(from: previous, to: current)
         save(upgraded)
+        AuthService.shared.rescopeStores()
         forgetKnownServer(previous)
         touchKnownServer(upgraded, name: known?.name, username: known?.lastUsername)
     }

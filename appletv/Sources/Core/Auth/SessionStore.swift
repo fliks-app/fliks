@@ -11,6 +11,9 @@ struct StoredProfile: Codable, Hashable {
     let permissions: [String]
     let libraryOrder: [Int]
     let hiddenLibraryIds: [Int]
+    /// Kept so `hasServerFeature` and the commercials policy hold until `/auth/me` answers.
+    let features: [String]?
+    let edlAutoSkipCommercials: Bool?
 
     init(_ user: User) {
         id = user.id
@@ -20,6 +23,8 @@ struct StoredProfile: Codable, Hashable {
         permissions = user.permissions
         libraryOrder = user.libraryOrder
         hiddenLibraryIds = user.hiddenLibraryIds
+        features = user.features
+        edlAutoSkipCommercials = user.edlAutoSkipCommercials
     }
 
     init(from decoder: Decoder) throws {
@@ -31,6 +36,8 @@ struct StoredProfile: Codable, Hashable {
         permissions = try c.decodeIfPresent([String].self, forKey: .permissions) ?? []
         libraryOrder = try c.decodeIfPresent([Int].self, forKey: .libraryOrder) ?? []
         hiddenLibraryIds = try c.decodeIfPresent([Int].self, forKey: .hiddenLibraryIds) ?? []
+        features = try c.decodeIfPresent([String].self, forKey: .features)
+        edlAutoSkipCommercials = try c.decodeIfPresent(Bool.self, forKey: .edlAutoSkipCommercials)
     }
 }
 
