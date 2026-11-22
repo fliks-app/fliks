@@ -151,7 +151,16 @@ async fn make_user(pool: &PgPool, st: &AppState, name: &str, admin: bool) -> (i3
     .fetch_one(pool)
     .await
     .unwrap();
-    (id, session::token(st, id, name).await)
+    let token = session::token(st, id, name).await;
+    sqlx::query(
+        r#"INSERT INTO refresh_tokens ("userId", "tokenHash", "expiresAt", "sessionId")
+           SELECT $1, md5(random()::text), now() + interval '1 day', id FROM sessions WHERE "userId" = $1"#,
+    )
+    .bind(id)
+    .execute(pool)
+    .await
+    .unwrap();
+    (id, token)
 }
 
 async fn ctx(pool: PgPool) -> Ctx {
