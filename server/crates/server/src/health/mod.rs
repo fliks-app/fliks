@@ -10,7 +10,7 @@ use crate::{
     queue,
     state::AppState,
 };
-use checks::{Check, Level};
+use checks::Check;
 use db::{Kind, Transition};
 use serde_json::Value;
 use std::{
