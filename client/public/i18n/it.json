@@ -1470,7 +1470,23 @@
     "subtitle_sync_failed": "Sincronizzazione non riuscita",
     "delete_no_folder": "Questo titolo non ha una cartella propria: verrà rimossa solo la voce della libreria, il file rimane sul disco.",
     "delete_success": "Titolo rimosso dalla libreria.",
-    "edit_details": "Modifica dettagli"
+    "edit_details": "Modifica dettagli",
+    "release_best": "Scelta migliore",
+    "passed_over": {
+      "seeders": "Scartata: meno seeder",
+      "rank": "Scartata: rango inferiore",
+      "score": "Scartata: punteggio inferiore",
+      "revision": "Scartata: revisione più vecchia",
+      "retail": "Scartata: non retail",
+      "freeleech": "Scartata: non freeleech",
+      "swarm": "Scartata: swarm più piccolo",
+      "size": "Scartata: dimensione",
+      "language": "Scartata: altra lingua",
+      "full_season": "Scartata: stagione completa",
+      "other": "Scartata"
+    },
+    "downloads_title": "Download",
+    "downloads_see_all": "Vedi tutto"
   },
   "requests": {
     "title": "Richieste",
@@ -5456,7 +5472,46 @@
     "upcoming": "In arrivo",
     "load_error": "Impossibile caricare l'elenco.",
     "empty": "Non si cerca nulla.",
-    "more": "Mostra altro"
+    "more": "Mostra altro",
+    "col_last_search": "Ultima ricerca",
+    "not_searched": "Non ancora",
+    "last_search": "{{when}} · {{eligible}} su {{found}}"
+  },
+  "last_search": {
+    "never": "Non ancora cercato.",
+    "found_none": "Cercato {{when}}: nessuna release trovata.",
+    "none_matched_one": "Cercato {{when}}: {{count}} release, nessuna corrisponde.",
+    "none_matched_other": "Cercato {{when}}: {{count}} release, nessuna corrisponde.",
+    "none_matched_why_one": "Cercato {{when}}: {{count}} release, nessuna corrisponde ({{reasons}}).",
+    "none_matched_why_other": "Cercato {{when}}: {{count}} release, nessuna corrisponde ({{reasons}}).",
+    "grabbed": "Trovato {{when}}.",
+    "unanswered": "Cercato {{when}}. Una fonte non ha risposto, nuovo tentativo più tardi.",
+    "failed": "{{names}} non ha risposto.",
+    "next": "Prossima ricerca {{when}}.",
+    "reason_other": "altri motivi",
+    "reason": {
+      "BLOCKLISTED": "bloccate",
+      "LANGUAGE_NOT_ALLOWED": "lingua sbagliata",
+      "QUALITY_NOT_ALLOWED": "qualità sbagliata",
+      "SIZE_TOO_LOW": "troppo piccole",
+      "SIZE_TOO_HIGH": "troppo grandi",
+      "SIZE_NOT_PREFERRED": "dimensione fuori target",
+      "MIN_SEEDERS": "pochi seeder",
+      "TITLE_MISMATCH": "altro titolo",
+      "EPISODE_MISMATCH": "altro episodio",
+      "FULL_SEASON_FOR_EPISODE": "stagione completa",
+      "SCENE_UNRESOLVED": "numerazione illeggibile",
+      "RESOLUTION_NOT_UPGRADED": "nessun upgrade di risoluzione",
+      "SEQUEL_MISMATCH": "altro seguito",
+      "YEAR_MISMATCH": "altro anno",
+      "COLLECTION_PACK": "pacchetto di film",
+      "COLLECTED_EDITION": "edizione da collezione",
+      "CUSTOM_FORMAT_SCORE_TOO_LOW": "punteggio formato basso",
+      "RANK_NOT_AN_UPGRADE": "nessun upgrade",
+      "RANK_ABOVE_CUTOFF": "sopra il limite",
+      "ARTIST_MISMATCH": "altro artista",
+      "DISCOGRAPHY": "discografia"
+    }
   },
   "oidc": {
     "completing": "Accesso in corso...",
@@ -5961,7 +6016,9 @@
     "filter_all": "Tutti gli stati",
     "load_error": "Impossibile caricare l’elenco.",
     "empty_queue": "Niente in coda.",
-    "empty_history": "La cronologia è vuota."
+    "empty_history": "La cronologia è vuota.",
+    "filter_media": "Un solo titolo",
+    "filter_media_clear": "Mostra tutti i titoli"
   },
   "carplay": {
     "signed_out": "Accesso a Fliks non effettuato",

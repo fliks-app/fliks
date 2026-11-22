@@ -45,6 +45,8 @@ import { mediaDetailLink } from '../../../core/media-kinds';
 import { MediaService } from '../../../core/services/api/media.service';
 import { asAlbumMedia, versionMeta } from './album-media';
 import { mediaTitleKey } from '../request-flow-controller';
+import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
+import { isWanted } from '../media-wanted';
 
 interface DiscView {
   disc: Disc;
@@ -56,7 +58,7 @@ interface DiscView {
 @Component({
   selector: 'app-album-page',
   imports: [
-    NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, DetailHeroComponent, TrackDownloadGlyphComponent, MediaCardComponent, DetailSectionComponent, HorizontalScrollerComponent, FactsGridComponent,
+    LastSearchComponent, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, DetailHeroComponent, TrackDownloadGlyphComponent, MediaCardComponent, DetailSectionComponent, HorizontalScrollerComponent, FactsGridComponent,
     ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent, AddDialogComponent, TvRowDirective,
     LucideCircleAlert, LucideClock, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle, LucideEllipsisVertical,
   ],
@@ -66,6 +68,7 @@ interface DiscView {
 export class AlbumPageComponent {
   /** The card handoff (list shape) until the full album lands. */
   readonly media = input.required<Media>();
+  protected readonly isWanted = isWanted;
 
   private readonly music = inject(MusicApiService);
   private readonly likes = inject(LikesApiService);

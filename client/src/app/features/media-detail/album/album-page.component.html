@@ -73,6 +73,9 @@
       </div>
     }
   </ng-container>
+  @if (isWanted(m)) {
+    <app-last-search class="mt-4 block" [search]="m.lastSearch" />
+  }
 </app-detail-hero>
 
 <ng-template #addAll let-compact="compact">

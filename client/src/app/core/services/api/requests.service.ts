@@ -5,6 +5,7 @@ import { MediaType } from '../../enums/media-type.enum';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { kindOf } from '../../media-kinds';
+import type { LastSearch } from './last-search.model';
 import type { WantSpec } from './wants-api.service';
 
 export interface RequestUser {
@@ -133,7 +134,12 @@ export interface FliksRequestRow {
   fanartUrl: string | null;
   createdAt: string;
   updatedAt: string;
+  /** The last automatic search of the media; `null` is never searched. */
+  lastSearch?: LastSearch | null;
 }
+
+/** An approved request still waiting for its file: the one the last search outcome explains. */
+export const awaitsSearch = (r: FliksRequestRow): boolean => r.kind === 'add' && (r.status === 'approved' || r.status === 'processing');
 
 /** An album request limited to some of its tracks. */
 export const isTrackRequest = (r: FliksRequestRow): boolean => r.mediaType === 'album' && !!r.recordings?.length;

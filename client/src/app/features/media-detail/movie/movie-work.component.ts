@@ -16,11 +16,15 @@ import { SubtitlesModalComponent } from '../../../shared/components/subtitles-mo
 import { LikeController } from '../../../shared/utils/like-controller';
 import { MediaCastComponent } from '../components/media-cast/media-cast.component';
 import { VideoWorkBase } from '../video-work';
+import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
+import { MediaDownloadsComponent } from '../components/media-downloads/media-downloads.component';
 
 /** The page of a movie, rendered by the media detail shell for the `movie` kind. */
 @Component({
   selector: 'app-movie-work',
   imports: [
+    LastSearchComponent,
+    MediaDownloadsComponent,
     RequestWatchComponent,
     NgTemplateOutlet,
     TranslatePipe,

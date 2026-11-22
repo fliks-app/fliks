@@ -95,16 +95,23 @@ describe('RequestsComponent', () => {
     expect(cmp.statusFilter()).toBe('pending');
   });
 
-  it('refetches when one of the user requests changes status, and only then', async () => {
+  it('refetches once for a burst of request.changed frames, and only for them', async () => {
     const { list, sse } = setup();
     await Promise.resolve();
     const before = list.mock.calls.length;
+    vi.useFakeTimers();
+    try {
+      sse.deliver({ type: 'queue.updated' });
+      await vi.advanceTimersByTimeAsync(500);
+      expect(list.mock.calls.length).toBe(before);
 
-    sse.notifications.next({ cat: 'parties' } as never);
-    expect(list.mock.calls.length).toBe(before);
-
-    sse.notifications.next({ cat: 'requests' } as never);
-    expect(list.mock.calls.length).toBe(before + 1);
+      sse.deliver({ type: 'request.changed', requestId: 1 });
+      sse.deliver({ type: 'request.changed', requestId: 2 });
+      await vi.advanceTimersByTimeAsync(500);
+      expect(list.mock.calls.length).toBe(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   describe('approve all', () => {

@@ -11,7 +11,7 @@ import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { distinctUntilChanged, filter, map, skip } from 'rxjs';
+import { debounceTime, distinctUntilChanged, map, skip } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe, translatePlural } from '../../core/pipes/translate-plural.pipe';
 import { AuthService } from '../../core/services/auth.service';
@@ -23,6 +23,7 @@ import {
   FliksRequestStatus,
   REQUEST_STATUSES,
   RequestKind,
+  awaitsSearch,
   isTrackRequest,
   requestAddLink,
 } from '../../core/services/api/requests.service';
@@ -34,6 +35,7 @@ import {
 import { ToastService } from '../../core/services/toast.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { LastSearchComponent } from '../../shared/components/last-search/last-search';
 import { RequestPosterComponent } from './request-poster';
 import { RequestWantsComponent } from './request-wants/request-wants';
 import { RequestDeclineModalComponent } from './request-decline-modal/request-decline-modal.component';
@@ -55,6 +57,9 @@ import { allowanceLine } from '../../core/utils/request-allowance';
 import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-skeleton';
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state';
 
+/** An approve-all fires one frame per request: one refetch for the burst. */
+const REQUEST_CHANGED_DEBOUNCE_MS = 300;
+
 @Component({
   selector: 'app-requests',
   imports: [EmptyStateComponent, RowSkeletonComponent, TvSelectDirective, 
@@ -63,6 +68,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
     TranslatePipe,
     TranslatePluralPipe,
     RouterLink,
+    LastSearchComponent,
     RequestPosterComponent,
     RequestWantsComponent,
     RequestDeclineModalComponent,
@@ -81,6 +87,7 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
 export class RequestsComponent implements OnInit, OnDestroy {
   protected readonly kinds = KIND_REGISTRY;
   protected readonly isTrackRequest = isTrackRequest;
+  protected readonly awaitsSearch = awaitsSearch;
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly requestsService = inject(RequestsService);
@@ -104,9 +111,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
     scrollKey: RequestsComponent.SCROLL_KEY,
   });
 
-  /** A request changed status for its owner (approved, declined, available): refetch so the row and its progress badge follow. */
-  private readonly requestNotified = this.sse.notifications
-    .pipe(filter((n) => n.cat === 'requests'), takeUntilDestroyed())
+  /** A request changed status (approved, declined, available): refetch so the row and its progress badge follow. */
+  private readonly requestChanged = this.sse
+    .on('request.changed')
+    .pipe(debounceTime(REQUEST_CHANGED_DEBOUNCE_MS), takeUntilDestroyed())
     .subscribe(() => void this.refreshStatuses());
 
   /** The URL is the filter: a push to `/requests?status=…` lands on a cached or visible page, where `ngOnInit` does not run again. */

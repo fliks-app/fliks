@@ -585,7 +585,7 @@ describe('LayoutComponent sidebar counts — SSE debounce', () => {
       events.next({ type: 'queue.updated' });
       await vi.advanceTimersByTimeAsync(100);
 
-      events.next({ type: 'stalled.removed' });
+      events.next({ type: 'request.changed' });
       await vi.advanceTimersByTimeAsync(100);
 
       // Still inside the debounce window re-armed by the last event: no request yet.

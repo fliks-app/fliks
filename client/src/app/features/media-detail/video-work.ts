@@ -25,6 +25,7 @@ import type { TrackingScope } from '../../shared/components/tracking-status-moda
 import { libraryCast } from './components/media-cast/media-cast.component';
 import { WatchedController } from './watched-controller';
 import { MEDIA_DETAIL_HOST } from './media-detail-host';
+import { isWanted } from './media-wanted';
 
 type PendingDownload = DownloadTarget & { watched: boolean };
 
@@ -40,6 +41,7 @@ export interface TitlePlaybackState {
 @Directive()
 export abstract class VideoWorkBase {
   readonly media = input.required<Media>();
+  protected readonly isWanted = isWanted;
 
   protected readonly host = inject(MEDIA_DETAIL_HOST);
   protected readonly mediaService = inject(MediaService);

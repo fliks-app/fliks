@@ -125,6 +125,8 @@ export class DataTableComponent implements OnInit {
   readonly pageSize = input(20);
   /** Declared `search`/`select` filters, rendered above the table. */
   readonly filters = input<readonly TableFilter[]>([]);
+  /** Query params every list request carries, beside the user's filters; a change reloads the first page. */
+  readonly fixedParams = input<Readonly<Record<string, string>>>({});
   /** Adds a selection column and turns the declared `proxy` row actions into batch actions.
    *  Opt-in: a table read one row at a time should not grow a column asking to be ticked. */
   readonly bulkSelect = input(false);
@@ -161,6 +163,7 @@ export class DataTableComponent implements OnInit {
 
   /** Current value per filter `key`; an empty entry is omitted from the request. */
   readonly filterValues = signal<Record<string, string>>({});
+  private loadedFixed: string | null = null;
   private searchDebounce: ReturnType<typeof setTimeout> | null = null;
   private loadSeq = 0;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -192,6 +195,11 @@ export class DataTableComponent implements OnInit {
     const sse = inject(SseService);
     sse.events.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((event) => {
       if (this.refreshOn().includes(event.type)) this.requestRefresh();
+    });
+    effect(() => {
+      const fixed = JSON.stringify(this.fixedParams());
+      const loaded = untracked(() => this.loadedFixed);
+      if (loaded !== null && fixed !== loaded) untracked(() => void this.applyFilterChange());
     });
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', this.onVisible);
@@ -259,8 +267,10 @@ export class DataTableComponent implements OnInit {
     if (!opts?.silent) this.loading.set(true);
     this.listError.set('');
     try {
+      const fixed = this.fixedParams();
+      this.loadedFixed = JSON.stringify(fixed);
       let params = new HttpParams();
-      for (const [key, value] of Object.entries(this.filterValues())) {
+      for (const [key, value] of Object.entries({ ...fixed, ...this.filterValues() })) {
         if (value) params = params.set(key, value);
       }
       if (this.paged()) {

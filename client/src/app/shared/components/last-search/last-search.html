@@ -1,0 +1,10 @@
+@if (text(); as line) {
+  <p class="flex items-start gap-2 text-sm text-base-content/70 m-0" data-testid="last-search">
+    @if (grabbed()) {
+      <svg lucideDownload class="size-4 shrink-0 mt-0.5" aria-hidden="true"></svg>
+    } @else {
+      <svg lucideClock class="size-4 shrink-0 mt-0.5" aria-hidden="true"></svg>
+    }
+    <span class="min-w-0">{{ line }}</span>
+  </p>
+}

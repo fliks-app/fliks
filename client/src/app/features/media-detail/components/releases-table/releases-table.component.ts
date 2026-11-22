@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   Component,
   inject,
@@ -20,7 +21,7 @@ import { ConfirmationService } from '../../../../core/services/confirmation.serv
 
 @Component({
   selector: 'app-releases-table',
-  imports: [TranslatePipe, LucideTriangleAlert, LucideCheck, LucideCircleAlert, LucideDownload, LucidePackage],
+  imports: [NgTemplateOutlet, TranslatePipe, LucideTriangleAlert, LucideCheck, LucideCircleAlert, LucideDownload, LucidePackage],
   templateUrl: './releases-table.component.html',
 })
 export class ReleasesTableComponent {

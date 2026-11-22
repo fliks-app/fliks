@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
+import { TranslateService } from '@ngx-translate/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SKIP_ERROR_TOAST } from '../../core/interceptors/error.interceptor';
 import type { WantedRow } from '../../core/services/api/wants-api.service';
@@ -8,7 +9,7 @@ import { WantedComponent } from './wanted';
 
 const row = (id: number, title: string): WantedRow => ({
   mediaId: id, type: 'book', title, year: 2027, posterUrl: null, releaseDate: '2027-01-01',
-  family: 'text', language: 'fr', wantId: id,
+  family: 'text', language: 'fr', wantId: id, lastSearch: null,
 });
 
 describe('WantedComponent', () => {
@@ -42,6 +43,20 @@ describe('WantedComponent', () => {
     await settle();
     expect(el.querySelectorAll('[data-testid="wanted-row"]')).toHaveLength(2);
     expect(el.querySelector('[data-testid="wanted-more"]')).toBeNull();
+  });
+
+  it('shows the age and the eligible share of the last search, or that none ran', async () => {
+    const { http, settle, el } = await setup();
+    TestBed.inject(TranslateService).setTranslation('en', { wanted: { not_searched: 'Not yet', last_search: '{{eligible}} of {{found}}' } });
+    const searched: WantedRow = {
+      ...row(2, 'Beta'),
+      lastSearch: { at: new Date(Date.now() - 2 * 3600_000).toISOString(), outcome: 'none', found: 14, eligible: 0, rejections: [], failed: [], nextAt: null },
+    };
+    http.expectOne('/api/wanted?page=1&limit=25').flush({ data: [row(1, 'Alpha'), searched], total: 2 });
+    await settle();
+    const cells = [...el.querySelectorAll('[data-testid="wanted-last-search"]')].map((c) => c.textContent?.trim());
+    expect(cells[0]).toBe('Not yet');
+    expect(cells[1]).toBe('0 of 14');
   });
 
   it('asks again with the kind filter and shows the empty state', async () => {
