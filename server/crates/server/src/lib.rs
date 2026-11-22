@@ -48,6 +48,7 @@ pub mod playback;
 pub mod playlists;
 pub mod plugins;
 pub mod presence;
+pub mod problems;
 pub mod profiles;
 pub mod push;
 pub mod qoe;
@@ -236,6 +237,7 @@ async fn boot(cfg: Config) -> Result<(AppState, axum::Router, PgConnection), Box
     party::spawn(&state);
     requests::spawn(&state);
     requests::spawn_reconcile(&state);
+    problems::spawn(&state);
     let cfg = state.cfg.clone();
     let app = app::router(
         state.clone(),

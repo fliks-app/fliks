@@ -89,6 +89,10 @@ Scope: the push pipeline (`push::notify`), the relay client, the identity file, 
     | `requests` | request declined | the requester | `request_declined` | 1 day | poster | open |
     | `requests` | request available | the requester | `request_available` | 1 day | poster | open |
     | `requests` | request created | users who can approve (`requests.manage`, `manage:all`), minus the requester | `request_created` | 1 day | poster | Approve, Decline (`call`); opens `/requests?status=pending` |
+    | `requests` | problem report created or reopened | users who can manage requests and read the library, minus the reporter | `problem_created` | 1 day | poster | open (`/requests?view=problems&status=active`) |
+    | `requests` | problem report fixed | the reporter | `problem_resolved` | 1 day | poster | open (the title) |
+    | `requests` | manager reply on a problem report | the reporter | `problem_replied` | 1 day | poster | none (opens `/requests?view=problems`) |
+    | `requests` | problem report closed | the reporter | `problem_closed` | 1 day | poster | none (opens `/requests?view=problems`) |
     | `parties` | `party.invited` | the invitees | `party_invited` | 1 day | party image | Join (`open`) |
     | `parties` | `party.starting` | the invitees | `party_starting` | 15 min | party image | Join (`open`) |
     | `social` | `social.follow_request` | the target user | `follow_request` | 1 day | avatar | Accept, Decline (`call`) |
@@ -107,7 +111,7 @@ Scope: the push pipeline (`push::notify`), the relay client, the identity file, 
     - Grouping: imports of one series are held for 5 minutes (from the first import of the group) and sent as one notification keyed by media. One episode: `episode_one` (`S02E03`); several of one season: `episodes_many` (count, `S02`); several seasons: `episodes_series` (count).
     - `tag` = `episodes:<mediaId>`, so a later notification for the series replaces an earlier one on the device.
     - The group is in memory: a graceful shutdown sends the groups still waiting at once; a crash inside the window loses them. A lagged bus drops imports with a warn.
-36. Text keys and params (client `push` branch, rule 38): `request_approved|request_declined|request_available` `{title}`; `request_created` `{title, user}`; `party_invited` `{party, host}`; `party_starting` `{party}`; `follow_request|follow_accepted` `{user}`; `content_recommended` `{user, title}`; `episode_one` `{title, episode}`; `episodes_many` `{title, count, season}`; `episodes_series` `{title, count}`; `pairing_requested` `{device}`; `test` (none). Action titles `push.action.<id>` with ids `approve decline join accept open`.
+36. Text keys and params (client `push` branch, rule 38): `request_approved|request_declined|request_available` `{title}`; `request_created` `{title, user}`; `problem_created` `{title, user}`; `problem_resolved|problem_replied|problem_closed` `{title}`; `party_invited` `{party, host}`; `party_starting` `{party}`; `follow_request|follow_accepted` `{user}`; `content_recommended` `{user, title}`; `episode_one` `{title, episode}`; `episodes_many` `{title, count, season}`; `episodes_series` `{title, count}`; `pairing_requested` `{device}`; `test` (none). Action titles `push.action.<id>` with ids `approve decline join accept open`.
 37. Images: `image` is a path on the server: posters and backdrops (`/api/images/media/:id/poster?size=medium`), avatars (`/api/images/user/:id`), party images. Those routes are public already (`images.md`), so no token travels.
 
 ### E. Text

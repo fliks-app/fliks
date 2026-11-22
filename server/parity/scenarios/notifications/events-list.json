@@ -32,7 +32,9 @@
           "media.cleaned_up",
           "optimize.completed",
           "optimize.failed",
-          "health.corrupt"
+          "health.corrupt",
+          "problem.created",
+          "problem.resolved"
         ],
         "status": 200
       },

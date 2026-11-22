@@ -5814,6 +5814,22 @@
       "title": "Novo pedido",
       "body": "{{user}} pediu «{{title}}»."
     },
+    "problem_created": {
+      "title": "Novo relato de problema",
+      "body": "{{user}} relatou um problema em «{{title}}»."
+    },
+    "problem_replied": {
+      "title": "Resposta ao seu relato",
+      "body": "Uma resposta ao seu relato de problema sobre «{{title}}»."
+    },
+    "problem_resolved": {
+      "title": "Problema corrigido",
+      "body": "O seu relato de problema sobre «{{title}}» foi marcado como corrigido."
+    },
+    "problem_closed": {
+      "title": "Relato de problema fechado",
+      "body": "O seu relato de problema sobre «{{title}}» foi fechado."
+    },
     "party_invited": {
       "title": "Sessão de visualização",
       "body": "{{host}} convidou-o para «{{party}}»."

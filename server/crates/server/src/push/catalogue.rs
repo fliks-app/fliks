@@ -3,6 +3,7 @@ use super::{ActionSpec, Notification, notify};
 use crate::{
     events::{DomainEvent, SseEvent},
     http::auth::{Authed, load_users},
+    libraries::library_ids_of,
     state::AppState,
     sync::MutexExt,
 };
@@ -243,7 +244,7 @@ pub fn request_event(st: &AppState, event: &'static str, payload: &Map<String, V
                         target: r.id,
                     },
                 ];
-                let mut to = approvers(&st).await;
+                let mut to = approvers(&st, None).await;
                 to.retain(|u| Some(*u) != r.requester);
                 (to, n)
             }
@@ -268,21 +269,93 @@ pub async fn request_recipients(db: &sqlx::PgPool, id: i32, requester: Option<i3
     to
 }
 
-async fn approvers(st: &AppState) -> Vec<i32> {
+/// Users who can manage requests; with a `library`, only those who read it.
+pub async fn approvers(st: &AppState, library: Option<i32>) -> Vec<i32> {
     let Ok(users) = load_users(&st.db, None, true).await else {
         return vec![];
     };
-    users
-        .into_iter()
-        .filter(|(u, role)| {
-            Permissions::from(
-                role.as_ref().map_or(&[][..], |r| &r.permissions),
-                u.is_admin,
-            )
-            .can(Action::Manage, &Subject::FliksRequest)
-        })
-        .map(|(u, _)| u.id)
-        .collect()
+    let mut out = vec![];
+    for (u, role) in users {
+        let perms = Permissions::from(
+            role.as_ref().map_or(&[][..], |r| &r.permissions),
+            u.is_admin,
+        );
+        if !perms.can(Action::Manage, &Subject::FliksRequest) {
+            continue;
+        }
+        if let Some(l) = library {
+            let all = u.is_admin || perms.can(Action::Manage, &Subject::All);
+            match library_ids_of(&st.db, u.id, all).await {
+                Ok(ids) if ids.contains(&l) => {}
+                _ => continue,
+            }
+        }
+        out.push(u.id);
+    }
+    out
+}
+
+/// What a problem-report notification needs beyond the admin payload.
+pub struct ProblemRef {
+    pub media: i32,
+    pub media_kind: MediaKind,
+    pub library: Option<i32>,
+    pub reporter: i32,
+}
+
+/// The user notifications of a problem report (`problems.md` rule 20): `problem_created` to the managers
+/// who read the library, the others to the reporter.
+pub fn problem_event(st: &AppState, key: &'static str, title: &str, r: ProblemRef) {
+    let (st, title) = (st.clone(), title.to_owned());
+    tokio::spawn(async move {
+        let list = "/requests?view=problems";
+        let (to, mut n) = match key {
+            "problem_created" => {
+                let who: String = sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
+                    .bind(r.reporter)
+                    .fetch_optional(&st.db)
+                    .await
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
+                let mut n = Notification::core(
+                    "requests",
+                    key,
+                    &params(json!({"title": title, "user": who})),
+                    format!("{list}&status=active"),
+                    DAY,
+                );
+                n.actions = vec![open(&n.url.clone())];
+                let mut to = approvers(&st, r.library).await;
+                to.retain(|u| *u != r.reporter);
+                (to, n)
+            }
+            "problem_resolved" => {
+                let mut n = Notification::core(
+                    "requests",
+                    key,
+                    &params(json!({"title": title})),
+                    media_url(r.media, r.media_kind),
+                    DAY,
+                );
+                n.actions = vec![open(&n.url.clone())];
+                (vec![r.reporter], n)
+            }
+            "problem_replied" | "problem_closed" => (
+                vec![r.reporter],
+                Notification::core(
+                    "requests",
+                    key,
+                    &params(json!({"title": title})),
+                    list.into(),
+                    DAY,
+                ),
+            ),
+            _ => return,
+        };
+        n.image = Some(poster(r.media));
+        notify(&st, to, n);
+    });
 }
 
 #[derive(Default)]

@@ -5814,6 +5814,22 @@
       "title": "New request",
       "body": "{{user}} requested \"{{title}}\"."
     },
+    "problem_created": {
+      "title": "New problem report",
+      "body": "{{user}} reported a problem with \"{{title}}\"."
+    },
+    "problem_replied": {
+      "title": "Reply to your report",
+      "body": "A reply on your problem report for \"{{title}}\"."
+    },
+    "problem_resolved": {
+      "title": "Problem fixed",
+      "body": "Your problem report for \"{{title}}\" was marked as fixed."
+    },
+    "problem_closed": {
+      "title": "Problem report closed",
+      "body": "Your problem report for \"{{title}}\" was closed."
+    },
     "party_invited": {
       "title": "Watch party",
       "body": "{{host}} invited you to \"{{party}}\"."

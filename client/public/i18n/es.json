@@ -5814,6 +5814,22 @@
       "title": "Nueva solicitud",
       "body": "{{user}} solicitó «{{title}}»."
     },
+    "problem_created": {
+      "title": "Nuevo informe de problema",
+      "body": "{{user}} informó de un problema con «{{title}}»."
+    },
+    "problem_replied": {
+      "title": "Respuesta a tu informe",
+      "body": "Una respuesta a tu informe de problema sobre «{{title}}»."
+    },
+    "problem_resolved": {
+      "title": "Problema corregido",
+      "body": "Tu informe de problema sobre «{{title}}» se marcó como corregido."
+    },
+    "problem_closed": {
+      "title": "Informe de problema cerrado",
+      "body": "Tu informe de problema sobre «{{title}}» se cerró."
+    },
     "party_invited": {
       "title": "Sesión de visionado",
       "body": "{{host}} le invitó a «{{party}}»."

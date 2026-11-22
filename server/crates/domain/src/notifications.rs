@@ -8,7 +8,7 @@ pub const TYPES: [&str; 5] = ["discord", "slack", "webhook", "gotify", "ntfy"];
 pub const BUILTIN: &str = "fliks-relay";
 
 /// `NOTIFICATION_EVENTS`, in vocabulary order.
-pub const EVENTS: [&str; 23] = [
+pub const EVENTS: [&str; 25] = [
     "request.created",
     "request.approved",
     "request.declined",
@@ -32,6 +32,8 @@ pub const EVENTS: [&str; 23] = [
     "optimize.completed",
     "optimize.failed",
     "health.corrupt",
+    "problem.created",
+    "problem.resolved",
 ];
 
 /// What `GET /notifications/events` lists: `health.issue` is only ever sent by the test route.
@@ -126,6 +128,8 @@ pub fn format_message(event: &str, payload: &Map<String, Value>) -> String {
         "optimize.completed" => format!("Optimized: {title}"),
         "optimize.failed" => format!("Optimization failed: {title}"),
         "health.corrupt" => format!("Corrupt file: {title}"),
+        "problem.created" => format!("New problem report: {title}{}", scope(payload)),
+        "problem.resolved" => format!("Problem resolved: {title}{}", scope(payload)),
         _ => format!("{event}: {}", Value::Object(payload.clone())),
     }
 }

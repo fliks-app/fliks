@@ -88,6 +88,7 @@ pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<
              sb AS (UPDATE subtitle_blacklist SET "mediaId" = $2 WHERE "mediaId" = $1),
              cr AS (UPDATE content_recommendations SET "mediaId" = $2 WHERE "mediaId" = $1),
              rq AS (UPDATE requests SET "mediaId" = $2 WHERE "mediaId" = $1),
+             mi AS (UPDATE media_issues SET "mediaId" = $2 WHERE "mediaId" = $1),
              dw AS (UPDATE discovered_works SET "mediaId" = $2 WHERE "mediaId" = $1),
              bm AS (UPDATE book_merges SET "mediaId" = $2 WHERE "mediaId" = $1)
            SELECT 1 AS done"#,

@@ -10,7 +10,7 @@ One route.
 
 | Method path | Auth (extractor + policy) | Request (fields, constraints) | Response (fields, types, nesting) | Errors (status, message/code) | Side effects |
 |---|---|---|---|---|---|
-| `GET /api/counts` | `Authed` only, no policy: any authenticated enabled user; a scoped stream token is 401 | none (no query, no body; unknown query keys ignored: no DTO) | 200 `{ badgeCounts: { [key: string]: number }, pendingRequests: int, mediaByLibrary: { [libraryId: string]: int }, attention: int }` (rule 1) | 401 (auth rule 14) | none |
+| `GET /api/counts` | `Authed` only, no policy: any authenticated enabled user; a scoped stream token is 401 | none (no query, no body; unknown query keys ignored: no DTO) | 200 `{ badgeCounts: { [key: string]: number }, pendingRequests: int, mediaByLibrary: { [libraryId: string]: int }, attention: int, openProblems: int }` (rule 1) | 401 (auth rule 14) | none |
 
 No 403 exists: each counter applies its own ability check inside the service and degrades to an empty value (rules 5-9). No route emits an SSE or domain event.
 
@@ -18,7 +18,7 @@ No 403 exists: each counter applies its own ability check inside the service and
 
 ### A. Shape
 
-1. Response is always the four keys, none ever `null`: `badgeCounts` (object, possibly `{}`), `pendingRequests` (integer, `0` when nothing), `mediaByLibrary` (object, possibly `{}`), `attention` (integer, `0` when nothing, rule 16). Key order in JSON: `badgeCounts`, `pendingRequests`, `mediaByLibrary`, `attention`.
+1. Response is always the five keys, none ever `null`: `badgeCounts` (object, possibly `{}`), `pendingRequests` (integer, `0` when nothing), `mediaByLibrary` (object, possibly `{}`), `attention` (integer, `0` when nothing, rule 16), `openProblems` (integer, `0` when nothing, `problems.md` rule 21). Key order in JSON: `badgeCounts`, `pendingRequests`, `mediaByLibrary`, `attention`, `openProblems`.
 2. Null vs absent: a `badgeCounts` key that no publisher pushed, or that the caller may not see, is ABSENT, never present-and-0 (the client folds `pendingRequests` into the same map and shows a badge only for a truthy value). `mediaByLibrary` omits libraries without media.
 3. The ability is built once per request , then the two SQL counters run concurrently; `badgeCounts` is a synchronous in-memory read. Any DB error rejects the whole call (500), there is no per-counter fallback.
 4. No cache of any kind on the SQL counters: every call re-queries. Nothing memoises; the client refetches on SSE count-bearing events.
