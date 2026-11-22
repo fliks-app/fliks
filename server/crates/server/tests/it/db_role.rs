@@ -172,7 +172,7 @@ async fn takes_a_superuser_database_over_and_stays_idempotent() {
     // A second run changes nothing, and a pool opened before it keeps working.
     f.transfer().await.unwrap();
     assert_eq!(snapshot(&admin).await, before);
-    assert_eq!(count(&app, "SELECT 1").await, 1);
+    assert_eq!(count(&app, "SELECT 1::bigint").await, 1);
 
     // The role does what core does after the switch: DDL, a trusted extension, a text search setup.
     sqlx::raw_sql(
