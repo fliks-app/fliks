@@ -1442,13 +1442,12 @@ async fn the_event_subscriptions_drive_the_lifecycle(pool: PgPool) {
         episode_number: None,
     });
     wait_status(&c, 1, "processing").await;
-    c.st.hub
-        .emit(fliks_server::events::SseEvent::ImportComplete {
-            media_id: 17,
-            title: "M".into(),
-            season_number: None,
-            episode_number: None,
-        });
+    c.st.hub.emit_domain(DomainEvent::AcquisitionImported {
+        media_id: 17,
+        family: fliks_domain::media::family::Family::Video,
+        season_number: None,
+        episode_number: None,
+    });
     wait_status(&c, 1, "available").await;
 }
 
