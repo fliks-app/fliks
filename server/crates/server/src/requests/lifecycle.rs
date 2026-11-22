@@ -278,9 +278,10 @@ pub(super) fn scope_covered(scope: Option<&[i64]>, eps: &[db::Ep]) -> bool {
 
 /// One reconcile at startup, then hourly (rule 43); the cron timer dies with the runtime.
 pub fn spawn_reconcile(st: &AppState) {
-    let lc = Lifecycle::of(st);
+    let (lc, st) = (Lifecycle::of(st), st.clone());
     let first = lc.clone();
     tokio::spawn(async move { first.reconcile().await });
+    crate::problems::reconcile(&st);
     crate::jobs::spawn_cron(
         "0 * * * *",
         crate::jobs::server_tz(),
@@ -288,6 +289,7 @@ pub fn spawn_reconcile(st: &AppState) {
         move || {
             let lc = lc.clone();
             tokio::spawn(async move { lc.reconcile().await });
+            crate::problems::reconcile(&st);
         },
     );
 }

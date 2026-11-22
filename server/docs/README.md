@@ -8,6 +8,8 @@ Client kinds: [`spec/client-kinds.md`](spec/client-kinds.md) (`X-Fliks-Kinds`: t
 
 Push notifications: [`spec/push.md`](spec/push.md) (the push pipeline, relay client and identity file, RFC 8291 encryption, Web Push, subscriptions, the catalogue, text, actions, the `attention` badge).
 
+Problem reports on a media: [`spec/problems.md`](spec/problems.md) (`media_issues`, the states, auto-resolve of a replaced file, push and counts).
+
 Watch party: [`spec/watch-party.md`](spec/watch-party.md) (routes, state machine, events).
 
 Books: [`spec/books.md`](spec/books.md) (the `book` kind, editions and their facts, ids, series, sort keys), [`spec/books-api.md`](spec/books-api.md) (routes and wire shapes), [`spec/book-metadata.md`](spec/book-metadata.md) (trait semantics, record mapping, identify and attach seams), [`spec/book-ingest.md`](spec/book-ingest.md) (ingest seams), [`spec/books-reader.md`](spec/books-reader.md) (EPUB manifest, sanitised resources, CSP).

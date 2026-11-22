@@ -40,6 +40,7 @@ mod party;
 mod playback;
 mod playlists;
 mod plugins;
+mod problems;
 mod profiles;
 mod push;
 mod remote;

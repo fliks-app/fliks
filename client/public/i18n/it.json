@@ -5991,6 +5991,22 @@
       "title": "Nuova richiesta",
       "body": "{{user}} ha richiesto «{{title}}»."
     },
+    "problem_created": {
+      "title": "Nuova segnalazione",
+      "body": "{{user}} ha segnalato un problema con «{{title}}»."
+    },
+    "problem_replied": {
+      "title": "Risposta alla tua segnalazione",
+      "body": "Una risposta alla tua segnalazione su «{{title}}»."
+    },
+    "problem_resolved": {
+      "title": "Problema risolto",
+      "body": "La tua segnalazione su «{{title}}» è stata contrassegnata come risolta."
+    },
+    "problem_closed": {
+      "title": "Segnalazione chiusa",
+      "body": "La tua segnalazione su «{{title}}» è stata chiusa."
+    },
     "party_invited": {
       "title": "Sessione di visione",
       "body": "{{host}} ti ha invitato a «{{party}}»."

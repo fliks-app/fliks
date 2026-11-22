@@ -5991,6 +5991,22 @@
       "title": "Neue Anfrage",
       "body": "{{user}} hat „{{title}}“ angefragt."
     },
+    "problem_created": {
+      "title": "Neue Problemmeldung",
+      "body": "{{user}} hat ein Problem mit „{{title}}“ gemeldet."
+    },
+    "problem_replied": {
+      "title": "Antwort auf Ihre Meldung",
+      "body": "Eine Antwort auf Ihre Problemmeldung zu „{{title}}“."
+    },
+    "problem_resolved": {
+      "title": "Problem behoben",
+      "body": "Ihre Problemmeldung zu „{{title}}“ wurde als behoben markiert."
+    },
+    "problem_closed": {
+      "title": "Problemmeldung geschlossen",
+      "body": "Ihre Problemmeldung zu „{{title}}“ wurde geschlossen."
+    },
     "party_invited": {
       "title": "Watch-Party",
       "body": "{{host}} hat Sie zu „{{party}}“ eingeladen."

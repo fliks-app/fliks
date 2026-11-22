@@ -467,6 +467,16 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         requests::comment_create,
         requests::comments_list,
         requests::comment_remove,
+        crate::problems::create,
+        crate::problems::list,
+        crate::problems::get_one,
+        crate::problems::resolve,
+        crate::problems::close,
+        crate::problems::reopen,
+        crate::problems::remove,
+        crate::problems::comments_list,
+        crate::problems::comment_create,
+        crate::problems::comment_remove,
         requests::rule_list,
         requests::rule_create,
         requests::rule_get,
@@ -607,6 +617,7 @@ fn api() -> Router<AppState> {
         .merge(jobs::router())
         .merge(crate::queue::router())
         .merge(requests::router())
+        .merge(crate::problems::router())
         .merge(cleanup::router())
         .merge(subtitles::router())
         .merge(livetv::router())

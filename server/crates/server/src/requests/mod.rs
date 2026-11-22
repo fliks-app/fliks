@@ -1,6 +1,6 @@
 //! `/api/requests/*`, `/api/auto-approval-rules/*` and the request lifecycle (`docs/spec/requests.md`).
 mod db;
-pub(crate) use db::lock_titles;
+pub(crate) use db::{lock_titles, lock_user_quota};
 #[cfg(test)]
 mod book_tests;
 pub(crate) mod dto;

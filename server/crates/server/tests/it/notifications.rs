@@ -333,7 +333,7 @@ async fn webhook_url_is_a_secret(pool: PgPool) {
 async fn validation_and_events_list(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, ev) = admin(&c, "GET", "/api/notifications/events", None).await;
-    assert_eq!(ev.as_array().unwrap().len(), 22);
+    assert_eq!(ev.as_array().unwrap().len(), 24);
     assert!(!ev.to_string().contains("health.issue"));
     let (s, b) = admin(
         &c,

@@ -2596,6 +2596,18 @@
         }
       }
     },
+    "/api/media/{id}/problems": {
+      "post": {
+        "tags": [
+          "crate::problems"
+        ],
+        "operationId": "create",
+        "responses": {
+          "201": {},
+          "409": {}
+        }
+      }
+    },
     "/api/media/{id}/profiles": {
       "patch": {
         "tags": [
@@ -4851,6 +4863,105 @@
         "operationId": "proxy",
         "responses": {
           "200": {}
+        }
+      }
+    },
+    "/api/problems": {
+      "get": {
+        "tags": [
+          "crate::problems"
+        ],
+        "operationId": "list",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/problems/comments/{commentId}": {
+      "delete": {
+        "tags": [
+          "crate::problems"
+        ],
+        "operationId": "comment_remove",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/problems/{id}": {
+      "get": {
+        "tags": [
+          "crate::problems"
+        ],
+        "operationId": "get_one",
+        "responses": {
+          "200": {},
+          "404": {}
+        }
+      },
+      "delete": {
+        "tags": [
+          "crate::problems"
+        ],
+        "operationId": "remove",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
+    "/api/problems/{id}/close": {
+      "post": {
+        "tags": [
+          "crate::problems"
+        ],
+        "operationId": "close",
+        "responses": {
+          "201": {},
+          "409": {}
+        }
+      }
+    },
+    "/api/problems/{id}/comments": {
+      "get": {
+        "tags": [
+          "crate::problems"
+        ],
+        "operationId": "comments_list",
+        "responses": {
+          "200": {}
+        }
+      },
+      "post": {
+        "tags": [
+          "crate::problems"
+        ],
+        "operationId": "comment_create",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
+    "/api/problems/{id}/reopen": {
+      "post": {
+        "tags": [
+          "crate::problems"
+        ],
+        "operationId": "reopen",
+        "responses": {
+          "201": {},
+          "409": {}
+        }
+      }
+    },
+    "/api/problems/{id}/resolve": {
+      "post": {
+        "tags": [
+          "crate::problems"
+        ],
+        "operationId": "resolve",
+        "responses": {
+          "201": {},
+          "409": {}
         }
       }
     },

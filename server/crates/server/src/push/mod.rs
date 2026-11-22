@@ -10,7 +10,10 @@ mod text;
 mod webpush;
 
 pub use act::{ACTIONS, Grant, mint as mint_action};
-pub use catalogue::{ReqRef, flush_pending, media_url, poster, request_event, request_recipients};
+pub use catalogue::{
+    ProblemRef, ReqRef, approvers, flush_pending, media_url, poster, problem_event, request_event,
+    request_recipients,
+};
 pub use routes::{
     __path_act, __path_config, __path_pending_drop, __path_status, __path_subscribe, __path_test,
     __path_unsubscribe, router,
