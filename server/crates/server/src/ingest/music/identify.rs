@@ -573,7 +573,7 @@ mod tests {
             &[
                 tags("Alpha", "Ana", 1),
                 tags("Alpha", "Ana", 2),
-                tags("Other", "Zed", 3),
+                tags("Other", "Ana", 3),
             ],
         );
         assert_eq!(

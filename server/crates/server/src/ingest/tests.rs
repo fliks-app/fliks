@@ -6359,8 +6359,8 @@ mod music_ingest {
                 )
             )
             .await,
-            1,
-            "its old id is an alias of the survivor"
+            2,
+            "its old ids are aliases of the survivor"
         );
         // The search finds a person by its sort name.
         sqlx::query(r#"UPDATE persons SET "sortName" = 'Zzyzx, Ana' WHERE id = $1"#)
