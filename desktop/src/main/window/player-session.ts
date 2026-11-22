@@ -61,12 +61,8 @@ function uiWebPreferences(preload: string): Electron.WebPreferences {
     sandbox: true,
     // The live event stream keeps running while the window is hidden in background mode.
     backgroundThrottling: false,
-    // Trusted client: the bundled Angular app (fliks://, a secure origin)
-    // must reach the user's server even when it's plain HTTP on a LAN —
-    // disable web security to allow that cross-origin/mixed-content fetch,
-    // the same bypass the mobile apps get via native HTTP. cors.ts still
-    // reflects the ACAO header for credentialed calls.
-    webSecurity: false,
+    // The bundled app is a secure origin reaching the user's plain-HTTP LAN server.
+    allowRunningInsecureContent: true,
   };
 }
 

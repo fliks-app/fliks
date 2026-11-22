@@ -1,43 +1,70 @@
 import { session } from 'electron';
 import { APP_SCHEME } from './protocol';
 import { appendLog, redactQuery } from './log-file';
+import { isReportedServer, noteValidChain } from './trusted-servers';
 
 const APP_ORIGIN = `${APP_SCHEME}://app`;
 
+const METHODS = 'GET, HEAD, PUT, PATCH, POST, DELETE';
+
 /**
- * The Angular client runs at origin `fliks://app` and calls the user's Fliks
- * server cross-origin. Servers only allowlist the known web/mobile origins, so
- * their responses lack `Access-Control-Allow-Origin: fliks://app` and the
- * browser blocks them. A trusted desktop client is the same situation as the
- * mobile apps, which bypass CORS via Capacitor's native HTTP layer — here we
- * reflect the app origin onto every response so credentialed API calls pass.
- * No backend change required.
+ * The Angular client runs at origin `fliks://app` and calls the user's Fliks server cross-origin, and
+ * servers only allowlist the known web/mobile origins. Responses of the servers the page reported
+ * (and only those) are rewritten to allow `fliks://app`, preflights included.
  */
+export function corsResponseHeaders(
+  headers: Record<string, string[]>,
+  preflightRequestHeaders: string | undefined,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (!key.toLowerCase().startsWith('access-control-')) out[key] = value;
+  }
+  out['Access-Control-Allow-Origin'] = [APP_ORIGIN];
+  out['Access-Control-Allow-Credentials'] = ['true'];
+  // The page reads Content-Range, Content-Disposition and the like: expose what the response carries.
+  out['Access-Control-Expose-Headers'] = [Object.keys(out).join(', ')];
+  if (preflightRequestHeaders !== undefined) {
+    out['Access-Control-Allow-Methods'] = [METHODS];
+    out['Access-Control-Allow-Headers'] = [preflightRequestHeaders];
+  }
+  return out;
+}
+
+/** Notifications, fullscreen, and the microphone (the voice chat; never video capture). */
+export function permissionAllowed(permission: string, mediaTypes?: readonly string[]): boolean {
+  if (permission === 'media') return (mediaTypes ?? []).every((t) => t === 'audio');
+  return permission === 'notifications' || permission === 'fullscreen' || permission === 'clipboard-sanitized-write';
+}
+
 export function installCorsBypass(): void {
   const { webRequest } = session.defaultSession;
-  webRequest.onHeadersReceived((details, callback) => {
-    const headers = details.responseHeaders ?? {};
-    // Drop any existing (case-variant) CORS headers before setting ours.
-    for (const key of Object.keys(headers)) {
-      const k = key.toLowerCase();
-      if (k === 'access-control-allow-origin' || k === 'access-control-allow-credentials') {
-        delete headers[key];
-      }
+  const preflightHeaders = new Map<number, string>();
+  webRequest.onBeforeSendHeaders((details, callback) => {
+    if (details.method === 'OPTIONS') {
+      const asked = Object.entries(details.requestHeaders).find(([k]) => k.toLowerCase() === 'access-control-request-headers');
+      if (asked) preflightHeaders.set(details.id, asked[1]);
     }
-    headers['Access-Control-Allow-Origin'] = [APP_ORIGIN];
-    headers['Access-Control-Allow-Credentials'] = ['true'];
-    callback({ responseHeaders: headers });
+    callback({ requestHeaders: details.requestHeaders });
+  });
+  webRequest.onHeadersReceived((details, callback) => {
+    const asked = preflightHeaders.get(details.id);
+    preflightHeaders.delete(details.id);
+    if (!isReportedServer(details.url)) return callback({});
+    const preflight = details.method === 'OPTIONS' ? (asked ?? '') : undefined;
+    callback({
+      responseHeaders: corsResponseHeaders(details.responseHeaders ?? {}, preflight),
+      ...(preflight === undefined ? {} : { statusLine: 'HTTP/1.1 204 No Content' }),
+    });
   });
 
-  // Video capture is denied: the voice chat needs only the microphone.
-  const allowed = (permission: string, mediaTypes?: readonly string[]) =>
-    permission !== 'media' || (mediaTypes ?? []).every((t) => t === 'audio');
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback, details) =>
-    callback(allowed(permission, (details as { mediaTypes?: string[] }).mediaTypes)),
+    callback(permissionAllowed(permission, (details as { mediaTypes?: string[] }).mediaTypes)),
   );
-  session.defaultSession.setPermissionCheckHandler((_wc, permission, _origin, details) =>
-    allowed(permission, (details as { mediaType?: string }).mediaType ? [(details as { mediaType: string }).mediaType] : undefined),
-  );
+  session.defaultSession.setPermissionCheckHandler((_wc, permission, _origin, details) => {
+    const type = (details as { mediaType?: string }).mediaType;
+    return permissionAllowed(permission, type ? [type] : undefined);
+  });
 
   // A renderer network failure only ever surfaces as a bare `status 0` — this
   // is the one place the underlying ERR_* (reset / TLS / network-changed) is
@@ -49,6 +76,7 @@ export function installCorsBypass(): void {
   // Ranks the CORS-preflight hypothesis for a failed /api/ call: an OPTIONS
   // that never resolves, or resolves without the right headers, precedes it.
   webRequest.onCompleted((details) => {
+    if (!details.fromCache) noteValidChain(details.url);
     if (details.method === 'OPTIONS' && details.url.includes('/api/')) {
       appendLog(`[net] OPTIONS ${redactQuery(details.url)} -> ${details.statusCode}`);
     }

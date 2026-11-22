@@ -24,3 +24,11 @@ test('the addon request keeps the renderer options next to the file options', ()
     fileOptions: ['sid=no'],
   });
 });
+
+test('a pinned server mpv cannot verify opens with its own check off', async () => {
+  const { trustServer, acceptCertificate } = await import('../trusted-servers.ts');
+  trustServer('https://by-ip.lan');
+  await acceptCertificate('https://by-ip.lan/', 'net::ERR_CERT_AUTHORITY_INVALID', { fingerprint: 'f', chain: ['not a certificate'] }, async () => true);
+  assert.deepEqual(mpvLoadFileOptions({ url: 'https://by-ip.lan/m.m3u8' }), ['sid=no', 'tls-verify=no']);
+  assert.deepEqual(mpvLoadFileOptions({ url: 'https://other.lan/m.m3u8' }), ['sid=no']);
+});

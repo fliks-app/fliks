@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 // extension fall back to index.html, letting the Angular router take over.
 export const APP_SCHEME = 'fliks';
 export const APP_URL = `${APP_SCHEME}://app/`;
+const CSP = "script-src 'self'; object-src 'none'; base-uri 'self'";
 
 /** Must run before app `ready`. */
 export function registerAppSchemePrivileged(): void {
@@ -38,6 +39,9 @@ export function registerAppProtocol(webDir: string): void {
     if (!fs.existsSync(filePath)) {
       return new Response('not found', { status: 404 });
     }
-    return net.fetch(pathToFileURL(filePath).toString());
+    const res = await net.fetch(pathToFileURL(filePath).toString());
+    const headers = new Headers(res.headers);
+    headers.set('Content-Security-Policy', CSP);
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   });
 }

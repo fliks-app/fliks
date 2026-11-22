@@ -23,7 +23,8 @@ import { watchRendererCrash } from './renderer-recovery';
 import { Notifier } from './notify';
 import { refreshMenu, setMenuLabels, setMenuFullscreen, setMenuPlayback } from './menu';
 import { pressMediaKey, type MediaKey } from './menu-template';
-import { isTrustedServer, trustServer } from './trusted-servers';
+import { acceptCertificate, loadTrust, trustServer } from './trusted-servers';
+import { askTrust, pemChain } from './trust-prompt';
 
 // Velopack's install/update/uninstall hooks run and exit here, before any Electron startup.
 if (process.platform === 'win32') {
@@ -73,13 +74,15 @@ registerAppSchemePrivileged();
 process.on('uncaughtException', (e) => console.error('[main:uncaughtException]', e?.stack ?? e));
 process.on('unhandledRejection', (e) => console.error('[main:unhandledRejection]', e));
 
-// A self-hosted Fliks server commonly has a self-signed or private-CA certificate the OS
-// doesn't trust: only the host the page reports as its server is accepted, others are refused.
-app.on('certificate-error', (event, _wc, url, error, _cert, callback) => {
-  const trusted = isTrustedServer(url);
-  appendLog(`[tls] ${redactQuery(url)} ${error} ${trusted ? 'accepted' : 'refused'}`);
+// A self-hosted Fliks server commonly has a self-signed or private-CA certificate the OS doesn't
+// trust: the server the page reports is pinned on first use, after the user agrees.
+app.on('certificate-error', (event, _wc, url, error, cert, callback) => {
   event.preventDefault();
-  callback(trusted);
+  const pem = { fingerprint: cert.fingerprint, chain: pemChain(cert) };
+  void acceptCertificate(url, error, pem, askTrust).then((ok) => {
+    appendLog(`[tls] ${redactQuery(url)} ${error} ${ok ? 'accepted' : 'refused'}`);
+    callback(ok);
+  });
 });
 
 const WIDTH = 1280;
@@ -341,6 +344,7 @@ async function startUiOnly(haveApp: boolean): Promise<void> {
 }
 
 app.whenReady().then(async () => {
+  loadTrust(path.join(app.getPath('userData'), 'trusted-servers.json'));
   // macOS needs the menu for Cmd+C/V/A/Z/Q; Windows and Linux have none.
   if (process.platform === 'darwin') refreshMenu();
   else Menu.setApplicationMenu(null);
@@ -459,9 +463,8 @@ app.whenReady().then(async () => {
       preload: path.join(app.getAppPath(), 'dist', 'preload', 'index.cjs'),
       contextIsolation: true,
       sandbox: true,
-      // Trusted client → reach the user's server regardless of CORS/mixed
-      // content (cors.ts still reflects ACAO). Same as the embed path + mobile.
-      webSecurity: false,
+      // The bundled app is a secure origin reaching the user's plain-HTTP LAN server.
+      allowRunningInsecureContent: true,
     },
   });
   uiWin.webContents.setFrameRate(60);
