@@ -759,15 +759,14 @@ pub async fn delete_claimed(db: &PgPool, id: i32, by: i32) -> sqlx::Result<()> {
 }
 
 /// Gives back the approved ADD rows that never got a media within the hour: an import cut short by a restart.
-pub async fn reset_orphans(db: &PgPool) -> sqlx::Result<u64> {
-    sqlx::query(
+pub async fn reset_orphans(db: &PgPool) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(
         r#"UPDATE requests SET status = 'pending', "approvedById" = NULL
            WHERE kind = 'add' AND status = 'approved' AND "mediaId" IS NULL
-             AND "updatedAt" < now() - interval '1 hour'"#,
+             AND "updatedAt" < now() - interval '1 hour' RETURNING id"#,
     )
-    .execute(db)
+    .fetch_all(db)
     .await
-    .map(|r| r.rows_affected())
 }
 
 /// Links the media of an approval that imported nothing itself (rule 23 step 8).
@@ -911,37 +910,45 @@ pub async fn remove_unlink(db: &PgPool, id: i32) -> sqlx::Result<()> {
 }
 
 /// The ADD rows linked to a media that left the library or was unmonitored: in-flight are declined with
-/// `reason`, `available` become `removed`, all unlinked.
-pub async fn retire_linked(db: &mut PgConnection, media_id: i32, reason: &str) -> sqlx::Result<()> {
-    sqlx::query!(
+/// `reason`, `available` become `removed`, all unlinked; the ids moved.
+pub async fn retire_linked(
+    db: &mut PgConnection,
+    media_id: i32,
+    reason: &str,
+) -> sqlx::Result<Vec<i32>> {
+    let mut ids: Vec<i32> = sqlx::query_scalar(
         r#"UPDATE requests SET status = 'declined', "declinedReason" = $2, "mediaId" = NULL
-        WHERE "mediaId" = $1 AND kind = 'add' AND status IN ('pending', 'approved', 'processing')"#,
-        media_id,
-        reason
+        WHERE "mediaId" = $1 AND kind = 'add' AND status IN ('pending', 'approved', 'processing')
+        RETURNING id"#,
     )
-    .execute(&mut *db)
+    .bind(media_id)
+    .bind(reason)
+    .fetch_all(&mut *db)
     .await?;
-    sqlx::query!(
-        r#"UPDATE requests SET status = 'removed', "mediaId" = NULL
-        WHERE "mediaId" = $1 AND kind = 'add' AND status = 'available'"#,
-        media_id
-    )
-    .execute(db)
-    .await?;
-    Ok(())
+    ids.extend(
+        sqlx::query_scalar::<_, i32>(
+            r#"UPDATE requests SET status = 'removed', "mediaId" = NULL
+        WHERE "mediaId" = $1 AND kind = 'add' AND status = 'available' RETURNING id"#,
+        )
+        .bind(media_id)
+        .fetch_all(db)
+        .await?,
+    );
+    Ok(ids)
 }
 
 /// `onMediaRemoved` in the delete's transaction: delete rows are done, add rows are declined.
-pub async fn resolve_removed(db: &mut PgConnection, media_id: i32) -> sqlx::Result<()> {
-    sqlx::query!(
+pub async fn resolve_removed(db: &mut PgConnection, media_id: i32) -> sqlx::Result<Vec<i32>> {
+    let mut ids: Vec<i32> = sqlx::query_scalar(
         r#"UPDATE requests SET status = 'approved', "declinedReason" = NULL, "mediaId" = NULL
-        WHERE "mediaId" = $1 AND kind = 'delete' AND status IN ('pending', 'approved', 'processing')"#,
-        media_id
+        WHERE "mediaId" = $1 AND kind = 'delete' AND status IN ('pending', 'approved', 'processing')
+        RETURNING id"#,
     )
-    .execute(&mut *db)
+    .bind(media_id)
+    .fetch_all(&mut *db)
     .await?;
-    retire_linked(db, media_id, "Media removed from library").await?;
-    Ok(())
+    ids.extend(retire_linked(db, media_id, "Media removed from library").await?);
+    Ok(ids)
 }
 
 /// The monitored season numbers of a series plus `season` (just unmonitored): what a whole-series request covered.

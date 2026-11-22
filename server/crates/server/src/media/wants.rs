@@ -216,6 +216,8 @@ pub struct Wanted {
     pub language: Option<String>,
     #[sqlx(rename = "wantId")]
     pub want_id: i32,
+    #[sqlx(skip)]
+    pub last_search: Option<serde_json::Value>,
 }
 
 /// The unsatisfied wants of monitored media in `libraries` (`wants-follows.md` rule 15), and their count.
@@ -225,8 +227,8 @@ pub async fn wanted(
     kinds: &[String],
     kind: Option<MediaKind>,
     released: Option<bool>,
-    offset: i64,
-    limit: i64,
+    (offset, limit): (i64, i64),
+    show_failed: bool,
 ) -> sqlx::Result<(Vec<Wanted>, i64)> {
     let filter = format!(
         r#"FROM wants w JOIN media m ON m.id = w."mediaId"
@@ -238,7 +240,7 @@ pub async fn wanted(
         sat = satisfied_sql()
     );
     let kind = kind.map(MediaKind::as_str);
-    let rows = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+    let mut rows: Vec<Wanted> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"SELECT m.id AS "mediaId", m.type AS "type", m.title, m.year, m."posterUrl", rel.date AS "releaseDate",
                   w.family, w.language, w.id AS "wantId" {filter}
            ORDER BY rel.date DESC NULLS LAST, m.id, w.family, w.language NULLS FIRST, w.id OFFSET $5 LIMIT $6"#
@@ -258,5 +260,15 @@ pub async fn wanted(
         .bind(kinds)
         .fetch_one(db)
         .await?;
+    let media: Vec<i32> = rows.iter().map(|w| w.media_id).collect();
+    let mut last = crate::acquisition::attempts::of_wants(db, &media, show_failed).await?;
+    for w in &mut rows {
+        let key = (
+            w.media_id,
+            w.family.clone(),
+            w.language.clone().unwrap_or_default(),
+        );
+        w.last_search = Some(last.remove(&key).unwrap_or_default());
+    }
     Ok((rows, total))
 }

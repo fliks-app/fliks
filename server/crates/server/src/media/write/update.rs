@@ -744,7 +744,7 @@ pub async fn grab_best(
             let (rank, outcome, detail) = match st.plugins.acquire(target, true).await {
                 Outcome::Grabbed(p) => (6, "grabbed", p),
                 Outcome::Error(m) => (5, "error", m),
-                Outcome::Busy => (4, "busy", String::new()),
+                Outcome::Busy | Outcome::Cooling(_) => (4, "busy", String::new()),
                 Outcome::TimedOut(p) => (3, "timeout", p),
                 Outcome::NoRelease => (2, "none", String::new()),
                 Outcome::Skipped(why) => (1, "skipped", why.to_owned()),

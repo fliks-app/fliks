@@ -626,7 +626,7 @@ async fn an_approved_request_without_media_returns_to_pending_after_an_hour(pool
             .execute(&c.pool)
             .await
             .unwrap();
-        super::db::reset_orphans(&c.pool).await.unwrap()
+        super::db::reset_orphans(&c.pool).await.unwrap().len()
     };
     assert_eq!(age(0).await, 0, "an import may still be running");
     assert_eq!(age(2).await, 1);

@@ -55,6 +55,17 @@ async fn grabbed(h: &H, id: &str, media: i32) -> Option<Value> {
     v.map(|v| serde_json::from_str(&v).unwrap())
 }
 
+async fn attempt(h: &H, media: i32) -> (String, i32, i32, Value, Option<String>) {
+    sqlx::query_as::<_, (String, i32, i32, sqlx::types::Json<Value>, Option<String>)>(
+        r#"SELECT outcome, found, eligible, rejections, "nextAt"::text FROM acquisition_attempts WHERE "mediaId" = $1"#,
+    )
+    .bind(media)
+    .fetch_one(&h.st.db)
+    .await
+    .map(|(o, f, e, r, n)| (o, f, e, r.0, n))
+    .unwrap()
+}
+
 async fn forget(h: &H) {
     sqlx::query("DELETE FROM app_settings WHERE key LIKE 'plugin.%.grabbed.%'")
         .execute(&h.st.db)
@@ -132,6 +143,11 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
     );
     assert_eq!(grabbed(&h, B, 1).await.unwrap()["sourceTitle"], "b");
     assert!(grabbed(&h, A, 1).await.is_none());
+    // The search is kept with what both providers answered; a grab leaves no next search.
+    assert_eq!(
+        attempt(&h, 1).await,
+        ("grabbed".into(), 2, 2, json!([]), None)
+    );
 
     // A tie goes to the first provider in order (by id until the admin orders them).
     forget(&h).await;
@@ -164,6 +180,29 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
     forget(&h).await;
     offer(&h, A, json!([])).await;
     assert_eq!(h.st.plugins.acquire(&t1, false).await, Outcome::NoRelease);
+
+    // Nothing grabbed: the attempt counts every release and ranks the rejection codes.
+    forget(&h).await;
+    let mut big = release("big", 9);
+    big["rejections"] = json!([{"code": "SIZE_TOO_HIGH"}, {"code": "MIN_SEEDERS"}]);
+    let mut big2 = release("big2", 9);
+    big2["rejections"] = json!([{"code": "SIZE_TOO_HIGH"}]);
+    let mut blocked = release("blocked", 9);
+    blocked["blocklisted"] = json!(true);
+    offer(&h, A, json!([big, big2, blocked])).await;
+    offer(&h, B, json!([])).await;
+    assert_eq!(h.st.plugins.acquire(&t1, false).await, Outcome::NoRelease);
+    let (outcome, found, eligible, rejections, next_at) = attempt(&h, 1).await;
+    assert_eq!((outcome.as_str(), found, eligible), ("none", 3, 0));
+    assert_eq!(
+        rejections,
+        json!([
+            {"code": "SIZE_TOO_HIGH", "count": 2},
+            {"code": "BLOCKLISTED", "count": 1},
+            {"code": "MIN_SEEDERS", "count": 1},
+        ])
+    );
+    assert!(next_at.is_some());
 
     // A media with a download in flight at any plugin is skipped.
     forget(&h).await;

@@ -68,5 +68,6 @@
   {"byDeviceName":"d","epoch":3,"sessionId":"s","type":"session.superseded"},
   {"payload":{"detail":"d","outcome":"grabbed","scope":{"family":"video","groupId":null,"itemId":null,"mediaId":1}},"type":"acquisition.grab-best"},
   {"payload":{"pluginId":"p","rows":[{"id":1}]},"type":"acquisition.queue"},
-  {"payload":{"pluginId":"p"},"type":"acquisition.sources"}
+  {"payload":{"pluginId":"p"},"type":"acquisition.sources"},
+  {"kind":"add","requestId":1,"status":"approved","type":"request.changed"}
 ]

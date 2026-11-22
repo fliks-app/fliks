@@ -1,4 +1,4 @@
-//! Wire events (`docs/spec/events-hub.md`, Events): the 70 `SseEvent` types, the 12 `DomainEvent`
+//! Wire events (`docs/spec/events-hub.md`, Events): the 71 `SseEvent` types, the 12 `DomainEvent`
 //! types and the plugin envelope. Field names and omission rules follow `JSON.stringify` of the 4.x objects.
 use fliks_domain::media::{family::Family, kind::MediaKind};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -385,6 +385,12 @@ pub enum SseEvent {
     AcquisitionQueue { payload: AcquisitionQueue },
     #[serde(rename = "acquisition.sources")]
     AcquisitionSources { payload: PluginRef },
+    #[serde(rename = "request.changed")]
+    RequestChanged {
+        request_id: i64,
+        status: String,
+        kind: String,
+    },
     #[serde(rename = "command.started")]
     CommandStarted { name: String },
     #[serde(rename = "command.completed")]
@@ -982,6 +988,7 @@ mod tests {
             AcquisitionGrabBest => json!({"type":"acquisition.grab-best","payload":{"scope":{"mediaId":1,"family":"video","groupId":null,"itemId":null},"outcome":"grabbed","detail":"d"}}),
             AcquisitionQueue => json!({"type":"acquisition.queue","payload":{"pluginId":"p","rows":[{"id":1}]}}),
             AcquisitionSources => json!({"type":"acquisition.sources","payload":{"pluginId":"p"}}),
+            RequestChanged => json!({"type":"request.changed","requestId":1,"status":"approved","kind":"add"}),
     }
 
     const FIXTURE: &str = concat!(

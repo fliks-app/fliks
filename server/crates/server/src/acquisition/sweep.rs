@@ -1,5 +1,6 @@
 //! Core-driven acquisition (`plugins.md` section K): the core asks every provider to search, ranks the
 //! answers and asks the best one's provider to grab.
+use super::attempts::{self, Tally};
 use super::{self as acquisition, picker};
 use crate::ingest::KeyedLocks;
 use crate::plugins::runtime::fliks::plugin::types as t;
@@ -7,6 +8,7 @@ use crate::plugins::runtime::{CallError, State};
 use crate::plugins::{HttpRequest, Plugins, Principal, events};
 use crate::state::AppState;
 use crate::sync::MutexExt;
+use chrono::{DateTime, Utc};
 use fliks_domain::release::parsing::attributes::parse_revision;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -22,6 +24,8 @@ const CALLS_PER_PROVIDER: usize = 2;
 /// A media whose providers were busy or whose check failed is asked again after this, at most `RETRIES` times.
 const RETRY_DELAY: Duration = Duration::from_secs(30);
 const RETRIES: u8 = 5;
+/// A cooldown further away than this is not waited for: the hourly tick covers the rest.
+const MAX_COOLDOWN: chrono::Duration = chrono::Duration::hours(24);
 
 /// Media waiting for a request sweep, with the retries each has had.
 #[derive(Default)]
@@ -51,6 +55,8 @@ pub struct Sweeps {
     pub(crate) claims: KeyedLocks<i32>,
     slots: Mutex<HashMap<String, Arc<Semaphore>>>,
     queue: Mutex<Queue>,
+    /// The instant a cooling media is asked again, by media: one timer per instant.
+    wakes: Mutex<HashMap<u32, DateTime<Utc>>>,
 }
 
 impl Sweeps {
@@ -71,6 +77,8 @@ pub enum Outcome {
     NoRelease,
     /// A provider had no room: nothing was grabbed and a retry is due.
     Busy,
+    /// Every provider that could answer was cooling: the media is asked again at that instant.
+    Cooling(DateTime<Utc>),
     /// The in-flight check failed: nothing was grabbed and a retry is due.
     Error(String),
     /// A provider did not answer its grab in time: it may have added the release, so the target is left alone.
@@ -82,17 +90,19 @@ pub enum Outcome {
 /// What a provider offers: its eligible releases, in its own order.
 type Offer = (String, Vec<Value>);
 
-/// The releases a provider would grab: no rejection, allowed, not blocklisted.
+/// A release a provider would grab: no rejection, allowed, not blocklisted.
+pub(super) fn clean(r: &Value) -> bool {
+    r["rejections"].as_array().is_none_or(Vec::is_empty)
+        && r["allowed"] != false
+        && r["blocklisted"] != true
+}
+
+/// The releases a provider would grab.
 fn eligible(list: &Value) -> Vec<Value> {
-    let ok = |r: &&Value| {
-        r["rejections"].as_array().is_none_or(Vec::is_empty)
-            && r["allowed"] != false
-            && r["blocklisted"] != true
-    };
     list.as_array()
         .into_iter()
         .flatten()
-        .filter(ok)
+        .filter(|r| clean(r))
         .take(TRIES)
         .cloned()
         .collect()
@@ -143,7 +153,17 @@ pub enum RouteError {
     TimedOut,
     /// The provider refused the grab: another one of the title is already under way.
     InFlight,
+    /// The provider answered 503 with the instant its indexers are ready again.
+    Cooling(DateTime<Utc>),
     Failed(String),
+}
+
+/// A 503 body `{"error":{"cooldownUntil":"<RFC 3339>"}}`.
+fn cooldown_until(body: &[u8]) -> Option<DateTime<Utc>> {
+    let v: Value = serde_json::from_slice(body).ok()?;
+    DateTime::parse_from_rfc3339(v["error"]["cooldownUntil"].as_str()?)
+        .ok()
+        .map(|d| d.with_timezone(&Utc))
 }
 
 /// A 409 whose error key ends in `already_in_flight`.
@@ -172,6 +192,7 @@ impl std::fmt::Display for RouteError {
             Self::Busy => f.write_str("provider busy"),
             Self::TimedOut => f.write_str("provider timed out"),
             Self::InFlight => f.write_str("a grab is already in flight"),
+            Self::Cooling(at) => write!(f, "provider cooling until {at}"),
             Self::Failed(m) => f.write_str(m),
         }
     }
@@ -206,6 +227,11 @@ impl Plugins {
             if res.status == 409 && is_in_flight(&res.body) {
                 return Err(RouteError::InFlight);
             }
+            if res.status == 503
+                && let Some(at) = cooldown_until(&res.body)
+            {
+                return Err(RouteError::Cooling(at));
+            }
             return Err(RouteError::Failed(format!(
                 "status {}: {}",
                 res.status,
@@ -233,7 +259,82 @@ impl Plugins {
     }
 
     /// Searches, ranks across providers and grabs the best release of one target; `manual` when a user asked.
+    /// The outcome of a search is kept as the target's last attempt.
     pub async fn acquire(&self, tg: &t::Target, manual: bool) -> Outcome {
+        let mut tally = Tally::default();
+        let out = self.search_and_grab(tg, manual, &mut tally).await;
+        if tally.searched {
+            self.remember(tg, &out, &tally).await;
+        }
+        out
+    }
+
+    async fn remember(&self, tg: &t::Target, out: &Outcome, tally: &Tally) {
+        let outcome = match out {
+            Outcome::Grabbed(_) => "grabbed",
+            Outcome::NoRelease => "none",
+            Outcome::Busy | Outcome::Cooling(_) => "busy",
+            Outcome::TimedOut(_) => "timed_out",
+            Outcome::Skipped(_) | Outcome::Error(_) => return,
+        };
+        let next_at = match out {
+            Outcome::Grabbed(_) => None,
+            _ => Some(match tally.cooling {
+                Some(at) => at,
+                None => Utc::now() + chrono::Duration::minutes(self.sweep_interval_minutes().await),
+            }),
+        };
+        let failed = tally
+            .failed
+            .iter()
+            .map(|id| {
+                let name = self.registry.get(id);
+                let name = name.as_ref().and_then(|r| r.manifest["name"].as_str());
+                name.unwrap_or(id).to_owned()
+            })
+            .collect();
+        let family = fliks_domain::media::family::Family::from(tg.family);
+        let language = tg.language.as_deref().unwrap_or_default();
+        attempts::record(
+            &self.db,
+            (tg.media_id as i32, family.as_str(), language),
+            outcome,
+            tally,
+            failed,
+            next_at,
+        )
+        .await;
+        if let Outcome::Cooling(at) = out {
+            self.wake_at(tg.media_id, *at);
+        }
+    }
+
+    /// Asks `media` again at `at` (capped), once per instant.
+    fn wake_at(&self, media: u32, at: DateTime<Utc>) {
+        let Some(app) = self.app() else { return };
+        let at = at.min(Utc::now() + MAX_COOLDOWN);
+        if self.sweeps.wakes.lock_clean().insert(media, at) == Some(at) {
+            return;
+        }
+        let delay = (at - Utc::now()).to_std().unwrap_or_default();
+        let (me, st) = (app.plugins.clone(), app.clone());
+        tokio::spawn(async move {
+            tokio::time::sleep(delay).await;
+            let due = {
+                let mut wakes = me.sweeps.wakes.lock_clean();
+                let due = wakes.get(&media) == Some(&at);
+                if due {
+                    wakes.remove(&media);
+                }
+                due
+            };
+            if due {
+                me.enqueue(&st, vec![(media, 0)]);
+            }
+        });
+    }
+
+    async fn search_and_grab(&self, tg: &t::Target, manual: bool, tally: &mut Tally) -> Outcome {
         if tg
             .want
             .as_ref()
@@ -290,12 +391,20 @@ impl Plugins {
                 .await;
             (id.clone(), r)
         });
+        tally.searched = true;
         let (mut offers, mut busy) = (vec![], false);
         for (id, r) in futures_util::future::join_all(searched).await {
             match r {
-                Ok(list) => offers.push((id, eligible(&list))),
+                Ok(list) => {
+                    tally.count(&list);
+                    offers.push((id, eligible(&list)));
+                }
                 Err(e) => {
                     busy |= e.is_transient();
+                    if let RouteError::Cooling(at) = e {
+                        tally.cool(at);
+                    }
+                    tally.failed.push(id.clone());
                     tracing::warn!(
                         "acquisition: search of \"{}\" at \"{id}\" failed: {e}",
                         tg.title
@@ -344,6 +453,9 @@ impl Plugins {
                 Err(RouteError::InFlight) => return Outcome::Skipped("in flight"),
                 Err(e) => {
                     busy |= matches!(e, RouteError::Busy | RouteError::Unavailable);
+                    if let RouteError::Cooling(at) = e {
+                        tally.cool(at);
+                    }
                     tracing::warn!(
                         "acquisition: grab of \"{}\" at \"{id}\" failed: {e}",
                         release["title"]
@@ -351,10 +463,10 @@ impl Plugins {
                 }
             }
         }
-        if busy {
-            Outcome::Busy
-        } else {
-            Outcome::NoRelease
+        match (busy, tally.cooling) {
+            (true, _) => Outcome::Busy,
+            (false, Some(at)) => Outcome::Cooling(at),
+            (false, None) => Outcome::NoRelease,
         }
     }
 
@@ -572,6 +684,19 @@ mod tests {
         );
         assert!(!RouteError::Failed("x".into()).is_transient());
         assert!(!RouteError::InFlight.is_transient());
+    }
+
+    #[test]
+    fn a_503_names_its_cooldown_instant() {
+        let b = br#"{"error":{"key":"x.cooling","cooldownUntil":"2026-01-01T10:30:00+02:00"}}"#;
+        assert_eq!(
+            cooldown_until(b).map(|d| d.to_rfc3339()),
+            Some("2026-01-01T08:30:00+00:00".to_owned())
+        );
+        assert!(cooldown_until(br#"{"error":{"key":"x.busy"}}"#).is_none());
+        assert!(cooldown_until(br#"{"error":{"cooldownUntil":"soon"}}"#).is_none());
+        assert!(cooldown_until(b"nope").is_none());
+        assert!(!RouteError::Cooling(Utc::now()).is_transient());
     }
 
     #[test]

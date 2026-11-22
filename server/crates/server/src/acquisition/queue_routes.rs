@@ -1,4 +1,5 @@
 //! `/api/acquisition/queue` and `/api/acquisition/history` (`plugins.md` rules 73-74).
+use crate::events::DomainEvent;
 use crate::http::{AppError, auth::Authed, validate::PathParams};
 use crate::libraries::accessible_library_ids;
 use crate::state::AppState;
@@ -54,6 +55,7 @@ pub struct Page {
     q: Option<String>,
     state: Option<String>,
     blocklist: Option<bool>,
+    media_id: Option<i32>,
 }
 
 impl Page {
@@ -188,6 +190,7 @@ async fn list(st: &AppState, a: &Authed, p: &Page, open: bool) -> Result<Json<Va
         r#" WHERE q."finishedAt" {closed}
             AND ($1::text IS NULL OR q.title ILIKE $1 OR m.title ILIKE $1)
             AND ($2::text IS NULL OR q.state = $2)
+            AND ($4::int IS NULL OR q."mediaId" = $4)
             AND q."deletedAt" IS NULL AND m."libraryId" = ANY($3)"#
     );
     let like = q.map(like);
@@ -202,14 +205,16 @@ async fn list(st: &AppState, a: &Authed, p: &Page, open: bool) -> Result<Json<Va
     .bind(&like)
     .bind(state)
     .bind(&libraries)
+    .bind(p.media_id)
     .fetch_one(&st.db)
     .await?;
     let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{SELECT}{filter} ORDER BY {order} LIMIT $4 OFFSET $5"
+        "{SELECT}{filter} ORDER BY {order} LIMIT $5 OFFSET $6"
     )))
     .bind(&like)
     .bind(state)
     .bind(&libraries)
+    .bind(p.media_id)
     .bind(size)
     .bind((page - 1) * size)
     .fetch_all(&st.db)
@@ -340,15 +345,16 @@ async fn act(
     a.require(Action::Manage, Subject::Queue)?;
     let (states, key) = action(name);
     let libraries = accessible_library_ids(&st.db, a).await?;
-    let row: Option<(String, String, String)> = sqlx::query_as(
-        r#"SELECT q."pluginId", q."ref", q.state FROM acquisition_queue q JOIN media m ON m.id = q."mediaId"
+    let row: Option<(String, String, String, i32)> = sqlx::query_as(
+        r#"SELECT q."pluginId", q."ref", q.state, q."mediaId" FROM acquisition_queue q JOIN media m ON m.id = q."mediaId"
            WHERE q.id = $1 AND q."finishedAt" IS NULL AND m."libraryId" = ANY($2)"#,
     )
     .bind(id)
     .bind(&libraries)
     .fetch_optional(&st.db)
     .await?;
-    let (plugin, r#ref, state) = row.ok_or_else(|| AppError::not_found("Queue entry not found"))?;
+    let (plugin, r#ref, state, media) =
+        row.ok_or_else(|| AppError::not_found("Queue entry not found"))?;
     if !states.contains(&state.as_str()) {
         return Err(AppError::conflict(format!("Cannot {name} a {state} entry")));
     }
@@ -377,10 +383,19 @@ async fn act(
             crate::acquisition::sweep::RouteError::InFlight => {
                 AppError::plain(StatusCode::CONFLICT, "ALREADY_IN_FLIGHT")
             }
+            e @ crate::acquisition::sweep::RouteError::Cooling(_) => {
+                AppError::with_message(StatusCode::BAD_GATEWAY, e.to_string())
+            }
             crate::acquisition::sweep::RouteError::Failed(m) => {
                 AppError::with_message(StatusCode::BAD_GATEWAY, m)
             }
         })?;
+    if blocklist == Some(true) {
+        st.hub.emit_domain(DomainEvent::MediaAcquisitionRequested {
+            media_ids: vec![i64::from(media)],
+            reason: "blocklisted".into(),
+        });
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

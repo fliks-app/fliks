@@ -4,6 +4,7 @@ use super::{
     dto::{self, CreateRequest, Field, UpdateRequest},
     rules, services,
 };
+use crate::acquisition::attempts;
 use crate::push::ReqRef;
 use crate::{
     events::DomainEvent,
@@ -665,6 +666,7 @@ async fn finish_create(st: AppState, n: Added, spec: Option<ImportSpec>) -> Res<
             approved_by_user_id: Some(i64::from(n.user)),
         });
     }
+    services::announce(&st, &[n.id]).await;
     let event = if auto {
         "request.approved"
     } else {
@@ -948,6 +950,7 @@ async fn create_delete(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Va
         },
     )
     .await?;
+    services::announce(st, &[id]).await;
     notify(
         st,
         "request.delete.created",
@@ -969,6 +972,13 @@ async fn create_delete(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Va
 /// `GET /api/requests/:id` and the shape `PATCH` returns: the row with its FK media and comments.
 pub async fn detail(st: &AppState, a: &Authed, row: &db::Req) -> Res<Map<String, Value>> {
     let mut json = row_json(st, row.id).await?;
+    let last = match row.media_id {
+        Some(m) => attempts::latest_of(&st.db, &[m], attempts::show_failed(a))
+            .await?
+            .remove(&m),
+        None => None,
+    };
+    put(&mut json, "lastSearch", last.unwrap_or_default());
     let media = match row.media_id {
         Some(m) => media_entity(st, a, m).await?,
         None => Value::Null,
@@ -1244,6 +1254,7 @@ async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bo
     }
     let widen = whole && row.recordings.take().is_some();
     lock.commit().await?;
+    services::announce(st, &[id]).await;
     let spec = ImportSpec {
         title: key.clone(),
         quality_profile_id: row.quality_profile_id,
@@ -1262,6 +1273,7 @@ async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bo
                 if let Err(d) = db::rollback_to_pending(&st.db, id, by).await {
                     tracing::warn!("Request #{id}: failed approval left its row: {d}");
                 }
+                services::announce(st, &[id]).await;
                 return Err(e);
             }
         },
@@ -1317,6 +1329,7 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
         return Err(AppError::conflict("Request is not pending"));
     }
     tx.commit().await?;
+    services::announce(st, &[id]).await;
     if let Some(m) = media {
         match services::remove_media(st, m).await {
             Ok(removed) => {
@@ -1338,6 +1351,7 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
             }
             Err(e) => {
                 db::rollback_to_pending(&st.db, id, a.user.id).await?;
+                services::announce(st, &[id]).await;
                 return Err(e.into());
             }
         }
@@ -1356,6 +1370,7 @@ pub async fn decline(st: &AppState, a: &Authed, id: i32, reason: Option<String>)
     if !db::decline(&st.db, id, a.user.id, reason.as_deref()).await? {
         return Err(AppError::conflict("Request is not pending"));
     }
+    services::announce(st, &[id]).await;
     let event = if row.kind == "delete" {
         "request.delete.declined"
     } else {
@@ -1430,6 +1445,10 @@ pub async fn comment_remove(st: &AppState, a: &Authed, comment_id: i32) -> Res<(
     Ok(db::comment_delete(&st.db, c.id).await?)
 }
 
+fn linked_media(row: &Value) -> Option<i32> {
+    i32::try_from(row["mediaId"].as_i64()?).ok()
+}
+
 /// `GET /api/requests` scoping (rule 9).
 pub async fn list(st: &AppState, a: &Authed, q: dto::List) -> Res<Value> {
     let (user_id, libraries) = if !can_manage(a) {
@@ -1455,7 +1474,14 @@ pub async fn list(st: &AppState, a: &Authed, q: dto::List) -> Res<Value> {
         kinds: Some(&kinds),
     };
     let offset = (q.page - 1).saturating_mul(q.limit);
-    let data = db::rows(&st.db, &f, q.limit, offset).await?;
+    let mut data = db::rows(&st.db, &f, q.limit, offset).await?;
+    let ids: Vec<i32> = data.iter().filter_map(linked_media).collect();
+    let mut found = attempts::latest_of(&st.db, &ids, attempts::show_failed(a)).await?;
+    for r in &mut data {
+        r["lastSearch"] = linked_media(r)
+            .and_then(|m| found.remove(&m))
+            .unwrap_or_default();
+    }
     let total = db::count(&st.db, &f).await?;
     Ok(json!({"data": data, "total": total}))
 }

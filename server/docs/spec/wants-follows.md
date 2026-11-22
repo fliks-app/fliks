@@ -28,7 +28,7 @@ Scope: the per-work wants (family x language) of any media, the follows of an au
 
 ## The wanted list
 
-15. `GET /api/wanted?type=&released=&page=&limit=` (permission `media.read`): one row per unsatisfied want (rule 2) of a monitored media in a readable library. `type` is a media kind; `released=true` keeps media with no release date or one on or before today (UTC), `false` the later ones. Paging as `GET /api/media` (`page` from 1, `limit` default 25, at most 100). Order: `release date DESC NULLS LAST, media id, family, language NULLS FIRST, want id`. The answer is `{data: [{mediaId, type, title, year, posterUrl, releaseDate, family, language, wantId}], total}`.
+15. `GET /api/wanted?type=&released=&page=&limit=` (permission `media.read`): one row per unsatisfied want (rule 2) of a monitored media in a readable library. `type` is a media kind; `released=true` keeps media with no release date or one on or before today (UTC), `false` the later ones. Paging as `GET /api/media` (`page` from 1, `limit` default 25, at most 100). Order: `release date DESC NULLS LAST, media id, family, language NULLS FIRST, want id`. The answer is `{data: [{mediaId, type, title, year, posterUrl, releaseDate, family, language, wantId, lastSearch}], total}`; `lastSearch` is the attempt of the want's `(media, family, language)` or `null` (`plugins.md` rule 77).
 
 ## The calendar
 

@@ -41,13 +41,18 @@ impl Lifecycle {
         );
     }
 
-    /// Inside the media delete's transaction, before the row goes.
+    /// Inside the media delete's transaction, before the row goes; the caller announces the ids once it commits.
     pub async fn on_media_removed(
         &self,
         tx: &mut PgConnection,
         media: &MediaRef,
-    ) -> Result<(), sqlx::Error> {
+    ) -> Result<Vec<i32>, sqlx::Error> {
         db::resolve_removed(tx, media.id).await
+    }
+
+    /// `request.changed` for the rows a hook moved.
+    pub async fn announce(&self, ids: &[i32]) {
+        services::announce(&self.st, ids).await;
     }
 
     pub async fn on_media_monitor_change(&self, media: MediaRef, was_monitored: bool) {
@@ -87,6 +92,7 @@ impl Lifecycle {
                 continue;
             }
             db::adopt(&self.st.db, r.id, media.id, added_by.filter(|u| *u != 0)).await?;
+            services::announce(&self.st, &[r.id]).await;
             let seasons = r.scope().filter(|_| media.media_type.has_seasons());
             db::monitor_scope(&self.st.db, media.id, seasons).await?;
             touched = true;
@@ -123,6 +129,7 @@ impl Lifecycle {
                 continue;
             }
             if db::set_status(&self.st.db, r.id, "processing", &["approved"]).await? {
+                services::announce(&self.st, &[r.id]).await;
                 services::notify(
                     &self.st,
                     "request.processing",
@@ -164,6 +171,7 @@ impl Lifecycle {
                 continue;
             }
             if db::set_status(&self.st.db, r.id, "available", &["approved", "processing"]).await? {
+                services::announce(&self.st, &[r.id]).await;
                 services::notify(
                     &self.st,
                     "request.available",
@@ -182,10 +190,14 @@ impl Lifecycle {
     /// Rule 43: `on_import_complete` over every media with an open request, for events that never arrived.
     pub async fn reconcile(&self) {
         match db::reset_orphans(&self.st.db).await {
-            Ok(0) => {}
-            Ok(n) => tracing::warn!(
-                "request reconcile: {n} approved request(s) without media back to pending"
-            ),
+            Ok(ids) if ids.is_empty() => {}
+            Ok(ids) => {
+                tracing::warn!(
+                    "request reconcile: {} approved request(s) without media back to pending",
+                    ids.len()
+                );
+                services::announce(&self.st, &ids).await;
+            }
             Err(e) => tracing::warn!("request reconcile failed to reset orphans: {e}"),
         }
         let ids = match db::media_with_open_adds(&self.st.db).await {
@@ -202,7 +214,9 @@ impl Lifecycle {
     /// Retires the ADD requests linked to the media (rules 38, 40).
     async fn retire_linked(&self, media_id: i32, reason: &str) -> Res<()> {
         let mut c = self.st.db.acquire().await?;
-        Ok(db::retire_linked(&mut c, media_id, reason).await?)
+        let ids = db::retire_linked(&mut c, media_id, reason).await?;
+        services::announce(&self.st, &ids).await;
+        Ok(())
     }
 
     /// Rule 39: a request scoped to the season is declined (`removed` once available), a wider one loses it;
@@ -227,9 +241,11 @@ impl Lifecycle {
             let rest: Vec<i64> = scope.into_iter().filter(|n| *n != season).collect();
             if rest.is_empty() && r.status == "available" {
                 db::remove_unlink(&self.st.db, r.id).await?;
+                services::announce(&self.st, &[r.id]).await;
             } else if rest.is_empty() {
                 let reason = format!("Season {season} was unmonitored");
                 db::decline_unlink(&self.st.db, r.id, &reason).await?;
+                services::announce(&self.st, &[r.id]).await;
             } else {
                 db::trim_seasons(&self.st.db, r.id, &rest).await?;
             }
