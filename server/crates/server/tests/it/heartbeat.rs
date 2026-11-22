@@ -396,6 +396,45 @@ async fn an_unknown_state_is_kept_verbatim_and_absent_body_fields_stay_absent(po
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_paused_device_does_not_overwrite_the_resume_point_of_the_one_playing(pool: PgPool) {
+    let c = ctx(pool).await;
+    c.st.presence.create(c.live("tv", None));
+    c.st.presence.create(c.live("desktop", None));
+    let row = || async {
+        sqlx::query_as::<_, (f64, String)>(
+            r#"SELECT "positionSeconds", "lastPlayedAt"::text FROM playback_states"#,
+        )
+        .fetch_one(&c.pool)
+        .await
+        .unwrap()
+    };
+    let beat = |sid: &str, pos: u32, state: &str| {
+        c.beat(json!({"sessionId": sid, "positionSeconds": pos, "state": state}))
+    };
+    let (_, b) = beat("desktop", 1200, "paused").await;
+    assert!(b["state"].is_object(), "the pause is written");
+    let (_, b) = beat("tv", 3000, "playing").await;
+    assert!(
+        b["state"].is_object(),
+        "the first beat of the other device writes"
+    );
+    let written = row().await;
+    assert_eq!(written.0, 3000.0);
+    for _ in 0..3 {
+        assert_eq!(beat("desktop", 1200, "paused").await.1, Value::Null);
+    }
+    assert_eq!(row().await, written, "the paused device wrote nothing");
+    let (_, b) = beat("tv", 3045, "playing").await;
+    assert_eq!(
+        b["state"]["positionSeconds"],
+        json!(3045.0),
+        "the playing one still seeks"
+    );
+    assert_eq!(beat("desktop", 1200, "paused").await.1, Value::Null);
+    assert_eq!(row().await.0, 3045.0);
+}
+
+#[sqlx::test(migrations = false)]
 async fn history_goes_to_the_launcher_and_no_target_means_no_emit(pool: PgPool) {
     let c = ctx(pool).await;
     let launcher: i32 =
