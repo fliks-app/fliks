@@ -15,6 +15,21 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::rustls;
 
+#[tokio::test]
+async fn the_hosts_own_ports_reach_the_host_config() {
+    let Some(s) = Scratch::create("ownports").await else {
+        return;
+    };
+    let h = harness_with(&s, "ownports", Arc::new(|_| {}), |o| {
+        o.own_ports = Arc::from([4848u16, 4849]);
+    })
+    .await;
+    let host = h.st.plugins.host().unwrap();
+    assert_eq!(&*host.env.cfg.own_ports, &[4848, 4849]);
+    h.finish().await;
+    s.finish().await;
+}
+
 pub struct Pki {
     pub roots: rustls::RootCertStore,
     pub server: Arc<rustls::ServerConfig>,

@@ -496,7 +496,7 @@ pub async fn do_sync(st: &AppState, id: i32, o: &Options) -> Result<(), String> 
     crate::notifications::dispatch(
         &st.db,
         "subtitle.synced",
-        json!({"language": row.language, "subtitleId": id}),
+        crate::notifications::payload!({"language": row.language, "subtitleId": id}),
     );
     events::emit(
         st,

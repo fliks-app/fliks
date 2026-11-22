@@ -228,14 +228,10 @@ async fn listing(
         .map_err(|e| format!("Error: {}", e.without_url()))?;
     if !res.status().is_success() {
         let status = res.status().as_u16();
-        let body: String = res
-            .text()
-            .await
-            .unwrap_or_default()
-            .chars()
-            .take(300)
-            .collect();
-        return Err(format!("{label} model list failed ({status}): {body}"));
+        let body = res.text().await.unwrap_or_default();
+        let head: String = body.chars().take(300).collect();
+        tracing::debug!("{label} model list answered {status}: {head}");
+        return Err(format!("{label} model list failed ({status})"));
     }
     json_of(res).await.map_err(|e| e.to_string())
 }
@@ -603,4 +599,33 @@ async fn libre(
 
 pub fn gateway(msg: String) -> AppError {
     AppError::with_message(StatusCode::BAD_GATEWAY, msg)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn a_failed_model_listing_never_returns_the_upstream_body() {
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/models", l.local_addr().unwrap());
+        tokio::spawn(async move {
+            let (mut s, _) = l.accept().await.unwrap();
+            assert!(s.read(&mut [0u8; 1024]).await.unwrap() > 0);
+            let body = "internal-service-secret";
+            let head = format!(
+                "HTTP/1.1 500 Err\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            );
+            s.write_all(format!("{head}{body}").as_bytes())
+                .await
+                .unwrap();
+        });
+        let client = crate::net::guard::open_builder().build().unwrap();
+        let err = listing(&client, &url, &[], "OpenAI-compatible")
+            .await
+            .unwrap_err();
+        assert_eq!(err, "OpenAI-compatible model list failed (500)");
+    }
 }

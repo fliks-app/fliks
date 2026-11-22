@@ -694,7 +694,7 @@ fn verdict_strs(d: &QoeDiagnosis) -> (String, String) {
     )
 }
 
-/// Boot: reads the enabled flag, then the 30 s sweep and the 04:00 purge run for the process.
+/// Boot: reads the enabled flag, then the 30 s sweep runs for the process.
 pub fn spawn(qoe: &Qoe) {
     let q = qoe.clone();
     tokio::spawn(async move {

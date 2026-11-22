@@ -13,7 +13,7 @@ use fliks_domain::subtitle_flags::{
     Flags, LanguageItem, Servable, has_covering_sub, is_ocr_supported_codec,
     matches_requested_flags, prefers_hearing_impaired,
 };
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::sync::Mutex;
 
 const SEARCH_CRON: &str = "0 0-23/6 * * *";
@@ -206,7 +206,7 @@ async fn do_search_missing(
                 crate::notifications::dispatch(
                     &st.db,
                     "subtitle.downloaded",
-                    json!({"title": media.title, "language": item.iso_code, "provider": provider, "score": score as i64}),
+                    crate::notifications::payload!({"title": media.title, "language": item.iso_code, "provider": provider, "score": score as i64}),
                 );
                 crate::media_servers::dispatch_detached(st, "subtitle.downloaded");
                 downloaded.push(item.iso_code.clone());
@@ -227,7 +227,7 @@ async fn do_search_missing(
                 crate::notifications::dispatch(
                     &st.db,
                     "subtitle.failed",
-                    json!({"title": media.title, "language": item.iso_code, "error": text}),
+                    crate::notifications::payload!({"title": media.title, "language": item.iso_code, "error": text}),
                 );
             }
         }
@@ -491,7 +491,7 @@ async fn upgrade_batch(st: &AppState, rows: &[Row], opts: &Opts) -> Result<(), S
                 crate::notifications::dispatch(
                     &st.db,
                     "subtitle.upgraded",
-                    json!({"title": media.title, "language": sub.language, "oldScore": sub.score, "newScore": new.round() as i64, "provider": provider}),
+                    crate::notifications::payload!({"title": media.title, "language": sub.language, "oldScore": sub.score, "newScore": new.round() as i64, "provider": provider}),
                 );
                 crate::media_servers::dispatch_detached(st, "subtitle.upgraded");
                 tracing::info!(

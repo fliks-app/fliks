@@ -30,24 +30,25 @@ pub async fn public_base(st: &AppState, headers: &HeaderMap) -> String {
     if let Some(u) = settings::public_url(&st.db).await.ok().flatten() {
         return u;
     }
-    match headers
-        .get("host")
-        .and_then(|v| v.to_str().ok())
-        .filter(|h| !h.is_empty())
-    {
-        Some(host) => scheme_host(headers, host),
-        None => format!("http://localhost:{}", st.cfg.port),
-    }
+    request_host(headers).map_or_else(
+        || format!("http://localhost:{}", st.cfg.port),
+        |host| scheme_host(headers, host),
+    )
 }
 
 /// `http(s)://host` of the request as the client reached it, which a device on the LAN needs.
 pub fn request_origin(headers: &HeaderMap) -> String {
-    let host = ["x-forwarded-host", "host"]
+    scheme_host(headers, request_host(headers).unwrap_or("localhost"))
+}
+
+/// The host the client asked for: `X-Forwarded-Host` (first value) else `Host`.
+fn request_host(headers: &HeaderMap) -> Option<&str> {
+    ["x-forwarded-host", "host"]
         .iter()
         .find_map(|k| headers.get(*k).and_then(|v| v.to_str().ok()))
         .and_then(|v| v.split(',').next())
-        .map_or("localhost", str::trim);
-    scheme_host(headers, host)
+        .map(str::trim)
+        .filter(|h| !h.is_empty())
 }
 
 fn scheme_host(headers: &HeaderMap, host: &str) -> String {
@@ -92,6 +93,17 @@ mod tests {
             "forged entry, public peer"
         );
         assert_eq!(ip(&["::ffff:8.8.8.8"], "10.0.0.1"), want);
+    }
+
+    #[test]
+    fn the_origin_prefers_the_forwarded_host_and_scheme() {
+        let mut h = HeaderMap::new();
+        h.insert("host", "127.0.0.1:4849".parse().unwrap());
+        assert_eq!(request_origin(&h), "http://127.0.0.1:4849");
+        h.insert("x-forwarded-host", "fliks.example, proxy".parse().unwrap());
+        h.insert("x-forwarded-proto", "https".parse().unwrap());
+        assert_eq!(request_origin(&h), "https://fliks.example");
+        assert_eq!(request_host(&HeaderMap::new()), None);
     }
 
     #[test]

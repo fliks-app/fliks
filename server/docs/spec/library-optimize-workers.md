@@ -23,7 +23,7 @@ The admin sets, per token, how the worker reaches files (the worker never declar
 
 Stems of a `separate` job are uploaded by every worker, `shared` ones included: the stem cache is not under the mappings.
 
-`none` needs the `public_url` setting; without it a remote worker is leased nothing. Verifications (`verify`), metadata edits and plans with extra subtitles (server paths) read or write by path: they are only leased to path-reading workers.
+`none` needs the `public_url` setting (the address the operator tells workers to download from, not the `Host` of the lease request); without it a remote worker is leased nothing. Verifications (`verify`), metadata edits and plans with extra subtitles (server paths) read or write by path: they are only leased to path-reading workers.
 
 ## Read grant (`inputUrl`)
 

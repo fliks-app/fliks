@@ -7,17 +7,14 @@ pub const LIST_TIMEOUT: Duration = Duration::from_secs(60);
 pub const ITEM_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_REDIRECTS: usize = 5;
 
-/// Follows a redirect only to the scheme, host and port of the previous URL, so `X-Api-Key` never leaves them.
+/// Follows a redirect only to the scheme, host and port of the previous URL, or the https upgrade of an
+/// `http` URL on its default port, so `X-Api-Key` never leaves the host.
 pub fn client() -> &'static Client {
     static C: OnceLock<Client> = OnceLock::new();
     C.get_or_init(|| {
         crate::net::guard::open_builder()
             .redirect(redirect::Policy::custom(|a| {
-                let same = a.previous().last().is_some_and(|p| {
-                    p.scheme() == a.url().scheme()
-                        && p.host_str() == a.url().host_str()
-                        && p.port_or_known_default() == a.url().port_or_known_default()
-                });
+                let same = a.previous().last().is_some_and(|p| follows(p, a.url()));
                 if a.previous().len() >= MAX_REDIRECTS {
                     a.error("too many redirects")
                 } else if same {
@@ -29,6 +26,17 @@ pub fn client() -> &'static Client {
             .build()
             .expect("outbound client")
     })
+}
+
+fn follows(from: &Url, to: &Url) -> bool {
+    let same_host = from.host_str() == to.host_str();
+    let same =
+        from.scheme() == to.scheme() && from.port_or_known_default() == to.port_or_known_default();
+    let upgrade = from.scheme() == "http"
+        && to.scheme() == "https"
+        && from.port().is_none()
+        && to.port().is_none();
+    same_host && (same || upgrade)
 }
 
 /// A transport error as text, without the request URL that `Display` would embed.
@@ -63,6 +71,16 @@ pub fn same_url(a: &str, b: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_redirect_stays_on_the_host_and_may_upgrade_to_https() {
+        let u = |s: &str| Url::parse(s).unwrap();
+        assert!(follows(&u("http://h/a"), &u("http://h/b")));
+        assert!(follows(&u("http://h/a"), &u("https://h/b")));
+        assert!(!follows(&u("https://h/a"), &u("http://h/b")));
+        assert!(!follows(&u("http://h/a"), &u("https://h:8443/b")));
+        assert!(!follows(&u("http://h/a"), &u("https://other/b")));
+    }
 
     #[test]
     fn same_url_ignores_slash_and_case() {

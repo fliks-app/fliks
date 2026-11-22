@@ -142,7 +142,7 @@ pub async fn search(st: &AppState, s: &Search) -> Result<Vec<Scored>, AppError> 
 }
 
 pub async fn clean_options(st: &AppState, ads: bool) -> Result<CleanOptions, AppError> {
-    let remove_hi_tags = settings::flag(&st.db, "subtitle_remove_hi_tags", false).await;
+    let remove_hi_tags = settings::try_flag(&st.db, "subtitle_remove_hi_tags", false).await?;
     let exclusions = settings::text(&st.db, "subtitle_custom_exclusions")
         .await?
         .unwrap_or_default();

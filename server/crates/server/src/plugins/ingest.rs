@@ -6,7 +6,6 @@ use crate::ingest::{books, comics, library, transfer::Method};
 use crate::state::AppState;
 use fliks_domain::language::parse_language_code;
 use fliks_domain::media::{family::Family, kind::MediaKind};
-use serde_json::json;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -262,8 +261,7 @@ pub async fn run(
             .ok()
             .flatten();
         if let Some(title) = title {
-            let payload =
-                json!({"title": title, "quality": first.quality, "sourceTitle": r.source_label});
+            let payload = crate::notifications::payload!({"title": title, "quality": first.quality, "sourceTitle": r.source_label});
             crate::notifications::dispatch(&st.db, "download.complete", payload);
             crate::media_servers::dispatch_detached(st, "download.complete");
         }
@@ -372,6 +370,7 @@ async fn placed(
 mod tests {
     use super::*;
     use fliks_domain::external_id::Namespace;
+    use serde_json::json;
     use sqlx::PgPool;
     use std::path::Path;
 

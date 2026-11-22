@@ -12,6 +12,17 @@ use axum::{
 pub use routes::*;
 pub use send::dispatch;
 
+/// A notification payload from an object literal: `payload!({"title": t})`.
+macro_rules! payload {
+    ({ $($t:tt)* }) => {
+        match ::serde_json::json!({ $($t)* }) {
+            ::serde_json::Value::Object(m) => m,
+            _ => unreachable!("an object literal"),
+        }
+    };
+}
+pub(crate) use payload;
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/notifications", get(routes::list).post(routes::create))

@@ -81,14 +81,23 @@ async fn lenient(db: &PgPool, key: &str) -> Option<String> {
 
 /// `true` or `false` exactly, else `default`.
 pub async fn flag(db: &PgPool, key: &str, default: bool) -> bool {
-    match lenient(db, key).await.as_deref() {
+    parse_flag(lenient(db, key).await.as_deref(), default)
+}
+
+/// `flag` for a caller that answers a database failure instead of reading it as the default.
+pub async fn try_flag(db: &PgPool, key: &str, default: bool) -> sqlx::Result<bool> {
+    Ok(parse_flag(text(db, key).await?.as_deref(), default))
+}
+
+fn parse_flag(raw: Option<&str>, default: bool) -> bool {
+    match raw {
         Some("true") => true,
         Some("false") => false,
         _ => default,
     }
 }
 
-/// JS `Number(value)` when finite, else `default`.
+/// JS `Number(value)` when finite; unset, blank or not a number is `default`.
 pub async fn number(db: &PgPool, key: &str, default: f64) -> f64 {
     number_of(lenient(db, key).await.as_deref(), default)
 }
@@ -102,7 +111,8 @@ pub async fn list(db: &PgPool, key: &str) -> Vec<String> {
 }
 
 pub fn number_of(raw: Option<&str>, default: f64) -> f64 {
-    raw.and_then(fliks_domain::media::query::js_number)
+    raw.filter(|v| !v.trim().is_empty())
+        .and_then(fliks_domain::media::query::js_number)
         .filter(|n| n.is_finite())
         .unwrap_or(default)
 }
@@ -212,5 +222,15 @@ mod tests {
         for (v, want) in cases {
             assert_eq!(super::pg_text(&v), want, "{v}");
         }
+    }
+
+    #[test]
+    fn a_blank_or_unparsable_number_is_the_default() {
+        use super::number_of;
+        assert_eq!(number_of(Some("85"), 90.0), 85.0);
+        assert_eq!(number_of(Some(""), 90.0), 90.0);
+        assert_eq!(number_of(Some("  "), 90.0), 90.0);
+        assert_eq!(number_of(Some("NaN"), 90.0), 90.0);
+        assert_eq!(number_of(None, 90.0), 90.0);
     }
 }

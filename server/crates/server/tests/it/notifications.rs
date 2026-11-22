@@ -28,7 +28,7 @@ struct Seen {
     body: String,
 }
 
-/// Records every request; `/status/<n>` answers n, `/hang` never answers, `/redirect` 302s to `/ok`.
+/// Records every request; `/status/<n>` answers n, `/hang` never answers, `/redirect` 302s to `/ok`, `/other-host` to another host name.
 async fn spawn_mock() -> (String, Mock) {
     async fn record(
         State(m): State<Mock>,
@@ -36,6 +36,7 @@ async fn spawn_mock() -> (String, Mock) {
         headers: HeaderMap,
         body: Bytes,
     ) -> axum::response::Response {
+        let host = headers["host"].to_str().unwrap_or_default().to_owned();
         m.0.lock_clean().push(Seen {
             uri: uri.to_string(),
             headers,
@@ -44,6 +45,11 @@ async fn spawn_mock() -> (String, Mock) {
         match uri.path() {
             "/hang" => std::future::pending().await,
             "/redirect" => Redirect::temporary("/ok").into_response(),
+            "/other-host" => Redirect::temporary(&format!(
+                "http://localhost:{}/leak",
+                host.rsplit(':').next().unwrap_or_default()
+            ))
+            .into_response(),
             p => match p
                 .strip_prefix("/status/")
                 .and_then(|n| n.parse::<u16>().ok())
@@ -566,6 +572,23 @@ async fn test_route_reports_results_never_errors(pool: PgPool) {
         b,
         json!({"ok": false, "message": "webhookUrl not configured"})
     );
+}
+
+#[sqlx::test]
+async fn a_redirect_to_another_host_is_not_followed(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (base, mock) = spawn_mock().await;
+    let (_, b) = test_send(
+        &c,
+        "slack",
+        json!({"webhookUrl": format!("{base}/other-host")}),
+    )
+    .await;
+    assert_eq!(
+        b,
+        json!({"ok": false, "message": "Request failed with status code 307"})
+    );
+    assert!(mock.0.lock_clean().iter().all(|s| s.uri != "/leak"));
 }
 
 #[sqlx::test]
