@@ -63,7 +63,6 @@ import { CachedSrcDirective } from '../../directives/cached-src.directive';
 /** Singleton cards actions menu mounted at layout level; reads `CardActionsService` and delegates all chrome to `app-popover-menu`. */
 @Component({
   selector: 'app-card-actions-panel',
-  standalone: true,
   imports: [
     CachedSrcDirective,
     TranslatePipe,

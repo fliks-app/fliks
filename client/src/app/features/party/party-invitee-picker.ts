@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, model, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, input, model, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { SocialApiService, type SocialUser } from '../../core/services/api/social-api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -9,7 +9,6 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
   selector: 'app-party-invitee-picker',
   imports: [TranslatePipe, UserAvatarComponent],
   templateUrl: './party-invitee-picker.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyInviteePickerComponent implements OnInit {
   private readonly social = inject(SocialApiService);

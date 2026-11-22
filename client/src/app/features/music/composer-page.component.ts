@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
@@ -19,7 +19,6 @@ import type { HandedPerson } from './artist-page.component';
   selector: 'app-composer-page',
   imports: [RouterLink, TranslatePipe, TranslatePluralPipe, PersonHeaderComponent, TrackLineComponent, LucidePlay, LucideChevronLeft],
   templateUrl: './composer-page.component.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ComposerPageComponent {
   private readonly api = inject(MusicApiService);

@@ -11,6 +11,7 @@
     "build": "ng build",
     "build:dev": "npm run cast-app-id && ng build --configuration development",
     "watch": "npm run cast-app-id && ng build --watch --configuration development",
+    "lint": "eslint src",
     "test": "ng test",
     "cap:sync": "npx cap sync android",
     "cap:sync:ios": "npx cap sync ios",
@@ -18,10 +19,10 @@
     "cap:open:ios": "npx cap open ios",
     "cap:build": "npm run build && npx cap sync android",
     "cap:build:ios": "npm run build && npx cap sync ios",
-    "tizen:build": "BROWSERSLIST='chrome 85' ng build --configuration tizen && node tizen/build-wgt.mjs",
+    "tizen:build": "BROWSERSLIST='chrome 76' ng build --configuration tizen && node tizen/build-wgt.mjs",
     "tizen:deploy": "sdb connect $TV_IP && sdb install dist/Fliks-$(node -p \"require('./package.json').version\").wgt",
     "tizen:build:deploy": "npm run tizen:build && npm run tizen:deploy",
-    "webos:compile": "BROWSERSLIST='chrome 85' ng build --configuration webos",
+    "webos:compile": "BROWSERSLIST='chrome 76' ng build --configuration webos",
     "webos:build": "npm run webos:compile && node webos/build-ipk.mjs"
   },
   "packageManager": "npm@10.8.2",
@@ -71,12 +72,14 @@
     "@capacitor/cli": "^8.6.2",
     "@typescript-eslint/eslint-plugin": "^8.72.2",
     "@typescript-eslint/parser": "^8.67.0",
+    "angular-eslint": "^22.8.0",
     "emojibase-data": "^18.0.0",
     "eslint": "^10.15.0",
     "jsdom": "^31.0.1",
     "postcss-preset-env": "^11.6.2",
     "prettier": "^3.10.1",
     "typescript": "~6.0.3",
+    "typescript-eslint": "^8.73.0",
     "vitest": "^5.1.0"
   }
 }

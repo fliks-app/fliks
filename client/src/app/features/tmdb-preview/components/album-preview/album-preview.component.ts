@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, OnInit, afterRenderEffect, computed, inject, input, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, OnInit, afterRenderEffect, computed, inject, input, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucidePlus } from '@lucide/angular';
@@ -20,7 +20,6 @@ import { PREVIEW_HOST, type PreviewSeed } from '../../preview-host';
   selector: 'app-album-preview',
   imports: [RouterLink, TranslatePipe, AddDialogComponent, HeroBaseComponent, LucidePlus, TrackLineComponent],
   templateUrl: './album-preview.component.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AlbumPreviewComponent implements OnInit {
   private readonly router = inject(Router);

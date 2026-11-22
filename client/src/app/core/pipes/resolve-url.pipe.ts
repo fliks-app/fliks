@@ -37,7 +37,7 @@ export function withAuthedImageToken(url: string, token: string | null): string 
 }
 
 /** Resolves a relative URL against the server base; a local size (thumb / medium / full) appends `?size=…` ONLY for `/api/images/...` URLs, remote URLs stay untouched. */
-@Pipe({ name: 'resolveUrl', standalone: true })
+@Pipe({ name: 'resolveUrl' })
 export class ResolveUrlPipe implements PipeTransform {
   private readonly config = inject(ServerConfigService);
   private readonly auth = inject(AuthService);

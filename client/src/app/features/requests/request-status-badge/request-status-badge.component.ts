@@ -22,7 +22,6 @@ import {
  *  or the real download status via {@link describeBadge} while in flight. Clickable then (`badgeClick`), except on TV: a focusable in-card button adds a second D-pad stop. */
 @Component({
   selector: 'app-request-status-badge',
-  standalone: true,
   imports: [TranslatePipe, ProgressBadgeComponent],
   // Transparent to layout so the inner badge stays the flex item it replaced.
   host: { class: 'contents' },

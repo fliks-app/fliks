@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, model } from '@angular/core';
+import { Component, computed, input, model } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { TmdbGenre } from '../../../core/services/api/metadata.service';
@@ -40,7 +40,6 @@ export function libraryFilterParams(f: { type: SearchContentType | MediaType[]; 
   selector: 'app-search-filters',
   imports: [FormsModule, TranslatePipe, TvSelectDirective],
   templateUrl: './search-filters.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SearchFiltersComponent {
   readonly genres = input<TmdbGenre[]>([]);

@@ -22,7 +22,6 @@ export interface MultiSelectOption<T extends string | number = number> {
  *  The panel is an `app-popover-menu`, which escapes scrolling ancestors (`.modal-box` would clip it) and becomes a bottom sheet on touch. */
 @Component({
   selector: 'app-multi-select',
-  standalone: true,
   imports: [FormsModule, TranslatePipe, PopoverMenuComponent],
   templateUrl: './multi-select.html',
   host: { class: 'block' },

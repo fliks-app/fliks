@@ -9,7 +9,7 @@ import {
 
 /** Declares a page's default-focus target for {@link DefaultFocusService} (keyboard/TV only, restores focus on back-nav); put it on the page root:
  *  `<div appDefaultFocus="a[data-home-focus^='library:']" focusKey="home" focusIdAttr="data-home-focus">`. */
-@Directive({ selector: '[appDefaultFocus]', standalone: true })
+@Directive({ selector: '[appDefaultFocus]' })
 export class DefaultFocusDirective implements OnInit, OnDestroy {
   /** CSS selector (within host) of the first element to focus; '' → first focusable. */
   readonly appDefaultFocus = input<string>('');

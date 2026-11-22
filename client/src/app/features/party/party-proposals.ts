@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, computed, effect, inject, input, linkedSignal, output, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, input, linkedSignal, output, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideLightbulb, LucideThumbsDown, LucideThumbsUp, LucideTrash2 } from '@lucide/angular';
 import { PartyApiService, type PartyDto, type PartyProposal } from '../../core/services/api/party-api.service';
@@ -57,7 +57,6 @@ const bump = (value: 1 | -1, cast: boolean): Keyframe[] => [
   selector: 'app-party-proposals',
   imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, ModalHeaderComponent, UserAvatarComponent, LucideLightbulb, LucideThumbsDown, LucideThumbsUp, LucideTrash2],
   templateUrl: './party-proposals.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyProposalsComponent {
   private readonly api = inject(PartyApiService);

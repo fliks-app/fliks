@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { PartyService } from '../../core/services/party/party.service';
@@ -9,7 +9,6 @@ import { BlockingOverlayComponent } from '../../shared/components/blocking-overl
   selector: 'app-party-reconnect',
   imports: [TranslatePipe, BlockingOverlayComponent],
   templateUrl: './party-reconnect.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyReconnectComponent {
   protected readonly party = inject(PartyService);

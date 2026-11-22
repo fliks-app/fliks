@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCircleArrowDown } from '@lucide/angular';
 import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
@@ -9,7 +9,6 @@ import { MusicDownloadsService } from '../../../core/services/music-downloads.se
   imports: [TranslatePipe, LucideCircleArrowDown],
   templateUrl: './track-download-glyph.html',
   host: { class: 'contents' },
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TrackDownloadGlyphComponent {
   readonly itemId = input.required<number>();

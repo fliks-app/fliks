@@ -5,7 +5,6 @@ import { TrackingStatusModalComponent } from '../tracking-status-modal/tracking-
 /** Mounts the tracking dialog once in the layout, opened from {@link TrackingModalService}; the modal stays unaware of who asked. */
 @Component({
   selector: 'app-tracking-modal-host',
-  standalone: true,
   imports: [TrackingStatusModalComponent],
   templateUrl: './tracking-modal-host.html',
 })

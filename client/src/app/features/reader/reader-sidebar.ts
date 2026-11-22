@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   Injector,
@@ -62,7 +61,6 @@ export interface TocEntry {
   ],
   templateUrl: './reader-sidebar.html',
   styleUrl: './reader-panel.css',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReaderSidebarComponent implements OnDestroy {
   readonly tab = model.required<SidebarTab>();

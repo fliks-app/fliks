@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideCopy, LucideSearch, LucideShare2, LucideStickyNote } from '@lucide/angular';
 import type { Locator } from '@readium/shared';
@@ -37,7 +37,6 @@ const CONTEXT_CHARS = 40;
   selector: 'app-epub-selection',
   imports: [TranslatePipe, LucideCopy, LucideSearch, LucideShare2, LucideStickyNote],
   templateUrl: './epub-selection.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'contents' },
 })
 export class EpubSelectionComponent {

@@ -7,7 +7,6 @@ const SLIDE_MS = 180;
  *  past the last one arms the trash (when `removable`), Enter drops or removes. `exportAs: 'reorder'` exposes the state. */
 @Directive({
   selector: '[appKeyboardReorder]',
-  standalone: true,
   exportAs: 'reorder',
   host: { '(keydown)': 'onKey($event)', '(focusout)': 'onFocusOut($event)' },
 })

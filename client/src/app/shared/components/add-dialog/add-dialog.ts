@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, inject, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { MediaType } from '../../../core/enums/media-type.enum';
@@ -41,7 +41,6 @@ import {
   selector: 'app-add-dialog',
   imports: [FormsModule, TranslatePipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, SeasonPickerComponent, LibraryFolderSelectComponent, WantsEditorComponent, RequestWantsComponent],
   templateUrl: './add-dialog.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AddDialogComponent {
   private readonly auth = inject(AuthService);

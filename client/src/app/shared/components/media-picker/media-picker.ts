@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, Injector, OnDestroy, afterNextRender, booleanAttribute, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, OnDestroy, afterNextRender, booleanAttribute, computed, effect, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -108,7 +108,6 @@ export function pickEpisodes(mode: EpisodePickMode, episodes: Episode[], anchor:
     ContentTypeToggleComponent,
   ],
   templateUrl: './media-picker.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MediaPickerComponent implements OnDestroy {
   protected readonly kinds = KIND_REGISTRY;

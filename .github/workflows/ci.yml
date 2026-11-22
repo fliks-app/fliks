@@ -307,6 +307,7 @@ jobs:
           cache: npm
           cache-dependency-path: client/package-lock.json
       - run: npm ci
+      - run: npm run lint
       - run: npx ng test --watch=false
 
   # The release-only widget build runs the Chromium 85 CSS guard; a dependency bump must trip it here.

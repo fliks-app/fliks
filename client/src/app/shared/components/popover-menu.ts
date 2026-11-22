@@ -25,7 +25,6 @@ import {
  * The sheet carries `data-tv-modal` so the spatial-nav focus trap kicks in. */
 @Component({
   selector: 'app-popover-menu',
-  standalone: true,
   imports: [BottomSheetComponent, NgTemplateOutlet],
   // `display: contents` keeps the host from acting as a stray grid item (e.g. in daisyUI's `.modal`) and off-centring it.
   styles: [':host { display: contents; }'],

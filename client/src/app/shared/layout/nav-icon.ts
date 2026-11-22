@@ -15,7 +15,6 @@ import {
 /** Renders a nav contribution's icon by name; a plugin can name any string, so unknown names fall back to a generic circle. */
 @Component({
   selector: 'app-nav-icon',
-  standalone: true,
   imports: [
     LucideHome, LucideSearch, LucideUserRound, LucideListVideo,
     LucideDownload, LucideHistory, LucideClipboardList, LucideCalendar, LucideTv, LucideCircle,

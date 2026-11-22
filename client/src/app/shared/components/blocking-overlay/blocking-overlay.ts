@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, effect, input, viewChild } from '@angular/core';
+import { Component, ElementRef, effect, input, viewChild } from '@angular/core';
 
 export interface BlockingOverlayAction {
   label: string;
@@ -9,7 +9,6 @@ export interface BlockingOverlayAction {
 @Component({
   selector: 'app-blocking-overlay',
   templateUrl: './blocking-overlay.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BlockingOverlayComponent {
   readonly open = input.required<boolean>();

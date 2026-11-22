@@ -5,7 +5,6 @@ import { TvSpatialNavService } from '../../core/services/tv-spatial-nav.service'
  *  Registers on every form factor; companion to `[appTvRow]`. `[appTvSectionWrap]="true"` wraps ↑ from the first child to the last (rare). */
 @Directive({
   selector: '[appTvSection]',
-  standalone: true,
 })
 export class TvSectionDirective implements OnInit, OnDestroy {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);

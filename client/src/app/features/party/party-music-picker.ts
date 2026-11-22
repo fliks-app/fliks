@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, inject, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, inject, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MusicApiService } from '../../core/services/api/music-api.service';
@@ -15,7 +15,6 @@ const SEARCH_DEBOUNCE_MS = 300;
   selector: 'app-party-music-picker',
   imports: [FormsModule, TranslatePipe, ModalHeaderComponent],
   templateUrl: './party-music-picker.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyMusicPickerComponent implements OnDestroy {
   private readonly music = inject(MusicApiService);

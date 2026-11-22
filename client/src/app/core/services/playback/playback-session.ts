@@ -305,6 +305,7 @@ export class PlaybackSession {
   /** The device `play` loads on (`RemoteService.playTarget`); a party plays on this device or the output it drives. */
   private playTarget(item: Pick<PlayItem, 'episodeId' | 'media'>): string | null {
     if (this.kind() === 'local' && this.partyActive()) return null;
+    // eslint-disable-next-line no-restricted-syntax -- fallback kind of an item without media: an episode id means a series
     return this.remoteSvc().playTarget(item.media?.type ?? (item.episodeId ? 'series' : 'movie'));
   }
 

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
@@ -9,7 +9,6 @@ import { ClampToggleDirective } from '../../directives/clamp-toggle.directive';
   selector: 'app-person-header',
   imports: [TranslatePipe, ResolveUrlPipe, CachedSrcDirective, ClampToggleDirective],
   templateUrl: './person-header.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
 })
 export class PersonHeaderComponent {

@@ -21,6 +21,7 @@ export class PlaybackDevice {
   );
 
   readonly icon = computed<DeviceIcon>(() => {
+    // eslint-disable-next-line no-restricted-syntax -- 'tv' is the device class, not a media kind
     if (!this.elsewhere()) return this.device.isTv() ? 'tv' : this.device.isTouch() ? 'phone' : 'monitor';
     return this.session.kind() === 'cast' || this.remote.observedCast() ? 'cast' : deviceIconFor(this.remote.observedTarget()?.formFactor);
   });

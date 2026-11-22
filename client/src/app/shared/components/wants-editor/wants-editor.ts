@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, model, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, model, signal } from '@angular/core';
 import { LucidePlus, LucideTrash2 } from '@lucide/angular';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -17,7 +17,6 @@ export const wantKey = (w: Pick<Want, 'family' | 'language'>) => `${w.family}|${
   selector: 'app-wants-editor',
   imports: [FormsModule, LucidePlus, LucideTrash2, TranslatePipe, TvSelectDirective],
   templateUrl: './wants-editor.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WantsEditorComponent {
   private readonly translate = inject(TranslateService);

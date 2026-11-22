@@ -7,7 +7,6 @@ import { rowTopOffset, snapRowOnFocus } from '../../core/utils/focus-snap.util';
  *  Registers on every form factor; `[appTvRowWrap]="true"` loops → from the last card back to the first. */
 @Directive({
   selector: '[appTvRow]',
-  standalone: true,
 })
 export class TvRowDirective implements OnInit, OnDestroy {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);

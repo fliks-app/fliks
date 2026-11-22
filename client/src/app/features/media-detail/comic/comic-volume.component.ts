@@ -1,5 +1,5 @@
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideEllipsisVertical, LucidePencil } from '@lucide/angular';
@@ -42,7 +42,6 @@ import { issuePatch, issueReset, volumePatch, volumeReset } from './comic-edit';
   ],
   templateUrl: './comic-volume.component.html',
   host: { class: 'block' },
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ComicVolumeComponent {
   /** The card handoff (list shape) until the full volume lands. */

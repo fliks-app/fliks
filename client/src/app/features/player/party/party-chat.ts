@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideSend } from '@lucide/angular';
 import { type PartyMessage } from '../../../core/services/api/party-api.service';
@@ -17,7 +17,6 @@ const MAX_LENGTH = 500;
   selector: 'app-party-chat',
   imports: [TranslatePipe, LucideSend, TvRowDirective],
   templateUrl: './party-chat.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'flex min-h-0 flex-1 flex-col' },
 })
 export class PartyChatComponent {

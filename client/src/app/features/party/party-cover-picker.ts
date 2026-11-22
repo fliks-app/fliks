@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, model } from '@angular/core';
+import { Component, computed, effect, input, model } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import type { PartyCover, PartyCoverChoice, PartyCoverRef } from '../../core/services/api/party-api.service';
@@ -65,7 +65,6 @@ export function coverChange(from: PartyCover, d: CoverDraft): CoverChange {
   selector: 'app-party-cover-picker',
   imports: [TranslatePipe, ResolveUrlPipe],
   templateUrl: './party-cover-picker.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyCoverPickerComponent {
   readonly options = input.required<CoverOption[]>();

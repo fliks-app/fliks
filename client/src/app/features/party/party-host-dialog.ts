@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { PartyApiService, type PartyDto, type PartySwitches } from '../../core/services/api/party-api.service';
@@ -19,7 +19,6 @@ import { partyWhen } from './party-time';
   selector: 'app-party-host-dialog',
   imports: [FormsModule, TranslatePipe, ModalHeaderComponent, ModalFooterComponent, PartyHostSwitchesComponent, PartyCoverPickerComponent, TvRowDirective],
   templateUrl: './party-host-dialog.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyHostDialogComponent {
   private readonly api = inject(PartyApiService);

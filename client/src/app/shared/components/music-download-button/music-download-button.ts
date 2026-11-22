@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCircleArrowDown, LucideDownload } from '@lucide/angular';
 import type { MusicTrackRequest } from '../../../core/services/audio-player/music-queue';
@@ -10,7 +10,6 @@ import { MusicDownloadsService } from '../../../core/services/music-downloads.se
   imports: [TranslatePipe, LucideCircleArrowDown, LucideDownload],
   templateUrl: './music-download-button.html',
   host: { class: 'contents' },
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MusicDownloadButtonComponent {
   /** Loads the tracks when the button is pressed. */

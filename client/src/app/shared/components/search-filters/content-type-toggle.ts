@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, model } from '@angular/core';
+import { Component, model } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { SearchContentType } from './search-filters';
 
@@ -8,7 +8,6 @@ import { SearchContentType } from './search-filters';
   imports: [TranslatePipe],
   templateUrl: './content-type-toggle.html',
   host: { class: 'join max-w-full overflow-x-auto scroll-ring-safe' },
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ContentTypeToggleComponent {
   readonly value = model<SearchContentType>('all');

@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   Injector,
@@ -54,7 +53,6 @@ const WEBTOON_ZOOM = { min: 0.5, max: 2, step: 0.25 } as const;
   templateUrl: './comic-engine.html',
   styleUrl: './comic-engine.css',
   encapsulation: ViewEncapsulation.None,
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ComicEngineComponent implements ReaderEngine, OnDestroy {
   readonly target = input.required<ReaderTarget>();

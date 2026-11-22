@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { type PartySwitches } from '../../../core/services/api/party-api.service';
 import { TvSectionDirective } from '../../../shared/directives/tv-section.directive';
@@ -16,7 +16,6 @@ export function switchesPatch(from: PartySwitches, to: PartySwitches): Partial<P
   selector: 'app-party-host-switches',
   imports: [TranslatePipe, TvSectionDirective, ToggleFieldComponent],
   templateUrl: './party-host-switches.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyHostSwitchesComponent {
   readonly value = input.required<PartySwitches>();

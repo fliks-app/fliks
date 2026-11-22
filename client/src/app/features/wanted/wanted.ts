@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MEDIA_KINDS, KIND_REGISTRY, mediaDetailLink } from '../../core/media-kinds';
@@ -16,7 +16,6 @@ const PAGE = 25;
   selector: 'app-wanted',
   imports: [RouterLink, TranslatePipe, LocaleDatePipe, ResolveUrlPipe, CachedSrcDirective],
   templateUrl: './wanted.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WantedComponent {
   private readonly api = inject(WantsApiService);

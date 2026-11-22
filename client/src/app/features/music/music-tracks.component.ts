@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -20,7 +20,6 @@ type Sort = NonNullable<TracksQuery['sortBy']>;
   imports: [FormsModule, RouterLink, TranslatePipe, TvSelectDirective, TrackLineComponent, LucidePlay],
   templateUrl: './music-tracks.component.html',
   host: { class: 'block' },
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MusicTracksComponent {
   readonly libraryId = input<number | undefined>(undefined);

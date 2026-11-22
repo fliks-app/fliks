@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ViewEncapsulation,
   inject,
@@ -45,7 +44,6 @@ import { ReaderSidebarComponent } from './reader-sidebar';
   styleUrl: './reader.css',
   encapsulation: ViewEncapsulation.None,
   providers: [ReaderSession, ReaderSettingsService, ReaderProgressService, ControlsVisibilityService],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(window:keydown)': 's.onKeydown($event)',
     '(window:pagehide)': 's.flushProgress()',

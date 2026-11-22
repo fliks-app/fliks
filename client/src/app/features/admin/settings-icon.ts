@@ -15,7 +15,6 @@ import {
 /** Renders a `settings.page` contribution's icon by name; unrecognised names fall back to a generic circle, never blank. */
 @Component({
   selector: 'app-settings-icon',
-  standalone: true,
   imports: [
     LucideBarChart3,
     LucideLayoutGrid,

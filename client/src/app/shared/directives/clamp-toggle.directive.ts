@@ -4,7 +4,6 @@ import { Directive, ElementRef, OnDestroy, computed, effect, inject, input, sign
  *  since a `md:hidden` ancestor measures zero. Usage: `<p appClampToggle #syn="clampToggle" ...>`; bind the text (`[appClampToggle]="text"`) if it changes in place. */
 @Directive({
   selector: '[appClampToggle]',
-  standalone: true,
   exportAs: 'clampToggle',
 })
 export class ClampToggleDirective implements OnDestroy {

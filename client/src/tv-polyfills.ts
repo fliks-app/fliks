@@ -1,4 +1,4 @@
-/** TV browsers (Chromium 76-85) lack builtins that `BROWSERSLIST` can't lower; Angular core calls `Object.hasOwn` on every binding,
+/** The TV floor is Chromium 76 (Tizen 6.5); TV browsers lack builtins that `BROWSERSLIST` can't lower; Angular core calls `Object.hasOwn` on every binding,
  *  so without this polyfill the app dies before first paint. */
 
 if (!Object.hasOwn) {
@@ -21,3 +21,10 @@ for (const proto of [Array.prototype, String.prototype] as { at?: unknown }[]) {
     });
   }
 }
+
+if (typeof globalThis.structuredClone !== 'function') {
+  // JSON round trip: enough for the plain rule objects the TV clones.
+  globalThis.structuredClone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+}
+
+export {};

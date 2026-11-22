@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCopy, LucidePlus, LucideShare2 } from '@lucide/angular';
 import { PartyApiService, type PartyDto } from '../../core/services/api/party-api.service';
@@ -15,7 +15,6 @@ import { PartyInviteePickerComponent } from './party-invitee-picker';
   selector: 'app-party-invite',
   imports: [TranslatePipe, LucideCopy, LucidePlus, LucideShare2, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent],
   templateUrl: './party-invite.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyInviteComponent {
   private readonly api = inject(PartyApiService);

@@ -31,7 +31,6 @@ import {
 /** Renders a Lucide icon by name from a curated list, falling back to LucideLibrary. */
 @Component({
   selector: 'app-lucide-icon',
-  standalone: true,
   imports: [
     LucideFilm, LucideTv, LucideLibrary, LucideLayoutGrid,
     LucideBook, LucideGamepad2, LucideMusic, LucideHeart,

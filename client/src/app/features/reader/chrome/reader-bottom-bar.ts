@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideHeadphones, LucideListTree, LucideNotebookPen, LucideType } from '@lucide/angular';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
@@ -18,7 +18,6 @@ import { ReaderScrubberComponent } from './reader-scrubber';
     LucideType,
   ],
   templateUrl: './reader-bottom-bar.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'contents' },
 })
 export class ReaderBottomBarComponent {
