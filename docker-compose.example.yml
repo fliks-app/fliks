@@ -25,13 +25,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Uncomment if your platform pins the container user (TrueNAS catalog uid
-    # 568, unraid 99:100, Kubernetes runAsNonRoot, OpenShift arbitrary uid).
-    # Any uid works as long as gid 0 is in the group list: the image's
-    # /app/conf, /app/data and /app/transcode are group-writable by root.
-    # A volume owned by another uid needs `chown -R 568:0` (the log names it).
-    # user: '568:568'
+    # The image runs as 568:0. Uncomment to pin another uid (unraid 99:100,
+    # Kubernetes runAsNonRoot, OpenShift arbitrary uid): any uid works as long
+    # as gid 0 is in the group list. A volume made by an older image (root) or
+    # owned by another uid needs `chown -R 568:0` (the log names it).
+    # user: '99:100'
     # group_add: ['0']
+    # The server flushes its buffers and stops its plugins after the last request
+    # drains; Docker's default 10 s cuts that short.
+    stop_grace_period: 30s
     # Chromecast discovery happens on the sender (browser/app), not here, so
     # bridge networking is fine: the cast device just needs to reach this
     # server (set Settings > General > Public address if it isn't obvious).

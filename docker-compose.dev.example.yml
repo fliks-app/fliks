@@ -57,6 +57,7 @@ services:
       engine:
         condition: service_healthy
     working_dir: /src/server
+    stop_grace_period: 30s
     # Files it writes under ./.dev/data stay yours; volumes made before this line was added are
     # root-owned: `docker compose down -v` once.
     user: '${FLIKS_UID:-1000}:${FLIKS_GID:-1000}'

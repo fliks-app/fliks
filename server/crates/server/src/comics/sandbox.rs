@@ -149,9 +149,11 @@ fn limits() -> io::Result<()> {
     set(libc::RLIMIT_CPU, CHILD_CPU_SECS);
     set(libc::RLIMIT_CORE, 0);
     set(libc::RLIMIT_FSIZE, 0);
-    // SAFETY: prctl and close_range are plain syscalls; a failure leaves the close-on-exec
-    // descriptors and the default death signal.
+    // SAFETY: unshare, prctl and close_range are plain syscalls; a failure leaves the shared
+    // network (a seccomp profile may refuse it), the close-on-exec descriptors and the default
+    // death signal.
     unsafe {
+        libc::unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWNET);
         libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
         libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL, 0, 0, 0);
         // CLOEXEC rather than close: std's exec-error pipe survives, so a failed exec is reported.

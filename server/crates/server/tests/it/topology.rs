@@ -84,7 +84,8 @@ async fn start(
         .stderr(Stdio::null());
     let child = cmd.spawn().unwrap();
     let base = format!("http://127.0.0.1:{port}");
-    eventually(&format!("{base}/api/system/liveness"), |r| r.0 == 200).await;
+    // Liveness answers while the boot work runs; any other route answers 503 until it is done.
+    eventually(&format!("{base}/api/system/health"), |r| r.0 != 503).await;
     Server { child, base }
 }
 

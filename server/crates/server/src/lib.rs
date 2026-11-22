@@ -6,6 +6,7 @@ pub mod atomic_file;
 pub mod auth;
 pub mod auth_token;
 pub mod books;
+pub mod boot;
 pub mod busy;
 pub mod cleanup;
 pub mod collections;
@@ -92,7 +93,56 @@ pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
     Ok(())
 }
 
+/// Longest wait for open connections after a stop signal; under Docker's `stop_grace_period`.
+const DRAIN: Duration = Duration::from_secs(20);
+
 pub async fn serve(cfg: Config) -> Result<(), BoxError> {
+    let listener = tokio::net::TcpListener::bind((cfg.bind, cfg.port)).await?;
+    tracing::info!("listening on {}", listener.local_addr()?);
+    let slot = boot::Slot::default();
+    let (stop, mut stopped) = tokio::sync::watch::channel(false);
+    let mut http = tokio::spawn(
+        axum::serve(
+            listener,
+            boot::gate(slot.clone()).into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(async move {
+            shutdown_signal().await;
+            let _ = stop.send(true);
+        })
+        .into_future(),
+    );
+    let booted = tokio::select! {
+        r = boot(cfg) => r?,
+        _ = stopped.wait_for(|s| *s) => return Ok(()),
+        r = &mut http => return r?.map_err(Into::into),
+    };
+    let (state, app) = booted;
+    let (system, hub, qoe) = (state.system.clone(), state.hub.clone(), state.qoe.clone());
+    let _ = slot.set(app);
+    let served = tokio::select! {
+        r = &mut http => r?,
+        _ = async {
+            let _ = stopped.wait_for(|s| *s).await;
+            hub.shutdown();
+            tokio::time::sleep(DRAIN).await;
+        } => {
+            tracing::warn!("open connections still running after {DRAIN:?}, closing");
+            Ok(())
+        }
+    };
+    qoe.flush_all().await;
+    push::flush_pending(&state).await;
+    state.plugins.shutdown().await;
+    // Non-zero so the parent supervisor (or `Restart=on-failure`) starts us again.
+    if system.restarting() {
+        std::process::exit(1);
+    }
+    served.map_err(Into::into)
+}
+
+/// Everything between the bound listener and the first request: probe, dump, migrations, seeds.
+async fn boot(cfg: Config) -> Result<(AppState, axum::Router), BoxError> {
     // One direct attempt: the pool would retry a refused connection for its whole acquire timeout.
     let probe =
         tokio::time::timeout(Duration::from_secs(10), PgConnection::connect_with(&cfg.db)).await;
@@ -155,16 +205,12 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     requests::spawn(&state);
     requests::spawn_reconcile(&state);
     let cfg = state.cfg.clone();
-    let system = state.system.clone();
-    let hub = state.hub.clone();
-    let qoe = state.qoe.clone();
     let app = app::router(
         state.clone(),
         cfg.serve_static_path.clone(),
         cfg.cast_dir.clone(),
         cfg.cors_origin.clone(),
     );
-    let listener = tokio::net::TcpListener::bind((cfg.bind, cfg.port)).await?;
     auth::spawn_jobs(db);
     jobs::spawn(&state);
     queue::spawn(&state);
@@ -175,24 +221,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         tracing::warn!("metadata provider order not loaded: {e}");
     }
     state.plugins.boot().await;
-    tracing::info!("listening on {}", listener.local_addr()?);
-    let served = axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(async move {
-        shutdown_signal().await;
-        hub.shutdown();
-    })
-    .await;
-    qoe.flush_all().await;
-    push::flush_pending(&state).await;
-    state.plugins.shutdown().await;
-    // Non-zero so the parent supervisor (or `Restart=on-failure`) starts us again.
-    if system.restarting() {
-        std::process::exit(1);
-    }
-    served.map_err(Into::into)
+    Ok((state, app))
 }
 
 async fn shutdown_signal() {
