@@ -262,7 +262,7 @@ pub(crate) async fn check_current_password(
     let Some(given) = given else {
         return Err(AppError::bad_request("Current password is incorrect"));
     };
-    let ip = crate::http::client_ip(headers, peer.as_ref());
+    let ip = crate::http::client_ip(st, headers, peer.as_ref()).await;
     if !st.login_throttle.attempt(ip, &a.user.username) {
         return Err(AppError::with_message(
             StatusCode::TOO_MANY_REQUESTS,

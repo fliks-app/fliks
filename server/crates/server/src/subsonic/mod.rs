@@ -125,9 +125,11 @@ async fn rest(
         }
     }
     let ip = client_ip(
+        &st,
         &headers,
         peer.as_ref().map(|axum::Extension(ConnectInfo(a))| a),
-    );
+    )
+    .await;
     let answer = match auth::authenticate(&st, ip, &p).await {
         Ok((a, token)) => {
             let libraries = crate::libraries::accessible_library_ids(&st.db, &a).await;

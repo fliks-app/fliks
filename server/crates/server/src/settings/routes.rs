@@ -116,10 +116,11 @@ pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>)
 
 /// Keys only an admin may write (`settings.access` can be granted to a non-admin role): who can
 /// sign in, and what code the host may run.
-const ADMIN_ONLY: [&str; 3] = [
+const ADMIN_ONLY: [&str; 4] = [
     "password_login",
     "oidc_auto_launch",
     "plugins.allow_unsigned",
+    "trusted_proxies",
 ];
 
 /// `ADMIN_ONLY` keys need `manage:all`; `password_login` and `oidc_auto_launch` are also checked
@@ -134,7 +135,7 @@ async fn check_admin_key(
         return Ok(());
     }
     authed.require(Action::Manage, Subject::All)?;
-    if key == "plugins.allow_unsigned" {
+    if key == "plugins.allow_unsigned" || key == "trusted_proxies" {
         return Ok(());
     }
     let Some(v) = value.map(str::trim).filter(|v| !v.is_empty()) else {
@@ -180,6 +181,17 @@ fn validate(key: &str, value: &str) -> Result<(), AppError> {
         return Err(AppError::bad_request(vec![
             "users_public_mode must be one of the following values: everyone, lan, hidden",
         ]));
+    }
+    if key == "trusted_proxies" && !value.trim().is_empty() {
+        let ok = serde_json::from_str::<Vec<String>>(value).is_ok_and(|l| {
+            l.iter()
+                .all(|c| fliks_domain::net::Cidr::parse(c).is_some())
+        });
+        if !ok {
+            return Err(AppError::bad_request(vec![
+                "trusted_proxies must be a JSON array of addresses or CIDR ranges",
+            ]));
+        }
     }
     if key == "music.unrequested_tracks" && !["import_unmonitored", "skip"].contains(&value) {
         return Err(AppError::bad_request(vec![
@@ -244,9 +256,6 @@ pub(crate) async fn put_one(
     authed.require(Action::Manage, Subject::Settings)?;
     let dto: SetSetting = from_value(body)?;
     refuse_protected(&key)?;
-    if let Some(Some(v)) = &dto.value {
-        validate(&key, v)?;
-    }
     check_admin_key(
         &st,
         &authed,
@@ -254,6 +263,9 @@ pub(crate) async fn put_one(
         dto.value.as_ref().and_then(|v| v.as_deref()),
     )
     .await?;
+    if let Some(Some(v)) = &dto.value {
+        validate(&key, v)?;
+    }
     let incoming = match dto.value {
         None => Incoming::Absent,
         Some(None) => Incoming::Null,
@@ -295,11 +307,11 @@ pub(crate) async fn put_bulk(
     };
     for (key, value) in &data {
         refuse_protected(key)?;
-        if !value.is_null() {
-            validate(key, &db::pg_text(value))?;
-        }
         let text = (!value.is_null()).then(|| db::pg_text(value));
         check_admin_key(&st, &authed, key, text.as_deref()).await?;
+        if let Some(t) = &text {
+            validate(key, t)?;
+        }
     }
     let secrets = Secrets::load(&st.db, data.keys().map(String::as_str))
         .await
