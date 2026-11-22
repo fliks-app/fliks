@@ -269,7 +269,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private readonly partyCreated = this.party.created.pipe(takeUntilDestroyed()).subscribe(() => this.loadParties());
 
-  private readonly partyEvents = this.sse.partyEvents.subscribe((e) => {
+  private readonly partyEvents = this.sse.partyEvents.pipe(takeUntilDestroyed()).subscribe((e) => {
     if (this.routeFresh()) return;
     if (e.type === 'party.updated' || e.type === 'party.invited' || e.type === 'party.starting') this.loadParties();
   });

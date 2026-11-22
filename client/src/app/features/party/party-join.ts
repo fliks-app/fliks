@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { PartyService } from '../../core/services/party/party.service';
@@ -8,7 +8,6 @@ import { PartyService } from '../../core/services/party/party.service';
   selector: 'app-party-join',
   imports: [TranslatePipe],
   templateUrl: './party-join.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyJoinComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { ReaderSession } from '../reader-session';
 
@@ -7,7 +7,6 @@ import { ReaderSession } from '../reader-session';
   selector: 'app-reader-scrubber',
   imports: [TranslatePipe],
   templateUrl: './reader-scrubber.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block' },
 })
 export class ReaderScrubberComponent {

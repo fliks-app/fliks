@@ -1,4 +1,4 @@
-import { DestroyRef, ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { DestroyRef, Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { LucideChevronLeft, LucideClock, LucideMusic, LucidePlus } from '@lucide/angular';
 import { NgTemplateOutlet } from '@angular/common';
@@ -36,7 +36,6 @@ export interface HandedPerson {
   selector: 'app-artist-page',
   imports: [NgTemplateOutlet, TranslatePipe, LucideChevronLeft, LucideClock, LucideMusic, LucidePlus, ResolveUrlPipe, CachedSrcDirective, AddDialogComponent, TrackLineComponent, CardSkeletonComponent, FollowToggleComponent, MusicDownloadButtonComponent, MediaCardComponent, MediaGridComponent, PersonHeaderComponent],
   templateUrl: './artist-page.component.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ArtistPageComponent {
   private readonly api = inject(MusicApiService);

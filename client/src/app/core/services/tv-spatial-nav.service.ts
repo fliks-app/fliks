@@ -63,11 +63,13 @@ export class TvSpatialNavService {
     // Window only: also listening on document fired each keypress twice.
     window.addEventListener('keydown', handler, { capture: true });
     this.destroyRef.onDestroy(() => window.removeEventListener('keydown', handler, { capture: true } as any));
-    // The webOS WebView never scrolls on the Magic Remote wheel: map it to up/down focus moves (TV only).
+    // The webOS WebView never scrolls on the Magic Remote wheel: map it to up/down focus moves.
     // Non-passive so the default scroll can be suppressed.
-    const wheelHandler = (e: WheelEvent) => this.onWheel(e);
-    window.addEventListener('wheel', wheelHandler, { capture: true, passive: false });
-    this.destroyRef.onDestroy(() => window.removeEventListener('wheel', wheelHandler, { capture: true } as any));
+    if (this.tv.isTv()) {
+      const wheelHandler = (e: WheelEvent) => this.onWheel(e);
+      window.addEventListener('wheel', wheelHandler, { capture: true, passive: false });
+      this.destroyRef.onDestroy(() => window.removeEventListener('wheel', wheelHandler, { capture: true } as any));
+    }
     // Track the deepest focused element per container for last-active-child memory.
     const focusInHandler = (e: FocusEvent) => {
       this.updateActiveChild(e.target as HTMLElement | null);
@@ -377,7 +379,6 @@ export class TvSpatialNavService {
   private wheelAcc = 0;
 
   private onWheel(e: WheelEvent) {
-    if (!this.tv.isTv()) return;
     // Ignore predominantly-horizontal wheels (trackpads, tilt) — those
     // belong to the horizontal-scroller rows, not vertical navigation.
     if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;

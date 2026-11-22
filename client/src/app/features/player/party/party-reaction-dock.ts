@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
+import { Component, DestroyRef, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideMic, LucideMicOff } from '@lucide/angular';
 import { ReactionsService } from '../../../core/services/party/reactions.service';
@@ -17,7 +17,6 @@ const HOLD_MS = 250;
   imports: [TranslatePipe, LucideMic, LucideMicOff, TvRowDirective],
   templateUrl: './party-reaction-dock.html',
   styleUrl: './party-reaction-dock.css',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   // The player wakes its controls on any click or pointer move; the dock is used without them.
   host: { '(click)': '$event.stopPropagation()', '(mousemove)': '$event.stopPropagation()' },
 })

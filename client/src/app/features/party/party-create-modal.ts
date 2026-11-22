@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucidePlus, LucideX } from '@lucide/angular';
@@ -40,7 +40,6 @@ export function toLocalInput(d: Date): string {
   selector: 'app-party-create-modal',
   imports: [FormsModule, TranslatePipe, LucidePlus, LucideX, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent, PartyHostSwitchesComponent, MediaPickerComponent, PartyCoverPickerComponent],
   templateUrl: './party-create-modal.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyCreateModalComponent {
   private readonly party = inject(PartyService);

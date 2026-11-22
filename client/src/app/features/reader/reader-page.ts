@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, afterNextRender, inject, signal } from '@angular/core';
+import { Component, DestroyRef, afterNextRender, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { DownloadCacheService } from '../../core/services/download-cache.service';
@@ -28,7 +28,6 @@ interface Opened {
   selector: 'app-reader-page',
   imports: [ReaderComponent],
   templateUrl: './reader-page.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReaderPageComponent {
   private readonly route = inject(ActivatedRoute);

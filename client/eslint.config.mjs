@@ -1,6 +1,7 @@
 // @ts-check
 import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
+import angular from 'angular-eslint';
 
 /** The acquisition plugin's own routes — core must reach them through its
  *  contract, never a literal path. */
@@ -43,9 +44,11 @@ export default [
       // @typescript-eslint/no-explicit-any` comments resolve instead of
       // erroring as an unknown rule now that this is the first config to lint them.
       '@typescript-eslint': tsPlugin,
+      '@angular-eslint': angular.tsPlugin,
     },
     rules: {
       'fence/no-plugin-api-paths': 'error',
+      '@angular-eslint/no-implicit-take-until-destroyed': 'error',
       '@typescript-eslint/no-explicit-any': 'off',
       'no-restricted-syntax': [
         'error',
@@ -60,6 +63,14 @@ export default [
           selector,
           message: 'Branch on a media kind through KIND_REGISTRY (core/media-kinds.ts), not a ternary on the literal.',
         })),
+        {
+          selector: "Decorator[expression.callee.name='Component'] Property[key.name='changeDetection'][value.property.name='OnPush']",
+          message: 'OnPush is the default: do not restate it.',
+        },
+        {
+          selector: "Decorator[expression.callee.name=/^(Component|Directive|Pipe)$/] Property[key.name='standalone'][value.value=true]",
+          message: 'standalone: true is the default: do not restate it.',
+        },
       ],
     },
     linterOptions: {

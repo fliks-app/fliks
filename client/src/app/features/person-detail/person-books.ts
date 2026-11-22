@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { BooksApiService } from '../../core/services/api/books-api.service';
@@ -14,7 +14,6 @@ type Work = PersonWorks['standalone'][number];
   selector: 'app-person-books',
   imports: [TranslatePipe, RouterLink, MediaCardComponent, MediaGridComponent],
   templateUrl: './person-books.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PersonBooksComponent {
   private readonly api = inject(BooksApiService);

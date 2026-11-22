@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 import type { WantSpec } from '../../../core/services/api/wants-api.service';
@@ -8,7 +8,6 @@ import type { WantSpec } from '../../../core/services/api/wants-api.service';
   selector: 'app-request-wants',
   imports: [TranslatePipe, LocalizeLanguagePipe],
   templateUrl: './request-wants.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RequestWantsComponent {
   readonly wants = input.required<WantSpec[]>();

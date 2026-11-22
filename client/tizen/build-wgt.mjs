@@ -32,7 +32,7 @@ const stage = resolve(clientRoot, 'dist/tizen-stage');
 execSync(`rm -rf "${stage}" && mkdir -p "${stage}"`, { stdio: 'inherit' });
 execSync(`cp -R "${distBrowser}/." "${stage}/"`, { stdio: 'inherit' });
 
-// Tizen 6.5 ships Chromium ~85, which predates cascade layers, `:is`/`:where`,
+// The TV floor is Tizen 6.5 (Chromium 76 JS, `chrome 76` in package.json); the CSS guard targets 85 and predates cascade layers, `:is`/`:where`,
 // `:has`, `:focus-visible`, logical properties, `oklch()`/`color-mix()`,
 // container queries, and `@starting-style`. Run the downlevel pass on every
 // `styles-*.css` chunk now so the WGT contains parser-friendly CSS.

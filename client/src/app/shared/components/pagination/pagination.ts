@@ -11,7 +11,6 @@ type Slot = number | 'ellipsis';
 
 @Component({
   selector: 'app-pagination',
-  standalone: true,
   imports: [TranslatePipe, LucideChevronLeft, LucideChevronRight],
   templateUrl: './pagination.html',
   host: { class: 'block' },

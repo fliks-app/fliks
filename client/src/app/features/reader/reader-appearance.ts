@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   afterNextRender,
@@ -41,7 +40,6 @@ import type { AppearanceSection } from './reader-features';
   imports: [TranslatePipe, LucideChevronDown, LucideMinus, LucidePlus, LucideRotateCcw, LucideX],
   templateUrl: './reader-appearance.html',
   styleUrl: './reader-panel.css',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReaderAppearanceComponent {
   readonly sections = input.required<readonly AppearanceSection[]>();

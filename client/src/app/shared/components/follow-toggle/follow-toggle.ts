@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LibrariesApiService, type LibrarySummary } from '../../../core/services/api/libraries-api.service';
@@ -26,7 +26,6 @@ const ARTIST_WANTS = (): WantSpec[] => [{ family: 'audio', language: null }];
   selector: 'app-follow-toggle',
   imports: [FormsModule, TranslatePipe, TvSelectDirective, WantsEditorComponent],
   templateUrl: './follow-toggle.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block', '[class.hidden]': '!available()' },
 })
 export class FollowToggleComponent {

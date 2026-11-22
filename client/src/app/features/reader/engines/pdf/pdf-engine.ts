@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   Injector,
@@ -41,7 +40,6 @@ const MAX_CANVAS_PIXELS = 16_000_000;
   templateUrl: './pdf-engine.html',
   styleUrl: './pdf-engine.css',
   encapsulation: ViewEncapsulation.None,
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PdfEngineComponent implements ReaderEngine, OnDestroy {
   readonly target = input.required<ReaderTarget>();

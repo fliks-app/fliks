@@ -24,7 +24,6 @@ import {
 
 @Component({
   selector: 'app-bottom-sheet',
-  standalone: true,
   // The backdrop and sheet are `position: fixed`, so the host needs no box (as in `app-popover-menu`); a box becomes a stray grid item in `.modal`.
   styles: [':host { display: contents; }'],
   templateUrl: './bottom-sheet.html',

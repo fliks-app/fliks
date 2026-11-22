@@ -8,7 +8,6 @@ import { PopoverMenuComponent } from './popover-menu';
 /** Singleton renderer for SelectPickerService: mount once at the layout root; shows a sheet (TV/touch) or dropdown (desktop) for `appTvSelect` selects. */
 @Component({
   selector: 'app-select-picker',
-  standalone: true,
   imports: [TranslatePipe, PopoverMenuComponent],
   templateUrl: './select-picker.html',
 })

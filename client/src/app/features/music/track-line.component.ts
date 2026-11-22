@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { Component, computed, input } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { TrackDownloadGlyphComponent } from '../../shared/components/track-download-glyph/track-download-glyph';
 import { formatDuration } from './music-utils';
@@ -9,7 +9,6 @@ import { formatDuration } from './music-utils';
   imports: [TranslatePipe, TrackDownloadGlyphComponent],
   templateUrl: './track-line.component.html',
   host: { class: 'contents' },
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TrackLineComponent {
   readonly title = input.required<string>();

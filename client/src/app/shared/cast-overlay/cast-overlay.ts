@@ -2,6 +2,7 @@ import { Component, computed, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideX } from '@lucide/angular';
 import { DeviceIconComponent } from '../device-chip/device-icon';
+import { KIND_REGISTRY } from '../../core/media-kinds';
 import { PlaybackDevice } from '../../core/services/playback-device.service';
 import { DeviceService } from '../../core/services/device.service';
 import { NowPlayingMetadataService } from '../../core/services/playback/now-playing-metadata.service';
@@ -64,7 +65,7 @@ export class CastOverlayComponent {
   /** `S01E02` of an episode, from the item subtitle the server builds as `S01E02: title`. */
   protected readonly observedEpisode = computed(() => {
     const item = this.observed()?.item;
-    return item?.kind === 'series' ? (item.subtitle?.split(':')[0] ?? null) : null;
+    return item && KIND_REGISTRY[item.kind].hasSeasons ? (item.subtitle?.split(':')[0] ?? null) : null;
   });
   protected readonly observedArtwork = computed(() => this.audioTrack()?.coverUrl ?? this.observed()?.item.posterUrl ?? null);
 

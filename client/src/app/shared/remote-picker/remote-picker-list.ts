@@ -38,7 +38,6 @@ export interface PickerRow {
 /** The destination list (Cast devices + remote targets) without its surface: wrapped by `app-remote-picker` in the top bar, a dropdown/sheet in the player. */
 @Component({
   selector: 'app-remote-picker-list',
-  standalone: true,
   imports: [
     TranslatePipe,
     LucidePlus, DeviceIconComponent,

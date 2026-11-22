@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { Component, computed, input } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import type { MediaProvider } from '../../../core/services/api/media.service';
 
@@ -8,7 +8,6 @@ import type { MediaProvider } from '../../../core/services/api/media.service';
   imports: [TranslatePipe],
   templateUrl: './provider-attribution.html',
   host: { class: 'block', '[class.hidden]': '!linked().length && !unofficial()' },
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProviderAttributionComponent {
   readonly providers = input<MediaProvider[] | undefined>();

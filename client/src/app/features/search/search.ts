@@ -65,6 +65,7 @@ const DEBOUNCE_MS = 250;
 const hasFilters = (s: SearchScope) => s === 'video' || s === 'movie' || s === 'series';
 /** The video kind of the discovery rows and TMDB discover; `all` is movies and series, null for no rows. */
 const discoveryKind = (s: SearchScope): 'all' | MediaType | null =>
+  // eslint-disable-next-line no-restricted-syntax -- search scopes, not media kinds
   s === 'all' || s === 'video' ? 'all' : s === 'movie' || s === 'series' ? s : null;
 
 @Component({

@@ -16,7 +16,6 @@ import {
 /** Subtitle appearance preset selectors shared by player and Cast settings; values stay raw presets (`small`, `white`, `drop`…) each consumer interprets. */
 @Component({
   selector: 'app-subtitle-appearance',
-  standalone: true,
   imports: [TvSelectDirective, FormsModule, TranslatePipe],
   templateUrl: './subtitle-appearance.html',
 })

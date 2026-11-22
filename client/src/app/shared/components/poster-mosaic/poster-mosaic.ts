@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
 
@@ -8,7 +8,6 @@ import { ImgFadeInDirective } from '../../directives/img-fade-in.directive';
   imports: [ResolveUrlPipe, ImgFadeInDirective],
   host: { class: 'block h-full w-full' },
   templateUrl: './poster-mosaic.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PosterMosaicComponent {
   readonly posters = input.required<string[]>();

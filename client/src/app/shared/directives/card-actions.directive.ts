@@ -7,7 +7,6 @@ import { TvService } from '../../core/services/tv.service';
  * native mobile on a 500 ms long-press (cancelled on move/lift); web desktop is a no-op. */
 @Directive({
   selector: '[appCardActions]',
-  standalone: true,
 })
 export class CardActionsDirective implements OnDestroy {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);

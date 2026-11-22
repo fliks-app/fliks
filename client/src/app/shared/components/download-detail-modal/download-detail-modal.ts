@@ -43,7 +43,6 @@ interface SeasonRow {
  *  A movie has a single download, so it keeps one headline; the parent passes live `progress` so SSE updates continue. */
 @Component({
   selector: 'app-download-detail-modal',
-  standalone: true,
   imports: [ModalFooterComponent, TranslatePipe, ProgressBarComponent, ModalHeaderComponent],
   templateUrl: './download-detail-modal.html',
 })

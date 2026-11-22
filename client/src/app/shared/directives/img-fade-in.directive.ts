@@ -4,7 +4,6 @@ import { viewTransitionRunning } from '../utils/view-transition';
 /** Hides the image until downloaded, then fades in, avoiding the janky progressive paint; cached images and images mounted during a view transition show immediately. */
 @Directive({
   selector: 'img[appImgFadeIn]',
-  standalone: true,
   host: {
     '[style.opacity]': 'opacity',
     '[style.transition]': '"opacity 200ms ease-out"',

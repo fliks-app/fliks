@@ -22,7 +22,6 @@ type Placement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start';
  *  Both slots sit in <ng-template> + *ngTemplateOutlet because <ng-content> inside @if blocks doesn't project reliably. */
 @Component({
   selector: 'app-dropdown-menu',
-  standalone: true,
   imports: [NgTemplateOutlet, BottomSheetComponent, DropdownToggleDirective],
   templateUrl: './dropdown-menu.html',
 })

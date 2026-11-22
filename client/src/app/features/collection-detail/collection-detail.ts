@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
@@ -19,7 +19,6 @@ export type Tile =
   selector: 'app-collection-detail',
   imports: [TranslatePipe, RouterLink, MediaCardComponent, FollowToggleComponent],
   templateUrl: './collection-detail.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CollectionDetailComponent {
   private readonly api = inject(BooksApiService);

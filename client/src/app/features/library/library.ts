@@ -355,11 +355,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
   @ViewChild('tabRow') set tabRowRef(ref: ElementRef<HTMLElement> | undefined) {
     const mode = this.viewMode();
     const current =
+      /* eslint-disable no-restricted-syntax -- view modes, not media kinds */
       mode === 'genres' ? this.genreGrid
       : mode === 'collections' ? this.collectionGrid
       : mode === 'series' ? this.seriesGrid
       : mode === 'authors' ? this.authorGrid
       : null;
+    /* eslint-enable no-restricted-syntax */
     // Unbinding the others makes their next layout measure afresh.
     for (const grid of this.tabGrids) grid.bindRow(grid === current ? ref?.nativeElement : undefined);
   }

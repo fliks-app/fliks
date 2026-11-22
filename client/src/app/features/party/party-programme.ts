@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, computed, effect, inject, input, model, output, signal, untracked, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, input, model, output, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -38,7 +38,6 @@ const rowKey = (i: ItemRef) => `${i.mediaId}:${i.episodeId ?? ''}:${i.itemId ?? 
   selector: 'app-party-programme',
   imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, PartyMusicPickerComponent, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragHandle, CdkDragPlaceholder, LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2],
   templateUrl: './party-programme.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyProgrammeComponent {
   private readonly api = inject(PartyApiService);

@@ -1,7 +1,7 @@
 import { CdkDrag, CdkDragPlaceholder, CdkDropList } from '@angular/cdk/drag-drop';
 import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
 import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, afterNextRender, computed, inject, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideSearch, LucideTrash2, LucideX } from '@lucide/angular';
@@ -30,7 +30,6 @@ interface Section {
   selector: 'app-party-reaction-settings',
   imports: [FormsModule, NgTemplateOutlet, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragPlaceholder, TranslatePipe, LucideSearch, LucideX, ModalHeaderComponent, TvSectionDirective, TvGridDirective, KeyboardReorderDirective, LucideTrash2, ToggleFieldComponent],
   templateUrl: './party-reaction-settings.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyReactionSettingsComponent {
   protected readonly reactions = inject(ReactionsService);

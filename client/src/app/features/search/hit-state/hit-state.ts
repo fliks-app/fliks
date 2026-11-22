@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { Component, input, output } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCheck, LucideCircleAlert, LucideClock, LucidePlus } from '@lucide/angular';
 import type { RowState } from '../music-rows';
@@ -9,7 +9,6 @@ import type { RowState } from '../music-rows';
   imports: [TranslatePipe, LucideCheck, LucideCircleAlert, LucideClock, LucidePlus],
   templateUrl: './hit-state.html',
   host: { class: 'flex size-11 shrink-0 items-center justify-center' },
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class HitStateComponent {
   readonly state = input.required<RowState>();

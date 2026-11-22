@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
   LucideArrowLeft,
@@ -37,7 +37,6 @@ import { ReaderSession } from '../reader-session';
     LucideZoomOut,
   ],
   templateUrl: './reader-top-bar.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'contents' },
 })
 export class ReaderTopBarComponent {

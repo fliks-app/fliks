@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideMic, LucideMicOff, LucideUser, LucideVolume2 } from '@lucide/angular';
 import { VoiceService } from '../../../core/services/party/voice.service';
@@ -10,7 +10,6 @@ import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
   selector: 'app-party-voice-bar',
   imports: [TranslatePipe, TranslatePluralPipe, LucideMic, LucideMicOff, LucideUser, LucideVolume2],
   templateUrl: './party-voice-bar.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '[class.hidden]': '!shown()' },
 })
 export class PartyVoiceBarComponent {

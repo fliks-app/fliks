@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, OnInit, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, DestroyRef, OnDestroy, OnInit, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -62,7 +62,6 @@ const isNoConnection = (e: unknown) => e instanceof HttpErrorResponse && (e.erro
     LucideCalendarPlus, LucideCheck, LucideCrown, LucideDices, LucideEllipsisVertical, LucidePlay, LucideSettings, LucideShare2, LucideUserMinus, LucideX, DropdownMenuComponent,
   ],
   templateUrl: './party-page.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartyPageComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);

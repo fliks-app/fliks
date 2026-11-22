@@ -4,7 +4,6 @@ import { Directive, computed, input, signal } from '@angular/core';
  *  Usage: `<p [appSpoiler]="masked" #sp="spoiler">`. */
 @Directive({
   selector: '[appSpoiler]',
-  standalone: true,
   exportAs: 'spoiler',
   host: {
     // `transition` covers filter, so the blur eases out on reveal.

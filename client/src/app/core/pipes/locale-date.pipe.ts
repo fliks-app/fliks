@@ -3,7 +3,7 @@ import { TranslateService } from '@ngx-translate/core';
 
 /** Formats a date in the selected language's convention; impure so it follows a live language switch (DatePipe's `LOCALE_ID` is fixed at bootstrap).
  * Date-only strings (`YYYY-MM-DD`) format in UTC to avoid an off-by-one day. */
-@Pipe({ name: 'localeDate', standalone: true, pure: false })
+@Pipe({ name: 'localeDate', pure: false })
 export class LocaleDatePipe implements PipeTransform {
   private readonly translate = inject(TranslateService);
   private static readonly formatters = new Map<string, Intl.DateTimeFormat>();

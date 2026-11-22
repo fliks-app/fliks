@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MediaLinkPipe } from '../../core/pipes/media-link.pipe';
 import type { Media } from '../../core/services/api/media.service';
@@ -16,7 +16,6 @@ type AlbumRow = Media & { album?: AlbumListInfo };
   imports: [TranslatePipe, MediaLinkPipe, HorizontalScrollerComponent, MediaCardComponent],
   templateUrl: './recently-played-row.component.html',
   host: { class: 'block' },
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RecentlyPlayedRowComponent {
   protected readonly albums = signal<AlbumRow[]>([]);

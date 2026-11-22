@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, output, signal } from '@angular/core';
+import { Component, computed, effect, inject, output, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { LucideSettings, LucideUsers, LucideX } from '@lucide/angular';
@@ -18,7 +18,6 @@ import { PartyVoiceBarComponent } from './party-voice-bar';
   imports: [TranslatePipe, TranslatePluralPipe, LucideSettings, LucideUsers, LucideX, TvSectionDirective, PartyChatComponent, PartyPersonRowComponent, PartyVoiceBarComponent],
   templateUrl: './party-panel.html',
   styleUrl: './party-panel.css',
-  changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '[attr.data-dock]': 'party.dock()', '[class.party-tv]': 'isTv()', '[style.padding-bottom.px]': 'keyboard.height()' },
 })
 export class PartyPanelComponent {

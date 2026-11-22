@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   Component,
   ElementRef,
   OnDestroy,
@@ -49,7 +48,6 @@ const STEPS = 1001;
   styleUrl: './epub-engine.css',
   encapsulation: ViewEncapsulation.None,
   providers: [EpubBook, EpubPagination, EpubNotes, EpubSearch],
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EpubEngineComponent implements ReaderEngine, OnDestroy {
   readonly target = input.required<ReaderTarget>();

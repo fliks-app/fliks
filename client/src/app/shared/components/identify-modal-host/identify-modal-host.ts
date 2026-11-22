@@ -5,7 +5,6 @@ import { MediaDetailIdentifyModalComponent } from '../../../features/media-detai
 /** Mounts the identify dialog once, at the layout, driven by its service. */
 @Component({
   selector: 'app-identify-modal-host',
-  standalone: true,
   imports: [MediaDetailIdentifyModalComponent],
   templateUrl: './identify-modal-host.html',
 })

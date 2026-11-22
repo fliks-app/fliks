@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, afterNextRender, computed, inject, output, signal, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideRefreshCw } from '@lucide/angular';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
@@ -16,7 +16,6 @@ import { PartyHostSwitchesComponent, switchesPatch } from './party-host-switches
   selector: 'app-party-settings',
   imports: [TranslatePipe, LucideRefreshCw, ModalHeaderComponent, TvSectionDirective, PartyHostSwitchesComponent, ToggleFieldComponent],
   templateUrl: './party-settings.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PartySettingsComponent {
   protected readonly party = inject(PartyService);

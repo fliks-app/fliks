@@ -29,7 +29,6 @@ export type TrackingScope =
 
 @Component({
   selector: 'app-tracking-status-modal',
-  standalone: true,
   imports: [
     ModalFooterComponent,
     NgTemplateOutlet,
