@@ -54,9 +54,9 @@ struct PlaylistDetailView: View {
                             AlbumTile(imagePath: track.posterUrl, title: track.title,
                                       subtitle: track.artists.joined(separator: ", ")) { playTrack(item) }
                         } else {
-                        PosterCard(imagePath: itemImage(item), title: itemTitle(item),
-                                   progressPercent: item.progressPercent,
-                                   mediaId: item.media.id, episodeId: item.episode?.id) {
+                        MediaCard(imagePath: itemImage(item), title: itemTitle(item),
+                                  progressPercent: item.progressPercent,
+                                  mediaId: item.media.id, episodeId: item.episode?.id, pushesBackdrop: false) {
                             Task { await play(item) }
                         }
                         }

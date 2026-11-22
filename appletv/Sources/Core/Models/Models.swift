@@ -272,6 +272,22 @@ struct Episode: Codable, Identifiable, Hashable {
     let stillUrl: String?
 }
 
+extension Media {
+    /// The episode after `episodeId` among those with a file, in season and episode order, specials left out:
+    /// the rule of the web client's `resolveNextEpisodeItem`.
+    func episodeAfter(_ episodeId: Int) -> (mediaFileId: Int, episodeId: Int)? {
+        let playable = (seasons ?? [])
+            .filter { $0.seasonNumber > 0 }
+            .sorted { $0.seasonNumber < $1.seasonNumber }
+            .flatMap { $0.episodes.sorted { $0.episodeNumber < $1.episodeNumber } }
+            .compactMap { episode in
+                files?.first { $0.episodeId == episode.id }.map { (mediaFileId: $0.id, episodeId: episode.id) }
+            }
+        guard let index = playable.firstIndex(where: { $0.episodeId == episodeId }) else { return nil }
+        return playable.indices.contains(index + 1) ? playable[index + 1] : nil
+    }
+}
+
 extension Episode {
     /// "3" or "3-4" for a multi-episode file; the card's corner badge.
     var numberLabel: String {
@@ -359,15 +375,6 @@ struct MediaCastEntry: Codable, Identifiable, Hashable {
     let id: Int
     let character: String
     let order: Int
-    let person: MediaPerson
-}
-
-/// GET /media/:id/crew row. Not currently rendered anywhere (only the cast
-/// Rail is) — modelled for parity now that the endpoint shape is confirmed.
-struct MediaCrewEntry: Codable, Identifiable, Hashable {
-    let id: Int
-    let job: String
-    let department: String
     let person: MediaPerson
 }
 

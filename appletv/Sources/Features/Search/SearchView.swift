@@ -72,8 +72,8 @@ struct SearchView: View {
             if typeFilter != .album && typeFilter != nil { emptyText }
         } else {
             ContentGrid(title: nil, items: results, onReachEnd: loadMore) { media in
-                PosterCard(imagePath: media.posterUrl, title: media.title, mediaId: media.id,
-                           missing: media.isMissing) {
+                MediaCard(imagePath: media.posterUrl, title: media.title, mediaId: media.id,
+                          missing: media.isMissing, pushesBackdrop: false) {
                     onSelectMedia(media.id, media.type)
                 }
             }

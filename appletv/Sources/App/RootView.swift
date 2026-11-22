@@ -34,9 +34,14 @@ struct RootView: View {
             .task(id: homeRefresh.tick) {
                 if auth.state == .signedIn { await watched.loadOverview() }
             }
-            .onChange(of: scenePhase) { _, _ in
+            .onChange(of: scenePhase) { old, new in
                 updateRemotePolling()
                 updateToastStream()
+                // Waking after a long background: what moved meanwhile (the phone's progress, the server's version) shows now.
+                if old == .background, new == .active, auth.state == .signedIn {
+                    homeRefresh.bump()
+                    Task { await ServerVersion.shared.refresh() }
+                }
             }
             .onChange(of: locale.lang) { _, _ in
                 toasts.stop()
@@ -156,14 +161,6 @@ struct RootView: View {
                 .navigationDestination(for: Route.self) { route in
                     Group {
                     switch route {
-                    case .home:
-                        HomeView(
-                            onSelectMedia: { path.append(Route.mediaDetail(id: $0)) },
-                            onSelectEpisode: { path.append(Route.episodeDetail(mediaId: $0, episodeId: $1)) },
-                            onSelectLibrary: { path.append(Route.library(id: $0)) },
-                            onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) },
-                            onSelectParty: { path.append(Route.partyDetail(id: $0)) }
-                        )
                     case let .library(id):
                         LibraryView(libraryId: id, onSelectMedia: { path.append(Route.forMedia($0, $1)) },
                                     onSelectArtist: { path.append(Route.artist(id: $0)) })

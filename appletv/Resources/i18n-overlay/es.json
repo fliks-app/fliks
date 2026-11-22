@@ -76,8 +76,6 @@
   "display_settings.language_hint": "Idioma de la interfaz. Usa por defecto el idioma de tu dispositivo.",
   "playback_settings.player_use_default": "Usar la pista de audio predeterminada",
   "playback_settings.player_use_default_hint": "Ignorar las preferencias de idioma y usar siempre la pista de audio predeterminada del archivo.",
-  "playback_settings.player_eco_default": "Bajo consumo por defecto",
-  "playback_settings.player_eco_default_hint": "Solo muestra las calidades de bajo consumo y selecciona una por defecto. Sustituye la opción anterior.",
   "playback_settings.sub_mode_hint": "Los subtítulos que coincidan con el idioma preferido se mostrarán cuando el audio esté en un idioma extranjero.",
   "home_settings.sections_hint": "Elija las secciones a mostrar y su orden. Use las flechas para reordenar.",
   "home_settings.visible": "Visible",

@@ -41,7 +41,7 @@ struct PlaylistsView: View {
                 Text(tr("playlists.empty")).foregroundStyle(.secondary)
             } else {
                 ContentGrid(title: nil, items: playlists) { playlist in
-                    PosterCard(imagePath: playlist.posters.first, title: playlist.name) {
+                    MediaCard(imagePath: playlist.posters.first, title: playlist.name, pushesBackdrop: false) {
                         onSelectPlaylist(playlist.id)
                     }
                 }

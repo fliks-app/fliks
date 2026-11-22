@@ -71,8 +71,6 @@
   "display_settings.language_hint": "Sprache der Oberfläche. Verwendet standardmäßig die Sprache deines Geräts.",
   "playback_settings.player_use_default": "Standard-Audiospur verwenden",
   "playback_settings.player_use_default_hint": "Spracheinstellungen ignorieren und immer die Standard-Audiospur der Datei verwenden.",
-  "playback_settings.player_eco_default": "Geringer Verbrauch als Standard",
-  "playback_settings.player_eco_default_hint": "Zeigt nur Qualitätsstufen mit geringem Verbrauch an und wählt standardmäßig eine davon aus. Ersetzt die Option oben.",
   "playback_settings.sub_mode_hint": "Untertitel in der bevorzugten Sprache werden angezeigt, wenn das Audio in einer Fremdsprache ist.",
   "home_settings.sections_hint": "Wählen Sie die anzuzeigenden Bereiche und ihre Reihenfolge. Verwenden Sie die Pfeile zum Neuanordnen.",
   "home_settings.visible": "Sichtbar",

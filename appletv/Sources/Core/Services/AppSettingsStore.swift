@@ -39,10 +39,6 @@ import Foundation
     var showEcoQualities: Bool = true {
         didSet { save(showEcoQualities, Keys.showEcoQualities) }
     }
-    /// Only eco rungs offered, one selected by default. Overrides `showEcoQualities`.
-    var ecoByDefault: Bool = false {
-        didSet { save(ecoByDefault, Keys.ecoByDefault) }
-    }
     /// Last quality picked in the player menu ("auto" or a rung id); sent with the next playback-info.
     var playerQualityId: String = "auto" {
         didSet { save(playerQualityId, Keys.playerQualityId) }
@@ -126,7 +122,6 @@ import Foundation
         useDefaultAudioStream = read(Keys.useDefaultAudioStream) as? Bool ?? false
         forceDisableHdr = read(Keys.forceDisableHdr) as? Bool ?? false
         showEcoQualities = read(Keys.showEcoQualities) as? Bool ?? true
-        ecoByDefault = read(Keys.ecoByDefault) as? Bool ?? false
         playerQualityId = read(Keys.playerQualityId) as? String ?? "auto"
         autoSkipIntro = read(Keys.autoSkipIntro) as? Bool ?? false
         autoPlayNext = read(Keys.autoPlayNext) as? Bool ?? true
@@ -145,7 +140,6 @@ import Foundation
         static let useDefaultAudioStream = "settings.useDefaultAudioStream"
         static let forceDisableHdr = "settings.forceDisableHdr"
         static let showEcoQualities = "settings.showEcoQualities"
-        static let ecoByDefault = "settings.ecoByDefault"
         static let playerQualityId = "settings.playerQualityId"
         static let autoSkipIntro = "settings.autoSkipIntro"
         static let autoPlayNext = "settings.autoPlayNext"

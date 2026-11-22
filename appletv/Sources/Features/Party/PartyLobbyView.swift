@@ -180,7 +180,8 @@ private struct ProposalCard: View {
         let up = myId.map(proposal.upvoterIds.contains) ?? false
         let down = myId.map(proposal.downvoterIds.contains) ?? false
         VStack(spacing: 12) {
-            PosterCard(imagePath: proposal.item.hidden ? nil : proposal.item.posterUrl, title: proposal.item.shownTitle) {}
+            MediaCard(imagePath: proposal.item.hidden ? nil : proposal.item.posterUrl, title: proposal.item.shownTitle,
+                      pushesBackdrop: false) {}
             HStack(spacing: 12) {
                 voteButton(tr("party.vote_up"), symbol: up ? "hand.thumbsup.fill" : "hand.thumbsup",
                            count: proposal.upvoterIds.count) { Task { await service.vote(proposal.id, up ? nil : 1) } }

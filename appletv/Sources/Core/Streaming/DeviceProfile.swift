@@ -42,6 +42,7 @@ struct DeviceProfile: Encodable {
     /// Nil is omitted from the body, like `needsHlsSubtitles`.
     let supportsMuxedAudioRendition: Bool?
     let probesSegZero: Bool
+    let supportsIFrameTrickPlay: Bool
     let deviceType: String
     let deviceName: String
     let systemName: String
@@ -52,12 +53,16 @@ struct DeviceProfile: Encodable {
 enum DeviceProfileBuilder {
     private static let videoCodecs = probeVideoCodecs()
     private static let audioCodecs = probeAudioCodecs()
-    private static let hdrModes = AVPlayer.availableHDRModes
+    /// Read per build, like the channel count: the display chain can come up after launch.
+    private static var hdrModes: AVPlayer.HDRMode {
+        AppSettingsStore.shared.forceDisableHdr ? [] : AVPlayer.availableHDRModes
+    }
     /// Read per build: the receiver can be switched on after launch.
     private static var audioChannels: Int { max(2, AVAudioSession.sharedInstance().maximumOutputNumberOfChannels) }
 
     /// The same full profile, video and audio-files entries, on every playback-info.
     static func build(needsHlsSubtitles: Bool = false, supportsMuxedAudioRendition: Bool = false) -> DeviceProfile {
+        let hdrModes = hdrModes
         let hevc10 = videoCodecs.contains("hevc") && AVURLAsset.isPlayableExtendedMIMEType("video/mp4; codecs=\"hvc1.2.4.L120.B0\"")
         return DeviceProfile(
             directPlayProfiles: [
@@ -84,6 +89,8 @@ enum DeviceProfileBuilder {
             supportsMuxedAudioRendition: supportsMuxedAudioRendition ? true : nil,
             // AVPlayer seeks straight to the resume segment; it never probes seg-0.
             probesSegZero: false,
+            // AVKit draws its scrub thumbnails from the I-frame playlist.
+            supportsIFrameTrickPlay: true,
             deviceType: "desktop",
             deviceName: DeviceName.current,
             systemName: "tvOS \(UIDevice.current.systemVersion)",

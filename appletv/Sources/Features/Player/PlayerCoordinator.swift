@@ -74,6 +74,8 @@ import UIKit
     var skipCommercialProgress: Double = 0
     var skipCommercialSecondsLeft = 0
     var skipCommercialOrdinal: Int?
+    /// The break whose cue the viewer closed with Menu: it stays hidden until the next break.
+    private var dismissedCommercialOrdinal: Int?
     private var skipCommercialShownAt: Double = 0
 
     /// Custom skip-intro cue: native `contextualActions` can't show progress and retract with the
@@ -103,6 +105,20 @@ import UIKit
         }
     }
 
+    /// The media row, asked a second time once: a flaky link must not start a film without its track preferences.
+    private static func fetchMedia(_ id: Int) async throws -> Media {
+        do {
+            return try await APIClient.shared.get("/api/media/\(id)")
+        } catch {
+            Log.player.notice("media \(id, privacy: .public) fetch failed, retrying once")
+            return try await APIClient.shared.get("/api/media/\(id)")
+        }
+    }
+
+    private static func fetchSubtitles(_ id: Int) async -> [SubtitleFileRow] {
+        (try? await APIClient.shared.get("/api/media/\(id)/subtitles")) ?? []
+    }
+
     // MARK: - Load / reload / teardown
 
     func load(mediaFileId: Int, mediaId: Int, episodeId: Int?, startAt: Double?, autoplay: Bool = true,
@@ -115,10 +131,14 @@ import UIKit
         self.episodeId = episodeId
         // Before the profile is built: the output channel count is only reported under an active session.
         AppAudioSession.acquire(.video)
-        let fetchedMedia: Media? = try? await APIClient.shared.get("/api/media/\(mediaId)")
-        media = fetchedMedia
-        let subtitleRows: [SubtitleFileRow]? = try? await APIClient.shared.get("/api/media/\(mediaId)/subtitles")
-        externalSubtitles = subtitleRows ?? []
+        // Independent of each other: media, subtitle rows and the file's stream token go out together.
+        async let mediaFetch = Self.fetchMedia(mediaId)
+        async let subtitleFetch = Self.fetchSubtitles(mediaId)
+        async let tokenFetch = AuthService.shared.ensureStreamToken(mediaFileId: mediaFileId)
+        // Without the media the track preferences and next-episode logic would silently drop: fail the load.
+        media = try await mediaFetch
+        externalSubtitles = await subtitleFetch
+        _ = await tokenFetch
         resolveNextEpisode()
 
         let (url, start) = try await playback.start(
@@ -341,28 +361,10 @@ import UIKit
 
     // MARK: - Next-episode resolution
 
-    /// The episode after `episodeId` (next in the season, else the next season's first),
-    /// resolved only when it has a downloaded file.
     private func resolveNextEpisode() {
         nextEpisode = nil
-        guard let media, media.type.hasChildren, let episodeId, let seasons = media.seasons else { return }
-        let sorted = seasons.sorted { $0.seasonNumber < $1.seasonNumber }
-        for (si, season) in sorted.enumerated() {
-            let eps = season.episodes.sorted { $0.episodeNumber < $1.episodeNumber }
-            guard let idx = eps.firstIndex(where: { $0.id == episodeId }) else { continue }
-            let candidate: Episode?
-            if idx + 1 < eps.count {
-                candidate = eps[idx + 1]
-            } else if si + 1 < sorted.count {
-                candidate = sorted[si + 1].episodes.sorted { $0.episodeNumber < $1.episodeNumber }.first
-            } else {
-                candidate = nil
-            }
-            if let candidate, candidate.hasFile, let file = media.files?.first(where: { $0.episodeId == candidate.id }) {
-                nextEpisode = (file.id, candidate.id)
-            }
-            return
-        }
+        guard let media, media.type.hasChildren, let episodeId else { return }
+        nextEpisode = media.episodeAfter(episodeId)
     }
 
     private func advance(to next: (mediaFileId: Int, episodeId: Int)) async {
@@ -389,6 +391,7 @@ import UIKit
         showSkipIntro = false
         showSkipCommercial = false
         skipCommercialOrdinal = nil
+        dismissedCommercialOrdinal = nil
         contextualKey = ""
         qualityMenuKey = ""
         lastTickTime = -1
@@ -397,8 +400,11 @@ import UIKit
         legibleGroup = nil
         if newMediaId != mediaId {
             mediaId = newMediaId
-            media = try? await APIClient.shared.get("/api/media/\(newMediaId)")
-            externalSubtitles = (try? await APIClient.shared.get("/api/media/\(newMediaId)/subtitles")) ?? []
+            async let mediaFetch = Self.fetchMedia(newMediaId)
+            async let subtitleFetch = Self.fetchSubtitles(newMediaId)
+            guard let fetched = try? await mediaFetch else { return false }
+            media = fetched
+            externalSubtitles = await subtitleFetch
         }
         resolveNextEpisode()
         guard let started = try? await playback.start(
@@ -577,6 +583,13 @@ import UIKit
         skipIntroSecondsLeft = max(0, Int(ceil(skipIntroRevealSeconds - elapsed)))
     }
 
+    /// Menu on a skip cue closes the cue and leaves the player open.
+    func dismissSkipCue() {
+        if showSkipCommercial { dismissedCommercialOrdinal = skipCommercialOrdinal } else if showSkipIntro { skipIntroDismissed = true }
+        showSkipIntro = false
+        showSkipCommercial = false
+    }
+
     func skipIntro() {
         skipIntroDismissed = true
         player?.seek(to: CMTime(seconds: skipIntroTarget, preferredTimescale: 600))
@@ -680,6 +693,10 @@ import UIKit
         if o != skipCommercialOrdinal || seeked {
             skipCommercialOrdinal = o
             skipCommercialShownAt = t
+        }
+        if o == dismissedCommercialOrdinal {
+            if showSkipCommercial { showSkipCommercial = false }
+            return
         }
         let elapsed = t - skipCommercialShownAt
         let show = elapsed < skipIntroRevealSeconds
@@ -924,7 +941,7 @@ import UIKit
     }
 
     /// Applies one polled `remote.command` (absolute semantics, no toggles except `playpause`),
-    /// then forces an ack heartbeat so the controller sees `lastCmdId`.
+    /// then forces an ack heartbeat so the controller sees `lastCmdId`, for a refused command as for an applied one.
     func applyRemoteCommand(_ cmd: RemoteCommand) {
         guard let player, let item = player.currentItem else {
             Log.remote.notice("no player loaded yet, dropping \(cmd.action, privacy: .public) (\(cmd.cmdId, privacy: .public))")
@@ -938,19 +955,19 @@ import UIKit
         case "seek":
             guard let seconds = cmd.positionSeconds else {
                 Log.remote.notice("seek without positionSeconds (\(cmd.cmdId, privacy: .public)), ignoring")
-                return
+                break
             }
             player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
         case "volume":
             guard let level = cmd.level else {
                 Log.remote.notice("volume without level (\(cmd.cmdId, privacy: .public)), ignoring")
-                return
+                break
             }
             player.volume = Float(level)
         case "mute":
             guard let muted = cmd.muted else {
                 Log.remote.notice("mute without a muted flag (\(cmd.cmdId, privacy: .public)), ignoring")
-                return
+                break
             }
             userMuted = muted
             applyMuteGate()
@@ -959,25 +976,25 @@ import UIKit
         case "next":
             guard let next = nextEpisode else {
                 Log.remote.notice("next with no next episode available, ignoring")
-                return
+                break
             }
             Task { await advance(to: next) }
         case "audio":
             guard let group = audibleGroup, let option = matchOption(cmd.trackId, in: group) else {
                 Log.remote.notice("audio track \(cmd.trackId ?? "nil", privacy: .public) not found (\(cmd.cmdId, privacy: .public)), ignoring")
-                return
+                break
             }
             item.select(option, in: group)
             selectionDidChange()
         case "subtitle":
             guard let group = legibleGroup else {
                 Log.remote.notice("no subtitle group loaded yet, dropping \(cmd.cmdId, privacy: .public)")
-                return
+                break
             }
             if let subtitleId = cmd.subtitleId {
                 guard let option = matchOption(subtitleId, in: group) else {
                     Log.remote.notice("subtitle track \(subtitleId, privacy: .public) not found (\(cmd.cmdId, privacy: .public)), ignoring")
-                    return
+                    break
                 }
                 item.select(option, in: group)
             } else {
@@ -987,13 +1004,14 @@ import UIKit
         case "quality":
             guard let id = cmd.qualityId, playback.qualityOptions.contains(where: { $0.id == id }) else {
                 Log.remote.notice("quality \(cmd.qualityId ?? "nil", privacy: .public) not offered (\(cmd.cmdId, privacy: .public)), ignoring")
-                return
+                break
             }
             selectQuality(id)
         default:
             Log.remote.notice("unknown action \(cmd.action, privacy: .public) (\(cmd.cmdId, privacy: .public)), ignoring")
-            return
+            break
         }
+        // A refused command is acked too: the controller must not read a refusal as a dead device.
         RemoteControlService.shared.lastAppliedCmdId = cmd.cmdId
         let position = player.currentTime().seconds
         let duration = item.duration.seconds

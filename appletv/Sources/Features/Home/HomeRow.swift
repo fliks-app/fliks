@@ -388,11 +388,18 @@ private struct RequestsRecentRow: View {
 
     var body: some View {
         ZoneRow(title: tr("home.requests_recent"), state: state, onRetry: { Task { await load() } }) { req in
-            MediaCard(imagePath: req.posterUrl ?? req.fanartUrl, title: req.title, subtitle: req.status) {
+            MediaCard(imagePath: req.posterUrl ?? req.fanartUrl, title: req.title, subtitle: Self.statusLabel(req.status)) {
                 if let mediaId = req.mediaId { onSelect(mediaId) }
             }
         }
         .task(id: refresh.tick) { await load() }
+    }
+
+    /// The web's translated status, the raw one for a status this build does not know.
+    private static func statusLabel(_ status: String) -> String {
+        let key = "requests.status.\(status)"
+        let label = tr(key)
+        return label == key ? status : label
     }
 
     private func load() async {
