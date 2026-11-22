@@ -9,6 +9,7 @@ use crate::{
     http::{
         AppError,
         auth::{Authed, SessionAuthed},
+        client_ip,
         json::iso_ms,
         validate::{PathParams, ValidJson},
     },
@@ -16,15 +17,15 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Query, State},
-    http::StatusCode,
+    extract::{ConnectInfo, Extension, Query, State},
+    http::{HeaderMap, StatusCode},
     routing::{delete, get, post},
 };
 use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Subject};
 use serde::Serialize;
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::{collections::HashMap, net::SocketAddr};
 
 const CODE_TTL_SECS: i64 = 600;
 const MAX_CODES_PER_DEVICE: i64 = 3;
@@ -507,15 +508,26 @@ pub async fn grant_code(
 #[utoipa::path(post, path = "/api/remote/grants/claim", responses((status = 201)))]
 pub async fn grant_claim(
     State(st): State<AppState>,
+    peer: Option<Extension<ConnectInfo<SocketAddr>>>,
+    headers: HeaderMap,
     SessionAuthed(a): SessionAuthed,
     ValidJson(dto): ValidJson<Claim>,
 ) -> Result<(StatusCode, Json<GrantDto>), AppError> {
     dto.validate()?;
     let me = a.user.id;
+    let ip = client_ip(&st, &headers, peer.as_ref().map(|Extension(ConnectInfo(a))| a)).await;
+    let key = format!("remote-claim:{me}");
+    if !st.pairing_throttle.attempt(ip, &key) {
+        return Err(AppError::with_message(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Too many failed attempts, try again later",
+        ));
+    }
     let code = dto.code.trim().to_uppercase();
     let Some(mut grant) = db::unclaimed_by_code(&st.db, &code).await? else {
         return Err(AppError::not_found("remote.error_unknown_code"));
     };
+    st.pairing_throttle.refund(ip, &key);
     if grant.code_expires_at < Utc::now() {
         db::delete(&st.db, grant.id).await?;
         return Err(AppError::not_found("remote.error_expired_code"));

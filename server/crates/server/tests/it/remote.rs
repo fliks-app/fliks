@@ -341,3 +341,53 @@ async fn load_without_kind_gets_the_media_kind(pool: PgPool) {
     assert_eq!(cmds[0]["kind"], "album");
     assert_eq!(cmds[1]["kind"], "movie");
 }
+
+impl Ctx {
+    async fn mint(&self, token: &str, device: &str) -> String {
+        let (s, code) = self
+            .call(
+                "POST",
+                "/api/remote/grants/code",
+                token,
+                Some(json!({"deviceId": device, "deviceName": "TV"})),
+            )
+            .await;
+        assert_eq!(s, 201);
+        code["code"].as_str().unwrap().to_owned()
+    }
+
+    async fn claim(&self, token: &str, code: &str) -> u16 {
+        let body = Some(json!({"code": code}));
+        self.call("POST", "/api/remote/grants/claim", token, body)
+            .await
+            .0
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn failed_claims_lock_the_claimer_out_even_for_the_right_code(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, owner) = c.user("owner", false).await;
+    let (_, thief) = c.user("thief", false).await;
+    let (_, guest) = c.user("guest", false).await;
+    let code = c.mint(&owner, "d1").await;
+    for _ in 0..5 {
+        assert_eq!(c.claim(&thief, "ZZZZZZ").await, 404);
+    }
+    assert_eq!(c.claim(&thief, &code).await, 429);
+    assert_eq!(c.claim(&guest, &code).await, 201);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_claim_that_finds_its_code_is_not_counted_as_a_failure(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, owner) = c.user("owner", false).await;
+    let (_, guest) = c.user("guest", false).await;
+    for _ in 0..4 {
+        assert_eq!(c.claim(&guest, "ZZZZZZ").await, 404);
+    }
+    for device in ["d1", "d2", "d3"] {
+        let code = c.mint(&owner, device).await;
+        assert_eq!(c.claim(&guest, &code).await, 201);
+    }
+}
