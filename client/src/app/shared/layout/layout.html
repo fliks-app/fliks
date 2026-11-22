@@ -234,7 +234,7 @@
     @if (navbar.phoneDock() && !keyboardOpen()) {
       <div class="dock z-40 dock-with-fab-cradle bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95 reduced-effects:backdrop-filter-none">
         @if (dockHome(); as item) {
-          <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
+          <a [routerLink]="item.route" routerLinkActive #dockLink="routerLinkActive" [class.dock-active]="dockLink.isActive && !librarySheetOpen()" [routerLinkActiveOptions]="{ exact: item.exact }"
              [state]="{ rootEntry: true }">
             <app-nav-icon [name]="item.icon" class="h-5 w-5" />
             <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
@@ -255,7 +255,7 @@
         <!-- Empty cell holding the centre slot so the 4 nav items spread over 5 columns; the FAB stays outside the dock to keep .dock's position:fixed. -->
         <span aria-hidden="true" class="invisible"></span>
         @if (dockRequests(); as item) {
-          <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
+          <a [routerLink]="item.route" routerLinkActive #dockLink="routerLinkActive" [class.dock-active]="dockLink.isActive && !librarySheetOpen()" [routerLinkActiveOptions]="{ exact: item.exact }"
              [state]="{ rootEntry: true }">
             <app-nav-icon [name]="item.icon" class="h-5 w-5" />
             <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
