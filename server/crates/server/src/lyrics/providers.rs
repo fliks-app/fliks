@@ -83,8 +83,22 @@ async fn lookup_fresh(st: &AppState, item: i32, provider: &str) -> bool {
     .unwrap_or(false)
 }
 
+/// At most one warn a minute for the whole fetcher: a provider that is down fails every track.
+fn warn_provider(ns: &str, e: &dyn std::fmt::Display) {
+    static LAST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    if now.saturating_sub(LAST.load(std::sync::atomic::Ordering::Relaxed)) >= 60 {
+        LAST.store(now, std::sync::atomic::Ordering::Relaxed);
+        tracing::warn!("lyrics provider {ns}: {e}");
+    } else {
+        tracing::debug!("lyrics provider {ns}: {e}");
+    }
+}
+
 async fn record(st: &AppState, item: i32, provider: &str, status: &str) {
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         r#"INSERT INTO lyrics_lookups ("itemId", provider, status) VALUES ($1, $2, $3)
            ON CONFLICT ("itemId", provider) DO UPDATE SET status = EXCLUDED.status, "checkedAt" = now()"#,
     )
@@ -92,7 +106,10 @@ async fn record(st: &AppState, item: i32, provider: &str, status: &str) {
     .bind(provider)
     .bind(status)
     .execute(&st.db)
-    .await;
+    .await
+    {
+        tracing::warn!("lyrics lookup of track #{item} not recorded: {e}");
+    }
 }
 
 /// Asks the providers for one track until one gives a synced document (a plain one is kept as the fallback).
@@ -114,6 +131,10 @@ pub async fn fetch(
         return Ok(());
     };
     let (Some(title), Some(artist)) = (f.title.clone(), f.artist.clone()) else {
+        // Recorded as a miss so the sweep waits `MISS_DAYS` before it asks again.
+        for p in providers(st).await {
+            record(st, item, p.id().as_str(), "miss").await;
+        }
         return Ok(());
     };
     let q = LyricsQuery {
@@ -134,7 +155,7 @@ pub async fn fetch(
         let hit = match p.fetch_lyrics(&q, priority).await {
             Ok(h) => h,
             Err(e) => {
-                tracing::debug!("lyrics provider {ns}: {e}");
+                warn_provider(&ns, &e);
                 continue;
             }
         };
@@ -327,6 +348,9 @@ pub async fn enqueue_missing(st: &AppState, media: Option<i32>) {
     .bind(MISS_DAYS)
     .fetch_all(&st.db)
     .await
-    .unwrap_or_default();
+    .unwrap_or_else(|e| {
+        tracing::warn!("lyrics sweep found no tracks: {e}");
+        vec![]
+    });
     super::queue::enqueue(st, items);
 }

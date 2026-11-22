@@ -200,8 +200,9 @@ async fn scan(st: &AppState, id: i32, path: &Path, info: MediaInfo, priority: Jo
     }
 }
 
-/// Scans bytes that have no row yet as urgent work, waiting at most `wait` (the job is then
-/// cancelled); `None` when it fails or is late. Also returns the version of the bytes read.
+/// Scans bytes that have no row yet as a High-priority job (it still queues behind the running
+/// ones), waiting at most `wait` (the job is then cancelled); `None` when it fails or is late.
+/// Also returns the version of the bytes read.
 pub async fn scan_now(
     st: &AppState,
     path: &Path,

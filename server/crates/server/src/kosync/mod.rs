@@ -187,6 +187,11 @@ async fn put_progress(
     let reply =
         || Json(json!({"document": u.document, "timestamp": now.timestamp()})).into_response();
     let Some(r) = resolve(&st, &u.document, &caller.libraries).await? else {
+        tracing::info!(
+            "KOSync progress of user #{} not stored: no book matches document {}",
+            caller.user,
+            u.document
+        );
         return Ok(reply());
     };
     sqlx::query(

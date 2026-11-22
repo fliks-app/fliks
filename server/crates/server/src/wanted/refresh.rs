@@ -237,6 +237,43 @@ async fn discover_albums(
         .collect())
 }
 
+/// Writes the repaired wants back to the follow, inside the creation's transaction.
+async fn store_wants(
+    tx: &mut sqlx::PgConnection,
+    source: &Source,
+    user: i32,
+    specs: &[fliks_domain::media::wants::WantSpec],
+) -> sqlx::Result<()> {
+    let wants = Jsonb(serde_json::json!(specs));
+    match source {
+        Source::Artist { person, .. } | Source::Author { person, .. } => {
+            let role = if matches!(source, Source::Artist { .. }) {
+                "artist"
+            } else {
+                "author"
+            };
+            sqlx::query(
+                r#"UPDATE person_follows SET wants = $4 WHERE "userId" = $1 AND "personId" = $2 AND role = $3"#,
+            )
+            .bind(user)
+            .bind(person)
+            .bind(role)
+            .bind(wants)
+            .execute(tx)
+            .await?;
+        }
+        Source::Series { collection, .. } => {
+            sqlx::query(r#"UPDATE series_watches SET wants = $3 WHERE "userId" = $1 AND "collectionId" = $2"#)
+                .bind(user)
+                .bind(collection)
+                .bind(wants)
+                .execute(tx)
+                .await?;
+        }
+    }
+    Ok(())
+}
+
 /// Adds the work for the follow when nobody has; `Ok(false)` when it is known, the follow gone or off,
 /// or the follower no longer allowed. Only an advisory lock is held across the creation, never a row lock.
 pub(super) async fn add(st: &AppState, job: &Job, work: &str) -> Result<bool, AppError> {
@@ -320,7 +357,12 @@ pub(super) async fn add(st: &AppState, job: &Job, work: &str) -> Result<bool, Ap
         );
         default_wants(kind)
     });
-    wants::drop_unknown_profiles(&st.db, &mut specs).await?;
+    if !wants::drop_unknown_profiles(&st.db, &mut specs)
+        .await?
+        .is_empty()
+    {
+        store_wants(&mut lock, &job.source, job.user, &specs).await?;
+    }
     if kind == MediaKind::Album {
         add_album(st, job, &target, work, &specs).await?;
         lock.commit().await?;

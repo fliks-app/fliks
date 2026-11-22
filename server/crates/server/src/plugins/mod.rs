@@ -447,8 +447,12 @@ impl Plugins {
         let dir = &self.opts.runtime_dir;
         clear_leftovers(dir);
         self.install_bundled().await;
-        let Ok(pkgs) = packages::all(&self.db).await else {
-            return;
+        let pkgs = match packages::all(&self.db).await {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::error!("no plugin loaded at boot: {e}");
+                return;
+            }
         };
         let keep: Vec<String> = pkgs
             .iter()

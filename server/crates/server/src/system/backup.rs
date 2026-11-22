@@ -136,17 +136,21 @@ async fn dump(
     tracing::info!("Creating backup: {filename}");
     mkdir_private(dir).map_err(|e| internal(format!("cannot create the backup directory: {e}")))?;
     let path = dir.join(&filename);
+    let tmp = dir.join(format!("{filename}{PARTIAL}"));
     let file =
-        create_private(&path).map_err(|e| internal(format!("cannot write the backup: {e}")))?;
-    let mut partial = Partial(Some(&path));
+        create_private(&tmp).map_err(|e| internal(format!("cannot write the backup: {e}")))?;
+    let mut partial = Partial(Some(&tmp));
     let mut args = conn_args(cfg);
     args.extend(format_args.iter().map(|a| (*a).to_owned()));
     args.extend(["--no-owner", "--no-privileges"].map(String::from));
     run_tool(cfg, "pg_dump", &args, file.into()).await?;
-    let size = tokio::fs::metadata(&path)
+    let size = tokio::fs::metadata(&tmp)
         .await
         .map_err(|e| internal(e.to_string()))?
         .len();
+    tokio::fs::rename(&tmp, &path)
+        .await
+        .map_err(|e| internal(format!("cannot write the backup: {e}")))?;
     partial.0 = None;
     tracing::info!("Backup created: {filename} ({size} bytes)");
     Ok(Made { filename, size })
@@ -171,6 +175,7 @@ pub async fn before_migration_in(
     pool: &PgPool,
     dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    sweep_partials(dir).await;
     let Some(version) = db::pending_version(pool).await? else {
         return Ok(());
     };
@@ -188,6 +193,25 @@ pub async fn before_migration_in(
         tokio::fs::remove_file(dir.join(e.filename)).await?;
     }
     Ok(())
+}
+
+/// A dump is written under this suffix and renamed once complete, so no list or prune sees a cut file.
+const PARTIAL: &str = ".partial";
+
+/// Deletes the unfinished dumps a killed process left behind.
+async fn sweep_partials(dir: &Path) {
+    let Ok(mut rd) = tokio::fs::read_dir(dir).await else {
+        return;
+    };
+    while let Ok(Some(e)) = rd.next_entry().await {
+        let name = e.file_name();
+        if name.to_string_lossy().ends_with(PARTIAL) {
+            match tokio::fs::remove_file(e.path()).await {
+                Ok(()) => tracing::info!("Removed unfinished backup {}", name.to_string_lossy()),
+                Err(err) => tracing::warn!("cannot remove {}: {err}", name.to_string_lossy()),
+            }
+        }
+    }
 }
 
 /// Removes an unfinished dump, also when the future is dropped mid-run (shutdown).
@@ -449,6 +473,15 @@ mod tests {
         ));
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[tokio::test]
+    async fn sweep_removes_only_the_partials() {
+        let dir = scratch("partial");
+        put(&dir, "fliks-pre-migration-v1-a.dump", 10);
+        put(&dir, "fliks-pre-migration-v2-b.dump.partial", 5);
+        sweep_partials(&dir).await;
+        assert_eq!(names(&dir), ["fliks-pre-migration-v1-a.dump"]);
     }
 
     #[tokio::test]

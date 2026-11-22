@@ -3,7 +3,7 @@ use super::{
     db::Server,
     emby::{Conn, Item, Mode},
 };
-use crate::users::imported_user;
+use crate::{events::event::ImportErrors, users::imported_user};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
 use sqlx::PgPool;
@@ -17,6 +17,7 @@ pub struct Stats {
     pub users_created: i64,
     pub imported: i64,
     pub skipped: i64,
+    pub errors: ImportErrors,
 }
 
 #[derive(Default)]
@@ -83,13 +84,16 @@ pub async fn import_server(db: &PgPool, server: &Server) -> Result<Stats, String
             tracing::warn!("watch-history import: user \"\": missing name");
             continue;
         }
-        match import_user(db, &conn, &user.id, name, &mut caches).await {
+        match import_user(db, &conn, &user.id, name, &mut caches, &mut stats.errors).await {
             Ok((created, imported, skipped)) => {
                 stats.users_created += i64::from(created);
                 stats.imported += imported;
                 stats.skipped += skipped;
             }
-            Err(e) => tracing::warn!(error = %e, "watch-history import: user \"{name}\""),
+            Err(e) => {
+                tracing::warn!(error = %e, "watch-history import: user \"{name}\"");
+                stats.errors.push(format!("user \"{name}\": {e}"));
+            }
         }
     }
     Ok(stats)
@@ -118,6 +122,7 @@ async fn import_user(
     emby_id: &str,
     name: &str,
     caches: &mut Caches,
+    errors: &mut ImportErrors,
 ) -> Result<(bool, i64, i64), String> {
     let (user_id, created) = imported_user(db, name, "emby")
         .await
@@ -139,7 +144,10 @@ async fn import_user(
         match apply(db, conn, emby_id, user_id, item, in_resume, caches).await {
             Ok(true) => imported += 1,
             Ok(false) => skipped += 1,
-            Err(e) => tracing::warn!(error = %e, "watch-history import: item \"{}\"", item.id),
+            Err(e) => {
+                tracing::warn!(error = %e, "watch-history import: item \"{}\"", item.id);
+                errors.push(format!("item {}: {e}", item.id));
+            }
         }
     }
     Ok((created, imported, skipped))

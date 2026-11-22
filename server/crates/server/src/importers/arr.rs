@@ -582,7 +582,7 @@ async fn radarr_movie_subtitles(
         .await
         .map_err(error_text)?;
     if !res.status().is_success() {
-        return Ok(0);
+        return Err(format!("extrafile answered {}", res.status().as_u16()));
     }
     let extras: Value = res.json().await.map_err(error_text)?;
     let mut count = 0;

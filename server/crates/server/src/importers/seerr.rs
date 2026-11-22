@@ -1,5 +1,6 @@
 //! Seerr: connection test and the request import (`importers.md` D).
 use super::{dto, fetch};
+use crate::events::event::ImportErrors;
 use crate::{
     events::SseEvent,
     http::{AppError, auth::Authed},
@@ -65,6 +66,8 @@ pub(super) async fn start(st: AppState, a: Authed) -> Res<(StatusCode, Json<Valu
                         imported: s.imported,
                         updated: s.updated,
                         skipped: s.skipped,
+                        errors: s.errors.first,
+                        error_count: s.errors.total,
                     });
                     Ok(())
                 }
@@ -94,7 +97,7 @@ struct Stats {
     imported: i64,
     updated: i64,
     skipped: i64,
-    errors: Vec<String>,
+    errors: ImportErrors,
 }
 
 enum Outcome {

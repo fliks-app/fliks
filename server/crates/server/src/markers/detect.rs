@@ -140,6 +140,12 @@ async fn pass(
         },
     )
     .await;
+    // Every fingerprint failing is the engine being down: the season must stay unstamped.
+    if prints.is_empty() && !targets.is_empty() {
+        return Err(format!(
+            "every {name} fingerprint of season #{season} failed"
+        ));
+    }
     prints.sort_by_key(|p| p.episode.episode_number);
 
     let (result_files, detected) = if prints.is_empty() {

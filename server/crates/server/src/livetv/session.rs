@@ -688,16 +688,25 @@ pub async fn revoke_lost_access(st: &AppState, user_id: i32) {
     if mine.is_empty() {
         return;
     }
-    let Ok(Some((user, role))) = load_enabled(&st.db, user_id).await else {
-        return;
+    let (user, role) = match load_enabled(&st.db, user_id).await {
+        Ok(Some(u)) => u,
+        Ok(None) => return,
+        Err(e) => {
+            tracing::warn!("live access re-check of user #{user_id} failed: {e}");
+            return;
+        }
     };
     let perms = if user.is_admin {
         vec!["manage:all".to_owned()]
     } else {
         role.map(|r| r.permissions).unwrap_or_default()
     };
-    let Ok(denied) = super::access::denied_groups(&st.db, user_id, &perms).await else {
-        return;
+    let denied = match super::access::denied_groups(&st.db, user_id, &perms).await {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::warn!("live access re-check of user #{user_id} failed: {e}");
+            return;
+        }
     };
     for (sid, channel) in mine {
         match playable(&st.db, channel, &denied).await {

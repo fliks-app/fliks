@@ -336,7 +336,14 @@ pub async fn start(
     {
         return Start::Idle;
     }
-    let file = track(st, item).await.ok().map(|t| t.file);
+    // A track with no file fails visibly in `steps`; there is no file to check for a worker here.
+    let file = match track(st, item).await {
+        Ok(t) => Some(t.file),
+        Err(e) => {
+            tracing::debug!("karaoke of track #{item}: {e}");
+            None
+        }
+    };
     // The pass leaves any worker job alone; a user's request only a job a worker will take.
     if let Some(f) = file {
         let held = if user.is_some() {
@@ -344,15 +351,26 @@ pub async fn start(
         } else {
             store::worker_separating(&st.db, f, &["queued", "leased"]).await
         };
-        if held.unwrap_or(false) {
-            return Start::Idle;
+        match held {
+            Ok(false) => {}
+            Ok(true) => return Start::Idle,
+            Err(e) => {
+                tracing::warn!("karaoke of track #{item} not started: {e}");
+                return Start::Idle;
+            }
         }
     }
-    if user.is_some()
-        && store::total(&st.db).await.unwrap_or(0)
-            >= super::budget_bytes(st).await.saturating_mul(2)
-    {
-        return Start::Refused(Refusal::Full);
+    if user.is_some() {
+        match store::total(&st.db).await {
+            Ok(total) if total >= super::budget_bytes(st).await.saturating_mul(2) => {
+                return Start::Refused(Refusal::Full);
+            }
+            Ok(_) => {}
+            Err(e) => {
+                tracing::warn!("karaoke of track #{item} not started: {e}");
+                return Start::Idle;
+            }
+        }
     }
     if !pending(st, item, opts).await {
         return Start::Idle;

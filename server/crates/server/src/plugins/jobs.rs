@@ -93,10 +93,17 @@ pub fn spawn_claimer(st: &AppState) {
                     let lease = env.cfg.deadlines.scheduled + env.cfg.lease_extra;
                     // A key still running is left due: its end wakes the claimer, no push-back.
                     let running = st.jobs.running_under(&format!("plugin-call:{}:", rt.sh.id));
-                    let Ok(rows) = scheduled::claim(&st.db, &rt.sh.id, free, lease, &running).await
-                    else {
-                        continue;
-                    };
+                    let rows =
+                        match scheduled::claim(&st.db, &rt.sh.id, free, lease, &running).await {
+                            Ok(rows) => rows,
+                            Err(e) => {
+                                tracing::warn!(
+                                    "plugin \"{}\" scheduled calls not claimed: {e}",
+                                    rt.sh.id
+                                );
+                                continue;
+                            }
+                        };
                     claimed |= !rows.is_empty();
                     for c in rows {
                         let (rt, st) = (rt.clone(), st.clone());
@@ -108,12 +115,20 @@ pub fn spawn_claimer(st: &AppState) {
                                     c.key,
                                     c.attempt - 1
                                 );
-                                let _ = scheduled::done(&st.db, &id, &c.key, c.version).await;
+                                log_db(
+                                    &id,
+                                    "done",
+                                    scheduled::done(&st.db, &id, &c.key, c.version).await,
+                                );
                                 return;
                             }
                             let Some(claim) = st.jobs.claim(&format!("plugin-call:{id}:{}", c.key))
                             else {
-                                let _ = scheduled::release(&st.db, &id, &c.key, c.version).await;
+                                log_db(
+                                    &id,
+                                    "release",
+                                    scheduled::release(&st.db, &id, &c.key, c.version).await,
+                                );
                                 return;
                             };
                             match rt
@@ -121,14 +136,18 @@ pub fn spawn_claimer(st: &AppState) {
                                 .await
                             {
                                 Ok(()) => {
-                                    let _ = scheduled::done(&st.db, &id, &c.key, c.version).await;
+                                    log_db(
+                                        &id,
+                                        "done",
+                                        scheduled::done(&st.db, &id, &c.key, c.version).await,
+                                    );
                                 }
                                 Err(e) => {
                                     tracing::warn!(
                                         "plugin \"{id}\" scheduled call {} failed: {e:?}",
                                         c.key
                                     );
-                                    let _ = match e {
+                                    let next = match e {
                                         CallError::Guest(_) => {
                                             scheduled::retry(
                                                 &st.db, &id, &c.key, c.version, c.attempt,
@@ -140,6 +159,7 @@ pub fn spawn_claimer(st: &AppState) {
                                         }
                                         _ => Ok(()),
                                     };
+                                    log_db(&id, "retry", next);
                                 }
                             }
                             drop(claim);
@@ -162,4 +182,11 @@ pub fn spawn_claimer(st: &AppState) {
             let _ = tokio::time::timeout(wait.max(floor), woken).await;
         }
     });
+}
+
+/// A failed ledger write leaves the call due again or never cleared: say so.
+fn log_db(plugin: &str, step: &str, r: sqlx::Result<()>) {
+    if let Err(e) = r {
+        tracing::warn!("plugin \"{plugin}\" scheduled call {step} not recorded: {e}");
+    }
 }

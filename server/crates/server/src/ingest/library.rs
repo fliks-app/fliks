@@ -329,7 +329,15 @@ async fn scan_source(st: &AppState, src: &Path, info: &MediaInfo) -> Option<(Sou
     if info.video.is_empty() || info.duration_seconds.is_none_or(|d| d <= 0.0) {
         return None;
     }
-    crate::stream::scan_now(st, src, info, TRUNCATION_SCAN_WAIT).await
+    let scanned = crate::stream::scan_now(st, src, info, TRUNCATION_SCAN_WAIT).await;
+    if scanned.is_none() {
+        tracing::warn!(
+            "Truncation check skipped for \"{}\": the scan failed or took over {} s",
+            src.display(),
+            TRUNCATION_SCAN_WAIT.as_secs()
+        );
+    }
+    scanned
 }
 
 /// `(readable end, declared duration)` when the data ends short of the declared duration by more

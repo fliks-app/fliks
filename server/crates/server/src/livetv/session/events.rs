@@ -176,8 +176,12 @@ pub(super) async fn attempt(st: &AppState, ev: &EngineEvent) {
 
 /// A remux of a non-H.264 upstream becomes a transcode: the engine's snapshot has the verdict.
 pub(super) async fn refresh_modes(st: &AppState) {
-    let Ok(snaps) = st.engine.list_live(None).await else {
-        return;
+    let snaps = match st.engine.list_live(None).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!("live session modes not refreshed: {e}");
+            return;
+        }
     };
     {
         let mut g = st.livetv.live.lock();
@@ -266,14 +270,21 @@ pub(super) async fn restore_holds(st: &AppState, snaps: &[LiveSnapshot]) {
             continue;
         }
         let channel_id: i32 = s.channel_id.parse().unwrap_or(0);
-        let Ok(streams) = load_streams(&st.db, channel_id, false).await else {
-            continue;
+        let streams = match load_streams(&st.db, channel_id, false).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!("live hold of channel #{channel_id} not restored: {e}");
+                continue;
+            }
         };
         let Some(fed) = streams
             .iter()
             .find(|x| x.url == s.upstream_url && x.priority == s.upstream_priority)
             .cloned()
         else {
+            tracing::warn!(
+                "live hold of channel #{channel_id} not restored: no stream matches its URL"
+            );
             continue;
         };
         let mut g = st.livetv.live.lock();

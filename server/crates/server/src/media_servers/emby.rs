@@ -108,8 +108,10 @@ impl Conn {
             ));
         }
         let bytes = res.bytes().await.map_err(error_text)?;
-        // An undecodable 2xx body is axios' string: no members, no items.
-        Ok(serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+        if bytes.is_empty() {
+            return Ok(Value::Null);
+        }
+        serde_json::from_slice(&bytes).map_err(|e| format!("Response is not JSON: {e}"))
     }
 
     /// `{ok, message}` of `testConnection` (rule 8).

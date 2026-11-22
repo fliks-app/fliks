@@ -12,17 +12,21 @@ use serde_json::json;
 use sqlx::Row;
 use std::time::UNIX_EPOCH;
 
-/// The library's profile as a comparison context; none when it has no profile.
-async fn context(st: &AppState, library: i32) -> Option<select::Context> {
+/// The library's profile as a comparison context; none only when it has no profile.
+async fn context(st: &AppState, library: i32) -> sqlx::Result<Option<select::Context>> {
     let row = sqlx::query(
         r#"SELECT l."allowRename" AS allow_rename, p.document FROM libraries l
            JOIN optimize_profiles p ON p.id = l."optimizeProfileId" WHERE l.id = $1"#,
     )
     .bind(library)
     .fetch_optional(&st.db)
-    .await
-    .ok()??;
-    let profile = serde_json::from_value(row.get("document")).ok()?;
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let profile = serde_json::from_value(row.get("document")).map_err(|e| {
+        sqlx::Error::Decode(format!("optimize profile of library #{library}: {e}").into())
+    })?;
     select::Context::load(
         &st.db,
         profile,
@@ -30,7 +34,7 @@ async fn context(st: &AppState, library: i32) -> Option<select::Context> {
         &st.queue.capabilities(),
     )
     .await
-    .ok()
+    .map(Some)
 }
 
 /// The plan of a difference, with the OCR it needs (`OcrPending` while that runs), and the hash of what it changes.
@@ -295,10 +299,10 @@ async fn queue_one(
             Some(x) => x.clone(),
             None => c
                 .entry(library)
-                .or_insert(context(st, library).await)
+                .or_insert(context(st, library).await?)
                 .clone(),
         },
-        None => context(st, library).await,
+        None => context(st, library).await?,
     };
     let Some(mut ctx) = loaded else {
         return Ok(done(id, Outcome::NothingToDo));
@@ -328,7 +332,7 @@ async fn queue_one(
 /// Every file of a library with a difference, from one pass: the count, and the queueing that
 /// follows in the background (the OCR of image tracks can take long).
 pub async fn queue_library(st: &AppState, library: i32, priority: i32) -> sqlx::Result<usize> {
-    let Some(ctx) = context(st, library).await else {
+    let Some(ctx) = context(st, library).await? else {
         return Ok(0);
     };
     let mut found: Vec<(i32, diff::Diff)> = vec![];

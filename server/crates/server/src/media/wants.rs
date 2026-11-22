@@ -116,18 +116,20 @@ pub async fn check_profiles(db: impl PgExecutor<'_>, specs: &[WantSpec]) -> Resu
     }
 }
 
-/// Unsets the profile ids `check_profiles` would refuse (a profile deleted since the specs were saved).
+/// Unsets the profile ids `check_profiles` would refuse (a profile deleted since the specs were saved)
+/// and returns them, so the caller can store the repaired specs.
 pub async fn drop_unknown_profiles(
     db: impl PgExecutor<'_>,
     specs: &mut [WantSpec],
-) -> sqlx::Result<()> {
+) -> sqlx::Result<Vec<i32>> {
     let bad = unknown_profiles(db, specs).await?;
     for s in specs.iter_mut() {
-        if s.quality_profile_id.is_some_and(|q| bad.contains(&q)) {
+        if let Some(q) = s.quality_profile_id.filter(|q| bad.contains(q)) {
+            tracing::warn!("quality profile #{q} no longer exists, dropped from a want");
             s.quality_profile_id = None;
         }
     }
-    Ok(())
+    Ok(bad)
 }
 
 /// The HTTP error of a failed `replace`: a profile deleted meanwhile is a 400, a vanished media a 404.

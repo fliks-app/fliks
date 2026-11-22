@@ -762,7 +762,13 @@ pub async fn refresh(st: &AppState, base: &Path, rows: &[&KnownFile]) -> Result<
             continue;
         }
         let info = if audio {
-            let p = probe(st, &abs, false).await?;
+            let p = match probe(st, &abs, false).await {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::warn!("Rescan[book]: {} not probed: {e}", r.rel);
+                    continue;
+                }
+            };
             Some(serde_json::to_value(&p.info).map_err(|e| e.to_string())?)
         } else {
             None

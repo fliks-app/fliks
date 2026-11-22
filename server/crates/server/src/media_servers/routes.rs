@@ -357,6 +357,8 @@ pub async fn import_watch_history(
                         users_created: s.users_created,
                         imported: s.imported,
                         skipped: s.skipped,
+                        errors: s.errors.first,
+                        error_count: s.errors.total,
                     });
                     Ok(())
                 }

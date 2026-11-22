@@ -142,10 +142,10 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 24 | `metadata.refreshed` | B | `{mediaId: number, title: string}` |
 | 25 | `metadata.failed` | B | `{mediaId: number, title: string, error: string}` |
 | 26 | `watch-history.import.started` | B | `{serverId: number, serverName: string}` |
-| 27 | `watch-history.import.completed` | B | `{serverId, serverName, users: number, usersCreated: number, imported: number, skipped: number}` |
+| 27 | `watch-history.import.completed` | B | `{serverId, serverName, users: number, usersCreated: number, imported: number, skipped: number, errors: string[], errorCount: number}` (the first 50 failure messages and the total) |
 | 28 | `watch-history.import.failed` | B | `{serverId: number, serverName: string, error: string}` (`error: ''` on audit-row failure) |
 | 29 | `seerr.import.started` | B | `{}` |
-| 30 | `seerr.import.completed` | B | `{users: number, usersCreated: number, imported: number, updated: number, skipped: number}` |
+| 30 | `seerr.import.completed` | B | `{users: number, usersCreated: number, imported: number, updated: number, skipped: number, errors: string[], errorCount: number}` (the first 50 failure messages and the total) |
 | 31 | `seerr.import.failed` | B | `{error: string}` (`''` on audit-row failure) |
 | 32 | `pairing.requested` | U(hinted user, none without `userId`) | `{userId: number, pairingId: string, deviceName: string, deviceId: string, legacyClient: boolean}` |
 | 33 | `remote.command` | C (or polled-target queue) | `{cmdId: string, expiresAt: number (epoch ms, now+10 000), byTargetId: string|null, action: RemoteCommandAction, mediaId?: number, mediaType?: 'movie'|'series', mediaFileId?: number, episodeId?: number, positionSeconds?: number, level?: number, muted?: boolean, trackId?: string, subtitleId?: string|null}`; also carries whatever other validated request fields; JSON key order is the request's fields first, then `type`, `cmdId`, `expiresAt` (`byTargetId` keeps its request position when sent) |

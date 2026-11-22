@@ -376,6 +376,28 @@ async fn a_failed_outro_pass_still_stamps_and_the_run_completes(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_season_whose_fingerprints_all_failed_is_not_stamped(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    c.fake.script(
+        "POST",
+        "/v1/jobs",
+        vec![crate::engine::testkit::status(500); 24],
+    );
+    let err = detect::run_detection_inline(&c.st, c.season, None)
+        .await
+        .unwrap_err();
+    assert!(err.contains("fingerprint"), "{err}");
+    let stamped: i64 = sqlx::query_scalar(
+        r#"SELECT count(*) FROM items WHERE "groupId" = $1 AND "markersScannedAt" IS NOT NULL"#,
+    )
+    .bind(c.season)
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert_eq!(stamped, 0);
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_season_with_one_episode_has_no_intro_pass(pool: PgPool) {
     let c = ctx(pool, true).await;
     detect::run_detection_inline(&c.st, c.other_season, None)
