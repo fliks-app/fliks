@@ -122,6 +122,7 @@ export interface Media {
   seasons?: Season[];
   /** Set on the grid view, where `files` is cut to the first file. */
   fileCount?: number;
+  /** `streamInfo` is absent on the grid view and recently-added. */
   files?: { id: number; quality: string; relativePath: string; size: number; createdAt?: string; episodeId?: number | null; streamInfo?: MediaFileInfo | null }[];
   qualityProfile?: QualityProfileBrief | null;
   languageProfile?: { id: number; name: string } | null;

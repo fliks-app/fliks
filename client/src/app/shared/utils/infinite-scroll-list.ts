@@ -84,6 +84,14 @@ export class InfiniteScrollList<T extends { id: number }> {
     this.recomputeLetters();
   }
 
+  /** Replaces one item by id with a patched copy, leaving order and letters untouched. */
+  patch(id: number, changes: Partial<T>) {
+    const i = this.idIndex.get(id);
+    if (i === undefined) return;
+    this.allItems = this.allItems.map((item, at) => (at === i ? { ...item, ...changes } : item));
+    this.all.set(this.allItems);
+  }
+
   /** Get all items (non-reactive: use the `all()` signal for computed). */
   getAll(): T[] {
     return this.allItems;

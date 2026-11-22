@@ -116,7 +116,7 @@ function createHarness(remembered?: number) {
       },
       { provide: Router, useValue: { navigate: vi.fn() } },
       { provide: MediaService, useValue: { getAll: vi.fn(async () => ({ data: [], total: 0 })) } },
-      { provide: StreamingApiService, useValue: { getWatchedMediaIds: vi.fn(async () => []) } },
+      { provide: StreamingApiService, useValue: { toggleWatched: vi.fn(async () => {}), toggleSeriesWatched: vi.fn(async () => {}) } },
       { provide: OfflinePlaybackSyncService, useValue: {} },
       { provide: PlayableMediaService, useValue: {} },
       { provide: SocialApiService, useValue: {} },
@@ -221,6 +221,31 @@ describe('LibraryComponent — grid request', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('LibraryComponent: watched badge', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+  });
+
+  const movie = { id: 7, type: 'movie', title: 'Alpha', watched: false, files: [{ id: 70 }] } as unknown as Media;
+
+  it('flips the item watched flag and keeps it once the request succeeds', async () => {
+    const { component } = createHarness();
+    component.list.setItems([movie], (m) => m.title);
+    await component.toggleMediaWatched(movie, true);
+    expect(component.list.getAll()[0].watched).toBe(true);
+    expect(TestBed.inject(StreamingApiService).toggleWatched).toHaveBeenCalledWith(7, 70);
+  });
+
+  it('restores the flag when the request fails', async () => {
+    const { component } = createHarness();
+    component.list.setItems([movie], (m) => m.title);
+    vi.mocked(TestBed.inject(StreamingApiService).toggleWatched).mockRejectedValueOnce(new Error('x'));
+    await component.toggleMediaWatched(movie, true);
+    expect(component.list.getAll()[0].watched).toBe(false);
   });
 });
 
