@@ -165,7 +165,8 @@ async fn takes_a_superuser_database_over_and_stays_idempotent() {
     let s = role::status(&app).await.unwrap();
     assert!(s.ready(), "gaps: {:?}", s.gaps());
     assert_eq!(owned_by(&admin, f.admin.get_username()).await, 0);
-    assert_eq!(owned_by(&admin, &old).await, 0);
+    // The plugin role keeps its own schema.
+    assert_eq!(owned_by(&admin, &old).await, 1);
     let before = snapshot(&admin).await;
 
     // A second run changes nothing, and a pool opened before it keeps working.
