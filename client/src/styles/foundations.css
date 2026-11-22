@@ -351,11 +351,10 @@ body.native.hero-page {
   animation: slide-up 0.18s ease-out;
 }
 
-/* A sheet resting on the phone dock rises and fades in place: sliding in from the screen edge would cross the dock. */
+/* A sheet resting on the phone dock fades in place: moving it vertically would cross the dock. */
 @keyframes sheet-rise {
   from {
     opacity: 0;
-    transform: translateY(1.5rem);
   }
 }
 

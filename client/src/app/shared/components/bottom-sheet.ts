@@ -155,7 +155,7 @@ export class BottomSheetComponent {
   }
 
   sheetTransform(): string {
-    if (this.dismissing()) return this.aboveDock() ? 'translateY(1.5rem)' : 'translateY(100%)';
+    if (this.dismissing()) return this.aboveDock() ? '' : 'translateY(100%)';
     const offset = this.dragOffset();
     return offset > 0 ? `translateY(${offset}px)` : '';
   }
