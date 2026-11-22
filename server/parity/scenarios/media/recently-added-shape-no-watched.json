@@ -14,22 +14,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-05T04:00:00.000Z",
                 "episodeId": null,
                 "id": 30,
-                "language": "en",
-                "mediaId": 21,
-                "osdbBytesize": 12345678901,
-                "osdbHash": "8e245d9679d31e12",
                 "quality": "WEBDL-1080p",
                 "relativePath": "alpha test (2020)/alpha test (2020).mkv",
-                "size": 1000030,
-                "streamInfo": {
-                  "audio": [],
-                  "subtitles": [],
-                  "video": []
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000030
               }
             ],
             "folderName": "alpha test (2020)",
@@ -89,18 +78,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T14:00:00.000Z",
                 "episodeId": 23,
                 "id": 59,
-                "language": "en",
-                "mediaId": 45,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Series Half Watched (2020)/Season 01/e23.mkv",
-                "size": 1000059,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000059
               }
             ],
             "folderName": "Series Half Watched (2020)",

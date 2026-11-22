@@ -14,22 +14,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-05T04:00:00.000Z",
                 "episodeId": null,
                 "id": 30,
-                "language": "en",
-                "mediaId": 21,
-                "osdbBytesize": 12345678901,
-                "osdbHash": "8e245d9679d31e12",
                 "quality": "WEBDL-1080p",
                 "relativePath": "alpha test (2020)/alpha test (2020).mkv",
-                "size": 1000030,
-                "streamInfo": {
-                  "audio": [],
-                  "subtitles": [],
-                  "video": []
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000030
               }
             ],
             "folderName": "alpha test (2020)",
@@ -89,18 +78,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T14:00:00.000Z",
                 "episodeId": 23,
                 "id": 59,
-                "language": "en",
-                "mediaId": 45,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Series Half Watched (2020)/Season 01/e23.mkv",
-                "size": 1000059,
-                "streamInfo": null,
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 1000059
               }
             ],
             "folderName": "Series Half Watched (2020)",
@@ -155,63 +137,11 @@
             "fanartUrl": null,
             "files": [
               {
-                "createdAt": "2026-02-03T12:00:00.000Z",
                 "episodeId": 1,
                 "id": 18,
-                "language": "en",
-                "mediaId": 18,
-                "osdbBytesize": null,
-                "osdbHash": null,
                 "quality": "WEBDL-1080p",
                 "relativePath": "Parity Series A/Season 01/Parity Series A - S01E01.mkv",
-                "size": 73237,
-                "streamInfo": {
-                  "audio": [
-                    {
-                      "channelLayout": "mono",
-                      "channels": 1,
-                      "codec": "aac",
-                      "endSeconds": 3.021,
-                      "isDefault": false,
-                      "language": "eng",
-                      "profile": "LC",
-                      "sampleRate": 48000,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 1
-                    }
-                  ],
-                  "chapters": [],
-                  "durationSeconds": 3.021,
-                  "formatBitRate": 193941,
-                  "formatName": "matroska,webm",
-                  "formatStartSeconds": 0,
-                  "subtitles": [],
-                  "video": [
-                    {
-                      "avgFrameRate": "24/1",
-                      "bitDepth": 8,
-                      "codec": "h264",
-                      "colorRange": "tv",
-                      "displayAspectRatio": "16:9",
-                      "dvBlPresent": false,
-                      "dvElPresent": false,
-                      "dvRpuPresent": false,
-                      "endSeconds": 3,
-                      "firstFrameSeconds": 0,
-                      "frameRate": "24",
-                      "hdr10Plus": false,
-                      "height": 90,
-                      "level": 10,
-                      "pixelFormat": "yuv420p",
-                      "profile": "High",
-                      "reorderFrames": 2,
-                      "startTimeSeconds": 0,
-                      "streamIndex": 0,
-                      "width": 160
-                    }
-                  ]
-                },
-                "updatedAt": "2026-01-01T00:00:00.000Z"
+                "size": 73237
               }
             ],
             "folderName": "Parity Series A",
