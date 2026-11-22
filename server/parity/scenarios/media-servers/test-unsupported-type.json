@@ -10,7 +10,7 @@
       "as": "admin",
       "expect": {
         "body": {
-          "message": "Type \"plex\" non supporte",
+          "message": "Type \"plex\" is not supported",
           "ok": false
         },
         "status": 201

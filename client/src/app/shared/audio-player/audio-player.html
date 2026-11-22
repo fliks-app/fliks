@@ -99,7 +99,7 @@
               <span class="block truncate" [class.text-primary]="i === audio.queueIndex()">{{ q.title }}</span>
               <span class="block truncate text-sm text-base-content/60">{{ q.artists }}</span>
               @if (author(q); as who) {
-                <span class="block truncate text-xs text-base-content/50" data-testid="queue-author">{{ 'party.added_by' | translate: { name: who } }}</span>
+                <span class="block truncate text-sm text-base-content/60" data-testid="queue-author">{{ 'party.added_by' | translate: { name: who } }}</span>
               }
             </span>
           </button>
@@ -128,7 +128,7 @@
               </button>
             }
           } @else if (!isTv() && !queueLocked()) {
-            <button type="button" cdkDragHandle class="flex h-10 w-10 shrink-0 cursor-grab items-center justify-center text-base-content/50" [attr.aria-label]="'music_player.reorder' | translate">
+            <button type="button" cdkDragHandle class="flex h-10 w-10 shrink-0 cursor-grab items-center justify-center text-base-content/60" [attr.aria-label]="'music_player.reorder' | translate">
               <svg lucideGripVertical class="h-5 w-5"></svg>
             </button>
           }
@@ -661,7 +661,7 @@
     </div>
   </app-bottom-sheet>
 } @else {
-  <dialog #dialog class="modal" (cancel)="$event.preventDefault(); audio.collapse()" (close)="onDialogClose()">
+  <dialog #dialog class="modal" [attr.aria-label]="'audio_player.open' | translate" (cancel)="$event.preventDefault(); audio.collapse()" (close)="onDialogClose()">
     <div class="player-box modal-box flex h-full max-h-none w-full max-w-none flex-col rounded-none p-4 sm:p-6 lg:mx-auto lg:h-[44rem] lg:max-h-[92vh] lg:max-w-3xl lg:rounded-2xl" [class.player-box-full]="fullscreen()">
       <ng-container *ngTemplateOutlet="full" />
     </div>

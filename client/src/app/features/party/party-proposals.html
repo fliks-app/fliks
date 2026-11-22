@@ -83,14 +83,14 @@
     <p class="text-base-content/60">{{ 'party.proposals_empty' | translate }}</p>
   }
   <app-media-picker multiple verb="propose" [taken]="taken()" (picked)="propose($event)" />
-  <dialog #votersDialog class="modal" (close)="voters.set(null)">
+  <dialog #votersDialog class="modal" (close)="voters.set(null)" aria-labelledby="party-proposals-title-1">
     <div class="modal-box max-w-sm">
       <app-modal-header [title]="'party.voters_title' | translate" />
       @if (voters(); as v) {
         <div class="flex flex-col gap-4 pt-1">
           @for (side of [{ key: 'party.voters_up', ids: v.upvoterIds, up: true }, { key: 'party.voters_down', ids: v.downvoterIds, up: false }]; track side.key) {
             <section class="flex flex-col gap-2">
-              <h3 class="flex items-center gap-2 text-base font-semibold" [class.text-primary]="side.up" [class.text-error]="!side.up">
+              <h3 id="party-proposals-title-1" class="flex items-center gap-2 text-base font-semibold" [class.text-primary]="side.up" [class.text-error]="!side.up">
                 @if (side.up) {
                   <svg lucideThumbsUp class="h-5 w-5"></svg>
                 } @else {

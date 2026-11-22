@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { TvService } from './tv.service';
+import { isBackKey } from '../../features/player/player-keymap';
 
 /** One row in the actions panel for a card: a translation key (preferred) or literal label, plus a callback. */
 export interface CardAction {
@@ -123,14 +124,7 @@ export class CardActionsService {
     }
     // Tizen's Return key (10009 / XF86Back) must close this popup rather than
     // reach the app-shell back handler, which would navigate away or exit.
-    if (
-      this.open() &&
-      (e.key === 'Escape' ||
-        e.key === 'Backspace' ||
-        e.key === 'GoBack' ||
-        e.key === 'XF86Back' ||
-        e.keyCode === 10009)
-    ) {
+    if (this.open() && (e.key === 'Escape' || e.key === 'Backspace' || isBackKey(e))) {
       e.preventDefault();
       e.stopPropagation();
       this.close();

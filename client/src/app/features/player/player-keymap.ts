@@ -31,6 +31,11 @@ export const TIZEN_MEDIA_KEYS = [
   'MediaRewind',
 ];
 
+/** TV remote Back: Tizen 10009, webOS 461 or `GoBack`, Android `XF86Back`; older firmware has no reliable `e.key`, so `keyCode` stays. */
+export function isBackKey(e: { key: string; keyCode: number }): boolean {
+  return e.keyCode === 10009 || e.keyCode === 461 || e.key === 'XF86Back' || e.key === 'GoBack';
+}
+
 export function mediaKeyAction(e: { key: string; keyCode: number }): MediaKeyAction | null {
   return BY_KEY[e.key] ?? BY_KEYCODE[e.keyCode] ?? null;
 }

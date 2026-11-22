@@ -38,7 +38,7 @@
 
     @if (kinds[request().mediaType].hasSeasons && request().seasons?.length) {
       <p class="text-sm text-base-content/70 m-0">
-        <span class="text-base-content/50">{{ (request().seasons!.length === 1 ? 'requests.seasons_label_one' : 'requests.seasons_label_other') | translate }}</span>
+        <span class="text-base-content/60">{{ (request().seasons!.length === 1 ? 'requests.seasons_label_one' : 'requests.seasons_label_other') | translate }}</span>
         {{ request().seasons?.join(', ') }}
       </p>
     }
@@ -55,23 +55,23 @@
 
     @if (canManage()) {
       <p class="text-sm text-base-content/70 m-0">
-        <span class="text-base-content/50">{{ 'requests.requested_by' | translate }}</span>
+        <span class="text-base-content/60">{{ 'requests.requested_by' | translate }}</span>
         <span class="font-medium text-base-content">{{ request().user.username }}</span>
       </p>
     }
 
     <div class="flex flex-col gap-0.5 text-xs text-base-content/65">
       <p class="m-0">
-        <span class="text-base-content/50">{{ 'requests.date_label' | translate }}</span>
+        <span class="text-base-content/60">{{ 'requests.date_label' | translate }}</span>
         {{ request().createdAt | localeDate:{ dateStyle: 'short', timeStyle: 'short' } }}
       </p>
       @if (request().kind !== 'delete' && request().mediaType !== 'book') {
         <p class="m-0">
-          <span class="text-base-content/50">{{ 'requests.quality_profile_label' | translate }}</span>
+          <span class="text-base-content/60">{{ 'requests.quality_profile_label' | translate }}</span>
           {{ qualityProfileName() }}
         </p>
         <p class="m-0">
-          <span class="text-base-content/50">{{ 'requests.language_profile_label' | translate }}</span>
+          <span class="text-base-content/60">{{ 'requests.language_profile_label' | translate }}</span>
           {{ languageProfileName() }}
         </p>
       }

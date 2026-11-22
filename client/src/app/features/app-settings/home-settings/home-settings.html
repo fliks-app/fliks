@@ -23,7 +23,7 @@
             <button
               type="button"
               cdkDragHandle
-              class="cursor-grab text-base-content/40 hover:text-base-content/70"
+              class="cursor-grab text-base-content/60 hover:text-base-content/70"
               [attr.aria-label]="'home_settings.drag' | translate"
             >
               <svg lucideGripVertical class="h-4 w-4"></svg>
@@ -109,7 +109,7 @@
   </div>
 </div>
 
-<dialog #libraryDialog class="modal">
+<dialog #libraryDialog class="modal" [attr.aria-label]="'home_settings.libraries_modal_title' | translate">
   <div class="modal-box max-w-md">
     <app-modal-header>
       <div>
@@ -133,7 +133,7 @@
               <button
                 type="button"
                 cdkDragHandle
-                class="cursor-grab text-base-content/40 hover:text-base-content/70"
+                class="cursor-grab text-base-content/60 hover:text-base-content/70"
                 [attr.aria-label]="'home_settings.drag' | translate"
               >
                 <svg lucideGripVertical class="h-4 w-4"></svg>
@@ -179,7 +179,7 @@
         }
       </div>
     } @else {
-      <p class="text-center py-8 text-base-content/50">
+      <p class="text-center py-8 text-base-content/60">
         {{ 'settings.libraries.empty' | translate }}
       </p>
     }

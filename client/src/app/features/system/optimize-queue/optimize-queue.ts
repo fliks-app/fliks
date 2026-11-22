@@ -12,6 +12,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe, translatePlural } from '../../../core/pipes/translate-plural.pipe';
 import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
 import { OptimizeService } from '../../../core/services/api/optimize.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
@@ -55,7 +56,7 @@ export interface DeviceRow {
 
 @Component({
   selector: 'app-optimize-queue',
-  imports: [DatePipe, RouterLink, TranslatePipe],
+  imports: [DatePipe, RouterLink, TranslatePipe, TranslatePluralPipe],
   templateUrl: './optimize-queue.html',
 })
 export class OptimizeQueueComponent implements OnInit {
@@ -275,7 +276,7 @@ export class OptimizeQueueComponent implements OnInit {
   private confirmCancel(count: number) {
     return this.confirmation.confirm({
       title: this.translate.instant('optimize.queue.cancel_title'),
-      message: this.translate.instant('optimize.queue.confirm_cancel', { count }),
+      message: translatePlural(this.translate, 'optimize.queue.confirm_cancel', count),
       confirmLabel: this.translate.instant('optimize.queue.cancel_confirm'),
       cancelLabel: this.translate.instant('optimize.queue.cancel_keep'),
       variant: 'danger',

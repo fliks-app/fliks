@@ -4,6 +4,7 @@ import { hintParams, loadLine, pipelineChain, pipelineParts, qualityLabel, type 
 
 const f: Fmt = {
   n: (v, d = 1) => v.toFixed(d),
+  plural: (key) => key,
   t: (key, p = {}) =>
     key === 'qoe.mbps' ? `${p['value']} Mbps` : key === 'qoe.pipeline.res_p' ? `${p['height']}p` : key === 'qoe.pipeline.rung' ? `tier ${p['name']}` : key === 'qoe.pipeline.auto' ? 'auto' : key,
 };

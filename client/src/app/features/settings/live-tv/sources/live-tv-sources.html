@@ -11,7 +11,7 @@
       <span class="loading loading-spinner loading-lg"></span>
     </div>
   } @else if (rows().length === 0) {
-    <p class="text-center py-12 text-base-content/50">{{ 'liveTv.admin.sources.empty' | translate }}</p>
+    <p class="text-center py-12 text-base-content/60">{{ 'liveTv.admin.sources.empty' | translate }}</p>
   } @else {
     <div class="overflow-x-auto rounded-lg border border-base-200">
       <table class="table table-zebra">
@@ -221,7 +221,7 @@
           <input type="text" class="input input-bordered input-sm w-full" [ngModel]="formGroupExclude()" (ngModelChange)="formGroupExclude.set($event)" />
         </label>
       </div>
-      <p class="text-sm text-base-content/50 -mt-2">{{ 'liveTv.admin.sources.group_pattern_hint' | translate }}</p>
+      <p class="text-sm text-base-content/60 -mt-2">{{ 'liveTv.admin.sources.group_pattern_hint' | translate }}</p>
 
       <label class="label cursor-pointer justify-start gap-3">
         <input type="checkbox" class="toggle toggle-sm" [ngModel]="formEnabled()" (ngModelChange)="formEnabled.set($event)" />

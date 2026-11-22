@@ -65,10 +65,10 @@
               <span class="badge badge-lg badge-ghost">
                 {{
                   'optimize.queue.level_left'
-                    | translate
+                    | translatePlural
+                      : lv.jobs
                       : {
                           level: ('optimize.queue.level.' + l | translate),
-                          count: lv.jobs,
                           time: eta(lv.estimateSeconds),
                         }
                 }}
@@ -105,7 +105,7 @@
             <p class="text-sm text-base-content/60 truncate">{{ d.worker }}</p>
             <p class="text-sm">
               {{
-                'optimize.queue.device.slots' | translate: { used: d.jobs.length, max: d.maxJobs }
+                'optimize.queue.device.slots' | translatePlural: d.maxJobs : { used: d.jobs.length }
               }}
             </p>
           </div>
@@ -150,7 +150,7 @@
     <div class="flex flex-col gap-2">
       <h2 class="text-lg font-semibold">{{ 'optimize.queue.running' | translate }}</h2>
       @if (running().length === 0) {
-        <p class="text-base-content/50">{{ 'optimize.queue.running_empty' | translate }}</p>
+        <p class="text-base-content/60">{{ 'optimize.queue.running_empty' | translate }}</p>
       } @else {
         <div class="overflow-x-auto scroll-ring-safe">
           <table class="table">
@@ -215,7 +215,7 @@
         @if (selected().length > 0) {
           <div class="flex flex-wrap items-center gap-2 px-1 -mx-1 py-1">
             <span class="text-sm text-base-content/70">{{
-              'optimize.queue.selected' | translate: { count: selected().length }
+              'optimize.queue.selected' | translatePlural: selected().length
             }}</span>
             <button
               type="button"
@@ -237,7 +237,7 @@
         }
       </div>
       @if (waiting().length === 0) {
-        <p class="text-base-content/50">{{ 'optimize.queue.waiting_empty' | translate }}</p>
+        <p class="text-base-content/60">{{ 'optimize.queue.waiting_empty' | translate }}</p>
       } @else {
         <div class="overflow-x-auto scroll-ring-safe">
           <table class="table">
@@ -291,7 +291,7 @@
     </div>
   } @else if (tab() === 'failures') {
     @if (jobs().length === 0) {
-      <p class="text-base-content/50">{{ 'optimize.queue.failures_empty' | translate }}</p>
+      <p class="text-base-content/60">{{ 'optimize.queue.failures_empty' | translate }}</p>
     } @else {
       <div class="overflow-x-auto scroll-ring-safe">
         <table class="table">
@@ -336,7 +336,7 @@
     }
   } @else {
     @if (jobs().length === 0) {
-      <p class="text-base-content/50">{{ 'optimize.queue.finished_empty' | translate }}</p>
+      <p class="text-base-content/60">{{ 'optimize.queue.finished_empty' | translate }}</p>
     } @else {
       <div class="overflow-x-auto scroll-ring-safe">
         <table class="table">

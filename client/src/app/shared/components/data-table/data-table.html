@@ -121,7 +121,7 @@
   } @else if (listError()) {
     <div role="alert" class="alert alert-error">{{ listError() }}</div>
   } @else if (rows().length === 0) {
-    <p class="text-center py-12 text-base-content/50">{{ emptyKey() | translate }}</p>
+    <p class="text-center py-12 text-base-content/60">{{ emptyKey() | translate }}</p>
   } @else {
     <div class="overflow-x-auto rounded-lg border border-base-200" [class.opacity-50]="loading()">
       <table class="table table-zebra">
@@ -180,7 +180,7 @@
                       @if (typeof row[col.key] === 'number') {
                         <span class="tabular-nums">
                           <span class="text-success">▲{{ row[col.key] }}</span>
-                          <span class="text-base-content/40 mx-0.5">/</span>
+                          <span class="text-base-content/60 mx-0.5">/</span>
                           <span class="text-warning">▼{{ row[col.leechersKey ?? ''] ?? 0 }}</span>
                         </span>
                       }

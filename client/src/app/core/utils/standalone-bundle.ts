@@ -1,14 +1,8 @@
-import { Capacitor } from '@capacitor/core';
+import { detectDevice } from '../services/device.service';
 
 /** True when the app runs as a standalone bundle with no backend serving its shell (Capacitor, Smart TV, Android TV, desktop):
  *  `/api/...` resolves against the user-picked server with an owned Bearer token; web builds use the httpOnly cookie. */
-export const IS_STANDALONE_BUNDLE = (() => {
-  if (Capacitor.isNativePlatform()) return true;
-  if (typeof navigator === 'undefined') return false;
-  return /AndroidTV\/\d|\bTizen\b|SMART-TV|Web0S|webOS|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV|\bElectron\//i.test(
-    navigator.userAgent,
-  );
-})();
+export const IS_STANDALONE_BUNDLE = detectDevice().standalone;
 
 /** Entry document. Over http the page may have been loaded on a deep route
  *  (e.g. /setup), so the restart goes to the root, not wherever that load landed. */

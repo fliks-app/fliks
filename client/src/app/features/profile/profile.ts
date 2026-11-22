@@ -16,6 +16,7 @@ import {
   RouterOutlet,
 } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import {
   LucideUserPlus,
   LucideUserCheck,
@@ -40,7 +41,7 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
     RouterLink,
     RouterLinkActive,
     RouterOutlet,
-    TranslatePipe,
+    TranslatePipe, TranslatePluralPipe,
     LucideUserPlus,
     LucideUserCheck,
     LucideClock,

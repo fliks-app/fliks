@@ -213,7 +213,7 @@ async fn connection_tests_report_ok_false_without_the_url(pool: PgPool) {
     .await;
     assert_eq!(
         (s, &b["ok"], b["message"].as_str()),
-        (201, &json!(true), Some("Connecté à Radarr Parity"))
+        (201, &json!(true), Some("Connected to Radarr Parity"))
     );
     let (_, b) = post(
         &c,
@@ -246,7 +246,7 @@ async fn connection_tests_report_ok_false_without_the_url(pool: PgPool) {
         json!({"url": format!("{}/seerr/ok/", c.stub), "apiKey": KEY}),
     )
     .await;
-    assert_eq!(b, json!({"ok": true, "message": "Connecté à Parity Seerr"}));
+    assert_eq!(b, json!({"ok": true, "message": "Connected to Parity Seerr"}));
 }
 
 #[sqlx::test(migrations = false)]

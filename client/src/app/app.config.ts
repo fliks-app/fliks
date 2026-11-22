@@ -95,9 +95,7 @@ const POSTER_OUT_CLASS = 'vt-poster-out';
 const NATIVE_PLAYER_CLASS = 'native-player-active';
 const IS_TV = detectDevice().formFactor === 'tv';
 // The desktop shell composites video under its UI bitmap, so an empty snapshot reveals the frame; phone/TV surfaces reveal black.
-const IS_DESKTOP_SHELL =
-  typeof window !== 'undefined' &&
-  (!!window.fliksDesktop || /\bElectron\//.test(navigator.userAgent));
+const IS_DESKTOP_SHELL = detectDevice().desktopPlatform !== null;
 
 export const appConfig: ApplicationConfig = {
   providers: [

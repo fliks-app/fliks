@@ -1,4 +1,4 @@
-<dialog #dialog class="modal">
+<dialog #dialog class="modal" [attr.aria-label]="'settings.plugins.sources.title' | translate">
   <div class="modal-box max-w-5xl flex flex-col p-0 gap-0 overflow-hidden">
     <app-modal-header flush>
       <div>
@@ -18,7 +18,7 @@
         <div role="alert" class="alert alert-error">{{ listError() }}</div>
       } @else {
         @if (sources().length === 0) {
-          <p class="text-center py-8 text-base-content/50">
+          <p class="text-center py-8 text-base-content/60">
             {{ 'settings.plugins.sources.empty' | translate }}
           </p>
         } @else {
@@ -56,7 +56,7 @@
                       @if (source.lastRefreshedAt) {
                         {{ source.lastRefreshedAt | date: 'short' }}
                       } @else {
-                        <span class="text-base-content/50">{{
+                        <span class="text-base-content/60">{{
                           'settings.plugins.sources.never_refreshed' | translate
                         }}</span>
                       }

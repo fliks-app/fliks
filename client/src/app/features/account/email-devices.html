@@ -104,7 +104,7 @@
       </table>
     </div>
   } @else {
-    <p class="text-base-content/50">{{ 'email_devices.empty' | translate }}</p>
+    <p class="text-base-content/60">{{ 'email_devices.empty' | translate }}</p>
   }
 
   @if (sends().length) {
@@ -120,7 +120,7 @@
             @if (s.error) {
               <span class="text-error">{{ 'email_devices.error_' + s.error | translate }}</span>
             }
-            <span class="text-base-content/50 whitespace-nowrap">{{ s.createdAt | date: 'short' }}</span>
+            <span class="text-base-content/60 whitespace-nowrap">{{ s.createdAt | date: 'short' }}</span>
           </li>
         }
       </ul>

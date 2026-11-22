@@ -37,7 +37,7 @@
           <input type="number" class="input input-bordered input-sm w-full" min="30" max="1440"
             [ngModel]="searchInterval()" (ngModelChange)="searchInterval.set($event)" />
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.subtitles.search_interval_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.subtitles.search_interval_hint' | translate }}</span>
           </div>
         </label>
 
@@ -48,7 +48,7 @@
           <input type="number" class="input input-bordered input-sm w-full" min="0" max="100"
             [ngModel]="minScore()" (ngModelChange)="minScore.set($event)" />
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.subtitles.min_score_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.subtitles.min_score_hint' | translate }}</span>
           </div>
         </label>
 
@@ -62,7 +62,7 @@
           <input type="number" class="input input-bordered input-sm w-full" min="60" max="2880"
             [ngModel]="upgradeInterval()" (ngModelChange)="upgradeInterval.set($event)" />
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.subtitles.upgrade_interval_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.subtitles.upgrade_interval_hint' | translate }}</span>
           </div>
         </label>
 
@@ -73,7 +73,7 @@
           <input type="number" class="input input-bordered input-sm w-full" min="0" max="100"
             [ngModel]="upgradeThreshold()" (ngModelChange)="upgradeThreshold.set($event)" />
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.subtitles.upgrade_threshold_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.subtitles.upgrade_threshold_hint' | translate }}</span>
           </div>
         </label>
 
@@ -103,7 +103,7 @@
             [placeholder]="'settings.subtitles.custom_exclusions_placeholder' | translate"
             [ngModel]="customExclusions()" (ngModelChange)="customExclusions.set($event)"></textarea>
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.subtitles.custom_exclusions_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.subtitles.custom_exclusions_hint' | translate }}</span>
           </div>
         </label>
 

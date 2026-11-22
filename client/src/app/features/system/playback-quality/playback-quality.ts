@@ -2,6 +2,7 @@ import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } fr
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { translatePlural } from '../../../core/pipes/translate-plural.pipe';
 import {
   QOE_SETTING_ENABLED,
   QOE_SETTING_RETENTION_DAYS,
@@ -401,9 +402,7 @@ export class SystemPlaybackQualityComponent implements OnInit {
     const u = unreportedStalls(b, incoming);
     if (!u) return '';
     const duration = this.seconds(u.ms);
-    return u.count === 1
-      ? this.translate.instant('qoe.block.unreported_one', { duration })
-      : this.translate.instant('qoe.block.unreported_many', { count: String(u.count), duration });
+    return translatePlural(this.translate, 'qoe.block.unreported', u.count, { duration });
   }
 
   /** Rows of the always-visible summary; a value unknown by design for this engine is left out. */

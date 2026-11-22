@@ -2,9 +2,9 @@
   <select
     appTvSelect class="select select-bordered select-xs" [ngModel]="logLevel()" (ngModelChange)="logLevel.set($event); load()">
     <option value="">{{ 'system.logs_all_levels' | translate }}</option>
-    <option value="log">Info</option>
-    <option value="warn">Warning</option>
-    <option value="error">Error</option>
+    <option value="log">{{ 'system.logs_level_info' | translate }}</option>
+    <option value="warn">{{ 'system.logs_level_warn' | translate }}</option>
+    <option value="error">{{ 'system.logs_level_error' | translate }}</option>
   </select>
   <input type="text" class="input input-bordered input-xs w-40" [placeholder]="'common.search' | translate"
     [ngModel]="logSearch()" (ngModelChange)="logSearch.set($event); load()" />

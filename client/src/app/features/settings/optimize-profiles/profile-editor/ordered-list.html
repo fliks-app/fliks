@@ -1,7 +1,7 @@
 <div class="flex flex-col gap-1" role="group" [attr.aria-label]="ariaLabel()">
   @for (r of rows(); track r.value; let i = $index) {
     <div class="flex items-center gap-1 rounded-lg bg-base-200 px-2 py-1">
-      <span class="w-5 text-sm text-base-content/50">{{ i + 1 }}</span>
+      <span class="w-5 text-sm text-base-content/60">{{ i + 1 }}</span>
       <span class="flex-1 min-w-0 truncate text-sm">{{ r.label }}</span>
       <button
         type="button"

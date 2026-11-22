@@ -13,6 +13,7 @@ import { TvSelectDirective } from '../../../shared/directives/tv-select.directiv
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe, translatePlural } from '../../../core/pipes/translate-plural.pipe';
 import { LucideDownload } from '@lucide/angular';
 import { firstValueFrom } from 'rxjs';
 import { ImportDiskComponent } from '../../import-disk/import-disk';
@@ -114,7 +115,7 @@ const ARR_SETTINGS: Record<Provider, { url: string; apiKey: string }> = {
     ModalFooterComponent,
     FormsModule,
     NgTemplateOutlet,
-    TranslatePipe,
+    TranslatePipe, TranslatePluralPipe,
     LucideDownload,
     ImportDiskComponent,
   ],
@@ -154,6 +155,15 @@ export class DataImportsSettingsComponent implements OnInit {
     message: string;
   } | null>(null);
   readonly seerrLastSummary = signal<SeerrSummary | null>(null);
+
+  seerrSummaryText(s: SeerrSummary): string {
+    return this.translate.instant('settings.data_imports.seerr.import_completed', {
+      users: translatePlural(this.translate, 'settings.data_imports.users_created', s.users, { created: s.usersCreated }),
+      imported: translatePlural(this.translate, 'settings.data_imports.requests_imported', s.imported),
+      updated: s.updated,
+      skipped: s.skipped,
+    });
+  }
 
   // ---- Radarr / Sonarr (and their path mapping wizards) ----
   readonly libraries = signal<Library[]>([]);
@@ -210,11 +220,13 @@ export class DataImportsSettingsComponent implements OnInit {
     this.lastHandledEvent = event;
     if (event.type === 'watch-history.import.completed') {
       this.setEmbyImporting(Number(event['serverId']), false);
+      const users = Number(event['users'] ?? 0);
+      const created = Number(event['usersCreated'] ?? 0);
+      const imported = Number(event['imported'] ?? 0);
       this.toast.success(
         this.translate.instant('settings.data_imports.emby.import_completed', {
-          users: Number(event['users'] ?? 0),
-          usersCreated: Number(event['usersCreated'] ?? 0),
-          imported: Number(event['imported'] ?? 0),
+          users: translatePlural(this.translate, 'settings.data_imports.users_created', users, { created }),
+          imported: translatePlural(this.translate, 'settings.data_imports.views_imported', imported),
           skipped: Number(event['skipped'] ?? 0),
         }),
       );
@@ -238,9 +250,7 @@ export class DataImportsSettingsComponent implements OnInit {
         skipped: Number(event['skipped'] ?? 0),
       };
       this.seerrLastSummary.set(summary);
-      this.toast.success(
-        this.translate.instant('settings.data_imports.seerr.import_completed', summary),
-      );
+      this.toast.success(this.seerrSummaryText(summary));
     } else if (event.type === 'seerr.import.failed') {
       this.seerrImporting.set(false);
       const err = (event['error'] as string | undefined) ?? this.translate.instant('common.error');

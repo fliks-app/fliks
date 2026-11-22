@@ -18,7 +18,7 @@
   } @else if (listError()) {
     <div role="alert" class="alert alert-error">{{ listError() }}</div>
   } @else if (rows().length === 0) {
-    <p class="text-center py-12 text-base-content/50">
+    <p class="text-center py-12 text-base-content/60">
       {{ 'settings.custom_formats.empty' | translate }}
     </p>
   } @else {
@@ -51,7 +51,7 @@
                 </span>
               </td>
               <td class="text-sm text-base-content/60">
-                {{ 'settings.custom_formats.spec_count' | translate: { count: cf.specs.length } }}
+                {{ 'settings.custom_formats.spec_count' | translatePlural: cf.specs.length }}
               </td>
               <td class="text-end">
                 <button
@@ -267,7 +267,7 @@
         }
 
         @if (formSpecs().length === 0) {
-          <p class="text-sm text-base-content/50 text-center py-4">
+          <p class="text-sm text-base-content/60 text-center py-4">
             {{ 'settings.custom_formats.no_specs' | translate }}
           </p>
         }

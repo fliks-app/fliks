@@ -21,7 +21,7 @@
     }
 
     @if (tiles().length === 0) {
-      <p class="text-base-content/50 text-center py-6">{{ 'books_people.no_entries' | translate }}</p>
+      <p class="text-base-content/60 text-center py-6">{{ 'books_people.no_entries' | translate }}</p>
     } @else {
       <div class="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8">
         @for (t of tiles(); track $index) {
@@ -38,7 +38,7 @@
             />
           } @else {
             <div
-              class="aspect-[2/3] rounded-lg border border-dashed border-base-content/20 flex items-center justify-center text-center text-sm text-base-content/40 p-2"
+              class="aspect-[2/3] rounded-lg border border-dashed border-base-content/20 flex items-center justify-center text-center text-sm text-base-content/60 p-2"
               data-missing
             >
               {{ 'books_people.missing_position' | translate: { position: t.position } }}

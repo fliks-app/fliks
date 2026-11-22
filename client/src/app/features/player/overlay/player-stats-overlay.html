@@ -1,7 +1,7 @@
 @if (visible()) {
   <div class="absolute z-50 bg-black/85 text-white select-none shadow-2xl overflow-y-auto
               top-28 left-4 text-sm p-5 rounded-xl min-w-[320px] max-w-md max-h-[60vh]
-              max-sm:top-16 max-sm:left-0 max-sm:right-0 max-sm:text-xs max-sm:p-3 max-sm:rounded-none max-sm:min-w-0 max-sm:max-w-none max-sm:max-h-[50vh]">
+              max-sm:top-16 max-sm:left-0 max-sm:right-0 max-sm:text-sm max-sm:p-3 max-sm:rounded-none max-sm:min-w-0 max-sm:max-w-none max-sm:max-h-[50vh]">
 
     <button
       type="button"
@@ -12,7 +12,7 @@
 
     @if (stats(); as s) {
       <section class="mb-3 sm:mb-4">
-        <div class="font-bold text-white/90 mb-0.5 text-xs sm:text-sm">{{ 'player.stats_stream' | translate }}</div>
+        <div class="font-bold text-white/90 mb-0.5 text-sm sm:text-sm">{{ 'player.stats_stream' | translate }}</div>
         <div class="text-white/80 pl-2 space-y-0.5">
           <div class="font-semibold">
             {{ s.container | uppercase }}@if (s.containerBitrate) { ({{ s.containerBitrate }}) }
@@ -33,15 +33,15 @@
       </section>
 
       <section class="mb-3 sm:mb-4">
-        <div class="font-bold text-white/90 mb-0.5 text-xs sm:text-sm">{{ 'player.stats_video' | translate }}</div>
+        <div class="font-bold text-white/90 mb-0.5 text-sm sm:text-sm">{{ 'player.stats_video' | translate }}</div>
         <div class="text-white/80 pl-2 space-y-0.5">
           <div class="font-semibold">{{ s.videoLabel }}</div>
           @if (s.videoStreamBitrate) {
-            <div class="text-white/75 text-xs sm:text-sm">
+            <div class="text-white/75 text-sm sm:text-sm">
               {{ 'player.stats_stream' | translate }}&nbsp;&nbsp;<span class="font-semibold tabular-nums">{{ s.videoStreamBitrate }}</span>
             </div>
           }
-          <div class="text-white/70 text-[10px] sm:text-xs">{{ s.videoProfileLine }}</div>
+          <div class="text-white/70 text-sm sm:text-sm">{{ s.videoProfileLine }}</div>
           @if (s.videoPlaybackMode) {
             <div class="text-white/60">&rarr; {{ s.videoPlaybackMode }}</div>
           }
@@ -60,7 +60,7 @@
 
       @if (s.live; as live) {
         <section class="mb-3 sm:mb-4">
-          <div class="font-bold text-white/90 mb-0.5 text-xs sm:text-sm">{{ 'player.stats_live' | translate }}</div>
+          <div class="font-bold text-white/90 mb-0.5 text-sm sm:text-sm">{{ 'player.stats_live' | translate }}</div>
           <div class="text-white/80 pl-2 space-y-0.5">
             <div>
               {{ 'player.stats_behind_live' | translate }}&nbsp;&nbsp;<span class="font-semibold tabular-nums">{{ live.behindLive }}</span>
@@ -68,7 +68,7 @@
             <div>
               {{ 'player.stats_rewind_window' | translate }}&nbsp;&nbsp;<span class="font-semibold tabular-nums">{{ live.rewindWindow }}</span>
             </div>
-            <div class="text-white/70 text-[10px] sm:text-xs">
+            <div class="text-white/70 text-sm sm:text-sm">
               {{ 'player.stats_segment_duration' | translate }}&nbsp;&nbsp;{{ live.segmentDuration }}
             </div>
           </div>
@@ -77,16 +77,16 @@
 
       @if (s.hasAudio ?? true) {
         <section>
-          <div class="font-bold text-white/90 mb-0.5 text-xs sm:text-sm">{{ 'player.stats_audio' | translate }}</div>
+          <div class="font-bold text-white/90 mb-0.5 text-sm sm:text-sm">{{ 'player.stats_audio' | translate }}</div>
           <div class="text-white/80 pl-2 space-y-0.5">
             <div class="font-semibold">{{ s.audioLabel }}</div>
             @if (s.audioStreamBitrate) {
-              <div class="text-white/75 text-xs sm:text-sm">
+              <div class="text-white/75 text-sm sm:text-sm">
                 {{ 'player.stats_stream' | translate }}&nbsp;&nbsp;<span class="font-semibold tabular-nums">{{ s.audioStreamBitrate }}</span>
               </div>
             }
             @if (s.audioDetailLine) {
-              <div class="text-white/70 text-[10px] sm:text-xs">{{ 'player.stats_sample_rate' | translate }}&nbsp;&nbsp;{{ s.audioDetailLine }}</div>
+              <div class="text-white/70 text-sm sm:text-sm">{{ 'player.stats_sample_rate' | translate }}&nbsp;&nbsp;{{ s.audioDetailLine }}</div>
             }
             @if (s.audioPlaybackMode) {
               <div class="text-white/60">&rarr; {{ s.audioPlaybackMode }}</div>

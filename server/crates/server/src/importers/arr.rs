@@ -169,7 +169,7 @@ pub(super) async fn test(st: &AppState, arr: Arr, a: Authed, body: Value) -> Res
         Ok(res) => match res.json::<Value>().await {
             Ok(v) => {
                 let n = str_of(&v, "instanceName").unwrap_or(name);
-                json!({"ok": true, "message": format!("Connecté à {n}")})
+                json!({"ok": true, "message": format!("Connected to {n}")})
             }
             Err(e) => json!({"ok": false, "message": error_text(e)}),
         },

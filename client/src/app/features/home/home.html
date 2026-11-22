@@ -45,7 +45,7 @@
     </div>
   }
 
-<div appTvSection appDefaultFocus="a[data-home-focus^='library:']" focusKey="home" focusIdAttr="data-home-focus"
+<div appTvSection [appDefaultFocus]="defaultFocus()" focusKey="home" focusIdAttr="data-home-focus"
      class="flex flex-col gap-8" [class.stagger-children]="coldStart()">
 
   @if (!loadingFirstPass()) {

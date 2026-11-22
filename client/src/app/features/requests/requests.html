@@ -35,7 +35,7 @@
       <span class="loading loading-spinner loading-lg"></span>
     </div>
   } @else if (rows().length === 0) {
-    <div class="text-center py-12 text-base-content/50">
+    <div class="text-center py-12 text-base-content/60">
       <p class="text-lg">{{ 'requests.empty' | translate }}</p>
     </div>
   } @else {
@@ -192,7 +192,7 @@
               <div class="flex flex-col">
                 @if (kinds[row.mediaType].hasSeasons && row.seasons && row.seasons.length) {
                   <p class="text-sm text-base-content/70">
-                    <span class="text-base-content/50">{{
+                    <span class="text-base-content/60">{{
                       (row.seasons!.length === 1
                         ? 'requests.seasons_label_one'
                         : 'requests.seasons_label_other'
@@ -214,7 +214,7 @@
 
                 @if (auth.hasPermission('requests.manage')) {
                   <p class="text-sm text-base-content/70">
-                    <span class="text-base-content/50">{{
+                    <span class="text-base-content/60">{{
                       'requests.requested_by' | translate
                     }}</span>
                     @if (auth.canManageUsers()) {
@@ -233,18 +233,18 @@
 
               <div class="flex flex-col gap-0.5 text-xs text-base-content/65">
                 <p>
-                  <span class="text-base-content/50">{{ 'requests.date_label' | translate }}</span>
+                  <span class="text-base-content/60">{{ 'requests.date_label' | translate }}</span>
                   {{ row.createdAt | localeDate: { dateStyle: 'short', timeStyle: 'short' } }}
                 </p>
                 @if (row.kind !== 'delete' && row.mediaType !== 'book') {
                   <p>
-                    <span class="text-base-content/50">{{
+                    <span class="text-base-content/60">{{
                       'requests.quality_profile_label' | translate
                     }}</span>
                     {{ qualityProfileDisplay(row.qualityProfileId) }}
                   </p>
                   <p>
-                    <span class="text-base-content/50">{{
+                    <span class="text-base-content/60">{{
                       'requests.language_profile_label' | translate
                     }}</span>
                     {{ languageProfileDisplay(row.languageProfileId) }}

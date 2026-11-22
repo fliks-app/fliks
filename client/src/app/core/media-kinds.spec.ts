@@ -5,7 +5,6 @@ import {
   canMarkWatched,
   isMediaKind,
   kindOf,
-  kindFromProviderSegment,
   kindFromSegment,
   kindOfListFilter,
   mediaDetailLink,
@@ -37,11 +36,6 @@ describe('media kind registry', () => {
     expect(kindFromSegment('nope')).toBeUndefined();
     expect(isMediaKind('movie')).toBe(true);
     expect(isMediaKind('toString')).toBe(false);
-  });
-
-  it('narrows wire strings', () => {
-    expect(kindFromProviderSegment('tv')).toBe('series');
-    expect(kindFromProviderSegment('series')).toBeUndefined();
   });
 
   it('maps a list filter to a kind, "all" onto the default', () => {

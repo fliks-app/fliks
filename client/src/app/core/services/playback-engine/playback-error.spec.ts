@@ -1,5 +1,4 @@
 import {
-  errorSignature,
   formatErrorDiagnostics,
   isUndecodableError,
   userMessageKeyFor,
@@ -90,16 +89,6 @@ describe('playback-error', () => {
       expect(isUndecodableError({ code: -1, message: 'unrecognized file format' })).toBe(true);
       expect(isUndecodableError({ code: -1, message: 'loading failed' })).toBe(false);
       expect(isUndecodableError({ source: 'engine', code: -1 })).toBe(false);
-    });
-  });
-
-  describe('errorSignature', () => {
-    it('is stable for the same class and differs across classes', () => {
-      const a: PlaybackError = { userMessage: '', source: 'shaka', category: 3, code: 3016 };
-      const b: PlaybackError = { userMessage: 'x', source: 'shaka', category: 3, code: 3016, variant: 'hvc1' };
-      const c: PlaybackError = { userMessage: '', source: 'media', code: 3 };
-      expect(errorSignature(a)).toBe(errorSignature(b));
-      expect(errorSignature(a)).not.toBe(errorSignature(c));
     });
   });
 

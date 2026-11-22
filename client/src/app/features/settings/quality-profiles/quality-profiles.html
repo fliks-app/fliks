@@ -20,7 +20,7 @@
   } @else if (listError()) {
     <div role="alert" class="alert alert-error">{{ listError() }}</div>
   } @else if (profiles().length === 0) {
-    <p class="text-center py-12 text-base-content/50">
+    <p class="text-center py-12 text-base-content/60">
       {{ 'settings.quality_profiles.empty' | translate }}
     </p>
   } @else {
@@ -71,10 +71,10 @@
   }
 </div>
 
-<dialog #editorDialog class="modal">
+<dialog #editorDialog class="modal" aria-labelledby="quality-profiles-title-1">
   <div class="modal-box max-w-2xl flex flex-col">
     <app-modal-header class="shrink-0">
-      <h3 class="text-lg font-bold">
+      <h3 id="quality-profiles-title-1" class="text-lg font-bold">
         @if (editingId() === null) {
           {{ 'settings.quality_profiles.editor_create_title' | translate }}
         } @else {
@@ -152,7 +152,7 @@
                   (change)="toggleQuality(q.id, $event)"
                 />
                 <span class="text-sm flex-1">{{ q.name }}</span>
-                <span class="text-sm text-base-content/50 tabular-nums"
+                <span class="text-sm text-base-content/60 tabular-nums"
                   >{{ qualityDetail(q) }}</span
                 >
               </div>

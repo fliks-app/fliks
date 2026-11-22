@@ -1,4 +1,4 @@
-<dialog #dialog class="modal" [style.padding-bottom.px]="keyboard.height()">
+<dialog #dialog class="modal" [style.padding-bottom.px]="keyboard.height()" [attr.aria-label]="'party.cover' | translate">
   <div class="modal-box max-w-md" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
     <app-modal-header [title]="'party.settings' | translate" />
     @let v = view();

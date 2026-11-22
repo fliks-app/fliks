@@ -54,7 +54,7 @@
   } @else if (error()) {
     <div role="alert" class="alert alert-error">{{ error() | translate }}</div>
   } @else if (requests().length === 0) {
-    <div class="text-center py-12 text-base-content/50">
+    <div class="text-center py-12 text-base-content/60">
       <svg lucideMonitorSmartphone class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
       <p class="text-lg">{{ 'pending_requests.empty' | translate }}</p>
     </div>

@@ -16,7 +16,7 @@ export function blockSummary(s: Pick<QoeSessionRow, 'stallCount' | 'stallMs'>, f
   const total = f.t('qoe.seconds', { value: f.n(s.stallMs / 1000, 1) });
   return s.stallCount === 0
     ? f.t('qoe.block.none')
-    : f.t(s.stallCount === 1 ? 'qoe.block.stalls_one' : 'qoe.block.stalls_many', { count: String(s.stallCount), total });
+    : f.plural('qoe.block.stalls', s.stallCount, { total });
 }
 
 /** The technical details are opened for a block whose cause lies on the server or the device. */

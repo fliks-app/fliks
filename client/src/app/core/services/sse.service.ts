@@ -1,6 +1,7 @@
 import { Injectable, signal, computed, inject, effect, untracked, OnDestroy } from '@angular/core';
 import { Subject, firstValueFrom } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
+import { translatePlural } from '../pipes/translate-plural.pipe';
 import { ToastService } from './toast.service';
 import { ServerConfigService } from './server-config.service';
 import { AuthService } from './auth.service';
@@ -682,21 +683,18 @@ export class SseService implements OnDestroy {
         const sm = Number(event['subtitleRemovedMissing'] ?? 0);
         const sd = Number(event['subtitleRemovedDuplicates'] ?? 0);
         let msg = base;
-        if (sm || sd) {
-          msg +=
-            ', ' +
-            this.translate.instant('sse.rescan_subtitles_cleaned', {
-              missing: sm,
-              duplicates: sd,
-            });
-        }
+        const cleaned = [
+          sm && translatePlural(this.translate, 'sse.rescan_subtitles_missing', sm),
+          sd && translatePlural(this.translate, 'sse.rescan_subtitles_duplicates', sd),
+        ].filter(Boolean);
+        if (cleaned.length) msg += ', ' + cleaned.join(', ');
         this.toast.success(msg);
         break;
       }
       case 'orphan_import.completed': {
         const failed = Number(event['failed'] ?? 0);
         if (failed > 0) {
-          this.toast.warning(this.translate.instant('sse.orphan_import_failed', { count: failed }));
+          this.toast.warning(translatePlural(this.translate, 'sse.orphan_import_failed', failed));
         }
         break;
       }
@@ -710,7 +708,7 @@ export class SseService implements OnDestroy {
         const leftover = Number(event['leftover'] ?? 0);
         if (leftover > 0) {
           this.toast.warning(
-            this.translate.instant('sse.media_move_leftover', { title, count: leftover }),
+            translatePlural(this.translate, 'sse.media_move_leftover', leftover, { title }),
           );
         } else {
           this.toast.success(this.translate.instant('sse.media_move_completed', { title }));

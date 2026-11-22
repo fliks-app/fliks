@@ -1,3 +1,4 @@
+import { formatBytes } from '../../core/utils/format-bytes';
 /** Shared download-progress formatting and state mapping, so numbers and bar colour render identically everywhere. */
 
 import type { ProgressPhase } from '../../core/enums/download-progress-state.enum';
@@ -14,13 +15,7 @@ export type ProgressVariant =
   | 'error'
   | 'neutral';
 
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
-}
+export { formatBytes };
 
 export function formatSpeed(bytesPerSec: number): string {
   return `${formatBytes(bytesPerSec)}/s`;

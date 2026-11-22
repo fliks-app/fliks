@@ -59,7 +59,7 @@
       @if (translationLoading()) {
         <div class="flex justify-center py-6"><span class="loading loading-spinner"></span></div>
       } @else if (translationRows().length === 0) {
-        <p class="text-sm text-base-content/50 py-4">
+        <p class="text-sm text-base-content/60 py-4">
           {{ 'settings.subtitle_providers.translation_empty' | translate }}
         </p>
       } @else {
@@ -165,10 +165,10 @@
   </div>
 </div>
 
-<dialog #statsDialog class="modal">
+<dialog #statsDialog class="modal" aria-labelledby="subtitle-providers-title-1">
   <div class="modal-box max-w-2xl">
     <app-modal-header>
-      <h3 class="text-lg font-bold">
+      <h3 id="subtitle-providers-title-1" class="text-lg font-bold">
         {{ statsProviderName() }} - {{ 'settings.subtitle_providers.stats_title' | translate }}
       </h3>
     </app-modal-header>
@@ -177,7 +177,7 @@
         <span class="loading loading-spinner loading-lg"></span>
       </div>
     } @else if (statsData().length === 0) {
-      <p class="text-center py-8 text-base-content/50">
+      <p class="text-center py-8 text-base-content/60">
         {{ 'settings.subtitle_providers.stats_empty' | translate }}
       </p>
     } @else {
@@ -227,10 +227,10 @@
   </form>
 </dialog>
 
-<dialog #translationEditorDialog class="modal">
+<dialog #translationEditorDialog class="modal" aria-labelledby="subtitle-providers-title-2">
   <div class="modal-box max-w-xl flex flex-col">
     <app-modal-header class="shrink-0">
-      <h3 class="text-lg font-bold">
+      <h3 id="subtitle-providers-title-2" class="text-lg font-bold">
         @if (trEditingId() === null) {
           {{ 'settings.subtitle_providers.translation_editor_create' | translate }}
         } @else {
@@ -304,7 +304,7 @@
             (ngModelChange)="trFormBaseUrl.set($event)"
             (change)="loadTrModels()"
           />
-          <span class="text-xs text-base-content/50 mt-1">{{
+          <span class="text-sm text-base-content/60 mt-1">{{
             'settings.subtitle_providers.translation_openai_base_url_hint' | translate
           }}</span>
         </label>
@@ -344,7 +344,7 @@
             [ngModel]="trFormUrl()"
             (ngModelChange)="trFormUrl.set($event)"
           />
-          <span class="text-xs text-base-content/50 mt-1">{{
+          <span class="text-sm text-base-content/60 mt-1">{{
             'settings.subtitle_providers.translation_libretranslate_url_hint' | translate
           }}</span>
         </label>
@@ -406,7 +406,7 @@
               [ngModel]="trFormMaxTokensPerRequest()"
               (ngModelChange)="trFormMaxTokensPerRequest.set($event)"
             />
-            <span class="text-xs text-base-content/50 mt-1">{{
+            <span class="text-sm text-base-content/60 mt-1">{{
               'settings.subtitle_providers.translation_max_tokens_per_request_hint' | translate
             }}</span>
           </label>
@@ -422,7 +422,7 @@
               [ngModel]="trFormTokensPerMinute()"
               (ngModelChange)="trFormTokensPerMinute.set($event)"
             />
-            <span class="text-xs text-base-content/50 mt-1">{{
+            <span class="text-sm text-base-content/60 mt-1">{{
               'settings.subtitle_providers.translation_tokens_per_minute_hint' | translate
             }}</span>
           </label>

@@ -1,6 +1,7 @@
 import { Component, ElementRef, effect, inject, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe, translatePlural } from '../../../core/pipes/translate-plural.pipe';
 import { LibrariesApiService } from '../../../core/services/api/libraries-api.service';
 import { MediaService } from '../../../core/services/api/media.service';
 import { OptimizeService } from '../../../core/services/api/optimize.service';
@@ -30,7 +31,7 @@ interface Summary {
 /** "Optimize…" and "Force re-encode" on a title, an episode, a season or a collection. */
 @Component({
   selector: 'app-optimize-modal',
-  imports: [RouterLink, TranslatePipe, ModalHeaderComponent],
+  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, ModalHeaderComponent],
   templateUrl: './optimize-modal.html',
 })
 export class OptimizeModalComponent {
@@ -144,14 +145,13 @@ export class OptimizeModalComponent {
 
   /** "N of M queued", then one sentence per reason the others were not. */
   private outcomeSummary(out: Queued[]): string {
-    const t = (key: string, params: object) => this.translate.instant(key, params);
     const counts = new Map<QueueOutcome, number>();
     for (const q of out) counts.set(q.outcome, (counts.get(q.outcome) ?? 0) + 1);
     const queued = counts.get('queued') ?? 0;
     counts.delete('queued');
     return [
-      t('optimize.action.queued', { count: queued, total: out.length }),
-      ...[...counts].map(([outcome, count]) => t(`optimize.action.outcome.${outcome}`, { count })),
+      translatePlural(this.translate, 'optimize.action.queued', out.length, { queued }),
+      ...[...counts].map(([outcome, count]) => translatePlural(this.translate, `optimize.action.outcome.${outcome}`, count)),
     ].join(' ');
   }
 

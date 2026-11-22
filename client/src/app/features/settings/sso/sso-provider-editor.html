@@ -15,7 +15,7 @@
           [ngModel]="name()"
           (ngModelChange)="name.set($event)"
         />
-        <span class="text-sm text-base-content/50">{{ 'settings.sso.field_name_hint' | translate }}</span>
+        <span class="text-sm text-base-content/60">{{ 'settings.sso.field_name_hint' | translate }}</span>
       </label>
 
       <div class="flex flex-col gap-2">
@@ -94,7 +94,7 @@
             [ngModel]="clientSecret()"
             (ngModelChange)="clientSecret.set($event)"
           />
-          <span class="text-sm text-base-content/50">
+          <span class="text-sm text-base-content/60">
             {{ (editing()?.clientSecretSet && !removeSecret() ? 'settings.sso.secret_keep_hint' : 'settings.sso.secret_public_hint') | translate }}
           </span>
           @if (editing()?.clientSecretSet) {
@@ -119,7 +119,7 @@
           [ngModel]="caPem()"
           (ngModelChange)="caPem.set($event)"
         ></textarea>
-        <span class="text-sm text-base-content/50">{{ 'settings.sso.field_ca_hint' | translate }}</span>
+        <span class="text-sm text-base-content/60">{{ 'settings.sso.field_ca_hint' | translate }}</span>
       </label>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -164,7 +164,7 @@
             [ngModel]="groupsClaim()"
             (ngModelChange)="groupsClaim.set($event)"
           />
-          <span class="text-sm text-base-content/50">{{ 'settings.sso.field_groups_claim_hint' | translate }}</span>
+          <span class="text-sm text-base-content/60">{{ 'settings.sso.field_groups_claim_hint' | translate }}</span>
         </label>
       </div>
 
@@ -177,7 +177,7 @@
             [ngModel]="allowedGroups()"
             (ngModelChange)="allowedGroups.set($event)"
           ></textarea>
-          <span class="text-sm text-base-content/50">{{ 'settings.sso.field_allowed_groups_hint' | translate }}</span>
+          <span class="text-sm text-base-content/60">{{ 'settings.sso.field_allowed_groups_hint' | translate }}</span>
         </label>
         <label class="form-control w-full">
           <span class="label-text">{{ 'settings.sso.field_admin_groups' | translate }}</span>
@@ -187,13 +187,13 @@
             [ngModel]="adminGroups()"
             (ngModelChange)="adminGroups.set($event)"
           ></textarea>
-          <span class="text-sm text-base-content/50">{{ 'settings.sso.field_admin_groups_hint' | translate }}</span>
+          <span class="text-sm text-base-content/60">{{ 'settings.sso.field_admin_groups_hint' | translate }}</span>
         </label>
       </div>
 
       <div class="flex flex-col gap-2">
         <span class="label-text font-semibold">{{ 'settings.sso.role_mappings' | translate }}</span>
-        <p class="text-sm text-base-content/50">{{ 'settings.sso.role_mappings_hint' | translate }}</p>
+        <p class="text-sm text-base-content/60">{{ 'settings.sso.role_mappings_hint' | translate }}</p>
         @for (m of roleMappings(); track $index; let i = $index; let last = $last) {
           <div class="flex items-center gap-2" data-testid="sso-mapping">
             <input
@@ -237,17 +237,17 @@
           <input type="checkbox" class="toggle toggle-sm" [ngModel]="autoRegister()" (ngModelChange)="autoRegister.set($event)" />
           <span class="label-text">{{ 'settings.sso.auto_register' | translate }}</span>
         </label>
-        <p class="text-sm text-base-content/50">{{ 'settings.sso.auto_register_hint' | translate }}</p>
+        <p class="text-sm text-base-content/60">{{ 'settings.sso.auto_register_hint' | translate }}</p>
         <label class="label cursor-pointer justify-start gap-3">
           <input type="checkbox" class="toggle toggle-sm" [ngModel]="matchByEmail()" (ngModelChange)="matchByEmail.set($event)" />
           <span class="label-text">{{ 'settings.sso.match_by_email' | translate }}</span>
         </label>
-        <p class="text-sm text-base-content/50">{{ 'settings.sso.match_by_email_hint' | translate }}</p>
+        <p class="text-sm text-base-content/60">{{ 'settings.sso.match_by_email_hint' | translate }}</p>
         <label class="label cursor-pointer justify-start gap-3">
           <input type="checkbox" class="toggle toggle-sm" [ngModel]="endSessionAtProvider()" (ngModelChange)="endSessionAtProvider.set($event)" />
           <span class="label-text">{{ 'settings.sso.end_session' | translate }}</span>
         </label>
-        <p class="text-sm text-base-content/50">{{ 'settings.sso.end_session_hint' | translate }}</p>
+        <p class="text-sm text-base-content/60">{{ 'settings.sso.end_session_hint' | translate }}</p>
       </div>
 
       <label class="form-control w-full">
@@ -258,7 +258,7 @@
           [ngModel]="accountUrl()"
           (ngModelChange)="accountUrl.set($event)"
         />
-        <span class="text-sm text-base-content/50">{{ 'settings.sso.field_account_url_hint' | translate }}</span>
+        <span class="text-sm text-base-content/60">{{ 'settings.sso.field_account_url_hint' | translate }}</span>
       </label>
 
       <label class="label cursor-pointer justify-start gap-3">
@@ -269,7 +269,7 @@
       <div class="flex flex-col gap-2" data-testid="sso-uris">
         <span class="label-text font-semibold">{{ 'settings.sso.uris' | translate }}</span>
         @if (uris(); as list) {
-          <p class="text-sm text-base-content/50">{{ 'settings.sso.uris_hint' | translate }}</p>
+          <p class="text-sm text-base-content/60">{{ 'settings.sso.uris_hint' | translate }}</p>
           @for (u of list; track u.label) {
             <div class="flex flex-col gap-1">
               <span class="label-text">{{ u.label | translate }}</span>
@@ -284,7 +284,7 @@
             </div>
           }
         } @else {
-          <p class="text-sm text-base-content/50">
+          <p class="text-sm text-base-content/60">
             {{ (publicUrl() ? 'settings.sso.uris_after_save' : 'settings.sso.uris_need_public_url') | translate }}
           </p>
         }

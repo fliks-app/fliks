@@ -129,11 +129,6 @@ export function kindOfListFilter(filter: 'all' | MediaType): MediaType {
 export const DETAIL_SEGMENTS_PATTERN = MEDIA_KINDS.map((k) => KIND_REGISTRY[k].segment).join('|');
 export const PROVIDER_SEGMENTS_PATTERN = MEDIA_KINDS.map((k) => KIND_REGISTRY[k].providerSegment).join('|');
 
-/** The kind served at an `/add/<segment>` route segment, if any. */
-export function kindFromProviderSegment(segment: string | null | undefined): MediaType | undefined {
-  return MEDIA_KINDS.find((k) => KIND_REGISTRY[k].providerSegment === segment);
-}
-
 /** The release modal title of a target's level; the work's own when the kind has no such level. */
 export function releasesTitleKey(kind: MediaType, level: AcquisitionLevel): string {
   const levels = KIND_REGISTRY[kind].levels;

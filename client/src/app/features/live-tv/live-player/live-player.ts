@@ -57,6 +57,7 @@ import { programmeProgressPercent } from '../programme-progress';
 import { PlayerScreen } from '../../player/player-screen';
 import { playerKeyAction, type MediaKeyAction } from '../../player/player-keymap';
 import { PlayerSettingsService } from '../../../core/services/player-settings.service';
+import { formatBitrate } from '../../../core/utils/format-bytes';
 
 /** How far back a rewind press steps, inside the DVR window. */
 const REWIND_STEP_SECONDS = 10;
@@ -719,9 +720,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
 
     const bitrate = (bps: number | undefined): string => {
       if (!bps || bps <= 0) return '';
-      if (bps >= 1_000_000) return `${(bps / 1_000_000).toFixed(1)} Mbps`;
-      if (bps >= 1_000) return `${(bps / 1_000).toFixed(0)} kbps`;
-      return `${bps} bps`;
+      return formatBitrate(bps);
     };
     const seconds = (value: number): string => `${Math.round(value)}s`;
 

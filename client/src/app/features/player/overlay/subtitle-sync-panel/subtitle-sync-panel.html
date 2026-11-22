@@ -127,7 +127,7 @@
   }
 </div>
 
-<dialog #syncDialog class="modal">
+<dialog #syncDialog class="modal" [attr.aria-label]="'player.subtitle_sync.sync_other' | translate">
   <div class="modal-box max-w-md">
     <h3 class="text-lg font-bold">{{ 'player.subtitle_sync.sync_other' | translate }}</h3>
     <div class="mt-4">

@@ -119,7 +119,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         provide: AuthService,
         useValue: {
           user: () => ({ id: f.userId, isAdmin: f.isAdmin }),
-          hasPermission: f.hasPermission ?? ((p: string) => p === 'livetv.read'),
+          hasPermission: f.hasPermission ?? ((p: string) => p === 'livetv.read' || p === 'requests.create'),
         },
       },
       { provide: LibraryPrefsService, useValue: { present: (libs: LibrarySummary[]) => libs } },
@@ -287,8 +287,7 @@ function dockItems(root: HTMLElement): CapturedItem[] {
 }
 
 function sheetItems(root: HTMLElement): CapturedItem[] {
-  const sidebarMenu = root.querySelector('aside ul.menu');
-  const sheetMenu = Array.from(root.querySelectorAll('ul.menu')).find((m) => m !== sidebarMenu);
+  const sheetMenu = root.querySelector('.popover-pop-in ul.menu');
   if (!sheetMenu) return [];
   return Array.from(sheetMenu.querySelectorAll('li'))
     .map((li) => readItem(li.querySelector('a')))
@@ -402,13 +401,12 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     ]);
   });
 
-  it('native phone: dock primary row is Home, Downloads, Requests + the search FAB', async () => {
+  it('native phone: dock primary row is Home, Library, Requests + the search FAB', async () => {
     const fixture = await createFixture(NATIVE_PHONE);
     expect(dockItems(fixture.nativeElement)).toEqual([
       { label: 'nav.home', icon: 'lucideHome', badge: null, href: '/' },
-      // The dock keeps its own abbreviated label via `shortLabelKey`; the sidebar
-      // and the sheet render the full one. Identical to the pre-refactor markup.
-      { label: 'nav.downloads', icon: 'lucideDownload', badge: null, href: '/downloads' },
+      // Three libraries: the cell opens the library sheet instead of linking.
+      { label: 'nav.section_library', icon: 'lucideLibrary', badge: null, href: null },
       { label: 'nav.requests', icon: 'lucideClipboardList', badge: null, href: '/requests' },
       { label: 'nav.more', icon: 'lucideEllipsisVertical', badge: null, href: null },
     ]);
@@ -427,11 +425,12 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    // Libraries live on Home, never in the sheet: main items first, then
-    // acquisition items, each group ordered by weight.
+    // Libraries have their own dock cell: main items first, then acquisition
+    // items, each group ordered by weight.
     expect(sheetItems(fixture.nativeElement)).toEqual([
       { label: 'liveTv.title', icon: 'lucideTv', badge: null, href: '/live-tv' },
       { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
+      { label: 'downloads.title', icon: 'lucideDownload', badge: null, href: '/downloads' },
       { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
       { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
     ]);
@@ -515,13 +514,13 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     expect(sheetItems(fixture.nativeElement).some((i) => i.label === 'x.admin_only')).toBe(false);
   });
 
-  it('renders the full label everywhere except the compact dock, which prefers shortLabelKey', async () => {
+  it('names the downloads entry the same on every surface', async () => {
     // `/downloads` is the on-device offline page, unrelated to the acquisition plugin — its
     // per-surface labels predate this work and must survive it.
     const downloads = CORE_NAV_CONTRIBUTIONS.find((c) => c.id === 'core.downloads');
 
     expect(downloads?.labelKey).toBe('downloads.title');
-    expect(downloads?.shortLabelKey).toBe('nav.downloads');
+    expect(downloads?.shortLabelKey).toBeUndefined();
   });
 });
 

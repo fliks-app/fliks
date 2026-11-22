@@ -89,7 +89,7 @@
                 <td class="text-sm">
                   {{ r.providerName }}
                   @if (r.downloadCount) {
-                    <span class="block text-sm text-base-content/50 whitespace-nowrap">{{
+                    <span class="block text-sm text-base-content/60 whitespace-nowrap">{{
                       'media_detail.subtitle_downloads' | translate: { count: r.downloadCount }
                     }}</span>
                   }
@@ -110,7 +110,7 @@
         </table>
       </div>
     } @else if (subSearchSearched() && !subSearchLoading()) {
-      <p class="text-sm text-base-content/50 py-4 text-center">
+      <p class="text-sm text-base-content/60 py-4 text-center">
         {{ 'media_detail.no_subtitle_results' | translate }}
       </p>
     }

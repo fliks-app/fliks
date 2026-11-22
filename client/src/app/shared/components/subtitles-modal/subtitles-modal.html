@@ -59,7 +59,7 @@
           <span class="loading loading-spinner loading-md"></span>
         </div>
       } @else if (rows().length === 0) {
-        <p class="text-sm text-base-content/50">{{ 'media_detail.no_subtitles' | translate }}</p>
+        <p class="text-sm text-base-content/60">{{ 'media_detail.no_subtitles' | translate }}</p>
       } @else {
         <!-- Phone only: -mx-6 cancels the modal-box padding so the table reaches both edges; from sm it is an inset, rounded card. -->
         <div class="-mx-6 overflow-x-auto sm:mx-0 sm:rounded-lg sm:border sm:border-base-200">
@@ -96,7 +96,7 @@
                       @if (sub.relativePath) {
                         {{ sub.relativePath | subtitleFilename }}
                       } @else if (sub.providerType === 'embedded') {
-                        <span class="text-base-content/30">{{
+                        <span class="text-base-content/60">{{
                           'media_detail.embedded' | translate
                         }}</span>
                       } @else {
@@ -116,7 +116,7 @@
                     </td>
                     <td class="text-center tabular-nums">
                       @if (sub.providerType === 'embedded') {
-                        <span class="text-base-content/30">-</span>
+                        <span class="text-base-content/60">-</span>
                       } @else {
                         {{ sub.score }}
                       }
@@ -241,7 +241,7 @@
 />
 
 <!-- Sync options modal -->
-<dialog #syncDialog class="modal">
+<dialog #syncDialog class="modal" [attr.aria-label]="'media_detail.sync_modal_title' | translate">
   <div class="modal-box max-w-2xl w-11/12">
     <app-modal-header>
       <div>
@@ -271,7 +271,7 @@
           (ngModelChange)="syncMaxOffset.set($event)"
         />
         <div class="label">
-          <span class="label-text-alt text-base-content/50">{{
+          <span class="label-text-alt text-base-content/60">{{
             'media_detail.sync_max_offset_hint' | translate
           }}</span>
         </div>
@@ -313,7 +313,7 @@
 </dialog>
 
 <!-- Adjust Times modal -->
-<dialog #adjustDialog class="modal">
+<dialog #adjustDialog class="modal" [attr.aria-label]="'media_detail.adjust_times_title' | translate">
   <div class="modal-box max-w-md">
     <app-modal-header>
       <div>
@@ -354,7 +354,7 @@
       </label>
     </div>
     <div class="label">
-      <span class="label-text-alt text-base-content/50">{{
+      <span class="label-text-alt text-base-content/60">{{
         'media_detail.adjust_offset_hint' | translate
       }}</span>
     </div>
@@ -374,7 +374,7 @@
 </dialog>
 
 <!-- Change Frame Rate modal -->
-<dialog #fpsDialog class="modal">
+<dialog #fpsDialog class="modal" [attr.aria-label]="'media_detail.change_fps_title' | translate">
   <div class="modal-box max-w-md">
     <app-modal-header>
       <div>
@@ -437,7 +437,7 @@
   </form>
 </dialog>
 
-<dialog #ocrLangDialog class="modal">
+<dialog #ocrLangDialog class="modal" [attr.aria-label]="'media_detail.change_language_title' | translate">
   <div class="modal-box max-w-sm">
     <app-modal-header>
       <div class="min-w-0">

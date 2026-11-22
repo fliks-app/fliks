@@ -13,13 +13,14 @@ export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.my_profile', slot: 'nav.main', weight: 300, labelKey: 'nav.my_profile', icon: 'user-round', when: [not('isTv')], action: { kind: 'action', actionId: 'nav.my-profile' } },
   { id: 'core.live_tv', slot: 'nav.main', weight: 900, labelKey: 'liveTv.title', icon: 'tv', when: ['hasPermission:livetv.read', 'liveTv'], action: { kind: 'route', path: '/live-tv' } },
   { id: 'core.playlists', slot: 'nav.main', weight: 2000, labelKey: 'nav.playlists', icon: 'list-video', action: { kind: 'route', path: '/playlists' } },
-  { id: 'core.downloads', slot: 'nav.main', weight: 2100, labelKey: 'downloads.title', shortLabelKey: 'nav.downloads', icon: 'download', when: [not('isTv')], action: { kind: 'route', path: '/downloads' } },
+  { id: 'core.downloads', slot: 'nav.main', weight: 2100, labelKey: 'downloads.title', icon: 'download', when: [not('isTv')], action: { kind: 'route', path: '/downloads' } },
   { id: 'core.history', slot: 'nav.main', weight: 2200, labelKey: 'nav.history', icon: 'history', action: { kind: 'route', path: '/history' } },
 
-  { id: 'core.requests', slot: 'nav.acquisition', weight: 100, labelKey: 'nav.requests', icon: 'clipboard-list', badge: 'pendingRequests', tone: 'danger', action: { kind: 'route', path: '/requests' } },
+  { id: 'core.requests', slot: 'nav.acquisition', weight: 100, labelKey: 'nav.requests', icon: 'clipboard-list', badge: 'pendingRequests', tone: 'danger', when: ['hasPermission:requests.create'], action: { kind: 'route', path: '/requests' } },
   { id: 'core.queue', slot: 'nav.acquisition', weight: 150, labelKey: 'acquisition_queue.queue_title', icon: 'download', when: [since('acquisitionQueue'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/queue' } },
   { id: 'core.queue_history', slot: 'nav.acquisition', weight: 160, labelKey: 'acquisition_queue.history_title', icon: 'history', when: [since('acquisitionQueue'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/history' } },
   { id: 'core.calendar', slot: 'nav.acquisition', weight: 300, labelKey: 'nav.calendar', icon: 'calendar', action: { kind: 'route', path: '/calendar' } },
+  { id: 'core.wanted', slot: 'nav.acquisition', weight: 350, labelKey: 'wanted.title', icon: 'target', when: ['hasPermission:media.grab'], action: { kind: 'route', path: '/wanted' } },
 ];
 
 /** Libraries render as their own block between the weight-300 and weight-2000 core items; where a plugin's `nav.main` weight 1000-1999 lands after them. */
@@ -85,6 +86,7 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
   {
     labelKey: 'admin.section_integrations',
     items: [
+      { id: 'core.plugins', slot: 'settings.page', weight: 50, labelKey: 'settings.nav.plugins', action: { kind: 'route', path: '/admin/settings/plugins' } },
       { id: 'core.media_servers', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.media_servers', action: { kind: 'route', path: '/admin/settings/media-servers' } },
       { id: 'core.data_imports', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.data_imports', action: { kind: 'route', path: '/admin/settings/data-imports' } },
       { id: 'core.notifications', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.notifications', action: { kind: 'route', path: '/admin/settings/notifications' } },
@@ -112,7 +114,6 @@ export const CORE_SETTINGS_SECTIONS: readonly CoreSettingsSection[] = [
       { id: 'core.schedulers', slot: 'settings.page', weight: 100, labelKey: 'settings.nav.schedulers', action: { kind: 'route', path: '/admin/settings/schedulers' } },
       { id: 'core.streaming', slot: 'settings.page', weight: 200, labelKey: 'settings.nav.streaming', action: { kind: 'route', path: '/admin/settings/streaming' } },
       { id: 'core.engine', slot: 'settings.page', weight: 250, labelKey: 'settings.nav.engine', action: { kind: 'route', path: '/admin/settings/engine' } },
-      { id: 'core.plugins', slot: 'settings.page', weight: 300, labelKey: 'settings.nav.plugins', action: { kind: 'route', path: '/admin/settings/plugins' } },
     ],
   },
 ];

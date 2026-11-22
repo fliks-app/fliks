@@ -4,7 +4,7 @@
      [style.--chrome-top]="chromeTop()"
      [style.--chrome-bottom]="chromeBottom()"
      [style.--chrome-bottom-total]="chromeBottomTotal()">
-  <input id="sidebar" type="checkbox" class="drawer-toggle" />
+  <input #sidebarToggle id="sidebar" type="checkbox" class="drawer-toggle" tabindex="-1" aria-hidden="true" />
   <div class="drawer-content flex flex-col relative">
     <!-- Watched by an IntersectionObserver to derive `scrollAtTop` without ever
          reading the scroll position. Absolute, so it adds no layout height. -->
@@ -34,6 +34,7 @@
         @if (canGoBack()) {
           <button
             class="btn btn-square btn-ghost"
+            [attr.aria-label]="'common.back' | translate"
             (click)="goBack()"
           >
             <svg lucideChevronLeft class="h-5 w-5 md:h-6 md:w-6"></svg>
@@ -41,19 +42,19 @@
         }
         @if (!navbar.phoneDock() && !tv.isTv()) {
           <!-- Hamburger wherever the drawer can open: everywhere but the phone dock and TV (D-pad nav). -->
-          <label for="sidebar" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate">
+          <button type="button" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate" (click)="sidebarToggle.click()">
             <svg lucideMenu class="h-5 w-5 md:h-6 md:w-6"></svg>
-          </label>
+          </button>
         }
       </div>
-      <div class="flex-1 min-w-0 tv:flex-none">
+      <div class="flex-1 min-w-0 tv:flex-initial">
         @if (tv.isTv()) {
           <!-- 10-foot primary nav: the drawer never opens on a TV, so the main
                entries live here, one ↑ away from the first rail. -->
-          <div class="flex items-center gap-6 pl-2">
-            <img src="fliks-logo-ondark.svg" [alt]="'app.name' | translate" class="h-7 w-auto object-contain" />
-            <div class="ml-4 flex items-center gap-2">
-              @for (item of tvNavItems(); track item.id) {
+          <div class="flex min-w-0 items-center gap-6 pl-2">
+            <img src="fliks-logo-ondark.svg" [alt]="'app.name' | translate" class="h-7 w-auto shrink-0 object-contain" />
+            <div class="scroll-ring-safe ml-3 flex min-w-0 items-center gap-2 overflow-x-auto px-3 -mx-1">
+              @for (item of tvTabs(); track item.id) {
                 <a
                   [routerLink]="item.route"
                   routerLinkActive
@@ -61,12 +62,16 @@
                   #tab="routerLinkActive"
                   [routerLinkActiveOptions]="{ exact: item.exact }"
                   [state]="{ rootEntry: true }"
-                  class="btn btn-ghost h-11 gap-2.5 rounded-2xl px-4 text-base font-semibold"
+                  class="btn btn-ghost h-11 shrink-0 gap-2.5 rounded-2xl px-4 text-base font-semibold"
                   [class.bg-base-content/10]="tab.isActive"
                   [class.text-base-content/70]="!tab.isActive"
                 >
-                  <app-nav-icon [name]="item.icon" class="h-5 w-5" />
-                  {{ item.labelKey | translate }}
+                  @if (item.isLibrary) {
+                    <app-lucide-icon [name]="item.icon" class="h-5 w-5" />
+                  } @else {
+                    <app-nav-icon [name]="item.icon" class="h-5 w-5" />
+                  }
+                  {{ item.label ?? (item.labelKey! | translate) }}
                 </a>
               }
             </div>
@@ -95,7 +100,7 @@
         }
       </div>
       <!-- TV: the tabs keep their width and the now-playing bar takes what is left. -->
-      <div class="flex-none flex items-center gap-1 md:gap-1.5 tv:min-w-0 tv:flex-1 tv:justify-end tv:pl-2">
+      <div class="flex-none flex items-center gap-1 md:gap-1.5 tv:min-w-0 tv:flex-1 tv:basis-48 tv:justify-end tv:pl-2">
         @if (appUpdate.available()) {
           <button class="btn btn-ghost btn-circle" (click)="openUpdateModal()"
                   [attr.aria-label]="'update.title' | translate">
@@ -233,12 +238,17 @@
             <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
           </a>
         }
-        @if (dockDownloads(); as item) {
-          <a [routerLink]="item.route" routerLinkActive="dock-active" [routerLinkActiveOptions]="{ exact: item.exact }"
-             [state]="{ rootEntry: true }">
-            <app-nav-icon [name]="item.icon" class="h-5 w-5" />
-            <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
+        <!-- One library opens itself; none or several open the sheet. -->
+        @if (soleLibrary(); as lib) {
+          <a [routerLink]="libraryUrl(lib)" routerLinkActive="dock-active" [state]="{ rootEntry: true }">
+            <app-nav-icon name="library" class="h-5 w-5" />
+            <span class="dock-label truncate max-w-full">{{ 'nav.section_library' | translate }}</span>
           </a>
+        } @else {
+          <button type="button" (click)="librarySheetOpen.set(true)" [class.dock-active]="isLibraryRoute() || librarySheetOpen()">
+            <app-nav-icon name="library" class="h-5 w-5" />
+            <span class="dock-label truncate max-w-full">{{ 'nav.section_library' | translate }}</span>
+          </button>
         }
         <!-- Empty cell holding the centre slot so the 4 nav items spread over 5 columns; the FAB stays outside the dock to keep .dock's position:fixed. -->
         <span aria-hidden="true" class="invisible"></span>
@@ -249,7 +259,7 @@
             <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
           </a>
         }
-        <button (click)="toggleBottomMenu()" [class.dock-active]="bottomMenuOpen()"
+        <button type="button" (click)="toggleBottomMenu()" [class.dock-active]="bottomMenuOpen()"
                 class="[&.dock-active]:before:hidden [&.dock-active]:after:hidden">
           <svg lucideEllipsisVertical class="h-5 w-5"></svg>
           <span class="dock-label truncate max-w-full">{{ 'nav.more' | translate }}</span>
@@ -268,6 +278,37 @@
          [attr.aria-label]="'search.title' | translate">
         <svg lucideSearch class="h-5 w-5"></svg>
       </a>
+        <app-bottom-sheet [open]="librarySheetOpen()" [heading]="'home.libraries' | translate" (closed)="librarySheetOpen.set(false)">
+          <ul class="menu w-full p-2 gap-0.5">
+            @for (lib of displayLibraries(); track lib.id) {
+              <li>
+                <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" #libLink="routerLinkActive" class="h-14 justify-between" [state]="{ rootEntry: true }">
+                  <span class="flex min-w-0 items-center gap-3">
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-base-content/10" [style.background-color]="lib.color">
+                      <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" />
+                    </span>
+                    <span class="truncate text-base">{{ lib.name }}</span>
+                  </span>
+                  <span class="flex items-center gap-2">
+                    @if (libraryCounts()[lib.id]) {
+                      <span class="text-sm text-base-content/60">{{ libraryCounts()[lib.id] }}</span>
+                    }
+                    @if (libLink.isActive) {
+                      <svg lucideCheck class="h-5 w-5"></svg>
+                    }
+                  </span>
+                </a>
+              </li>
+            } @empty {
+              <li class="px-4 py-3 text-base-content/60">{{ 'nav.no_library' | translate }}</li>
+              @if (auth.user()?.isAdmin) {
+                <li>
+                  <a routerLink="/admin/settings/libraries" class="btn btn-primary" [state]="{ rootEntry: true }">{{ 'settings.libraries.add' | translate }}</a>
+                </li>
+              }
+            }
+          </ul>
+        </app-bottom-sheet>
         <!-- More menu dropdown (opens upward, positioned relative to viewport
              since the .dock is no longer the parent stacking context). -->
         @if (bottomMenuOpen()) {
@@ -390,7 +431,7 @@
 
         <!-- Held until the list lands: inserted under painted items, it would push them down. -->
         @if (librariesLoaded()) {
-        <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_library' | translate }}</li>
+        <li class="menu-title text-sm mt-3">{{ 'nav.section_library' | translate }}</li>
         @for (lib of displayLibraries(); track lib.id) {
           <li>
             <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" class="justify-between">
@@ -417,7 +458,7 @@
             </a>
           </li>
         }
-        <li class="menu-title text-xs uppercase tracking-wider mt-3">{{ 'nav.section_downloads' | translate }}</li>
+        <li class="menu-title text-sm mt-3">{{ 'nav.section_downloads' | translate }}</li>
         @for (item of acquisitionItems(); track item.id) {
           <li>
             <a [routerLink]="item.route" routerLinkActive="menu-active" class="justify-between">

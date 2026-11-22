@@ -17,7 +17,7 @@
                   fetchpriority="low"
                 />
               } @else {
-                <div class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/30">
+                <div class="bg-base-300 flex items-center justify-center w-full h-full text-lg font-bold text-base-content/60">
                   {{ c.name.charAt(0) }}
                 </div>
               }
@@ -25,7 +25,7 @@
           </div>
           <span class="text-sm text-center font-medium line-clamp-1 w-full">{{ c.name }}</span>
           @if (c.character) {
-            <span class="text-sm text-base-content/50 text-center line-clamp-1 w-full -mt-1">{{ c.character }}</span>
+            <span class="text-sm text-base-content/60 text-center line-clamp-1 w-full -mt-1">{{ c.character }}</span>
           }
         </ng-template>
         @if (c.link; as link) {

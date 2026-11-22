@@ -43,7 +43,7 @@
     } @else if (loadError()) {
       <div role="alert" class="alert alert-error">{{ 'settings.libraries.media_load_error' | translate }}</div>
     } @else if (items().length === 0) {
-      <p class="text-center py-12 text-base-content/50">{{ 'settings.libraries.media_empty' | translate }}</p>
+      <p class="text-center py-12 text-base-content/60">{{ 'settings.libraries.media_empty' | translate }}</p>
     } @else {
       <div class="overflow-x-auto">
         <table class="table">
@@ -79,8 +79,8 @@
                 </td>
                 <td class="text-sm text-base-content/70">
                   @if (fileSummary(item); as f) {
-                    <div>{{ 'settings.libraries.scan_files' | translate: { count: f.count } }}</div>
-                    <div class="text-base-content/50">{{ f.text }}</div>
+                    <div>{{ 'settings.libraries.scan_files' | translatePlural: f.count }}</div>
+                    <div class="text-base-content/60">{{ f.text }}</div>
                   }
                 </td>
               </tr>

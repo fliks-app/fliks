@@ -16,7 +16,7 @@
         <div class="flex flex-col gap-2 max-w-lg">
           <div>
             <span class="text-sm">{{ 'settings.acquisition.provider_order' | translate }}</span>
-            <p class="text-sm text-base-content/50">{{ 'settings.acquisition.provider_order_hint' | translate }}</p>
+            <p class="text-sm text-base-content/60">{{ 'settings.acquisition.provider_order_hint' | translate }}</p>
           </div>
             <div cdkDropList (cdkDropListDropped)="reorder($event.previousIndex, $event.currentIndex)" class="flex flex-col gap-2">
               @for (r of rows(); track r.id; let i = $index; let last = $last) {
@@ -30,16 +30,16 @@
                     <button
                       type="button"
                       cdkDragHandle
-                      class="cursor-grab text-base-content/40 hover:text-base-content/70"
+                      class="cursor-grab text-base-content/60 hover:text-base-content/70"
                       [attr.aria-label]="'settings.acquisition.drag' | translate"
                     >
                       <svg lucideGripVertical class="h-4 w-4"></svg>
                     </button>
                   }
-                  <span class="w-5 text-sm text-base-content/50">{{ i + 1 }}</span>
+                  <span class="w-5 text-sm text-base-content/60">{{ i + 1 }}</span>
                   <span class="flex flex-1 min-w-0 items-baseline gap-2">
                     <span class="font-medium truncate">{{ r.name }}</span>
-                    <span class="font-mono text-sm text-base-content/50">{{ r.id }}</span>
+                    <span class="font-mono text-sm text-base-content/60">{{ r.id }}</span>
                   </span>
                   <button
                     type="button"
@@ -72,13 +72,13 @@
           </div>
           <input type="number" class="input input-bordered input-sm w-full" min="1" [ngModel]="interval()" (ngModelChange)="interval.set($event)" />
           <div class="label">
-            <span class="label-text-alt text-base-content/50">{{ 'settings.acquisition.sweep_interval_hint' | translate }}</span>
+            <span class="label-text-alt text-base-content/60">{{ 'settings.acquisition.sweep_interval_hint' | translate }}</span>
           </div>
         </label>
 
         <fieldset class="flex max-w-lg flex-col gap-2" data-testid="unrequested-tracks">
           <legend class="text-sm">{{ 'settings.acquisition.music_title' | translate }}: {{ 'settings.acquisition.unrequested_tracks' | translate }}</legend>
-          <p class="text-sm text-base-content/50">{{ 'settings.acquisition.unrequested_tracks_hint' | translate }}</p>
+          <p class="text-sm text-base-content/60">{{ 'settings.acquisition.unrequested_tracks_hint' | translate }}</p>
           <label class="flex cursor-pointer items-center gap-3">
             <input type="radio" name="unrequested" class="radio radio-primary radio-sm" value="skip" [ngModel]="unrequested()" (ngModelChange)="unrequested.set($event)" />
             <span class="text-sm">{{ 'settings.acquisition.unrequested_skip' | translate }}</span>

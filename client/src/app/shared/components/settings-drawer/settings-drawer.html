@@ -12,7 +12,7 @@
       [class.-translate-y-full]="navbarHidden()"
     >
       <div class="flex-none flex">
-        <button type="button" class="btn btn-square btn-ghost" (click)="goBack()">
+        <button type="button" class="btn btn-square btn-ghost" [attr.aria-label]="'common.back' | translate" (click)="goBack()">
           <svg lucideChevronLeft class="h-5 w-5"></svg>
         </button>
         <label [for]="drawerId()" tabindex="0" role="button" class="btn btn-square btn-ghost">

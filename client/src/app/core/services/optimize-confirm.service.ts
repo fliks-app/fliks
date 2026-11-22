@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
+import { translatePlural } from '../pipes/translate-plural.pipe';
 import { OptimizeService } from './api/optimize.service';
 import { ConfirmationService } from './confirmation.service';
 
@@ -19,7 +20,7 @@ export class OptimizeConfirmService {
     }
     const t = (key: string, params?: object) => this.translate.instant(key, params);
     const message = [
-      t('optimize.action.confirm_files', { count }),
+      translatePlural(this.translate, 'optimize.action.confirm_files', count),
       t(`settings.optimize.global.original_${policy}`),
       ...(policy === 'delete' ? [t('settings.optimize.global.delete_warning')] : []),
     ].join(' ');

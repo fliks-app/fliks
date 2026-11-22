@@ -1,6 +1,6 @@
 import type { PlayerControlsComponent } from './controls/player-controls';
 import type { ControlsVisibilityService } from './controls/controls-visibility';
-import { playerKeyAction } from './player-keymap';
+import { isBackKey, playerKeyAction } from './player-keymap';
 
 export interface KeyboardHost {
   chrome: ControlsVisibilityService;
@@ -38,10 +38,7 @@ export class KeyboardController {
     const control = this.host.canControlPlayback();
 
     // Back keys must bubble to the window handler in `app.ts` so the player can be left.
-    // Older Tizen reports 10009 with no reliable `e.key`, so `keyCode` stays load-bearing.
-    const tizenKeyCode = (e as { keyCode: number }).keyCode;
-    const isBackKey =
-      tizenKeyCode === 10009 || e.key === 'XF86Back' || e.key === 'GoBack' || e.key === 'Escape';
+    const isBack = isBackKey(e) || e.key === 'Escape';
 
     // A focused floating cue is visible while the bar is hidden: it gets its activation key.
     const activeEl = document.activeElement as HTMLElement | null;
@@ -52,7 +49,7 @@ export class KeyboardController {
     // An open dialog (settings, reactions) owns every key, arrows included, even with focus left behind it.
     if (document.querySelector('dialog[open]')) return;
     // The sync panel owns its keys; only Back still reaches the handlers below.
-    if (!isBackKey && activeEl?.closest('app-subtitle-sync-panel')) return;
+    if (!isBack && activeEl?.closest('app-subtitle-sync-panel')) return;
     // Focus beside the bar (party panel, error overlay) keeps arrows and OK for its own buttons.
     const elsewhere = !!activeEl && activeEl !== document.body && !activeEl.closest('app-player-controls');
     if (elsewhere && (e.key.startsWith('Arrow') || e.key === 'Enter')) return;
@@ -68,16 +65,16 @@ export class KeyboardController {
         else chrome.show();
         return;
       }
-      if (reactions && (isBackKey || e.key === 'ArrowDown')) {
+      if (reactions && (isBack || e.key === 'ArrowDown')) {
         e.preventDefault();
         e.stopPropagation();
-        if (isBackKey) chrome.hide();
+        if (isBack) chrome.hide();
         return;
       }
       if (reactions && floatingKey) chrome.resetHideTimer();
     }
 
-    const mapped = playerKeyAction({ key: e.key, keyCode: tizenKeyCode });
+    const mapped = playerKeyAction({ key: e.key, keyCode: e.keyCode });
     if (mapped?.kind === 'media') {
       const media = mapped.action;
       e.preventDefault();
@@ -120,7 +117,7 @@ export class KeyboardController {
     // Any other key on a hidden bar just wakes it, on TV or with focus left in the bar (Space still plays);
     // a focused cue and back are exempt.
     const inBar = !!activeEl?.closest('app-player-controls') && e.key !== ' ';
-    if (!isBackKey && !floatingKey && !this.host.chrome.visible() && (this.host.isTv() || inBar)) {
+    if (!isBack && !floatingKey && !this.host.chrome.visible() && (this.host.isTv() || inBar)) {
       this.host.chrome.show();
       e.preventDefault();
       e.stopPropagation();
@@ -199,6 +196,6 @@ export class KeyboardController {
         break;
     }
     // Not for back (`onPlayerBackEvent` would only hide the bar, so Return looks stuck) nor a focused cue or reaction row.
-    if (!isBackKey && !floatingKey) this.host.chrome.show(isSeekArrow && this.host.chrome.seekOsd());
+    if (!isBack && !floatingKey) this.host.chrome.show(isSeekArrow && this.host.chrome.seekOsd());
   };
 }

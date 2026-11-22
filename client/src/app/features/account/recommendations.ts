@@ -1,5 +1,6 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { translatePlural } from '../../core/pipes/translate-plural.pipe';
 import { LucideRotateCcw } from '@lucide/angular';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
@@ -37,9 +38,7 @@ export class AccountRecommendationsComponent implements OnInit {
     if (!(this.count() ?? 0)) return;
     const ok = await this.confirmation.confirm({
       title: this.translate.instant('account_settings.recommendations.confirm_title'),
-      message: this.translate.instant('account_settings.recommendations.confirm_body', {
-        n: this.count() ?? 0,
-      }),
+      message: translatePlural(this.translate, 'account_settings.recommendations.confirm_body', this.count() ?? 0),
       confirmLabel: this.translate.instant('account_settings.recommendations.reset'),
     });
     if (!ok) return;
@@ -47,9 +46,7 @@ export class AccountRecommendationsComponent implements OnInit {
     try {
       const res = await this.api.resetDismissedRecommendations();
       this.toast.success(
-        this.translate.instant('account_settings.recommendations.reset_success', {
-          n: res.removed,
-        }),
+        translatePlural(this.translate, 'account_settings.recommendations.reset_success', res.removed),
       );
       this.count.set(0);
     } catch {

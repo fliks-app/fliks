@@ -39,7 +39,7 @@ pub(super) async fn test(st: &AppState, a: Authed, body: Value) -> Res<Json<Valu
                     .and_then(Value::as_str)
                     .map(String::from)
             });
-            json!({"ok": true, "message": format!("Connecté à {}", title.as_deref().unwrap_or("Seerr"))})
+            json!({"ok": true, "message": format!("Connected to {}", title.as_deref().unwrap_or("Seerr"))})
         }
     };
     Ok(Json(out))

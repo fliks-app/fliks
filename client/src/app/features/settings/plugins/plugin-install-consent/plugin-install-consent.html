@@ -1,4 +1,4 @@
-<dialog #dialog class="modal" (close)="discardUnconfirmed()">
+<dialog #dialog class="modal" (close)="discardUnconfirmed()" aria-labelledby="plugin-consent-title">
   <div class="modal-box max-w-lg">
     @if (report(); as r) {
       @if (!r.installable) {
@@ -12,10 +12,10 @@
       } @else {
         <app-modal-header>
           <div>
-            <h3 class="text-lg font-bold">
+            <h3 id="plugin-consent-title" class="text-lg font-bold">
               {{ 'settings.plugins.consent.title' | translate: { name: r.name } }}
             </h3>
-            <p class="text-xs text-base-content/50 mt-1">
+            <p class="text-sm text-base-content/60 mt-1">
               {{
                 'settings.plugins.consent.identity' | translate: { id: r.id, version: r.version }
               }}
@@ -39,7 +39,7 @@
         }
 
         @if (r.capabilities?.length) {
-          <p class="text-sm font-semibold uppercase tracking-wider text-base-content/50 mb-2">
+          <p class="text-sm font-semibold uppercase tracking-wider text-base-content/60 mb-2">
             {{ 'settings.plugins.consent.capabilities_title' | translate }}
           </p>
           <ul class="list-disc list-inside text-sm mb-4 space-y-1">

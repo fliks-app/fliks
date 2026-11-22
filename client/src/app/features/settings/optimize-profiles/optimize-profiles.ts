@@ -1,6 +1,7 @@
 import { Component, ElementRef, OnInit, inject, signal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe, translatePlural } from '../../../core/pipes/translate-plural.pipe';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { OptimizeService } from '../../../core/services/api/optimize.service';
 import { formatChoice, type OptimizeProfile, type PresetKey } from '../../../core/models/optimize';
@@ -10,7 +11,7 @@ const PRESETS: PresetKey[] = ['balanced', 'cleanup_only', 'direct_playback'];
 
 @Component({
   selector: 'app-optimize-profiles',
-  imports: [RouterLink, TranslatePipe, ModalHeaderComponent],
+  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, ModalHeaderComponent],
   templateUrl: './optimize-profiles.html',
 })
 export class OptimizeProfilesComponent implements OnInit {
@@ -64,9 +65,8 @@ export class OptimizeProfilesComponent implements OnInit {
   async remove(p: OptimizeProfile) {
     const ok = await this.confirmation.confirm({
       title: this.translate.instant('common.confirm'),
-      message: this.translate.instant('settings.optimize.profiles.confirm_delete', {
+      message: translatePlural(this.translate, 'settings.optimize.profiles.confirm_delete', p.libraryCount, {
         name: p.name,
-        count: p.libraryCount,
       }),
       variant: 'danger',
     });

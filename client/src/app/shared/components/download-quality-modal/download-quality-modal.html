@@ -1,8 +1,8 @@
-<dialog #dialog class="modal">
+<dialog #dialog class="modal" [attr.aria-label]="(current() ? 'downloads.change_quality' : 'downloads.choose_quality') | translate">
   <div class="modal-box max-w-sm">
     <div class="flex items-center justify-between mb-4">
       <h3 class="text-lg font-bold">{{ (current() ? 'downloads.change_quality' : 'downloads.choose_quality') | translate }}</h3>
-      <button class="btn btn-ghost btn-sm btn-circle" (click)="close()">
+      <button class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.close' | translate" (click)="close()">
         <svg lucideX class="h-4 w-4"></svg>
       </button>
     </div>

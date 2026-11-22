@@ -1,4 +1,5 @@
 import { MusicPeopleComponent } from '../music/music-people.component';
+import { AuthService } from '../../core/services/auth.service';
 import { MusicTracksComponent } from '../music/music-tracks.component';
 import type { ComicListInfo } from '../../core/services/api/comics.models';
 import type { AlbumListInfo } from '../../core/services/api/music.models';
@@ -155,7 +156,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     RouterLink,
     LocalizeLanguagePipe,
     PersonAvatarCardComponent,
-    TranslatePipe,
+    TranslatePipe, TranslatePluralPipe,
     LucideSearch,
     LucideSlidersHorizontal,
     LucideArrowUp,
@@ -177,6 +178,9 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
 })
 export class LibraryComponent implements OnInit, OnDestroy {
   private readonly mediaService = inject(MediaService);
+  private readonly auth = inject(AuthService);
+  /** Monitoring is an admin notion: members get no filter for it. */
+  protected readonly canFilterMonitoring = computed(() => this.auth.hasPermission('requests.manage') || this.auth.hasPermission('media.edit'));
   private readonly booksApi = inject(BooksApiService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);

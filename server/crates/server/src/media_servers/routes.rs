@@ -313,7 +313,7 @@ pub async fn test(
     let (ok, message) = if s.r#type == emby::TYPE {
         emby::Conn::new(&s.url, s.api_key.as_deref()).test().await
     } else {
-        (false, format!("Type \"{}\" non supporte", s.r#type))
+        (false, format!("Type \"{}\" is not supported", s.r#type))
     };
     Ok((
         StatusCode::CREATED,

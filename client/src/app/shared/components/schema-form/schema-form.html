@@ -91,7 +91,7 @@
           (valueChange)="setMulti(field, $event)"
         />
         @if (field.hint) {
-          <div class="label"><span class="label-text-alt text-base-content/50">{{ field.hint | translate }}</span></div>
+          <div class="label"><span class="label-text-alt text-base-content/60">{{ field.hint | translate }}</span></div>
         }
         @for (err of fieldErrors(field); track err.key) {
           <p class="text-error text-xs">{{ err.key | translate: err.params }}</p>

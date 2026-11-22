@@ -11,6 +11,7 @@ import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { LucideX } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import {
   MediaServersApiService,
@@ -28,7 +29,7 @@ import { EnabledSwitchComponent } from '../../../shared/components/enabled-switc
     ModalFooterComponent,
     ModalHeaderComponent,
     FormsModule,
-    TranslatePipe,
+    TranslatePipe, TranslatePluralPipe,
     EnabledSwitchComponent,
   ],
   templateUrl: './media-servers.html',

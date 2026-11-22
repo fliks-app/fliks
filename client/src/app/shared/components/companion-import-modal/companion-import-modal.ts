@@ -2,6 +2,7 @@ import { Component, ElementRef, computed, inject, output, signal, viewChild } fr
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { translatePlural } from '../../../core/pipes/translate-plural.pipe';
 import { COMPANION_IMPORT, CompanionImportType } from '../../../core/constants/companion-import';
 import { SUBTITLE_LANGUAGE_CODES } from '../../../core/constants/subtitle-languages';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
@@ -152,7 +153,9 @@ export class CompanionImportModalComponent {
       }
       const count = res.rejected.length;
       this.toast.success(
-        this.translate.instant(count ? 'file_info.import_edl_success_ignored' : 'file_info.import_edl_success', { count }),
+        count
+          ? translatePlural(this.translate, 'file_info.import_edl_success_ignored', count)
+          : this.translate.instant('file_info.import_edl_success', { count }),
       );
       return true;
     } catch (err) {

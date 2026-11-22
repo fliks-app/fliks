@@ -11,7 +11,7 @@
       <input
         type="number" min="0" step="1" class="input input-bordered w-full"
         [ngModel]="guideDaysPast()" (ngModelChange)="setInt(guideDaysPast, 'livetv_guide_days_past', $event)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.guide_days_past_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'liveTv.admin.settings.guide_days_past_help' | translate }}</span></label>
     </div>
 
     <div class="form-control">
@@ -19,7 +19,7 @@
       <input
         type="number" min="0" step="1" class="input input-bordered w-full"
         [ngModel]="guideDaysFuture()" (ngModelChange)="setInt(guideDaysFuture, 'livetv_guide_days_future', $event)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.guide_days_future_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'liveTv.admin.settings.guide_days_future_help' | translate }}</span></label>
     </div>
 
     <div class="divider">{{ 'liveTv.admin.settings.section_session' | translate }}</div>
@@ -29,7 +29,7 @@
       <input
         type="number" min="1" step="1" class="input input-bordered w-full"
         [ngModel]="segmentSeconds()" (ngModelChange)="setInt(segmentSeconds, 'livetv_segment_seconds', $event, 1)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.segment_seconds_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'liveTv.admin.settings.segment_seconds_help' | translate }}</span></label>
     </div>
 
     <div class="form-control">
@@ -37,7 +37,7 @@
       <input
         type="number" min="1" step="1" class="input input-bordered w-full"
         [ngModel]="timeshiftMinutes()" (ngModelChange)="setInt(timeshiftMinutes, 'livetv_timeshift_minutes', $event, 1)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.timeshift_minutes_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'liveTv.admin.settings.timeshift_minutes_help' | translate }}</span></label>
     </div>
 
     <div class="form-control">
@@ -45,7 +45,7 @@
       <input
         type="number" min="0" step="1" class="input input-bordered w-full"
         [ngModel]="channelIdleSeconds()" (ngModelChange)="setInt(channelIdleSeconds, 'livetv_channel_idle_seconds', $event)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.channel_idle_seconds_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'liveTv.admin.settings.channel_idle_seconds_help' | translate }}</span></label>
     </div>
 
     <div class="form-control">
@@ -53,7 +53,7 @@
       <input
         type="number" min="0" step="1" class="input input-bordered w-full"
         [ngModel]="probeSeconds()" (ngModelChange)="setInt(probeSeconds, 'livetv_probe_seconds', $event)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.probe_seconds_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'liveTv.admin.settings.probe_seconds_help' | translate }}</span></label>
     </div>
 
     <div class="form-control">
@@ -61,7 +61,7 @@
       <input
         type="number" min="0" step="1" class="input input-bordered w-full"
         [ngModel]="slotReleaseSeconds()" (ngModelChange)="setInt(slotReleaseSeconds, 'livetv_slot_release_seconds', $event)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.slot_release_seconds_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'liveTv.admin.settings.slot_release_seconds_help' | translate }}</span></label>
     </div>
 
     <div class="form-control">
@@ -69,7 +69,7 @@
       <input
         type="number" min="0" step="1" class="input input-bordered w-full"
         [ngModel]="maxViewersPerUser()" (ngModelChange)="setInt(maxViewersPerUser, 'livetv_max_viewers_per_user', $event)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.max_viewers_per_user_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'liveTv.admin.settings.max_viewers_per_user_help' | translate }}</span></label>
     </div>
 
     <div class="divider">{{ 'liveTv.admin.settings.section_maintenance' | translate }}</div>
@@ -79,7 +79,7 @@
       <input
         type="number" min="0" step="1" class="input input-bordered w-full"
         [ngModel]="staleStreamDays()" (ngModelChange)="setInt(staleStreamDays, 'livetv_stale_stream_days', $event)" />
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ 'liveTv.admin.settings.stale_stream_days_help' | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'liveTv.admin.settings.stale_stream_days_help' | translate }}</span></label>
     </div>
 
     <div class="divider">{{ 'liveTv.admin.settings.section_zap' | translate }}</div>
@@ -93,7 +93,7 @@
         <option value="true">{{ 'liveTv.admin.settings.fast_zap_on' | translate }}</option>
         <option value="false">{{ 'liveTv.admin.settings.fast_zap_off' | translate }}</option>
       </select>
-      <label class="label"><span class="label-text-alt text-base-content/50">{{ ('liveTv.admin.settings.fast_zap_' + fastZap() + '_help') | translate }}</span></label>
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ ('liveTv.admin.settings.fast_zap_' + fastZap() + '_help') | translate }}</span></label>
     </div>
 
     <div class="card-actions justify-end">

@@ -62,6 +62,7 @@ import { HeroBaseComponent, heroDesktopLayout, type HeroChip } from '../hero-bas
 import { HeroProgressComponent } from '../hero-progress/hero-progress';
 import { ProgressBadgeComponent } from '../progress-badge/progress-badge.component';
 import { CORE_MEDIA_ACTIONS } from './core-media-actions';
+import { formatBytes } from '../../../core/utils/format-bytes';
 
 /** What the page that owns the title does for the hero. */
 export interface DetailHeroHost {
@@ -218,6 +219,8 @@ export class DetailHeroComponent {
   readonly libraryName = input<string | null>(null);
   readonly qualityProfileName = input<string | null>(null);
   readonly languageProfileName = input<string | null>(null);
+  /** Profiles are admin vocabulary: members see neither. */
+  protected readonly canSeeProfiles = computed(() => this.auth.hasPermission('requests.manage') || this.auth.hasPermission('media.edit'));
   /** Title's original language, keeps the preselected audio label in step with the player's `original` mode. */
   readonly originalLanguage = input<string | null>(null);
   readonly tags = input<string[]>([]);
@@ -656,11 +659,7 @@ export class DetailHeroComponent {
     return f.quality || `#${f.id}`;
   }
 
-  formatBytes(bytes: number): string {
-    if (bytes < 1_000_000) return `${(bytes / 1024).toFixed(0)} KB`;
-    if (bytes < 1_000_000_000) return `${(bytes / 1_048_576).toFixed(1)} MB`;
-    return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
-  }
+  protected readonly formatBytes = formatBytes;
 
   navigateToGenre(genre: string) {
     const library = this.libraryName();

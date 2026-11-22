@@ -141,7 +141,7 @@ describe('NavContributionsService', () => {
 
   it('acquisition: core requests, queue, history + calendar, weight 200 free for a plugin', () => {
     const svc = createService();
-    expect(svc.acquisitionItems().map((i) => i.id)).toEqual(['core.requests', 'core.queue', 'core.queue_history', 'core.calendar']);
+    expect(svc.acquisitionItems().map((i) => i.id)).toEqual(['core.requests', 'core.queue', 'core.queue_history', 'core.calendar', 'core.wanted']);
   });
 
   it('maps tone to a badge class: danger -> warning, default -> primary', () => {

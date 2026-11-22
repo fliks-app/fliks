@@ -15,7 +15,7 @@
           }
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium break-all">{{ c.name }}</p>
-            <p class="text-xs text-base-content/50">{{ formatSize(c.size) }} · {{ formatDate(c.mtime) }}</p>
+            <p class="text-sm text-base-content/60">{{ formatSize(c.size) }} · {{ formatDate(c.mtime) }}</p>
             @if (c.sharedWith.length) {
               <p class="text-xs text-warning">{{ 'file_info.companions_shared' | translate: { name: sharedNames(c) } }}</p>
             }
@@ -89,7 +89,7 @@
     @if (loading()) {
       <div class="py-10 text-center"><span class="loading loading-spinner"></span></div>
     } @else if (!thisVideo().length && !folder().length) {
-      <p class="py-10 text-center text-sm text-base-content/50">
+      <p class="py-10 text-center text-sm text-base-content/60">
         {{ 'file_info.companions_empty' | translate }}
       </p>
     } @else {

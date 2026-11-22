@@ -21,7 +21,7 @@
         <span class="loading loading-spinner loading-md"></span>
       </div>
     } @else if (rules().length === 0) {
-      <p class="text-base-content/50 text-center py-8">{{ 'settings.cleanup.empty' | translate }}</p>
+      <p class="text-base-content/60 text-center py-8">{{ 'settings.cleanup.empty' | translate }}</p>
     } @else {
       <div class="overflow-x-auto rounded-lg border border-base-200">
         <table class="table">
@@ -43,13 +43,13 @@
                   </button>
                   <span class="badge badge-ghost badge-sm ms-2">{{ levelLabels(rule) }}</span>
                   @if (libraryNames(rule)) {
-                    <div class="text-xs text-base-content/50">{{ libraryNames(rule) }}</div>
+                    <div class="text-sm text-base-content/60">{{ libraryNames(rule) }}</div>
                   }
                 </td>
                 <td>{{ 'settings.cleanup.action_' + rule.action | translate }}</td>
                 <td>
                   @if (rule.graceDays == null) {
-                    <span class="text-base-content/50">{{ 'settings.cleanup.never' | translate }}</span>
+                    <span class="text-base-content/60">{{ 'settings.cleanup.never' | translate }}</span>
                   } @else {
                     {{ rule.graceDays }}
                   }
@@ -94,7 +94,7 @@
           {{ 'common.save' | translate }}
         </button>
       </div>
-      <span class="block text-xs leading-tight text-base-content/50 mt-1">
+      <span class="block text-sm leading-tight text-base-content/60 mt-1">
         {{ 'settings.cleanup.max_per_run_hint' | translate }}
       </span>
     </label>
@@ -118,7 +118,7 @@
       }
     </div>
     @if (!loading() && candidates().length === 0) {
-      <p class="text-base-content/50 text-center py-4">{{ 'settings.cleanup.candidates_empty' | translate }}</p>
+      <p class="text-base-content/60 text-center py-4">{{ 'settings.cleanup.candidates_empty' | translate }}</p>
     } @else if (candidates().length) {
       <div class="overflow-x-auto rounded-lg border border-base-200">
         <table class="table">
@@ -159,7 +159,7 @@
                   @if (c.deleteAt) {
                     {{ daysLeft(c.deleteAt) }}
                   } @else {
-                    <span class="text-base-content/50">{{ 'settings.cleanup.no_date' | translate }}</span>
+                    <span class="text-base-content/60">{{ 'settings.cleanup.no_date' | translate }}</span>
                   }
                 </td>
                 <td class="text-end whitespace-nowrap">
@@ -184,7 +184,7 @@
       <p class="text-sm text-base-content/60 mt-1">{{ 'settings.cleanup.recommendations_hint' | translate }}</p>
     </div>
     @if (!loading() && recommendations().items.length === 0) {
-      <p class="text-base-content/50 text-center py-4">{{ 'settings.cleanup.recommendations_empty' | translate }}</p>
+      <p class="text-base-content/60 text-center py-4">{{ 'settings.cleanup.recommendations_empty' | translate }}</p>
     } @else if (recommendations().items.length) {
       <div class="flex flex-wrap items-end gap-3">
         <div class="form-control w-64">
@@ -229,7 +229,7 @@
         </label>
       </div>
       @if (filteredRecommendations().length === 0) {
-        <p class="text-base-content/50 text-center py-4">{{ 'settings.cleanup.recommendations_filtered_empty' | translate }}</p>
+        <p class="text-base-content/60 text-center py-4">{{ 'settings.cleanup.recommendations_filtered_empty' | translate }}</p>
       } @else {
       <div class="overflow-x-auto rounded-lg border border-base-200">
         <table class="table">
@@ -267,7 +267,7 @@
                   @if (item.lastPlayedAt) {
                     {{ item.lastPlayedAt | date: 'mediumDate' }}
                   } @else {
-                    <span class="text-base-content/50">{{ 'settings.cleanup.never' | translate }}</span>
+                    <span class="text-base-content/60">{{ 'settings.cleanup.never' | translate }}</span>
                   }
                 </td>
                 <td class="text-end whitespace-nowrap">
@@ -331,7 +331,7 @@
           [value]="formLevels()"
           (valueChange)="setLevels($event)"
         />
-        <span class="block text-xs leading-tight text-base-content/50 mt-1">
+        <span class="block text-sm leading-tight text-base-content/60 mt-1">
           {{ 'settings.cleanup.applies_limit' | translate }} {{ 'settings.cleanup.applies_hint' | translate }}
         </span>
       </div>
@@ -362,7 +362,7 @@
           />
         </label>
       </div>
-      <p class="text-xs leading-tight text-base-content/50 -mt-3">{{ 'settings.cleanup.grace_hint' | translate }}</p>
+      <p class="text-sm leading-tight text-base-content/60 -mt-3">{{ 'settings.cleanup.grace_hint' | translate }}</p>
 
       <label class="form-control">
         <span class="label-text">{{ 'settings.cleanup.col_reminders' | translate }}</span>
@@ -374,7 +374,7 @@
           (ngModelChange)="formReminderDays.set($event)"
         />
       </label>
-      <p class="text-xs leading-tight text-base-content/50 -mt-3">{{ 'settings.cleanup.reminders_hint' | translate }}</p>
+      <p class="text-sm leading-tight text-base-content/60 -mt-3">{{ 'settings.cleanup.reminders_hint' | translate }}</p>
 
       <p class="text-sm text-base-content/60">{{ 'settings.cleanup.logic_hint' | translate }}</p>
 
@@ -448,7 +448,7 @@
           </label>
         }
       </div>
-      <p class="text-xs leading-tight text-base-content/50 -mt-3">{{ 'settings.cleanup.votes_hint' | translate }}</p>
+      <p class="text-sm leading-tight text-base-content/60 -mt-3">{{ 'settings.cleanup.votes_hint' | translate }}</p>
 
       <div class="grid sm:grid-cols-2 gap-1">
         @for (key of flagFields; track key) {
@@ -496,7 +496,7 @@
     @if (preview(); as p) {
       <app-modal-header [title]="p.name" />
       @if (p.matches.length === 0) {
-        <p class="text-base-content/50 text-center py-4">{{ 'settings.cleanup.preview_empty' | translate }}</p>
+        <p class="text-base-content/60 text-center py-4">{{ 'settings.cleanup.preview_empty' | translate }}</p>
       } @else {
         <p class="text-sm mb-3">
           {{ 'settings.cleanup.preview_total' | translate: { count: p.matches.length, size: formatBytes(p.totalSize) } }}
@@ -519,7 +519,7 @@
                     @if (m.lastPlayedAt) {
                       {{ m.lastPlayedAt | date: 'mediumDate' }}
                     } @else {
-                      <span class="text-base-content/50">{{ 'settings.cleanup.never_played' | translate }}</span>
+                      <span class="text-base-content/60">{{ 'settings.cleanup.never_played' | translate }}</span>
                     }
                   </td>
                 </tr>

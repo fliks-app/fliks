@@ -15,23 +15,23 @@
         </h3>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
           @if (e.language) {
-            <div><span class="text-base-content/50">{{ 'books_work.col_language' | translate }} :&nbsp;</span><span class="font-medium">{{ language(e.language) }}</span></div>
+            <div><span class="text-base-content/60">{{ 'books_work.col_language' | translate }} :&nbsp;</span><span class="font-medium">{{ language(e.language) }}</span></div>
           }
           @if (e.publisher) {
-            <div><span class="text-base-content/50">{{ 'books_work.col_publisher' | translate }} :&nbsp;</span><span class="font-medium">{{ e.publisher }}</span></div>
+            <div><span class="text-base-content/60">{{ 'books_work.col_publisher' | translate }} :&nbsp;</span><span class="font-medium">{{ e.publisher }}</span></div>
           }
           @if (e.published) {
-            <div><span class="text-base-content/50">{{ 'books_work.col_published' | translate }} :&nbsp;</span><span class="font-medium">{{ e.published }}</span></div>
+            <div><span class="text-base-content/60">{{ 'books_work.col_published' | translate }} :&nbsp;</span><span class="font-medium">{{ e.published }}</span></div>
           }
           @if (e.durationSeconds != null) {
-            <div><span class="text-base-content/50">{{ 'books_work.col_length' | translate }} :&nbsp;</span><span class="font-medium tabular-nums">{{ clock(e.durationSeconds) }}</span></div>
+            <div><span class="text-base-content/60">{{ 'books_work.col_length' | translate }} :&nbsp;</span><span class="font-medium tabular-nums">{{ clock(e.durationSeconds) }}</span></div>
           } @else if (e.pageCount != null) {
-            <div><span class="text-base-content/50">{{ 'books_work.col_pages' | translate }} :&nbsp;</span><span class="font-medium tabular-nums">{{ e.pageCount }}</span></div>
+            <div><span class="text-base-content/60">{{ 'books_work.col_pages' | translate }} :&nbsp;</span><span class="font-medium tabular-nums">{{ e.pageCount }}</span></div>
           }
           @if (e.narrators.length) {
-            <div class="col-span-full"><span class="text-base-content/50">{{ 'books_work.col_narrators' | translate }} :&nbsp;</span><span class="font-medium">{{ e.narrators.map((n) => n.name).join(', ') }}</span></div>
+            <div class="col-span-full"><span class="text-base-content/60">{{ 'books_work.col_narrators' | translate }} :&nbsp;</span><span class="font-medium">{{ e.narrators.map((n) => n.name).join(', ') }}</span></div>
           }
-          <div><span class="text-base-content/50">{{ 'books_work.col_file' | translate }} :&nbsp;</span><span class="font-medium">{{ (e.hasFile ? 'books_work.file_yes' : 'books_work.file_no') | translate }}</span></div>
+          <div><span class="text-base-content/60">{{ 'books_work.col_file' | translate }} :&nbsp;</span><span class="font-medium">{{ (e.hasFile ? 'books_work.file_yes' : 'books_work.file_no') | translate }}</span></div>
         </div>
         @if (canDeliver(e) || canOffline(e) || targets(e).length) {
           <div class="pt-3 flex flex-wrap items-center gap-2">

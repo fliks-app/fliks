@@ -3,6 +3,7 @@ import { Component, computed, inject, signal, OnInit } from '@angular/core';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe, translatePlural } from '../../../core/pipes/translate-plural.pipe';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
@@ -11,10 +12,11 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { SERVER_SINCE, ServerVersionService } from '../../../core/services/server-version.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
+import { formatBytes } from '../../../core/utils/format-bytes';
 
 @Component({
   selector: 'app-streaming-settings',
-  imports: [LoadFailedComponent, TvSelectDirective, FormsModule, RouterLink, TranslatePipe, ToggleFieldComponent],
+  imports: [LoadFailedComponent, TvSelectDirective, FormsModule, RouterLink, TranslatePipe, TranslatePluralPipe, ToggleFieldComponent],
   templateUrl: './streaming.html',
 })
 export class StreamingSettingsComponent implements OnInit {
@@ -171,8 +173,7 @@ export class StreamingSettingsComponent implements OnInit {
     try {
       const freed = await this.streamsApi.purgeTranscodeCache();
       this.toast.success(
-        this.translate.instant('settings.streaming.cache_purged', {
-          entries: freed.entries,
+        translatePlural(this.translate, 'settings.streaming.cache_purged', freed.entries, {
           size: this.formatBytes(freed.bytes),
         }),
       );
@@ -181,10 +182,5 @@ export class StreamingSettingsComponent implements OnInit {
     this.purging.set(false);
   }
 
-  formatBytes(bytes: number): string {
-    if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
-    if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(0)} MB`;
-    if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(0)} KB`;
-    return `${bytes} B`;
-  }
+  protected readonly formatBytes = formatBytes;
 }

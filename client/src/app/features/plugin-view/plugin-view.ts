@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { translatePlural } from '../../core/pipes/translate-plural.pipe';
 import { LucideTriangleAlert } from '@lucide/angular';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen } from '../../core/plugin-ui/when-evaluator';
@@ -249,7 +250,7 @@ export class PluginViewComponent implements OnDestroy {
       else if (res.failures.length) {
         this.toast.error(this.translate.instant('plugin_view.webhook_test_failed', { detail: res.failures.join('; ') }));
       } else {
-        this.toast.success(this.translate.instant('plugin_view.webhook_test_ok', { count: res.delivered }));
+        this.toast.success(translatePlural(this.translate, 'plugin_view.webhook_test_ok', res.delivered));
       }
     } catch {
       // surfaced by the global error interceptor

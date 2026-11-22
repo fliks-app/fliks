@@ -18,7 +18,7 @@
   } @else if (listError()) {
     <div role="alert" class="alert alert-error">{{ listError() }}</div>
   } @else if (profiles().length === 0) {
-    <p class="text-center py-12 text-base-content/50">
+    <p class="text-center py-12 text-base-content/60">
       {{ 'settings.language_profiles.empty' | translate }}
     </p>
   } @else {
@@ -61,10 +61,10 @@
   }
 </div>
 
-<dialog #editorDialog class="modal">
+<dialog #editorDialog class="modal" aria-labelledby="language-profiles-title-1">
   <div class="modal-box max-w-2xl flex flex-col">
     <app-modal-header class="shrink-0">
-      <h3 class="text-lg font-bold">
+      <h3 id="language-profiles-title-1" class="text-lg font-bold">
         @if (editingId() === null) {
           {{ 'settings.language_profiles.editor_create_title' | translate }}
         } @else {
@@ -88,7 +88,7 @@
         <p class="text-sm font-medium mb-2">
           {{ 'settings.language_profiles.audio_languages' | translate }}
         </p>
-        <p class="text-xs text-base-content/50 mb-2">
+        <p class="text-sm text-base-content/60 mb-2">
           {{ 'settings.language_profiles.audio_languages_hint' | translate }}
         </p>
         <div
@@ -104,7 +104,7 @@
                   (change)="toggleAudio(l.isoCode, $event)"
                 />
                 <span class="text-sm flex-1">{{ l.name }}</span>
-                <span class="text-sm text-base-content/50 font-mono">{{ l.isoCode }}</span>
+                <span class="text-sm text-base-content/60 font-mono">{{ l.isoCode }}</span>
               </div>
             </div>
           }
@@ -116,7 +116,7 @@
         <p class="text-sm font-medium mb-2">
           {{ 'settings.language_profiles.subtitle_languages' | translate }}
         </p>
-        <p class="text-xs text-base-content/50 mb-2">
+        <p class="text-sm text-base-content/60 mb-2">
           {{ 'settings.language_profiles.subtitle_languages_hint' | translate }}
         </p>
         <div
@@ -132,7 +132,7 @@
                   (change)="toggleSubtitle(l.isoCode, $event)"
                 />
                 <span class="text-sm flex-1">{{ l.name }}</span>
-                <span class="text-sm text-base-content/50 font-mono mr-2">{{ l.isoCode }}</span>
+                <span class="text-sm text-base-content/60 font-mono mr-2">{{ l.isoCode }}</span>
                 <label class="flex items-center gap-1 text-xs">
                   <input
                     type="checkbox"

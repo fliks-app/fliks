@@ -5,6 +5,7 @@ import { DecimalPipe, NgClass } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { firstValueFrom } from 'rxjs';
 import { LucideTrash2 } from '@lucide/angular';
 import { SseService, type MediaProgressSubject } from '../../../core/services/sse.service';
@@ -38,7 +39,7 @@ const MAX_VISIBLE_CHILDREN = 5;
 
 @Component({
   selector: 'app-system-status',
-  imports: [TranslatePipe, LocaleDatePipe, DecimalPipe, NgClass, RouterLink, LucideTrash2, PaginationComponent, DropdownMenuComponent],
+  imports: [TranslatePipe, TranslatePluralPipe, LocaleDatePipe, DecimalPipe, NgClass, RouterLink, LucideTrash2, PaginationComponent, DropdownMenuComponent],
   templateUrl: './status.html',
 })
 export class SystemStatusComponent implements OnInit, OnDestroy {

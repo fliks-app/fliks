@@ -2,6 +2,7 @@ import { Component, OnInit, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CdkDrag, CdkDragHandle, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { LucideGripVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
 import { OidcApiService, OidcProviderBody, OidcProviderRow } from '../../../core/services/api/oidc-api.service';
 import { RolesApiService, RoleRow } from '../../../core/services/api/roles-api.service';
@@ -24,7 +25,7 @@ function bodyOf(row: OidcProviderRow, patch: Partial<OidcProviderBody> = {}): Oi
   selector: 'app-sso-settings',
   imports: [
     FormsModule,
-    TranslatePipe,
+    TranslatePipe, TranslatePluralPipe,
     TvSelectDirective,
     EnabledSwitchComponent,
     SsoProviderEditorComponent,

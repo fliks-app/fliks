@@ -13,8 +13,9 @@ f ~ /\.rs$/ {
 f ~ /^client\/src\/.*\.ts$/ && $0 ~ /catch *(\{ *\}|\{ *\/\* *interceptor *\*\/ *\})/ {bad("silent catch")}
 f ~ /^client\/src\// {
   if ($0 ~ /(^|[^A-Za-z0-9_-])text-xs([^A-Za-z0-9_-]|$)/ || $0 ~ /text-\[(0\.[0-7][0-9]*rem|1[0-3]px|[0-9]px)\]/) bad("font size below text-sm")
-  if ($0 ~ /text-base-content\/(30|40)/ && $0 !~ /<svg|lucide|app-nav-icon/) bad("muted text contrast")
+  if ($0 ~ /text-base-content\/(30|40|50)/ && $0 !~ /<svg|lucide|app-nav-icon/) bad("muted text contrast")
 }
+f == "client/public/i18n/en.json" && $0 ~ /\((s|ies|es)\)/ {bad("fake plural, use _one/_other")}
 f ~ /^(server\/crates\/[^\/]+\/src|client\/src)\// && f !~ /(\/tests?\/|fixtures?|\.spec\.|\.test\.|_tests?\.rs$|\/tests?\.rs$)/ {
   if (($0 ~ ("[" q "\"]fliks\\.[a-z][a-z0-9]*[" q "\"]") && $0 !~ ("[" q "\"]fliks\\.(tab|avtest)[" q "\"]")) || $0 ~ /fliks-[a-z0-9]+\.(settings|nav)\./) bad("plugin id in core")
 }

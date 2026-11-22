@@ -148,11 +148,6 @@ export function isUndecodableError(err: {
   return msg.includes('PLAYER_ERROR_NOT_SUPPORTED_FILE') || msg.startsWith('unrecognized file format');
 }
 
-/** Stable signature to detect repeated identical failures, so a reload reproducing the same error doesn't reset the recovery budget. */
-export function errorSignature(err: PlaybackError): string {
-  return `${err.source}:${err.category ?? ''}:${err.code ?? ''}`;
-}
-
 /** Terse English tokens on purpose: a diagnostic meant to be pasted into bug reports, not translated UI. */
 export function formatErrorDiagnostics(
   err: PlaybackError,

@@ -1,4 +1,4 @@
-<dialog #dialog class="modal">
+<dialog #dialog class="modal" [attr.aria-label]="'media_detail.identify_results' | translate">
   <div class="modal-box max-w-3xl flex flex-col p-0 gap-0 overflow-hidden">
     <app-modal-header flush [title]="'media_detail.identify_title' | translate" />
 
@@ -7,7 +7,7 @@
 
       @if (config()?.path) {
         <div>
-          <span class="text-sm text-base-content/50">{{
+          <span class="text-sm text-base-content/60">{{
             'media_detail.identify_path' | translate
           }}</span>
           <p class="text-sm font-mono break-all m-0">{{ config()!.path }}</p>
@@ -116,7 +116,7 @@
             {{ 'media_detail.identify_results' | translate }}
           </h3>
           @if (!results().length) {
-            <p class="text-sm text-base-content/50 py-4">
+            <p class="text-sm text-base-content/60 py-4">
               {{ 'media_detail.identify_no_results' | translate }}
             </p>
           } @else {
@@ -152,7 +152,7 @@
                   @if (r.mediaType === 'book' && bookFacts(r); as facts) {
                     <span class="text-sm text-base-content/70 line-clamp-2">{{ facts }}</span>
                   }
-                  <span class="text-sm text-base-content/50">
+                  <span class="text-sm text-base-content/60">
                     @if (r.mediaType !== 'book' && r.year) { {{ r.year }} }
                     @if (isTaken(r)) {
                       @if (r.mediaType !== 'book' && r.year) { · } {{ 'media_detail.identify_already_in_library' | translate }}

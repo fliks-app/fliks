@@ -11,7 +11,7 @@
           [ngModel]="state.formPath()" (ngModelChange)="state.formPath.set($event)"
           placeholder="/medias/movies" (keydown.enter)="scan()" />
         <div class="label">
-          <span class="label-text-alt text-sm text-base-content/50">{{ 'settings.libraries.path_hint' | translate }}</span>
+          <span class="label-text-alt text-sm text-base-content/60">{{ 'settings.libraries.path_hint' | translate }}</span>
         </div>
       </label>
       <button type="button" class="btn btn-outline mb-6" (click)="browsePath()">
@@ -44,7 +44,7 @@
           {{ 'settings.libraries.folder_add' | translate }}
         </button>
       </div>
-      <span class="text-sm text-base-content/50">{{ 'settings.libraries.extra_folders_hint' | translate }}</span>
+      <span class="text-sm text-base-content/60">{{ 'settings.libraries.extra_folders_hint' | translate }}</span>
     </div>
 
     @if (!scanned()) {

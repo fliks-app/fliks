@@ -20,7 +20,7 @@
       <!-- Day headers -->
       <div class="grid grid-cols-7 gap-px mb-px">
         @for (day of weekdayReference; track $index) {
-          <div class="text-center text-sm font-medium text-base-content/50 py-2 capitalize">{{ day | localeDate:{ weekday: 'short' } }}</div>
+          <div class="text-center text-sm font-medium text-base-content/60 py-2 capitalize">{{ day | localeDate:{ weekday: 'short' } }}</div>
         }
       </div>
 
@@ -43,7 +43,7 @@
                     class="text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full self-start"
                     [class.bg-primary]="day.isToday"
                     [class.text-primary-content]="day.isToday"
-                    [class.text-base-content/40]="!day.isCurrentMonth && !day.isToday"
+                    [class.text-base-content/60]="!day.isCurrentMonth && !day.isToday"
                   >
                     {{ day.date.getDate() }}
                   </span>

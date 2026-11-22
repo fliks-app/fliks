@@ -7,7 +7,7 @@
       <span class="loading loading-spinner loading-lg"></span>
     </div>
   } @else if (items().length === 0) {
-    <div class="text-center py-12 text-base-content/50">
+    <div class="text-center py-12 text-base-content/60">
       <svg lucideHistory class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
       <p class="text-lg">{{ 'history.empty' | translate }}</p>
     </div>
@@ -29,7 +29,7 @@
               } @else if (item.posterUrl) {
                 <img [cachedSrc]="item.posterUrl | resolveUrl:'thumb'" [alt]="item.mediaTitle" class="h-full w-full object-cover" loading="lazy" />
               } @else {
-                <div class="flex h-full w-full items-center justify-center text-base-content/30">
+                <div class="flex h-full w-full items-center justify-center text-base-content/60">
                   @if (kinds[item.mediaType].hasSeasons) {
                     <svg lucideTv class="h-8 w-8" [strokeWidth]="1.5"></svg>
                   } @else {
@@ -54,6 +54,7 @@
                   type="button"
                   class="btn btn-circle btn-md z-10 min-h-0 h-11 w-11 border-0 bg-black/50 text-white transition-colors hover:bg-neutral-500/50"
                   (click)="play(item); $event.stopPropagation()"
+                  [attr.aria-label]="'player.play' | translate"
                 >
                   <svg lucidePlay class="h-6 w-6" [strokeWidth]="2"></svg>
                 </button>
@@ -68,9 +69,9 @@
               <p class="text-sm sm:text-lg font-semibold leading-tight line-clamp-2 group-hover:underline">{{ item.mediaTitle }}</p>
             </button>
             @if (item.episodeLabel) {
-              <p class="text-xs sm:text-base text-base-content/65 line-clamp-2">{{ item.episodeLabel }}</p>
+              <p class="text-sm sm:text-base text-base-content/65 line-clamp-2">{{ item.episodeLabel }}</p>
             }
-            <p class="text-[11px] sm:text-sm text-base-content/45 leading-tight">{{ formatDate(item.lastPlayedAt) }}</p>
+            <p class="text-sm text-base-content/60 leading-tight">{{ formatDate(item.lastPlayedAt) }}</p>
 
           </div>
 
@@ -78,13 +79,13 @@
           <div class="hidden sm:flex shrink-0 items-center gap-1">
             @if (!item.completed) {
               <span class="tooltip tooltip-left" [attr.data-tip]="'history.mark_watched' | translate">
-                <button type="button" class="btn btn-ghost btn-sm btn-circle min-h-0 h-9 w-9" (click)="markWatched(item)">
+                <button type="button" class="btn btn-ghost btn-sm btn-circle min-h-0 h-9 w-9" [attr.aria-label]="'history.mark_watched' | translate" (click)="markWatched(item)">
                   <svg lucideCheck class="h-4 w-4"></svg>
                 </button>
               </span>
             }
             <span class="tooltip tooltip-left" [attr.data-tip]="'history.remove' | translate">
-              <button type="button" class="btn btn-ghost btn-sm btn-circle text-error min-h-0 h-9 w-9" (click)="removeItem(item)">
+              <button type="button" class="btn btn-ghost btn-sm btn-circle text-error min-h-0 h-9 w-9" [attr.aria-label]="'history.remove' | translate" (click)="removeItem(item)">
                 <svg lucideTrash2 class="h-4 w-4"></svg>
               </button>
             </span>
