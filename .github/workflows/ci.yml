@@ -279,14 +279,24 @@ jobs:
           cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
           --partition count:${{ matrix.shard }}/3 --no-fail-fast --profile ci
 
-  # The shipped tools are PostgreSQL 18's: the restore tests also run them against an older server than the shards'.
-  restore-pg17:
+  # The shipped tools are PostgreSQL 18's: the restore tests also run them against older servers than the shards':
+  # 17 restores, 16 must refuse before touching anything (system.md rule 36).
+  restore-pg:
+    name: restore-pg${{ matrix.pg }}
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pg: 16
+            filter: test(a_server_before_17)
+          - pg: 17
+            filter: test(restore)
     services:
       postgres:
-        image: postgres:17
+        image: postgres:${{ matrix.pg }}
         env:
           POSTGRES_USER: fliks
           POSTGRES_PASSWORD: fliks
@@ -323,7 +333,7 @@ jobs:
           DB_NAME=template1 "$RUNNER_TEMP/target/debug/fliks-server" migrate
       - run: >-
           cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
-          -E 'test(restore)' --no-fail-fast --profile ci -j 2
+          -E '${{ matrix.filter }}' --no-fail-fast --profile ci -j 2
 
   plugin-sdk:
     needs: changes
@@ -698,7 +708,7 @@ jobs:
   # The only required check: a skipped job (area untouched) counts as passed.
   ci-ok:
     if: always()
-    needs: [changes, no-em-dash, lint, build, test-shard, restore-pg17, test-app-role, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos, macos]
+    needs: [changes, no-em-dash, lint, build, test-shard, restore-pg, test-app-role, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos, macos]
     runs-on: ubuntu-latest
     steps:
       - env:

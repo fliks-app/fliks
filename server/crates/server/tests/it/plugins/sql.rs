@@ -868,10 +868,7 @@ async fn provision_repairs_core_owned_routines_and_types() {
     assert_eq!(st, 204, "{r}");
     let role = format!("fp_{}_fliks_fixture", s.oid().await);
     // Before Postgres 17 a multirange stays with core when its range changes owner: it holds no code.
-    let version: i32 = sqlx::query_scalar("SELECT current_setting('server_version_num')::int")
-        .fetch_one(&s.pool)
-        .await
-        .unwrap();
+    let version = fliks_server::db::server_version(&s.pool).await.unwrap();
     let stray: Vec<String> = sqlx::query_scalar(
         "SELECT 'type ' || t.typname FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
           WHERE n.nspname = 'plugin_fliks_fixture' AND pg_get_userbyid(t.typowner) <> $1

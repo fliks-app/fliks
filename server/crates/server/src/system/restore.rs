@@ -27,6 +27,9 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 pub struct NotRestored {
     pub schema: String,
     pub message: String,
+    /// Set when the client has its own translation of `message`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -66,28 +69,34 @@ fn plugin_role(line: &str) -> Option<&str> {
 struct Scan {
     /// The file creates a plugin schema or grants to a plugin role.
     plugin_data: bool,
+    /// The file sets `transaction_timeout`, which servers before 17 reject (every `pg_dump` 17+ writes it).
+    transaction_timeout: bool,
 }
 
 enum Copy {
     Other,
-    /// `COPY public._sqlx_migrations`, the index of its `version` column.
-    Versions(usize),
+    /// `COPY public._sqlx_migrations`: the indexes of its `version` and `checksum` columns.
+    Ledger {
+        version: usize,
+        checksum: Option<usize>,
+    },
 }
 
 /// `COPY public._sqlx_migrations (version, ...) FROM stdin;`
-fn versions_column(line: &str) -> Option<usize> {
+fn ledger_columns(line: &str) -> Option<(usize, Option<usize>)> {
     let rest = line.strip_prefix("COPY public._sqlx_migrations")?;
     let Some(cols) = rest.strip_prefix(" (") else {
-        return rest.starts_with(" FROM ").then_some(0);
+        // No column list: the table's own order (version first, checksum fifth).
+        return rest.starts_with(" FROM ").then_some((0, Some(4)));
     };
-    cols.split_once(')')?
-        .0
-        .split(", ")
-        .position(|c| c == "version")
+    let cols: Vec<&str> = cols.split_once(')')?.0.split(", ").collect();
+    let at = |n| cols.iter().position(|c| *c == n);
+    Some((at("version")?, at("checksum")))
 }
 
 /// Rule 24 in one pass: refuses a line-start psql meta-command outside a COPY block (best effort, no
-/// SQL lexing), a migration this build does not know (rule 39), and reports plugin data.
+/// SQL lexing), a migration this build does not know or ships otherwise (rule 39), and reports plugin
+/// data and the 17+ setting.
 async fn screen(path: &Path) -> Result<Scan, AppError> {
     let file = tokio::fs::File::open(path)
         .await
@@ -104,15 +113,22 @@ async fn screen(path: &Path) -> Result<Scan, AppError> {
         if let Some(c) = &copy {
             if line == "\\." {
                 copy = None;
-            } else if let Copy::Versions(col) = c {
-                let v = line
-                    .split('\t')
-                    .nth(*col)
-                    .and_then(|v| v.parse::<i64>().ok());
-                if let Some(v) = v.filter(|v| !db::known_version(*v)) {
-                    return Err(AppError::bad_request(format!(
-                        "This backup comes from a newer Fliks (migration {v} is unknown to this version)"
-                    )));
+            } else if let Copy::Ledger { version, checksum } = c {
+                let cells: Vec<&str> = line.split('\t').collect();
+                let v = cells.get(*version).and_then(|v| v.parse::<i64>().ok());
+                let sum = checksum.and_then(|i| cells.get(i).copied());
+                match v.map(|v| (v, db::ledger_row(v, sum))) {
+                    Some((v, db::Ledger::Unknown)) => {
+                        return Err(AppError::bad_request(format!(
+                            "This backup comes from a newer Fliks (migration {v} is unknown to this version)"
+                        )));
+                    }
+                    Some((v, db::Ledger::Edited)) => {
+                        return Err(AppError::bad_request(format!(
+                            "This backup comes from another build of Fliks (migration {v} differs from this version's)"
+                        )));
+                    }
+                    _ => {}
                 }
             }
         } else if line.starts_with('\\') {
@@ -125,7 +141,14 @@ async fn screen(path: &Path) -> Result<Scan, AppError> {
                 return Err(AppError::bad_request("Backup contains psql meta-commands"));
             }
         } else if line.starts_with("COPY ") && line.ends_with(" FROM stdin;") {
-            copy = Some(versions_column(line).map_or(Copy::Other, Copy::Versions));
+            copy = Some(
+                ledger_columns(line).map_or(Copy::Other, |(version, checksum)| Copy::Ledger {
+                    version,
+                    checksum,
+                }),
+            );
+        } else if line.starts_with("SET transaction_timeout") {
+            scan.transaction_timeout = true;
         } else if line.starts_with("CREATE SCHEMA plugin_") || plugin_role(line).is_some() {
             scan.plugin_data = true;
         }
@@ -366,6 +389,24 @@ async fn empty_schema(db: &PgPool, schema: &str, id: &str, refs: &[String]) -> R
         .map_err(|e| e.message)
 }
 
+/// A plugin whose data did not come back: disabled with the reason, and reported.
+async fn fail(
+    db: &PgPool,
+    id: &str,
+    schema: String,
+    message: String,
+    code: Option<&'static str>,
+) -> Result<NotRestored, AppError> {
+    packages::set_enabled(db, id, false).await?;
+    packages::set_status(db, id, Some(&format!("restore-failed: {message}"))).await?;
+    tracing::warn!("restore: {schema} not restored: {message}");
+    Ok(NotRestored {
+        schema,
+        message,
+        code,
+    })
+}
+
 /// A registered package with a schema the archive does not hold (the dump left it out): the replay
 /// dropped its live schema, so the plugin stays disabled instead of booting on an empty one.
 async fn missing_schemas(
@@ -373,6 +414,14 @@ async fn missing_schemas(
     plugins: Option<&Plugins>,
     present: &[String],
 ) -> Result<Vec<NotRestored>, AppError> {
+    // A dump of an older database predates the table: no package to disable.
+    let table: Option<String> =
+        sqlx::query_scalar("SELECT to_regclass('public.plugin_packages')::text")
+            .fetch_one(db)
+            .await?;
+    if table.is_none() {
+        return Ok(vec![]);
+    }
     let ids: Vec<String> = sqlx::query_scalar(
         r#"SELECT "pluginId" FROM plugin_packages WHERE manifest #>> '{database,schema}' = 'true'
             AND status = 'active' ORDER BY id"#,
@@ -389,14 +438,8 @@ async fn missing_schemas(
             Some(p) => Some(p.lock(&id).await),
             None => None,
         };
-        packages::set_enabled(db, &id, false).await?;
         let message = "the backup does not hold its schema (the server could not read it when the backup was made)";
-        packages::set_status(db, &id, Some(&format!("restore-failed: {message}"))).await?;
-        tracing::warn!("restore: {schema} not restored: {message}");
-        out.push(NotRestored {
-            schema,
-            message: message.to_owned(),
-        });
+        out.push(fail(db, &id, schema, message.to_owned(), Some("schema_missing")).await?);
     }
     Ok(out)
 }
@@ -424,38 +467,27 @@ async fn plugin_passes(
             .map(packages::core_refs)
             .unwrap_or_default();
         let done = plugin_pass(a, schema, &id, &refs, scratch).await;
-        match (&done, &manifest) {
-            (_, None) => plugin_db::keep_orphaned(db, &id).await?,
-            (Err(m), Some(_)) => {
-                packages::set_enabled(db, &id, false).await?;
-                packages::set_status(db, &id, Some(&format!("restore-failed: {m}"))).await?;
-            }
-            _ => {}
+        if manifest.is_none() {
+            plugin_db::keep_orphaned(db, &id).await?;
         }
-        if let Err(message) = done {
-            tracing::warn!("restore: {schema} not restored: {message}");
-            failed.push(NotRestored {
-                schema: schema.clone(),
-                message,
-            });
+        if let Err(m) = done {
+            failed.push(fail(db, &id, schema.clone(), m, None).await?);
         }
     }
     failed.extend(missing_schemas(db, plugins, schemas).await?);
     Ok(failed)
 }
 
-/// The shipped `pg_restore` is 18's and sends `SET transaction_timeout`, which servers before 17 reject.
+/// The shipped tools are 18's and write or send `SET transaction_timeout`, which servers before 17 reject.
 async fn require_restorable_server(db: &PgPool) -> Result<(), AppError> {
-    let version: i32 = sqlx::query_scalar("SELECT current_setting('server_version_num')::int")
-        .fetch_one(db)
-        .await?;
+    let version = db::server_version(db).await?;
     if version >= 170_000 {
         return Ok(());
     }
     let major = version / 10_000;
     Err(AppError::bad_request(format!(
-        "Restoring a backup needs PostgreSQL 17 or later (this server runs {major}): restore it by hand \
-         with the matching pg_restore, or move the database to PostgreSQL 17 or later"
+        "Restoring a backup needs PostgreSQL 17 or later (this server runs {major}): move the database \
+         to PostgreSQL 17 or later, then restore it there"
     ))
     .keyed("system.restore_needs_pg17", json!({"version": major})))
 }
@@ -482,11 +514,15 @@ struct Prepared {
 async fn prepare(cfg: &Config, db: &PgPool, path: &Path) -> Result<Prepared, AppError> {
     let mut scratch = Scratch::new()?;
     if !path.extension().is_some_and(|e| e == "dump") {
-        if screen(path).await?.plugin_data {
+        let scan = screen(path).await?;
+        if scan.plugin_data {
             return Err(AppError::conflict(
                 "BACKUP_HAS_PLUGIN_DATA: this backup is a plain SQL file that holds plugin data, which \
                  would run as the database owner; restore a .dump backup instead",
             ));
+        }
+        if scan.transaction_timeout {
+            require_restorable_server(db).await?;
         }
         return Ok(Prepared {
             plan: Plan::Plain,
@@ -712,23 +748,59 @@ mod tests {
     }
 
     #[test]
-    fn the_versions_column_is_read_from_the_header() {
+    fn the_ledger_columns_are_read_from_the_header() {
+        let cols = |l| ledger_columns(&format!("COPY public._sqlx_migrations {l}FROM stdin;"));
+        assert_eq!(cols("(version, description) "), Some((0, None)));
+        assert_eq!(cols("(checksum, version) "), Some((1, Some(0))));
+        assert_eq!(cols(""), Some((0, Some(4))));
         assert_eq!(
-            versions_column("COPY public._sqlx_migrations (version, description) FROM stdin;"),
-            Some(0)
-        );
-        assert_eq!(
-            versions_column("COPY public._sqlx_migrations (description, version) FROM stdin;"),
-            Some(1)
-        );
-        assert_eq!(
-            versions_column("COPY public._sqlx_migrations FROM stdin;"),
-            Some(0)
-        );
-        assert_eq!(
-            versions_column("COPY public.items (version) FROM stdin;"),
+            ledger_columns("COPY public.items (version) FROM stdin;"),
             None
         );
+    }
+
+    #[tokio::test]
+    async fn screening_refuses_an_edited_migration_and_reports_the_17_setting() {
+        let dir = std::env::temp_dir().join(format!("fliks-screen-c-{}", std::process::id()));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let first = &sqlx::migrate!("../../migrations").migrations[0];
+        let sum: String = first.checksum.iter().map(|b| format!("{b:02x}")).collect();
+        let rows = |c: &str| {
+            format!(
+                "COPY public._sqlx_migrations (version, checksum) FROM stdin;\n{}\t{c}\n\\.\n",
+                first.version
+            )
+        };
+        assert!(
+            screened(&dir, 0, &rows(&format!("\\\\x{sum}")))
+                .await
+                .is_ok()
+        );
+        let edited = screened(&dir, 1, &rows("\\\\x00")).await;
+        assert!(edited.unwrap_err().text().contains("another build"));
+        let timeout = screened(
+            &dir,
+            2,
+            "SET statement_timeout = 0;\nSET transaction_timeout = 0;\n",
+        )
+        .await;
+        assert!(timeout.unwrap().transaction_timeout);
+        assert!(
+            !screened(&dir, 3, "SET statement_timeout = 0;\n")
+                .await
+                .unwrap()
+                .transaction_timeout
+        );
+        let _ = tokio::fs::remove_dir_all(dir).await;
+    }
+
+    #[sqlx::test]
+    async fn a_database_before_the_package_table_has_no_plugin_to_disable(db: PgPool) {
+        sqlx::query("DROP TABLE plugin_packages CASCADE")
+            .execute(&db)
+            .await
+            .unwrap();
+        assert!(missing_schemas(&db, None, &[]).await.unwrap().is_empty());
     }
 
     const LIST: &str = "\

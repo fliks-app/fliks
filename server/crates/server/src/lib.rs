@@ -97,6 +97,10 @@ pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
     Ok(())
 }
 
+/// Longest wait at boot for a restore (or the server being replaced) to release the database.
+const INSTANCE_WAIT: Duration = Duration::from_secs(600);
+const INSTANCE_CHECK: Duration = Duration::from_secs(30);
+
 /// Longest wait for open connections after a stop signal; the engine waits 25 s before it kills the
 /// server, and the QoE, push and plugin flushes run after the drain.
 const DRAIN: Duration = Duration::from_secs(15);
@@ -148,7 +152,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         _ = stopped.wait_for(|s| *s) => return Ok(()),
         r = &mut http => return r?.map_err(Into::into),
     };
-    let (state, app, _instance) = booted;
+    let (state, app) = booted;
     let (system, hub, qoe) = (state.system.clone(), state.hub.clone(), state.qoe.clone());
     let _ = slot.set(app);
     let served = tokio::select! {
@@ -173,20 +177,18 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
 }
 
 /// Everything between the bound listener and the first request: probe, dump, migrations, seeds.
-async fn boot(cfg: Config) -> Result<(AppState, axum::Router, PgConnection), BoxError> {
+async fn boot(cfg: Config) -> Result<(AppState, axum::Router), BoxError> {
     // One direct attempt: the pool would retry a refused connection for its whole acquire timeout.
     let probe =
         tokio::time::timeout(Duration::from_secs(10), PgConnection::connect_with(&cfg.db)).await;
-    let instance = match probe {
+    match probe {
         Ok(Ok(mut c)) => {
-            if !system::instance::claim(&mut c).await? {
-                tracing::warn!("another Fliks server or restore is using this database");
-            }
-            c
+            system::instance::claim_waiting(&mut c, INSTANCE_WAIT).await?;
+            system::instance::keep(cfg.db.clone(), c, INSTANCE_CHECK);
         }
         Ok(Err(e)) => return Err(format!("cannot reach the database: {e}").into()),
         Err(_) => return Err("cannot reach the database: no answer within 10 s".into()),
-    };
+    }
     let pool = connect(&cfg).await?;
     match db::role::status(&pool).await {
         Ok(s) => db::role::log(&s),
@@ -262,8 +264,7 @@ async fn boot(cfg: Config) -> Result<(AppState, axum::Router, PgConnection), Box
         tracing::warn!("metadata provider order not loaded: {e}");
     }
     state.plugins.boot().await;
-    // The session holding the instance lock lives as long as the server.
-    Ok((state, app, instance))
+    Ok((state, app))
 }
 
 async fn shutdown_signal() {
