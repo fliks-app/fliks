@@ -202,6 +202,7 @@ mod tests {
         "media_credits",
         "media_external_ids",
         "media_files",
+        "media_issues",
         "media_moves",
         "media_release_dates",
         "requests",
