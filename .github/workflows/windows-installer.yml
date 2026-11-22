@@ -105,7 +105,7 @@ jobs:
         working-directory: client
         run: |
           npm ci
-          npx ng build --configuration=production
+          npm run build
 
       - name: Build bundle
         working-directory: windows

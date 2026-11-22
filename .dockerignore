@@ -4,6 +4,7 @@
 **/.git
 **/*.md
 !client/public/whats-new/**/*.md
+!THIRD-PARTY-NOTICES.md
 **/coverage
 client/android
 client/ios

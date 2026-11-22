@@ -7,11 +7,10 @@
  *      Shaka — the same engine the Fliks web/Android paths use.
  *   2. We hook LOAD to apply Fliks-specific defaults (subtitle styling,
  *      idle splash toggling) and forward whatever the sender sent.
- *   3. customData is reserved for future-extension features
- *      (skip-intro markers, queue, watch-next) — currently the standard
- *      MediaInformation fields carry everything the player needs.
+ *   3. customData carries what the standard MediaInformation lacks: the EDL, session and
+ *      playback ids, cues, mixes and the party state (see README, customData contract).
  *
- * Hosted at a single static URL registered once in Cast Console; users
+ * Hosted at static URLs registered once in Cast Console (release and staging); users
  * never touch this code, their NAS just answers the stream URLs the
  * sender hands to the receiver.
  */

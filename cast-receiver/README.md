@@ -108,6 +108,13 @@ Test receiver changes without touching the prod app (`66BF4DAE`):
 
 An empty or missing value means the prod ID everywhere.
 
+## Release and staging
+
+The deploy workflow publishes the latest release tag at the site root (the prod app) and `main`
+under `/staging/`. To try `main` on a real Chromecast before a release, register an unpublished
+Custom Receiver whose URL is `https://<owner>.github.io/<repo>/staging/` and use its ID as your
+`FLIKS_CAST_APP_ID`. Protocol changes reach released senders only with the release that carries them.
+
 ## customData contract
 
 Sender sends, receiver reads:

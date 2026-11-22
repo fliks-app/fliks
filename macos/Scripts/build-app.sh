@@ -53,7 +53,7 @@ if [ "$SKIP_WEB" = false ]; then
     echo "==> Building Angular client..."
     cd "$REPO_ROOT/client"
     npm ci --silent
-    npx ng build --configuration=production
+    npm run build
     echo "    [done]"
 fi
 

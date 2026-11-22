@@ -1,4 +1,5 @@
 //! Scratch databases, a tuned plugin host and the fixture components.
+use crate::fakes::skip;
 use crate::session;
 use axum::{Router, body::Body, http::Request};
 use ed25519_dalek::{Signer, SigningKey};
@@ -13,14 +14,6 @@ use tower::ServiceExt;
 
 pub const SECRET: &str = "0123456789abcdef0123456789abcdef";
 pub const TEST_KEY: [u8; 32] = [7u8; 32];
-
-/// Under CI a missing input fails the test; locally it skips it, loudly.
-fn skip(what: &str) {
-    if std::env::var("CI").is_ok_and(|v| !matches!(v.as_str(), "" | "0" | "false")) {
-        panic!("{what}: required under CI");
-    }
-    eprintln!("\n\x1b[1;33mWARNING: {what}: test SKIPPED\x1b[0m\n");
-}
 
 pub fn admin_url() -> Option<String> {
     let url = std::env::var("S8_PG_ADMIN_URL").ok();

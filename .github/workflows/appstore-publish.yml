@@ -67,7 +67,7 @@ jobs:
         run: npm ci
 
       - name: Build Angular client
-        run: npx ng build --configuration=production
+        run: npm run build
 
       - name: Capacitor sync to iOS shell
         run: npx cap sync ios

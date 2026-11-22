@@ -168,8 +168,27 @@ license applies to the ported logic:
 > DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 > OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+## Mobile apps (Android and iOS)
+
+The store apps wrap the web client with Capacitor and add the native components below. The npm
+packages inside the web client are listed in `3rdpartylicenses.txt`, shipped next to this file and
+linked from Settings.
+
+| Component | License | Source | Use |
+|---|---|---|---|
+| Capacitor (iOS and Android runtimes, `@capacitor/*` plugins) | MIT | https://github.com/ionic-team/capacitor | native shell around the web client |
+| AndroidX Media3 (`media3-exoplayer`, `-exoplayer-hls`, `-datasource`, `-ui`, `-session`) | Apache-2.0 | https://github.com/androidx/media | native Android player and media session |
+| AndroidX MediaRouter | Apache-2.0 | https://developer.android.com/jetpack/androidx/releases/mediarouter | Cast route picker (Play and GitHub builds) |
+| Google Cast SDK for Android (`play-services-cast-framework`) | Proprietary, Google Play Services terms | https://developers.google.com/cast | Chromecast sender (Play and GitHub builds) |
+| Firebase Cloud Messaging (`firebase-messaging`) | Apache-2.0 (the Google Play Services it needs is proprietary) | https://github.com/firebase/firebase-android-sdk | push notifications (Play and GitHub builds) |
+| Google Cast SDK for iOS (`google-cast-sdk`) | Proprietary, Google Cast SDK terms | https://developers.google.com/cast | Chromecast sender |
+
+The Android `libre` flavor (no Google Play Services, no Firebase) is a build option and is not
+published.
+
 ## Package-manager dependencies
 
 npm, Cargo (the Rust crates linked into `fliks-server` and the provider plugins), Gradle, CocoaPods
 and Swift packages declare their own licenses in their
-respective manifests; this file covers the programs embedded outside them.
+respective manifests; this file covers the programs embedded outside them. The web client's npm
+licenses are generated at build time into `3rdpartylicenses.txt`.

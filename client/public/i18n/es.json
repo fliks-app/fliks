@@ -421,6 +421,7 @@
       "notifications": "Notificaciones"
     },
     "version": "Versión {{version}}",
+    "licenses": "Licencias de código abierto",
     "notifications": {
       "device_title": "Este dispositivo",
       "device": "Notificaciones del sistema en este dispositivo",

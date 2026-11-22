@@ -1,15 +1,20 @@
 # A closed PR's caches can never be restored again; they only push main's out of the 10 GB quota.
+# The same goes for a tag's caches: only a run of that same tag can restore them.
 name: Cache cleanup
 
 on:
   pull_request_target:
     types: [closed]
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
 
 permissions:
   actions: write
 
 jobs:
   cleanup:
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
       - env:
@@ -18,4 +23,15 @@ jobs:
           REF: refs/pull/${{ github.event.pull_request.number }}/merge
         run: |
           gh cache list --ref "$REF" --limit 100 --json id --jq '.[].id' |
+            xargs -r -n1 gh cache delete
+
+  tags:
+    if: github.event_name != 'pull_request_target'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh cache list --limit 1000 --json id,ref --jq '.[] | select(.ref | startswith("refs/tags/")) | .id' |
             xargs -r -n1 gh cache delete

@@ -11,7 +11,9 @@ WORKDIR /app
 COPY client/package.json client/package-lock.json ./
 RUN npm ci
 COPY client/ .
-RUN npx ng build --configuration=production
+# The build copies it into the served client folder next to the npm licenses (`../` from /app).
+COPY THIRD-PARTY-NOTICES.md /
+RUN npm run build
 # Only this image ships the siblings: desktop, Capacitor and TV bundles keep plain files.
 COPY scripts/precompress-client.mjs /tmp/precompress-client.mjs
 RUN node /tmp/precompress-client.mjs dist/client/browser
