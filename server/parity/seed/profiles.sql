@@ -4,6 +4,7 @@ INSERT INTO roles (id, "createdAt", "updatedAt", name, permissions, "isDefault")
 INSERT INTO users (id, "createdAt", "updatedAt", username, email, "passwordHash", "roleId", "isAdmin") VALUES
  (6, '2026-01-01', '2026-01-01', 'settings', 'settings@parity.test', '$2b$10$dHgV4KDAYShlxrhE/Plnte19kxC1Oq7zlPFHYN168N4tDDla9o4la', 5, false);
 
+DELETE FROM quality_profiles;
 INSERT INTO quality_profiles (id, "createdAt", "updatedAt", name, cutoff, items, "upgradeAllowed", "resolutionUpgradeOnly", "minCustomFormatScore") VALUES
  (1, '2026-01-01', '2026-01-01', 'Parity HD', 18,
   '[{"quality":{"id":16,"name":"WEBDL-1080p","resolution":1080,"source":"web"},"allowed":true,"sortOrder":1,"groupId":1},{"quality":{"id":17,"name":"WEBRip-1080p","resolution":1080,"source":"web"},"allowed":true,"sortOrder":2,"groupId":1},{"quality":{"id":18,"name":"Bluray-1080p","resolution":1080,"source":"bluray"},"allowed":true,"sortOrder":3}]',

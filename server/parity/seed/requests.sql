@@ -12,6 +12,7 @@ SELECT setval('library_folders_id_seq', 3);
 SELECT setval('libraries_id_seq', 3);
 INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 6), (3, 6);
 
+DELETE FROM quality_profiles;
 INSERT INTO quality_profiles (id, "createdAt", "updatedAt", name, cutoff, items, "upgradeAllowed", "resolutionUpgradeOnly", "minCustomFormatScore") VALUES
  (1, '2026-01-01', '2026-01-01', 'Parity HD', 18,
   '[{"quality":{"id":16,"name":"WEBDL-1080p","resolution":1080,"source":"web"},"allowed":true,"sortOrder":1}]', true, false, 0);

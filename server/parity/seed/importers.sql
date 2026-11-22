@@ -1,4 +1,5 @@
 -- Parity seed delta "importers" (docs/spec/importers.md Vectors/parity), applied on top of base.sql by the runner.
+DELETE FROM quality_profiles;
 INSERT INTO quality_profiles (id, "createdAt", "updatedAt", name, cutoff, items) VALUES
  (1, '2026-01-01', '2026-01-01', 'Existing HD', 18, '[]');
 INSERT INTO app_settings (key, value) VALUES

@@ -1,6 +1,7 @@
 -- Parity seed delta "providers" (docs/spec/media-write.md Vectors/parity), applied on top of base.sql:
 -- provider-backed import, refresh, identify and season overrides against external/stub.py fixtures.
 -- base.sql predates the persons search vector migration; Rust relies on its trigger.
+DELETE FROM quality_profiles;
 INSERT INTO quality_profiles (id, "createdAt", "updatedAt", name, cutoff, items) VALUES
  (1, '2026-01-01', '2026-01-01', 'Parity HD', 18, '[]');
 SELECT setval('quality_profiles_id_seq', 1);

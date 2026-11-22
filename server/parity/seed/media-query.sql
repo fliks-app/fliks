@@ -9,6 +9,7 @@ INSERT INTO users (id, "createdAt", "updatedAt", username, email, "passwordHash"
  (6, '2026-01-01', '2026-01-01', 'noread', 'noread@parity.test', '$2b$10$Y.5IbQnOtCy7KYdDjolww.zQB.e0Jl22TcQkZM6nq8TjMRAROCJGi', 5, false);
 
 INSERT INTO libraries (id, "createdAt", "updatedAt", name, icon, color, "mediaTypes") VALUES (3, '2026-01-01', '2026-01-01', 'Pathless', 'film', '#ef4444', '["movie"]');
+DELETE FROM quality_profiles;
 INSERT INTO quality_profiles (id, "createdAt", "updatedAt", name, cutoff, items) VALUES
  (1, '2026-01-01', '2026-01-01', 'Parity HD', 18, '[]'), (2, '2026-01-01', '2026-01-01', 'Parity Unknown Cutoff', 99, '[]');
 ALTER TABLE libraries DISABLE TRIGGER set_updated_at;
