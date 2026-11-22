@@ -1,5 +1,5 @@
 //! RFC 8291 message encryption (`aes128gcm`, one record) for Web Push and the mobile relay payload.
-use aes_gcm::{Aes128Gcm, KeyInit, Nonce, aead::Aead};
+use aes_gcm::{Aes128Gcm, KeyInit, aead::Aead};
 use hkdf::Hkdf;
 use p256::{PublicKey, SecretKey, ecdh::diffie_hellman, elliptic_curve::sec1::ToEncodedPoint};
 use sha2::Sha256;
@@ -61,7 +61,7 @@ pub fn encrypt_with(
     let mut record = plaintext.to_vec();
     record.push(2);
     let sealed = Aes128Gcm::new(&cek.into())
-        .encrypt(Nonce::from_slice(&nonce), record.as_slice())
+        .encrypt(&nonce.into(), record.as_slice())
         .map_err(|_| "encrypt")?;
     let mut out = Vec::with_capacity(86 + sealed.len());
     out.extend_from_slice(&salt);
