@@ -235,19 +235,19 @@
       <div class="dock z-40 dock-with-fab-cradle bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95 reduced-effects:backdrop-filter-none">
         @if (dockHome(); as item) {
           <a [routerLink]="item.route" routerLinkActive #dockLink="routerLinkActive" [class.dock-active]="dockLink.isActive && !librarySheetOpen()" [routerLinkActiveOptions]="{ exact: item.exact }"
-             [state]="{ rootEntry: true }">
+             [state]="{ rootEntry: true }" (click)="librarySheetOpen.set(false)">
             <app-nav-icon [name]="item.icon" class="h-5 w-5" />
             <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
           </a>
         }
         <!-- One library opens itself; none or several open the sheet. -->
         @if (soleLibrary(); as lib) {
-          <a [routerLink]="libraryUrl(lib)" routerLinkActive="dock-active" [state]="{ rootEntry: true }">
+          <a [routerLink]="libraryUrl(lib)" routerLinkActive="dock-active" [state]="{ rootEntry: true }" (click)="librarySheetOpen.set(false)">
             <app-nav-icon name="library" class="h-5 w-5" />
             <span class="dock-label truncate max-w-full">{{ 'nav.section_library' | translate }}</span>
           </a>
         } @else {
-          <button type="button" (click)="librarySheetOpen.set(!librarySheetOpen())" [class.dock-active]="isLibraryRoute() || librarySheetOpen()">
+          <button type="button" (click)="bottomMenuOpen.set(false); librarySheetOpen.set(!librarySheetOpen())" [class.dock-active]="isLibraryRoute() || librarySheetOpen()">
             <app-nav-icon name="library" class="h-5 w-5" />
             <span class="dock-label truncate max-w-full">{{ 'nav.section_library' | translate }}</span>
           </button>
@@ -256,12 +256,12 @@
         <span aria-hidden="true" class="invisible"></span>
         @if (dockRequests(); as item) {
           <a [routerLink]="item.route" routerLinkActive #dockLink="routerLinkActive" [class.dock-active]="dockLink.isActive && !librarySheetOpen()" [routerLinkActiveOptions]="{ exact: item.exact }"
-             [state]="{ rootEntry: true }">
+             [state]="{ rootEntry: true }" (click)="librarySheetOpen.set(false)">
             <app-nav-icon [name]="item.icon" class="h-5 w-5" />
             <span class="dock-label truncate max-w-full">{{ (item.shortLabelKey ?? item.labelKey) | translate }}</span>
           </a>
         }
-        <button type="button" (click)="toggleBottomMenu()" [class.dock-active]="bottomMenuOpen()"
+        <button type="button" (click)="librarySheetOpen.set(false); toggleBottomMenu()" [class.dock-active]="bottomMenuOpen()"
                 class="[&.dock-active]:before:hidden [&.dock-active]:after:hidden">
           <svg lucideEllipsisVertical class="h-5 w-5"></svg>
           <span class="dock-label truncate max-w-full">{{ 'nav.more' | translate }}</span>
@@ -274,7 +274,7 @@
          data-chrome-fab
          [routerLinkActive]="['dock-active', '!bg-primary', '!text-primary-content']"
          [routerLinkActiveOptions]="{ exact: false }"
-         (click)="onSearchNavClick()"
+         (click)="librarySheetOpen.set(false); onSearchNavClick()"
          class="fixed left-1/2 -translate-x-1/2 z-50 bg-white text-primary !rounded-full !p-0 shadow-lg flex items-center justify-center [&.dock-active]:before:hidden [&.dock-active]:after:hidden"
          style="bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem); width: 56px; height: 56px;"
          [attr.aria-label]="'search.title' | translate">
