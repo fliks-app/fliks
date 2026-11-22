@@ -167,6 +167,11 @@ body.reduced-effects .app-sidebar-veil,
 body.reduced-effects:not(.tv) .app-navbar-veil {
   background-color: rgba(29, 35, 42, 0.9);
 }
+/* One switch for every backdrop-blur utility on TV and low-memory devices. */
+body.reduced-effects [class*='backdrop-blur'] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
 
 /* Native app (Capacitor): offset content from system bars */
 body.native {

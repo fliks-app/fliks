@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
+import { DeviceService } from './device.service';
 import { NetworkService } from './network.service';
 
 /** Lazy-loaded Filesystem reference — the plugin doesn't exist on web. */
@@ -14,6 +15,8 @@ const INDEX_KEY = 'fliks.imageCache.index';
 /** Posters and stills only — a few tens of KB each, so the cap is about
  *  bounding the directory, not the bytes. */
 const MAX_ENTRIES = 800;
+/** Eviction drops to this, so it runs once per ~100 stores instead of per store. */
+const EVICT_TO = 700;
 /** Each store is a fetch plus a base64 round-trip over the Capacitor bridge;
  *  more than a couple at once visibly stalls a scrolling grid. */
 const MAX_CONCURRENT_STORES = 2;
@@ -23,8 +26,12 @@ const MAX_CONCURRENT_STORES = 2;
 @Injectable({ providedIn: 'root' })
 export class ImageCacheService {
   private readonly network = inject(NetworkService);
-  /** Off on web, where the Angular service worker already does this. */
-  readonly enabled = Capacitor.isNativePlatform();
+  private readonly device = inject(DeviceService);
+
+  /** Off on web (the service worker covers it) and on TV (no offline use there). */
+  get enabled(): boolean {
+    return Capacitor.isNativePlatform() && !this.device.isTv();
+  }
 
   /** cache key → [filename, last use]. Mirrors the on-disk directory so a
    *  lookup costs nothing; a bridge `stat` per image would not be affordable. */
@@ -59,7 +66,7 @@ export class ImageCacheService {
     return Capacitor.convertFileSrc(`${this.baseUriValue}/${entry[0]}`);
   }
 
-  /** URL to render: the on-disk copy if any, else the remote URL with a copy queued for next time. */
+  /** URL to render: the on-disk copy if any, else the remote URL; the caller queues a copy once the image has loaded. */
   async resolve(remoteUrl: string): Promise<string> {
     if (!this.cacheable(remoteUrl)) return remoteUrl;
     this.load();
@@ -72,7 +79,6 @@ export class ImageCacheService {
         return Capacitor.convertFileSrc(`${base}/${entry[0]}`);
       }
     }
-    this.store(remoteUrl);
     return remoteUrl;
   }
 
@@ -144,7 +150,7 @@ export class ImageCacheService {
       await Filesystem.writeFile({ path: `${DIR}/${name}`, data, directory: Directory.Data });
       this.index.set(key, [name, Date.now()]);
       await this.evict();
-      this.persist();
+      this.persistWhenIdle();
       return true;
     } catch {
       return false;
@@ -157,7 +163,7 @@ export class ImageCacheService {
     if (this.index.size <= MAX_ENTRIES) return;
     const stale = [...this.index.entries()]
       .sort((a, b) => a[1][1] - b[1][1])
-      .slice(0, this.index.size - MAX_ENTRIES);
+      .slice(0, this.index.size - EVICT_TO);
     const { Filesystem, Directory } = await getFs();
     for (const [key, [name]] of stale) {
       this.index.delete(key);
@@ -200,7 +206,25 @@ export class ImageCacheService {
     }
   }
 
+  private persistScheduled = false;
+
+  /** The index is rewritten once per idle period and when the app is hidden, not per stored image. */
+  private persistWhenIdle(): void {
+    if (this.persistScheduled) return;
+    this.persistScheduled = true;
+    if (!this.hideListener) {
+      this.hideListener = () => document.hidden && this.persist();
+      document.addEventListener('visibilitychange', this.hideListener);
+    }
+    const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void })
+      .requestIdleCallback;
+    if (ric) ric(() => this.persist(), { timeout: 30_000 });
+    else setTimeout(() => this.persist(), 5_000);
+  }
+  private hideListener?: () => void;
+
   private persist(): void {
+    this.persistScheduled = false;
     try {
       localStorage.setItem(INDEX_KEY, JSON.stringify(Object.fromEntries(this.index)));
     } catch {

@@ -74,6 +74,7 @@ export class InfiniteScrollList<T extends { id: number }> {
 
   /** Replace all items. */
   setItems(items: T[], titleFn?: (item: T) => string) {
+    if (items === this.allItems && items.length === this.total()) return;
     this.allItems = items;
     if (titleFn) this.titleFn = titleFn;
     this.all.set(items);

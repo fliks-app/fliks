@@ -15,8 +15,8 @@ export class CardActionsDirective implements OnDestroy {
   private readonly isNativePlatform = Capacitor.isNativePlatform();
   private readonly isMobileNative = this.isNativePlatform && !this.tv.isTv();
 
-  /** Actions to register when this card becomes active. Empty/undefined disables. */
-  readonly appCardActions = input<CardAction[] | null | undefined>([]);
+  /** Resolves the actions when the card becomes active (focus, long-press), so idle cards build no menu. */
+  readonly appCardActions = input<() => CardAction[] | null | undefined>(() => []);
   /** Optional title shown atop the panel (typically the card title). */
   readonly actionsTitle = input<string>('');
   /** Optional poster/thumbnail shown in the panel header. */
@@ -60,7 +60,7 @@ export class CardActionsDirective implements OnDestroy {
   }
 
   private currentActions(): CardAction[] {
-    return (this.appCardActions() ?? []).filter((a) => !!a);
+    return (this.appCardActions()() ?? []).filter((a) => !!a);
   }
 
   // ── TV: focus-driven registry ──────────────────────────────────────────

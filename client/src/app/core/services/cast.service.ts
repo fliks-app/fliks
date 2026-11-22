@@ -420,6 +420,8 @@ export class CastService implements OnDestroy {
   private initWeb() {
     // A TV never shows the Cast entry points.
     if (detectDevice().formFactor === 'tv') return;
+    // The Cast sender only works in Chromium (iOS Chrome is WebKit): skip the script elsewhere.
+    if (!/Chrome\//.test(navigator.userAgent) || /CriOS/.test(navigator.userAgent)) return;
     const w = window as any;
     w['__onGCastApiAvailable'] = (isAvailable: boolean) => {
       if (isAvailable) this.initWebCast();

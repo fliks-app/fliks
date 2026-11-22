@@ -535,7 +535,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     const startStr = threeDaysAgo.toISOString().slice(0, 10);
     const in30dStr = in30d.toISOString().slice(0, 10);
 
-    void this.mediaService.getLeavingSoon(opts).then((l) => this.leavingSoon.set(l), () => undefined);
+    void this.mediaService.getLeavingSoon(opts).then((l) => this.leavingSoon.set(l.slice(0, 20)), () => undefined);
     try {
       const [recent, calendar] = await Promise.all([
         this.mediaService.getRecentlyAdded(
@@ -559,7 +559,7 @@ export class HomeComponent implements OnInit, OnDestroy {
           if (seen.has(e.mediaId)) return false;
           seen.add(e.mediaId);
           return true;
-        }),
+        }).slice(0, 20),
       );
     } catch { /* ignore */ }
   }

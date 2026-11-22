@@ -25,7 +25,7 @@ import {
 } from '../../core/services/focusable.constants';
 
 /** The phone dock's own surface, so a sheet resting on it reads as one piece. */
-const DOCK_BG = 'bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95 reduced-effects:backdrop-filter-none';
+const DOCK_BG = 'bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95';
 
 @Component({
   selector: 'app-bottom-sheet',

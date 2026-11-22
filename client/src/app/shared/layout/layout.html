@@ -24,7 +24,7 @@
       [class.bg-base-100/70]="!navbarTransparent() && !background.url() && !tv.isTv() && !device.reducedEffects()"
       [class.bg-base-100/95]="!navbarTransparent() && !background.url() && !tv.isTv() && device.reducedEffects()"
       [class.app-navbar-veil]="!navbarTransparent() && !!background.url()"
-      [class.backdrop-blur-sm]="!navbarTransparent() && !device.reducedEffects()"
+      [class.backdrop-blur-sm]="!navbarTransparent()"
       [class.shadow-sm]="!navbarTransparent() && !background.url() && !tv.isTv()"
       [class.bg-transparent]="navbarTransparent()"
       [class.border-b]="!navbarTransparent() && !tv.isTv()"
@@ -232,7 +232,7 @@
     <!-- Native bottom navigation bar — phones only.
          Tablets and TV use the drawer/sidebar instead. -->
     @if (navbar.phoneDock() && !keyboardOpen()) {
-      <div class="dock z-40 dock-with-fab-cradle bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95 reduced-effects:backdrop-filter-none">
+      <div class="dock z-40 dock-with-fab-cradle bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95">
         @if (dockHome(); as item) {
           <a [routerLink]="item.route" routerLinkActive #dockLink="routerLinkActive" [class.dock-active]="dockLink.isActive && !librarySheetOpen()" [routerLinkActiveOptions]="{ exact: item.exact }"
              [state]="{ rootEntry: true }" (click)="dismissLibrarySheet()">
@@ -363,34 +363,52 @@
   <app-audio-player />
 
   <!-- App-update changelog + install dialog (opened from the topbar button) -->
-  <app-update-modal />
+  @defer (when updateModalRequested(); prefetch on idle) {
+    <app-update-modal #updateModal />
+  }
 
   <!-- What's new carousel, once per version on desktop and web -->
-  <app-whats-new-modal />
+  @defer (when auth.user() && device.isDesktop()) {
+    <app-whats-new-modal />
+  }
 
   <!-- Card actions panel (TV menu button / mobile long-press) — single instance -->
   <app-card-actions-panel />
 
   <!-- Add-to-playlist dialog — single instance, opened via AddToPlaylistService -->
-  <app-add-to-playlist-modal />
+  @defer (when addToPlaylistSvc.request(); prefetch on idle) {
+    <app-add-to-playlist-modal #addToPlaylistModal />
+  }
 
   <!-- Recommend-to-a-member dialog — single instance, opened via RecommendService -->
-  <app-recommend-modal />
+  @defer (when recommendSvc.request(); prefetch on idle) {
+    <app-recommend-modal #recommendModal />
+  }
 
   <!-- Watch-party creation dialog, single instance, opened via PartyService.createRequest -->
-  <app-party-create-modal />
+  @defer (when party.createRequest(); prefetch on idle) {
+    <app-party-create-modal />
+  }
 
   <!-- Party reconnection overlay, driven by PartyService.reconnecting -->
-  <app-party-reconnect />
+  @defer (when party.reconnecting(); prefetch on idle) {
+    <app-party-reconnect />
+  }
 
   <!-- Tracking-status dialog — single instance, opened via TrackingModalService -->
-  <app-tracking-modal-host />
+  @defer (when trackingModal.request(); prefetch on idle) {
+    <app-tracking-modal-host />
+  }
 
   <!-- Identify dialog — single instance, opened via IdentifyModalService -->
-  <app-identify-modal-host />
+  @defer (when identifyModal.request(); prefetch on idle) {
+    <app-identify-modal-host />
+  }
 
   <!-- Optimize dialog, single instance, opened via OptimizeModalService -->
-  <app-optimize-modal />
+  @defer (when optimizeModal.request(); prefetch on idle) {
+    <app-optimize-modal />
+  }
 
   <!-- The gutter is always reserved: a scrollbar appearing as the menu grows would shift the page. -->
   <div class="drawer-side z-40 [scrollbar-gutter:stable]" [class.hidden]="navbar.phoneDock()">
@@ -398,7 +416,7 @@
     <aside class="app-chrome-side w-64 min-h-full flex flex-col"
            [class.bg-base-100]="!background.url()"
            [class.app-sidebar-veil]="!!background.url()"
-           [class.backdrop-blur-sm]="!!background.url() && !device.reducedEffects()"
+           [class.backdrop-blur-sm]="!!background.url()"
            style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
       <div class="p-4 border-b border-base-200 flex items-center gap-2">
         <a routerLink="/" class="flex items-center gap-2 px-2 py-1 rounded-lg text-2xl font-bold flex-1 min-w-0">

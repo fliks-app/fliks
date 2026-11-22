@@ -189,6 +189,32 @@ describe('cache.interceptor: paint then revalidate', () => {
   });
 });
 
+describe('cache.interceptor: ETag', () => {
+  beforeEach(async () => {
+    vi.stubGlobal('indexedDB', { open: vi.fn(() => { throw new Error('unavailable'); }) });
+    await clearRequestCache();
+  });
+
+  const read = (next: HttpHandlerFn) =>
+    new Promise<unknown>((resolve) => {
+      const req = new HttpRequest('GET', '/api/libraries/mine', { headers: new HttpHeaders(cacheHeaders({ force: true })) });
+      cacheInterceptor(req, next).subscribe((e) => resolve((e as HttpResponse<unknown>).body));
+    });
+  const answer = (etag: string | null, body: unknown) => () =>
+    of(new HttpResponse({ status: 200, body, headers: new HttpHeaders(etag ? { ETag: etag } : {}) }));
+
+  it('hands back the same body object while the server answers the same ETag', async () => {
+    const first = await read(answer('W/"a"', [{ id: 1 }]));
+    expect(await read(answer('W/"a"', [{ id: 1 }]))).toBe(first);
+    expect(await read(answer('W/"b"', [{ id: 1 }]))).not.toBe(first);
+  });
+
+  it('keeps the new body for an answer without ETag', async () => {
+    const first = await read(answer(null, [1]));
+    expect(await read(answer(null, [1]))).not.toBe(first);
+  });
+});
+
 describe('cache.interceptor: connection', () => {
   type Req = { result?: unknown; onsuccess?: () => void };
   const fakeDb = () => ({
