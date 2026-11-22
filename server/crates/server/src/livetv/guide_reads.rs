@@ -1,4 +1,4 @@
-//! The user reads of the guide (`livetv-guide.md`): the match report, `on-now`, `guide`, `programs/:id`, `search` and the prune.
+//! The user reads of the guide (`livetv-guide.md`): the match report, `on-now`, `guide` and the prune.
 use super::{
     admin,
     channels::{Visible, denied_for, text_filter},
@@ -134,17 +134,16 @@ fn guide_ids(items: &[ChannelItem]) -> Vec<String> {
         .collect()
 }
 
-/// The widest per-channel shift of the page: the programme query reaches that far each side.
-fn widest_shift(items: &[ChannelItem]) -> Duration {
-    let m = items.iter().map(|c| c.guide_shift_minutes.unsigned_abs());
-    Duration::minutes(i64::from(m.max().unwrap_or(0)))
+/// The widest shift among `minutes`: the programme query reaches that far each side.
+fn widest_shift(minutes: impl Iterator<Item = i32>) -> Duration {
+    Duration::minutes(i64::from(minutes.map(i32::unsigned_abs).max().unwrap_or(0)))
 }
 
-/// The programmes of the channel's guide id with the channel's own `guideShiftMinutes` applied (rule 36).
-fn shifted(rows: &[Program], c: &ChannelItem) -> Vec<Program> {
-    let by = Duration::minutes(i64::from(c.guide_shift_minutes));
+/// The programmes of `guide_id` moved by `minutes` (rule 36).
+fn shifted(rows: &[Program], guide_id: Option<&str>, minutes: i32) -> Vec<Program> {
+    let by = Duration::minutes(i64::from(minutes));
     rows.iter()
-        .filter(|p| Some(p.guide_channel_id.as_str()) == c.guide_channel_id.as_deref())
+        .filter(|p| Some(p.guide_channel_id.as_str()) == guide_id)
         .map(|p| Program {
             starts_at: p.starts_at + by,
             ends_at: p.ends_at + by,
@@ -200,13 +199,13 @@ pub async fn on_now(
     let rows = if ids.is_empty() {
         vec![]
     } else {
-        let reach = widest_shift(&items);
+        let reach = widest_shift(items.iter().map(|c| c.guide_shift_minutes));
         ranked(&st.db, &ids, now - reach, now + Duration::hours(12) + reach).await?
     };
     let entries: Vec<Value> = items
         .iter()
         .map(|c| {
-            let mine = shifted(&rows, c);
+            let mine = shifted(&rows, c.guide_channel_id.as_deref(), c.guide_shift_minutes);
             let current = mine.iter().find(|p| p.starts_at <= now && now < p.ends_at);
             let next = mine.iter().find(|p| p.starts_at > now);
             json!({"channel": c, "now": current, "next": next})
@@ -254,16 +253,41 @@ pub async fn window(
     let (items, total) = v.list(&st.db, Some((page, size))).await?;
     let ids = guide_ids(&items);
     let mut programs = serde_json::Map::new();
+    let mut channel_programs = serde_json::Map::new();
     if !ids.is_empty() {
-        let reach = widest_shift(&items);
+        // `programs` keeps the shape released clients read: per guide id, shifted by its first enabled channel.
+        let first: Vec<(String, i32)> = sqlx::query_as(
+            r#"SELECT DISTINCT ON ("guideChannelId") "guideChannelId", "guideShiftMinutes" FROM livetv_channels
+               WHERE enabled AND "guideChannelId" = ANY($1) ORDER BY "guideChannelId", id"#,
+        )
+        .bind(&ids)
+        .fetch_all(&st.db)
+        .await?;
+        let reach = widest_shift(
+            items
+                .iter()
+                .map(|c| c.guide_shift_minutes)
+                .chain(first.iter().map(|f| f.1)),
+        );
         let rows = ranked(&st.db, &ids, from - reach, to + reach).await?;
-        for c in &items {
-            let mine: Vec<Program> = shifted(&rows, c)
+        let in_window = |p: &Program| p.starts_at < to && p.ends_at > from;
+        for (guide, minutes) in &first {
+            let mine: Vec<Program> = shifted(&rows, Some(guide), *minutes)
                 .into_iter()
-                .filter(|p| p.starts_at < to && p.ends_at > from)
+                .filter(in_window)
                 .collect();
             if !mine.is_empty() {
-                programs.insert(
+                programs.insert(guide.clone(), serde_json::to_value(mine).expect("programs"));
+            }
+        }
+        for c in &items {
+            let mine: Vec<Program> =
+                shifted(&rows, c.guide_channel_id.as_deref(), c.guide_shift_minutes)
+                    .into_iter()
+                    .filter(in_window)
+                    .collect();
+            if !mine.is_empty() {
+                channel_programs.insert(
                     c.id.to_string(),
                     serde_json::to_value(mine).expect("programs"),
                 );
@@ -271,7 +295,7 @@ pub async fn window(
         }
     }
     Ok(Json(
-        json!({"channels": items, "programs": programs, "page": page, "pageSize": size, "total": total}),
+        json!({"channels": items, "programs": programs, "channelPrograms": channel_programs, "page": page, "pageSize": size, "total": total}),
     ))
 }
 

@@ -197,10 +197,12 @@ PUT  /api/settings/<key>          body: { "value": "<string>" }
   error; the source just has none. If the provider's playlist really is empty, that's confirmed by
   **Test connection** and there's nothing to fix on the Fliks side.
 - **A sync that suddenly returns far fewer channels than before** (under half of what the source
-  already had) is refused outright, and the previous lineup is kept untouched — that's treated as a
-  provider rate limit or an error page mistaken for the real playlist, not your channels actually
-  disappearing. The sync error explains why nothing changed; fix the underlying issue and sync
-  again.
+  already had) is refused by the scheduled refresh, and the previous lineup is kept untouched. That is
+  treated as a provider rate limit or an error page mistaken for the real playlist, not your channels
+  actually disappearing. The sync error explains why nothing changed. If the provider really dropped
+  those channels, press **Sync now** on the source: a manual sync takes the smaller lineup as the new
+  one, and once a channel has been unseen for `livetv_stale_stream_days` days it is removed with its
+  favorites.
 - **"has reached its limit of N simultaneous streams"** — the source's **Max simultaneous streams**
   cap is already fully used, including connections that only closed in the last
   `livetv_slot_release_seconds` seconds. Wait a moment, close another stream from that source, or

@@ -708,6 +708,10 @@ const ADDITIVE: &[&str] = &[
     "$..pushMuted",
     "$[*].state",
     "$[*].requestStatus",
+    "$.channelPrograms",
+    "$[*].guideShiftMinutes",
+    "$.channels[*].guideShiftMinutes",
+    "$.entries[*].channel.guideShiftMinutes",
 ];
 
 /// Step-level `ignore`: paths dropped from that step's body only.

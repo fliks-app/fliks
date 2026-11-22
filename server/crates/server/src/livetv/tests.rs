@@ -1056,6 +1056,63 @@ mod guide_import {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn the_guide_keeps_the_released_programs_shape_beside_the_channel_keyed_one(
+        pool: PgPool,
+    ) {
+        let c = ctx(pool).await;
+        let one = channel(&c.pool, "One", "News", true).await;
+        let plus = channel(&c.pool, "One +1", "News", true).await;
+        sqlx::query(r#"UPDATE livetv_channels SET "guideChannelId" = 'one.fr', "guideMatchKind" = 'id', "guideShiftMinutes" = CASE WHEN id = $1 THEN 60 ELSE 0 END WHERE id IN ($1, $2)"#)
+            .bind(plus)
+            .bind(one)
+            .execute(&c.pool)
+            .await
+            .unwrap();
+        c.prov.lock_clean().guide = feed();
+        let g = guide_source(&c, "A", "/guide.xml").await;
+        guide::sync(&c.st, g).await.unwrap();
+        let (_, admin) = viewer(&c, "boss", true).await;
+        let from = (chrono::Utc::now() - chrono::Duration::days(1)).to_rfc3339();
+        let to = (chrono::Utc::now() + chrono::Duration::days(1)).to_rfc3339();
+        let (s, b) = call(
+            &c.app,
+            "GET",
+            &format!(
+                "/api/livetv/guide?from={}&to={}",
+                from.replace('+', "%2B"),
+                to.replace('+', "%2B")
+            ),
+            &admin,
+            None,
+        )
+        .await;
+        assert_eq!(s, 200, "{b}");
+        let starts = |list: &Value, title: &str| -> String {
+            list.as_array()
+                .unwrap()
+                .iter()
+                .find(|p| p["title"] == title)
+                .unwrap()["startsAt"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
+        let old = &b["programs"]["one.fr"];
+        let mine = &b["channelPrograms"][one.to_string()];
+        let shifted = &b["channelPrograms"][plus.to_string()];
+        assert_eq!(
+            starts(old, "Now One"),
+            starts(mine, "Now One"),
+            "released shape follows the first channel"
+        );
+        assert_ne!(
+            starts(mine, "Now One"),
+            starts(shifted, "Now One"),
+            "the +1 channel has its own times"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_resync_replaces_its_own_rows_and_leaves_a_sibling_alone(pool: PgPool) {
         let c = ctx(pool).await;
         lineup(&c).await;
@@ -2158,6 +2215,65 @@ mod sessions {
             c.fake.seen("POST", "/v1/live").last().unwrap().body["upstreams"][0]["atCapacity"],
             true
         );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_hold_opened_after_the_listing_survives_the_resync(pool: PgPool) {
+        let w = world(pool).await;
+        let c = &w.c;
+        opened(&w).await;
+        session::stamp_holds(&c.st, crate::presence::now_ms() + 60_000.0);
+        c.fake.script("GET", "/v1/live", vec![ok(json!([]))]);
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        session::resync(&c.st).await.unwrap();
+        let (viewers, holds) = session::peek(&c.st);
+        assert!(viewers.is_empty(), "the engine no longer lists the viewer");
+        assert_eq!(
+            holds.len(),
+            1,
+            "the hold of an open finished after the listing stays"
+        );
+        session::stamp_holds(&c.st, 0.0);
+        c.fake.script("GET", "/v1/live", vec![ok(json!([]))]);
+        session::resync(&c.st).await.unwrap();
+        assert!(
+            session::peek(&c.st).1.is_empty(),
+            "an older hold the engine lost is released"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn disabling_the_source_that_feeds_a_viewer_ends_it_though_another_stream_remains(
+        pool: PgPool,
+    ) {
+        let w = world(pool).await;
+        let c = &w.c;
+        let src2 = source(c, "S2", "m3u", "http://h/y", 5).await;
+        stream(&c.pool, w.a, src2, "http://h/a-b.ts", 1).await;
+        opened(&w).await;
+        c.fake
+            .script("DELETE", "/v1/sessions/sid-1", vec![status(204)]);
+        sqlx::query("UPDATE livetv_sources SET enabled = false WHERE id = $1")
+            .bind(w.src1)
+            .execute(&c.pool)
+            .await
+            .unwrap();
+        session::revoke_lost_access(&c.st).await;
+        assert!(session::peek(&c.st).0.is_empty());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_groups_route_leaves_out_a_group_the_caller_may_not_see(pool: PgPool) {
+        let w = world(pool).await;
+        let c = &w.c;
+        sqlx::query("INSERT INTO app_settings (key, value) VALUES ('livetv_restricted_groups', '[\"Adult\"]')").execute(&c.pool).await.unwrap();
+        channel(&c.pool, "R", "Adult", true).await;
+        let (_, user) = viewer(c, "plain", false).await;
+        let (_, admin) = viewer(c, "boss", true).await;
+        let (s, b) = call(&c.app, "GET", "/api/livetv/channels/groups", &user, None).await;
+        assert_eq!((s, b), (200, json!(["Live"])));
+        let (s, b) = call(&c.app, "GET", "/api/livetv/channels/groups", &admin, None).await;
+        assert_eq!((s, b), (200, json!(["Adult", "Live"])));
     }
 
     #[sqlx::test(migrations = false)]

@@ -430,6 +430,7 @@ pub async fn open(
             g.holds.remove(&token);
         } else if let Some(h) = g.holds.get_mut(&token) {
             h.pending = false;
+            h.opened_at = now_ms();
             h.mode = Some(res.mode);
         }
         g.viewers.insert(
@@ -692,13 +693,17 @@ fn may_watch(perms: &[String]) -> bool {
 /// Every live viewer whose owner can no longer watch its channel ends now: a disabled or deleted user, a role
 /// without `livetv.read`, a restricted group, a disabled channel, a removed source. `direct.ts` is resolved once.
 pub async fn revoke_lost_access(st: &AppState) {
-    let mut by_owner: BTreeMap<i32, Vec<(String, i32)>> = BTreeMap::new();
-    for (sid, v) in &st.livetv.live.lock().viewers {
-        if let Some(owner) = v.user_id {
-            by_owner
-                .entry(owner)
-                .or_default()
-                .push((sid.clone(), v.channel_id));
+    let mut by_owner: BTreeMap<i32, Vec<(String, i32, Option<i32>)>> = BTreeMap::new();
+    {
+        let g = st.livetv.live.lock();
+        for (sid, v) in &g.viewers {
+            if let Some(owner) = v.user_id {
+                let feeding = g.holds.get(&v.capacity_token).map(|h| h.source_id);
+                by_owner
+                    .entry(owner)
+                    .or_default()
+                    .push((sid.clone(), v.channel_id, feeding));
+            }
         }
     }
     for (user_id, viewers) in by_owner {
@@ -723,10 +728,12 @@ pub async fn revoke_lost_access(st: &AppState) {
                 continue;
             }
         };
-        for (sid, channel) in viewers {
+        for (sid, channel, feeding) in viewers {
             let keep = match &access {
                 Some((true, denied)) => match playable(&st.db, channel, denied).await {
-                    Ok(found) => matches!(found, Some((_, s)) if !s.is_empty()),
+                    // The source feeding the viewer must still be an enabled source of the channel.
+                    Ok(found) => matches!(found, Some((_, s)) if !s.is_empty()
+                        && feeding.is_none_or(|f| s.iter().any(|x| x.source.id == f))),
                     Err(e) => {
                         tracing::warn!("live access re-check of viewer {sid} failed: {e}");
                         continue;
@@ -783,6 +790,14 @@ pub async fn resolve_live(
     }
     let denied = super::access::denied_groups(&st.db, user_id, perms).await?;
     Ok(matches!(playable(&st.db, viewer.channel_id, &denied).await?, Some((_, s)) if !s.is_empty()))
+}
+
+/// Moves every hold's open time, as an open that finishes after a resync listed the engine.
+#[cfg(test)]
+pub(super) fn stamp_holds(st: &AppState, opened_at: f64) {
+    for h in st.livetv.live.lock().holds.values_mut() {
+        h.opened_at = opened_at;
+    }
 }
 
 #[cfg(test)]

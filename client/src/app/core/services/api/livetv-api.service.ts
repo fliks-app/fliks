@@ -4,6 +4,7 @@ import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { ServerConfigService } from '../server-config.service';
+import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import { AuthService } from '../auth.service';
 
 export interface LiveChannel {
@@ -51,8 +52,10 @@ export interface OnNowPage {
 
 export interface GuidePage {
   channels: LiveChannel[];
-  /** Keyed by channel id, each channel's own `guideShiftMinutes` applied. */
+  /** Keyed by guide channel id; what servers before `channelPrograms` send. */
   programs: Record<string, LiveProgram[]>;
+  /** Keyed by channel id, each channel's own `guideShiftMinutes` applied. */
+  channelPrograms?: Record<string, LiveProgram[]>;
   page: number;
   pageSize: number;
   total: number;
@@ -298,11 +301,17 @@ export class LiveTvApiService {
   private readonly http = inject(HttpClient);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly auth = inject(AuthService);
+  private readonly serverVersion = inject(ServerVersionService);
 
   // ── User routes ──
 
-  getChannelGroups() {
-    return firstValueFrom(this.http.get<string[]>('/api/livetv/channels/groups'));
+  /** The groups of the visible lineup; a server before `SERVER_SINCE.liveTvGroups` has them only in the channel list. */
+  async getChannelGroups(): Promise<string[]> {
+    if (await this.serverVersion.supportsWhenKnown(SERVER_SINCE.liveTvGroups)) {
+      return firstValueFrom(this.http.get<string[]>('/api/livetv/channels/groups'));
+    }
+    const channels = await firstValueFrom(this.http.get<LiveChannel[]>('/api/livetv/channels'));
+    return [...new Set(channels.flatMap((c) => (c.groupName ? [c.groupName] : [])))].sort();
   }
 
   /** Whether the signed-in user has any channel. Silent on failure: it only gates a nav entry. */
