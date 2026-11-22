@@ -2,7 +2,6 @@
 use super::manifest::{self, Inspected};
 use super::packages::{self, Package};
 use super::{Plugins, archive::Refusal};
-use crate::sync::MutexExt;
 use axum::http::StatusCode;
 use nodejs_semver::Version;
 use serde::Serialize;
@@ -592,7 +591,6 @@ impl Plugins {
         if delete_data {
             let _ = std::fs::remove_dir_all(super::runtime::data_dir(&self.opts.runtime_dir, id));
         }
-        self.fk_warnings.lock_clean().remove(id);
         Ok(())
     }
 
