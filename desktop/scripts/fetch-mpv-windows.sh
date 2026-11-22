@@ -14,5 +14,5 @@ if [ ! -f "$dest/mpv.exe" ]; then
   [ -n "$sub" ] && cp -rf "$sub"/. "$dest"/
 fi
 test -f "$dest/mpv.exe" || { echo "::error::mpv.exe missing after extract"; find "$dest" -maxdepth 2; exit 1; }
-rm -f "$dest/libmpv.so.2"  # the committed Linux lib isn't used on Windows
+rm -f "$dest/libmpv.so.2"  # a Linux lib left in the tree isn't used on Windows
 echo "vendored mpv.exe ($(du -h "$dest/mpv.exe" | cut -f1)) + $(ls "$dest"/*.dll 2>/dev/null | wc -l) DLLs"

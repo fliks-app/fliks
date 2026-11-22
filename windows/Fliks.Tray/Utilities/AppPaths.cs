@@ -41,10 +41,10 @@ internal static class AppPaths
         Path.Combine(BaseDir, "pgsql", "bin"),
         RepoRoot is null ? null : Path.Combine(RepoRoot, "windows", "Vendored", "pgsql", "bin"));
 
-    /// <summary>FFmpeg bin dir (front of PATH for the engine's spawns).</summary>
-    public static string FfmpegBinDir => ResolveDir(
-        Path.Combine(BaseDir, "ffmpeg", "bin"),
-        RepoRoot is null ? null : Path.Combine(RepoRoot, "windows", "Vendored", "ffmpeg", "bin"));
+    /// <summary>Tools pack dir: ffmpeg, ffprobe, fpcalc, mkvmerge (front of PATH for the engine's spawns).</summary>
+    public static string ToolsDir => ResolveDir(
+        Path.Combine(BaseDir, "tools"),
+        RepoRoot is null ? null : Path.Combine(RepoRoot, "windows", "build", "Bundle", "tools"));
 
     /// <summary>Built Angular client served via SERVE_STATIC_PATH.</summary>
     public static string ClientDir => ResolveDir(

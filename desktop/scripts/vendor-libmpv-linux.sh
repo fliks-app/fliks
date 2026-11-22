@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bundle the shared libraries the committed libmpv.so.2 links against but a
+# Bundle the shared libraries the vendored libmpv.so.2 links against but a
 # stock Ubuntu desktop has no package for, and point every RUNPATH at $ORIGIN.
 #
 # FFmpeg, libass and libplacebo are static inside that libmpv (av_* hidden) and
@@ -12,7 +12,7 @@
 # breaks the addon build. Nothing here touches the build machine's package set.
 #
 # Runs on the Linux CI job before electron-builder (desktop-release.yml). The
-# copies are gitignored (native/vendor/* minus libmpv.so.2) and shipped by
+# copies are gitignored (native/vendor/* minus libmpv.so.2, which fetch-libmpv-linux.sh puts there) and shipped by
 # electron-builder's native/vendor/** glob + asarUnpack.
 #
 # `--print-sonames` lists what ends up bundled, so desktop-release.yml's

@@ -1,5 +1,5 @@
 # Builds a self-contained Fliks Windows server (tray app + embedded
-# PostgreSQL + tri-vendor FFmpeg + fliks-engine and fliks-server).
+# PostgreSQL + the engine tools pack + fliks-engine and fliks-server).
 #
 # Packaged with Velopack (per-user Setup.exe + update feed on the `win-server`
 # channel; the desktop client owns `win` in the same release).

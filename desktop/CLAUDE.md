@@ -96,7 +96,8 @@ cd desktop && npm install
 ## Prerequisite: vendored libmpv (gitignored)
 
 The runtime libmpv lives under `native/vendor/` and is **not in git** (`vendor/`
-is ignored; the Linux `.so` is the one committed exception). It must be
+is ignored). On Linux, `scripts/fetch-libmpv-linux.sh` downloads it from the Fliks release
+pinned in `desktop-release.yml` (`LIBMPV_LINUX_*`, sha256-checked). It must be
 *self-contained* with hidden FFmpeg symbols, or Electron's bundled libffmpeg
 clashes with libmpv's FFmpeg and crashes (`free(): invalid pointer` / abort).
 Override the path with `FLIKS_MPV_PATH`.

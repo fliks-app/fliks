@@ -34,16 +34,9 @@ npm ci
 npx ng build --configuration=production
 ```
 
-### 3. Fetch vendored binaries
+> The bundle's ffmpeg, ffprobe, fpcalc and mkvmerge come from the engine tools pack pinned in `engine.lock`, fetched by `build-app.sh`. During development, the app uses Homebrew-installed versions instead. `fliks-engine` and `fliks-server` only exist in a bundle built by `build-app.sh`.
 
-```bash
-cd ../macos
-./Scripts/fetch-vendored.sh
-```
-
-> This fetches PostgreSQL and FFmpeg for the bundle. During development, the app uses Homebrew-installed versions instead. `fliks-engine` and `fliks-server` only exist in a bundle built by `build-app.sh`.
-
-### 4. Build & run
+### 3. Build & run
 
 Open in Xcode:
 
@@ -75,9 +68,9 @@ To create a self-contained, distributable DMG:
 ```
 
 This will:
-1. Build the client and `fliks-server`, fetch `fliks-engine` (pinned in `engine.lock`)
+1. Build the client and `fliks-server`, fetch `fliks-engine` and the tools pack (pinned in `engine.lock`)
 2. Build the Swift app (Release)
-3. Copy PostgreSQL, FFmpeg, the engine and the server into the app bundle
+3. Copy PostgreSQL, the engine and the server into the app bundle
 4. Recursively bundle all dylib dependencies (`bundle-dylibs.sh`)
 5. Code sign everything
 6. Create `build/Fliks-<version>-arm64.dmg` with drag-to-Applications layout
@@ -148,7 +141,6 @@ macos/
 │       ├── Paths.swift                 # All file paths (bundle + Homebrew fallbacks)
 │       └── ProcessRunner.swift         # Async Process wrapper
 ├── Scripts/
-│   ├── fetch-vendored.sh              # Download arm64 binaries
 │   ├── build-app.sh                   # Full release build pipeline
 │   ├── bundle-dylibs.sh               # Recursive dylib relocation
 │   └── make-dmg.sh                    # Create distributable DMG

@@ -44,3 +44,25 @@ updates:
     commit-message:
       prefix: "chore"
       include: scope
+
+  # ENGINE_IMAGE is owned by scripts/bump-engine.sh, which pins the engine release, digest and checksums together.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: ghcr.io/fliks-app/engine
+    commit-message:
+      prefix: "chore"
+      include: scope
+
+  - package-ecosystem: gradle
+    directory: /client/android
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "chore"
+      include: scope

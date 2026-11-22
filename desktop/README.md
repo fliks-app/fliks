@@ -51,7 +51,7 @@ Node packages (Node ≥ 20):
 npm install
 ```
 A self-contained `native/vendor/libmpv.so.2` is also required at runtime (it is
-gitignored — see `CLAUDE.md`).
+gitignored; `scripts/fetch-libmpv-linux.sh`, see `CLAUDE.md`).
 
 ### Build & run
 

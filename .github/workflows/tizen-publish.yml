@@ -76,6 +76,7 @@ jobs:
           # does not cover connect failures.
           curl -fSL --retry 5 --retry-all-errors --retry-delay 15 -o "$installer" \
             https://download.tizen.org/sdk/Installer/tizen-sdk_10.0/web-cli_Tizen_SDK_10.0_ubuntu-64.bin
+          echo "65d2a569cbf0351dca4b94254f2c642d49195ac4964e08a76b4eaabc9ce4bed0  $installer" | sha256sum -c -
           chmod +x "$installer"
           "$installer" --accept-license "$HOME/tizen-studio" > /dev/null
           echo "$HOME/tizen-studio/tools/ide/bin" >> "$GITHUB_PATH"

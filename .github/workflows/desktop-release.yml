@@ -68,7 +68,7 @@ jobs:
           # Linux ships both .deb (no in-app update — dpkg needs root) and
           # AppImage (electron-updater self-updates it). macOS ships the .dmg
           # (first install) plus a .zip (the artifact Squirrel.Mac updates from).
-          # Pinned, not `latest`: the committed libmpv.so.2 is a noble build and
+          # Pinned, not `latest`: the vendored libmpv.so.2 is a noble build and
           # the runtime libs bundled beside it have to be the SONAMEs it asks
           # for, which only noble packages.
           - os: ubuntu-24.04
@@ -200,11 +200,20 @@ jobs:
         working-directory: client
         run: npm ci
 
-      # The self-contained libmpv (FFmpeg statically linked, symbols hidden) is
-      # committed at desktop/native/vendor/libmpv.so.2 and bundled by
-      # electron-builder (files: native/vendor/**, asarUnpacked). It's the only
-      # OS that uses the compositor addon today; mac/win embed mpv natively and
-      # vendor their own .dylib/.dll later.
+      # The self-contained libmpv (FFmpeg statically linked, symbols hidden) comes from a Fliks-owned
+      # release (LIBMPV_LINUX_*), checked by sha256, and is bundled by electron-builder
+      # (files: native/vendor/**, asarUnpacked). Refresh: build-libmpv-linux.sh, then
+      # `gh release create libmpv-linux-<sha8> --prerelease --latest=false` with the file and
+      # update the three variables. The tag must never start with `v`.
+      - name: Fetch libmpv (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          LIBMPV_LINUX_TAG: "libmpv-linux-16ce51f1"
+          LIBMPV_LINUX_ASSET: "libmpv-linux-x86_64-16ce51f1.so.2"
+          LIBMPV_LINUX_SHA256: "16ce51f14e86dd72caa7d0ba0dc12ca82c037d56fb191d8d06928902164085ed"
+        run: bash desktop/scripts/fetch-libmpv-linux.sh
+
       - name: Vendor libmpv runtime deps (Linux)
         if: runner.os == 'Linux'
         shell: bash

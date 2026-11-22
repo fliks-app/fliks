@@ -5,7 +5,7 @@
 .DESCRIPTION
     Builds the Angular client and fliks-server, publishes the .NET tray as a
     self-contained single-file exe, then assembles everything (tray + engine +
-    server + PostgreSQL + FFmpeg + client) under ..\build\Bundle. Feed that
+    server + PostgreSQL + tools pack + client) under ..\build\Bundle. Feed that
     directory to make-installer.ps1.
 
 .PARAMETER SkipWeb
@@ -79,6 +79,14 @@ if ((Get-FileHash $karaokeZip -Algorithm SHA256).Hash -ne $lock['sha256_karaoke_
 Expand-Archive $karaokeZip -DestinationPath $bin -Force
 Remove-Item $karaokeZip
 
+# Tools pack (ffmpeg, ffprobe, fpcalc, mkvmerge, mkvpropedit): the archive's top dir is tools\, put on the engine's PATH.
+if (-not $lock['sha256_tools_windows_x64']) { throw 'engine.lock has no sha256_tools_windows_x64 (run scripts/bump-engine.sh).' }
+$toolsZip = Join-Path $build 'fliks-engine-tools-windows-x64.zip'
+Invoke-WebRequest "https://github.com/fliks-app/engine/releases/download/v$($lock['version'])/fliks-engine-tools-windows-x64.zip" -OutFile $toolsZip
+if ((Get-FileHash $toolsZip -Algorithm SHA256).Hash -ne $lock['sha256_tools_windows_x64']) { throw 'tools pack sha256 mismatch' }
+Expand-Archive $toolsZip -DestinationPath $bundle -Force
+Remove-Item $toolsZip
+
 # fliks-server (Rust) sits beside the engine.
 Push-Location (Join-Path $repo 'server')
 try { cargo build --release --locked -p fliks-server; if ($LASTEXITCODE) { throw 'cargo build failed' } } finally { Pop-Location }
@@ -87,13 +95,12 @@ Copy-Item (Join-Path $repo 'server\target\release\fliks-server.exe') (Join-Path 
 # Setup's extraction time follows the file count (each one is scanned by the antivirus), so
 # what the server never loads stays out: message translations, sourcemaps, typings, docs.
 Copy-Tree (Join-Path $vendored 'pgsql')  (Join-Path $bundle 'pgsql') @('/XD', (Join-Path $vendored 'pgsql\share\locale'))
-Copy-Tree (Join-Path $vendored 'ffmpeg') (Join-Path $bundle 'ffmpeg')
 Copy-Tree (Join-Path $repo 'server\public') (Join-Path $bundle 'cast')
 
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'client') | Out-Null
 Copy-Tree (Join-Path $repo 'client\dist\client\browser') (Join-Path $bundle 'client')
 
-foreach ($f in 'bin\fliks-engine.exe', 'bin\karaoke\whisper-cli.exe', 'bin\fliks-server.exe', 'cast\emoji\1f525.webp', 'client\index.html') {
+foreach ($f in 'bin\fliks-engine.exe', 'bin\karaoke\whisper-cli.exe', 'tools\ffmpeg.exe', 'tools\ffprobe.exe', 'tools\fpcalc.exe', 'tools\mkvmerge.exe', 'bin\fliks-server.exe', 'cast\emoji\1f525.webp', 'client\index.html') {
     if (-not (Test-Path (Join-Path $bundle $f))) { throw "bundle is missing $f" }
 }
 
