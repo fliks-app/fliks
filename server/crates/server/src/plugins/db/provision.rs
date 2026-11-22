@@ -1,5 +1,49 @@
 //! Provisioning of a plugin's role and schema: create, adopt, drop, and the foreign keys into the core.
 use super::*;
+use hmac::{Hmac, KeyInit, Mac};
+use sha2::Sha256;
+use sqlx::postgres::PgConnectOptions;
+use std::sync::LazyLock;
+
+/// Key of the derived plugin passwords: one per process, never stored.
+static PASSWORD_KEY: LazyLock<String> = LazyLock::new(|| crate::config::random_hex(32));
+
+/// The login password of `role`: stable inside this process, distinct per role.
+pub fn password(role: &str) -> String {
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(PASSWORD_KEY.as_bytes()).expect("hmac takes any key length");
+    mac.update(role.as_bytes());
+    mac.finalize()
+        .into_bytes()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// `ALTER ROLE`/`CREATE ROLE` clause carrying the SCRAM verifier, so no plaintext reaches the server logs.
+fn password_clause(role: &str) -> String {
+    format!(
+        "PASSWORD '{}'",
+        postgres_protocol::password::scram_sha_256(password(role).as_bytes())
+    )
+}
+
+/// Connection options of the plugin's own login on the core database; the caller holds the per-id lock.
+pub async fn login(core: &PgPool, plugin_id: &str) -> sqlx::Result<PgConnectOptions> {
+    let role = role(&database_oid(core).await?, plugin_id);
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        "ALTER ROLE {} {}",
+        quote(&role),
+        password_clause(&role)
+    )))
+    .execute(core)
+    .await?;
+    Ok((*core.connect_options())
+        .clone()
+        .username(&role)
+        .password(&password(&role))
+        .options([("search_path", schema(plugin_id))]))
+}
 
 /// Where plugin roles log in: the core database, as another role.
 #[derive(Clone, Debug)]
@@ -121,7 +165,7 @@ pub(super) async fn public_create_open(tx: &mut Tx) -> sqlx::Result<bool> {
 }
 
 /// Rule 19 (3) and the SQL section: role, adoption, schema, ownership, grants; one transaction.
-/// Returns the freshly rotated password.
+/// Returns the role's derived password.
 pub async fn provision(
     core: &PgPool,
     plugin_id: &str,
@@ -178,13 +222,14 @@ pub async fn provision(
             ));
         }
     }
-    let password = crate::config::random_hex(24);
+    let password = password(&role);
+    let clause = password_clause(&role);
     let exists = role_exists(&mut tx, &role).await?;
     if !exists {
         sqlx::Executor::execute(
             &mut *tx,
             sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-                "CREATE ROLE {qr} LOGIN PASSWORD '{password}'"
+                "CREATE ROLE {qr} LOGIN {clause}"
             ))),
         )
         .await?;
@@ -260,9 +305,10 @@ pub async fn provision(
         )
         .await?;
     }
-    // Core joins the role so export and import can `SET LOCAL ROLE` to it (rule 54).
+    own_routines_and_types(&mut tx, &schema, &qs, &qr).await?;
+    // Core joins the role: a non-superuser core needs it for `CREATE SCHEMA ... AUTHORIZATION` and `ALTER ... OWNER`.
     let mut sql = format!(
-        "ALTER ROLE {qr} LOGIN PASSWORD '{password}';
+        "ALTER ROLE {qr} LOGIN {clause};
          GRANT USAGE ON SCHEMA public TO {qr};
          REVOKE SELECT, REFERENCES ON ALL TABLES IN SCHEMA public FROM {qr};
          GRANT {qr} TO CURRENT_USER;
@@ -423,6 +469,48 @@ pub async fn drop_foreign_roles(core: &PgPool, roles: &[String]) -> sqlx::Result
     tx.commit().await
 }
 
+/// Routines and types a `--no-owner` restore left to the core role go to the plugin's role.
+async fn own_routines_and_types(tx: &mut Tx, schema: &str, qs: &str, qr: &str) -> sqlx::Result<()> {
+    // A table's row type follows its table; a multirange follows its range.
+    let types: Vec<(String, String)> = sqlx::query_as(
+        "SELECT quote_ident(t.typname), t.typtype::text FROM pg_type t
+           JOIN pg_namespace n ON n.oid = t.typnamespace
+           LEFT JOIN pg_class c ON c.oid = t.typrelid
+          WHERE n.nspname = $1 AND t.typtype IN ('c', 'd', 'e', 'r')
+            AND (t.typrelid = 0 OR c.relkind = 'c')
+            AND pg_get_userbyid(t.typowner) = current_user
+          ORDER BY t.typname",
+    )
+    .bind(schema)
+    .fetch_all(&mut **tx)
+    .await?;
+    for (name, kind) in types {
+        let what = if kind == "d" { "DOMAIN" } else { "TYPE" };
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "ALTER {what} {qs}.{name} OWNER TO {qr}"
+        )))
+        .execute(&mut **tx)
+        .await?;
+    }
+    let routines: Vec<String> = sqlx::query_scalar(
+        "SELECT quote_ident(p.proname) || '(' || pg_get_function_identity_arguments(p.oid) || ')'
+           FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = $1 AND pg_get_userbyid(p.proowner) = current_user
+          ORDER BY p.oid",
+    )
+    .bind(schema)
+    .fetch_all(&mut **tx)
+    .await?;
+    for r in routines {
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "ALTER ROUTINE {qs}.{r} OWNER TO {qr}"
+        )))
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
+}
+
 /// A foreign key from the plugin schema into `public` would run its cascade, and the plugin's AFTER and
 /// deferred triggers, as the core login on a core delete: drop it, or fail naming it.
 async fn drop_core_fks(tx: &mut Tx, schema: &str, qs: &str) -> Result<(), ProvisionError> {
@@ -455,4 +543,17 @@ async fn drop_core_fks(tx: &mut Tx, schema: &str, qs: &str) -> Result<(), Provis
             })?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn passwords_are_stable_per_role_and_distinct_across_roles() {
+        let a = password("fp_00000001_a");
+        assert_eq!(a, password("fp_00000001_a"));
+        assert_ne!(a, password("fp_00000001_b"));
+        assert_eq!(a.len(), 64);
+    }
 }

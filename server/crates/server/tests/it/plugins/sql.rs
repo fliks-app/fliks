@@ -591,3 +591,200 @@ async fn a_core_foreign_key_that_cannot_be_dropped_fails_provision_by_name() {
     h.finish().await;
     s.finish().await;
 }
+
+/// Data usage, export and import run plugin code (triggers, defaults, checks, policies, index
+/// expressions) as the plugin's login: `RESET ROLE` lands on the plugin, never on core.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn export_import_and_data_usage_run_plugin_code_as_the_plugin_login() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("plogin").await else {
+        return;
+    };
+    let h = harness(&s, "plogin", |_| {}).await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    let rt = h.st.plugins.rt("fliks.fixture").unwrap();
+    let sql = r#"CREATE FUNCTION probe() RETURNS boolean LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN
+          BEGIN RESET ROLE; EXCEPTION WHEN OTHERS THEN NULL; END;
+          IF has_table_privilege('public.users', 'UPDATE') THEN RAISE EXCEPTION 'escaped as %', current_user; END IF;
+          RETURN true; END $$;
+        CREATE FUNCTION probe_trg() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM probe(); RETURN NEW; END $$;
+        CREATE DOMAIN d AS int CHECK (probe());
+        CREATE TABLE t (id int PRIMARY KEY, a boolean DEFAULT probe(), b d, c int CHECK (probe()));
+        CREATE TRIGGER t_bi BEFORE INSERT ON t FOR EACH ROW EXECUTE FUNCTION probe_trg();
+        CREATE INDEX t_idx ON t ((probe()));
+        ALTER TABLE t ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE t FORCE ROW LEVEL SECURITY;
+        CREATE POLICY p ON t USING (probe()) WITH CHECK (probe());"#;
+    let r = rt
+        .http(
+            post(
+                "/test/db/script",
+                sql.as_bytes().to_vec(),
+                &[("name", "0100_probe")],
+            ),
+            false,
+        )
+        .await
+        .unwrap();
+    let made: Value = serde_json::from_slice(&r.body).unwrap();
+    assert!(made.get("error").is_none(), "{made}");
+    let (st, usage) = h
+        .call(
+            "GET",
+            "/api/plugins/fliks.fixture/data-usage",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    assert_eq!(st, 200, "{usage}");
+    let (st, mut doc) = h
+        .call(
+            "GET",
+            "/api/plugins/fliks.fixture/export",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    assert_eq!((st, &doc["tables"]["t"]), (200, &json!([])), "{doc}");
+    doc["tables"]["t"] = json!([{"id": 1, "a": true, "b": 2, "c": 3}]);
+    let (st, b) = h
+        .call(
+            "POST",
+            "/api/plugins/fliks.fixture/import",
+            Some(&h.admin),
+            Some(doc),
+        )
+        .await;
+    assert_eq!(st, 201, "{b}");
+    let (st, doc) = h
+        .call(
+            "GET",
+            "/api/plugins/fliks.fixture/export",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    assert_eq!(
+        (st, &doc["tables"]["t"]),
+        (200, &json!([{"id": 1, "a": true, "b": 2, "c": 3}])),
+        "{doc}"
+    );
+    let (_, usage) = h
+        .call(
+            "GET",
+            "/api/plugins/fliks.fixture/data-usage",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    assert!(usage.to_string().contains('1'), "{usage}");
+    h.finish().await;
+    s.finish().await;
+}
+
+/// The plugin login cannot leave its role: `RESET ROLE` stays on it, core and other plugins are refused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_plugin_login_cannot_become_core_or_another_plugin() {
+    use sqlx::Connection;
+    let Some(s) = Scratch::create("plogin2").await else {
+        return;
+    };
+    let oid = s.oid().await;
+    let core: String = sqlx::query_scalar("SELECT current_user::text")
+        .fetch_one(&s.pool)
+        .await
+        .unwrap();
+    for id in ["fliks.one", "fliks.two"] {
+        fliks_server::plugins::db::provision(&s.pool, id, &[])
+            .await
+            .unwrap();
+    }
+    let opts = fliks_server::plugins::db::login(&s.pool, "fliks.one")
+        .await
+        .unwrap();
+    let mut c = sqlx::PgConnection::connect_with(&opts).await.unwrap();
+    sqlx::raw_sql("RESET ROLE").execute(&mut c).await.unwrap();
+    let me: String = sqlx::query_scalar("SELECT current_user::text")
+        .fetch_one(&mut c)
+        .await
+        .unwrap();
+    assert_eq!(me, format!("fp_{oid}_fliks_one"));
+    for stmt in [
+        format!("SET ROLE \"{core}\""),
+        format!("SET ROLE \"fp_{oid}_fliks_two\""),
+        format!("SET SESSION AUTHORIZATION \"{core}\""),
+    ] {
+        let e = sqlx::raw_sql(sqlx::AssertSqlSafe(stmt.clone()))
+            .execute(&mut c)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            e.as_database_error().and_then(|d| d.code()).as_deref(),
+            Some("42501"),
+            "{stmt}: {e}"
+        );
+        // A refused statement aborts nothing outside a transaction; the session is still the plugin's.
+    }
+    drop(c);
+    s.finish().await;
+}
+
+/// Provision hands routines and types a restore left to core back to the plugin role, the
+/// stand-alone composite included (an `ALTER TABLE` on it would fail).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn provision_repairs_core_owned_routines_and_types() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("ownfix").await else {
+        return;
+    };
+    let h = harness(&s, "ownfix", |_| {}).await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    sqlx::raw_sql(
+        "CREATE TYPE plugin_fliks_fixture.pair AS (a int, b int);
+         CREATE DOMAIN plugin_fliks_fixture.pos AS int CHECK (VALUE > 0);
+         CREATE TYPE plugin_fliks_fixture.mood AS ENUM ('ok');
+         CREATE TYPE plugin_fliks_fixture.span AS RANGE (subtype = int4);
+         CREATE TABLE plugin_fliks_fixture.tt (id int);
+         CREATE FUNCTION plugin_fliks_fixture.f(x int) RETURNS int LANGUAGE sql AS 'SELECT x'",
+    )
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    let (st, r) = h
+        .call(
+            "POST",
+            "/api/plugins/fliks.fixture/restart",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    assert_eq!(st, 204, "{r}");
+    let role = format!("fp_{}_fliks_fixture", s.oid().await);
+    // Before Postgres 17 a multirange stays with core when its range changes owner: it holds no code.
+    let stray: Vec<String> = sqlx::query_scalar(
+        "SELECT 'type ' || t.typname FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+          WHERE n.nspname = 'plugin_fliks_fixture' AND pg_get_userbyid(t.typowner) <> $1
+            AND t.typname NOT LIKE '%multirange'
+         UNION ALL
+         SELECT 'proc ' || p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'plugin_fliks_fixture' AND pg_get_userbyid(p.proowner) <> $1
+         UNION ALL
+         SELECT 'rel ' || c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'plugin_fliks_fixture' AND pg_get_userbyid(c.relowner) <> $1",
+    )
+    .bind(&role)
+    .fetch_all(&s.pool)
+    .await
+    .unwrap();
+    assert!(stray.is_empty(), "left to core: {stray:?}");
+    h.finish().await;
+    s.finish().await;
+}
