@@ -4,7 +4,7 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
     branches: [main]
   push:
     branches: [main]
@@ -31,35 +31,41 @@ jobs:
     permissions:
       contents: read
       actions: read
+    env:
+      RELEASE_PR: ${{ github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--') && github.event.pull_request.head.repo.full_name == github.repository }}
     outputs:
       server: ${{ steps.diff.outputs.server }}
       client: ${{ steps.diff.outputs.client }}
       desktop: ${{ steps.diff.outputs.desktop }}
       libmpv_mac: ${{ steps.diff.outputs.libmpv_mac }}
       receiver: ${{ steps.diff.outputs.receiver }}
+      tvos: ${{ steps.diff.outputs.tvos }}
     steps:
       # Depth 2: a PR checks out its merge commit, whose first parent is the base branch tip.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
       - run: .github/scripts/main-is-green.test.sh && .github/scripts/route-retention.test.sh
-      # Merging the release PR tags every release workflow: its base commit must have passed on main.
+      # Early signal on the release PR; release-please.yml gates the tag itself. The script comes from the
+      # base branch, never from the PR. Only a branch of this repository is a release PR (a fork's is a PR).
       - name: the release PR's base commit is green on main
-        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'release-please--')
+        if: env.RELEASE_PR == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           BASE: ${{ github.event.pull_request.base.sha }}
-        run: .github/scripts/main-is-green.sh "$BASE"
+        run: |
+          git fetch -q --depth=1 origin "$BASE"
+          git show "$BASE:.github/scripts/main-is-green.sh" > "$RUNNER_TEMP/main-is-green.sh"
+          bash "$RUNNER_TEMP/main-is-green.sh" "$BASE"
       - id: diff
         env:
           EVENT: ${{ github.event_name }}
-          HEAD_REF: ${{ github.head_ref }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          out() { printf 'server=%s\nclient=%s\ndesktop=%s\nlibmpv_mac=%s\nreceiver=%s\n' "$1" "$1" "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
+          out() { printf 'server=%s\nclient=%s\ndesktop=%s\nlibmpv_mac=%s\nreceiver=%s\ntvos=%s\n' "$1" "$1" "$1" "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
           # Release PRs only bump versions (main re-runs everything after the merge); drafts wait for review.
-          if [[ "$HEAD_REF" == release-please--* || "$DRAFT" == true ]]; then out false; exit 0; fi
+          if [[ "$RELEASE_PR" == true || "$DRAFT" == true ]]; then out false; exit 0; fi
           case "$EVENT" in
             pull_request) base=$(git rev-parse HEAD^1) ;;
             *) base= ;;
@@ -73,6 +79,7 @@ jobs:
             echo "server=$(hit '^(server/|engine\.lock$)')"
             echo "client=$(hit '^client/')"
             echo "desktop=$(hit '^desktop/')"
+            echo "tvos=$(hit '^(appletv/|server/parity/scenarios/|client/public/i18n/)')"
             echo "receiver=$(hit '^(cast-receiver/|server/public/emoji/)')"
             echo "libmpv_mac=$(hit '^desktop/(scripts/(build-libmpv-mac|verify-libmpv-mac|verify-minos-mac)\.sh|native/(binding\.gyp|player_mac/))')"
           } | tee -a "$GITHUB_OUTPUT"
@@ -542,10 +549,52 @@ jobs:
             build
         working-directory: client/ios/App
 
+  # Unit and server-contract tests on a simulator: ServerContractTests decode the parity scenarios and the i18n files.
+  tvos:
+    needs: changes
+    # Pull requests only: a push to main must stay green without a simulator runner, main gates the release.
+    if: github.event_name == 'pull_request' && needs.changes.outputs.tvos == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: appletv
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        with:
+          xcode-version: '27'
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: xcodegen generate --spec project.yml
+      # Ad-hoc signed like the local simulator builds: the entitlements keep the Keychain usable.
+      # The simulator is the last Apple TV listed (newest tvOS runtime); one retry on a fresh boot, the
+      # runner sometimes reports a simulator with no native architecture.
+      - name: Build and test tvOS app
+        run: |
+          for attempt in 1 2; do
+            udid=$(xcrun simctl list devices available tvOS \
+              | awk '/Apple TV/ { match($0, /[0-9A-F-]{36}/); id = substr($0, RSTART, RLENGTH) } END { print id }')
+            test -n "$udid" || { echo "no tvOS simulator available"; exit 1; }
+            xcrun simctl shutdown all || true
+            xcrun simctl bootstatus "$udid" -b
+            if xcodebuild \
+              -project FliksTV.xcodeproj \
+              -scheme FliksTV \
+              -destination "id=$udid" \
+              CODE_SIGN_IDENTITY="-" \
+              CODE_SIGNING_REQUIRED=YES \
+              CODE_SIGNING_ALLOWED=YES \
+              test; then exit 0; fi
+            echo "attempt $attempt failed"
+          done
+          exit 1
+
   # The only required check: a skipped job (area untouched) counts as passed.
   ci-ok:
     if: always()
-    needs: [changes, no-em-dash, lint, build, test-shard, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios]
+    needs: [changes, no-em-dash, lint, build, test-shard, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos]
     runs-on: ubuntu-latest
     steps:
       - env:

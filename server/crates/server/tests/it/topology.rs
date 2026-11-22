@@ -33,7 +33,8 @@ fn free_port() -> u16 {
 }
 
 async fn get_text(url: &str) -> Option<(u16, String)> {
-    let res = reqwest::get(url).await.ok()?;
+    let http = fliks_server::net::guard::open_builder().build().ok()?;
+    let res = http.get(url).send().await.ok()?;
     Some((res.status().as_u16(), res.text().await.ok()?))
 }
 

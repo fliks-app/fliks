@@ -23,7 +23,7 @@ const repoRoot = resolve(clientRoot, '..');
 const distBrowser = resolve(clientRoot, 'dist/client/browser');
 if (!existsSync(distBrowser)) {
   console.error(
-    `[tizen] missing ${distBrowser}. Run \`npm run build -- --configuration tizen\` first.`,
+    `[tizen] missing ${distBrowser}. Run \`npm run tizen:build\` first.`,
   );
   process.exit(1);
 }
