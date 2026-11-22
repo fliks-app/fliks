@@ -290,7 +290,7 @@ describe('OrphanScanPanelComponent.link: files already present', () => {
           lang: 'en',
           loader: {
             provide: TranslateLoader,
-            useValue: { getTranslation: () => of({ settings: { libraries: { scan_already_present: '1 already present' } } }) },
+            useValue: { getTranslation: () => of({ settings: { libraries: { scan_already_present_one: '1 already present', scan_already_present_other: '{{count}} already present' } } }) },
           },
         }),
         { provide: ImportsApiService, useValue: importsApi as unknown as ImportsApiService },

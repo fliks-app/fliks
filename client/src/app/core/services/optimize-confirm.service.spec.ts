@@ -15,7 +15,7 @@ function setup(optimizeOriginal: string | Error) {
           useValue: {
             getTranslation: () =>
               of({
-                optimize: { action: { confirm_files: '{{count}} files.', confirm_title: 'Title' } },
+                optimize: { action: { confirm_files_one: '{{count}} file.', confirm_files_other: '{{count}} files.', confirm_title: 'Title' } },
                 settings: { optimize: { global: { original_delete: 'Deleted.', delete_warning: 'Final.' } } },
               }),
           },
