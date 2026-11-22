@@ -6,6 +6,7 @@ use super::{
         Error, Listing, MAX_ENTRY_BYTES, MAX_INFO_BYTES, MAX_PAGES, Page, SOLID_CACHE_BYTES, local,
     },
 };
+use crate::sync::MutexExt;
 use std::{
     ffi::OsString,
     fs::File,
@@ -203,11 +204,11 @@ fn call<T>(
         let deadline = std::time::Instant::now() + CHILD_WALL;
         while std::time::Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(100));
-            if *watch.lock().unwrap_or_else(|e| e.into_inner()) {
+            if *watch.lock_clean() {
                 return;
             }
         }
-        let gone = watch.lock().unwrap_or_else(|e| e.into_inner());
+        let gone = watch.lock_clean();
         if !*gone {
             // SAFETY: a plain kill of our own unreaped child.
             unsafe { libc::kill(pid, libc::SIGKILL) };
@@ -221,7 +222,7 @@ fn call<T>(
     let mut pipe = (&mut out).take(limit);
     let parsed = parse(&mut pipe);
     let over = pipe.limit() == 0;
-    *reaped.lock().unwrap_or_else(|e| e.into_inner()) = true;
+    *reaped.lock_clean() = true;
     let exited = child.try_wait().ok().flatten();
     let _ = child.kill();
     let _ = child.wait();

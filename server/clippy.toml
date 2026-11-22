@@ -1,4 +1,5 @@
 disallowed-methods = [
   { path = "reqwest::Client::builder", reason = "build outbound clients through net::guard (open_builder, or client_builder to pin vetted addresses)", allow-invalid = true },
   { path = "reqwest::Client::new", reason = "build outbound clients through net::guard (open_builder, or client_builder to pin vetted addresses)", allow-invalid = true },
+  { path = "std::sync::Mutex::lock", reason = "lock through sync::MutexExt::lock_clean, the one poisoning policy" },
 ]

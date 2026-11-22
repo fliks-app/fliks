@@ -1,5 +1,6 @@
 //! The engine feed, the sweep and the background pass (`docs/spec/karaoke.md` rules 6, 15-17).
 use super::{Shared, aligner, gpu_provider, run, store, verified_providers};
+use crate::sync::MutexExt;
 use crate::{engine::Feed, settings, state::AppState};
 use fliks_engine_core::api::{EngineEvent, JobPriority, ModelKind, ModelState};
 use std::{sync::atomic::Ordering, time::Duration};
@@ -149,8 +150,7 @@ async fn pass_workers(st: &AppState) -> Result<(), sqlx::Error> {
         if st
             .karaoke
             .runs
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .lock_clean()
             .get(&item)
             .is_some_and(run::RunState::active)
         {
@@ -163,11 +163,7 @@ async fn pass_workers(st: &AppState) -> Result<(), sqlx::Error> {
             Ok(queued) => active += i64::from(queued),
             Err(e) => {
                 tracing::warn!("karaoke separation of item #{item} not queued: {e}");
-                st.karaoke
-                    .failed
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .insert(item);
+                st.karaoke.failed.lock_clean().insert(item);
             }
         }
     }
@@ -205,11 +201,7 @@ async fn pass_local(st: &AppState) -> Result<(), sqlx::Error> {
             }
             Ok(Ok(_)) => {}
             _ => {
-                st.karaoke
-                    .failed
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .insert(item);
+                st.karaoke.failed.lock_clean().insert(item);
             }
         }
     }
@@ -217,12 +209,7 @@ async fn pass_local(st: &AppState) -> Result<(), sqlx::Error> {
 }
 
 fn fail_list(k: &Shared) -> Vec<i32> {
-    k.failed
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .iter()
-        .copied()
-        .collect()
+    k.failed.lock_clean().iter().copied().collect()
 }
 
 async fn may_separate_here(st: &AppState) -> bool {
@@ -256,8 +243,7 @@ pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
         };
         st.karaoke
             .realign_results
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .lock_clean()
             .insert(item, aligner::result_of(outcome, &stale));
         st.karaoke.realign_done.fetch_add(1, Ordering::SeqCst);
     }

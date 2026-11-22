@@ -160,7 +160,7 @@ Env: `STREAM_SESSION_REVIVE_TTL_MS` (tracker idle window, see rule 39).
 | Job | Schedule | Behaviour |
 |---|---|---|
 | tracker sweep + flush | every 30 s | rule 39 |
-| purge | daily at 04:00 | rule 39 |
+| purge | the daily prune tick (`PRUNE_CRON`, 03:00 server timezone; none under `FLIKS_DISABLE_CRON`) | rule 39 |
 | exit flush | on `sessionEnded` and shutdown | rule 36, 39 |
 
 ## Vectors/parity

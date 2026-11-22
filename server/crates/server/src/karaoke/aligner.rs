@@ -1,6 +1,7 @@
 //! The aligner of a language, the library's languages and the re-alignment (`docs/spec/karaoke.md` rules 38-41).
 use super::run;
 use super::{engine_err, manage_settings};
+use crate::sync::MutexExt;
 use crate::{
     http::{AppError, auth::Authed},
     settings,
@@ -242,11 +243,7 @@ async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<Stale>> 
     .await?;
     let chosen = overrides(st).await;
     let quality = quality(st).await;
-    let results = st
-        .karaoke
-        .realign_results
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let results = st.karaoke.realign_results.lock_clean();
     Ok(languages
         .into_iter()
         .filter_map(|(item, language, source_ref, updated)| {
@@ -362,11 +359,7 @@ pub async fn realign_items(
     .bind(&ids)
     .fetch_all(&st.db)
     .await?;
-    let results = st
-        .karaoke
-        .realign_results
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let results = st.karaoke.realign_results.lock_clean();
     let items: Vec<Value> = page
         .into_iter()
         .map(|s| {

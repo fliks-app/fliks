@@ -1,4 +1,6 @@
 //! One poisoning policy: a panic under a lock never wedges the server, the state it left is used.
+//! The only caller of `std::sync::Mutex::lock` (`clippy.toml`).
+#![allow(clippy::disallowed_methods)]
 use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 pub trait MutexExt<T> {

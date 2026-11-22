@@ -1,5 +1,6 @@
 //! `/kobo/<token>/v1/*` (`docs/spec/kobo.md`): the requests a Kobo e-reader sends, on a fresh database.
 use axum::{Router, body::Body, http::Request};
+use fliks_server::sync::MutexExt;
 use fliks_server::{
     config::Config,
     device_tokens::{self, Kind},
@@ -1049,7 +1050,7 @@ async fn with_the_proxy_on_store_books_state_and_deletes_reach_the_store(pool: P
         let log = log.clone();
         async move {
             let line = format!("{} {}", req.method(), req.uri().path());
-            log.lock().unwrap().push(line.clone());
+            log.lock_clean().push(line.clone());
             if line.contains("redirect") {
                 return axum::response::Response::builder()
                     .status(302)
@@ -1094,7 +1095,7 @@ async fn with_the_proxy_on_store_books_state_and_deletes_reach_the_store(pool: P
     assert_eq!(r.status, 200);
     let r = c.call("GET", "/v1/redirect/me", None).await;
     assert_eq!(r.status, 502, "a store redirect is no answer");
-    let seen_now = seen.lock().unwrap().clone();
+    let seen_now = seen.lock_clean().clone();
     assert!(
         seen_now.contains(&format!("PUT /v1/library/{foreign}/state")),
         "{seen_now:?}"

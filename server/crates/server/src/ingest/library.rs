@@ -22,7 +22,6 @@ use fliks_engine_core::api::{MediaInfo, SourceScan};
 use serde_json::Value;
 use std::{
     collections::HashSet,
-    fs,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -840,7 +839,7 @@ impl Ctx<'_> {
 
     async fn collides(&self, dir: &Path, file: &str) -> Result<bool, String> {
         let dest = dir.join(file);
-        if fs::symlink_metadata(&dest).is_ok() {
+        if tokio::fs::symlink_metadata(&dest).await.is_ok() {
             return Ok(true);
         }
         let Some(rel) = fsx::rel_under(self.root.path(), &dest) else {

@@ -1,6 +1,5 @@
-use super::{Kind, Qoe, SessionRef, playbacks, routes, store, until_next};
+use super::{Kind, Qoe, SessionRef, playbacks, routes, store};
 use crate::events::event::PlayState;
-use chrono::NaiveDateTime;
 use fliks_domain::qoe::{Confidence, Verdict, parse_events, parse_sample};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -250,11 +249,4 @@ fn devices_are_repeated_values_and_a_lone_empty_one_is_no_filter() {
         routes::devices(&q(&[&"é".repeat(512), &"😀".repeat(257)])).len(),
         1
     );
-}
-
-#[test]
-fn the_purge_waits_for_the_coming_0400() {
-    let at = |s| NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S").unwrap();
-    assert_eq!(until_next(at("2026-01-01 03:00:00")).as_secs(), 3600);
-    assert_eq!(until_next(at("2026-01-01 04:00:00")).as_secs(), 86400);
 }

@@ -155,6 +155,15 @@ async fn drop_snapshots(
 }
 
 impl Plugins {
+    async fn remove_data_dir(&self, id: &str) {
+        let dir = super::runtime::data_dir(&self.opts.runtime_dir, id);
+        if let Err(e) = tokio::fs::remove_dir_all(&dir).await
+            && e.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::warn!("plugin \"{id}\": cannot remove {}: {e}", dir.display());
+        }
+    }
+
     pub fn summary(&self, p: &Package) -> Summary {
         let process = p.is_process();
         Summary {
@@ -538,8 +547,7 @@ impl Plugins {
             if delete_data && fliks_domain::plugins::legal_plugin_id(id) {
                 super::db::deprovision(&self.db, id).await?;
                 super::namespaces::delete_data(&self.db, &self.namespaces, id).await?;
-                let _ =
-                    std::fs::remove_dir_all(super::runtime::data_dir(&self.opts.runtime_dir, id));
+                self.remove_data_dir(id).await;
             }
             return Ok(());
         };
@@ -585,7 +593,7 @@ impl Plugins {
         packages::delete(&self.db, id).await?;
         drop_snapshots(&self.db, [&pkg.manifest]).await?;
         if delete_data {
-            let _ = std::fs::remove_dir_all(super::runtime::data_dir(&self.opts.runtime_dir, id));
+            self.remove_data_dir(id).await;
         }
         Ok(())
     }

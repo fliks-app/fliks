@@ -6,6 +6,7 @@ pub mod remote;
 pub mod run;
 pub mod store;
 
+use crate::sync::MutexExt;
 use crate::{
     engine::EngineError,
     events::SseEvent,
@@ -87,22 +88,14 @@ pub(crate) struct Separating(Arc<Shared>, i32);
 
 impl Separating {
     pub(crate) fn new(shared: &Arc<Shared>, file: i32) -> Self {
-        shared
-            .separating
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(file);
+        shared.separating.lock_clean().insert(file);
         Self(shared.clone(), file)
     }
 }
 
 impl Drop for Separating {
     fn drop(&mut self) {
-        self.0
-            .separating
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(&self.1);
+        self.0.separating.lock_clean().remove(&self.1);
     }
 }
 
@@ -380,13 +373,7 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
     let ready = store::KINDS.iter().all(|k| stems.contains_key(*k))
         || (imported("vocals") && imported("instrumental"));
     let detail = a.user.is_admin || a.perms.can(Action::Manage, &Subject::Settings);
-    let run = st
-        .karaoke
-        .runs
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .get(&item)
-        .cloned();
+    let run = st.karaoke.runs.lock_clean().get(&item).cloned();
     let lyrics = crate::lyrics::store::list(&st.db, item).await?;
     let melody = run::melody_target(st, item)
         .await?
@@ -432,7 +419,7 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
 
 /// Sets `karaoke` on each track of an album detail: the state, stage and progress of its running job, else null.
 pub(crate) fn tag_tracks(st: &AppState, album: &mut Value) {
-    let runs = st.karaoke.runs.lock().unwrap_or_else(|e| e.into_inner());
+    let runs = st.karaoke.runs.lock_clean();
     for t in album["tracks"].as_array_mut().into_iter().flatten() {
         let job = t["itemId"]
             .as_i64()
@@ -541,7 +528,7 @@ pub async fn remove(
         .execute(&st.db)
         .await?;
     {
-        let mut runs = st.karaoke.runs.lock().unwrap_or_else(|e| e.into_inner());
+        let mut runs = st.karaoke.runs.lock_clean();
         if runs.get(&item).is_some_and(|r| !r.active()) {
             runs.remove(&item);
         }
@@ -757,7 +744,7 @@ mod tests {
         running.progress = Some(0.4);
         running.stage = Some("align");
         {
-            let mut runs = st.karaoke.runs.lock().unwrap();
+            let mut runs = st.karaoke.runs.lock_clean();
             runs.insert(1, run(None, "queued"));
             runs.insert(2, running);
             runs.insert(3, run(None, "failed"));

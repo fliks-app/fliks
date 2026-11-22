@@ -3,6 +3,7 @@ use super::{
     archive::{self, Error},
     cache::{self, Entry, Key},
 };
+use crate::sync::MutexExt;
 use crate::{
     http::{
         AppError,
@@ -216,7 +217,7 @@ pub struct PageQuery {
 /// they fit. One fill per archive at a time, the others wait for it.
 fn fill(path: &Path, key: Key) -> Result<Arc<Entry>, Failed> {
     let flight = cache::flight(key);
-    let _one = flight.lock().unwrap_or_else(|e| e.into_inner());
+    let _one = flight.lock_clean();
     if let Some(e) = cache::list(key) {
         return Ok(e);
     }

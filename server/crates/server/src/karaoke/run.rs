@@ -1,5 +1,6 @@
 //! Preparation of a track: `Separate`, `Align`, `Melody` (`docs/spec/karaoke.md` rules 13, 18, 19).
 use super::{aligner, store};
+use crate::sync::MutexExt;
 use crate::{
     events::SseEvent, ingest::post_import::file_path, lyrics::store as lstore, state::AppState,
 };
@@ -210,7 +211,7 @@ pub fn installed_model(models: &[ModelInfo], kind: ModelKind) -> Option<&ModelIn
 /// Applies `f` to the run of `item` and tells its viewers; a no-op once the run is gone.
 fn update(st: &AppState, item: i32, f: impl FnOnce(&mut RunState)) {
     let (ev, viewers) = {
-        let mut runs = st.karaoke.runs.lock().unwrap_or_else(|e| e.into_inner());
+        let mut runs = st.karaoke.runs.lock_clean();
         let Some(r) = runs.get_mut(&item) else { return };
         f(r);
         let ev = SseEvent::KaraokeJobChanged {
@@ -247,7 +248,7 @@ fn stage(st: &AppState, item: i32, stage: &'static str) {
 fn progress(st: &AppState, item: i32, which: &'static str) -> crate::engine::Progress {
     let (st, last) = (st.clone(), std::sync::Mutex::new(Instant::now()));
     Arc::new(move |pct| {
-        let mut at = last.lock().unwrap_or_else(|e| e.into_inner());
+        let mut at = last.lock_clean();
         if at.elapsed() < Duration::from_secs(1) {
             return;
         }
@@ -330,8 +331,7 @@ pub async fn start(
     if st
         .karaoke
         .runs
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .lock_clean()
         .get(&item)
         .is_some_and(RunState::active)
     {
@@ -378,7 +378,7 @@ pub async fn start(
     }
     let viewers = viewers(st, item).await;
     {
-        let mut runs = st.karaoke.runs.lock().unwrap_or_else(|e| e.into_inner());
+        let mut runs = st.karaoke.runs.lock_clean();
         match admit(&runs, item, user) {
             Admit::Join => return Start::Idle,
             Admit::Busy => return Start::Refused(Refusal::Busy),
@@ -404,11 +404,7 @@ pub async fn start(
             .await
             .unwrap_or(false)
         {
-            st.karaoke
-                .runs
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .remove(&item);
+            st.karaoke.runs.lock_clean().remove(&item);
             return Start::Idle;
         }
     }
@@ -426,11 +422,7 @@ pub async fn start(
                     r.lyrics_error.clone_from(&out.lyrics_error);
                 });
                 if out.lyrics_error.is_none() {
-                    st.karaoke
-                        .runs
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .remove(&item);
+                    st.karaoke.runs.lock_clean().remove(&item);
                 }
             }
             Err(e) => {

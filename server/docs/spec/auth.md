@@ -224,7 +224,7 @@ Env vars: see `config.md` (Auth table). No other settings keys.
 | Job | Schedule | Behaviour |
 |---|---|---|
 | pairing cleanup | hourly | rule 60 |
-| refresh-token prune | daily at 03:30 server local time | rule 61 |
+| refresh-token prune | the daily prune tick (`PRUNE_CRON`, 03:00 server timezone; none under `FLIKS_DISABLE_CRON`) | rule 61 |
 | sign-in row cleanup | hourly | rule 85 |
 
 ## Vectors/parity

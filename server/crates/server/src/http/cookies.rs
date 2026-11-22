@@ -48,19 +48,6 @@ fn decode_uri_component(raw: &str) -> String {
     String::from_utf8(out).unwrap_or_else(|_| raw.to_owned())
 }
 
-/// JS `encodeURIComponent`.
-fn encode_uri_component(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for b in s.bytes() {
-        if b.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&b) {
-            out.push(b as char);
-        } else {
-            out.push_str(&format!("%{b:02X}"));
-        }
-    }
-    out
-}
-
 /// Behind the engine gateway TLS ends upstream: `X-Forwarded-Proto`, first comma-separated value.
 pub fn is_secure(headers: &HeaderMap) -> bool {
     headers
@@ -98,7 +85,7 @@ fn access_cookie_at(
     let expires = httpdate::fmt_http_date(now + std::time::Duration::from_secs(max_age_secs));
     format!(
         "{ACCESS_COOKIE}={}; Max-Age={max_age_secs}; Path=/; Expires={expires}; HttpOnly{}; SameSite={}",
-        encode_uri_component(token),
+        fliks_domain::js::encode_uri_component(token),
         if secure { "; Secure" } else { "" },
         same_site(headers, secure),
     )
@@ -244,7 +231,10 @@ mod tests {
 
     #[test]
     fn value_is_uri_encoded() {
-        assert_eq!(encode_uri_component("a b/c=é"), "a%20b%2Fc%3D%C3%A9");
+        assert_eq!(
+            fliks_domain::js::encode_uri_component("a b/c=é"),
+            "a%20b%2Fc%3D%C3%A9"
+        );
         assert_eq!(decode_uri_component("a%20b%2Fc%3D%C3%A9"), "a b/c=é");
     }
 }

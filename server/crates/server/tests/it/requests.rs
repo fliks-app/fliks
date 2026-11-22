@@ -10,6 +10,7 @@ use axum::{
     routing::post,
 };
 use fliks_domain::{external_id::Namespace, media::kind::MediaKind};
+use fliks_server::sync::MutexExt;
 use fliks_server::{
     app,
     config::Config,
@@ -38,7 +39,7 @@ struct Tmdb {
 
 impl Tmdb {
     fn seasons(&self) -> i32 {
-        let f = self.facts.lock().unwrap();
+        let f = self.facts.lock_clean();
         f.as_ref().and_then(|f| f.season_count).unwrap_or(3)
     }
 
@@ -46,7 +47,7 @@ impl Tmdb {
     fn answer(&self, key: &str) -> Option<Result<Value, u16>> {
         let parts: Vec<&str> = key.split('/').collect();
         let id: i32 = parts.last()?.parse().ok()?;
-        if self.down.lock().unwrap().contains(&id) {
+        if self.down.lock_clean().contains(&id) {
             return Some(Err(503));
         }
         if parts[0] == "children" {
@@ -55,7 +56,7 @@ impl Tmdb {
             });
             return Some(Ok(Value::Array(seasons.collect())));
         }
-        let facts = self.facts.lock().unwrap().clone().unwrap_or_default();
+        let facts = self.facts.lock_clean().clone().unwrap_or_default();
         let series = parts[1] == "series";
         let mut body = json!({
             "tmdbId": id, "overview": "o", "genres": facts.genre_ids.iter().flatten().map(|g| format!("g{g}")).collect::<Vec<_>>(),
@@ -75,7 +76,7 @@ impl Tmdb {
 struct Hook(Mutex<Vec<Value>>);
 
 async fn capture(State(h): State<Arc<Hook>>, Json(b): Json<Value>) -> StatusCode {
-    h.0.lock().unwrap().push(b);
+    h.0.lock_clean().push(b);
     StatusCode::OK
 }
 
@@ -542,14 +543,14 @@ async fn auto_approval_by_user_role_and_library_imports_before_inserting(pool: P
 async fn a_metadata_rule_fails_closed_when_tmdb_is_unavailable(pool: PgPool) {
     let c = ctx(pool).await;
     rule(&c, json!({"genreIds": [16]})).await;
-    c.tmdb.down.lock().unwrap().insert(21);
+    c.tmdb.down.lock_clean().insert(21);
     let (s, r) = call(&c, "POST", "/api/requests", &c.user, movie(21)).await;
     assert_eq!(s, 201, "{r}");
     assert_eq!(
         r["status"], "pending",
         "a failed lookup cannot match a genre criterion"
     );
-    *c.tmdb.facts.lock().unwrap() = Some(TitleFacts {
+    *c.tmdb.facts.lock_clean() = Some(TitleFacts {
         genre_ids: Some(vec![16, 18]),
         year: Some(2010),
         season_count: Some(2),
@@ -578,7 +579,7 @@ async fn without_a_tmdb_key_an_approval_is_refused_and_a_metadata_rule_fails_clo
 async fn max_seasons_counts_the_requested_scope_else_the_show(pool: PgPool) {
     let c = ctx(pool).await;
     rule(&c, json!({"mediaType": "series", "maxSeasons": 2})).await;
-    *c.tmdb.facts.lock().unwrap() = Some(TitleFacts {
+    *c.tmdb.facts.lock_clean() = Some(TitleFacts {
         genre_ids: Some(vec![]),
         year: None,
         season_count: Some(5),
@@ -617,7 +618,7 @@ async fn max_seasons_counts_the_requested_scope_else_the_show(pool: PgPool) {
 async fn a_failed_import_aborts_the_create(pool: PgPool) {
     let c = ctx(pool).await;
     rule(&c, json!({})).await;
-    c.tmdb.down.lock().unwrap().insert(40);
+    c.tmdb.down.lock_clean().insert(40);
     let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(40)).await;
     assert_eq!(s, 500, "TMDB answering 503 is a generic 500");
     let (_, list) = call(&c, "GET", "/api/requests", &c.admin, json!(null)).await;
@@ -1029,7 +1030,7 @@ async fn approve_rolls_back_on_an_import_error(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, a) = call(&c, "POST", "/api/requests", &c.user, movie(81)).await;
     let id = rid(&a);
-    c.tmdb.down.lock().unwrap().insert(81);
+    c.tmdb.down.lock_clean().insert(81);
     let (s, _) = call(
         &c,
         "POST",
@@ -1464,14 +1465,14 @@ async fn wait_status(c: &Ctx, id: i64, want: &str) {
 #[sqlx::test(migrations = false)]
 async fn art_lands_in_the_response_and_a_failure_is_swallowed(pool: PgPool) {
     let c = ctx(pool).await;
-    c.tmdb.down.lock().unwrap().insert(100);
+    c.tmdb.down.lock_clean().insert(100);
     let (s, r) = call(&c, "POST", "/api/requests", &c.user, movie(100)).await;
     assert_eq!(
         (s, r["posterUrl"].clone()),
         (201, Value::Null),
         "a failed prefetch leaves the art empty"
     );
-    c.tmdb.down.lock().unwrap().remove(&100);
+    c.tmdb.down.lock_clean().remove(&100);
     let (_, r) = call(&c, "POST", "/api/requests", &c.user, movie(101)).await;
     let poster = r["posterUrl"].as_str().unwrap().to_owned();
     assert!(
@@ -1558,8 +1559,7 @@ impl Ctx {
         let mine = || -> Vec<Value> {
             self.hook
                 .0
-                .lock()
-                .unwrap()
+                .lock_clean()
                 .iter()
                 .filter(|b| b["event"] == event)
                 .map(|b| {

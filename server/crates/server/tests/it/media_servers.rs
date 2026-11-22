@@ -7,6 +7,7 @@ use axum::{
     http::{Request, StatusCode, Uri},
     response::Response,
 };
+use fliks_server::sync::MutexExt;
 use fliks_server::{
     app,
     config::Config,
@@ -63,7 +64,7 @@ async fn stub(hits: Hits, req: Request<Body>) -> Response {
         "401" => return json_res(401, json!({})),
         "500" => return json_res(500, json!({})),
         "hit" => {
-            hits.0.lock().unwrap().push(("redirected".into(), token));
+            hits.0.lock_clean().push(("redirected".into(), token));
             return json_res(200, json!({}));
         }
         _ => {}
@@ -81,7 +82,7 @@ async fn stub(hits: Hits, req: Request<Body>) -> Response {
             .unwrap(),
         ("GET", ["System", "Info"]) => json_res(200, serde_json::from_str(INFO).unwrap()),
         ("POST", ["Library", "Refresh"]) => {
-            hits.0.lock().unwrap().push((mode.into(), token));
+            hits.0.lock_clean().push((mode.into(), token));
             json_res(204, Value::Null)
         }
         ("GET", ["Users"]) if mode == "nousers" => json_res(500, json!({})),
@@ -577,7 +578,7 @@ async fn test_connection_modes(pool: PgPool) {
     let (_, b) = check("redirect").await;
     assert_eq!(b["ok"], false, "a cross-host redirect is a failure");
     assert!(
-        c.hits.0.lock().unwrap().is_empty(),
+        c.hits.0.lock_clean().is_empty(),
         "the token never reached the other host"
     );
     let (_, p) = call(
@@ -642,11 +643,11 @@ async fn dispatch_hits_enabled_subscribers_only(pool: PgPool) {
     add_server(&c, "401", &["library.rescan"], true).await;
     media_servers::dispatch(&c.st, "library.rescan").await;
     assert_eq!(
-        *c.hits.0.lock().unwrap(),
+        *c.hits.0.lock_clean(),
         vec![("ok".to_owned(), "tok".to_owned())]
     );
     media_servers::dispatch(&c.st, "unknown.event").await;
-    assert_eq!(c.hits.0.lock().unwrap().len(), 1);
+    assert_eq!(c.hits.0.lock_clean().len(), 1);
 }
 
 /// `acquisition.imported` keeps SSE and the queue event; the refresh belongs to `library.ingest`.
@@ -673,7 +674,7 @@ async fn an_imported_event_does_not_dispatch_a_second_refresh(pool: PgPool) {
     });
     publish(&c.st, "acme", vec![event]).await.unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-    assert!(c.hits.0.lock().unwrap().is_empty());
+    assert!(c.hits.0.lock_clean().is_empty());
 }
 
 async fn seed_library(pool: &PgPool) {

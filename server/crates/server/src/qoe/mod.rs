@@ -13,7 +13,7 @@ pub use routes::{
 
 use crate::sync::MutexExt;
 use crate::{events::event::PlayState, presence::LiveSession};
-use chrono::{DateTime, Duration as Span, Local, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use fliks_domain::qoe::{
     CmcdSnapshot, QoeAggregator, QoeDiagnosis, QoeEvent, QoePipeline, QoeSample, ServerLoad,
     StallLast, diagnose,
@@ -707,22 +707,4 @@ pub fn spawn(qoe: &Qoe) {
             q.sweep().await;
         }
     });
-    let q = qoe.clone();
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(until_next(Local::now().naive_local())).await;
-            q.purge_old().await;
-            // Avoid re-firing within the same second.
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-    });
-}
-
-/// Wait until the next 04:00 wall-clock; a DST change shifts one run by an hour at most.
-fn until_next(now: NaiveDateTime) -> Duration {
-    let mut next = now.date().and_hms_opt(4, 0, 0).expect("valid time");
-    if next <= now {
-        next += Span::days(1);
-    }
-    (next - now).to_std().unwrap_or_default()
 }

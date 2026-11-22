@@ -4,6 +4,7 @@ use fliks_server::net::guard::Net;
 use fliks_server::plugins::fetch::{ArchiveError, Fetcher};
 use fliks_server::plugins::outbound;
 use fliks_server::plugins::runtime::{HttpRequest, Principal};
+use fliks_server::sync::MutexExt;
 use futures_util::future::BoxFuture;
 use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
@@ -113,7 +114,7 @@ pub async fn stub(tls: Arc<rustls::ServerConfig>, reply: Reply) -> (u16, Arc<Mut
                     buf.extend_from_slice(&chunk[..n]);
                 }
                 let path = head.split_whitespace().nth(1).unwrap_or("").to_owned();
-                h.lock().unwrap().push(Hit {
+                h.lock_clean().push(Hit {
                     sni,
                     path: path.clone(),
                     body: String::from_utf8_lossy(&buf[head_end..]).to_string(),
@@ -191,7 +192,7 @@ impl Net for StubNet {
         host: &str,
         port: u16,
     ) -> BoxFuture<'static, std::io::Result<Vec<SocketAddr>>> {
-        self.lookups.lock().unwrap().push(host.to_owned());
+        self.lookups.lock_clean().push(host.to_owned());
         if self.slow.iter().any(|s| s == host) {
             return Box::pin(async {
                 tokio::time::sleep(Duration::from_secs(30)).await;
@@ -201,7 +202,7 @@ impl Net for StubNet {
         if self.failing.iter().any(|s| s == host) {
             return Box::pin(async { Err(std::io::Error::other("resolver unreachable")) });
         }
-        let mut a = self.answers.lock().unwrap();
+        let mut a = self.answers.lock_clean();
         let r = match a.get_mut(host) {
             Some(q) if q.len() > 1 => Ok(q.pop_front().unwrap()),
             Some(q) => Ok(q[0].clone()),
@@ -219,7 +220,7 @@ impl Net for StubNet {
         })
     }
     fn connect(&self, addr: SocketAddr) -> BoxFuture<'static, std::io::Result<TcpStream>> {
-        self.connects.lock().unwrap().push(addr);
+        self.connects.lock_clean().push(addr);
         let port = self.port;
         Box::pin(async move { TcpStream::connect(("127.0.0.1", port)).await })
     }
@@ -227,7 +228,7 @@ impl Net for StubNet {
         self.tls.clone()
     }
     fn route(&self, addr: SocketAddr) -> SocketAddr {
-        self.connects.lock().unwrap().push(addr);
+        self.connects.lock_clean().push(addr);
         SocketAddr::from(([127, 0, 0, 1], self.port))
     }
 }
@@ -336,14 +337,13 @@ async fn guest_outbound_guard() {
             assert_eq!(o["dns-timeout"]["error"], "Dns(\"timeout\")");
             assert_eq!(
                 net.lookups
-                    .lock()
-                    .unwrap()
+                    .lock_clean()
                     .iter()
                     .filter(|l| *l == "rebind.test")
                     .count(),
                 1
             );
-            let connects = net.connects.lock().unwrap().clone();
+            let connects = net.connects.lock_clean().clone();
             assert!(connects.contains(&"93.184.216.35:443".parse().unwrap()));
             assert!(
                 !connects
@@ -351,8 +351,7 @@ async fn guest_outbound_guard() {
                     .any(|a| a.ip().to_string().starts_with("10."))
             );
             assert_eq!(
-                hits.lock()
-                    .unwrap()
+                hits.lock_clean()
                     .iter()
                     .filter(|h| h.path == "/next")
                     .count(),
@@ -424,8 +423,7 @@ async fn catalog_archive_redirects() {
         "a guarded hop to a public host"
     );
     assert!(
-        hits.lock()
-            .unwrap()
+        hits.lock_clean()
             .iter()
             .any(|h| h.sni.as_deref() == Some("cdn.test") && h.path == "/asset")
     );
@@ -519,15 +517,15 @@ async fn webhooks_resolve_once_and_never_leak_urls() {
         )
         .await;
     assert_eq!(r["delivered"], 2, "{r}");
-    assert!(hits.lock().unwrap().iter().all(|h| {
+    assert!(hits.lock_clean().iter().all(|h| {
         h.head
             .to_ascii_lowercase()
             .contains("user-agent: fliks-plugin-webhook/1.0")
     }));
-    let body: Value = serde_json::from_str(&hits.lock().unwrap()[0].body).unwrap();
+    let body: Value = serde_json::from_str(&hits.lock_clean()[0].body).unwrap();
     assert_eq!(body["test"], true);
     assert_eq!(
-        net.lookups.lock().unwrap().len(),
+        net.lookups.lock_clean().len(),
         2,
         "one lookup per delivery, then the vetted address"
     );

@@ -472,7 +472,10 @@ pub async fn companions_edl(
     }
     let replace = q.get("replace").is_some_and(|v| v == "true");
     let found = PathBuf::from(crate::stream::edl_sidecar(&video.to_string_lossy()).await);
-    let existing = fs::symlink_metadata(&found).is_ok().then_some(found);
+    let existing = tokio::fs::symlink_metadata(&found)
+        .await
+        .is_ok()
+        .then_some(found);
     if existing.is_some() && !replace {
         return Ok(edl_exists());
     }

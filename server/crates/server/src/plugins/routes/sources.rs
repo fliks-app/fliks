@@ -1,5 +1,6 @@
 //! The plugin source routes: list, create, update, delete, catalog, refresh and inspect.
 use super::*;
+use crate::sync::MutexExt;
 
 pub(super) fn source_summary(s: &packages::Source) -> Value {
     json!({
@@ -284,7 +285,7 @@ pub async fn sources_catalog_logo(
         .and_then(|p| p["logo"].as_str())
         .ok_or_else(not_found)?
         .to_owned();
-    let cached = LOGOS.lock().expect("logo cache").get(&url).cloned();
+    let cached = LOGOS.lock_clean().get(&url).cloned();
     let (ct, bytes) = match cached {
         Some(l) => l,
         None => {
@@ -296,7 +297,7 @@ pub async fn sources_catalog_logo(
                 .await
                 .map_err(|_| app(AppError::bare(StatusCode::BAD_GATEWAY)))?;
             let ct = logo_type(&bytes).ok_or_else(not_found)?;
-            let mut c = LOGOS.lock().expect("logo cache");
+            let mut c = LOGOS.lock_clean();
             if c.len() >= LOGO_CACHE_MAX {
                 c.clear();
             }

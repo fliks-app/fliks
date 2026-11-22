@@ -3,6 +3,7 @@ use crate::metadata::{
     Call, Credits, EditionRef, LyricsHit, LyricsQuery, MetadataProvider, PersonDetails, Search,
     Upstream,
 };
+use crate::sync::MutexExt;
 use fliks_domain::{
     external_id::Namespace,
     media::kind::MediaKind,
@@ -41,7 +42,7 @@ pub(crate) struct MusicFake {
 
 impl MusicFake {
     pub fn calls(&self) -> Vec<String> {
-        self.calls.lock().unwrap().clone()
+        self.calls.lock_clean().clone()
     }
 }
 
@@ -51,7 +52,7 @@ fn missing<T: Send + 'static>() -> Call<'static, T> {
 
 impl MetadataProvider for MusicFake {
     fn id(&self) -> Namespace {
-        self.key.lock().unwrap().unwrap_or(Namespace::MUSICBRAINZ)
+        self.key.lock_clean().unwrap_or(Namespace::MUSICBRAINZ)
     }
     fn supports(&self, kind: MediaKind) -> bool {
         kind == MediaKind::Album
@@ -63,14 +64,11 @@ impl MetadataProvider for MusicFake {
         ns == Namespace::MUSICBRAINZ
     }
     fn has_lyrics(&self) -> bool {
-        self.lyrics.lock().unwrap().is_some()
+        self.lyrics.lock_clean().is_some()
     }
     fn fetch_lyrics<'a>(&'a self, q: &'a LyricsQuery, _: Priority) -> Call<'a, Option<LyricsHit>> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(format!("lyrics {}", q.title));
-        let r = self.lyrics.lock().unwrap().clone().flatten();
+        self.calls.lock_clean().push(format!("lyrics {}", q.title));
+        let r = self.lyrics.lock_clean().clone().flatten();
         let down = self.lyrics_down.load(std::sync::atomic::Ordering::SeqCst);
         Box::pin(async move {
             if down {
@@ -89,10 +87,9 @@ impl MetadataProvider for MusicFake {
         _: Priority,
     ) -> Call<'a, Vec<String>> {
         self.calls
-            .lock()
-            .unwrap()
+            .lock_clean()
             .push(format!("recording_releases {id}"));
-        let r = self.holders.lock().unwrap().get(id).cloned();
+        let r = self.holders.lock_clean().get(id).cloned();
         match r {
             Some(v) => Box::pin(async move { Ok(v) }),
             None => missing(),
@@ -107,11 +104,8 @@ impl MetadataProvider for MusicFake {
         _: &'a Resolved,
         _: Priority,
     ) -> Call<'a, Vec<Value>> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(format!("search {}", q.query));
-        let r = self.found.lock().unwrap().clone();
+        self.calls.lock_clean().push(format!("search {}", q.query));
+        let r = self.found.lock_clean().clone();
         Box::pin(async move { Ok(r) })
     }
     fn fetch_work<'a>(
@@ -121,8 +115,8 @@ impl MetadataProvider for MusicFake {
         _: &'a Resolved,
         _: Priority,
     ) -> Call<'a, Value> {
-        self.calls.lock().unwrap().push(format!("work {id}"));
-        match self.works.lock().unwrap().get(id).cloned() {
+        self.calls.lock_clean().push(format!("work {id}"));
+        match self.works.lock_clean().get(id).cloned() {
             Some(v) => Box::pin(async move { Ok(v) }),
             None => missing(),
         }
@@ -137,8 +131,7 @@ impl MetadataProvider for MusicFake {
     ) -> Call<'a, Vec<Value>> {
         let r = self
             .children
-            .lock()
-            .unwrap()
+            .lock_clean()
             .get(id)
             .cloned()
             .unwrap_or_default();
@@ -171,8 +164,8 @@ impl MetadataProvider for MusicFake {
         missing()
     }
     fn person_credits<'a>(&'a self, _: &'a str, _: &'a Resolved, _: Priority) -> Call<'a, Credits> {
-        let albums = self.albums.lock().unwrap().clone();
-        let top_recordings = self.top.lock().unwrap().clone();
+        let albums = self.albums.lock_clean().clone();
+        let top_recordings = self.top.lock_clean().clone();
         Box::pin(async move {
             Ok(Credits {
                 albums,
@@ -187,11 +180,8 @@ impl MetadataProvider for MusicFake {
         _: &'a Resolved,
         _: Priority,
     ) -> Call<'a, Option<Value>> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(format!("edition {}", e.value));
-        let r = self.editions.lock().unwrap().get(e.value).cloned();
+        self.calls.lock_clean().push(format!("edition {}", e.value));
+        let r = self.editions.lock_clean().get(e.value).cloned();
         match r {
             Some(v) => Box::pin(async move { Ok(Some(v)) }),
             None => missing(),

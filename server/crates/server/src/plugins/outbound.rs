@@ -992,7 +992,7 @@ mod tests {
         }
 
         fn sleep(&self, ms: u64) -> BoxFuture<'_, ()> {
-            self.sleeps.lock().unwrap().push(ms);
+            self.sleeps.lock_clean().push(ms);
             self.now.fetch_add(ms, Ordering::Relaxed);
             Box::pin(std::future::ready(()))
         }
@@ -1041,11 +1041,11 @@ mod tests {
     }
 
     fn sleeps(c: &Fake) -> Vec<u64> {
-        c.sleeps.lock().unwrap().clone()
+        c.sleeps.lock_clean().clone()
     }
 
     fn failures(g: &Gate) -> u32 {
-        g.breaker.lock().unwrap().failures
+        g.breaker.lock_clean().failures
     }
 
     fn hits(h: &AtomicU32) -> u32 {
@@ -1188,7 +1188,7 @@ mod tests {
         g.record_checked(false);
         assert_eq!(failures(&g), 0);
         g.record_checked(false);
-        assert!(!g.breaker.lock().unwrap().allow(clock.now_ms()));
+        assert!(!g.breaker.lock_clean().allow(clock.now_ms()));
     }
 
     #[tokio::test]
@@ -1372,7 +1372,7 @@ mod tests {
         assert!(matches!(&d, Done::Refused(r) if r.status == 503));
         assert_eq!(hits(&h), 3);
         // the fourth burst token is still there: three calls took three
-        assert!(g.limiter.lock().unwrap().take(0, 0, Interactive).is_ok());
+        assert!(g.limiter.lock_clean().take(0, 0, Interactive).is_ok());
     }
 
     #[tokio::test]
@@ -1386,7 +1386,7 @@ mod tests {
 
     async fn ok_after(g: &Gate, queued: Option<&Arc<RateWait>>, done: &Mutex<Vec<u8>>, n: u8) {
         let attempt = || async {
-            done.lock().unwrap().push(n);
+            done.lock_clean().push(n);
             Ok::<_, ()>(Reply {
                 status: 200,
                 retry_after_ms: None,
@@ -1414,7 +1414,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(80)).await;
         ok_after(&g, None, &done, 2).await;
         early.await.unwrap();
-        assert_eq!(*done.lock().unwrap(), [0, 1, 2]);
+        assert_eq!(*done.lock_clean(), [0, 1, 2]);
     }
 
     #[tokio::test]
@@ -1534,7 +1534,7 @@ mod tests {
         for (n, replayable) in [(3, true), (MAX_REPLAY, true), (MAX_REPLAY + 1, false)] {
             let rec = Arc::new(Mutex::new(Recorded::default()));
             Tee::new(body(n), rec.clone()).collect().await.unwrap();
-            let rec = rec.lock().unwrap();
+            let rec = rec.lock_clean();
             assert_eq!(rec.replayable(), replayable, "{n} bytes");
             assert_eq!(rec.buf.len(), if replayable { n } else { 0 });
         }
@@ -1568,8 +1568,7 @@ mod tests {
                     let n = s.read(&mut chunk).await.unwrap();
                     buf.extend_from_slice(&chunk[..n]);
                 }
-                log.lock()
-                    .unwrap()
+                log.lock_clean()
                     .push(String::from_utf8_lossy(&buf[split..]).into_owned());
                 let extra = if after.is_empty() {
                     String::new()
@@ -1619,11 +1618,11 @@ mod tests {
         let mut h = hook(Some(Arc::new(Gates::of("127.0.0.1", g))));
         let (port, seen) = serve(&[(429, "2")]).await;
         assert_eq!(post(&mut h, port, 3).await, 200);
-        assert_eq!(*seen.lock().unwrap(), ["aaa", "aaa"]);
+        assert_eq!(*seen.lock_clean(), ["aaa", "aaa"]);
         assert_eq!(sleeps(&clock), [2_000]);
         let (port, seen) = serve(&[(429, "1")]).await;
         assert_eq!(post(&mut h, port, MAX_REPLAY + 1).await, 429);
-        assert_eq!(seen.lock().unwrap().len(), 1);
+        assert_eq!(seen.lock_clean().len(), 1);
     }
 
     #[tokio::test]
@@ -1643,7 +1642,7 @@ mod tests {
         let io: IoFuture = Box::new(std::future::ready(Ok(())));
         let sent = Box::into_pin(h.send_request(req, None, io)).await;
         assert_eq!(sent.unwrap().0.status().as_u16(), 200);
-        assert_eq!(seen.lock().unwrap().len(), 2);
+        assert_eq!(seen.lock_clean().len(), 2);
     }
 
     #[tokio::test]
@@ -1651,7 +1650,7 @@ mod tests {
         let mut h = hook(None);
         let (port, seen) = serve(&[(429, "2")]).await;
         assert_eq!(post(&mut h, port, 3).await, 429);
-        assert_eq!(seen.lock().unwrap().len(), 1);
+        assert_eq!(seen.lock_clean().len(), 1);
     }
 
     #[tokio::test]
@@ -1661,7 +1660,7 @@ mod tests {
         let mut h = hook(Some(Arc::new(Gates::of("127.0.0.1", g))));
         let (port, seen) = serve(&[]).await;
         assert_eq!(post(&mut h, port, 3).await, 429);
-        assert!(seen.lock().unwrap().is_empty());
+        assert!(seen.lock_clean().is_empty());
         // the plugin echoing this 429 as `rate-limited` must not pause the gate again
         assert!(h.last_refused.load(Ordering::SeqCst));
     }

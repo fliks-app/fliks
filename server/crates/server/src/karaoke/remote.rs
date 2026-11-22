@@ -1,6 +1,7 @@
 //! Separation on optimization workers: leasing, eligibility and the commit of a worker's stems
 //! (`docs/spec/karaoke.md` rules 16-17, `library-optimize-workers.md`).
 use super::{run, store, verified_providers};
+use crate::sync::MutexExt;
 use crate::{
     events::SseEvent,
     http::AppError,
@@ -251,11 +252,7 @@ async fn after_failure(st: &AppState, id: i64, file: Option<i32>) {
         && let Some(file) = file
         && let Ok(Some(item)) = item_of(st, file).await
     {
-        st.karaoke
-            .failed
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(item);
+        st.karaoke.failed.lock_clean().insert(item);
     }
 }
 

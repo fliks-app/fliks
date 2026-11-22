@@ -1,5 +1,6 @@
 //! The queue through its SQL: fencing, restart, retries, capabilities and the cancel trigger.
 use super::store::{self, Settled, Want};
+use crate::sync::MutexExt;
 use fliks_engine_core::api::{JobError, JobErrorClass};
 use serde_json::json;
 use sqlx::PgPool;
@@ -313,7 +314,7 @@ fn workers_lists_only_live_instances() {
     };
     q.register("old".into(), w());
     q.register("new".into(), w());
-    q.seen.lock().unwrap().insert(
+    q.seen.lock_clean().insert(
         "old".into(),
         std::time::Instant::now() - super::LIVE - std::time::Duration::from_secs(1),
     );
@@ -402,7 +403,7 @@ fn a_touch_keeps_a_busy_worker_live() {
         },
     );
     let stale = std::time::Instant::now() - super::LIVE - std::time::Duration::from_secs(1);
-    q.seen.lock().unwrap().insert("w".into(), stale);
+    q.seen.lock_clean().insert("w".into(), stale);
     assert!(q.workers().is_empty());
     q.touch("w");
     assert_eq!(q.workers().len(), 1);

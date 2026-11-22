@@ -2,6 +2,7 @@
 //! The SDK harness and build tooling on this fixture, under the real host. Needs the release
 //! component (`cargo xtask build examples/fixture-guest`) and `FLIKS_HARNESS_PG_URL`.
 
+use fliks_server::sync::MutexExt;
 use fliks_plugin_sdk::build::{self, Crate};
 use fliks_plugin_sdk::harness::fliks_server::plugins::HttpResponse;
 use fliks_plugin_sdk::harness::fliks_server::plugins::runtime::{HostConfig, State};
@@ -52,7 +53,7 @@ fn slow_stub(port: u16, delay: Duration) -> Arc<Mutex<Vec<bool>>> {
                 let _ = c.read(&mut buf);
                 c.set_read_timeout(Some(delay)).unwrap();
                 let closed = matches!(c.read(&mut buf), Ok(0));
-                d.lock().unwrap().push(closed);
+                d.lock_clean().push(closed);
                 if !closed {
                     let _ = c.write_all(
                         b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok",
@@ -226,7 +227,7 @@ async fn outbound_targets_guard_and_breaker() {
             .is_some_and(|e| e.starts_with("Dns(")),
     );
     assert_eq!(
-        h.targets.connects.lock().unwrap().as_slice(),
+        h.targets.connects.lock_clean().as_slice(),
         ["93.184.216.34:80".parse().unwrap()],
         "refused targets are never dialled"
     );
@@ -294,7 +295,7 @@ async fn async_requests_overlap_cancel_and_budget() {
         (700..1400).contains(&ms),
         "4 requests of 700 ms each overlap: {ms} ms"
     );
-    assert_eq!(dropped.lock().unwrap().as_slice(), [false; 4]);
+    assert_eq!(dropped.lock_clean().as_slice(), [false; 4]);
 
     let started = Instant::now();
     let r = get("/test/abandon", &[("url", "http://hung.test/")]).await;
@@ -302,7 +303,7 @@ async fn async_requests_overlap_cancel_and_budget() {
     until(
         "the abandoned connection",
         Duration::from_secs(2),
-        async || hung.lock().unwrap().as_slice() == [true],
+        async || hung.lock_clean().as_slice() == [true],
     )
     .await;
     assert!(

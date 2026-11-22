@@ -1,4 +1,5 @@
 //! Content-Security-Policy on the SPA document, and the endpoint that logs violations.
+use crate::sync::MutexExt;
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Request};
 use axum::http::header::CONTENT_TYPE;
@@ -56,7 +57,7 @@ struct Budget(Mutex<Option<(Instant, u32)>>);
 
 impl Budget {
     fn take(&self, now: Instant) -> bool {
-        let mut g = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let mut g = self.0.lock_clean();
         let w = g.filter(|(t, _)| now.duration_since(*t) < WINDOW);
         let (t, n) = w.unwrap_or((now, 0));
         *g = Some((t, n + 1));

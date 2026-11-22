@@ -1,5 +1,6 @@
 //! Remote workers: the resumable upload, its hash check and the grant that ends with its lease.
 use super::{remote, routes::worker_router, tokens};
+use crate::sync::MutexExt;
 use crate::{config::Config, state::AppState};
 use axum::{
     body::Body,
@@ -246,12 +247,11 @@ async fn a_stale_result_does_not_touch_the_live_upload(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::CONFLICT);
-    assert_eq!(st.queue.uploads.lock().unwrap().len(), 1);
+    assert_eq!(st.queue.uploads.lock_clean().len(), 1);
     assert!(
         st.queue
             .uploads
-            .lock()
-            .unwrap()
+            .lock_clean()
             .contains_key(&(job, 1, String::new()))
     );
     let _ = std::fs::remove_dir_all(staged.parent().unwrap());
