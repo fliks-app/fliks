@@ -426,7 +426,7 @@ async fn crud_validation_and_acl(pool: PgPool) {
     );
 }
 
-/// No response carries the key; absent or "" keeps it, a new string replaces it, null clears it.
+/// No response carries the key; absent or "" keeps it on the same url, a new string replaces it, null clears it.
 #[sqlx::test(migrations = false)]
 async fn api_key_is_redacted_and_kept(pool: PgPool) {
     let c = ctx(pool).await;
@@ -456,7 +456,8 @@ async fn api_key_is_redacted_and_kept(pool: PgPool) {
         true,
     );
     let put = |extra: Value| {
-        let mut body = json!({"name": "n", "type": "emby", "url": "http://u", "enabled": false});
+        let url = format!("{}/ok/", c.base);
+        let mut body = json!({"name": "n", "type": "emby", "url": url, "enabled": false});
         body.as_object_mut()
             .unwrap()
             .extend(extra.as_object().unwrap().clone());
