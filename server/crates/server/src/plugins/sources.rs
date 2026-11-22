@@ -214,7 +214,11 @@ impl Plugins {
                 prev.version
             );
         }
-        let _ = packages::hold_update(&self.db, &prev.plugin_id, failed, "failed", why).await;
+        if let Err(e) =
+            packages::hold_update(&self.db, &prev.plugin_id, failed, "failed", why).await
+        {
+            tracing::warn!("auto-update: {} not held at {failed}: {e}", prev.plugin_id);
+        }
     }
 
     /// Rule 29: the newest installable version, unattended only when official and consent-free.
@@ -226,12 +230,13 @@ impl Plugins {
     pub async fn auto_update_of(&self, only: Option<&[String]>) -> Value {
         let mut updated = vec![];
         let mut skipped = vec![];
-        let off = crate::settings::setting_value(&self.db, "plugins.auto_update")
-            .await
-            .ok()
-            .flatten()
-            .as_deref()
-            == Some("false");
+        let off = match crate::settings::setting_value(&self.db, "plugins.auto_update").await {
+            Ok(v) => v.as_deref() == Some("false"),
+            Err(e) => {
+                tracing::warn!("auto-update skipped, plugins.auto_update unreadable: {e}");
+                true
+            }
+        };
         if off {
             return json!({"updated": updated, "skipped": skipped});
         }
@@ -355,7 +360,11 @@ impl Plugins {
                 .collect();
             if !new_scopes.is_empty() {
                 let detail = new_scopes.join(", ");
-                let _ = packages::hold_update(&self.db, &id, &version, "new-scopes", &detail).await;
+                if let Err(e) =
+                    packages::hold_update(&self.db, &id, &version, "new-scopes", &detail).await
+                {
+                    tracing::warn!("auto-update: {id} not held at {version}: {e}");
+                }
                 skip(format!(
                     "the new version requests scopes ({detail}), which need an admin's consent"
                 ));

@@ -42,7 +42,7 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   plugins that declare `>=6.0.0`: this is how a major upgrade gets rehearsed before it ships.
 - `files` — sha256 of every archive entry but the manifest and its own signature.
 - `database` — `{ schema: boolean, coreRefs: string[] }`: whether it wants its own schema, and
-  which core tables it needs `REFERENCES` on.
+  which core tables it reads the `id` column of (`SELECT (id)`; no foreign key into core).
 - `routes[]` — every route core will proxy, each with the CASL `policy` it requires and an
   optional `objectGuard`. A route that is not declared does not exist. (Not `provides.routes[]` —
   there is no `provides` key; `routes` sits at the manifest's top level.)
@@ -293,7 +293,7 @@ scheduled call.
 A `process` plugin that asks for a schema gets its own Postgres role
 (`fp_<database oid>_<id with dots as underscores>`) and schema (`plugin_<id with dots as
 underscores>`), a password rotated on every start and never handed to the
-guest, and `REFERENCES`-only grants on the core tables it declared. It reaches them only through the
+guest, and a `SELECT (id)` grant on the core tables it declared (never `REFERENCES`). It reaches them only through the
 `db` interface (`query`, `execute`, `migrate`): the host keeps one pool per plugin, logged in as that
 role with the schema as its whole `search_path`. A plugin runs its own migrations, from `start`.
 Core never reads those tables.

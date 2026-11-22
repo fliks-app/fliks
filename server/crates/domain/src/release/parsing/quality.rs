@@ -90,9 +90,13 @@ fn named(id: i64) -> ParsedReleaseQuality {
     }
 }
 
-/// A lone `web` tag counts as WEB-DL only when no other source tag is present, so "Web Therapy 720p HDTV" is HDTV.
+/// A lone `web` tag counts as WEB-DL only after the SxxEyy, year or resolution token (before it, it is
+/// the title) and when no other source tag is present.
 pub(super) fn is_bare_web(t: &str) -> bool {
-    rx!(r"\bweb\b").is_match(t)
+    let tags = rx!(r"\bs\d{1,3}e\d{1,4}\b|\b(19|20)\d{2}\b|\b(\d{3,4}p|4k|8k|uhd)\b")
+        .find(t)
+        .map_or(t, |m| &t[m.end()..]);
+    rx!(r"\bweb\b").is_match(tags)
         && !rx!(r"\b(hdtv|sdtv|dvd|dvdrip|dvd-?r|bluray|blu-?ray|bdrip|brrip|bdr)\b").is_match(t)
 }
 
@@ -211,6 +215,8 @@ mod tests {
         assert_eq!(name("Show.S02E03.WEB.Rip.1080p"), "WEBRip-1080p");
         assert_eq!(name("Web.Therapy.S01E01.720p.HDTV"), "HDTV-720p");
         assert_eq!(name("Web.Therapy.S01E01.1080p.WEB.h264"), "WEBDL-1080p");
+        assert_eq!(name("Web.Therapy.S01E01.720p.x264-GRP"), "HDTV-720p");
+        assert_eq!(name("Web.Therapy.2011.1080p.x264-GRP"), "HDTV-1080p");
         assert_eq!(name("Movie.2019.HDCAM.XviD"), "CAM");
         assert_eq!(name("Movie.2019.HDTS.XviD"), "TELESYNC");
     }

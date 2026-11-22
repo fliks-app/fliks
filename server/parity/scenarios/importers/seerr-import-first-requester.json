@@ -49,6 +49,8 @@
           },
           {
             "data": {
+              "errorCount": 0,
+              "errors": [],
               "imported": 2,
               "skipped": 0,
               "type": "seerr.import.completed",

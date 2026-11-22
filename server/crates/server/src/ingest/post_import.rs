@@ -24,6 +24,7 @@ struct Q {
     tasks: VecDeque<i32>,
     known: HashSet<i32>,
     active: bool,
+    running: Option<i32>,
     total: u64,
     done: u64,
 }
@@ -110,7 +111,10 @@ impl Queue {
             let next = {
                 let mut q = self.lock();
                 match q.tasks.pop_front() {
-                    Some(id) => Some((id, q.done, q.total)),
+                    Some(id) => {
+                        q.running = Some(id);
+                        Some((id, q.done, q.total))
+                    }
                     None => {
                         st.hub.activity().remove(QUEUE_PARENT);
                         *q = Q::default();
@@ -156,6 +160,7 @@ impl Queue {
             let (done, total) = {
                 let mut q = self.lock();
                 q.known.remove(&id);
+                q.running = None;
                 q.done += 1;
                 (q.done, q.total)
             };
@@ -174,18 +179,45 @@ impl Queue {
     }
 }
 
-/// A panic in the drain would leave `active` set and every later import undrained.
+/// A panic in the drain drops only the file it was running; the rest of the queue gets a new drain.
 struct ResetOnPanic<'a> {
     queue: &'a Queue,
     st: &'a AppState,
 }
 
+impl Queue {
+    fn recover(&self, st: &AppState) {
+        let (failed, more) = {
+            let mut q = self.lock();
+            let failed = q.running.take();
+            if let Some(id) = failed {
+                q.known.remove(&id);
+                q.done += 1;
+            }
+            let more = !q.tasks.is_empty();
+            if !more {
+                *q = Q::default();
+            }
+            (failed, more)
+        };
+        if let Some(id) = failed {
+            tracing::error!("Post-import enrich of file #{id} panicked");
+            st.hub.activity().remove(&format!("{KIND}:{id}"));
+        }
+        if more {
+            let st = st.clone();
+            tokio::spawn(async move { st.ingest.queue.drain(&st).await });
+        } else {
+            st.hub.activity().remove(QUEUE_PARENT);
+            self.idle.notify_waiters();
+        }
+    }
+}
+
 impl Drop for ResetOnPanic<'_> {
     fn drop(&mut self) {
         if std::thread::panicking() {
-            self.st.hub.activity().remove(QUEUE_PARENT);
-            *self.queue.lock() = Q::default();
-            self.queue.idle.notify_waiters();
+            self.queue.recover(self.st);
         }
     }
 }
@@ -466,5 +498,41 @@ pub(crate) async fn sprite_if_missing(st: &AppState, id: i32) {
     }
     if let Err(e) = crate::stream::sprite_file(st, id, false, JobPriority::Low, None).await {
         tracing::warn!("sprite of file #{id} failed: {e:?}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[sqlx::test(migrations = false)]
+    async fn a_panic_drops_only_the_running_file_and_keeps_the_queue(pool: sqlx::PgPool) {
+        let st = crate::metadata::books::tests::state(&pool, vec![]);
+        {
+            let mut q = st.ingest.queue.lock();
+            q.known.extend([1, 2]);
+            q.tasks.push_back(2);
+            q.running = Some(1);
+            q.active = true;
+            q.total = 2;
+        }
+        st.ingest.queue.recover(&st);
+        let q = st.ingest.queue.lock();
+        assert_eq!(q.tasks, [2]);
+        assert_eq!(q.known, HashSet::from([2]));
+        assert_eq!((q.running, q.active, q.done), (None, true, 1));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_panic_on_the_last_file_leaves_an_idle_queue(pool: sqlx::PgPool) {
+        let st = crate::metadata::books::tests::state(&pool, vec![]);
+        {
+            let mut q = st.ingest.queue.lock();
+            q.known.insert(1);
+            q.running = Some(1);
+            q.active = true;
+        }
+        st.ingest.queue.recover(&st);
+        assert!(st.ingest.queue.is_idle());
     }
 }

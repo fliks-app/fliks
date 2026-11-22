@@ -894,8 +894,8 @@ pub async fn relink_batch(
     Ok((StatusCode::CREATED, Json(json!({ "queued": n }))))
 }
 
-/// Rule 73: an `auto` video or comic with no id takes the best hit of its title; a book is
-/// identified from its file at settle, and no hit leaves the item unmatched. A failed search skips it.
+/// Rule 73: an `auto` video or comic with no id takes the closest hit (`best_hit`); a book is identified
+/// from its file at settle, and no hit above the floor leaves the item unmatched. A failed search skips it.
 async fn auto_pick(st: &AppState, d: &mut RelinkDto) -> Result<(), AppError> {
     let Some(title) = d
         .title

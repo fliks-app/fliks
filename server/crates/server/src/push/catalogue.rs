@@ -366,7 +366,7 @@ async fn build(st: &AppState, media: i32) -> sqlx::Result<Option<(Vec<i32>, Noti
         return Ok(None);
     }
     let row: Option<(String, Option<i32>)> = sqlx::query_as(
-        r#"SELECT title, "libraryId" FROM media WHERE id = $1 AND "mediaType"::text = 'series'"#,
+        r#"SELECT title, "libraryId" FROM media WHERE id = $1 AND type::text = 'series'"#,
     )
     .bind(media)
     .fetch_optional(&st.db)
@@ -421,17 +421,18 @@ async fn flush(st: &AppState, media: i32) -> sqlx::Result<()> {
 
 /// Sends the groups still waiting on their window; the process is about to stop.
 pub async fn flush_pending(st: &AppState) {
+    let mut sends = vec![];
     for media in st.push.episodes.pending() {
         match build(st, media).await {
-            Ok(Some((to, n))) if !to.is_empty() => {
-                if let Err(e) = st.push.run(st, to, n).await {
-                    tracing::warn!("new-episode notification at shutdown: {e}");
-                }
-            }
+            Ok(Some((to, n))) if !to.is_empty() => match st.push.run(st, to, n).await {
+                Ok(h) => sends.extend(h),
+                Err(e) => tracing::warn!("new-episode notification at shutdown: {e}"),
+            },
             Ok(_) => {}
             Err(e) => tracing::warn!("new-episode notification at shutdown: {e}"),
         }
     }
+    futures_util::future::join_all(sends).await;
 }
 
 #[cfg(test)]

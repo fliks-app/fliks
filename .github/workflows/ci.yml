@@ -52,7 +52,7 @@ jobs:
           # A push to main runs every area: a superseded pending run must not skip a commit's jobs.
           if [ -z "$base" ] || ! git fetch -q --depth=1 origin "$base"; then out true; exit 0; fi
           files=$(git diff --name-only "$base" HEAD | grep -v '\.md$' || true)
-          if grep -qE '^(\.github/(workflows/ci\.yml|actions/|scripts/)|rust-toolchain\.toml$)' <<< "$files"; then out true; exit 0; fi
+          if grep -qE '^(\.github/(workflows/ci\.yml|actions/|scripts/)|scripts/check-added-lines|rust-toolchain\.toml$)' <<< "$files"; then out true; exit 0; fi
           hit() { grep -qE "$1" <<< "$files" && echo true || echo false; }
           {
             echo "server=$(hit '^(server/|engine\.lock$)')"

@@ -520,6 +520,12 @@ pub async fn prepare(
                 "karaoke_storage_full",
             ));
         }
+        run::Start::Refused(run::Refusal::Unavailable) => {
+            return Err(AppError::with_message(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "karaoke_unavailable",
+            ));
+        }
     };
     Ok((status, Json(state_of(&st, &a, item).await?)))
 }

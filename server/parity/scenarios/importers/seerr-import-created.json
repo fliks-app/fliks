@@ -33,6 +33,8 @@
           },
           {
             "data": {
+              "errorCount": 0,
+              "errors": [],
               "imported": 5,
               "skipped": 0,
               "type": "seerr.import.completed",

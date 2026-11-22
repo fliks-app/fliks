@@ -13,7 +13,7 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use fliks_server::{
     app,
     config::Config,
-    events::{Bus, Identity, SseEvent},
+    events::{Bus, DomainEvent, Identity, SseEvent},
     push::{self, Notification},
     roles,
     state::AppState,
@@ -364,6 +364,41 @@ async fn enabling_registers_and_disabling_deletes_everything_at_the_relay(pool: 
     );
     assert_eq!(status["relay"]["pendingDeletions"], json!([]));
     std::fs::remove_dir_all(c.conf.parent().unwrap()).unwrap();
+}
+
+#[sqlx::test]
+async fn shutdown_sends_the_pending_episode_groups_before_returning(pool: PgPool) {
+    let c = ctx(pool).await;
+    set_relay(&c, true).await;
+    c.relay.wait("POST", "/v1/servers", 1).await;
+    assert_eq!(subscribe(&c, &c.user, "apns", 1).await.0, 201);
+    let media: i32 = sqlx::query_scalar(
+        r#"INSERT INTO media (title, type) VALUES ('Show', 'series') RETURNING id"#,
+    )
+    .fetch_one(&c.st.db)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"WITH e AS (INSERT INTO editions ("mediaId", family) VALUES ($1, 'video') RETURNING id),
+                i AS (INSERT INTO items ("mediaId", "editionId") SELECT $1, id FROM e RETURNING id)
+           INSERT INTO playback_states ("userId", "itemId") SELECT $2, id FROM i"#,
+    )
+    .bind(media)
+    .bind(c.user_id)
+    .execute(&c.st.db)
+    .await
+    .unwrap();
+    push::init(&c.st);
+    c.st.hub.emit_domain(DomainEvent::MediaFilesImported {
+        media_id: media.into(),
+        family: fliks_domain::media::family::Family::Video,
+        season_number: Some(1),
+        episode_number: Some(1),
+        source: fliks_server::events::event::ImportSource::Disk,
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    push::flush_pending(&c.st).await;
+    assert_eq!(c.relay.seen("POST", "/v1/push").len(), 1);
 }
 
 impl Ctx {
