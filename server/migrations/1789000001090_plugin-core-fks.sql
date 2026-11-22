@@ -2,6 +2,7 @@
 DO $$
 DECLARE r record;
 BEGIN
+  PERFORM set_config('lock_timeout', '5s', true);
   FOR r IN
     SELECT con.conname, con.conrelid::regclass AS rel
       FROM pg_constraint con
@@ -9,7 +10,7 @@ BEGIN
       JOIN pg_namespace ns ON ns.oid = cl.relnamespace
       JOIN pg_class fcl ON fcl.oid = con.confrelid
       JOIN pg_namespace fns ON fns.oid = fcl.relnamespace
-     WHERE con.contype = 'f' AND ns.nspname LIKE 'plugin\_%' AND fns.nspname = 'public'
+     WHERE con.contype = 'f' AND con.conparentid = 0 AND ns.nspname LIKE 'plugin\_%' AND fns.nspname = 'public'
   LOOP
     BEGIN
       EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', r.rel, r.conname);

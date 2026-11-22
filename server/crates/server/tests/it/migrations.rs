@@ -372,3 +372,36 @@ async fn track_search_text_follows_a_rename_and_a_move(pool: PgPool) {
     assert_eq!(text, expected);
     assert!(text.starts_with("Renamed Album B"), "{text}");
 }
+
+#[sqlx::test(migrations = false)]
+async fn the_plugin_fk_migration_drops_foreign_keys_into_core(admin: PgPool) {
+    const BEFORE: i64 = 1_789_000_001_070;
+    let pool = empty(&admin).await;
+    MIGRATOR.run_to(BEFORE, &pool).await.unwrap();
+    sql(
+        &pool,
+        r#"CREATE SCHEMA plugin_x;
+           CREATE TABLE plugin_x.plain (m int REFERENCES public.media(id) ON DELETE CASCADE);
+           CREATE TABLE plugin_x.parted (m int REFERENCES public.media(id), k int) PARTITION BY LIST (k);
+           CREATE TABLE plugin_x.parted_1 PARTITION OF plugin_x.parted FOR VALUES IN (1);
+           CREATE TABLE plugin_x.inside (id int PRIMARY KEY, p int REFERENCES plugin_x.inside(id))"#,
+    )
+    .await;
+    let fks = || {
+        rows::<(String,)>(
+            &pool,
+            "SELECT conrelid::regclass::text FROM pg_constraint
+              WHERE contype = 'f' AND connamespace = 'plugin_x'::regnamespace ORDER BY 1",
+        )
+    };
+    assert_eq!(fks().await.len(), 4);
+
+    fliks_server::db::migrate(&pool).await.unwrap();
+
+    let left: Vec<String> = fks().await.into_iter().map(|r| r.0).collect();
+    assert_eq!(
+        left,
+        ["plugin_x.inside"],
+        "only the FK inside the plugin stays"
+    );
+}

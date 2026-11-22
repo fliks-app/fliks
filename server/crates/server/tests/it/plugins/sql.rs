@@ -592,6 +592,51 @@ async fn a_core_foreign_key_that_cannot_be_dropped_fails_provision_by_name() {
     s.finish().await;
 }
 
+/// A lock held on the core table makes the drop wait, then fail as a retryable `db-unavailable`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_lock_on_the_core_table_makes_the_foreign_key_drop_retryable() {
+    let Some((m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("lockedfk").await else {
+        return;
+    };
+    let h = harness(&s, "lockedfk", |_| {}).await;
+    allow_unsigned(&h).await;
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    let role = format!("fp_{}_fliks_fixture", s.oid().await);
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+        r#"CREATE TABLE plugin_fliks_fixture.t (m int);
+        ALTER TABLE plugin_fliks_fixture.t OWNER TO "{role}";
+        ALTER TABLE plugin_fliks_fixture.t ADD CONSTRAINT leftover_fk FOREIGN KEY (m) REFERENCES public.media(id)"#
+    )))
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    let mut holder = s.pool.begin().await.unwrap();
+    sqlx::query("LOCK TABLE public.media IN ACCESS SHARE MODE")
+        .execute(&mut *holder)
+        .await
+        .unwrap();
+    let (st, r) = h
+        .call(
+            "POST",
+            "/api/plugins/fliks.fixture/restart",
+            Some(&h.admin),
+            None,
+        )
+        .await;
+    let msg = r["message"].as_str().unwrap_or_default();
+    assert!(
+        st >= 400 && msg.contains("db-unavailable") && msg.contains("leftover_fk"),
+        "{st} {r}"
+    );
+    holder.rollback().await.unwrap();
+    h.finish().await;
+    s.finish().await;
+}
+
 /// Data usage, export and import run plugin code (triggers, defaults, checks, policies, index
 /// expressions) as the plugin's login: `RESET ROLE` lands on the plugin, never on core.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

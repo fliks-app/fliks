@@ -251,21 +251,14 @@ pub(crate) async fn apply_seasons(
         let live: HashSet<i32> = sd.episodes.iter().map(|e| e.episode_number).collect();
         if !live.is_empty() {
             let listed: Vec<i32> = live.into_iter().collect();
-            let gone = sqlx::query!(
-                r#"SELECT i.id, EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = i.id) AS "held!"
-                   FROM items i WHERE i."groupId" = $1 AND NOT (i."number" = ANY($2))"#,
+            let gone: Vec<i32> = sqlx::query_scalar!(
+                r#"SELECT id FROM items WHERE "groupId" = $1 AND NOT ("number" = ANY($2))"#,
                 sid,
                 &listed
             )
             .fetch_all(&mut *tx)
             .await?;
-            let (held, free): (Vec<_>, Vec<_>) = gone.into_iter().partition(|r| r.held);
-            warn_held(media_id, held.len());
-            let free: Vec<i32> = free.into_iter().map(|r| r.id).collect();
-            crate::party::end_playing_items(st, &free).await?;
-            sqlx::query!(r#"DELETE FROM items WHERE id = ANY($1)"#, &free)
-                .execute(&mut *tx)
-                .await?;
+            drop_unheld(st, &mut tx, &gone).await?;
         }
         applied.push((sid, stills, sd.poster_url.clone()));
     }
@@ -411,22 +404,18 @@ pub(crate) async fn drop_absent(
     let live: Vec<i32> = seasons.iter().map(|s| s.season_number).collect();
     let mut tx = st.db.begin().await?;
     items::lock_versions(&mut tx, id).await?;
-    let gone = sqlx::query!(
-        r#"SELECT i.id, EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = i.id) AS "held!"
-           FROM items i JOIN item_groups g ON g.id = i."groupId"
+    let gone: Vec<i32> = sqlx::query_scalar!(
+        r#"SELECT i.id FROM items i JOIN item_groups g ON g.id = i."groupId"
            WHERE g."mediaId" = $1 AND NOT (g."number" = ANY($2))"#,
         id,
         &live
     )
     .fetch_all(&mut *tx)
     .await?;
-    let (held, free): (Vec<_>, Vec<_>) = gone.into_iter().partition(|r| r.held);
-    warn_held(id, held.len());
-    let free: Vec<i32> = free.into_iter().map(|r| r.id).collect();
-    crate::party::end_playing_items(st, &free).await?;
-    sqlx::query!(r#"DELETE FROM items WHERE id = ANY($1)"#, &free)
-        .execute(&mut *tx)
-        .await?;
+    let held = drop_unheld(st, &mut tx, &gone).await?;
+    if held > 0 {
+        tracing::warn!("media #{id}: {held} item(s) the provider no longer lists are kept");
+    }
     sqlx::query!(
         r#"DELETE FROM item_groups g WHERE g."mediaId" = $1 AND NOT (g."number" = ANY($2))
              AND NOT EXISTS (SELECT 1 FROM items i WHERE i."groupId" = g.id)"#,
@@ -438,54 +427,40 @@ pub(crate) async fn drop_absent(
     tx.commit().await
 }
 
-fn warn_held(media: i32, held: usize) {
-    if held > 0 {
-        tracing::warn!(
-            "media #{media}: {held} item(s) the provider no longer lists keep their file"
-        );
-    }
-}
-
-/// The (item, file) pairs of items `seasons` no longer lists: the files an identify may relink.
-async fn unlisted_parts(
-    db: &sqlx::PgPool,
-    media: i32,
-    seasons: &[SeasonDetails],
-) -> sqlx::Result<Vec<(i32, i32)>> {
-    if seasons.is_empty() {
-        return Ok(vec![]);
-    }
-    let live: Vec<i32> = seasons.iter().map(|s| s.season_number).collect();
-    let (listed_season, listed_episode): (Vec<i32>, Vec<i32>) = seasons
-        .iter()
-        .flat_map(|s| {
-            s.episodes
-                .iter()
-                .map(|e| (s.season_number, e.episode_number))
-        })
-        .unzip();
-    let sparse: Vec<i32> = seasons
-        .iter()
-        .filter(|s| !s.episodes.is_empty())
-        .map(|s| s.season_number)
-        .collect();
+/// Deletes the `candidates` nobody holds and returns how many stay: an item with a file or a row of
+/// a user stays, unmonitored when it has no file, since only a user could ask for it back.
+async fn drop_unheld(
+    st: &AppState,
+    tx: &mut PgConnection,
+    candidates: &[i32],
+) -> Result<usize, sqlx::Error> {
     let rows = sqlx::query!(
-        r#"SELECT i.id, p."mediaFileId" AS file
-           FROM items i JOIN item_groups g ON g.id = i."groupId" JOIN item_parts p ON p."itemId" = i.id
-           WHERE g."mediaId" = $1
-             AND (NOT (g."number" = ANY($2))
-               OR (g."number" = ANY($3) AND NOT EXISTS (
-                     SELECT 1 FROM UNNEST($4::int[], $5::int[]) l(s, n)
-                     WHERE l.s = g."number" AND l.n = i."number")))"#,
-        media,
-        &live,
-        &sparse,
-        &listed_season,
-        &listed_episode
+        r#"SELECT i.id,
+                  EXISTS (SELECT 1 FROM item_parts p WHERE p."itemId" = i.id) AS "file!",
+                  (EXISTS (SELECT 1 FROM playback_states x WHERE x."itemId" = i.id)
+                   OR EXISTS (SELECT 1 FROM playback_history x WHERE x."itemId" = i.id)
+                   OR EXISTS (SELECT 1 FROM likes x WHERE x."itemId" = i.id)
+                   OR EXISTS (SELECT 1 FROM annotations x WHERE x."itemId" = i.id)
+                   OR EXISTS (SELECT 1 FROM playlist_items x WHERE x."itemId" = i.id)) AS "user!"
+           FROM items i WHERE i.id = ANY($1) FOR UPDATE OF i"#,
+        candidates
     )
-    .fetch_all(db)
+    .fetch_all(&mut *tx)
     .await?;
-    Ok(rows.into_iter().map(|r| (r.id, r.file)).collect())
+    let (held, free): (Vec<_>, Vec<_>) = rows.into_iter().partition(|r| r.file || r.user);
+    let free: Vec<i32> = free.into_iter().map(|r| r.id).collect();
+    let unfiled: Vec<i32> = held.iter().filter(|r| !r.file).map(|r| r.id).collect();
+    crate::party::end_playing_items(st, &free).await?;
+    sqlx::query!(r#"DELETE FROM items WHERE id = ANY($1)"#, &free)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query!(
+        r#"UPDATE items SET monitored = false WHERE id = ANY($1)"#,
+        &unfiled
+    )
+    .execute(&mut *tx)
+    .await?;
+    Ok(held.len())
 }
 
 /// Reads a media again from its provider ids and its files, whatever its kind (`media-write.md`
@@ -566,27 +541,16 @@ async fn finish_identify(
     let media = load_media(&st.db, id)
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
-    let mut identified = None;
     if let Some(found) = refresh_any_with(st, &media, true, Priority::Interactive, changed).await?
         && media.has_seasons()
     {
         drop_absent(st, id, &found.seasons).await?;
-        identified = Some(found);
     }
-    let held = match &identified {
-        Some(found) => unlisted_parts(&st.db, id, &found.seasons).await?,
-        None => vec![],
-    };
     if media.media_type != MediaKind::Book {
         let guard = st.ingest.media.lock(id).await;
         if let Err(e) = rescan_files(st, &guard, id, false).await {
             tracing::warn!("identify: rescan of media #{id} failed: {e:?}");
         }
-    }
-    if let Some(found) = identified
-        && items::settle_held(&st.db, id, &held).await?
-    {
-        drop_absent(st, id, &found.seasons).await?;
     }
     st.hub.emit_domain(DomainEvent::MediaAcquisitionRequested {
         media_ids: vec![i64::from(id)],

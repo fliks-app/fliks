@@ -12,7 +12,7 @@ use axum::{
 };
 use utoipa::OpenApi;
 
-pub use db::ScanSeason;
+pub use db::{ScanSeason, rearm as rearm_markers};
 pub use detect::{auto_detect_missing, list_seasons_for_scan, run_detection_inline};
 
 /// The routes of this domain, merged into the API document by `app::openapi`.

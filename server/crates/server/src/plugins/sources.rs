@@ -348,6 +348,16 @@ impl Plugins {
                 .filter_map(|c| c.strip_prefix("namespace:"))
                 .filter(|n| !held_ns.contains(n))
                 .map(|n| format!("namespace:{n}"));
+            let held_refs: Vec<&str> = pkg.manifest["database"]["coreRefs"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            let new_refs = caps()
+                .filter_map(|c| c.strip_prefix("coreref:"))
+                .filter(|t| !held_refs.contains(t))
+                .map(|t| format!("coreref:{t}"));
             let new_scopes: Vec<String> = granted
                 .iter()
                 .flat_map(|g| {
@@ -357,6 +367,7 @@ impl Plugins {
                 })
                 .map(str::to_owned)
                 .chain(new_namespaces)
+                .chain(new_refs)
                 .collect();
             if !new_scopes.is_empty() {
                 let detail = new_scopes.join(", ");

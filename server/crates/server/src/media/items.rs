@@ -243,43 +243,6 @@ pub async fn sole_item(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<Opti
         .await
 }
 
-/// An item that held a file of `held` (item, file) before a rescan and holds none now, while a file
-/// sits on another item: its user rows move there and it goes. True when one went.
-pub(crate) async fn settle_held(
-    db: &PgPool,
-    media: i32,
-    held: &[(i32, i32)],
-) -> sqlx::Result<bool> {
-    let mut tx = db.begin().await?;
-    lock_versions(&mut tx, media).await?;
-    let mut any = false;
-    for old in held
-        .iter()
-        .map(|h| h.0)
-        .collect::<std::collections::BTreeSet<_>>()
-    {
-        let files: Vec<i32> = held.iter().filter(|h| h.0 == old).map(|h| h.1).collect();
-        let heir = sqlx::query_scalar!(
-            r#"SELECT p."itemId" FROM item_parts p
-               WHERE p."mediaFileId" = ANY($2) AND p."itemId" <> $1
-                 AND NOT EXISTS (SELECT 1 FROM item_parts k WHERE k."itemId" = $1)
-               ORDER BY p."itemId" LIMIT 1"#,
-            old,
-            &files
-        )
-        .fetch_optional(&mut *tx)
-        .await?;
-        let Some(heir) = heir else { continue };
-        move_user_rows(&mut tx, old, heir).await?;
-        sqlx::query!("DELETE FROM items WHERE id = $1", old)
-            .execute(&mut *tx)
-            .await?;
-        any = true;
-    }
-    tx.commit().await?;
-    Ok(any)
-}
-
 /// The rows that hang on the item `from` (likes, plays, lyrics, playlists, annotations, party rows, markers) move to
 /// `to`; a row `to` holds a twin of stays and goes with `from`.
 pub(crate) async fn move_user_rows(c: &mut PgConnection, from: i32, to: i32) -> sqlx::Result<()> {
