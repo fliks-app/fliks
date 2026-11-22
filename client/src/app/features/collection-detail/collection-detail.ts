@@ -9,6 +9,7 @@ import type { CollectionDetail } from '../../core/services/api/books.models';
 import { mediaDetailLink, kindOf } from '../../core/media-kinds';
 import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
+import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-skeleton';
 
 type Entry = CollectionDetail['entries'][number];
 export type Tile =
@@ -17,7 +18,7 @@ export type Tile =
 
 @Component({
   selector: 'app-collection-detail',
-  imports: [TranslatePipe, RouterLink, MediaCardComponent, FollowToggleComponent],
+  imports: [RowSkeletonComponent, TranslatePipe, RouterLink, MediaCardComponent, FollowToggleComponent],
   templateUrl: './collection-detail.html',
 })
 export class CollectionDetailComponent {

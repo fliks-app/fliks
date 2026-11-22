@@ -138,7 +138,7 @@ async fn quality_round_trip_defaults_and_keep(pool: PgPool) {
         (200, json!("HD2"), json!(true), json!(true), json!(5))
     );
     let (s, list) = call(&c, "GET", "/api/profiles/quality", &c.user, json!(null)).await;
-    assert_eq!((s, list.as_array().unwrap().len()), (200, 1));
+    assert_eq!((s, list.as_array().unwrap().len()), (200, 2));
     let (s, _) = call(&c, "DELETE", &uri, &c.admin, json!(null)).await;
     assert_eq!(s, 200);
     let (s, b) = call(&c, "GET", &uri, &c.admin, json!(null)).await;
@@ -573,6 +573,10 @@ async fn deleting_a_profile_nulls_its_references(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn import_resolution_and_covers(pool: PgPool) {
     let c = ctx(pool.clone()).await;
+    sqlx::query("DELETE FROM quality_profiles")
+        .execute(&pool)
+        .await
+        .unwrap();
     let db = &c.st.db;
     // the default language profile is inserted by a migration; no quality profile yet
     assert_eq!(
@@ -675,6 +679,10 @@ fn audio_profile(extra: Value) -> Value {
 #[sqlx::test(migrations = false)]
 async fn audio_profiles_live_beside_video_ones(pool: PgPool) {
     let c = ctx(pool).await;
+    sqlx::query("DELETE FROM quality_profiles")
+        .execute(&c.st.db)
+        .await
+        .unwrap();
     let (s, p) = call(
         &c,
         "POST",

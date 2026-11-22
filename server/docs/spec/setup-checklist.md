@@ -20,19 +20,21 @@ Guards run before the key check (auth rule 17): unauthenticated with a bad key i
 
 ### A. Shape
 
-1. `ChecklistItem` = `{ key: string, severity: 'required'|'recommended', done: boolean, dismissed: boolean, route: string[] }`; every field always present, no null. `key` is a string, one of the seven core keys (rule 3).
+1. `ChecklistItem` = `{ key: string, severity: 'required'|'recommended', done: boolean, dismissed: boolean, route: string[] }`; every field always present, no null. `key` is a string, one of the nine core keys (rule 3).
 2. `done` and `dismissed` are independent: dismissing a done item, or a not-done one, only flips `dismissed`; `done` never reads the dismissal. `route` is the frontend route segments the "Configure" button navigates to (the client passes it to the router verbatim).
-3. The seven core items, fixed order, this is the response order. `done` = the query returns at least one row:
+3. The nine core items, fixed order, this is the response order. `done` = the query returns at least one row:
 
 | # | key | severity | route | `done` when | Table |
 |---|---|---|---|---|---|
 | 1 | `library` | required | `["/admin","settings","libraries"]` | any row | `libraries` |
 | 2 | `quality-profile` | required | `["/admin","settings","quality-profiles"]` | any row | `quality_profiles` |
 | 3 | `language-profile` | required | `["/admin","settings","language-profiles"]` | any row | `language_profiles` |
-| 4 | `subtitle-provider` | recommended | `["/admin","settings","subtitle-providers"]` | any row with `enabled = true` | `subtitle_providers` |
-| 5 | `notification` | recommended | `["/admin","settings","notifications"]` | any row (enabled or not) | `notification_connections` |
-| 6 | `non-admin-user` | recommended | `["/admin","settings","users"]` | any user with `"isAdmin" <> true` (disabled users count) | `users` |
-| 7 | `auto-approval-rule` | recommended | `["/admin","settings","auto-approval"]` | any row (`enabled` ignored) | `auto_approval_rules` |
+| 4 | `download-provider` | recommended | `["/admin","settings","plugin-catalogue"]` | any enabled `plugin_packages` row whose manifest has `ui.releasePicker` (a download kind) | `plugin_packages` |
+| 5 | `subtitle-provider` | recommended | `["/admin","settings","subtitle-providers"]` | any row with `enabled = true` | `subtitle_providers` |
+| 6 | `notification` | recommended | `["/admin","settings","notifications"]` | any row (enabled or not) | `notification_connections` |
+| 7 | `non-admin-user` | recommended | `["/admin","settings","users"]` | any user with `"isAdmin" <> true` (disabled users count) | `users` |
+| 8 | `auto-approval-rule` | recommended | `["/admin","settings","auto-approval"]` | any row (`enabled` ignored) | `auto_approval_rules` |
+| 9 | `data-import` | recommended | `["/admin","settings","data-imports"]` | a `commands` row `ImportWatchHistory` or `ImportSeerrRequests` with `status = 'completed'` | `commands` |
 
 4. Items 1-3 read other domains' tables with no service call and no per-user scope: a restricted viewer is irrelevant, the route needs `settings.access`. Library ACL does not apply (the checklist asks "does any exist").
 5. Checks run concurrently, one existence query each; results keep item order.
@@ -44,8 +46,8 @@ Guards run before the key check (auth rule 17): unauthenticated with a bad key i
 8. Storage: `app_settings` row `key = 'setup_checklist_dismissed_keys'`, `value` = JSON array of strings, e.g. `["library","notification"]`; global to the installation (no per-user column, no join table). Written as a compact JSON array, insertion order (existing order preserved, a new key appended). The row is created on the first dismiss and kept (value `"[]"`) after the last un-dismiss.
 9. Read tolerance: absent row, NULL or empty value, invalid JSON, or a non-array JSON value -> empty set (no error, nothing repaired on read). Array members that are not strings, or are strings that are not known keys (rule 12), are silently dropped.
 10. The key is not in `PROTECTED` (`server/crates/server/src/settings/routes.rs`), so `PUT /api/settings/setup_checklist_dismissed_keys` and `GET /api/settings` read and write it freely (settings spec: opaque text); tolerance rule 9 absorbs any garbage a client writes.
-11. There is no registry of extra items: the response is exactly the 7 core items.
-12. Known key = one of the 7 core keys. The route rejects an unknown key with 400 `Unknown checklist key: <raw>` on both POST and DELETE, so a stale stored key can never be un-dismissed.
+11. There is no registry of extra items: the response is exactly the 9 core items.
+12. Known key = one of the 9 core keys. The route rejects an unknown key with 400 `Unknown checklist key: <raw>` on both POST and DELETE, so a stale stored key can never be un-dismissed.
 13. Any write drops every unknown stored key (rule 9 filters on read).
 14. `dismiss(key)`: read set; already present -> return, NO write and no notification; else add and save. Response `{ok:true}` either way.
 15. `undismiss(key)`: read set; key absent -> return, no write; else delete and save. Response `{ok:true}` either way.

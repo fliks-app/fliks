@@ -14,7 +14,7 @@
     }
     @if (loadFailed()) {
       <div role="alert" class="alert alert-error text-sm mt-4 py-2">{{ 'discover.profiles_load_error' | translate }}</div>
-    } @else if (isVideo() && !loading() && choices().quality.length === 0 && !qualityLocked()) {
+    } @else if (canChoose() && isVideo() && !loading() && choices().quality.length === 0 && !qualityLocked()) {
       <div role="alert" class="alert alert-warning text-sm mt-4 py-2">{{ 'discover.no_quality_profile' | translate }}</div>
     }
 
@@ -67,8 +67,10 @@
             </select>
           </label>
         }
+        @if (canChoose()) {
         <app-library-folder-select [folders]="folders()" [(folderId)]="folderId" />
-        @if (isVideo() && choices().quality.length > 1 && !qualityLocked()) {
+        }
+        @if (canChoose() && isVideo() && choices().quality.length > 1 && !qualityLocked()) {
           <label class="form-control w-full">
             <span class="label-text text-base-content/60">{{ 'discover.quality_profile' | translate }}</span>
             <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="qualityId()" (ngModelChange)="qualityId.set(+$event)">
@@ -78,7 +80,7 @@
             </select>
           </label>
         }
-        @if (isVideo() && choices().language.length > 1 && !locked()) {
+        @if (canChoose() && isVideo() && choices().language.length > 1 && !locked()) {
           <label class="form-control w-full">
             <span class="label-text text-base-content/60">{{ 'discover.language_profile' | translate }}</span>
             <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="languageId()" (ngModelChange)="languageId.set(+$event)">

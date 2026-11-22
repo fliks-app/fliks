@@ -986,7 +986,7 @@ async fn releases_match_and_score() {
     sqlx::raw_sql(
         r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Movies', '["movie"]');
 INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
-           INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]');
+           INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items;
            INSERT INTO media (id, title, type, "libraryId", "folderName", year, monitored)
              VALUES (1, 'Big Buck Bunny', 'movie', 1, 'bbb', 2008, true),
                     (2, 'Sintel', 'movie', 1, 'sintel', 2010, true);

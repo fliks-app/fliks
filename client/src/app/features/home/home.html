@@ -48,7 +48,14 @@
 <div appTvSection [appDefaultFocus]="defaultFocus()" focusKey="home" focusIdAttr="data-home-focus"
      class="flex flex-col gap-8" [class.stagger-children]="coldStart()">
 
-  @if (!loadingFirstPass()) {
+  @if (!loadingFirstPass() && noLibraries()) {
+    <app-empty-state icon="library" [title]="'home.empty.title' | translate"
+      [hint]="(isAdminUser() ? (isTv() ? 'home.empty.admin_tv_hint' : 'home.empty.admin_hint') : 'home.empty.member_hint') | translate: { address: serverAddress }">
+      @if (isAdminUser() && !isTv()) {
+        <a routerLink="/admin/settings/libraries" class="btn btn-primary">{{ 'home.empty.add_library' | translate }}</a>
+      }
+    </app-empty-state>
+  } @else if (!loadingFirstPass()) {
 
   @for (section of visibleSections(); track section.key) {
     @switch (section.type) {

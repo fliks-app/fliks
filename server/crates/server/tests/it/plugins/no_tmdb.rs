@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 const NS: &str = "org.example.anime:aid";
 
 async fn series_library(h: &H) {
-    sqlx::query("INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]')")
+    sqlx::query("INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items")
         .execute(&h.st.db)
         .await
         .unwrap();

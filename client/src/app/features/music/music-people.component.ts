@@ -13,13 +13,14 @@ import type { MusicPersonRow } from '../../core/services/api/music.models';
 import { PersonAvatarCardComponent } from '../../shared/components/person-avatar-card/person-avatar-card';
 import { VirtualGrid } from '../../shared/utils/infinite-scroll-list';
 import { PagedList } from './paged-list';
+import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-skeleton';
 
 const PAGE = 60;
 
 /** The artists or the composers of a library, as a grid of avatars. */
 @Component({
   selector: 'app-music-people',
-  imports: [
+  imports: [RowSkeletonComponent, 
     FormsModule,
     TranslatePipe,
     TranslatePluralPipe,

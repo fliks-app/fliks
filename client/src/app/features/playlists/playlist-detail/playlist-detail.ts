@@ -77,6 +77,7 @@ import type { SmartRules } from '../../../core/services/api/smart-rules';
 import { formatDuration } from '../../music/music-utils';
 import { HeroBaseComponent, heroDesktopLayout } from '../../../shared/components/hero-base/hero-base';
 import { SmartPlaylistEditorComponent } from '../smart-playlist-editor/smart-playlist-editor';
+import { RowSkeletonComponent } from '../../../shared/components/row-skeleton/row-skeleton';
 
 interface PlaylistSeriesGroup {
   seriesId: number;
@@ -91,7 +92,7 @@ type PlaylistGroupedEntry =
 
 @Component({
   selector: 'app-playlist-detail',
-  imports: [TvSelectDirective, MusicDownloadButtonComponent, TrackDownloadGlyphComponent,
+  imports: [RowSkeletonComponent, TvSelectDirective, MusicDownloadButtonComponent, TrackDownloadGlyphComponent,
     ModalFooterComponent,
     CachedSrcDirective,
     TranslatePipe,

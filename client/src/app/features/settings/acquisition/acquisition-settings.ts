@@ -1,5 +1,6 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   CdkDrag,
@@ -32,6 +33,7 @@ export type UnrequestedTracks = 'import_unmonitored' | 'skip';
 @Component({
   selector: 'app-acquisition-settings',
   imports: [
+    RouterLink,
     LoadFailedComponent,
     TranslatePipe,
     FormsModule,

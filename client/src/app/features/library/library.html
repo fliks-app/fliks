@@ -345,10 +345,19 @@
         }
       </div>
     } @else if (list.all().length === 0) {
-      <div class="text-center py-12 text-base-content/60">
-        <p class="text-lg">{{ 'library.empty' | translate }}</p>
-        <p class="text-sm mt-2">{{ 'library.empty_hint' | translate }}</p>
-      </div>
+      @if (noMatch()) {
+        <app-empty-state icon="search"
+          [title]="(searchQuery() ? 'library.no_match' : 'library.no_match_filters') | translate: { query: searchQuery() }">
+          <button type="button" class="btn btn-ghost" (click)="clearSearchAndFilters()">{{ 'library.clear_filters' | translate }}</button>
+        </app-empty-state>
+      } @else {
+        <app-empty-state [icon]="emptyIcon()" [title]="'library.empty_title' | translate" [hint]="canAdminLibrary() ? emptyFolder() : null">
+          @if (canAdminLibrary() && !isTv() && library(); as lib) {
+            <a [routerLink]="['/admin', 'settings', 'libraries', lib.id, 'media']" class="btn btn-primary">{{ 'library.import_existing' | translate }}</a>
+            <a [routerLink]="['/admin', 'settings', 'libraries', lib.id]" class="btn btn-ghost">{{ 'library.library_settings' | translate }}</a>
+          }
+        </app-empty-state>
+      }
     } @else {
       @if (bulkMode()) {
         <div class="flex items-center gap-2 text-sm">

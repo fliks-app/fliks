@@ -15,10 +15,11 @@ import { LucideChevronLeft } from '@lucide/angular';
 import { PersonHeaderComponent } from '../../shared/components/person-header/person-header';
 import { PersonBooksComponent } from './person-books';
 import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
+import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-skeleton';
 
 @Component({
   selector: 'app-person-detail',
-  imports: [
+  imports: [RowSkeletonComponent, 
     PersonBooksComponent, PersonHeaderComponent, FollowToggleComponent, TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, LucideChevronLeft],
   templateUrl: './person-detail.html',
 })

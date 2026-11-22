@@ -68,7 +68,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (1, 'admin', true, NULL), (2, 'user', false, 1);
         INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Music', '["album"]');
         INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m/one');
-        INSERT INTO quality_profiles (id, name, family, cutoff, items) VALUES (1, 'Audio', 'audio', 1, '[]');
+        INSERT INTO quality_profiles (id, name, family, cutoff, items) VALUES (1, 'Audio', 'audio', 1, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items;
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2);
         "#,
     )

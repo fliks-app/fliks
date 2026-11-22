@@ -585,7 +585,7 @@ export class AuthService {
   }
 
   pairingPending(): Promise<PendingRequest[]> {
-    return firstValueFrom(this.http.get<PendingRequest[]>('/api/auth/pairing/pending'));
+    return firstValueFrom(this.http.get<PendingRequest[]>('/api/auth/pairing/pending', { context: new HttpContext().set(SKIP_ERROR_TOAST, true) }));
   }
 
   pairingLookup(code: string): Promise<PairingLookup> {

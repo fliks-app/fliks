@@ -10,6 +10,7 @@ import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { artistLine, formatDuration, toTrackRequest } from './music-utils';
 import { PagedList } from './paged-list';
 import { TrackLineComponent } from './track-line.component';
+import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-skeleton';
 
 const PAGE = 50;
 type Sort = NonNullable<TracksQuery['sortBy']>;
@@ -17,7 +18,7 @@ type Sort = NonNullable<TracksQuery['sortBy']>;
 /** Every track of a library, searchable and sortable; a click plays the list from that track. */
 @Component({
   selector: 'app-music-tracks',
-  imports: [FormsModule, RouterLink, TranslatePipe, TvSelectDirective, TrackLineComponent, LucidePlay],
+  imports: [RowSkeletonComponent, FormsModule, RouterLink, TranslatePipe, TvSelectDirective, TrackLineComponent, LucidePlay],
   templateUrl: './music-tracks.component.html',
   host: { class: 'block' },
 })

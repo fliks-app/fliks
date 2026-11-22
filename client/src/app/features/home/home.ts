@@ -45,6 +45,9 @@ import { SetupChecklistComponent } from '../../shared/components/setup-checklist
 import { FollowRequestsCardComponent } from '../../shared/components/follow-requests-card/follow-requests-card';
 import { ReceivedRecommendationsCardComponent } from '../../shared/components/received-recommendations-card/received-recommendations-card';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
+import { TvService } from '../../core/services/tv.service';
+import { ServerConfigService } from '../../core/services/server-config.service';
+import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state';
 import { AuthService } from '../../core/services/auth.service';
 import { RequestCardComponent } from '../requests/request-card/request-card';
 import { RequestDeclineModalComponent } from '../requests/request-decline-modal/request-decline-modal.component';
@@ -71,6 +74,7 @@ import type { MediaType } from '../../core/enums/media-type.enum';
     HorizontalScrollerComponent,
     LucideIconComponent,
     SetupChecklistComponent,
+    EmptyStateComponent,
     FollowRequestsCardComponent,
     ReceivedRecommendationsCardComponent,
     TvSectionDirective,
@@ -135,6 +139,11 @@ export class HomeComponent implements OnInit, OnDestroy {
   });
 
   readonly libraries = signal<LibrarySummary[]>([]);
+  private readonly librariesLoaded = signal(false);
+  protected readonly noLibraries = computed(() => this.librariesLoaded() && this.libraries().length === 0);
+  protected readonly isAdminUser = computed(() => this.auth.canAccessSettings());
+  protected readonly isTv = inject(TvService).isTv;
+  protected readonly serverAddress = inject(ServerConfigService).serverUrl() || location.origin;
   private readonly continueWatchingRaw = signal<ContinueWatchingItem[]>([]);
   /** Server list with any position queued while offline layered on top — the
    *  API keeps returning the pre-offline progress until the queue flushes. */
@@ -505,7 +514,10 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.streamingApi.getContinueWatching(undefined, opts).catch(() => null),
         this.streamingApi.getRecommendations(opts).catch(() => null),
       ]);
-      if (libs) this.libraries.set(libs);
+      if (libs) {
+        this.libraries.set(libs);
+        this.librariesLoaded.set(true);
+      }
       if (cw) this.continueWatchingRaw.set(cw);
       if (recs) this.recommendations.set(recs);
     } catch { /* ignore */ }

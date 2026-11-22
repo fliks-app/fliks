@@ -524,7 +524,7 @@ async fn every_put_emits_settings_changed_per_key(pool: PgPool) {
     );
 }
 
-/// `setup-checklist.md`: the seven items in order, dismissal stored compact, unknown keys 400.
+/// `setup-checklist.md`: the nine items in order, dismissal stored compact, unknown keys 400.
 #[sqlx::test(migrations = false)]
 async fn setup_checklist_items_and_dismissal(pool: PgPool) {
     let c = ctx(pool.clone()).await;
@@ -549,14 +549,16 @@ async fn setup_checklist_items_and_dismissal(pool: PgPool) {
             "library",
             "quality-profile",
             "language-profile",
+            "download-provider",
             "subtitle-provider",
             "notification",
             "non-admin-user",
-            "auto-approval-rule"
+            "auto-approval-rule",
+            "data-import"
         ]
     );
     assert_eq!(
-        items[5],
+        items[6],
         json!({"key": "non-admin-user", "severity": "recommended", "done": true, "dismissed": false,
         "route": ["/admin", "settings", "users"]})
     );
@@ -629,7 +631,41 @@ async fn setup_checklist_items_and_dismissal(pool: PgPool) {
         .iter()
         .map(|i| i["dismissed"] == true)
         .collect();
-    assert_eq!(dismissed, [true, false, false, false, false, false, false]);
+    assert_eq!(
+        dismissed,
+        [true, false, false, false, false, false, false, false, false]
+    );
+    sqlx::raw_sql(
+        r#"INSERT INTO plugin_packages ("pluginId", version, archive, origin, signature, manifest)
+             VALUES ('org.test.dl', '1.0.0', '\x00', 'manual', 'sig', '{"ui": {"releasePicker": {}}}');
+           INSERT INTO commands (name, status) VALUES ('ImportSeerrRequests', 'failed');"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let done = |items: &Value, i: usize| items[i]["done"] == true;
+    let (_, items) = call(
+        &c.app,
+        "GET",
+        "/api/setup-checklist",
+        Some(&c.admin),
+        Value::Null,
+    )
+    .await;
+    assert!(done(&items, 3) && !done(&items, 8));
+    sqlx::query("UPDATE commands SET status = 'completed'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, items) = call(
+        &c.app,
+        "GET",
+        "/api/setup-checklist",
+        Some(&c.admin),
+        Value::Null,
+    )
+    .await;
+    assert!(done(&items, 8));
 }
 
 /// `counts.md`: the three counters, each scoped by its own ability.

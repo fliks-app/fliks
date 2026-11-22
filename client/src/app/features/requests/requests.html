@@ -31,13 +31,9 @@
   </div>
 
   @if (loading() && rows().length === 0) {
-    <div class="flex justify-center py-12">
-      <span class="loading loading-spinner loading-lg"></span>
-    </div>
+    <app-row-skeleton />
   } @else if (rows().length === 0) {
-    <div class="text-center py-12 text-base-content/60">
-      <p class="text-lg">{{ 'requests.empty' | translate }}</p>
-    </div>
+    <app-empty-state icon="clapperboard" [title]="'requests.empty' | translate" />
   } @else {
     <div class="flex flex-col gap-3">
       @for (row of rows(); track row.id) {

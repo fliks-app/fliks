@@ -78,7 +78,7 @@ function setup(libraries: LibrarySummary[], perms: string[] = ['media.create']) 
   const done: AddResult[] = [];
   fixture.componentInstance.done.subscribe((r) => done.push(r));
   fixture.detectChanges();
-  return { cmp: fixture.componentInstance, calls, done, show, toast, ask };
+  return { cmp: fixture.componentInstance, fixture, calls, done, show, toast, ask };
 }
 
 const movie: AddRequest = { kind: 'movie', provider: 'tmdb', externalId: '603', title: 'T' };
@@ -141,9 +141,24 @@ describe('AddDialogComponent', () => {
     expect(ask).toHaveBeenCalledWith('request');
     expect(calls['import']).toEqual([]);
     expect(calls['request']).toEqual([
-      { mediaType: 'movie', tmdbId: 603, title: 'T', qualityProfileId: 7, languageProfileId: 3, libraryId: 1 },
+      { mediaType: 'movie', tmdbId: 603, title: 'T', libraryId: 1 },
     ]);
     expect(done[0]!.mode).toBe('request');
+  });
+
+  it('shows a member no folder or profile picker, and a manager the folder picker', async () => {
+    const libs = [lib(1, ['movie']), lib(2, ['movie'])];
+    const member = setup(libs, ['requests.create']);
+    await member.cmp.add(movie);
+    member.fixture.detectChanges();
+    const el = member.fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('select')).toHaveLength(1);
+    expect(el.querySelector('app-library-folder-select')).toBeNull();
+    TestBed.resetTestingModule();
+    const manager = setup(libs, ['requests.create', 'requests.manage']);
+    await manager.cmp.add(movie);
+    manager.fixture.detectChanges();
+    expect((manager.fixture.nativeElement as HTMLElement).querySelector('app-library-folder-select')).not.toBeNull();
   });
 
   it('adds a book with a text want on the first text profile', async () => {

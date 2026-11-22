@@ -1,4 +1,4 @@
-//! `/api/setup-checklist` (`docs/spec/setup-checklist.md`): the seven core items and their dismissal.
+//! `/api/setup-checklist` (`docs/spec/setup-checklist.md`): the nine core items and their dismissal.
 use crate::http::{AppError, auth::Authed};
 use crate::state::AppState;
 use axum::{
@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 const KEY: &str = "setup_checklist_dismissed_keys";
 
 /// Rule 3, in response order: key, severity, route tail, `done` query.
-const ITEMS: [(&str, &str, &str, &str); 7] = [
+const ITEMS: [(&str, &str, &str, &str); 9] = [
     (
         "library",
         "required",
@@ -31,6 +31,12 @@ const ITEMS: [(&str, &str, &str, &str); 7] = [
         "required",
         "language-profiles",
         "SELECT EXISTS(SELECT 1 FROM language_profiles)",
+    ),
+    (
+        "download-provider",
+        "recommended",
+        "plugin-catalogue",
+        "SELECT EXISTS(SELECT 1 FROM plugin_packages WHERE enabled AND manifest #> '{ui,releasePicker}' IS NOT NULL)",
     ),
     (
         "subtitle-provider",
@@ -55,6 +61,12 @@ const ITEMS: [(&str, &str, &str, &str); 7] = [
         "recommended",
         "auto-approval",
         "SELECT EXISTS(SELECT 1 FROM auto_approval_rules)",
+    ),
+    (
+        "data-import",
+        "recommended",
+        "data-imports",
+        "SELECT EXISTS(SELECT 1 FROM commands WHERE status = 'completed' AND name IN ('ImportWatchHistory', 'ImportSeerrRequests'))",
     ),
 ];
 

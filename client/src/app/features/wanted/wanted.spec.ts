@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { afterEach, describe, expect, it } from 'vitest';
+import { SKIP_ERROR_TOAST } from '../../core/interceptors/error.interceptor';
 import type { WantedRow } from '../../core/services/api/wants-api.service';
 import { bookSpecProviders } from '../media-detail/book/book-test-setup';
 import { WantedComponent } from './wanted';
@@ -52,5 +53,19 @@ describe('WantedComponent', () => {
     req.flush({ data: [], total: 0 });
     await settle();
     expect(el.querySelector('[data-testid="wanted-empty"]')).not.toBeNull();
+  });
+
+  it('shows one failed state with a retry, and no error toast on the first load', async () => {
+    const { http, settle, el } = await setup();
+    const first = http.expectOne((r) => r.url === '/api/wanted');
+    expect(first.request.context.get(SKIP_ERROR_TOAST)).toBe(true);
+    first.flush('x', { status: 500, statusText: 'Server Error' });
+    await settle();
+    expect(el.querySelector('app-load-failed')).not.toBeNull();
+    (el.querySelector('app-load-failed button') as HTMLButtonElement).click();
+    http.expectOne((r) => r.url === '/api/wanted').flush({ data: [row(1, 'Alpha')], total: 1 });
+    await settle();
+    expect(el.querySelector('app-load-failed')).toBeNull();
+    expect(el.querySelectorAll('[data-testid="wanted-row"]')).toHaveLength(1);
   });
 });
