@@ -709,13 +709,13 @@ async fn rescan_probes_only_what_changed(pool: PgPool) {
     let first = rescan(&c, a).await.unwrap();
     assert_eq!(
         (first.updated, probes(&c), scans(&c, 0).await),
-        (1, 2, 0),
-        "unstamped row, same size: probe + embedded detection, no scan"
+        (1, 1, 0),
+        "unstamped row, same size: one probe feeds the embedded detection, no scan"
     );
     let second = rescan(&c, a).await.unwrap();
     assert_eq!(
         (second.updated, probes(&c), scans(&c, 0).await),
-        (0, 2, 0),
+        (0, 1, 0),
         "stamped and unchanged: no probe, no scan"
     );
     sqlx::query(r#"UPDATE media_files SET "mtimeMs" = 0"#)
@@ -725,7 +725,7 @@ async fn rescan_probes_only_what_changed(pool: PgPool) {
     let third = rescan(&c, a).await.unwrap();
     assert_eq!(
         (third.updated, probes(&c), scans(&c, 1).await),
-        (1, 4, 1),
+        (1, 2, 1),
         "a moved mtime probes and scans again"
     );
 }
@@ -746,8 +746,8 @@ async fn rescan_detects_embedded_subtitles_after_an_interrupted_walk(pool: PgPoo
     assert_eq!(r.unwrap().added, 1);
     assert_eq!(
         c.fake.seen("POST", "/v1/probe").len(),
-        2,
-        "probe + embedded detection although the walk was incomplete"
+        1,
+        "the probe feeds the embedded detection although the walk was incomplete"
     );
 }
 
