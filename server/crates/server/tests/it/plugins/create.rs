@@ -4,10 +4,10 @@ use crate::fakes::Scripted;
 use crate::session;
 use fliks_domain::external_id::Namespace;
 use fliks_server::{
+    acquisition::resolve_or_create,
     config::Config,
     events::{Bus, DomainEvent},
     images::ImageStore,
-    plugins::acquisition::resolve_or_create,
     plugins::runtime::fliks::plugin::types::ExternalId,
     state::AppState,
 };

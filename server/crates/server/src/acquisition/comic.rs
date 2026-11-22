@@ -362,7 +362,7 @@ pub(super) async fn match_one(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugins::acquisition::{candidates, context, matches, score_any};
+    use crate::acquisition::{candidates, context, matches, score_any};
 
     fn state(db: &PgPool) -> AppState {
         AppState::new(

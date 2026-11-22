@@ -975,7 +975,7 @@ async fn progress_of_two_plugins_is_their_union() {
 /// `releases.match` and `releases.score` (rule 34) against a seeded library.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn releases_match_and_score() {
-    use fliks_server::plugins::acquisition;
+    use fliks_server::acquisition;
     use fliks_server::plugins::runtime::fliks::plugin::types::{
         CandidateRelease, MatchDecision, ReleaseTitle, SkipReason,
     };

@@ -470,7 +470,7 @@ pub(super) fn wit_scored(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plugins::acquisition::context;
+    use crate::acquisition::context;
 
     fn state(db: &PgPool) -> AppState {
         AppState::new(

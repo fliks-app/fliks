@@ -529,7 +529,7 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     doc.merge(markers::Doc::openapi());
     doc.merge(subtitles::Doc::openapi());
     doc.merge(crate::plugins::routes::Doc::openapi());
-    doc.merge(crate::plugins::queue_routes::Doc::openapi());
+    doc.merge(crate::acquisition::queue_routes::Doc::openapi());
     doc
 }
 
@@ -558,7 +558,7 @@ pub fn router(
 fn api() -> Router<AppState> {
     Router::new()
         .merge(crate::auth::router())
-        .merge(crate::plugins::queue_routes::router())
+        .merge(crate::acquisition::queue_routes::router())
         .merge(crate::roles::router())
         .merge(crate::settings::router())
         .merge(crate::fs::router())

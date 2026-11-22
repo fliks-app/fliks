@@ -63,7 +63,7 @@ pub async fn push_progress(st: &AppState, media_id: i32, mut downloads: Vec<Down
     let Some((_, media_type)) = media_row(st, media_id).await else {
         return;
     };
-    downloads.extend(super::queue::downloads(&st.db, media_id).await);
+    downloads.extend(crate::acquisition::queue::downloads(&st.db, media_id).await);
     st.hub.emit_to_users(
         &recipients,
         SseEvent::DownloadProgress {
@@ -250,7 +250,7 @@ pub async fn in_flight(
         .into_iter()
         .collect();
     ids.extend(
-        super::queue::in_flight(&st.db, plugin, media_id, season, episode)
+        crate::acquisition::queue::in_flight(&st.db, plugin, media_id, season, episode)
             .await
             .map_err(super::imports::db_err)?,
     );

@@ -700,7 +700,7 @@ pub async fn grab_best(
     id: Result<PathParams<i32>, AppError>,
     ValidJson(v): ValidJson<Value>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
-    use crate::plugins::sweep::Outcome;
+    use crate::acquisition::sweep::Outcome;
     let id = gate(&st, &a, Action::Grab, id).await?;
     let num = |k: &str| v[k].as_u64().and_then(|n| u32::try_from(n).ok());
     let family = match v["family"].as_str() {
@@ -716,9 +716,9 @@ pub async fn grab_best(
         .fetch_one(&st.db)
         .await?;
     let targets = if is_album && num("itemId").is_none() && num("groupId").is_none() {
-        crate::plugins::acquisition::album_targets(&st.db, id).await?
+        crate::acquisition::album_targets(&st.db, id).await?
     } else {
-        crate::plugins::acquisition::context(
+        crate::acquisition::context(
             &st,
             id as u32,
             family,

@@ -1,6 +1,5 @@
 //! The plugin host (`docs/spec/plugins.md`, pluginApi 3 on wasm): install pipeline, registry,
 //! runtime and the `/api/plugins/*` routes.
-pub mod acquisition;
 pub mod backup;
 pub mod bundled;
 pub mod catalog;
@@ -19,10 +18,7 @@ pub mod namespaces;
 pub mod notify;
 pub mod outbound;
 pub mod packages;
-pub mod picker;
 pub mod provider;
-pub mod queue;
-pub mod queue_routes;
 mod register;
 pub mod registry;
 pub mod routes;
@@ -30,7 +26,6 @@ pub mod runtime;
 pub mod scheduled;
 pub mod sources;
 pub mod staging;
-pub mod sweep;
 pub mod ui;
 pub mod units;
 #[cfg(test)]
@@ -167,11 +162,11 @@ pub struct Plugins {
     pub namespaces: Arc<namespaces::Known>,
     pub counts: counts::Counts,
     pub notify: notify::Limiter,
-    pub pickers: picker::Pickers,
-    pub sweeps: sweep::Sweeps,
+    pub pickers: crate::acquisition::picker::Pickers,
+    pub sweeps: crate::acquisition::sweep::Sweeps,
     /// In-flight placeholders and the tracks a per-track grab holds, cleared with the plugin.
     pub progress: events::Progress,
-    pub item_claims: queue::Claims,
+    pub item_claims: crate::acquisition::queue::Claims,
     pub staging: staging::Staging,
     pub logs: Arc<logs::Logs>,
     host: OnceLock<Arc<Host>>,
@@ -220,10 +215,10 @@ impl Plugins {
             namespaces: Arc::default(),
             counts: counts::Counts::default(),
             notify: notify::Limiter::default(),
-            pickers: picker::Pickers::default(),
-            sweeps: sweep::Sweeps::default(),
+            pickers: crate::acquisition::picker::Pickers::default(),
+            sweeps: crate::acquisition::sweep::Sweeps::default(),
             progress: events::Progress::default(),
-            item_claims: queue::Claims::default(),
+            item_claims: crate::acquisition::queue::Claims::default(),
             logs: Arc::default(),
             host: OnceLock::new(),
             locks: KeyedLocks::default(),
@@ -242,7 +237,7 @@ impl Plugins {
         }
     }
 
-    fn app(&self) -> Option<&AppState> {
+    pub(crate) fn app(&self) -> Option<&AppState> {
         self.app.get()
     }
 
@@ -363,7 +358,7 @@ impl Plugins {
         }
         self.item_claims.forget(id);
         self.progress.forget(app, id).await;
-        queue::close_plugin(app, id).await;
+        crate::acquisition::queue::close_plugin(app, id).await;
     }
 
     /// Follows a runtime's state: the circuit breaker drops its acquisition state (rule 71), and a provider
@@ -499,7 +494,7 @@ impl Plugins {
         // Plugin pushes and webhooks are lossy by contract; a lost request for a sweep is not.
         let on_lag = move || {
             let st = on_lag.clone();
-            tokio::spawn(async move { sweep::sweep_all(&st).await });
+            tokio::spawn(async move { crate::acquisition::sweep::sweep_all(&st).await });
         };
         tokio::spawn(crate::events::listen(
             "plugin event feed",
@@ -518,7 +513,7 @@ impl Plugins {
                 tokio::spawn(async move { st3.plugins.staging.sweep().await });
             },
         );
-        sweep::spawn_tick(st);
+        crate::acquisition::sweep::spawn_tick(st);
         let st4 = st.clone();
         tokio::spawn(async move { sources::refresh_all(&st4, true).await });
         let me = self.clone();
@@ -531,7 +526,7 @@ impl Plugins {
         };
         let name = payload["type"].as_str().unwrap_or_default().to_owned();
         self.push_to_plugins(&name, &payload);
-        if name == picker::REQUESTED {
+        if name == crate::acquisition::picker::REQUESTED {
             let ids: Vec<u32> = payload["mediaIds"]
                 .as_array()
                 .into_iter()
@@ -545,7 +540,10 @@ impl Plugins {
 
     /// A settings write: the owning running plugin gets `config-changed` unless it wrote it.
     pub fn settings_changed(self: &Arc<Self>, keys: &[String], origin: Option<&str>) {
-        if keys.iter().any(|k| k == picker::ORDER_KEY) {
+        if keys
+            .iter()
+            .any(|k| k == crate::acquisition::picker::ORDER_KEY)
+        {
             let me = self.clone();
             tokio::spawn(async move { me.load_acquisition_settings().await });
         }

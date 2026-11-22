@@ -1,7 +1,7 @@
 //! The acquisition reads of `plugins.md` rule 31, built on the S5 release domain.
-use super::imports::{db_err, host_err};
-use super::runtime::HostError;
-use super::runtime::fliks::plugin::types as t;
+use crate::plugins::imports::{db_err, host_err};
+use crate::plugins::runtime::HostError;
+use crate::plugins::runtime::fliks::plugin::types as t;
 use crate::profiles::db as profiles;
 use crate::scene::Mapping;
 use crate::state::AppState;
@@ -414,7 +414,7 @@ pub async fn score_any(
             .map_err(db_err);
     }
     if m.kind != MediaKind::Book {
-        let (season, episode) = super::units::video(unit.as_ref())?;
+        let (season, episode) = crate::plugins::units::video(unit.as_ref())?;
         return release::score_of(st, &m, season, episode, releases)
             .await
             .map_err(db_err);
@@ -439,7 +439,11 @@ mod candidates;
 mod comic;
 mod create;
 mod music;
+pub mod picker;
+pub mod queue;
+pub mod queue_routes;
 mod release;
+pub mod sweep;
 pub use book::score as score_book;
 pub use candidates::*;
 pub use create::*;

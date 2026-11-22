@@ -2,7 +2,7 @@
 
 A release or file name carries the numbering its group uses (scene numbering), which some series do not share with the library's (aired) numbering: a show released by part names its fourth part `S04` while the library's season 3 holds it. TheXEM publishes the per-episode mapping from scene numbering to TVDB aired numbering. Library numbering never changes.
 
-Code: `fliks_domain::release::scene` (pure), `server/src/scene.rs` (storage, refresh, loader), callers in `plugins/acquisition/release.rs` and `ingest/library.rs`.
+Code: `fliks_domain::release::scene` (pure), `server/src/scene.rs` (storage, refresh, loader), callers in `acquisition/release.rs` and `ingest/library.rs`.
 
 ## Rules
 
@@ -21,14 +21,14 @@ Code: `fliks_domain::release::scene` (pure), `server/src/scene.rs` (storage, ref
 
 | Item | Test |
 |---|---|
-| aired S03 searches scene S04 | `aired_season_searches_its_scene_season` (domain), `a_mapped_series_target_carries_the_scene_units` (`plugins/acquisition.rs`); plugin repo `a_split_season_issues_one_query_per_scene_season` |
-| scene S03 pack is aired S02, rejected for aired S03 | `scene_pack_resolves_to_the_aired_season`, `scene_pack_is_rejected_for_the_next_aired_season` (domain), `releases_match_reads_scene_numbers_as_aired` (`plugins/acquisition.rs`) |
+| aired S03 searches scene S04 | `aired_season_searches_its_scene_season` (domain), `a_mapped_series_target_carries_the_scene_units` (`acquisition/mod.rs`); plugin repo `a_split_season_issues_one_query_per_scene_season` |
+| scene S03 pack is aired S02, rejected for aired S03 | `scene_pack_resolves_to_the_aired_season`, `scene_pack_is_rejected_for_the_next_aired_season` (domain), `releases_match_reads_scene_numbers_as_aired` (`acquisition/mod.rs`) |
 | scene S02E01 is aired S01E06, scene S02 pack is partial aired S01 | `scene_episode_resolves_per_episode`, `split_scene_season_is_a_partial_pack` (domain) |
 | file S04E01 imports into aired S03E01, explicit episode wins | `a_scene_named_file_imports_into_its_aired_episode`, `an_explicit_episode_wins_over_the_name` (`ingest/tests.rs`) |
 | upstream failure keeps the stored mapping | `a_failed_fetch_keeps_the_stored_mapping` (`scene.rs`) |
 | provider answering none: not mapped, stale mapping cleared | `a_listed_series_with_no_mapping_is_unmapped_not_unknown`, `refresh_replaces_the_stored_mapping_when_the_provider_has_none` (`scene.rs`) |
 | library not matching TVDB numbering ignores the mapping | `guard_rejects_a_library_with_other_season_counts` (domain), `a_library_that_does_not_fit_is_not_mapped` (`scene.rs`) |
-| known-mapped series never identity | `an_unknown_mapping_is_fetched_on_demand_and_refuses_when_it_fails` (`scene.rs`), `an_unknown_or_ambiguous_mapping_rejects_numbered_releases` (domain), `an_unknown_mapping_skips_numbered_releases` (`plugins/acquisition.rs`), `an_unknown_mapping_skips_and_fails_the_import` (`ingest/tests.rs`) |
+| known-mapped series never identity | `an_unknown_mapping_is_fetched_on_demand_and_refuses_when_it_fails` (`scene.rs`), `an_unknown_or_ambiguous_mapping_rejects_numbered_releases` (domain), `an_unknown_mapping_skips_numbered_releases` (`acquisition/mod.rs`), `an_unknown_mapping_skips_and_fails_the_import` (`ingest/tests.rs`) |
 | double episode translated, cross-season split refused | `a_double_episode_translates_and_a_cross_season_split_is_refused` (domain), `an_ambiguous_number_is_a_plain_error_not_a_retry` (`ingest/tests.rs`) |
 | refused-for-now import is retried, then failed | `an_unknown_mapping_skips_and_fails_the_import`, `a_second_ingest_of_a_placed_file_is_already_present` (`ingest/tests.rs`); plugin repo `an_import_the_host_refuses_for_now_is_retried_then_failed` |
 | unlisted unfetched rows pruned, failed ids not refetched at once | `refresh_drops_unfetched_rows_that_are_no_longer_listed`, `an_unknown_mapping_is_fetched_on_demand_and_refuses_when_it_fails` (`scene.rs`) |

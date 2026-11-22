@@ -280,7 +280,11 @@ async fn mark_state(
                FROM media m WHERE m.id = ANY($1)"#,
         )
         .bind(&ids)
-        .bind(crate::plugins::queue::IN_FLIGHT.map(String::from).to_vec())
+        .bind(
+            crate::acquisition::queue::IN_FLIGHT
+                .map(String::from)
+                .to_vec(),
+        )
         .fetch_all(db)
         .await?;
         for (id, monitored, owned, transfer) in rows {
@@ -579,11 +583,12 @@ async fn mark_recordings(db: &PgPool, a: &Authed, hits: &mut [Value]) -> Result<
         .iter()
         .filter_map(|h| h["externalId"].as_str())
         .collect();
-    let held: Vec<(i32, i32, String, bool, bool, bool)> = if ids.is_empty() {
-        vec![]
-    } else {
-        let libs = accessible_library_ids(db, a).await?;
-        sqlx::query_as(
+    let held: Vec<(i32, i32, String, bool, bool, bool)> =
+        if ids.is_empty() {
+            vec![]
+        } else {
+            let libs = accessible_library_ids(db, a).await?;
+            sqlx::query_as(
             r#"SELECT DISTINCT ON (td."recordingMbid") i.id, i."mediaId", td."recordingMbid"::text,
                       track_file(i.id) IS NOT NULL, i.monitored AND m.monitored,
                       EXISTS (SELECT 1 FROM acquisition_queue q WHERE q."mediaId" = i."mediaId"
@@ -600,10 +605,10 @@ async fn mark_recordings(db: &PgPool, a: &Authed, hits: &mut [Value]) -> Result<
         )
         .bind(&ids)
         .bind(&libs)
-        .bind(crate::plugins::queue::IN_FLIGHT.map(String::from).to_vec())
+        .bind(crate::acquisition::queue::IN_FLIGHT.map(String::from).to_vec())
         .fetch_all(db)
         .await?
-    };
+        };
     let asked = recording_requests(db, a, hits).await?;
     for h in hits {
         let id = h["externalId"].as_str().map(str::to_owned);
