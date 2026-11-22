@@ -10,11 +10,11 @@
       "as": "admin",
       "expect": {
         "body": {
-          "error": "Internal Server Error",
-          "message": "Internal server error",
-          "statusCode": 500
+          "error": "Service Unavailable",
+          "message": "Metadata request failed on tmdb: ERR_NOT_FOUND: plugin \"fliks.tmdb\" has no active registration",
+          "statusCode": 503
         },
-        "status": 500
+        "status": 503
       },
       "method": "POST",
       "path": "/api/requests/1/approve"

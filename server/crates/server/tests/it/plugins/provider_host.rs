@@ -406,7 +406,7 @@ async fn lists_go_through_the_plugin_and_are_validated() {
         .call(
             "GET",
             "/api/metadata/trending/tv?window=day",
-            Some(&h.user),
+            Some(&h.admin),
             None,
         )
         .await;
@@ -414,7 +414,7 @@ async fn lists_go_through_the_plugin_and_are_validated() {
     assert_eq!(body[0]["title"], format!("series:day:{}", lang.tmdb_locale));
     assert_eq!(body[0]["existingMediaId"], Value::Null);
     let (st, _) = h
-        .call("GET", "/api/metadata/popular/tv", Some(&h.user), None)
+        .call("GET", "/api/metadata/popular/tv", Some(&h.admin), None)
         .await;
     assert_eq!(st, 503);
     h.finish().await;

@@ -173,13 +173,10 @@ pub struct Lookup {
     pub library_id: i32,
 }
 
-/// Any provider failure is a generic 500; the reason is only logged.
+/// 404 when the provider has no such title, else 503 naming the provider.
 fn fail(p: Namespace, e: Upstream) -> AppError {
     tracing::warn!("metadata request failed on {}: {e}", p.as_str());
-    AppError::plain(
-        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-        "Internal server error",
-    )
+    super::routes::fail(p, &e, true)
 }
 
 fn fail_meta(p: Namespace, e: MetaError) -> AppError {

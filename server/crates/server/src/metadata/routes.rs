@@ -14,6 +14,7 @@ use axum::{
     http::StatusCode,
     routing::get,
 };
+use fliks_domain::acl::{Action, Subject};
 use fliks_domain::external_id::Namespace;
 use fliks_domain::media::kind::MediaKind;
 use fliks_domain::metadata::{language::Resolved, limiter::Priority};
@@ -128,7 +129,8 @@ pub(crate) async fn lang(st: &AppState) -> Result<Resolved, AppError> {
 /// Whether the TMDB provider answers (a client keys a request by `tmdbId` only then), and the available
 /// providers serving each kind, in the admin's order.
 #[utoipa::path(get, path = "/api/metadata/providers", responses((status = 200)))]
-pub async fn providers(State(st): State<AppState>, _a: Authed) -> Res {
+pub async fn providers(State(st): State<AppState>, a: Authed) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let mut serving = serde_json::Map::new();
     let known = st.namespaces();
     for kind in MediaKind::ALL {
@@ -156,6 +158,7 @@ async fn listed(
     name: &str,
     params: &[(String, String)],
 ) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let kind = MediaKind::from_tv(tv);
     let Some(id) = st.metadata.lister(kind) else {
         return Ok(Json(json!([])));
@@ -229,12 +232,14 @@ async fn genres(st: &AppState, tv: bool) -> Res {
 }
 
 #[utoipa::path(get, path = "/api/metadata/genres/movie", responses((status = 200)))]
-pub async fn genres_movie(State(st): State<AppState>, _a: Authed) -> Res {
+pub async fn genres_movie(State(st): State<AppState>, a: Authed) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     genres(&st, false).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/genres/tv", responses((status = 200)))]
-pub async fn genres_tv(State(st): State<AppState>, _a: Authed) -> Res {
+pub async fn genres_tv(State(st): State<AppState>, a: Authed) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     genres(&st, true).await
 }
 
@@ -300,47 +305,54 @@ async fn seasons_of(st: &AppState, p: Namespace, id: &str, stubs: bool) -> Res {
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/movie/{externalId}", responses((status = 200)))]
-pub async fn details_movie(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
+pub async fn details_movie(State(st): State<AppState>, a: Authed, ids: Ids) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st, &p, &id)?;
     details(&st, p, MediaKind::Movie, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}", responses((status = 200)))]
-pub async fn details_tv(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
+pub async fn details_tv(State(st): State<AppState>, a: Authed, ids: Ids) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st, &p, &id)?;
     details(&st, p, MediaKind::Series, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}/seasons", responses((status = 200)))]
-pub async fn seasons(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
+pub async fn seasons(State(st): State<AppState>, a: Authed, ids: Ids) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st, &p, &id)?;
     seasons_of(&st, p, &id, false).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}/season-stubs", responses((status = 200)))]
-pub async fn season_stubs(State(st): State<AppState>, _a: Authed, ids: Ids) -> Res {
+pub async fn season_stubs(State(st): State<AppState>, a: Authed, ids: Ids) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st, &p, &id)?;
     seasons_of(&st, p, &id, true).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/movie/{tmdbId}", responses((status = 200)))]
-pub async fn legacy_movie(State(st): State<AppState>, _a: Authed, id: Legacy) -> Res {
+pub async fn legacy_movie(State(st): State<AppState>, a: Authed, id: Legacy) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let (p, id) = target(&st, "tmdb", &id?.0)?;
     details(&st, p, MediaKind::Movie, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}", responses((status = 200)))]
-pub async fn legacy_tv(State(st): State<AppState>, _a: Authed, id: Legacy) -> Res {
+pub async fn legacy_tv(State(st): State<AppState>, a: Authed, id: Legacy) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let (p, id) = target(&st, "tmdb", &id?.0)?;
     details(&st, p, MediaKind::Series, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}/seasons", responses((status = 200)))]
-pub async fn legacy_seasons(State(st): State<AppState>, _a: Authed, id: Legacy) -> Res {
+pub async fn legacy_seasons(State(st): State<AppState>, a: Authed, id: Legacy) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let (p, id) = target(&st, "tmdb", &id?.0)?;
     seasons_of(&st, p, &id, false).await
 }

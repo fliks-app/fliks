@@ -1684,3 +1684,45 @@ async fn identify_keeps_the_unlisted_episodes_a_file_or_a_user_holds(pool: PgPoo
         .unwrap();
     assert_eq!(history, 2);
 }
+
+#[sqlx::test(migrations = false)]
+async fn metadata_routes_need_media_read_and_a_bounded_page(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO roles (name, permissions) VALUES ('none', '[]');
+INSERT INTO users (username, "isAdmin", "roleId") VALUES ('none', false, (SELECT id FROM roles WHERE name = 'none'))"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let id: i32 = sqlx::query_scalar("SELECT id FROM users WHERE username = 'none'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let tok = session::token(&c.st, id, "none").await;
+    for uri in [
+        "/api/metadata/providers",
+        "/api/metadata/search/movie?q=x",
+        "/api/metadata/trending/movie",
+        "/api/metadata/trending/album",
+        "/api/metadata/genres/tv",
+        "/api/metadata/tmdb/movie/1",
+        "/api/metadata/movie/1",
+    ] {
+        assert_eq!(call(&c, uri, Some(&tok)).await.0, 403, "{uri}");
+    }
+    let (s, _) = call(
+        &c,
+        "/api/metadata/search/movie?q=x&page=501",
+        Some(&c.reader),
+    )
+    .await;
+    assert_eq!(s, 400);
+    let (s, _) = call(
+        &c,
+        "/api/metadata/search/movie?q=x&page=500",
+        Some(&c.reader),
+    )
+    .await;
+    assert_ne!(s, 400);
+}

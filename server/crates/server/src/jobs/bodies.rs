@@ -8,9 +8,15 @@ use crate::{
     system::backup,
 };
 use chrono::{DateTime, NaiveDate, Utc};
+use fliks_domain::external_id::Namespace;
 use fliks_domain::{media::kind::MediaKind, metadata::limiter::Priority, refresh};
 use fliks_engine_core::api::JobPriority;
+use futures_util::future::join_all;
 use sqlx::{FromRow, PgPool};
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 type Outcome = Result<(), String>;
 
@@ -211,45 +217,54 @@ async fn refresh_loop(
     chatty: bool,
 ) -> Result<u32, String> {
     let _row = ActivityRows::new(&st.hub, [job.to_owned()]);
-    let served: Vec<&&MediaRow> = rows
-        .iter()
-        .filter(|m| st.metadata.resolve(None, m.kind).is_some())
-        .collect();
-    if served.len() < rows.len() {
+    // One sequential loop per provider: a slow one only delays its own titles.
+    let mut by_provider: HashMap<Namespace, Vec<&MediaRow>> = HashMap::new();
+    for m in rows {
+        if let Some(p) = st.metadata.resolve(None, m.kind) {
+            by_provider.entry(p).or_default().push(m);
+        }
+    }
+    let total: usize = by_provider.values().map(Vec::len).sum();
+    if total < rows.len() {
         tracing::info!(
             "{job}: {} title(s) skipped, no metadata provider for their kind",
-            rows.len() - served.len()
+            rows.len() - total
         );
     }
-    let rows: Vec<&MediaRow> = served.into_iter().copied().collect();
-    let total = rows.len();
-    let mut updated = 0;
-    for (i, m) in rows.iter().enumerate() {
-        let subject = m.subject();
-        progress(
-            &st.hub,
-            job,
-            i,
-            total,
-            m.title.clone(),
-            Some(subject.clone()),
-        );
-        running(&st.hub, job, job, Some(subject), i, total, None);
-        if chatty {
-            tracing::info!("{job}: refreshing \"{}\" ({}/{total})", m.title, i + 1);
-        }
-        let refreshed = match crate::ingest::load_media(&st.db, m.id).await {
-            Ok(Some(full)) => {
-                crate::media::write::refresh_any(st, &full, false, Priority::Background).await
+    let seen = &AtomicUsize::new(0);
+    let counts = join_all(by_provider.values().map(|group| async move {
+        let mut updated = 0;
+        for m in group {
+            let i = seen.fetch_add(1, Ordering::Relaxed);
+            let subject = m.subject();
+            progress(
+                &st.hub,
+                job,
+                i,
+                total,
+                m.title.clone(),
+                Some(subject.clone()),
+            );
+            running(&st.hub, job, job, Some(subject), i, total, None);
+            if chatty {
+                tracing::info!("{job}: refreshing \"{}\" ({}/{total})", m.title, i + 1);
             }
-            Ok(None) => continue,
-            Err(e) => Err(e.into()),
-        };
-        match refreshed {
-            Ok(_) => updated += 1,
-            Err(e) => tracing::warn!("{job}: failed for \"{}\": {e}", m.title),
+            let refreshed = match crate::ingest::load_media(&st.db, m.id).await {
+                Ok(Some(full)) => {
+                    crate::media::write::refresh_any(st, &full, false, Priority::Background).await
+                }
+                Ok(None) => continue,
+                Err(e) => Err(e.into()),
+            };
+            match refreshed {
+                Ok(_) => updated += 1,
+                Err(e) => tracing::warn!("{job}: failed for \"{}\": {e}", m.title),
+            }
         }
-    }
+        updated
+    }))
+    .await;
+    let updated: u32 = counts.into_iter().sum();
     done(&st.hub, job, total);
     Ok(updated)
 }

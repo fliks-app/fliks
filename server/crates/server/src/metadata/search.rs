@@ -16,6 +16,7 @@ use axum::{
     extract::{Query, State},
 };
 use fliks_domain::{
+    acl::{Action, Subject},
     external_id::{ExternalProvider, Namespace, Namespaces},
     media::{
         kind::MediaKind,
@@ -48,6 +49,9 @@ pub(crate) fn segment_kind(seg: &str) -> Option<MediaKind> {
     }
 }
 
+/// TMDB serves no page past 500.
+const MAX_PAGE: u32 = 500;
+
 /// `page`: an integer of at least 1, default 1.
 fn page(q: &[(String, String)]) -> Result<u32, AppError> {
     let Some(raw) = bare(q, "page").filter(|p| !p.is_empty()) else {
@@ -59,7 +63,12 @@ fn page(q: &[(String, String)]) -> Result<u32, AppError> {
     if n < 1.0 {
         return Err(AppError::bad_request("page must not be less than 1"));
     }
-    Ok(n.min(f64::from(u32::MAX)) as u32)
+    if n > f64::from(MAX_PAGE) {
+        return Err(AppError::bad_request(format!(
+            "page must not be greater than {MAX_PAGE}"
+        )));
+    }
+    Ok(n as u32)
 }
 
 /// Media override, then library, else no preference; a bad id is no preference.
@@ -343,6 +352,7 @@ pub async fn search_hits(
     seg: Result<PathParams<String>, AppError>,
     Query(q): Pairs,
 ) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let PathParams(seg) = seg?;
     let kind = segment_kind(&seg)
         .ok_or_else(|| AppError::bad_request(format!("Unknown media type: {seg}")))?;
@@ -467,6 +477,7 @@ async fn mark_target(
 /// no music provider serves lists (`docs/spec/metadata.md` rule 56).
 #[utoipa::path(get, path = "/api/metadata/trending/album", responses((status = 200)))]
 pub async fn trending_album(State(st): State<AppState>, a: Authed, Query(q): Pairs) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let kind = MediaKind::Album;
     let target = target(kind, bare(&q, "target").as_deref())?;
     let Some(p) = st.metadata.lister(kind) else {

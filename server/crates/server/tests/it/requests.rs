@@ -620,7 +620,7 @@ async fn a_failed_import_aborts_the_create(pool: PgPool) {
     rule(&c, json!({})).await;
     c.tmdb.down.lock_clean().insert(40);
     let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(40)).await;
-    assert_eq!(s, 500, "TMDB answering 503 is a generic 500");
+    assert_eq!(s, 503, "TMDB answering 503 is a 503");
     let (_, list) = call(&c, "GET", "/api/requests", &c.admin, json!(null)).await;
     assert_eq!(list["total"], 0, "nothing inserted");
 }
@@ -1039,7 +1039,7 @@ async fn approve_rolls_back_on_an_import_error(pool: PgPool) {
         json!(null),
     )
     .await;
-    assert_eq!(s, 500);
+    assert_eq!(s, 503);
     let (_, r) = call(
         &c,
         "GET",
