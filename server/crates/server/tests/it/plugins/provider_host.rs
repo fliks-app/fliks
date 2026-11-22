@@ -185,19 +185,14 @@ async fn the_order_setting_picks_the_providers_of_a_kind() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_bundled_provider_registers_again_after_the_breaker() {
+async fn a_provider_registers_again_after_the_breaker() {
     let tune = |c: &mut HostConfig| {
         c.breaker_crashes = 2;
-        c.provider_retry = (Duration::from_millis(100), Duration::from_millis(100));
+        c.breaker_retry = (Duration::from_millis(100), Duration::from_millis(100));
     };
     let Some((s, h, _)) = up("pvbrk", tune, |_| {}).await else {
         return;
     };
-    sqlx::query(r#"UPDATE plugin_packages SET origin = 'bundled' WHERE "pluginId" = $1"#)
-        .bind(ID)
-        .execute(&s.pool)
-        .await
-        .unwrap();
     let pkg = fliks_server::plugins::packages::find(&s.pool, ID)
         .await
         .unwrap()

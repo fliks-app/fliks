@@ -994,14 +994,11 @@ impl Plugins {
                 }
             }
         }
-        if bundled {
-            self.reregister_after_breaker(rt.clone());
-        }
     }
 
     /// Rule 48: once `failed`, the package registers again after the first delay, then every later one,
     /// unless an admin's restart or a removal got there first.
-    fn reregister_after_breaker(&self, rt: Arc<PluginRt>) {
+    pub(super) fn reregister_after_breaker(&self, rt: Arc<PluginRt>) {
         let Some(st) = self.app().cloned() else {
             return;
         };
@@ -1015,7 +1012,7 @@ impl Plugins {
                 Ok(s) if *s == State::Failed => {}
                 _ => return,
             }
-            let (first, every) = rt.sh.env.cfg.provider_retry;
+            let (first, every) = rt.sh.env.cfg.breaker_retry;
             let me = &st.plugins;
             let mut ours = Some(rt);
             let mut delay = first;

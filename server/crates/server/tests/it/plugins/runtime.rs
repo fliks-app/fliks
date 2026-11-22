@@ -1224,3 +1224,113 @@ async fn a_restore_refuses_registration_and_admin_routes() {
     );
     done(s, h).await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_memory_budget_refusal_is_not_a_crash() {
+    let Some((s, h)) = setup("membudget", |_| {}).await else {
+        return;
+    };
+    let rt = h.st.plugins.rt(ID).unwrap();
+    let held = 127 << 20;
+    rt.sh
+        .mem_total
+        .fetch_add(held, std::sync::atomic::Ordering::SeqCst);
+    let r = rt.http(req("/test/grow", &[("mb", "10")]), false).await;
+    assert!(
+        matches!(&r, Err(e) if e.is_saturated()),
+        "the budget refuses like a full queue: {r:?}"
+    );
+    assert_eq!(rt.restarts.load(std::sync::atomic::Ordering::SeqCst), 0);
+    rt.sh
+        .mem_total
+        .fetch_sub(held, std::sync::atomic::Ordering::SeqCst);
+    let ok = rt.http(req("/test/grow", &[("mb", "10")]), false).await;
+    assert_eq!(ok.unwrap().status, 200);
+    done(s, h).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn domain_events_reach_only_plugins_holding_events_receive() {
+    let Some((s, h)) = setup("evscope", |_| {}).await else {
+        return;
+    };
+    let seen = || logs("event media.removed");
+    let before = seen();
+    h.st.plugins
+        .push_to_plugins("media.removed", &json!({"n": 1}));
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(seen(), before, "no events:receive, no event");
+    sqlx::query(
+        r#"UPDATE plugin_registrations SET scopes = scopes || 'events:receive' WHERE "pluginId" = $1"#,
+    )
+    .bind(ID)
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    h.st.plugins.restart(ID).await.unwrap();
+    h.st.plugins
+        .push_to_plugins("media.removed", &json!({"n": 2}));
+    until("the event", Duration::from_secs(10), async || {
+        seen() > before
+    })
+    .await;
+    done(s, h).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_failed_plugin_registers_again_after_the_breaker() {
+    let Some((s, h)) = setup("rebreaker", |c| {
+        c.breaker_crashes = 2;
+        c.breaker_retry = (Duration::from_millis(100), Duration::from_millis(100));
+    })
+    .await
+    else {
+        return;
+    };
+    let rt = h.st.plugins.rt(ID).unwrap();
+    for _ in 0..2 {
+        rt.crash(&rt.core, "test");
+    }
+    assert_eq!(rt.state(), State::Failed);
+    until(
+        "the new registration",
+        Duration::from_secs(10),
+        async || {
+            h.st.plugins
+                .rt(ID)
+                .is_some_and(|r| !std::sync::Arc::ptr_eq(&r, &rt) && r.state() == State::Ready)
+        },
+    )
+    .await;
+    done(s, h).await;
+}
+
+/// A valid component with no exports: it compiles and cannot link as a plugin.
+const EMPTY_COMPONENT: &[u8] = b"\0asm\x0d\0\x01\0";
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_unlinkable_upgrade_never_replaces_the_installed_version() {
+    let Some((s, h)) = setup("unlinkable", |_| {}).await else {
+        return;
+    };
+    let (m, _) = fixture().unwrap();
+    let (st, r) = h.upload(&pack(&m, "0.2.0", EMPTY_COMPONENT, None)).await;
+    assert_eq!((st, r["installable"].as_bool()), (201, Some(true)), "{r}");
+    let (st, r) = h
+        .call(
+            "POST",
+            "/api/plugins/import/confirm",
+            Some(&h.admin),
+            Some(json!({"stagingId": r["stagingId"], "sha256": r["sha256"]})),
+        )
+        .await;
+    assert_eq!(
+        (st, r["code"].as_str()),
+        (422, Some("PLUGIN_INCOMPATIBLE_API")),
+        "{r}"
+    );
+    let pkg = packages::find(&s.pool, ID).await.unwrap().unwrap();
+    assert_eq!(pkg.version, "0.1.0");
+    assert_eq!(h.st.plugins.state_of(ID), Some(State::Ready));
+    done(s, h).await;
+}

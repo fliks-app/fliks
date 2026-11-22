@@ -190,7 +190,8 @@ impl PluginDb {
                         "{timeout};
                          CREATE TABLE IF NOT EXISTS \"_migrations\" (
                            \"name\" text PRIMARY KEY,
-                           \"appliedAt\" timestamptz NOT NULL DEFAULT now())"
+                           \"appliedAt\" timestamptz NOT NULL DEFAULT now(),
+                           \"sha256\" text)"
                     ))
                     .await;
                 // Two hosts creating it at once: the loser finds the table the winner made.
@@ -199,6 +200,26 @@ impl PluginDb {
                     Err(e) if matches!(e.code.as_str(), "42P07" | "23505") => {}
                     Err(e) => return Err(e),
                 }
+            }
+            // Tables made before the hash existed; checked first for the same NOTICE reason.
+            let hashed: bool = c
+                .query_one(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = current_schema() AND table_name = '_migrations' AND column_name = 'sha256')",
+                    &[],
+                )
+                .await
+                .map_err(pg_err)?
+                .get(0);
+            if !hashed && !migrations.is_empty() {
+                let tx = c.transaction().await.map_err(pg_err)?;
+                tx.batch_execute(&format!(
+                    "{timeout}; LOCK TABLE \"_migrations\" IN SHARE ROW EXCLUSIVE MODE;
+                     ALTER TABLE \"_migrations\" ADD COLUMN IF NOT EXISTS \"sha256\" text"
+                ))
+                .await
+                .map_err(pg_err)?;
+                tx.commit().await.map_err(pg_err)?;
             }
             let mut applied = Vec::new();
             for (name, up) in migrations {
@@ -209,11 +230,31 @@ impl PluginDb {
                 ))
                 .await
                 .map_err(pg_err)?;
+                let sha = super::archive::sha256_hex(up.as_bytes());
                 let done = tx
-                    .query_opt("SELECT 1 FROM \"_migrations\" WHERE \"name\" = $1", &[name])
+                    .query_opt(
+                        "SELECT \"sha256\" FROM \"_migrations\" WHERE \"name\" = $1",
+                        &[name],
+                    )
                     .await
                     .map_err(pg_err)?;
-                if done.is_some() {
+                if let Some(row) = done {
+                    // An edited script is not re-run (an older install would differ from a fresh one): it is reported.
+                    match row.get::<_, Option<String>>(0) {
+                        Some(old) if old != sha => tracing::warn!(
+                            "plugin migration {name} changed after it was applied (sha256 {old}, now {sha})"
+                        ),
+                        Some(_) => {}
+                        None => {
+                            tx.execute(
+                                "UPDATE \"_migrations\" SET \"sha256\" = $2 WHERE \"name\" = $1",
+                                &[name, &sha],
+                            )
+                            .await
+                            .map_err(pg_err)?;
+                            tx.commit().await.map_err(pg_err)?;
+                        }
+                    }
                     continue;
                 }
                 tx.batch_execute(up).await.map_err(|e| {
@@ -221,8 +262,8 @@ impl PluginDb {
                     err(&e.code, format!("migration {name}: {}", e.message))
                 })?;
                 tx.execute(
-                    "INSERT INTO \"_migrations\" (\"name\") VALUES ($1)",
-                    &[name],
+                    "INSERT INTO \"_migrations\" (\"name\", \"sha256\") VALUES ($1, $2)",
+                    &[name, &sha],
                 )
                 .await
                 .map_err(pg_err)?;

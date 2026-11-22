@@ -171,6 +171,14 @@ async fn compile(env: &Env, wasm: &[u8]) -> Result<Vec<u8>, LoadError> {
     Ok(bytes)
 }
 
+/// A component of `wasm` for a link check before any row exists: compiled each time, never cached.
+pub async fn probe(env: &Env, wasm: &[u8]) -> Result<Component, LoadError> {
+    let bytes = compile(env, wasm).await?;
+    // SAFETY: produced just now by our own compiler image from the archive's checked bytes.
+    unsafe { Component::deserialize(&env.engine, &bytes) }
+        .map_err(|e| LoadError::Host(format!("compiled component refused: {e}")))
+}
+
 /// The component from the cache when the row authenticates the file, else compiled and cached.
 pub async fn load(env: &Env, id: &str, wasm: &[u8]) -> Result<Loaded, LoadError> {
     let engine = &env.engine;

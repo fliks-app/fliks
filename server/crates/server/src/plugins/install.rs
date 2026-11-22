@@ -164,6 +164,21 @@ impl Plugins {
         }
     }
 
+    /// Deletes the `plugin.<id>.*` settings the id owns (rule 24): a fresh install starts with none.
+    async fn purge_settings(&self, id: &str) -> sqlx::Result<()> {
+        let mut ids = super::imports::installed_ids(&self.db).await?;
+        ids.push(id.to_owned());
+        let keys = crate::settings::with_prefix(&self.db, &format!("plugin.{id}.")).await?;
+        let owned: Vec<String> = keys
+            .into_iter()
+            .map(|(k, _)| k)
+            .filter(|k| {
+                fliks_domain::plugins::setting_owner(k, ids.iter().map(String::as_str)) == Some(id)
+            })
+            .collect();
+        crate::settings::delete_keys(&self.db, &owned).await
+    }
+
     pub fn summary(&self, p: &Package) -> Summary {
         let process = p.is_process();
         Summary {
@@ -391,6 +406,9 @@ impl Plugins {
             }
             manifest::check_files(i)
                 .map_err(|r| ie(StatusCode::UNPROCESSABLE_ENTITY, r.code, r.detail))?;
+            if m["kind"] == "process" && origin != "bundled" {
+                self.check_link(i).await?;
+            }
             if unsigned_ok {
                 sqlx::query(
                     r#"UPDATE provider_namespaces SET "signerKeyId" = NULL WHERE "pluginId" = $1"#,
@@ -546,19 +564,7 @@ impl Plugins {
             }
             return Ok(());
         };
-        let ids = super::imports::installed_ids(&self.db).await?;
-        let keys = crate::settings::with_prefix(&self.db, &format!("plugin.{id}.")).await?;
-        let owned: Vec<String> = keys
-            .into_iter()
-            .map(|(k, _)| k)
-            .filter(|k| {
-                fliks_domain::plugins::setting_owner(k, ids.iter().map(String::as_str)) == Some(id)
-            })
-            .collect();
-        sqlx::query(r#"DELETE FROM app_settings WHERE "key" = ANY($1)"#)
-            .bind(&owned)
-            .execute(&self.db)
-            .await?;
+        self.purge_settings(id).await?;
         if pkg.is_process() {
             if delete_data {
                 super::db::deprovision(&self.db, id).await?;

@@ -146,9 +146,9 @@ impl Plugins {
         self.pickers.configure(order);
     }
 
-    pub(crate) fn push_to_plugins(&self, name: &str, payload: &Value) {
+    pub fn push_to_plugins(&self, name: &str, payload: &Value) {
         let text = payload.to_string();
-        for rt in self.live() {
+        for rt in self.live().iter().filter(|r| r.sh.receives_events()) {
             rt.push_event(name, &text);
         }
     }

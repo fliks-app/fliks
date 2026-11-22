@@ -113,7 +113,7 @@ impl PluginRt {
                 let n = s.crashes.len();
                 drop(s);
                 tracing::error!(
-                    "plugin \"{}\" circuit breaker tripped after {n} crashes in the last 10 min ({why}); manual re-enable required",
+                    "plugin \"{}\" circuit breaker tripped after {n} crashes in the last 10 min ({why}); registered again after the retry delay",
                     self.sh.id
                 );
                 self.set_state(State::Failed);
@@ -217,7 +217,7 @@ impl PluginRt {
             if self.sh.era.load(Ordering::SeqCst) != era {
                 return;
             }
-            for l in [&self.http, &self.task]
+            for l in [&self.http, &self.task, &self.event]
                 .into_iter()
                 .chain(&self.provider)
                 .chain(self.jobs.values())

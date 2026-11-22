@@ -141,8 +141,8 @@ pub struct HostConfig {
     pub lease_extra: Duration,
     pub idle_after: Duration,
     pub db_retry: Duration,
-    /// Delays before a bundled provider that tripped the breaker registers again: first, then every.
-    pub provider_retry: (Duration, Duration),
+    /// Delays before a plugin that tripped the breaker registers again: first, then every.
+    pub breaker_retry: (Duration, Duration),
     pub http_max: usize,
     pub http_queue: usize,
     pub task_max: usize,
@@ -180,7 +180,7 @@ impl HostConfig {
             lease_extra: Duration::from_secs(60),
             idle_after: Duration::from_secs(600),
             db_retry: Duration::from_secs(30),
-            provider_retry: (Duration::from_secs(600), Duration::from_secs(1800)),
+            breaker_retry: (Duration::from_secs(600), Duration::from_secs(1800)),
             http_max: 4,
             http_queue: 32,
             task_max: 2,
@@ -278,8 +278,8 @@ pub struct Shared {
     pub id: Arc<str>,
     pub env: Arc<Env>,
     pub db: Option<Arc<PluginDb>>,
+    /// The scopes granted at registration; they only change through a re-registration.
     pub scopes: Vec<String>,
-    pub ingest_roots: Vec<String>,
     /// The manifest carries a `provider` block.
     pub provider: bool,
     /// Fliks defaults resolved for this plugin (`defaults.rs`), never served by a route.
@@ -299,6 +299,13 @@ pub struct Shared {
     pub gate: Option<Arc<super::outbound::Gates>>,
 }
 
+impl Shared {
+    /// The plugin holds `events:receive`, the grant to be handed every domain event.
+    pub fn receives_events(&self) -> bool {
+        self.scopes.iter().any(|s| s == "events:receive")
+    }
+}
+
 pub struct Ctx {
     wasi: WasiCtx,
     http: WasiHttpCtx,
@@ -311,6 +318,8 @@ pub struct Ctx {
     mem_max: usize,
     /// Set by a `db` call that failed `unavailable` during the current export.
     pub db_unavailable: bool,
+    /// The plugin budget refused a memory growth: a capacity limit, not a guest fault.
+    pub budget_refused: bool,
 }
 
 impl Ctx {
@@ -373,6 +382,7 @@ impl ResourceLimiter for Ctx {
         }
         let total = self.sh.mem_total.load(Ordering::Relaxed);
         if over_plugin_budget(total, desired - current, self.mem_max) {
+            self.budget_refused = true;
             wasmtime::bail!(
                 "plugin memory budget of {} MiB exceeded",
                 (self.mem_max * PLUGIN_MEM_FACTOR) >> 20
@@ -540,13 +550,15 @@ pub struct PluginRt {
 pub enum SpawnError {
     Mismatch(String),
     Failed(String),
+    /// The plugin's memory budget refused the instance: no crash.
+    Budget(String),
 }
 
 impl std::fmt::Display for SpawnError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SpawnError::Mismatch(d) => write!(f, "manifest-mismatch: {d}"),
-            SpawnError::Failed(d) => write!(f, "spawn-failed: {d}"),
+            SpawnError::Failed(d) | SpawnError::Budget(d) => write!(f, "spawn-failed: {d}"),
         }
     }
 }
@@ -568,26 +580,46 @@ fn call_fn<R: Send + 'static>(
     Box::new(f)
 }
 
-impl PluginRt {
-    pub fn new(
-        sh: Arc<Shared>,
-        manifest: Json,
-        component: &Component,
-        internal: bool,
-    ) -> anyhow::Result<Arc<Self>> {
-        let env = sh.env.clone();
+/// A component linked against this core's interface: the part of `PluginRt::new` that fails
+/// when the plugin was built for another core.
+pub struct Linked {
+    pre: PluginPre<Ctx>,
+    provider_idx: Option<wit_provider::GuestIndices>,
+    scene_idx: Option<wit_scene::GuestIndices>,
+    lyrics_idx: Option<wit_lyrics::GuestIndices>,
+}
+
+impl Linked {
+    pub fn new(env: &Env, component: &Component, manifest: &Json) -> anyhow::Result<Self> {
+        let provider = manifest.get("provider").is_some();
         let instance_pre = env.linker.instantiate_pre(component)?;
-        let provider_idx = sh
-            .provider
+        let provider_idx = provider
             .then(|| wit_provider::GuestIndices::new(&instance_pre))
             .transpose()?;
-        let scene_idx = (sh.provider && has_scene(&manifest))
+        let scene_idx = (provider && has_scene(manifest))
             .then(|| wit_scene::GuestIndices::new(&instance_pre))
             .transpose()?;
-        let lyrics_idx = (sh.provider && has_lyrics(&manifest))
+        let lyrics_idx = (provider && has_lyrics(manifest))
             .then(|| wit_lyrics::GuestIndices::new(&instance_pre))
             .transpose()?;
-        let pre = PluginPre::new(instance_pre)?;
+        Ok(Linked {
+            pre: PluginPre::new(instance_pre)?,
+            provider_idx,
+            scene_idx,
+            lyrics_idx,
+        })
+    }
+}
+
+impl PluginRt {
+    pub fn new(sh: Arc<Shared>, manifest: Json, linked: Linked, internal: bool) -> Arc<Self> {
+        let env = sh.env.clone();
+        let Linked {
+            pre,
+            provider_idx,
+            scene_idx,
+            lyrics_idx,
+        } = linked;
         let jobs = manifest["jobs"]
             .as_array()
             .into_iter()
@@ -596,7 +628,7 @@ impl PluginRt {
             .map(|n| (n.to_owned(), Lane::new(LaneKind::Job, 1, 0)))
             .collect();
         let c = &env.cfg;
-        Ok(Arc::new(PluginRt {
+        Arc::new(PluginRt {
             mem_max: manifest["memoryMb"].as_f64().unwrap_or(64.0).max(1.0) as usize * (1 << 20),
             manifest,
             pre,
@@ -630,7 +662,7 @@ impl PluginRt {
             restarts: AtomicU64::new(0),
             timings: Mutex::default(),
             sh,
-        }))
+        })
     }
 
     pub fn state(&self) -> State {
@@ -733,6 +765,7 @@ impl PluginRt {
             mem: 0,
             mem_max: self.mem_max,
             db_unavailable: false,
+            budget_refused: false,
         };
         let mut store = Store::new(&env.engine, ctx);
         store.limiter(|c| c);
@@ -800,7 +833,11 @@ impl PluginRt {
             Ok::<_, SpawnError>((guest, prov, scene, lyrics, check))
         };
         let (guest, prov, scene, lyrics, check) = match tokio::time::timeout(hello, work).await {
-            Ok(r) => r?,
+            Ok(Ok(r)) => r,
+            Ok(Err(SpawnError::Failed(m))) if store.data().budget_refused => {
+                return Err(SpawnError::Budget(m));
+            }
+            Ok(Err(e)) => return Err(e),
             Err(_) => return Err(fail("hello deadline".into())),
         };
         let m = &self.manifest;

@@ -73,13 +73,14 @@ const PROCESS_KEYS: [&str; 13] = [
     "checklist",
     "network",
 ];
-pub const SCOPES: [&str; 9] = [
+pub const SCOPES: [&str; 10] = [
     "media:read",
     "media:create",
     "acquisition:candidates",
     "releases:score",
     "ingest:write",
     "events:emit",
+    "events:receive",
     "config:rw",
     "playlists:write",
     "notify:users",

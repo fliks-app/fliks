@@ -39,10 +39,30 @@ pub fn parse(bytes: &[u8]) -> Option<Value> {
         return None;
     }
     let mut doc = json!({ "plugins": plugins });
+    if let Some(at) = j["generatedAt"].as_str().and_then(generated_at) {
+        doc["generatedAt"] = at.to_rfc3339().into();
+    }
     if let Some(d) = j["denyList"].as_array() {
         doc["denyList"] = Value::Array(d.iter().filter(|e| deny_entry(e)).cloned().collect());
     }
     Some(doc)
+}
+
+fn generated_at(s: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    chrono::DateTime::parse_from_rfc3339(s)
+        .ok()
+        .map(|d| d.to_utc())
+}
+
+/// Why a document must not replace the cached one: it is older, or it dropped the `generatedAt`
+/// the cached one signed (a replay of an earlier catalog).
+pub fn older_than_cached(doc: &Value, cached: Option<&Value>) -> Option<String> {
+    let kept = cached?["generatedAt"].as_str().and_then(generated_at)?;
+    match doc["generatedAt"].as_str().and_then(generated_at) {
+        Some(new) if new >= kept => None,
+        Some(_) => Some("the catalog is older than the cached one".into()),
+        None => Some("the catalog carries no generation time, the cached one does".into()),
+    }
 }
 
 fn satisfies(range: &str, running: &str) -> bool {
@@ -125,7 +145,11 @@ pub fn filter(doc: &Value, running: &str, skip_range: bool) -> Value {
             Value::Object(e)
         })
         .collect();
-    json!({ "plugins": plugins, "denyList": doc.get("denyList").cloned().unwrap_or(json!([])) })
+    let mut out = json!({ "plugins": plugins, "denyList": doc.get("denyList").cloned().unwrap_or(json!([])) });
+    if let Some(at) = doc.get("generatedAt") {
+        out["generatedAt"] = at.clone();
+    }
+    out
 }
 
 /// One source's denylist and the key that verified its catalog.
@@ -202,6 +226,20 @@ mod tests {
 
     fn v(version: &str, api: u32, fliks: &str, sha: &str) -> Value {
         json!({"version": version, "pluginApi": api, "fliks": fliks, "zipUrl": "https://x/a.fkplugin", "sha256": sha})
+    }
+
+    #[test]
+    fn an_older_or_unstamped_document_does_not_replace_a_stamped_cache() {
+        let at = |t: &str| json!({"plugins": [], "generatedAt": t});
+        let cached = at("2026-11-02T00:00:00Z");
+        assert!(older_than_cached(&at("2026-11-02T00:00:00Z"), Some(&cached)).is_none());
+        assert!(older_than_cached(&at("2026-11-03T00:00:00Z"), Some(&cached)).is_none());
+        assert!(older_than_cached(&at("2026-11-01T00:00:00Z"), Some(&cached)).is_some());
+        assert!(older_than_cached(&json!({"plugins": []}), Some(&cached)).is_some());
+        assert!(
+            older_than_cached(&json!({"plugins": []}), Some(&json!({"plugins": []}))).is_none()
+        );
+        assert!(older_than_cached(&at("2026-11-01T00:00:00Z"), None).is_none());
     }
 
     #[test]
