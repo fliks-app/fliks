@@ -64,6 +64,7 @@ import { BackgroundService } from '../../core/services/background.service';
 import { SearchStateService } from '../../core/services/search-state.service';
 import { NavContributionsService, DOCK_PINNED_IDS, MOBILE_HIDDEN_IDS, type ResolvedNavItem } from '../../core/plugin-ui/nav-contributions.service';
 import { NavIconComponent } from './nav-icon';
+import { libraryColorVar } from '../../core/constants/library-appearance';
 import { BottomSheetComponent } from '../components/bottom-sheet';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
@@ -92,6 +93,7 @@ interface TvTab {
   labelKey?: string;
   label?: string;
   isLibrary?: boolean;
+  color?: string;
 }
 
 /** Coalesces a burst of count-bearing SSE events (e.g. a season-pack import) into one request. */
@@ -313,7 +315,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   /** TV tab row: the sidebar's order, with one tab per library between the two `nav.main` blocks. */
   readonly tvTabs = computed<TvTab[]>(() => [
     ...this.mainItemsBeforeLibraries().map((i) => ({ id: i.id, route: i.route, exact: i.exact, icon: i.icon, labelKey: i.labelKey })),
-    ...this.displayLibraries().map((l) => ({ id: `library:${l.id}`, route: this.libraryUrl(l), exact: false, icon: this.libraryIcon(l), label: l.name, isLibrary: true })),
+    ...this.displayLibraries().map((l) => ({ id: `library:${l.id}`, route: this.libraryUrl(l), exact: false, icon: this.libraryIcon(l), label: l.name, isLibrary: true, color: this.libraryColor(l) })),
     ...this.mainItemsAfterLibraries().map((i) => ({ id: i.id, route: i.route, exact: i.exact, icon: i.icon, labelKey: i.labelKey })),
   ]);
   private readonly tvTabsRow = viewChild<ElementRef<HTMLElement>>('tvTabsRow');
@@ -571,6 +573,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
       this.sidebarCountsDebounceTimer = null;
       void this.refreshSidebarCounts();
     }, SIDEBAR_COUNTS_DEBOUNCE_MS);
+  }
+
+  libraryColor(lib: LibrarySummary): string {
+    return libraryColorVar(lib.color);
   }
 
   libraryUrl(lib: LibrarySummary): string {
