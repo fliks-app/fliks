@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.id, p.\"mediaFileId\" AS file\n           FROM items i JOIN item_groups g ON g.id = i.\"groupId\" JOIN item_parts p ON p.\"itemId\" = i.id\n           WHERE g.\"mediaId\" = $1\n             AND (NOT (g.\"number\" = ANY($2))\n               OR (g.\"number\" = ANY($3) AND NOT EXISTS (\n                     SELECT 1 FROM UNNEST($4::int[], $5::int[]) l(s, n)\n                     WHERE l.s = g.\"number\" AND l.n = i.\"number\")))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "items",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "file",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "item_parts",
+            "name": "mediaFileId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Int4Array",
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "cdb760e7fd446840d1e5e02a316b3d8aa18f5c9e1ae8072d9457c8977a10a212"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH hit AS (\n             UPDATE items i SET \"markersScannedAt\" = NULL\n             FROM items o\n             WHERE o.id = $1 AND (i.id = o.id OR (i.\"groupId\" = o.\"groupId\"\n               AND i.\"number\" >= o.\"number\" AND i.\"number\" <= COALESCE(o.\"endNumber\", o.\"number\")))\n             RETURNING i.id)\n           DELETE FROM item_markers WHERE \"itemId\" IN (SELECT id FROM hit)\n             AND kind IN ('intro', 'outro') AND NOT manual",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f3a7a41f3eb9d6fa44a8228dae64c018d724e9308e77210737376934c2252849"
+}

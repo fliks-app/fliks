@@ -1,6 +1,7 @@
 //! A merged MusicBrainz id is kept as an alias of the row that holds the surviving id
 //! (`docs/spec/music.md` rule 15): lookups read the live id first, then the alias.
 use crate::ingest::music::pairing::{Key, assign};
+use crate::media::items::move_user_rows;
 use crate::metadata::books::absorb::same_library;
 use crate::{media::write::orphans::Refs, state::AppState};
 use fliks_domain::external_id::ExternalProvider;
@@ -403,45 +404,6 @@ async fn add_versions(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Resul
 /// Far above any version number: parks the numbers of a table while they shift.
 const VERSION_PARK: i32 = 1_000_000;
 
-/// The rows that hang on the track `from` (likes, plays, lyrics, playlists, annotations, party rows) move to
-/// `to`; a row `to` holds a twin of stays and goes with `from`.
-async fn move_user_rows(c: &mut PgConnection, from: i32, to: i32) -> sqlx::Result<()> {
-    let columns: Vec<(String, String)> = sqlx::query_as(
-        r#"SELECT DISTINCT c.conrelid::regclass::text, quote_ident(a.attname)
-             FROM pg_constraint c
-             JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
-            WHERE c.contype = 'f' AND c.confrelid = 'items'::regclass AND a.attname = 'itemId'
-              AND c.conrelid NOT IN ('item_parts'::regclass, 'track_details'::regclass,
-                                     'item_credits'::regclass, 'item_works'::regclass)"#,
-    )
-    .fetch_all(&mut *c)
-    .await?;
-    for (table, column) in columns {
-        sqlx::query("SAVEPOINT move_rows").execute(&mut *c).await?;
-        let bulk = sqlx::query(sqlx::AssertSqlSafe(format!(
-            "UPDATE {table} SET {column} = $1 WHERE {column} = $2"
-        )))
-        .bind(to)
-        .bind(from)
-        .execute(&mut *c)
-        .await;
-        match bulk {
-            Ok(_) => {}
-            Err(e) if is_duplicate(&e) => {
-                sqlx::query("ROLLBACK TO SAVEPOINT move_rows")
-                    .execute(&mut *c)
-                    .await?;
-                move_rows_apart(c, &table, &column, (from, to)).await?;
-            }
-            Err(e) => return Err(e),
-        }
-        sqlx::query("RELEASE SAVEPOINT move_rows")
-            .execute(&mut *c)
-            .await?;
-    }
-    Ok(())
-}
-
 /// `from` (an album that holds no id) is folded into `into`, which holds the id its files were matched to;
 /// `false` and nothing moved when `into` is in another library.
 pub async fn absorb_into(st: &AppState, from: i32, into: i32) -> sqlx::Result<bool> {
@@ -503,49 +465,4 @@ pub async fn redirect_person(
     .await?;
     tx.commit().await?;
     Ok(Moved::Renamed)
-}
-
-fn is_duplicate(e: &sqlx::Error) -> bool {
-    e.as_database_error()
-        .and_then(|d| d.code())
-        .is_some_and(|c| c == "23505")
-}
-
-/// The rows of `table` on `from`, one by one: a row `to` holds a twin of stays on `from`.
-async fn move_rows_apart(
-    c: &mut PgConnection,
-    table: &str,
-    column: &str,
-    (from, to): (i32, i32),
-) -> sqlx::Result<()> {
-    let rows: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        "SELECT ctid::text FROM {table} WHERE {column} = $1"
-    )))
-    .bind(from)
-    .fetch_all(&mut *c)
-    .await?;
-    for ctid in rows {
-        sqlx::query("SAVEPOINT move_row").execute(&mut *c).await?;
-        let moved = sqlx::query(sqlx::AssertSqlSafe(format!(
-            "UPDATE {table} SET {column} = $1 WHERE ctid = $2::tid AND {column} = $3"
-        )))
-        .bind(to)
-        .bind(&ctid)
-        .bind(from)
-        .execute(&mut *c)
-        .await;
-        match moved {
-            Ok(_) => {}
-            Err(e) if is_duplicate(&e) => {
-                sqlx::query("ROLLBACK TO SAVEPOINT move_row")
-                    .execute(&mut *c)
-                    .await?;
-            }
-            Err(e) => return Err(e),
-        }
-        sqlx::query("RELEASE SAVEPOINT move_row")
-            .execute(&mut *c)
-            .await?;
-    }
-    Ok(())
 }

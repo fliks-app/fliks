@@ -242,3 +242,124 @@ pub async fn sole_item(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<Opti
         .fetch_one(db)
         .await
 }
+
+/// An item that held a file of `held` (item, file) before a rescan and holds none now, while a file
+/// sits on another item: its user rows move there and it goes. True when one went.
+pub(crate) async fn settle_held(
+    db: &PgPool,
+    media: i32,
+    held: &[(i32, i32)],
+) -> sqlx::Result<bool> {
+    let mut tx = db.begin().await?;
+    lock_versions(&mut tx, media).await?;
+    let mut any = false;
+    for old in held
+        .iter()
+        .map(|h| h.0)
+        .collect::<std::collections::BTreeSet<_>>()
+    {
+        let files: Vec<i32> = held.iter().filter(|h| h.0 == old).map(|h| h.1).collect();
+        let heir = sqlx::query_scalar!(
+            r#"SELECT p."itemId" FROM item_parts p
+               WHERE p."mediaFileId" = ANY($2) AND p."itemId" <> $1
+                 AND NOT EXISTS (SELECT 1 FROM item_parts k WHERE k."itemId" = $1)
+               ORDER BY p."itemId" LIMIT 1"#,
+            old,
+            &files
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(heir) = heir else { continue };
+        move_user_rows(&mut tx, old, heir).await?;
+        sqlx::query!("DELETE FROM items WHERE id = $1", old)
+            .execute(&mut *tx)
+            .await?;
+        any = true;
+    }
+    tx.commit().await?;
+    Ok(any)
+}
+
+/// The rows that hang on the item `from` (likes, plays, lyrics, playlists, annotations, party rows, markers) move to
+/// `to`; a row `to` holds a twin of stays and goes with `from`.
+pub(crate) async fn move_user_rows(c: &mut PgConnection, from: i32, to: i32) -> sqlx::Result<()> {
+    let columns: Vec<(String, String)> = sqlx::query_as(
+        r#"SELECT DISTINCT c.conrelid::regclass::text, quote_ident(a.attname)
+             FROM pg_constraint c
+             JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+            WHERE c.contype = 'f' AND c.confrelid = 'items'::regclass AND a.attname = 'itemId'
+              AND c.conrelid NOT IN ('item_parts'::regclass, 'track_details'::regclass,
+                                     'item_credits'::regclass, 'item_works'::regclass)"#,
+    )
+    .fetch_all(&mut *c)
+    .await?;
+    for (table, column) in columns {
+        sqlx::query("SAVEPOINT move_rows").execute(&mut *c).await?;
+        let bulk = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "UPDATE {table} SET {column} = $1 WHERE {column} = $2"
+        )))
+        .bind(to)
+        .bind(from)
+        .execute(&mut *c)
+        .await;
+        match bulk {
+            Ok(_) => {}
+            Err(e) if is_duplicate(&e) => {
+                sqlx::query("ROLLBACK TO SAVEPOINT move_rows")
+                    .execute(&mut *c)
+                    .await?;
+                move_rows_apart(c, &table, &column, (from, to)).await?;
+            }
+            Err(e) => return Err(e),
+        }
+        sqlx::query("RELEASE SAVEPOINT move_rows")
+            .execute(&mut *c)
+            .await?;
+    }
+    Ok(())
+}
+
+fn is_duplicate(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .and_then(|d| d.code())
+        .is_some_and(|c| c == "23505")
+}
+
+/// The rows of `table` on `from`, one by one: a row `to` holds a twin of stays on `from`.
+async fn move_rows_apart(
+    c: &mut PgConnection,
+    table: &str,
+    column: &str,
+    (from, to): (i32, i32),
+) -> sqlx::Result<()> {
+    let rows: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT ctid::text FROM {table} WHERE {column} = $1"
+    )))
+    .bind(from)
+    .fetch_all(&mut *c)
+    .await?;
+    for ctid in rows {
+        sqlx::query("SAVEPOINT move_row").execute(&mut *c).await?;
+        let moved = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "UPDATE {table} SET {column} = $1 WHERE ctid = $2::tid AND {column} = $3"
+        )))
+        .bind(to)
+        .bind(&ctid)
+        .bind(from)
+        .execute(&mut *c)
+        .await;
+        match moved {
+            Ok(_) => {}
+            Err(e) if is_duplicate(&e) => {
+                sqlx::query("ROLLBACK TO SAVEPOINT move_row")
+                    .execute(&mut *c)
+                    .await?;
+            }
+            Err(e) => return Err(e),
+        }
+        sqlx::query("RELEASE SAVEPOINT move_row")
+            .execute(&mut *c)
+            .await?;
+    }
+    Ok(())
+}

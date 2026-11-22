@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM item_groups g WHERE g.\"mediaId\" = $1 AND NOT (g.\"number\" = ANY($2))\n             AND NOT EXISTS (SELECT 1 FROM items i WHERE i.\"groupId\" = g.id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "19cf9f2470d884fd8c74d22b0af5f0d95d28d6337db2ee64eb0a2937097e554c"
+}
