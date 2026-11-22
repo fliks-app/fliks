@@ -20,6 +20,7 @@ import { compareVersions, releaseOf } from '../../../core/utils/semver';
 import { MarkdownPipe } from '../../pipes/markdown.pipe';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
+import { ModalComponent } from '../modal';
 
 export interface WhatsNewSlide {
   version: string;
@@ -70,7 +71,7 @@ async function fetchText(url: string): Promise<string | null> {
 /** Carousel of `public/whats-new/<version>/<lang>.md` for the versions listed in `whats-new/index.json`, shown on desktop and web, once per account. */
 @Component({
   selector: 'app-whats-new-modal',
-  imports: [TranslatePipe, MarkdownPipe, LucideRocket, ModalHeaderComponent, ModalFooterComponent],
+  imports: [ModalComponent, TranslatePipe, MarkdownPipe, LucideRocket, ModalHeaderComponent, ModalFooterComponent],
   templateUrl: './whats-new-modal.html',
 })
 export class WhatsNewModalComponent {
@@ -80,7 +81,7 @@ export class WhatsNewModalComponent {
   private readonly api = inject(UsersApiService);
   private readonly versions = inject(ServerVersionService);
   private readonly swUpdate = inject(SwUpdate, { optional: true });
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
   private readonly track = viewChild<ElementRef<HTMLElement>>('track');
 
   readonly slides = signal<WhatsNewSlide[]>([]);

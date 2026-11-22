@@ -18,6 +18,7 @@ import { ErrorBadgeComponent } from '../../../../shared/components/error-badge';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 import { EnabledSwitchComponent } from '../../../../shared/components/enabled-switch';
+import { ModalComponent } from '../../../../shared/components/modal';
 
 /** Xtream `status` is free-form and unvalidated; only these four values are known, anything else displays untranslated rather than hidden. */
 const ACCOUNT_STATUS_BADGES: Record<string, { labelKey: string; cls: string }> = {
@@ -34,6 +35,7 @@ const EXPIRY_WARNING_DAYS = 7;
 @Component({
   selector: 'app-live-tv-sources',
   imports: [
+    ModalComponent,
     FormsModule,
     NgClass,
     TranslatePipe,
@@ -52,7 +54,7 @@ export class LiveTvSourcesComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly sse = inject(SseService);
   private readonly confirmation = inject(ConfirmationService);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
 
   readonly rows = signal<AdminSource[]>([]);
   readonly loading = signal(true);

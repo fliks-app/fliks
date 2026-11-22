@@ -1,84 +1,80 @@
 <dialog
   #dialog
-  class="modal"
+  appModal
+  boxClass="w-11/12 max-w-4xl"
   (keydown.arrowright)="go(index() + 1)"
   (keydown.arrowleft)="go(index() - 1)"
- [attr.aria-label]="'whats_new.title' | translate: { version: version() }">
-  <div class="modal-box w-11/12 max-w-4xl p-0 flex flex-col overflow-hidden">
-    <app-modal-header flush>
-      <div class="flex items-center gap-2">
-        <svg lucideRocket class="h-5 w-5 text-primary"></svg>
-        <h3 class="text-lg font-bold">
-          {{ 'whats_new.title' | translate: { version: version() } }}
-        </h3>
-      </div>
-    </app-modal-header>
-
-    <div
-      #track
-      class="flex min-h-0 overflow-x-auto snap-x snap-mandatory motion-safe:scroll-smooth py-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      (scroll)="onScroll(track)"
-    >
-      @for (slide of slides(); track $index) {
-        <section class="flex w-full shrink-0 snap-center snap-always flex-col px-5 sm:px-6">
-          <!-- Fixed heights keep the modal's size; a slide without a picture gives its text the room. -->
-          @if (slide.image) {
-            <div
-              class="mx-auto aspect-video w-full max-w-[70dvh] shrink-0 rounded-box overflow-hidden bg-base-200"
-            >
-              <img
-                #pic
-                [src]="slide.image"
-                [alt]="slide.alt"
-                loading="lazy"
-                decoding="async"
-                class="w-full h-full object-cover"
-                (error)="pic.hidden = true"
-              />
-            </div>
-          }
-          <div
-            class="overflow-y-auto scroll-ring-safe"
-            [class]="slide.image ? 'h-[max(12rem,30dvh)] mt-5' : 'flex-1 min-h-0'"
-          >
-            <h4 class="text-xl font-bold">{{ slide.title }}</h4>
-            <div
-              class="changelog-md mt-2 text-base-content/80 [&_h3]:text-primary [&_h3]:opacity-100"
-              [innerHTML]="slide.body | markdown"
-            ></div>
-          </div>
-        </section>
-      }
+  [attr.aria-label]="'whats_new.title' | translate: { version: version() }">
+  <app-modal-header>
+    <div class="flex items-center gap-2">
+      <svg lucideRocket class="h-5 w-5 text-primary"></svg>
+      <h3 class="text-lg font-bold">
+        {{ 'whats_new.title' | translate: { version: version() } }}
+      </h3>
     </div>
+  </app-modal-header>
 
-    <app-modal-footer flush>
-      <div class="flex w-full items-center justify-between gap-3">
-        <button
-          class="btn btn-ghost rounded-full px-5"
-          [class.invisible]="index() === 0"
-          (click)="go(index() - 1)"
+  <div
+    #track
+    class="flex min-h-0 overflow-x-auto snap-x snap-mandatory motion-safe:scroll-smooth -mx-5 sm:-mx-6 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    (scroll)="onScroll(track)"
+  >
+    @for (slide of slides(); track $index) {
+      <section class="flex w-full shrink-0 snap-center snap-always flex-col px-5 sm:px-6">
+        <!-- Fixed heights keep the modal's size; a slide without a picture gives its text the room. -->
+        @if (slide.image) {
+          <div
+            class="mx-auto aspect-video w-full max-w-[70dvh] shrink-0 rounded-box overflow-hidden bg-base-200"
+          >
+            <img
+              #pic
+              [src]="slide.image"
+              [alt]="slide.alt"
+              loading="lazy"
+              decoding="async"
+              class="w-full h-full object-cover"
+              (error)="pic.hidden = true"
+            />
+          </div>
+        }
+        <div
+          class="overflow-y-auto scroll-ring-safe"
+          [class]="slide.image ? 'h-[max(12rem,30dvh)] mt-5' : 'flex-1 min-h-0'"
         >
-          {{ 'whats_new.previous' | translate }}
-        </button>
-        <div class="flex gap-2">
-          @for (slide of slides(); track $index) {
-            <button
-              class="h-2 rounded-full transition-all"
-              [class]="$index === index() ? 'w-6 bg-primary' : 'w-2 bg-base-content/40'"
-              [class.ml-3]="startsGroup($index)"
-              [attr.aria-label]="slide.title"
-              [attr.aria-current]="$index === index()"
-              (click)="go($index)"
-            ></button>
-          }
+          <h4 class="text-xl font-bold">{{ slide.title }}</h4>
+          <div
+            class="changelog-md mt-2 text-base-content/80 [&_h3]:text-primary [&_h3]:opacity-100"
+            [innerHTML]="slide.body | markdown"
+          ></div>
         </div>
-        <button class="btn btn-primary rounded-full px-5 min-w-28" (click)="next()">
-          {{ (index() === slides().length - 1 ? 'whats_new.done' : 'whats_new.next') | translate }}
-        </button>
-      </div>
-    </app-modal-footer>
+      </section>
+    }
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button>{{ 'common.close' | translate }}</button>
-  </form>
+
+  <app-modal-footer>
+    <div class="flex w-full items-center justify-between gap-3">
+      <button
+        class="btn btn-ghost rounded-full px-5"
+        [class.invisible]="index() === 0"
+        (click)="go(index() - 1)"
+      >
+        {{ 'whats_new.previous' | translate }}
+      </button>
+      <div class="flex gap-2">
+        @for (slide of slides(); track $index) {
+          <button
+            class="h-2 rounded-full transition-all"
+            [class]="$index === index() ? 'w-6 bg-primary' : 'w-2 bg-base-content/40'"
+            [class.ml-3]="startsGroup($index)"
+            [attr.aria-label]="slide.title"
+            [attr.aria-current]="$index === index()"
+            (click)="go($index)"
+          ></button>
+        }
+      </div>
+      <button class="btn btn-primary rounded-full px-5 min-w-28" (click)="next()">
+        {{ (index() === slides().length - 1 ? 'whats_new.done' : 'whats_new.next') | translate }}
+      </button>
+    </div>
+  </app-modal-footer>
 </dialog>

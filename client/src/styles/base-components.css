@@ -40,6 +40,11 @@ body.tv app-player-controls .btn-ghost:focus-visible {
   background-color: transparent !important;
   --btn-bg: rgba(0, 0, 0, 0) !important;
 }
+/* daisyUI paints a pressed ghost button grey; on touch `:active` outlives the click, so the grey lingers over the new state. */
+.btn-ghost:active {
+  --btn-bg: #0000;
+  --btn-border: #0000;
+}
 /* Gentle scale on keyboard / D-pad focus so the card lifts off the grid; bigger on TV. */
 app-media-card figure:focus-visible,
 [data-home-focus]:focus-visible,
@@ -464,6 +469,117 @@ html.tv-host .toggle-primary[aria-checked='true'] {
 }
 .modal-box {
   max-height: calc(100dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
+
+/* `app-modal`: the box owns the padding between header, body and footer; the whole box scrolls. */
+.modal-sheet > .modal-box {
+  padding: 0;
+}
+.modal-sheet .modal-header-bar,
+.modal-sheet .modal-footer-bar {
+  margin: 0;
+}
+.modal-sheet-body {
+  padding: 0.5rem 1.5rem 1.5rem;
+}
+/* `fill`: the content lays out and scrolls its own regions. */
+.modal-sheet > .modal-sheet-fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-sheet-fill > * {
+  flex-shrink: 0;
+}
+.modal-sheet-fill > .modal-sheet-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+}
+.modal-sheet-handle {
+  display: none;
+}
+
+/* On a phone it is a bottom sheet. Unlayered CSS outranks daisyUI's, so its open rule is restated.
+   A transparent border, not padding, clears the home indicator. */
+@media (max-width: 639.98px) {
+  /* Radius, shadow and scrim of the dock's `app-bottom-sheet`; the surface stays opaque. */
+  .modal-sheet {
+    place-items: end;
+    padding-bottom: 0;
+  }
+  .modal-sheet {
+    transition:
+      overlay var(--transition-duration-sheet) allow-discrete,
+      visibility var(--transition-duration-sheet) allow-discrete,
+      background-color var(--transition-duration-sheet) ease-out;
+  }
+  .modal-sheet[open] {
+    background-color: rgb(0 0 0 / 0.6);
+    transition:
+      visibility 0s allow-discrete,
+      background-color var(--transition-duration-sheet) ease-out;
+  }
+  .modal-sheet > .modal-box {
+    --modal-tl: 1.5rem;
+    --modal-tr: 1.5rem;
+    --modal-bl: 0;
+    --modal-br: 0;
+    width: 100%;
+    max-width: none;
+    max-height: 85dvh;
+    border-bottom: env(safe-area-inset-bottom, 0px) solid transparent;
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    translate: 0 100%;
+    scale: 1;
+    opacity: 1;
+    transition:
+      translate var(--transition-duration-sheet) ease-out,
+      transform var(--transition-duration-sheet) ease-out;
+  }
+  .modal-sheet[open] > .modal-box {
+    translate: 0;
+  }
+  /* A box opened before it ever had a style (first open) slides in from below too. */
+  @starting-style {
+    .modal-sheet[open] > .modal-box {
+      translate: 0 100%;
+    }
+  }
+  /* Grip and title as in `app-bottom-sheet`: no rule under the title, no close button. */
+  .modal-sheet-handle {
+    display: flex;
+    flex-shrink: 0;
+    justify-content: center;
+    padding: 0.75rem 0 0.25rem;
+  }
+  .modal-sheet-handle::before {
+    content: '';
+    width: 2.5rem;
+    height: 0.25rem;
+    border-radius: 9999px;
+    background-color: rgb(255 255 255 / 0.2);
+  }
+  .modal-sheet .modal-header-bar {
+    padding: 0.25rem 1.25rem 0.5rem;
+    border-bottom-width: 0;
+  }
+  .modal-sheet .modal-header-bar > form {
+    display: none;
+  }
+  .modal-sheet .modal-footer-bar {
+    padding-inline: 1.25rem;
+  }
+  .modal-sheet-body {
+    padding-inline: 1.25rem;
+  }
+  .modal-sheet .modal-action > *,
+  .modal-sheet .modal-action > form > .btn {
+    flex: 1;
+    width: 100%;
+  }
 }
 
 /* A side drawer spans the full height with square edges and the slide of `.panel-slide-in`; the safe area moves inside its box. */

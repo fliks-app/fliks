@@ -15,12 +15,13 @@ import {
 import { RecommendTarget } from '../../../core/services/recommend.service';
 import { ModalHeaderComponent } from '../modal-header';
 import { ToastService } from '../../../core/services/toast.service';
+import { ModalComponent } from '../modal';
 
 /** Dialog to recommend a movie / season / episode to another member; mounted once at layout level and opened via {@link RecommendService}.
  *  Recipients are limited to connectable members (`/social/connectable`). */
 @Component({
   selector: 'app-recommend-modal',
-  imports: [FormsModule, TranslatePipe, LucideSend, ModalHeaderComponent],
+  imports: [ModalComponent, FormsModule, TranslatePipe, LucideSend, ModalHeaderComponent],
   templateUrl: './recommend-modal.component.html',
 })
 export class RecommendModalComponent {
@@ -29,7 +30,7 @@ export class RecommendModalComponent {
   private readonly translate = inject(TranslateService);
 
   private readonly dialogEl =
-    viewChild<ElementRef<HTMLDialogElement>>('dialog');
+    viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly target = signal<RecommendTarget | null>(null);
   readonly message = signal('');

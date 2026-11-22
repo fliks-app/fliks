@@ -9,11 +9,12 @@ import { ModalFooterComponent } from '../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { runBusy } from './party-busy';
 import { PartyInviteePickerComponent } from './party-invitee-picker';
+import { ModalComponent } from '../../shared/components/modal';
 
 /** The host's invite dialog: the link to share, then the followed people to add. A button opens it, or `open()` from a player. */
 @Component({
   selector: 'app-party-invite',
-  imports: [TranslatePipe, LucideCopy, LucidePlus, LucideShare2, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent],
+  imports: [ModalComponent, TranslatePipe, LucideCopy, LucidePlus, LucideShare2, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent],
   templateUrl: './party-invite.html',
 })
 export class PartyInviteComponent {
@@ -21,7 +22,7 @@ export class PartyInviteComponent {
   protected readonly party = inject(PartyService);
   private readonly device = inject(DeviceService);
   private readonly auth = inject(AuthService);
-  private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild.required<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly view = input.required<PartyDto>();
   readonly updated = output<PartyDto>();

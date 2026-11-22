@@ -1,36 +1,33 @@
-<dialog #dialog class="modal" [style.padding-bottom.px]="keyboard.height()" [attr.aria-label]="'party.cover' | translate">
-  <div class="modal-box max-w-md" [style.max-height]="keyboard.height() ? 'calc(100% - 1rem)' : null">
-    <app-modal-header [title]="'party.settings' | translate" />
-    @let v = view();
-    <div class="flex flex-col gap-4 pt-2">
-      <app-party-host-switches [value]="draft()" [disabled]="busy()" (changed)="draft.update((d) => ({ ...d, ...$event }))" />
+<dialog #dialog appModal [boxClass]="keyboard.height() ? 'max-w-md max-h-[calc(100%-1rem)]' : 'max-w-md'" [style.padding-bottom.px]="keyboard.height()" [attr.aria-label]="'party.cover' | translate">
+  <app-modal-header [title]="'party.settings' | translate" />
+  @let v = view();
+  <div class="flex flex-col gap-4 pt-2">
+    <app-party-host-switches [value]="draft()" [disabled]="busy()" (changed)="draft.update((d) => ({ ...d, ...$event }))" />
 
-      <div class="flex flex-col gap-2">
-        <h3 class="text-sm font-medium opacity-70">{{ 'party.cover' | translate }}</h3>
-        <app-party-cover-picker [options]="coverOptions()" [current]="v.cover" [(draft)]="cover" />
-      </div>
-
-      @if (v.inviteToken) {
-        <div class="flex flex-col gap-2">
-          <h3 class="text-sm font-medium opacity-70">{{ 'party.link' | translate }}</h3>
-          <div appTvRow class="flex items-center gap-2">
-            <input type="text" readonly class="input input-bordered min-w-0 flex-1" [value]="link()" [attr.aria-label]="'party.link' | translate" />
-            <button type="button" class="btn btn-ghost shrink-0" [disabled]="busy()" (click)="regenerate()">{{ 'party.regenerate_link' | translate }}</button>
-          </div>
-        </div>
-      }
-
-      @if (v.status === 'scheduled') {
-        <label class="flex flex-col gap-2">
-          <span class="text-sm font-medium opacity-70">{{ 'party.create_when' | translate }}</span>
-          <input type="datetime-local" class="input input-bordered w-full" [min]="min()" [ngModel]="newWhen()" (ngModelChange)="newWhen.set($event)" />
-        </label>
-      }
+    <div class="flex flex-col gap-2">
+      <h3 class="text-sm font-medium opacity-70">{{ 'party.cover' | translate }}</h3>
+      <app-party-cover-picker [options]="coverOptions()" [current]="v.cover" [(draft)]="cover" />
     </div>
-    <app-modal-footer>
-      <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.cancel' | translate }}</button>
-      <button type="button" class="btn btn-primary" [disabled]="busy() || !dirty()" (click)="save()">{{ 'common.save' | translate }}</button>
-    </app-modal-footer>
+
+    @if (v.inviteToken) {
+      <div class="flex flex-col gap-2">
+        <h3 class="text-sm font-medium opacity-70">{{ 'party.link' | translate }}</h3>
+        <div appTvRow class="flex items-center gap-2">
+          <input type="text" readonly class="input input-bordered min-w-0 flex-1" [value]="link()" [attr.aria-label]="'party.link' | translate" />
+          <button type="button" class="btn btn-ghost shrink-0" [disabled]="busy()" (click)="regenerate()">{{ 'party.regenerate_link' | translate }}</button>
+        </div>
+      </div>
+    }
+
+    @if (v.status === 'scheduled') {
+      <label class="flex flex-col gap-2">
+        <span class="text-sm font-medium opacity-70">{{ 'party.create_when' | translate }}</span>
+        <input type="datetime-local" class="input input-bordered w-full" [min]="min()" [ngModel]="newWhen()" (ngModelChange)="newWhen.set($event)" />
+      </label>
+    }
   </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.cancel' | translate }}</button>
+    <button type="button" class="btn btn-primary" [disabled]="busy() || !dirty()" (click)="save()">{{ 'common.save' | translate }}</button>
+  </app-modal-footer>
 </dialog>

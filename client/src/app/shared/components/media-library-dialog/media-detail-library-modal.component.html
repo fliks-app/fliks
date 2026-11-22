@@ -1,80 +1,74 @@
-<dialog #dialog class="modal">
-  <div class="modal-box max-w-md">
-    <app-modal-header [title]="'media_detail.library_section' | translate" />
-    <form class="flex flex-col gap-4" (ngSubmit)="save.emit()">
+<dialog #dialog appModal boxClass="max-w-md">
+  <app-modal-header [title]="'media_detail.library_section' | translate" />
+  <form id="library-form" class="flex flex-col gap-4" (ngSubmit)="save.emit()">
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'media_detail.library_label' | translate }}</span>
+      <select
+        class="select select-bordered select-sm w-full"
+        name="library"
+        appTvSelect
+        [ngModel]="selectedLibraryId()"
+        (ngModelChange)="selectedLibraryIdChange.emit($event)"
+      >
+        <option [ngValue]="null">{{ 'media_detail.no_library' | translate }}</option>
+        @for (l of libraries(); track l.id) {
+          <option [ngValue]="l.id">{{ l.name }}</option>
+        }
+      </select>
+    </label>
+    @if (folders().length > 1) {
       <label class="form-control w-full">
-        <span class="label-text">{{ 'media_detail.library_label' | translate }}</span>
+        <span class="label-text">{{ 'media_detail.folder_label' | translate }}</span>
         <select
           class="select select-bordered select-sm w-full"
-          name="library"
+          name="folder"
           appTvSelect
-          [ngModel]="selectedLibraryId()"
-          (ngModelChange)="selectedLibraryIdChange.emit($event)"
+          [ngModel]="selectedFolderId()"
+          (ngModelChange)="selectedFolderIdChange.emit($event)"
         >
-          <option [ngValue]="null">{{ 'media_detail.no_library' | translate }}</option>
-          @for (l of libraries(); track l.id) {
-            <option [ngValue]="l.id">{{ l.name }}</option>
+          @if (!libraryChanged()) {
+            <option [ngValue]="null">{{ 'media_detail.folder_current' | translate }}</option>
+          }
+          @for (f of folders(); track f.id) {
+            <option [ngValue]="f.id">{{ f.name }}</option>
           }
         </select>
       </label>
-      @if (folders().length > 1) {
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'media_detail.folder_label' | translate }}</span>
-          <select
-            class="select select-bordered select-sm w-full"
-            name="folder"
-            appTvSelect
-            [ngModel]="selectedFolderId()"
-            (ngModelChange)="selectedFolderIdChange.emit($event)"
-          >
-            @if (!libraryChanged()) {
-              <option [ngValue]="null">{{ 'media_detail.folder_current' | translate }}</option>
-            }
-            @for (f of folders(); track f.id) {
-              <option [ngValue]="f.id">{{ f.name }}</option>
-            }
-          </select>
-        </label>
+    }
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'media_detail.provider_section_title' | translate }}</span>
+      <select
+        class="select select-bordered select-sm w-full"
+        name="provider"
+        appTvSelect
+        [ngModel]="selectedProvider()"
+        (ngModelChange)="selectedProviderChange.emit($event)"
+      >
+        <option [ngValue]="null">{{ 'media_detail.provider_inherit' | translate }}</option>
+        @for (p of providerOptions(); track p.provider) {
+          <option [ngValue]="p.provider">{{ p.label }}</option>
+        }
+      </select>
+      <span class="label-text-alt opacity-60">{{
+        'media_detail.provider_override_hint' | translate
+      }}</span>
+    </label>
+    @if (saved()) {
+      <div role="alert" class="alert alert-success text-sm py-2">
+        {{ 'media_detail.library_saved' | translate }}
+      </div>
+    }
+  </form>
+  <app-modal-footer>
+    <button
+      type="submit" form="library-form"
+      class="btn btn-primary"
+      [disabled]="saving() || selectedLibraryId() === null"
+    >
+      @if (saving()) {
+        <span class="loading loading-spinner loading-xs"></span>
       }
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'media_detail.provider_section_title' | translate }}</span>
-        <select
-          class="select select-bordered select-sm w-full"
-          name="provider"
-          appTvSelect
-          [ngModel]="selectedProvider()"
-          (ngModelChange)="selectedProviderChange.emit($event)"
-        >
-          <option [ngValue]="null">{{ 'media_detail.provider_inherit' | translate }}</option>
-          @for (p of providerOptions(); track p.provider) {
-            <option [ngValue]="p.provider">{{ p.label }}</option>
-          }
-        </select>
-        <span class="label-text-alt opacity-60">{{
-          'media_detail.provider_override_hint' | translate
-        }}</span>
-      </label>
-      @if (saved()) {
-        <div role="alert" class="alert alert-success text-sm py-2">
-          {{ 'media_detail.library_saved' | translate }}
-        </div>
-      }
-      <app-modal-footer>
-        <button type="button" class="btn btn-ghost" (click)="close()">
-          {{ 'common.close' | translate }}
-        </button>
-        <button
-          type="submit"
-          class="btn btn-primary"
-          [disabled]="saving() || selectedLibraryId() === null"
-        >
-          @if (saving()) {
-            <span class="loading loading-spinner loading-xs"></span>
-          }
-          {{ 'common.save' | translate }}
-        </button>
-      </app-modal-footer>
-    </form>
-  </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+      {{ 'common.save' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>

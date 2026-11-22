@@ -1,20 +1,7 @@
-<dialog #dialog class="modal" (close)="onClosed()" [attr.aria-label]="'settings.libraries.scan_title' | translate">
-  <div class="modal-box max-w-3xl flex flex-col overflow-hidden">
-    <div class="shrink-0">
-      <app-modal-header>
-        <h2 class="text-lg font-bold">{{ 'settings.libraries.scan_title' | translate }}</h2>
-      </app-modal-header>
-    </div>
+<dialog #dialog appModal boxClass="max-w-3xl" (close)="onClosed()" [attr.aria-label]="'settings.libraries.scan_title' | translate">
+  <app-modal-header>
+    <h2 class="text-lg font-bold">{{ 'settings.libraries.scan_title' | translate }}</h2>
+  </app-modal-header>
 
-    <app-orphan-scan-panel #panel (queued)="close()" />
-
-    <app-modal-footer>
-      <button type="button" class="btn" (click)="close()">{{ 'common.close' | translate }}</button>
-    </app-modal-footer>
-  </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="close()" [attr.aria-label]="'common.close' | translate">
-      close
-    </button>
-  </form>
+  <app-orphan-scan-panel #panel (queued)="close()" />
 </dialog>

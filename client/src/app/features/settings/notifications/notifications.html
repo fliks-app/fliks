@@ -78,199 +78,18 @@
   }
 </div>
 
-<dialog #editorDialog class="modal">
-  <div class="modal-box max-w-lg flex flex-col p-0 gap-0 overflow-hidden">
-    <app-modal-header
-      flush
-      [title]="
-        (editingId() === null
-          ? 'settings.notifications.editor_create'
-          : 'settings.notifications.editor_edit'
-        ) | translate
-      "
-    />
+<dialog #editorDialog appModal boxClass="max-w-lg">
+  <app-modal-header
+    [title]="
+      (editingId() === null
+        ? 'settings.notifications.editor_create'
+        : 'settings.notifications.editor_edit'
+      ) | translate
+    "
+  />
 
-    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
-      @if (isRelay()) {
-        <label class="label cursor-pointer justify-start gap-3">
-          <input
-            type="checkbox"
-            class="toggle toggle-sm"
-            [ngModel]="formEnabled()"
-            (ngModelChange)="formEnabled.set($event)"
-          />
-          <span class="label-text">{{ 'settings.notifications.relay_enabled' | translate }}</span>
-        </label>
-        <p class="text-sm text-base-content/60">{{ 'settings.notifications.relay_hint' | translate }}</p>
-        @if (pushStatus(); as st) {
-          <div class="flex flex-col gap-2 text-sm">
-            <p>
-              {{ 'settings.notifications.relay_state' | translate }}:
-              <span class="badge badge-sm" [class.badge-success]="st.relay.state === 'ready'" [class.badge-error]="st.relay.state === 'error'">{{ 'settings.notifications.relay_state_' + st.relay.state | translate }}</span>
-            </p>
-            @if (st.relay.error) {
-              <p class="text-error">{{ st.relay.error }}</p>
-            }
-            <p>{{ 'settings.notifications.relay_devices' | translate: { mobile: st.mobile.subscriptions, web: st.web.subscriptions } }}</p>
-            @if (st.relay.stats) {
-              <p>{{ 'settings.notifications.relay_stats' | translate: relayTotals() }}</p>
-            }
-            @if (st.relay.pendingDeletions.length) {
-              <div class="flex flex-col gap-2">
-                <p class="text-warning">{{ 'settings.notifications.relay_pending' | translate }}</p>
-                @for (p of st.relay.pendingDeletions; track p.relay) {
-                  <div class="flex items-center gap-2">
-                    <span class="font-mono truncate">{{ p.relay }}</span>
-                    <button type="button" class="btn btn-ghost btn-sm shrink-0" (click)="dropPending(p.relay)">
-                      {{ 'settings.notifications.relay_pending_drop' | translate }}
-                    </button>
-                  </div>
-                }
-              </div>
-            }
-          </div>
-        }
-      } @else {
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.notifications.field_name' | translate }}</span>
-        <input
-          type="text"
-          class="input input-bordered input-sm w-full"
-          [ngModel]="formName()"
-          (ngModelChange)="formName.set($event)"
-        />
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text">{{ 'settings.notifications.field_type' | translate }}</span>
-        <select
-    appTvSelect
-          class="select select-bordered select-sm w-full"
-          [ngModel]="formType()"
-          (ngModelChange)="formType.set($event)"
-        >
-          @for (t of connectionTypes; track t) {
-            <option [value]="t">{{ t }}</option>
-          }
-        </select>
-      </label>
-
-      <label class="form-control w-full">
-        <span class="label-text">
-          @if (formType() === 'ntfy') {
-            {{ 'settings.notifications.field_server_url' | translate }}
-          } @else {
-            {{ 'settings.notifications.field_webhook_url' | translate }}
-          }
-        </span>
-        <input
-          type="url"
-          class="input input-bordered input-sm w-full"
-          [ngModel]="formWebhookUrl()"
-          (ngModelChange)="formWebhookUrl.set($event)"
-          [placeholder]="webhookUrlStored() ? secretMask : 'https://...'"
-        />
-        @if (webhookUrlStored()) {
-          <span class="label-text-alt text-base-content/60">
-            {{ 'settings.notifications.webhook_url_hint' | translate }}
-          </span>
-        }
-      </label>
-
-      @if (supportsToken()) {
-        <label class="form-control w-full">
-          <span class="label-text">
-            {{ 'settings.notifications.field_token' | translate }}
-            @if (formType() !== 'gotify') {
-              <span class="opacity-60">
-                {{ 'settings.notifications.field_token_optional' | translate }}
-              </span>
-            }
-          </span>
-          <input
-            type="password"
-            class="input input-bordered input-sm w-full"
-            [placeholder]="tokenStored() && !formTokenCleared() ? secretMask : ''"
-            [ngModel]="formToken()"
-            (ngModelChange)="onTokenInput($event)"
-          />
-          @if (canClearToken()) {
-            @if (formTokenCleared()) {
-              <span class="label-text-alt text-warning">
-                {{ 'common.secret_will_clear' | translate }}
-                <button
-                  type="button"
-                  class="link link-hover font-medium"
-                  (click)="formTokenCleared.set(false)"
-                >
-                  {{ 'common.secret_keep' | translate }}
-                </button>
-              </span>
-            } @else {
-              <button
-                type="button"
-                class="link link-hover label-text-alt self-start text-base-content/60"
-                (click)="formTokenCleared.set(true)"
-              >
-                {{ 'common.secret_clear' | translate }}
-              </button>
-            }
-          } @else if (tokenStored()) {
-            <span class="label-text-alt text-base-content/60">
-              {{ 'settings.notifications.token_hint' | translate }}
-            </span>
-          }
-        </label>
-      }
-
-      @if (formType() === 'ntfy') {
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'settings.notifications.field_topic' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formTopic()"
-            (ngModelChange)="formTopic.set($event)"
-            placeholder="fliks"
-          />
-        </label>
-      }
-
-      <div>
-        <p class="label-text mb-2">{{ 'settings.notifications.field_events' | translate }}</p>
-        <div class="flex flex-col gap-3">
-          @for (g of eventGroups(); track g.id) {
-            <div class="rounded-lg border border-base-200 scroll-ring-safe">
-              <label class="label cursor-pointer justify-start gap-3 font-medium">
-                <input
-                  type="checkbox"
-                  class="checkbox checkbox-sm"
-                  [checked]="groupCount(g.events) === g.events.length"
-                  [indeterminate]="groupCount(g.events) > 0 && groupCount(g.events) < g.events.length"
-                  (change)="toggleGroup(g.events)"
-                />
-                <span class="label-text font-medium">{{ 'settings.notifications.groups.' + g.id | translate }}</span>
-                <span class="text-sm text-base-content/60">{{ groupCount(g.events) }} / {{ g.events.length }}</span>
-              </label>
-              @for (event of g.events; track event) {
-                <label class="label cursor-pointer items-start justify-start gap-3 pl-8">
-                  <input
-                    type="checkbox"
-                    class="checkbox checkbox-sm mt-0.5"
-                    [ngModel]="formEvents().includes(event)"
-                    (ngModelChange)="toggleEvent(event)"
-                  />
-                  <span class="flex flex-col">
-                    <span class="label-text text-sm">{{ 'settings.notifications.events.' + event + '.label' | translate }}</span>
-                    <span class="text-sm text-base-content/60">{{ 'settings.notifications.events.' + event + '.hint' | translate }}</span>
-                  </span>
-                </label>
-              }
-            </div>
-          }
-        </div>
-      </div>
-
+  <div class="flex flex-col gap-4">
+    @if (isRelay()) {
       <label class="label cursor-pointer justify-start gap-3">
         <input
           type="checkbox"
@@ -278,53 +97,226 @@
           [ngModel]="formEnabled()"
           (ngModelChange)="formEnabled.set($event)"
         />
-        <span class="label-text">{{ 'settings.notifications.field_enabled' | translate }}</span>
+        <span class="label-text">{{ 'settings.notifications.relay_enabled' | translate }}</span>
       </label>
-
-      }
-
-      @if (editingId() !== null) {
-        <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
-          <button
-            type="button"
-            class="btn btn-outline btn-sm w-fit"
-            (click)="testConnection()"
-            [disabled]="testLoading()"
-          >
-            @if (testLoading()) {
-              <span class="loading loading-spinner loading-xs"></span>
-            }
-            {{ 'settings.notifications.test_connection' | translate }}
-          </button>
-          @if (testResult(); as tr) {
-            <div
-              role="alert"
-              class="alert text-sm py-2"
-              [class.alert-success]="tr.ok"
-              [class.alert-error]="!tr.ok"
-            >
-              {{ tr.message }}
+      <p class="text-sm text-base-content/60">{{ 'settings.notifications.relay_hint' | translate }}</p>
+      @if (pushStatus(); as st) {
+        <div class="flex flex-col gap-2 text-sm">
+          <p>
+            {{ 'settings.notifications.relay_state' | translate }}:
+            <span class="badge badge-sm" [class.badge-success]="st.relay.state === 'ready'" [class.badge-error]="st.relay.state === 'error'">{{ 'settings.notifications.relay_state_' + st.relay.state | translate }}</span>
+          </p>
+          @if (st.relay.error) {
+            <p class="text-error">{{ st.relay.error }}</p>
+          }
+          <p>{{ 'settings.notifications.relay_devices' | translate: { mobile: st.mobile.subscriptions, web: st.web.subscriptions } }}</p>
+          @if (st.relay.stats) {
+            <p>{{ 'settings.notifications.relay_stats' | translate: relayTotals() }}</p>
+          }
+          @if (st.relay.pendingDeletions.length) {
+            <div class="flex flex-col gap-2">
+              <p class="text-warning">{{ 'settings.notifications.relay_pending' | translate }}</p>
+              @for (p of st.relay.pendingDeletions; track p.relay) {
+                <div class="flex items-center gap-2">
+                  <span class="font-mono truncate">{{ p.relay }}</span>
+                  <button type="button" class="btn btn-ghost btn-sm shrink-0" (click)="dropPending(p.relay)">
+                    {{ 'settings.notifications.relay_pending_drop' | translate }}
+                  </button>
+                </div>
+              }
             </div>
           }
         </div>
       }
+    } @else {
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'settings.notifications.field_name' | translate }}</span>
+      <input
+        type="text"
+        class="input input-bordered input-sm w-full"
+        [ngModel]="formName()"
+        (ngModelChange)="formName.set($event)"
+      />
+    </label>
+
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'settings.notifications.field_type' | translate }}</span>
+      <select
+  appTvSelect
+        class="select select-bordered select-sm w-full"
+        [ngModel]="formType()"
+        (ngModelChange)="formType.set($event)"
+      >
+        @for (t of connectionTypes; track t) {
+          <option [value]="t">{{ t }}</option>
+        }
+      </select>
+    </label>
+
+    <label class="form-control w-full">
+      <span class="label-text">
+        @if (formType() === 'ntfy') {
+          {{ 'settings.notifications.field_server_url' | translate }}
+        } @else {
+          {{ 'settings.notifications.field_webhook_url' | translate }}
+        }
+      </span>
+      <input
+        type="url"
+        class="input input-bordered input-sm w-full"
+        [ngModel]="formWebhookUrl()"
+        (ngModelChange)="formWebhookUrl.set($event)"
+        [placeholder]="webhookUrlStored() ? secretMask : 'https://...'"
+      />
+      @if (webhookUrlStored()) {
+        <span class="label-text-alt text-base-content/60">
+          {{ 'settings.notifications.webhook_url_hint' | translate }}
+        </span>
+      }
+    </label>
+
+    @if (supportsToken()) {
+      <label class="form-control w-full">
+        <span class="label-text">
+          {{ 'settings.notifications.field_token' | translate }}
+          @if (formType() !== 'gotify') {
+            <span class="opacity-60">
+              {{ 'settings.notifications.field_token_optional' | translate }}
+            </span>
+          }
+        </span>
+        <input
+          type="password"
+          class="input input-bordered input-sm w-full"
+          [placeholder]="tokenStored() && !formTokenCleared() ? secretMask : ''"
+          [ngModel]="formToken()"
+          (ngModelChange)="onTokenInput($event)"
+        />
+        @if (canClearToken()) {
+          @if (formTokenCleared()) {
+            <span class="label-text-alt text-warning">
+              {{ 'common.secret_will_clear' | translate }}
+              <button
+                type="button"
+                class="link link-hover font-medium"
+                (click)="formTokenCleared.set(false)"
+              >
+                {{ 'common.secret_keep' | translate }}
+              </button>
+            </span>
+          } @else {
+            <button
+              type="button"
+              class="link link-hover label-text-alt self-start text-base-content/60"
+              (click)="formTokenCleared.set(true)"
+            >
+              {{ 'common.secret_clear' | translate }}
+            </button>
+          }
+        } @else if (tokenStored()) {
+          <span class="label-text-alt text-base-content/60">
+            {{ 'settings.notifications.token_hint' | translate }}
+          </span>
+        }
+      </label>
+    }
+
+    @if (formType() === 'ntfy') {
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'settings.notifications.field_topic' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formTopic()"
+          (ngModelChange)="formTopic.set($event)"
+          placeholder="fliks"
+        />
+      </label>
+    }
+
+    <div>
+      <p class="label-text mb-2">{{ 'settings.notifications.field_events' | translate }}</p>
+      <div class="flex flex-col gap-3">
+        @for (g of eventGroups(); track g.id) {
+          <div class="rounded-lg border border-base-200 scroll-ring-safe">
+            <label class="label cursor-pointer justify-start gap-3 font-medium">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                [checked]="groupCount(g.events) === g.events.length"
+                [indeterminate]="groupCount(g.events) > 0 && groupCount(g.events) < g.events.length"
+                (change)="toggleGroup(g.events)"
+              />
+              <span class="label-text font-medium">{{ 'settings.notifications.groups.' + g.id | translate }}</span>
+              <span class="text-sm text-base-content/60">{{ groupCount(g.events) }} / {{ g.events.length }}</span>
+            </label>
+            @for (event of g.events; track event) {
+              <label class="label cursor-pointer items-start justify-start gap-3 pl-8">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-sm mt-0.5"
+                  [ngModel]="formEvents().includes(event)"
+                  (ngModelChange)="toggleEvent(event)"
+                />
+                <span class="flex flex-col">
+                  <span class="label-text text-sm">{{ 'settings.notifications.events.' + event + '.label' | translate }}</span>
+                  <span class="text-sm text-base-content/60">{{ 'settings.notifications.events.' + event + '.hint' | translate }}</span>
+                </span>
+              </label>
+            }
+          </div>
+        }
+      </div>
     </div>
 
-    <app-modal-footer flush>
-      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
-        {{ 'settings.notifications.cancel' | translate }}
-      </button>
-      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
-        @if (saving()) {
-          <span class="loading loading-spinner loading-sm"></span>
+    <label class="label cursor-pointer justify-start gap-3">
+      <input
+        type="checkbox"
+        class="toggle toggle-sm"
+        [ngModel]="formEnabled()"
+        (ngModelChange)="formEnabled.set($event)"
+      />
+      <span class="label-text">{{ 'settings.notifications.field_enabled' | translate }}</span>
+    </label>
+
+    }
+
+    @if (editingId() !== null) {
+      <div class="flex flex-col gap-2 pt-2 border-t border-base-200">
+        <button
+          type="button"
+          class="btn btn-outline btn-sm w-fit"
+          (click)="testConnection()"
+          [disabled]="testLoading()"
+        >
+          @if (testLoading()) {
+            <span class="loading loading-spinner loading-xs"></span>
+          }
+          {{ 'settings.notifications.test_connection' | translate }}
+        </button>
+        @if (testResult(); as tr) {
+          <div
+            role="alert"
+            class="alert text-sm py-2"
+            [class.alert-success]="tr.ok"
+            [class.alert-error]="!tr.ok"
+          >
+            {{ tr.message }}
+          </div>
         }
-        {{ 'settings.notifications.save' | translate }}
-      </button>
-    </app-modal-footer>
+      </div>
+    }
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">
-      close
+
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+      {{ 'settings.notifications.cancel' | translate }}
     </button>
-  </form>
+    <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving()">
+      @if (saving()) {
+        <span class="loading loading-spinner loading-sm"></span>
+      }
+      {{ 'settings.notifications.save' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>

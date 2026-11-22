@@ -68,26 +68,19 @@
   }
 </div>
 
-<dialog #presetDialog class="modal" [attr.aria-label]="'settings.optimize.profiles.preset_title' | translate">
-  <div class="modal-box max-w-xl flex flex-col">
-    <app-modal-header class="shrink-0">
-      <h3 class="text-lg font-bold">{{ 'settings.optimize.profiles.preset_title' | translate }}</h3>
-    </app-modal-header>
-    <p class="text-sm text-base-content/60 pt-2">{{ 'settings.optimize.profiles.preset_hint' | translate }}</p>
-    <div class="py-4 flex flex-col gap-2 scroll-ring-safe">
-      @for (k of presets; track k) {
-        <button type="button" class="btn btn-outline h-auto justify-start text-start py-3 flex-col items-start gap-1" (click)="create(k)">
-          <span class="font-semibold">{{ 'settings.optimize.presets.' + k + '.name' | translate }}</span>
-          <span class="text-sm font-normal text-base-content/70 whitespace-normal">
-            {{ 'settings.optimize.presets.' + k + '.desc' | translate }}
-          </span>
-        </button>
-      }
-    </div>
+<dialog #presetDialog appModal boxClass="max-w-xl flex flex-col" [attr.aria-label]="'settings.optimize.profiles.preset_title' | translate">
+  <app-modal-header class="shrink-0">
+    <h3 class="text-lg font-bold">{{ 'settings.optimize.profiles.preset_title' | translate }}</h3>
+  </app-modal-header>
+  <p class="text-sm text-base-content/60 pt-2">{{ 'settings.optimize.profiles.preset_hint' | translate }}</p>
+  <div class="py-4 flex flex-col gap-2 scroll-ring-safe">
+    @for (k of presets; track k) {
+      <button type="button" class="btn btn-outline h-auto justify-start text-start py-3 flex-col items-start gap-1" (click)="create(k)">
+        <span class="font-semibold">{{ 'settings.optimize.presets.' + k + '.name' | translate }}</span>
+        <span class="text-sm font-normal text-base-content/70 whitespace-normal">
+          {{ 'settings.optimize.presets.' + k + '.desc' | translate }}
+        </span>
+      </button>
+    }
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closePresets()" [attr.aria-label]="'common.close' | translate">
-      {{ 'common.close' | translate }}
-    </button>
-  </form>
 </dialog>

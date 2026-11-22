@@ -157,35 +157,28 @@
   }
 </div>
 
-<dialog #sheetDialog class="modal">
-  <div class="modal-box max-w-md p-0 gap-0 overflow-hidden">
-    <app-modal-header flush [title]="selectedSheet()?.program?.title ?? ''" (closed)="closeSheet()" />
-    @if (selectedSheet(); as sheet) {
-      <div class="px-5 sm:px-6 py-4 flex flex-col gap-2">
-        <p class="text-sm text-base-content/60">
-          {{ sheet.program.startsAt | localeDate:{ hour: 'numeric', minute: '2-digit' } }}
-          -
-          {{ sheet.program.endsAt | localeDate:{ hour: 'numeric', minute: '2-digit' } }}
-          @if (episodeLabel(sheet.program); as ep) {
-            <span class="ml-2 badge badge-ghost badge-sm">{{ ep }}</span>
-          }
-        </p>
-        @if (sheet.program.subtitle) {
-          <p class="text-sm font-medium">{{ sheet.program.subtitle }}</p>
+<dialog #sheetDialog appModal boxClass="max-w-md">
+  <app-modal-header [title]="selectedSheet()?.program?.title ?? ''" (closed)="closeSheet()" />
+  @if (selectedSheet(); as sheet) {
+    <div class="flex flex-col gap-2">
+      <p class="text-sm text-base-content/60">
+        {{ sheet.program.startsAt | localeDate:{ hour: 'numeric', minute: '2-digit' } }}
+        -
+        {{ sheet.program.endsAt | localeDate:{ hour: 'numeric', minute: '2-digit' } }}
+        @if (episodeLabel(sheet.program); as ep) {
+          <span class="ml-2 badge badge-ghost badge-sm">{{ ep }}</span>
         }
-        @if (sheet.program.description) {
-          <p class="text-sm text-base-content/80">{{ sheet.program.description }}</p>
-        }
-        <button type="button" class="btn btn-primary btn-sm mt-2 w-fit" (click)="watchFromSheet()">
-          <svg lucidePlay class="h-4 w-4"></svg>
-          {{ 'liveTv.watch' | translate }} {{ sheet.channel.name }}
-        </button>
-      </div>
-    }
-  </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeSheet()" [attr.aria-label]="'common.close' | translate">
-      {{ 'common.close' | translate }}
-    </button>
-  </form>
+      </p>
+      @if (sheet.program.subtitle) {
+        <p class="text-sm font-medium">{{ sheet.program.subtitle }}</p>
+      }
+      @if (sheet.program.description) {
+        <p class="text-sm text-base-content/80">{{ sheet.program.description }}</p>
+      }
+      <button type="button" class="btn btn-primary btn-sm mt-2 w-fit" (click)="watchFromSheet()">
+        <svg lucidePlay class="h-4 w-4"></svg>
+        {{ 'liveTv.watch' | translate }} {{ sheet.channel.name }}
+      </button>
+    </div>
+  }
 </dialog>

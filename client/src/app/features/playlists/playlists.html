@@ -49,62 +49,57 @@
   }
 </div>
 
-<dialog #createDialog class="modal">
-  <div class="modal-box max-w-md">
-    <app-modal-header [title]="'playlists.create' | translate" />
-    <form class="flex flex-col gap-4" (ngSubmit)="create()">
-      <input
-        type="text"
-        class="input input-bordered w-full"
-        name="newPlaylistName"
-        [placeholder]="'playlists.new_placeholder' | translate"
-        [ngModel]="newName()"
-        (ngModelChange)="newName.set($event)"
-        autofocus
-      />
-      <app-modal-footer>
-        <button type="button" class="btn" (click)="closeCreate()">
-          {{ 'common.cancel' | translate }}
-        </button>
-        <button type="submit" class="btn btn-primary" [disabled]="creating() || !newName().trim()">
-          @if (creating()) {
-            <span class="loading loading-spinner loading-xs"></span>
-          }
-          {{ 'playlists.create' | translate }}
-        </button>
-      </app-modal-footer>
-    </form>
-  </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+<dialog #createDialog appModal boxClass="max-w-md">
+  <app-modal-header [title]="'playlists.create' | translate" />
+  <form id="create-playlist-form" class="flex flex-col gap-4" (ngSubmit)="create()">
+    <input
+      type="text"
+      class="input input-bordered w-full"
+      name="newPlaylistName"
+      [placeholder]="'playlists.new_placeholder' | translate"
+      [ngModel]="newName()"
+      (ngModelChange)="newName.set($event)"
+      autofocus
+    />
+  </form>
+  <app-modal-footer>
+    <button type="button" class="btn" (click)="closeCreate()">
+      {{ 'common.cancel' | translate }}
+    </button>
+    <button type="submit" form="create-playlist-form" class="btn btn-primary" [disabled]="creating() || !newName().trim()">
+      @if (creating()) {
+        <span class="loading loading-spinner loading-xs"></span>
+      }
+      {{ 'playlists.create' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>
 
 <app-smart-playlist-editor #smartEditor (saved)="smartSaved($event)" />
 
-<dialog #importDialog class="modal">
-  <div class="modal-box max-w-md">
-    <app-modal-header [title]="'playlists.import_title' | translate" />
-    @if (importResult(); as r) {
-      <p class="mb-2">
-        {{ (r.matched === 1 ? 'playlists.import_done_one' : 'playlists.import_done_other') | translate: { count: r.matched } }}
+<dialog #importDialog appModal boxClass="max-w-md">
+  <app-modal-header [title]="'playlists.import_title' | translate" />
+  @if (importResult(); as r) {
+    <p class="mb-2">
+      {{ (r.matched === 1 ? 'playlists.import_done_one' : 'playlists.import_done_other') | translate: { count: r.matched } }}
+    </p>
+    @if (r.unmatched.length) {
+      <p class="text-sm font-semibold mb-1">
+        {{ 'playlists.import_unmatched' | translate: { count: r.unmatched.length } }}
       </p>
-      @if (r.unmatched.length) {
-        <p class="text-sm font-semibold mb-1">
-          {{ 'playlists.import_unmatched' | translate: { count: r.unmatched.length } }}
-        </p>
-        <ul class="flex flex-col gap-1 max-h-52 overflow-y-auto scroll-ring-safe text-sm">
-          @for (u of r.unmatched; track u.line) {
-            <li class="flex gap-2">
-              <span class="shrink-0 text-base-content/60">{{ 'playlists.import_line' | translate: { line: u.line } }}</span>
-              <span class="min-w-0 break-all">{{ u.text }}</span>
-            </li>
-          }
-        </ul>
-      }
-      <app-modal-footer>
-        <button type="button" class="btn" (click)="importDialog.close()">{{ 'common.close' | translate }}</button>
-        <button type="button" class="btn btn-primary" (click)="openImported(r)">{{ 'playlists.import_open' | translate }}</button>
-      </app-modal-footer>
+      <ul class="flex flex-col gap-1 max-h-52 overflow-y-auto scroll-ring-safe text-sm">
+        @for (u of r.unmatched; track u.line) {
+          <li class="flex gap-2">
+            <span class="shrink-0 text-base-content/60">{{ 'playlists.import_line' | translate: { line: u.line } }}</span>
+            <span class="min-w-0 break-all">{{ u.text }}</span>
+          </li>
+        }
+      </ul>
     }
-  </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+  }
+  @if (importResult(); as r) {
+    <app-modal-footer>
+      <button type="button" class="btn btn-primary" (click)="openImported(r)">{{ 'playlists.import_open' | translate }}</button>
+    </app-modal-footer>
+  }
 </dialog>

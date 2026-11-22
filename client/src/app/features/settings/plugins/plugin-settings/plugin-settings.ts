@@ -14,7 +14,7 @@ import { PluginsApiService } from '../../../../core/services/api/plugins-api.ser
 import { PluginsState } from '../plugins-state';
 import { ToastService } from '../../../../core/services/toast.service';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
-import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../../shared/components/modal';
 
 /** Mirrors the backend's `PLUGIN_AUTO_UPDATE_SETTING`. */
 const AUTO_UPDATE_KEY = 'plugins.auto_update';
@@ -27,7 +27,7 @@ const ALLOW_UNSIGNED_KEY = 'plugins.allow_unsigned';
 
 @Component({
   selector: 'app-plugin-settings',
-  imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe, ToggleFieldComponent],
+  imports: [ModalComponent, ModalHeaderComponent, TranslatePipe, ToggleFieldComponent],
   templateUrl: './plugin-settings.html',
 })
 export class PluginSettingsComponent {
@@ -39,7 +39,7 @@ export class PluginSettingsComponent {
   /** The unsigned-plugin switch and the source refresh are admin-only: a 403 for anyone else. */
   protected readonly isAdmin = inject(PluginsState).isAdmin;
 
-  private readonly dialogRef = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogRef = viewChild.required<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   /** On unless the stored value is the explicit 'false' — mirrors the backend's own reading. */
   readonly autoUpdate = signal(true);

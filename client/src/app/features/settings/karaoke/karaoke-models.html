@@ -173,28 +173,24 @@
   </section>
 }
 
-<dialog #licence class="modal" role="dialog" aria-modal="true" (close)="closeReview()">
+<dialog #licence appModal boxClass="max-w-2xl" role="dialog" aria-modal="true" (close)="closeReview()">
   @if (reviewing(); as m) {
-    <div class="modal-box max-w-2xl">
-      <app-modal-header [title]="m.licence.name" />
-      <pre class="max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded bg-base-200 p-3 text-sm" tabindex="0">{{ m.licence.text }}</pre>
-      @if (canDownload(m) && !m.licence.clear) {
-        <label class="mt-4 flex cursor-pointer items-start gap-3">
-          <input type="checkbox" class="checkbox checkbox-sm mt-0.5 shrink-0" [checked]="accepted()" (change)="accepted.set($any($event.target).checked)" />
-          <span>{{ 'karaoke.admin.accept' | translate: { name: m.name } }}</span>
-        </label>
-      }
-      <app-modal-footer>
-        <button type="button" class="btn" (click)="closeReview()">{{ 'common.close' | translate }}</button>
-        @if (canDownload(m) && !m.licence.clear) {
-          <button type="button" class="btn btn-primary" [disabled]="!accepted()" (click)="confirmDownload()">
-            {{ (m.outdated ? 'karaoke.admin.update' : 'karaoke.admin.download') | translate }}
-          </button>
-        }
-      </app-modal-footer>
-    </div>
+    <app-modal-header [title]="m.licence.name" />
   }
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeReview()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
-  </form>
+  @if (reviewing(); as m) {
+    <pre class="max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded bg-base-200 p-3 text-sm" tabindex="0">{{ m.licence.text }}</pre>
+    @if (canDownload(m) && !m.licence.clear) {
+      <label class="mt-4 flex cursor-pointer items-start gap-3">
+        <input type="checkbox" class="checkbox checkbox-sm mt-0.5 shrink-0" [checked]="accepted()" (change)="accepted.set($any($event.target).checked)" />
+        <span>{{ 'karaoke.admin.accept' | translate: { name: m.name } }}</span>
+      </label>
+    }
+  }
+  @if (downloadable(); as m) {
+    <app-modal-footer>
+      <button type="button" class="btn btn-primary" [disabled]="!accepted()" (click)="confirmDownload()">
+        {{ (m.outdated ? 'karaoke.admin.update' : 'karaoke.admin.download') | translate }}
+      </button>
+    </app-modal-footer>
+  }
 </dialog>

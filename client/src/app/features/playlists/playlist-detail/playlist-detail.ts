@@ -78,6 +78,7 @@ import { formatDuration } from '../../music/music-utils';
 import { HeroBaseComponent, heroDesktopLayout } from '../../../shared/components/hero-base/hero-base';
 import { SmartPlaylistEditorComponent } from '../smart-playlist-editor/smart-playlist-editor';
 import { RowSkeletonComponent } from '../../../shared/components/row-skeleton/row-skeleton';
+import { ModalComponent } from '../../../shared/components/modal';
 
 interface PlaylistSeriesGroup {
   seriesId: number;
@@ -92,7 +93,7 @@ type PlaylistGroupedEntry =
 
 @Component({
   selector: 'app-playlist-detail',
-  imports: [RowSkeletonComponent, TvSelectDirective, MusicDownloadButtonComponent, TrackDownloadGlyphComponent,
+  imports: [ModalComponent, RowSkeletonComponent, TvSelectDirective, MusicDownloadButtonComponent, TrackDownloadGlyphComponent,
     ModalFooterComponent,
     CachedSrcDirective,
     TranslatePipe,
@@ -157,9 +158,9 @@ export class PlaylistDetailComponent {
   private readonly routeParams = toSignal(this.route.paramMap);
   readonly playlistId = computed(() => Number(this.routeParams()?.get('id')));
 
-  private readonly renameDialog = viewChild<ElementRef<HTMLDialogElement>>('renameDialog');
-  private readonly settingsDialog = viewChild<ElementRef<HTMLDialogElement>>('settingsDialog');
-  private readonly membersDialog = viewChild<ElementRef<HTMLDialogElement>>('membersDialog');
+  private readonly renameDialog = viewChild<string, ElementRef<HTMLDialogElement>>('renameDialog', { read: ElementRef });
+  private readonly settingsDialog = viewChild<string, ElementRef<HTMLDialogElement>>('settingsDialog', { read: ElementRef });
+  private readonly membersDialog = viewChild<string, ElementRef<HTMLDialogElement>>('membersDialog', { read: ElementRef });
 
   readonly loading = signal(true);
   readonly playlist = signal<Playlist | null>(null);

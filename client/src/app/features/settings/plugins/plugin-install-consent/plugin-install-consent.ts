@@ -19,18 +19,19 @@ import { refusalMessageKey } from '../plugin-refusal';
 import { capabilityLabels } from '../plugin-capability';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../../shared/components/modal';
 
 /** The install consent sheet; owns the confirm call, so callers only open it with an inspect report and listen for `installed`. */
 @Component({
   selector: 'app-plugin-install-consent',
-  imports: [ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
+  imports: [ModalComponent, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   templateUrl: './plugin-install-consent.html',
 })
 export class PluginInstallConsentComponent {
   private readonly api = inject(PluginsApiService);
   protected readonly translate = inject(TranslateService);
 
-  private readonly dialogRef = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogRef = viewChild.required<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly report = signal<PluginInspectReport | null>(null);
   readonly acknowledged = signal(false);

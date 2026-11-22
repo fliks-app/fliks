@@ -74,6 +74,14 @@ html:not(.keyboard-modality):not(.tv-host) app-mosaic-card button:focus-visible 
   transform: none !important;
 }
 
+/* Same gate for daisyUI's focus fill on a ghost button (a closed dialog hands focus back to its opener). */
+html:not(.keyboard-modality):not(.tv-host) .btn-ghost:focus-visible {
+  --btn-bg: #0000;
+  --btn-border: #0000;
+  --btn-shadow: 0 0 0 0 #0000;
+  --btn-inset: 0 0 0 0 #0000;
+}
+
 /* Same modality gate for a menu row's focus tint (the panel focuses its first entry on open). */
 html:not(.keyboard-modality):not(.tv-host) .dropdown-item:focus-visible {
   background-color: transparent;

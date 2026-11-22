@@ -1,3 +1,4 @@
+import { ModalComponent } from '../modal';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, ElementRef, computed, inject, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -41,7 +42,7 @@ import {
  *  it, else this dialog (library, folder, profiles; seasons for a series; editions for a book). */
 @Component({
   selector: 'app-add-dialog',
-  imports: [FormsModule, TranslatePipe, TranslatePluralPipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, SeasonPickerComponent, LibraryFolderSelectComponent, WantsEditorComponent, RequestWantsComponent],
+  imports: [FormsModule, TranslatePipe, TranslatePluralPipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, ModalComponent, SeasonPickerComponent, LibraryFolderSelectComponent, WantsEditorComponent, RequestWantsComponent],
   templateUrl: './add-dialog.html',
 })
 export class AddDialogComponent {
@@ -55,7 +56,7 @@ export class AddDialogComponent {
   private readonly push = inject(PushService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
-  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogEl = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly done = output<AddResult>();
   /** The add ended without being made: the dialog was dismissed or the request failed. */
@@ -106,10 +107,9 @@ export class AddDialogComponent {
   });
   protected readonly titleKey = computed(() => {
     const r = this.req();
-    if (!r) return 'discover.add_to_library';
+    if (!r) return 'discover.add_title';
     if (this.kind() === 'album') return this.mode() === 'import' ? 'discover.add_music' : 'discover.request_music';
-    if (this.mode() === 'import') return 'discover.add_to_library';
-    return this.hasSeasons() ? 'discover.request_series_title' : this.isVideo() ? 'discover.request_movie_title' : 'discover.request';
+    return this.mode() === 'import' ? 'discover.add_title' : 'discover.request_title';
   });
   protected readonly confirmKey = computed(() => {
     if (this.mode() === 'import') return 'discover.add_to_library';

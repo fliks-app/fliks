@@ -12,13 +12,14 @@ import {
   CRITERION_FIELDS, CRITERION_TYPES, RELEASE_TYPES, SORT_BY, cleanRules, createPreviewer, criterionValid, defaultRules,
   newCriterion, rulesValid, type Criterion, type CriterionType, type Field, type PreviewState, type SmartRules, type SortBy,
 } from '../../../core/services/api/smart-rules';
+import { ModalComponent } from '../../../shared/components/modal';
 
 type Bag = Record<string, unknown>;
 
 /** Dialog to create a smart playlist (no `playlist`) or edit the rules of one. */
 @Component({
   selector: 'app-smart-playlist-editor',
-  imports: [FormsModule, TranslatePipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, LucidePlus, LucideTrash2],
+  imports: [ModalComponent, FormsModule, TranslatePipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, LucidePlus, LucideTrash2],
   templateUrl: './smart-playlist-editor.html',
 })
 export class SmartPlaylistEditorComponent {
@@ -30,7 +31,7 @@ export class SmartPlaylistEditorComponent {
   readonly playlist = input<Playlist | null>(null);
   readonly saved = output<Playlist>();
 
-  private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild.required<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   protected readonly types = CRITERION_TYPES;
   protected readonly sorts = SORT_BY;

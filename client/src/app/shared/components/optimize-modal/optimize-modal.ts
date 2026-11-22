@@ -15,6 +15,8 @@ import { ToastService } from '../../../core/services/toast.service';
 import { LEVELS, type OptimizeLevel, type Queued, type QueueOutcome } from '../../../core/models/optimize';
 import { formatBytes } from '../../../core/utils/format-bytes';
 import { ModalHeaderComponent } from '../modal-header';
+import { ModalFooterComponent } from '../modal-footer';
+import { ModalComponent } from '../modal';
 
 /** Files compared one by one; beyond this the dialog queues without a per-file preview. */
 const PREVIEW_MAX = 40;
@@ -31,7 +33,7 @@ interface Summary {
 /** "Optimize…" and "Force re-encode" on a title, an episode, a season or a collection. */
 @Component({
   selector: 'app-optimize-modal',
-  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, ModalHeaderComponent],
+  imports: [ModalComponent, RouterLink, TranslatePipe, TranslatePluralPipe, ModalHeaderComponent, ModalFooterComponent],
   templateUrl: './optimize-modal.html',
 })
 export class OptimizeModalComponent {
@@ -43,7 +45,7 @@ export class OptimizeModalComponent {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly levels = LEVELS;
   readonly formatBytes = formatBytes;

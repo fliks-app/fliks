@@ -47,6 +47,7 @@ import { asAlbumMedia, versionMeta } from './album-media';
 import { mediaTitleKey } from '../request-flow-controller';
 import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
 import { isWanted } from '../media-wanted';
+import { ModalComponent } from '../../../shared/components/modal';
 
 interface DiscView {
   disc: Disc;
@@ -58,6 +59,7 @@ interface DiscView {
 @Component({
   selector: 'app-album-page',
   imports: [
+    ModalComponent,
     LastSearchComponent, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, DetailHeroComponent, TrackDownloadGlyphComponent, MediaCardComponent, DetailSectionComponent, HorizontalScrollerComponent, FactsGridComponent,
     ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent, AddDialogComponent, TvRowDirective,
     LucideCircleAlert, LucideClock, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle, LucideEllipsisVertical,
@@ -191,7 +193,7 @@ export class AlbumPageComponent {
   }
 
   protected readonly wantsOpen = signal(false);
-  private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
+  private readonly wantsDialog = viewChild<string, ElementRef<HTMLDialogElement>>('wantsDialog', { read: ElementRef });
 
   private readonly focusTrack = inject(ActivatedRoute).snapshot.queryParamMap.get('track');
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -339,8 +341,8 @@ export class AlbumPageComponent {
   }
 
   protected readonly creditsOf = signal<Track | null>(null);
-  private readonly detailsDialog = viewChild<ElementRef<HTMLDialogElement>>('detailsDialog');
-  private readonly creditsDialog = viewChild<ElementRef<HTMLDialogElement>>('creditsDialog');
+  private readonly detailsDialog = viewChild<string, ElementRef<HTMLDialogElement>>('detailsDialog', { read: ElementRef });
+  private readonly creditsDialog = viewChild<string, ElementRef<HTMLDialogElement>>('creditsDialog', { read: ElementRef });
   protected readonly candidates = signal<AlbumCandidate[] | null>(null);
   protected readonly reviewing = signal(false);
 

@@ -20,10 +20,11 @@ import { LucideCircleCheck, LucideDownload, LucideTrash2, LucideX } from '@lucid
 import { DownloadSettingsService } from '../../../core/services/download-settings.service';
 import { pickRung } from '../../../core/services/download-manager.service';
 import { formatBytes } from '../../utils/download-format';
+import { ModalComponent } from '../modal';
 
 @Component({
   selector: 'app-download-quality-modal',
-  imports: [TranslatePipe, LucideCircleCheck, LucideDownload, LucideTrash2, LucideX],
+  imports: [ModalComponent, TranslatePipe, LucideCircleCheck, LucideDownload, LucideTrash2, LucideX],
   templateUrl: './download-quality-modal.html',
 })
 export class DownloadQualityModalComponent {
@@ -40,7 +41,7 @@ export class DownloadQualityModalComponent {
    *  routes through the shell's download-to-disk path rather than a browser save. */
   readonly isDesktop = !!desktopDownloaderOrNull();
 
-  @ViewChild('dialog') dialogRef!: ElementRef<HTMLDialogElement>;
+  @ViewChild('dialog', { read: ElementRef }) dialogRef!: ElementRef<HTMLDialogElement>;
 
   readonly qualities = signal<DownloadQuality[]>([]);
   /** Offered rung closest to the user's default; highlighted, not started. */

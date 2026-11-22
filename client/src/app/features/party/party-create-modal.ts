@@ -14,6 +14,7 @@ import { readStored, writeStored } from '../../core/utils/local-flag';
 import { AUTO_COVER, PartyCoverPickerComponent, coverChoice, coverValid, type CoverDraft } from './party-cover-picker';
 import { PartyInviteePickerComponent } from './party-invitee-picker';
 import { albumRows } from './party-programme-items';
+import { ModalComponent } from '../../shared/components/modal';
 
 type Film = { mediaId: number; mediaFileId?: number; episodeId: number | null; itemId?: number; title: string; posterUrl: string | null };
 
@@ -38,13 +39,13 @@ export function toLocalInput(d: Date): string {
 /** "Watch together" dialog, mounted once in the layout and opened through `PartyService.createRequest`. */
 @Component({
   selector: 'app-party-create-modal',
-  imports: [FormsModule, TranslatePipe, LucidePlus, LucideX, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent, PartyHostSwitchesComponent, MediaPickerComponent, PartyCoverPickerComponent],
+  imports: [ModalComponent, FormsModule, TranslatePipe, LucidePlus, LucideX, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent, PartyHostSwitchesComponent, MediaPickerComponent, PartyCoverPickerComponent],
   templateUrl: './party-create-modal.html',
 })
 export class PartyCreateModalComponent {
   private readonly party = inject(PartyService);
   private readonly media = inject(MediaService);
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   protected readonly picker = viewChild.required(MediaPickerComponent);
   protected readonly target = signal<PartyCreateTarget | null>(null);

@@ -85,7 +85,7 @@
       <div class="flex-1 min-w-0">
         @if (showFilters()) {
           <button type="button" class="lg:hidden btn btn-sm btn-outline gap-2 mb-4" (click)="openFilterSheet()">
-            <svg lucideSettings class="h-4 w-4"></svg>{{ 'search.filters' | translate }}
+            <svg lucideSlidersHorizontal class="h-4 w-4"></svg>{{ 'search.filters' | translate }}
           </button>
         }
 
@@ -183,7 +183,7 @@
       <div class="flex-1 min-w-0 flex flex-col gap-8">
         @if (showFilters()) {
           <button type="button" class="lg:hidden btn btn-sm btn-outline gap-2 self-start" (click)="openFilterSheet()">
-            <svg lucideSettings class="h-4 w-4"></svg>{{ 'search.filters' | translate }}
+            <svg lucideSlidersHorizontal class="h-4 w-4"></svg>{{ 'search.filters' | translate }}
           </button>
         }
 
@@ -318,12 +318,9 @@
 </ng-template>
 
 <!-- Mobile filter sheet — top-level so it opens during discovery and search alike -->
-<dialog #filterSheet class="modal" [attr.aria-label]="'search.filters' | translate">
-  <div class="modal-box">
-    <app-modal-header />
-    <ng-container *ngTemplateOutlet="filterPanel" />
-  </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+<dialog #filterSheet appModal [attr.aria-label]="'search.filters' | translate">
+  <app-modal-header />
+  <ng-container *ngTemplateOutlet="filterPanel" />
 </dialog>
 
 <!-- Discover filter panel — projected into the desktop sidebar and the mobile sheet -->

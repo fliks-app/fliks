@@ -18,10 +18,12 @@ import { ErrorBadgeComponent } from '../../../../shared/components/error-badge';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 import { EnabledSwitchComponent } from '../../../../shared/components/enabled-switch';
+import { ModalComponent } from '../../../../shared/components/modal';
 
 @Component({
   selector: 'app-live-tv-guide-admin',
   imports: [
+    ModalComponent,
     FormsModule,
     TranslatePipe,
     LocaleDatePipe,
@@ -39,7 +41,7 @@ export class LiveTvGuideAdminComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly sse = inject(SseService);
   private readonly confirmation = inject(ConfirmationService);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
 
   readonly sources = signal<AdminSource[]>([]);
   readonly rows = signal<GuideSource[]>([]);

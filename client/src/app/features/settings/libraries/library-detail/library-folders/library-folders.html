@@ -124,32 +124,24 @@
   </div>
 </div>
 
-<dialog #inUseDialog class="modal" (close)="blocked.set(null)">
-  <div class="modal-box max-w-md">
-    <app-modal-header [title]="'settings.libraries.folder_in_use_title' | translate" />
-    @if (blocked(); as folder) {
-      <div class="flex flex-col gap-4">
-        <p class="text-sm">
-          {{ 'settings.libraries.folder_in_use_message' | translate: { count: folder.mediaCount, path: folder.path } }}
-        </p>
-        <div class="flex flex-col gap-1">
-          <button type="button" class="btn btn-outline justify-start" disabled>
-            {{ 'settings.libraries.folder_move_media' | translate }}
-            <span class="badge badge-sm">{{ 'settings.libraries.folder_coming_soon' | translate }}</span>
-          </button>
-          <button type="button" class="btn btn-outline btn-error justify-start" (click)="removeWithMedia()" [disabled]="busy()">
-            @if (busy()) { <span class="loading loading-spinner loading-xs"></span> }
-            {{ 'settings.libraries.folder_remove_media' | translate }}
-          </button>
-          <span class="text-sm text-base-content/60">{{ 'settings.libraries.folder_remove_media_hint' | translate }}</span>
-        </div>
+<dialog #inUseDialog appModal boxClass="max-w-md" (close)="blocked.set(null)">
+  <app-modal-header [title]="'settings.libraries.folder_in_use_title' | translate" />
+  @if (blocked(); as folder) {
+    <div class="flex flex-col gap-4">
+      <p class="text-sm">
+        {{ 'settings.libraries.folder_in_use_message' | translate: { count: folder.mediaCount, path: folder.path } }}
+      </p>
+      <div class="flex flex-col gap-1">
+        <button type="button" class="btn btn-outline justify-start" disabled>
+          {{ 'settings.libraries.folder_move_media' | translate }}
+          <span class="badge badge-sm">{{ 'settings.libraries.folder_coming_soon' | translate }}</span>
+        </button>
+        <button type="button" class="btn btn-outline btn-error justify-start" (click)="removeWithMedia()" [disabled]="busy()">
+          @if (busy()) { <span class="loading loading-spinner loading-xs"></span> }
+          {{ 'settings.libraries.folder_remove_media' | translate }}
+        </button>
+        <span class="text-sm text-base-content/60">{{ 'settings.libraries.folder_remove_media_hint' | translate }}</span>
       </div>
-    }
-    <app-modal-footer>
-      <form method="dialog">
-        <button class="btn btn-ghost">{{ 'common.cancel' | translate }}</button>
-      </form>
-    </app-modal-footer>
-  </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+    </div>
+  }
 </dialog>

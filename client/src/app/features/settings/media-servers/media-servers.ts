@@ -21,10 +21,12 @@ import {
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { EnabledSwitchComponent } from '../../../shared/components/enabled-switch';
+import { ModalComponent } from '../../../shared/components/modal';
 
 @Component({
   selector: 'app-media-servers-settings',
   imports: [
+    ModalComponent,
     TvSelectDirective,
     ModalFooterComponent,
     ModalHeaderComponent,
@@ -38,7 +40,7 @@ export class MediaServersSettingsComponent implements OnInit {
   private readonly api = inject(MediaServersApiService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
 
   readonly serverTypes = signal<MediaServerTypeInfo[]>([]);
   readonly rows = signal<MediaServerRow[]>([]);

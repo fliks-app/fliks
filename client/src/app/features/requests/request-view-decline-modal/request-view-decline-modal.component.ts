@@ -7,7 +7,7 @@ import {
 } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
-import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../shared/components/modal';
 
 export interface RequestViewDeclinePayload {
   mediaTitle: string;
@@ -16,14 +16,14 @@ export interface RequestViewDeclinePayload {
 
 @Component({
   selector: 'app-request-view-decline-modal',
-  imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
+  imports: [ModalComponent, ModalHeaderComponent, TranslatePipe],
   templateUrl: './request-view-decline-modal.component.html',
 })
 export class RequestViewDeclineModalComponent {
   readonly payload = input<RequestViewDeclinePayload | null>(null);
   readonly dismissed = output<void>();
 
-  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogEl = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   showModal() {
     this.dialogEl()?.nativeElement.showModal();

@@ -13,8 +13,10 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { NgTemplateOutlet } from '@angular/common';
 import {
   LucideChevronDown,
+  LucideEllipsisVertical,
   LucideUpload,
 } from '@lucide/angular';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
@@ -57,6 +59,7 @@ import { PaginationComponent } from '../pagination/pagination';
 import { MediaDetailSubtitleSearchModalComponent } from '../../../features/media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
 import type { DetailHeroSubtitle } from '../detail-hero/detail-hero';
 import { ModalHeaderComponent } from '../modal-header';
+import { ModalComponent } from '../modal';
 import { SyncReferenceSelectComponent } from '../sync-reference-select/sync-reference-select';
 import { ModalFooterComponent } from '../modal-footer';
 import { ErrorBadgeComponent } from '../error-badge';
@@ -85,6 +88,7 @@ function readTranslateRemoveHi(): boolean {
     ModalFooterComponent,
     SyncReferenceSelectComponent,
     ModalHeaderComponent,
+    ModalComponent,
     FormsModule,
     TranslatePipe,
     LocalizeLanguagePipe,
@@ -94,7 +98,9 @@ function readTranslateRemoveHi(): boolean {
     MediaDetailSubtitleSearchModalComponent,
     SubtitleViewerModalComponent,
     LucideChevronDown,
+    LucideEllipsisVertical,
     LucideUpload,
+    NgTemplateOutlet,
     CompanionImportModalComponent,
   ],
   templateUrl: './subtitles-modal.html',
@@ -352,12 +358,12 @@ export class SubtitlesModalComponent {
   private readonly languageProfiles = signal<LanguageProfile[]>([]);
 
   // ── Refs ──
-  private readonly modal = viewChild<ElementRef<HTMLDialogElement>>('modal');
+  private readonly modal = viewChild<string, ElementRef<HTMLDialogElement>>('modal', { read: ElementRef });
   private readonly searchModal = viewChild(MediaDetailSubtitleSearchModalComponent);
-  private readonly syncDialog = viewChild<ElementRef<HTMLDialogElement>>('syncDialog');
-  private readonly adjustDialog = viewChild<ElementRef<HTMLDialogElement>>('adjustDialog');
-  private readonly fpsDialog = viewChild<ElementRef<HTMLDialogElement>>('fpsDialog');
-  private readonly ocrLangDialog = viewChild<ElementRef<HTMLDialogElement>>('ocrLangDialog');
+  private readonly syncDialog = viewChild<string, ElementRef<HTMLDialogElement>>('syncDialog', { read: ElementRef });
+  private readonly adjustDialog = viewChild<string, ElementRef<HTMLDialogElement>>('adjustDialog', { read: ElementRef });
+  private readonly fpsDialog = viewChild<string, ElementRef<HTMLDialogElement>>('fpsDialog', { read: ElementRef });
+  private readonly ocrLangDialog = viewChild<string, ElementRef<HTMLDialogElement>>('ocrLangDialog', { read: ElementRef });
 
   // OCR language picker (used when an image track is untagged — 'und').
   readonly ocrLangCodes: readonly string[] = [

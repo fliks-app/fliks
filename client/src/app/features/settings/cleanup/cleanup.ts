@@ -33,6 +33,7 @@ import { safeFileName, saveFile } from '../../../core/plugins/save-file.plugin';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { formatBytes } from '../../../shared/utils/download-format';
 import { cleanCriteria, daysLeft, scopeLabel } from '../../../shared/utils/cleanup.util';
+import { ModalComponent } from '../../../shared/components/modal';
 
 type NumberKey = {
   [K in keyof CleanupCriteria]-?: CleanupCriteria[K] extends number | undefined ? K : never;
@@ -48,6 +49,7 @@ const ONE_GB = 1024 ** 3;
 @Component({
   selector: 'app-cleanup',
   imports: [
+    ModalComponent,
     TvSelectDirective,
     ModalFooterComponent,
     ModalHeaderComponent,
@@ -148,8 +150,8 @@ export class CleanupSettingsComponent implements OnInit {
     this.libraries().map((l) => ({ value: l.id, label: l.name })),
   );
 
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
-  private readonly previewDialog = viewChild<ElementRef<HTMLDialogElement>>('previewDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
+  private readonly previewDialog = viewChild<string, ElementRef<HTMLDialogElement>>('previewDialog', { read: ElementRef });
   readonly saving = signal(false);
   readonly togglingId = signal<number | null>(null);
   readonly editingId = signal<number | null>(null);

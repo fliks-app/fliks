@@ -365,174 +365,165 @@
   </div>
 </ng-template>
 
-<dialog #renameDialog class="modal">
-  <div class="modal-box max-w-md">
-    <app-modal-header [title]="'playlists.rename' | translate" />
-    <form class="flex flex-col gap-4" (ngSubmit)="confirmRename()">
-      <input
-        type="text"
-        class="input input-bordered w-full"
-        name="playlistName"
-        [ngModel]="renameValue()"
-        (ngModelChange)="renameValue.set($event)"
-        autofocus
-      />
-      <app-modal-footer>
-        <button type="button" class="btn" (click)="closeRename()">
-          {{ 'common.cancel' | translate }}
-        </button>
-        <button
-          type="submit"
-          class="btn btn-primary"
-          [disabled]="renaming() || !renameValue().trim()"
-        >
-          @if (renaming()) {
-            <span class="loading loading-spinner loading-xs"></span>
-          }
-          {{ 'common.save' | translate }}
-        </button>
-      </app-modal-footer>
-    </form>
-  </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+<dialog #renameDialog appModal boxClass="max-w-md">
+  <app-modal-header [title]="'playlists.rename' | translate" />
+  <form id="rename-playlist-form" class="flex flex-col gap-4" (ngSubmit)="confirmRename()">
+    <input
+      type="text"
+      class="input input-bordered w-full"
+      name="playlistName"
+      [ngModel]="renameValue()"
+      (ngModelChange)="renameValue.set($event)"
+      autofocus
+    />
+  </form>
+  <app-modal-footer>
+    <button type="button" class="btn" (click)="closeRename()">
+      {{ 'common.cancel' | translate }}
+    </button>
+    <button
+      type="submit" form="rename-playlist-form"
+      class="btn btn-primary"
+      [disabled]="renaming() || !renameValue().trim()"
+    >
+      @if (renaming()) {
+        <span class="loading loading-spinner loading-xs"></span>
+      }
+      {{ 'common.save' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>
 
-<dialog #settingsDialog class="modal">
-  <div class="modal-box max-w-md">
-    <app-modal-header [title]="'playlists.settings' | translate" />
-    <div class="flex flex-col gap-4">
-      <div class="form-control">
-        <label class="label pb-1">
-          <span class="label-text">{{ 'social.playlist_visibility' | translate }}</span>
-        </label>
-        <select
-    appTvSelect
-          class="select select-bordered select-sm"
-          [ngModel]="draftVisibility()"
-          (ngModelChange)="draftVisibility.set($event)"
-        >
-          <option value="private">{{ 'social.visibility_private' | translate }}</option>
-          <option value="followers">{{ 'social.visibility_followers' | translate }}</option>
-          <option value="public">{{ 'social.visibility_public' | translate }}</option>
-        </select>
-      </div>
-      <app-toggle-field
-        [value]="draftAutoPlay()"
-        (valueChange)="draftAutoPlay.set($event)"
-        [label]="'playlists.auto_play' | translate"
-        [hint]="'playlists.auto_play_hint' | translate"
-      />
-      @if (!isSmart()) {
-        <app-toggle-field
-          [value]="draftAutoRemoveWatched()"
-          (valueChange)="draftAutoRemoveWatched.set($event)"
-          [label]="'playlists.auto_remove_watched' | translate"
-          [hint]="'playlists.auto_remove_watched_hint' | translate"
-        />
-      }
-      @if (showAutoDownload) {
-        <app-toggle-field
-          [value]="draftAutoDownload()"
-          (valueChange)="draftAutoDownload.set($event)"
-          [label]="'playlists.auto_download' | translate"
-          [hint]="'playlists.auto_download_hint' | translate"
-        />
-      }
-    </div>
-    <app-modal-footer>
-      <button type="button" class="btn" (click)="closeSettings()">
-        {{ 'common.cancel' | translate }}
-      </button>
-      <button
-        type="button"
-        class="btn btn-primary"
-        [disabled]="savingSettings()"
-        (click)="saveSettings()"
+<dialog #settingsDialog appModal boxClass="max-w-md">
+  <app-modal-header [title]="'playlists.settings' | translate" />
+  <div class="flex flex-col gap-4">
+    <div class="form-control">
+      <label class="label pb-1">
+        <span class="label-text">{{ 'social.playlist_visibility' | translate }}</span>
+      </label>
+      <select
+  appTvSelect
+        class="select select-bordered select-sm"
+        [ngModel]="draftVisibility()"
+        (ngModelChange)="draftVisibility.set($event)"
       >
-        @if (savingSettings()) {
-          <span class="loading loading-spinner loading-xs"></span>
-        }
-        {{ 'common.save' | translate }}
-      </button>
-    </app-modal-footer>
+        <option value="private">{{ 'social.visibility_private' | translate }}</option>
+        <option value="followers">{{ 'social.visibility_followers' | translate }}</option>
+        <option value="public">{{ 'social.visibility_public' | translate }}</option>
+      </select>
+    </div>
+    <app-toggle-field
+      [value]="draftAutoPlay()"
+      (valueChange)="draftAutoPlay.set($event)"
+      [label]="'playlists.auto_play' | translate"
+      [hint]="'playlists.auto_play_hint' | translate"
+    />
+    @if (!isSmart()) {
+      <app-toggle-field
+        [value]="draftAutoRemoveWatched()"
+        (valueChange)="draftAutoRemoveWatched.set($event)"
+        [label]="'playlists.auto_remove_watched' | translate"
+        [hint]="'playlists.auto_remove_watched_hint' | translate"
+      />
+    }
+    @if (showAutoDownload) {
+      <app-toggle-field
+        [value]="draftAutoDownload()"
+        (valueChange)="draftAutoDownload.set($event)"
+        [label]="'playlists.auto_download' | translate"
+        [hint]="'playlists.auto_download_hint' | translate"
+      />
+    }
   </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+  <app-modal-footer>
+    <button type="button" class="btn" (click)="closeSettings()">
+      {{ 'common.cancel' | translate }}
+    </button>
+    <button
+      type="button"
+      class="btn btn-primary"
+      [disabled]="savingSettings()"
+      (click)="saveSettings()"
+    >
+      @if (savingSettings()) {
+        <span class="loading loading-spinner loading-xs"></span>
+      }
+      {{ 'common.save' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>
 
-<dialog #membersDialog class="modal" [attr.aria-label]="'playlists.members' | translate">
-  <div class="modal-box max-w-md">
-    <app-modal-header>
-      <div>
-        <h3 class="text-lg font-bold">{{ 'playlists.members' | translate }}</h3>
-        <p class="text-sm text-base-content/60">{{ 'playlists.members_hint' | translate }}</p>
-      </div>
-    </app-modal-header>
+<dialog #membersDialog appModal boxClass="max-w-md" [attr.aria-label]="'playlists.members' | translate">
+  <app-modal-header>
+    <div>
+      <h3 class="text-lg font-bold">{{ 'playlists.members' | translate }}</h3>
+      <p class="text-base text-base-content/60">{{ 'playlists.members_hint' | translate }}</p>
+    </div>
+  </app-modal-header>
 
-    <!-- Current members -->
-    <ul class="flex flex-col gap-1 mb-4">
-      @for (m of members(); track m.userId) {
-        <li class="flex items-center gap-3 p-1.5 rounded-lg">
-          <span class="flex-1 min-w-0 truncate font-medium">{{ m.username }}</span>
-          @if (m.role === 'owner' || m.userId === myUserId()) {
-            <span class="badge badge-sm badge-ghost">{{
-              'playlists.role_' + m.role | translate
-            }}</span>
-          } @else {
-            <select
-    appTvSelect
-              class="select select-bordered select-xs w-36 shrink-0"
-              [ngModel]="m.role"
-              (ngModelChange)="changeMemberRole(m.userId, $event)"
-              [disabled]="memberBusy()"
-            >
-              <option value="viewer">{{ 'playlists.role_viewer' | translate }}</option>
-              <option value="editor">{{ 'playlists.role_editor' | translate }}</option>
-              <option value="administrator">
-                {{ 'playlists.role_administrator' | translate }}
-              </option>
-            </select>
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs btn-square text-error"
-              [disabled]="memberBusy()"
-              (click)="removeMember(m.userId)"
-              [attr.aria-label]="'playlists.remove_item_action' | translate"
-            >
-              <svg lucideTrash2 class="h-4 w-4"></svg>
-            </button>
-          }
+  <!-- Current members -->
+  <ul class="flex flex-col gap-1 mb-4">
+    @for (m of members(); track m.userId) {
+      <li class="flex items-center gap-3 p-1.5 rounded-lg">
+        <span class="flex-1 min-w-0 truncate font-medium">{{ m.username }}</span>
+        @if (m.role === 'owner' || m.userId === myUserId()) {
+          <span class="badge badge-sm badge-ghost">{{
+            'playlists.role_' + m.role | translate
+          }}</span>
+        } @else {
+          <select
+  appTvSelect
+            class="select select-bordered select-xs w-36 shrink-0"
+            [ngModel]="m.role"
+            (ngModelChange)="changeMemberRole(m.userId, $event)"
+            [disabled]="memberBusy()"
+          >
+            <option value="viewer">{{ 'playlists.role_viewer' | translate }}</option>
+            <option value="editor">{{ 'playlists.role_editor' | translate }}</option>
+            <option value="administrator">
+              {{ 'playlists.role_administrator' | translate }}
+            </option>
+          </select>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs btn-square text-error"
+            [disabled]="memberBusy()"
+            (click)="removeMember(m.userId)"
+            [attr.aria-label]="'playlists.remove_item_action' | translate"
+          >
+            <svg lucideTrash2 class="h-4 w-4"></svg>
+          </button>
+        }
+      </li>
+    }
+  </ul>
+
+  <div class="divider my-2"></div>
+
+  <!-- Add a member -->
+  <p class="text-sm font-semibold mb-1">{{ 'playlists.members_add_title' | translate }}</p>
+  <input
+    type="text"
+    class="input input-bordered input-sm w-full"
+    [placeholder]="'playlists.members_search_placeholder' | translate"
+    [ngModel]="memberQuery()"
+    (ngModelChange)="onMemberQuery($event)"
+  />
+  @if (memberResults().length) {
+    <ul class="flex flex-col gap-1 mt-2 max-h-52 overflow-y-auto scroll-ring-safe">
+      @for (u of memberResults(); track u.id) {
+        <li>
+          <button
+            type="button"
+            class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left"
+            [disabled]="memberBusy()"
+            (click)="addMember(u)"
+          >
+            <span class="flex-1 min-w-0 truncate">{{ u.username }}</span>
+            <svg lucideUserPlus class="h-4 w-4 text-base-content/60"></svg>
+          </button>
         </li>
       }
     </ul>
-
-    <div class="divider my-2"></div>
-
-    <!-- Add a member -->
-    <p class="text-sm font-semibold mb-1">{{ 'playlists.members_add_title' | translate }}</p>
-    <input
-      type="text"
-      class="input input-bordered input-sm w-full"
-      [placeholder]="'playlists.members_search_placeholder' | translate"
-      [ngModel]="memberQuery()"
-      (ngModelChange)="onMemberQuery($event)"
-    />
-    @if (memberResults().length) {
-      <ul class="flex flex-col gap-1 mt-2 max-h-52 overflow-y-auto scroll-ring-safe">
-        @for (u of memberResults(); track u.id) {
-          <li>
-            <button
-              type="button"
-              class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-base-200 text-left"
-              [disabled]="memberBusy()"
-              (click)="addMember(u)"
-            >
-              <span class="flex-1 min-w-0 truncate">{{ u.username }}</span>
-              <svg lucideUserPlus class="h-4 w-4 text-base-content/60"></svg>
-            </button>
-          </li>
-        }
-      </ul>
-    }
-  </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+  }
 </dialog>

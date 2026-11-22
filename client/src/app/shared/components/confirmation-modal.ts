@@ -11,17 +11,18 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ModalHeaderComponent } from './modal-header';
 import { ModalFooterComponent } from './modal-footer';
+import { ModalComponent } from './modal';
 
 @Component({
   selector: 'app-confirmation-modal',
-  imports: [ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
+  imports: [ModalComponent, ModalFooterComponent, ModalHeaderComponent, TranslatePipe],
   templateUrl: './confirmation-modal.html',
 })
 export class ConfirmationModalComponent {
   readonly confirmService = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
 
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly isOpen = computed(() => !!this.confirmService.state());
 

@@ -6,11 +6,12 @@ import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { FliksRequestDetail, RequestsService } from '../../../core/services/api/requests.service';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { UserAvatarComponent } from '../../../shared/components/user-avatar/user-avatar';
+import { ModalComponent } from '../../../shared/components/modal';
 
 /** Manager-only line "Requested by Ana and 1 other"; a tap lists the requester and the watchers with their dates. */
 @Component({
   selector: 'app-request-requesters',
-  imports: [TranslatePipe, LocaleDatePipe, ModalHeaderComponent, UserAvatarComponent, LucideUsers],
+  imports: [ModalComponent, TranslatePipe, LocaleDatePipe, ModalHeaderComponent, UserAvatarComponent, LucideUsers],
   templateUrl: './request-requesters.component.html',
   host: { class: 'block' },
 })
@@ -24,7 +25,7 @@ export class RequestRequestersComponent {
   readonly loaded = output<FliksRequestDetail>();
 
   protected readonly detail = signal<FliksRequestDetail | null>(null);
-  private readonly sheet = viewChild<ElementRef<HTMLDialogElement>>('sheet');
+  private readonly sheet = viewChild<string, ElementRef<HTMLDialogElement>>('sheet', { read: ElementRef });
 
   protected readonly people = computed(() => {
     const d = this.detail();

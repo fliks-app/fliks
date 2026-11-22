@@ -2,7 +2,7 @@
   <!-- Backdrop: CSS @starting-style fades it in. Preventing the pointerdown default keeps the tap from blurring the opener (its ring flickered). -->
   <div
     [class]="
-      'bottom-sheet-backdrop fixed inset-0 transition-opacity duration-150 ' + layers().backdrop + ' ' +
+      'bottom-sheet-backdrop fixed inset-0 transition-opacity duration-sheet ' + layers().backdrop + ' ' +
       (showBackdrop() ? 'bg-black/60' : '')
     "
     [class.opacity-0]="dismissing()"
@@ -20,13 +20,13 @@
       (fullHeight()
         ? 'inset-x-0 top-0 flex flex-col bg-base-100 text-base-content'
         : aboveDock()
-          ? layers().bg + ' inset-x-0 rounded-t-2xl max-h-[70vh] border-b border-base-content/10'
-          : layers().bg + ' rounded-t-2xl max-h-[70vh] portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
+          ? layers().bg + ' inset-x-0 rounded-t-3xl max-h-[70vh] border-b border-base-content/10'
+          : layers().bg + ' rounded-t-3xl max-h-[70vh] portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
             (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto'))
     "
     [class.animate-slide-up]="!dismissing()"
     [style.transform]="sheetTransform()"
-    [style.transition]="dragging() ? 'none' : 'transform 0.18s ease-out'"
+    [style.transition]="dragging() ? 'none' : 'transform var(--transition-duration-sheet) ease-out'"
     [style.padding-bottom]="aboveDock() ? null : 'env(safe-area-inset-bottom)'"
     (touchstart)="onTouchStart($event)"
     (touchmove)="onTouchMove($event)"

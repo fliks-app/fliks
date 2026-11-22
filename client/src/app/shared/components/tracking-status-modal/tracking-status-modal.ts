@@ -15,8 +15,8 @@ import {
   TrackingStatus,
 } from '../../../core/services/api/media.service';
 import { ModalHeaderComponent } from '../modal-header';
-import { ModalFooterComponent } from '../modal-footer';
 import type { MediaType } from '../../../core/enums/media-type.enum';
+import { ModalComponent } from '../modal';
 
 export type TrackingScope =
   | { kind: 'movie' }
@@ -30,7 +30,7 @@ export type TrackingScope =
 @Component({
   selector: 'app-tracking-status-modal',
   imports: [
-    ModalFooterComponent,
+    ModalComponent,
     NgTemplateOutlet,
     TranslatePipe,
     ModalHeaderComponent,
@@ -50,7 +50,7 @@ export class TrackingStatusModalComponent {
     album: null,
   };
   private readonly media = inject(MediaService);
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly loading = signal(false);
   readonly data = signal<TrackingStatus | null>(null);

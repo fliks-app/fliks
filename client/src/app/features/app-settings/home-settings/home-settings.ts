@@ -39,10 +39,12 @@ import { SelectFieldComponent } from '../../../shared/components/forms/select-fi
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../shared/components/modal';
 
 @Component({
   selector: 'app-home-settings',
   imports: [
+    ModalComponent,
     ModalFooterComponent,
     ModalHeaderComponent,
     TranslatePipe,
@@ -81,7 +83,7 @@ export class HomeSettingsPageComponent implements OnInit {
   private libs: { id: number; name: string }[] = [];
 
   // --- Library order + visibility modal ---
-  private readonly libraryDialog = viewChild<ElementRef<HTMLDialogElement>>('libraryDialog');
+  private readonly libraryDialog = viewChild<string, ElementRef<HTMLDialogElement>>('libraryDialog', { read: ElementRef });
   /** Working copy edited in the modal: every accessible library in the user's
    *  order, each flagged hidden. Persisted only on save. */
   readonly libraryRows = signal<{ id: number; name: string; hidden: boolean }[]>([]);

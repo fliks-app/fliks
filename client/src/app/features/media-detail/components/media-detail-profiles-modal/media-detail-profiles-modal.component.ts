@@ -10,10 +10,12 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { TvSelectDirective } from '../../../../shared/directives/tv-select.directive';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../../shared/components/modal';
 
 @Component({
   selector: 'app-media-detail-profiles-modal',
   imports: [
+    ModalComponent,
     ModalFooterComponent,
     TranslatePipe,
     FormsModule,
@@ -36,7 +38,7 @@ export class MediaDetailProfilesModalComponent {
   readonly draftLanguageProfileIdChange = output<number | null>();
   readonly save = output<void>();
 
-  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogEl = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   showModal() {
     this.dialogEl()?.nativeElement.showModal();

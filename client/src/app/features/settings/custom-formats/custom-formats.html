@@ -138,171 +138,163 @@
   }
 </div>
 
-<dialog #editorDialog class="modal">
-  <div class="modal-box max-w-xl flex flex-col p-0 gap-0 overflow-hidden">
-    <app-modal-header
-      flush
-      [title]="
-        (editingId() === null
-          ? 'settings.custom_formats.editor_create'
-          : 'settings.custom_formats.editor_edit'
-        ) | translate
-      "
-    />
+<dialog #editorDialog appModal boxClass="max-w-xl">
+  <app-modal-header
+    [title]="
+      (editingId() === null
+        ? 'settings.custom_formats.editor_create'
+        : 'settings.custom_formats.editor_edit'
+      ) | translate
+    "
+  />
 
-    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
-      <div class="grid grid-cols-3 gap-3">
-        <label class="form-control col-span-2">
-          <span class="label-text">{{ 'settings.custom_formats.field_name' | translate }}</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formName()"
-            (ngModelChange)="formName.set($event)"
-          />
-        </label>
-        <label class="form-control">
-          <span class="label-text">{{ 'settings.custom_formats.field_score' | translate }}</span>
-          <input
-            type="number"
-            class="input input-bordered input-sm w-full"
-            [ngModel]="formScore()"
-            (ngModelChange)="formScore.set(+$event)"
-          />
-        </label>
+  <div class="flex flex-col gap-4">
+    <div class="grid grid-cols-3 gap-3">
+      <label class="form-control col-span-2">
+        <span class="label-text">{{ 'settings.custom_formats.field_name' | translate }}</span>
+        <input
+          type="text"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formName()"
+          (ngModelChange)="formName.set($event)"
+        />
+      </label>
+      <label class="form-control">
+        <span class="label-text">{{ 'settings.custom_formats.field_score' | translate }}</span>
+        <input
+          type="number"
+          class="input input-bordered input-sm w-full"
+          [ngModel]="formScore()"
+          (ngModelChange)="formScore.set(+$event)"
+        />
+      </label>
+    </div>
+
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-medium">{{ 'settings.custom_formats.specs' | translate }}</span>
+        <button type="button" class="btn btn-ghost btn-xs" (click)="addSpec()">
+          + {{ 'settings.custom_formats.add_spec' | translate }}
+        </button>
       </div>
 
-      <div class="flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <span class="text-sm font-medium">{{ 'settings.custom_formats.specs' | translate }}</span>
-          <button type="button" class="btn btn-ghost btn-xs" (click)="addSpec()">
-            + {{ 'settings.custom_formats.add_spec' | translate }}
-          </button>
-        </div>
-
-        @for (spec of formSpecs(); track $index) {
-          <div class="flex flex-col gap-2 p-3 rounded-lg bg-base-200/40 border border-base-300">
-            <div class="flex items-center gap-2">
+      @for (spec of formSpecs(); track $index) {
+        <div class="flex flex-col gap-2 p-3 rounded-lg bg-base-200/40 border border-base-300">
+          <div class="flex items-center gap-2">
+            <select
+              appTvSelect
+              class="select select-bordered select-xs flex-1 min-w-0"
+              [ngModel]="spec.type"
+              (ngModelChange)="changeSpecType($index, $event)"
+            >
+              @for (t of specTypes; track t) {
+                <option [value]="t">
+                  {{ 'settings.custom_formats.spec_type.' + t | translate }}
+                </option>
+              }
+            </select>
+            <select
+              appTvSelect
+              class="select select-bordered select-xs flex-1 min-w-0"
+              [ngModel]="spec.negate ? 'not' : 'is'"
+              (ngModelChange)="updateSpec($index, { negate: $event === 'not' })"
+            >
+              <option value="is">{{ operatorKey(spec.type, false) | translate }}</option>
+              <option value="not">{{ operatorKey(spec.type, true) | translate }}</option>
+            </select>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs text-error shrink-0"
+              [attr.aria-label]="'settings.custom_formats.remove_spec' | translate"
+              (click)="removeSpec($index)"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="flex items-center gap-3">
+            @if (valueOptions(spec.type); as options) {
               <select
                 appTvSelect
                 class="select select-bordered select-xs flex-1 min-w-0"
-                [ngModel]="spec.type"
-                (ngModelChange)="changeSpecType($index, $event)"
+                [ngModel]="spec.value"
+                (ngModelChange)="updateSpec($index, { value: $event })"
               >
-                @for (t of specTypes; track t) {
-                  <option [value]="t">
-                    {{ 'settings.custom_formats.spec_type.' + t | translate }}
+                @for (v of options; track v) {
+                  <option [value]="v">
+                    {{
+                      spec.type === 'edition'
+                        ? ('settings.custom_formats.edition.' + v | translate)
+                        : v
+                    }}
                   </option>
                 }
               </select>
-              <select
-                appTvSelect
-                class="select select-bordered select-xs flex-1 min-w-0"
-                [ngModel]="spec.negate ? 'not' : 'is'"
-                (ngModelChange)="updateSpec($index, { negate: $event === 'not' })"
+            } @else {
+              <input
+                type="text"
+                class="input input-bordered input-xs flex-1 min-w-0"
+                [class.input-error]="specInvalid(spec)"
+                [ngModel]="spec.value"
+                (ngModelChange)="updateSpec($index, { value: $event })"
+                [placeholder]="
+                  (spec.type === 'title_regex'
+                    ? 'settings.custom_formats.regex_placeholder'
+                    : 'settings.custom_formats.value_placeholder'
+                  ) | translate
+                "
+              />
+            }
+            @if (showRequired(spec.type)) {
+              <label
+                class="label cursor-pointer gap-1.5 shrink-0"
+                [title]="'settings.custom_formats.required_hint' | translate"
               >
-                <option value="is">{{ operatorKey(spec.type, false) | translate }}</option>
-                <option value="not">{{ operatorKey(spec.type, true) | translate }}</option>
-              </select>
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs text-error shrink-0"
-                [attr.aria-label]="'settings.custom_formats.remove_spec' | translate"
-                (click)="removeSpec($index)"
-              >
-                ✕
-              </button>
-            </div>
-            <div class="flex items-center gap-3">
-              @if (valueOptions(spec.type); as options) {
-                <select
-                  appTvSelect
-                  class="select select-bordered select-xs flex-1 min-w-0"
-                  [ngModel]="spec.value"
-                  (ngModelChange)="updateSpec($index, { value: $event })"
-                >
-                  @for (v of options; track v) {
-                    <option [value]="v">
-                      {{
-                        spec.type === 'edition'
-                          ? ('settings.custom_formats.edition.' + v | translate)
-                          : v
-                      }}
-                    </option>
-                  }
-                </select>
-              } @else {
                 <input
-                  type="text"
-                  class="input input-bordered input-xs flex-1 min-w-0"
-                  [class.input-error]="specInvalid(spec)"
-                  [ngModel]="spec.value"
-                  (ngModelChange)="updateSpec($index, { value: $event })"
-                  [placeholder]="
-                    (spec.type === 'title_regex'
-                      ? 'settings.custom_formats.regex_placeholder'
-                      : 'settings.custom_formats.value_placeholder'
-                    ) | translate
-                  "
+                  type="checkbox"
+                  class="checkbox checkbox-xs"
+                  [ngModel]="spec.required"
+                  (ngModelChange)="updateSpec($index, { required: $event })"
                 />
-              }
-              @if (showRequired(spec.type)) {
-                <label
-                  class="label cursor-pointer gap-1.5 shrink-0"
-                  [title]="'settings.custom_formats.required_hint' | translate"
-                >
-                  <input
-                    type="checkbox"
-                    class="checkbox checkbox-xs"
-                    [ngModel]="spec.required"
-                    (ngModelChange)="updateSpec($index, { required: $event })"
-                  />
-                  <span class="label-text text-sm">{{
-                    'settings.custom_formats.required' | translate
-                  }}</span>
-                </label>
-              }
-            </div>
+                <span class="label-text text-sm">{{
+                  'settings.custom_formats.required' | translate
+                }}</span>
+              </label>
+            }
           </div>
-        }
-
-        @if (formSpecs().length === 0) {
-          <p class="text-sm text-base-content/60 text-center py-4">
-            {{ 'settings.custom_formats.no_specs' | translate }}
-          </p>
-        }
-
-        <p class="text-sm text-base-content/60">
-          {{ 'settings.custom_formats.match_rule_hint' | translate }}
-        </p>
-      </div>
-    </div>
-
-    <app-modal-footer flush>
-      @if (formError(); as error) {
-        <span class="text-sm text-error mr-auto self-center text-start">{{
-          error | translate
-        }}</span>
+        </div>
       }
-      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
-        {{ 'settings.custom_formats.cancel' | translate }}
-      </button>
-      <button
-        type="button"
-        class="btn btn-primary"
-        (click)="save()"
-        [disabled]="saving() || !!formError()"
-      >
-        @if (saving()) {
-          <span class="loading loading-spinner loading-sm"></span>
-        }
-        {{ 'settings.custom_formats.save' | translate }}
-      </button>
-    </app-modal-footer>
+
+      @if (formSpecs().length === 0) {
+        <p class="text-sm text-base-content/60 text-center py-4">
+          {{ 'settings.custom_formats.no_specs' | translate }}
+        </p>
+      }
+
+      <p class="text-sm text-base-content/60">
+        {{ 'settings.custom_formats.match_rule_hint' | translate }}
+      </p>
+    </div>
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">
-      close
+
+  <app-modal-footer>
+    @if (formError(); as error) {
+      <span class="text-sm text-error mr-auto self-center text-start">{{
+        error | translate
+      }}</span>
+    }
+    <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">
+      {{ 'settings.custom_formats.cancel' | translate }}
     </button>
-  </form>
+    <button
+      type="button"
+      class="btn btn-primary"
+      (click)="save()"
+      [disabled]="saving() || !!formError()"
+    >
+      @if (saving()) {
+        <span class="loading loading-spinner loading-sm"></span>
+      }
+      {{ 'settings.custom_formats.save' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>

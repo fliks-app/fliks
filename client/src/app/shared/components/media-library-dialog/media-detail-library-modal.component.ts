@@ -23,10 +23,12 @@ import type { MediaType } from '../../../core/enums/media-type.enum';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
+import { ModalComponent } from '../modal';
 
 @Component({
   selector: 'app-media-detail-library-modal',
   imports: [
+    ModalComponent,
     ModalFooterComponent,
     TranslatePipe,
     FormsModule,
@@ -57,7 +59,7 @@ export class MediaDetailLibraryModalComponent {
   private readonly serving = signal<ServingProvider[]>([]);
   readonly providerOptions = computed(() => withStoredProvider(this.serving(), this.selectedProvider()));
 
-  private readonly dialogEl = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogEl = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   showModal() {
     void this.metadata

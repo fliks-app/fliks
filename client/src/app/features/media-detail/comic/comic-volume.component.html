@@ -95,86 +95,84 @@
     </app-detail-section>
   }
 }
-<dialog #volumeDialog class="modal" (close)="editingVolume.set(false)">
-  <div class="modal-box max-w-lg">
-    <app-modal-header [title]="'comic.edit.volume' | translate" />
-    @if (editingVolume()) {
-      <form class="flex flex-col gap-3" (submit)="saveVolume($event)" data-testid="volume-form">
+<dialog #volumeDialog appModal boxClass="max-w-lg" (close)="editingVolume.set(false)">
+  <app-modal-header [title]="'comic.edit.volume' | translate" />
+  @if (editingVolume()) {
+    <form id="volume-form" class="flex flex-col gap-3" (submit)="saveVolume($event)" data-testid="volume-form">
+      <label class="form-control">
+        <span class="label-text">{{ 'comic.edit.title' | translate }}</span>
+        <input class="input input-bordered w-full" name="title" required [value]="title()" />
+      </label>
+      <label class="form-control">
+        <span class="label-text">{{ 'comic.edit.publisher' | translate }}</span>
+        <input class="input input-bordered w-full" name="publisher" [value]="c?.publisher ?? ''" />
+      </label>
+      <div class="grid grid-cols-2 gap-3">
         <label class="form-control">
-          <span class="label-text">{{ 'comic.edit.title' | translate }}</span>
-          <input class="input input-bordered w-full" name="title" required [value]="title()" />
+          <span class="label-text">{{ 'comic.edit.start_year' | translate }}</span>
+          <input class="input input-bordered w-full" name="startYear" type="number" min="1" max="9999" [value]="c?.startYear ?? ''" />
         </label>
         <label class="form-control">
-          <span class="label-text">{{ 'comic.edit.publisher' | translate }}</span>
-          <input class="input input-bordered w-full" name="publisher" [value]="c?.publisher ?? ''" />
+          <span class="label-text">{{ 'comic.edit.volume_number' | translate }}</span>
+          <input class="input input-bordered w-full" name="volume" type="number" min="0" max="9999" [value]="c?.volume ?? ''" />
         </label>
-        <div class="grid grid-cols-2 gap-3">
-          <label class="form-control">
-            <span class="label-text">{{ 'comic.edit.start_year' | translate }}</span>
-            <input class="input input-bordered w-full" name="startYear" type="number" min="1" max="9999" [value]="c?.startYear ?? ''" />
-          </label>
-          <label class="form-control">
-            <span class="label-text">{{ 'comic.edit.volume_number' | translate }}</span>
-            <input class="input input-bordered w-full" name="volume" type="number" min="0" max="9999" [value]="c?.volume ?? ''" />
-          </label>
-        </div>
-        <label class="form-control">
-          <span class="label-text">{{ 'comic.edit.overview' | translate }}</span>
-          <textarea class="textarea textarea-bordered w-full" rows="4" name="overview" [value]="overview() ?? ''"></textarea>
-        </label>
-        <app-modal-footer>
-          <button type="button" class="btn btn-ghost me-auto" [disabled]="saving()" (click)="resetVolume()" data-testid="reset-volume">{{ 'comic.edit.reset' | translate }}</button>
-          <button type="button" class="btn" (click)="closeDialogs()">{{ 'common.cancel' | translate }}</button>
-          <button type="submit" class="btn btn-primary" [disabled]="saving()">{{ 'common.save' | translate }}</button>
-        </app-modal-footer>
-      </form>
-    }
-  </div>
-  <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
+      </div>
+      <label class="form-control">
+        <span class="label-text">{{ 'comic.edit.overview' | translate }}</span>
+        <textarea class="textarea textarea-bordered w-full" rows="4" name="overview" [value]="overview() ?? ''"></textarea>
+      </label>
+    </form>
+  }
+  @if (editingVolume()) {
+    <app-modal-footer>
+      <button type="button" class="btn btn-ghost me-auto" [disabled]="saving()" (click)="resetVolume()" data-testid="reset-volume">{{ 'comic.edit.reset' | translate }}</button>
+      <button type="button" class="btn" (click)="closeDialogs()">{{ 'common.cancel' | translate }}</button>
+      <button type="submit" form="volume-form" class="btn btn-primary" [disabled]="saving()">{{ 'common.save' | translate }}</button>
+    </app-modal-footer>
+  }
 </dialog>
 
-<dialog #issueDialog class="modal" (close)="editingIssue.set(null)">
-  <div class="modal-box max-w-lg">
-    <app-modal-header [title]="'comic.edit.issue' | translate" />
-    @if (editingIssue(); as i) {
-      <form class="flex flex-col gap-3" (submit)="saveIssue($event)" data-testid="issue-form">
-        <div class="grid grid-cols-2 gap-3">
-          <label class="form-control">
-            <span class="label-text">{{ 'comic.edit.number' | translate }}</span>
-            <input class="input input-bordered w-full" name="number" required [value]="i.number" />
-          </label>
-          <label class="form-control">
-            <span class="label-text">{{ 'comic.edit.sort' | translate }}</span>
-            <input class="input input-bordered w-full" name="sort" type="number" step="any" min="-9999" max="9999" required [value]="i.sort" />
-          </label>
-        </div>
+<dialog #issueDialog appModal boxClass="max-w-lg" (close)="editingIssue.set(null)">
+  <app-modal-header [title]="'comic.edit.issue' | translate" />
+  @if (editingIssue(); as i) {
+    <form id="issue-form" class="flex flex-col gap-3" (submit)="saveIssue($event)" data-testid="issue-form">
+      <div class="grid grid-cols-2 gap-3">
         <label class="form-control">
-          <span class="label-text">{{ 'comic.edit.kind' | translate }}</span>
-          <select class="select select-bordered w-full" name="kind">
-            @for (k of kinds; track k) {
-              <option [value]="k" [selected]="k === i.kind">{{ 'comic.edit.kind_' + k | translate }}</option>
-            }
-          </select>
+          <span class="label-text">{{ 'comic.edit.number' | translate }}</span>
+          <input class="input input-bordered w-full" name="number" required [value]="i.number" />
         </label>
         <label class="form-control">
-          <span class="label-text">{{ 'comic.edit.title' | translate }}</span>
-          <input class="input input-bordered w-full" name="title" [value]="i.title ?? ''" />
+          <span class="label-text">{{ 'comic.edit.sort' | translate }}</span>
+          <input class="input input-bordered w-full" name="sort" type="number" step="any" min="-9999" max="9999" required [value]="i.sort" />
         </label>
-        <label class="form-control">
-          <span class="label-text">{{ 'comic.edit.release_date' | translate }}</span>
-          <input class="input input-bordered w-full" name="releaseDate" type="date" [value]="i.releaseDate ?? ''" />
-        </label>
-        <label class="form-control">
-          <span class="label-text">{{ 'comic.edit.overview' | translate }}</span>
-          <textarea class="textarea textarea-bordered w-full" rows="3" name="overview" [value]="i.overview ?? ''"></textarea>
-        </label>
-        <app-modal-footer>
-          <button type="button" class="btn btn-ghost me-auto" [disabled]="saving()" (click)="resetIssue()" data-testid="reset-issue">{{ 'comic.edit.reset' | translate }}</button>
-          <button type="button" class="btn" (click)="closeDialogs()">{{ 'common.cancel' | translate }}</button>
-          <button type="submit" class="btn btn-primary" [disabled]="saving()">{{ 'common.save' | translate }}</button>
-        </app-modal-footer>
-      </form>
-    }
-  </div>
-  <form method="dialog" class="modal-backdrop"><button [attr.aria-label]="'common.close' | translate"></button></form>
+      </div>
+      <label class="form-control">
+        <span class="label-text">{{ 'comic.edit.kind' | translate }}</span>
+        <select class="select select-bordered w-full" name="kind">
+          @for (k of kinds; track k) {
+            <option [value]="k" [selected]="k === i.kind">{{ 'comic.edit.kind_' + k | translate }}</option>
+          }
+        </select>
+      </label>
+      <label class="form-control">
+        <span class="label-text">{{ 'comic.edit.title' | translate }}</span>
+        <input class="input input-bordered w-full" name="title" [value]="i.title ?? ''" />
+      </label>
+      <label class="form-control">
+        <span class="label-text">{{ 'comic.edit.release_date' | translate }}</span>
+        <input class="input input-bordered w-full" name="releaseDate" type="date" [value]="i.releaseDate ?? ''" />
+      </label>
+      <label class="form-control">
+        <span class="label-text">{{ 'comic.edit.overview' | translate }}</span>
+        <textarea class="textarea textarea-bordered w-full" rows="3" name="overview" [value]="i.overview ?? ''"></textarea>
+      </label>
+    </form>
+  }
+  @if (editingIssue()) {
+    <app-modal-footer>
+      <button type="button" class="btn btn-ghost me-auto" [disabled]="saving()" (click)="resetIssue()" data-testid="reset-issue">{{ 'comic.edit.reset' | translate }}</button>
+      <button type="button" class="btn" (click)="closeDialogs()">{{ 'common.cancel' | translate }}</button>
+      <button type="submit" form="issue-form" class="btn btn-primary" [disabled]="saving()">{{ 'common.save' | translate }}</button>
+    </app-modal-footer>
+  }
 </dialog>

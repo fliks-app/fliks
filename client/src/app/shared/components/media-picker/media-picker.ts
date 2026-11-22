@@ -2,7 +2,7 @@ import { Component, ElementRef, Injector, OnDestroy, afterNextRender, booleanAtt
 import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCheck, LucideSettings, LucideX } from '@lucide/angular';
+import { LucideCheck, LucideSlidersHorizontal, LucideX } from '@lucide/angular';
 import { Episode, Media, MediaService, SearchParams, Season } from '../../../core/services/api/media.service';
 import { MetadataService, TmdbGenre } from '../../../core/services/api/metadata.service';
 import { RecommendationItem, StreamingApiService } from '../../../core/services/api/streaming-api.service';
@@ -18,6 +18,7 @@ import { ContentTypeToggleComponent } from '../search-filters/content-type-toggl
 import { SearchFiltersComponent } from '../search-filters/search-filters';
 import { DEFAULT_SORT, SearchContentType, filtersEngaged, libraryFilterParams } from '../search-filters/search-filters.model';
 import { KIND_REGISTRY, kindOfListFilter, kindOf } from '../../../core/media-kinds';
+import { ModalComponent } from '../modal';
 
 export interface MediaPick {
   mediaId: number;
@@ -92,6 +93,7 @@ export function pickEpisodes(mode: EpisodePickMode, episodes: Episode[], anchor:
 @Component({
   selector: 'app-media-picker',
   imports: [
+    ModalComponent,
     DecimalPipe,
     NgTemplateOutlet,
     ResolveUrlPipe,
@@ -100,7 +102,7 @@ export function pickEpisodes(mode: EpisodePickMode, episodes: Episode[], anchor:
     TranslatePluralPipe,
     SeasonLabelPipe,
     LucideCheck,
-    LucideSettings,
+    LucideSlidersHorizontal,
     LucideX,
     ModalHeaderComponent,
     MediaCardComponent,
@@ -117,7 +119,7 @@ export class MediaPickerComponent implements OnDestroy {
   private readonly streaming = inject(StreamingApiService);
   private readonly injector = inject(Injector);
   protected readonly keyboard = inject(KeyboardOverlayService);
-  private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   /** Allows the episode modes beyond "this episode". */
   readonly multiple = input(false, { transform: booleanAttribute });

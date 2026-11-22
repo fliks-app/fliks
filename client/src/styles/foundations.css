@@ -250,6 +250,16 @@ body.native.hero-page {
   filter: none;
 }
 
+/* `static`: CSS rules and `sheetDurationMs()` read these even where no utility uses them. */
+@theme static {
+  /* Slide of every bottom sheet (`app-bottom-sheet`, the phone `app-modal`): `duration-sheet`. */
+  --transition-duration-sheet: 180ms;
+  /* Short state fades (a status dot, a row tint): `duration-fade`, `animate-fade-enter` / `-leave`. */
+  --transition-duration-fade: 120ms;
+  --animate-fade-enter: fade-in var(--transition-duration-fade) ease-out;
+  --animate-fade-leave: fade-out var(--transition-duration-fade) ease-out forwards;
+}
+
 @theme {
   --breakpoint-3xl: 120rem;
   --breakpoint-4xl: 160rem;
@@ -353,7 +363,7 @@ body.native.hero-page {
 }
 
 .animate-slide-up {
-  animation: slide-up 0.18s ease-out;
+  animation: slide-up var(--transition-duration-sheet) ease-out;
 }
 
 /* Full-width gradient strip with transparent edges so the 100% to -100% reset doesn't read as a gap. */

@@ -81,10 +81,10 @@ describe('CompanionFilesModalComponent', () => {
     const { fixture, cmp } = setup(false, [row({})]);
     await cmp.open(1, 5);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.modal-box > div > button.btn-primary')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.modal-sheet-body > div > button.btn-primary')).toBeNull();
     fixture.componentRef.setInput('canManageSubtitles', true);
     fixture.detectChanges();
-    const btn = fixture.nativeElement.querySelector('.modal-box > div > button.btn-primary') as HTMLElement;
+    const btn = fixture.nativeElement.querySelector('.modal-sheet-body > div > button.btn-primary') as HTMLElement;
     expect(btn).not.toBeNull();
     expect(btn.compareDocumentPosition(fixture.nativeElement.querySelector('ul'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });

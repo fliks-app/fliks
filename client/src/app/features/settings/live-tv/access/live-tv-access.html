@@ -138,60 +138,52 @@
   </div>
 }
 
-<dialog #grantsDialog class="modal">
-  <div class="modal-box max-w-md flex flex-col p-0 gap-0 overflow-hidden">
-    <app-modal-header
-      flush
-      [title]="
-        'liveTv.admin.access.grants_title' | translate: { username: grantsUser()?.username ?? '' }
-      "
-    />
+<dialog #grantsDialog appModal boxClass="max-w-md">
+  <app-modal-header
+    [title]="
+      'liveTv.admin.access.grants_title' | translate: { username: grantsUser()?.username ?? '' }
+    "
+  />
 
-    <div class="px-5 sm:px-6 py-4 flex flex-col gap-1 overflow-y-auto flex-1 min-h-0 bg-base-100">
-      @if (restrictedList().length === 0) {
-        <p class="text-sm text-base-content/60">
-          {{ 'liveTv.admin.access.grants_empty' | translate }}
-        </p>
-      } @else {
-        @for (name of restrictedList(); track name) {
-          <label class="label cursor-pointer justify-start gap-2 py-1">
-            <input
-              type="checkbox"
-              class="checkbox checkbox-xs"
-              [checked]="grantedGroups().has(name)"
-              (change)="toggleGrant(name)"
-            />
-            <span class="label-text text-sm">{{ name | liveTvGroupLabel }}</span>
-          </label>
-        }
+  <div class="flex flex-col gap-1">
+    @if (restrictedList().length === 0) {
+      <p class="text-sm text-base-content/60">
+        {{ 'liveTv.admin.access.grants_empty' | translate }}
+      </p>
+    } @else {
+      @for (name of restrictedList(); track name) {
+        <label class="label cursor-pointer justify-start gap-2 py-1">
+          <input
+            type="checkbox"
+            class="checkbox checkbox-xs"
+            [checked]="grantedGroups().has(name)"
+            (change)="toggleGrant(name)"
+          />
+          <span class="label-text text-sm">{{ name | liveTvGroupLabel }}</span>
+        </label>
       }
-    </div>
-
-    <app-modal-footer flush>
-      <button
-        type="button"
-        class="btn btn-ghost"
-        (click)="closeGrants()"
-        [disabled]="grantsSaving()"
-      >
-        {{ 'common.cancel' | translate }}
-      </button>
-      <button
-        type="button"
-        class="btn btn-primary"
-        (click)="saveGrants()"
-        [disabled]="grantsSaving()"
-      >
-        @if (grantsSaving()) {
-          <span class="loading loading-spinner loading-sm"></span>
-        }
-        {{ 'common.save' | translate }}
-      </button>
-    </app-modal-footer>
+    }
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeGrants()" [attr.aria-label]="'common.close' | translate">
-      {{ 'common.close' | translate }}
+
+  <app-modal-footer>
+    <button
+      type="button"
+      class="btn btn-ghost"
+      (click)="closeGrants()"
+      [disabled]="grantsSaving()"
+    >
+      {{ 'common.cancel' | translate }}
     </button>
-  </form>
+    <button
+      type="button"
+      class="btn btn-primary"
+      (click)="saveGrants()"
+      [disabled]="grantsSaving()"
+    >
+      @if (grantsSaving()) {
+        <span class="loading loading-spinner loading-sm"></span>
+      }
+      {{ 'common.save' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>

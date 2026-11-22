@@ -17,10 +17,11 @@ import { FamilyTabsComponent } from '../../../shared/components/family-tabs/fami
 import type { Family } from '../../../core/enums/family.enum';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
+import { ModalComponent } from '../../../shared/components/modal';
 
 @Component({
   selector: 'app-quality-profiles',
-  imports: [TvSelectDirective, 
+  imports: [ModalComponent, TvSelectDirective, 
     FamilyTabsComponent,
     ModalFooterComponent,
     ModalHeaderComponent,
@@ -35,7 +36,7 @@ export class QualityProfilesComponent implements OnInit {
   private readonly mediaApi = inject(MediaService);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
 
   readonly family = signal<Family>('video');
   readonly profiles = signal<QualityProfile[]>([]);

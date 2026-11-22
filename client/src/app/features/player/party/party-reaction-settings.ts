@@ -16,6 +16,7 @@ import { KeyboardReorderDirective } from '../../../shared/directives/keyboard-re
 import { TvGridDirective } from '../../../shared/directives/tv-grid.directive';
 import { TvSectionDirective } from '../../../shared/directives/tv-section.directive';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
+import { ModalComponent } from '../../../shared/components/modal';
 
 interface Section {
   key: string;
@@ -28,7 +29,7 @@ interface Section {
 /** Reaction settings, opened from the player's settings menu; lives in the player so it shows in fullscreen. */
 @Component({
   selector: 'app-party-reaction-settings',
-  imports: [FormsModule, NgTemplateOutlet, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragPlaceholder, TranslatePipe, LucideSearch, LucideX, ModalHeaderComponent, TvSectionDirective, TvGridDirective, KeyboardReorderDirective, LucideTrash2, ToggleFieldComponent],
+  imports: [ModalComponent, FormsModule, NgTemplateOutlet, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragPlaceholder, TranslatePipe, LucideSearch, LucideX, ModalHeaderComponent, TvSectionDirective, TvGridDirective, KeyboardReorderDirective, LucideTrash2, ToggleFieldComponent],
   templateUrl: './party-reaction-settings.html',
 })
 export class PartyReactionSettingsComponent {
@@ -44,7 +45,7 @@ export class PartyReactionSettingsComponent {
   protected readonly query = signal('');
   /** Set when a tap was refused because the bar is full. */
   protected readonly full = signal(false);
-  private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild.required<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
   /** The player mounts the dialog to open it and drops it on close. */
   readonly closed = output<void>();
 

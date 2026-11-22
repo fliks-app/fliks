@@ -37,6 +37,7 @@ import { DataTableComponent } from '../data-table/data-table';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalFooterComponent } from '../modal-footer';
 import { EnabledSwitchComponent } from '../enabled-switch';
+import { ModalComponent } from '../modal';
 
 interface RowActionResultView {
   url: string;
@@ -56,6 +57,7 @@ export function resolveRowActionRoute(route: string, id: number | string): strin
 @Component({
   selector: 'app-provider-list',
   imports: [
+    ModalComponent,
     ModalFooterComponent,
     ModalHeaderComponent,
     TranslatePipe,
@@ -79,9 +81,9 @@ export class ProviderListComponent implements OnInit {
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);
   readonly togglingId = signal<number | null>(null);
-  private readonly editorDialog = viewChild<ElementRef<HTMLDialogElement>>('editorDialog');
-  private readonly bulkDialog = viewChild<ElementRef<HTMLDialogElement>>('bulkDialog');
-  private readonly resultDialog = viewChild<ElementRef<HTMLDialogElement>>('resultDialog');
+  private readonly editorDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editorDialog', { read: ElementRef });
+  private readonly bulkDialog = viewChild<string, ElementRef<HTMLDialogElement>>('bulkDialog', { read: ElementRef });
+  private readonly resultDialog = viewChild<string, ElementRef<HTMLDialogElement>>('resultDialog', { read: ElementRef });
 
   /** Empty renders no heading — a plugin page carries its own page-level title. */
   readonly titleKey = input('');

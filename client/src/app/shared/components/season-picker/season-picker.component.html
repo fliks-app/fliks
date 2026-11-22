@@ -3,14 +3,14 @@
     <span class="loading loading-spinner loading-md"></span>
   </div>
 } @else if (seasons().length) {
-  <div class="overflow-x-auto rounded-lg border border-base-200">
-    <table class="table">
+  <div class="overflow-x-auto rounded-2xl border border-base-content/10">
+    <table class="table max-sm:table-sm">
       <thead>
         <tr>
           <th class="w-12">
             <input
               type="checkbox"
-              class="toggle toggle-sm toggle-primary"
+              class="toggle toggle-sm toggle-primary checked:bg-primary checked:border-primary checked:text-white"
               [checked]="allSelectableChosen()"
               [disabled]="selectableCount() === 0"
               (change)="allToggled.emit()"
@@ -33,23 +33,23 @@
             <td>
               <input
                 type="checkbox"
-                class="toggle toggle-sm toggle-primary"
+                class="toggle toggle-sm toggle-primary checked:bg-primary checked:border-primary checked:text-white"
                 [checked]="isSelected || isLocked"
                 [disabled]="isLocked"
                 (change)="toggle(s.seasonNumber)"
               />
             </td>
-            <td class="font-medium">{{ s.seasonNumber | seasonLabel }}</td>
+            <td class="font-medium whitespace-nowrap">{{ s.seasonNumber | seasonLabel }}</td>
             <td>{{ s.episodeCount }}</td>
             <td>
               @if (isLocked) {
-                <span class="badge badge-warning badge-sm">{{ lockedBadgeKey() | translate }}</span>
+                <span class="badge badge-warning badge-sm font-semibold">{{ lockedBadgeKey() | translate }}</span>
               } @else if (isSelected) {
-                <span class="badge badge-primary badge-sm">{{
+                <span class="badge badge-primary badge-sm font-semibold">{{
                   selectedBadgeKey() | translate
                 }}</span>
               } @else {
-                <span class="badge badge-ghost badge-sm">{{
+                <span class="badge badge-outline badge-sm font-semibold border-base-content/25 text-base-content/70">{{
                   unselectedBadgeKey() | translate
                 }}</span>
               }

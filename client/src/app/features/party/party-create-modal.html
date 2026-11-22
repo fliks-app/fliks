@@ -1,73 +1,71 @@
-<dialog #dialog class="modal" (close)="open.set(false)">
-  <div class="modal-box w-11/12 max-w-2xl">
-    <app-modal-header [title]="'party.create_title' | translate" />
+<dialog #dialog appModal boxClass="w-11/12 max-w-2xl" (close)="open.set(false)">
+  <app-modal-header [title]="'party.create_title' | translate" />
 
-    @if (open()) {
-      <form class="flex flex-col gap-3" (submit)="$event.preventDefault(); submit()">
-        @if (target()?.playlistId != null) {
-          <p class="text-sm text-base-content/70">{{ 'party.playlist_label' | translate: { name: target()!.title } }}</p>
-        }
-        @if (target()?.playlistId == null) {
-          <div class="flex flex-col gap-1">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-sm font-semibold">{{ 'party.programme' | translate }}</span>
-              <button type="button" class="btn btn-sm btn-outline" (click)="picker().show()">
-                <svg lucidePlus class="h-4 w-4"></svg>{{ 'party.programme_add' | translate }}
+  @if (open()) {
+    <form id="party-create-form" class="flex flex-col gap-3" (submit)="$event.preventDefault(); submit()">
+      @if (target()?.playlistId != null) {
+        <p class="text-sm text-base-content/70">{{ 'party.playlist_label' | translate: { name: target()!.title } }}</p>
+      }
+      @if (target()?.playlistId == null) {
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-sm font-semibold">{{ 'party.programme' | translate }}</span>
+            <button type="button" class="btn btn-sm btn-outline" (click)="picker().show()">
+              <svg lucidePlus class="h-4 w-4"></svg>{{ 'party.programme_add' | translate }}
+            </button>
+          </div>
+          @for (g of groups(); track g.mediaId) {
+            <div class="flex items-center gap-2">
+              <p class="min-w-0 flex-1 truncate text-sm">{{ g.title }}@if (g.count > 1) {<span class="ml-1 text-base-content/60">({{ g.count }})</span>}</p>
+              <button type="button" class="btn btn-ghost btn-xs btn-square" [attr.aria-label]="'party.programme_remove' | translate" (click)="remove(g.mediaId)">
+                <svg lucideX class="h-4 w-4"></svg>
               </button>
             </div>
-            @for (g of groups(); track g.mediaId) {
-              <div class="flex items-center gap-2">
-                <p class="min-w-0 flex-1 truncate text-sm">{{ g.title }}@if (g.count > 1) {<span class="ml-1 text-base-content/60">({{ g.count }})</span>}</p>
-                <button type="button" class="btn btn-ghost btn-xs btn-square" [attr.aria-label]="'party.programme_remove' | translate" (click)="remove(g.mediaId)">
-                  <svg lucideX class="h-4 w-4"></svg>
-                </button>
-              </div>
-            } @empty {
-              <p class="text-sm text-base-content/70">{{ 'party.create_programme_later' | translate }}</p>
-            }
-          </div>
-        }
-        <label class="form-control">
-          <span class="mb-1 text-sm font-semibold">{{ 'party.create_name' | translate }}</span>
-          <input type="text" class="input input-bordered w-full" maxlength="80" [ngModel]="name()" (ngModelChange)="name.set($event)" name="name" />
-        </label>
-
-        <div class="flex flex-col gap-2">
-          <span class="text-sm font-semibold">{{ 'party.cover' | translate }}</span>
-          <app-party-cover-picker [options]="films()" [(draft)]="cover" />
-        </div>
-
-        <div class="flex flex-col gap-2">
-          <span class="text-sm font-semibold">{{ 'party.create_when' | translate }}</span>
-          <div role="radiogroup" class="join">
-            <button type="button" role="radio" class="btn btn-sm join-item" [class.btn-primary]="!later()" [attr.aria-checked]="!later()" (click)="later.set(false)">{{ 'party.create_now' | translate }}</button>
-            <button type="button" role="radio" class="btn btn-sm join-item" [class.btn-primary]="later()" [attr.aria-checked]="later()" (click)="later.set(true)">{{ 'party.create_later' | translate }}</button>
-          </div>
-          @if (later()) {
-            <input type="datetime-local" class="input input-bordered w-full" [min]="min()" [ngModel]="when()" (ngModelChange)="when.set($event)" name="when" [attr.aria-label]="'party.create_later' | translate" />
+          } @empty {
+            <p class="text-sm text-base-content/70">{{ 'party.create_programme_later' | translate }}</p>
           }
         </div>
+      }
+      <label class="form-control">
+        <span class="mb-1 text-sm font-semibold">{{ 'party.create_name' | translate }}</span>
+        <input type="text" class="input input-bordered w-full" maxlength="80" [ngModel]="name()" (ngModelChange)="name.set($event)" name="name" />
+      </label>
 
-        <div class="flex flex-col gap-1">
-          <span class="text-sm font-semibold">{{ 'party.create_invitees' | translate }}</span>
-          <app-party-invitee-picker [(selected)]="invitees" />
+      <div class="flex flex-col gap-2">
+        <span class="text-sm font-semibold">{{ 'party.cover' | translate }}</span>
+        <app-party-cover-picker [options]="films()" [(draft)]="cover" />
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <span class="text-sm font-semibold">{{ 'party.create_when' | translate }}</span>
+        <div role="radiogroup" class="join">
+          <button type="button" role="radio" class="btn btn-sm join-item" [class.btn-primary]="!later()" [attr.aria-checked]="!later()" (click)="later.set(false)">{{ 'party.create_now' | translate }}</button>
+          <button type="button" role="radio" class="btn btn-sm join-item" [class.btn-primary]="later()" [attr.aria-checked]="later()" (click)="later.set(true)">{{ 'party.create_later' | translate }}</button>
         </div>
+        @if (later()) {
+          <input type="datetime-local" class="input input-bordered w-full" [min]="min()" [ngModel]="when()" (ngModelChange)="when.set($event)" name="when" [attr.aria-label]="'party.create_later' | translate" />
+        }
+      </div>
 
-        <div class="flex flex-col gap-2">
-          <span class="text-sm font-semibold">{{ 'party.settings' | translate }}</span>
-          <app-party-host-switches [value]="switches()" (changed)="setSwitches($event)" />
-        </div>
+      <div class="flex flex-col gap-1">
+        <span class="text-sm font-semibold">{{ 'party.create_invitees' | translate }}</span>
+        <app-party-invitee-picker [(selected)]="invitees" />
+      </div>
 
-        <app-modal-footer>
-          <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.cancel' | translate }}</button>
-          <button type="submit" class="btn btn-primary" [disabled]="!canSubmit()">
-            @if (busy()) { <span class="loading loading-spinner loading-sm"></span> }
-            {{ (later() ? 'party.create_schedule' : 'party.create_start') | translate }}
-          </button>
-        </app-modal-footer>
-      </form>
-    }
-  </div>
-  <form method="dialog" class="modal-backdrop"><button tabindex="-1">close</button></form>
+      <div class="flex flex-col gap-2">
+        <span class="text-sm font-semibold">{{ 'party.settings' | translate }}</span>
+        <app-party-host-switches [value]="switches()" (changed)="setSwitches($event)" />
+      </div>
+    </form>
+  }
+  @if (open()) {
+    <app-modal-footer>
+      <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.cancel' | translate }}</button>
+      <button type="submit" form="party-create-form" class="btn btn-primary" [disabled]="!canSubmit()">
+        @if (busy()) { <span class="loading loading-spinner loading-sm"></span> }
+        {{ (later() ? 'party.create_schedule' : 'party.create_start') | translate }}
+      </button>
+    </app-modal-footer>
+  }
   <app-media-picker multiple [taken]="films()" (picked)="pick($event)" />
 </dialog>

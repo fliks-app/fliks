@@ -37,12 +37,14 @@ import { AnalyzeController } from './analyze-controller';
 import { RequestFlowController } from './request-flow-controller';
 import { mediaDetailLink, kindOf } from '../../core/media-kinds';
 import { MEDIA_DETAIL_HOST, type HandedEpisode, type MediaDetailHost } from './media-detail-host';
+import { ModalComponent } from '../../shared/components/modal';
 
 /** The route shell of every detail page: loads the title, owns the hero chrome, the scroll memory and the modals
  *  every kind shares, and renders the kind's page (`data.page`) with the loaded media. */
 @Component({
   selector: 'app-media-detail',
   imports: [
+    ModalComponent,
     ModalFooterComponent,
     ModalHeaderComponent,
     TranslatePipe,
@@ -493,7 +495,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
   }
 
   /** Native <dialog>: showModal() gives focus trap, Tab cycling and Escape for free. */
-  private readonly analyzeDialog = viewChild<ElementRef<HTMLDialogElement>>('analyzeDialog');
+  private readonly analyzeDialog = viewChild<string, ElementRef<HTMLDialogElement>>('analyzeDialog', { read: ElementRef });
   private readonly firstAnalyzeOption =
     viewChild<ElementRef<HTMLInputElement>>('firstAnalyzeOption');
 

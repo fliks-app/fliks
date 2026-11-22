@@ -15,6 +15,7 @@ import { ServerConfigService, KnownServer } from '../../core/services/server-con
 import { AuthService } from '../../core/services/auth.service';
 import { SessionStoreService } from '../../core/services/session-store.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ModalComponent } from '../../shared/components/modal';
 
 /** Probe https directly: an http host that 301s to https is unreachable from the native app, as the redirect lacks CORS headers. */
 const PROBE_TIMEOUT_MS = 10_000;
@@ -27,7 +28,7 @@ export function withHttpsFallback(base: string): string[] {
 
 @Component({
   selector: 'app-setup',
-  imports: [FormsModule, TranslatePipe, ModalHeaderComponent, ModalFooterComponent],
+  imports: [ModalComponent, FormsModule, TranslatePipe, ModalHeaderComponent, ModalFooterComponent],
   templateUrl: './setup.html',
 })
 export class SetupComponent {
@@ -48,7 +49,7 @@ export class SetupComponent {
   readonly switchingTo = signal<string | null>(null);
   /** URL of the entry whose ⋯ menu is open, or null. */
   readonly openMenuFor = signal<string | null>(null);
-  private readonly editDialog = viewChild<ElementRef<HTMLDialogElement>>('editDialog');
+  private readonly editDialog = viewChild<string, ElementRef<HTMLDialogElement>>('editDialog', { read: ElementRef });
   /** Server the edit dialog changes. */
   readonly editing = signal<KnownServer | null>(null);
   readonly editName = signal('');

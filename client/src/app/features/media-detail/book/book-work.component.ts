@@ -24,6 +24,7 @@ import { MediaWantsComponent } from '../../../shared/components/media-wants/medi
 import { BookWorksRowComponent, type WorkItem } from './book-works-row.component';
 import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
 import { isWanted } from '../media-wanted';
+import { ModalComponent } from '../../../shared/components/modal';
 
 
 function toItem(e: CollectionDetail['entries'][number]): WorkItem {
@@ -41,6 +42,7 @@ function toItem(e: CollectionDetail['entries'][number]): WorkItem {
   selector: 'app-book-work',
   imports: [
     LastSearchComponent,
+    ModalComponent,
     ProviderAttributionComponent,
     RouterLink,
     TranslatePipe,
@@ -121,9 +123,9 @@ export class BookWorkComponent {
   protected readonly wantsOpen = signal(false);
   protected readonly sourcesOpen = signal(false);
   protected readonly seriesOpen = signal(false);
-  private readonly wantsDialog = viewChild<ElementRef<HTMLDialogElement>>('wantsDialog');
-  private readonly sourcesDialog = viewChild<ElementRef<HTMLDialogElement>>('sourcesDialog');
-  private readonly seriesDialog = viewChild<ElementRef<HTMLDialogElement>>('seriesDialog');
+  private readonly wantsDialog = viewChild<string, ElementRef<HTMLDialogElement>>('wantsDialog', { read: ElementRef });
+  private readonly sourcesDialog = viewChild<string, ElementRef<HTMLDialogElement>>('sourcesDialog', { read: ElementRef });
+  private readonly seriesDialog = viewChild<string, ElementRef<HTMLDialogElement>>('seriesDialog', { read: ElementRef });
 
   /** Profiles are the wants dialog for a book; both dialogs are offered once rendered. */
   protected readonly actions = computed<MediaActionHandlers>(() =>

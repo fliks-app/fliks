@@ -5,27 +5,22 @@
   </div>
 }
 
-<dialog #sheet class="modal max-sm:modal-bottom" [attr.aria-label]="'requests.requesters_title' | translate">
-  <div class="modal-box max-w-md">
-    <app-modal-header (closed)="close()">
-      <h3 class="text-lg font-bold">{{ 'requests.requesters_title' | translate }}</h3>
-    </app-modal-header>
-    <ul class="flex flex-col gap-3 mt-3">
-      @for (p of people(); track p.id) {
-        <li class="flex items-center gap-3">
-          <app-user-avatar [username]="p.username" [avatar]="p.avatar" size="w-9 h-9 text-sm" />
-          <div class="min-w-0 flex-1">
-            <div class="font-medium truncate">{{ p.username }}</div>
-            <div class="text-sm text-base-content/60">
-              {{ (p.requester ? 'requests.role_requester' : 'requests.role_watching') | translate }}
-              · {{ p.at | localeDate: { day: 'numeric', month: 'short' } }}
-            </div>
+<dialog #sheet appModal boxClass="max-w-md" [attr.aria-label]="'requests.requesters_title' | translate">
+  <app-modal-header (closed)="close()">
+    <h3 class="text-lg font-bold">{{ 'requests.requesters_title' | translate }}</h3>
+  </app-modal-header>
+  <ul class="flex flex-col gap-3 mt-3">
+    @for (p of people(); track p.id) {
+      <li class="flex items-center gap-3">
+        <app-user-avatar [username]="p.username" [avatar]="p.avatar" size="w-9 h-9 text-sm" />
+        <div class="min-w-0 flex-1">
+          <div class="font-medium truncate">{{ p.username }}</div>
+          <div class="text-sm text-base-content/60">
+            {{ (p.requester ? 'requests.role_requester' : 'requests.role_watching') | translate }}
+            · {{ p.at | localeDate: { day: 'numeric', month: 'short' } }}
           </div>
-        </li>
-      }
-    </ul>
-  </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="close()">{{ 'common.close' | translate }}</button>
-  </form>
+        </div>
+      </li>
+    }
+  </ul>
 </dialog>

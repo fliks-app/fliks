@@ -54,11 +54,12 @@ import {
   RULER_PX,
   CHEVRON_PX,
 } from './subtitle-sync.util';
+import { ModalComponent } from '../../../../shared/components/modal';
 
 /** Side panel to preview a subtitle track against the playing video and shift its timing. */
 @Component({
   selector: 'app-subtitle-sync-panel',
-  imports: [CueTextDirective, FormsModule, LucideCheck, LucideChevronLeft, LucideChevronRight, LucideRotateCcw, LucideWandSparkles, TranslatePipe, TvSelectDirective, SyncReferenceSelectComponent],
+  imports: [ModalComponent, CueTextDirective, FormsModule, LucideCheck, LucideChevronLeft, LucideChevronRight, LucideRotateCcw, LucideWandSparkles, TranslatePipe, TvSelectDirective, SyncReferenceSelectComponent],
   templateUrl: './subtitle-sync-panel.html',
   styleUrl: './subtitle-sync-panel.scss',
 })
@@ -140,7 +141,7 @@ export class SubtitleSyncPanelComponent {
   protected readonly subtitleStreams = computed(() => this.streams().filter((s) => s.type === 'subtitle'));
 
   private readonly scroller = viewChild.required<ElementRef<HTMLElement>>('scroller');
-  private readonly syncDialog = viewChild.required<ElementRef<HTMLDialogElement>>('syncDialog');
+  private readonly syncDialog = viewChild.required<string, ElementRef<HTMLDialogElement>>('syncDialog', { read: ElementRef });
   private readonly overlay = new SubtitleOverlay(1, 'fliks-sync-subtitle');
   private readonly clock = new SmoothClock();
   private t = 0;

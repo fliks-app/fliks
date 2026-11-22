@@ -135,68 +135,63 @@
   </div>
 </div>
 
-<dialog #editorDialog class="modal">
-  <div class="modal-box max-w-md p-0 gap-0 overflow-hidden">
-    <app-modal-header flush [title]="(editingId() === null ? 'liveTv.admin.guide.editor_create' : 'liveTv.admin.guide.editor_edit') | translate" />
-    <div class="px-5 sm:px-6 py-4 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0 bg-base-100">
+<dialog #editorDialog appModal boxClass="max-w-md">
+  <app-modal-header [title]="(editingId() === null ? 'liveTv.admin.guide.editor_create' : 'liveTv.admin.guide.editor_edit') | translate" />
+  <div class="flex flex-col gap-4">
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'liveTv.admin.sources.field_name' | translate }}</span>
+      <input type="text" class="input input-bordered input-sm w-full" [ngModel]="formName()" (ngModelChange)="formName.set($event)" />
+    </label>
+    <label class="form-control w-full">
+      <span class="label-text">{{ 'liveTv.admin.sources.field_kind' | translate }}</span>
+      <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="formKind()" (ngModelChange)="formKind.set($event)">
+        <option value="xmltv">{{ 'liveTv.admin.guide.kind_xmltv' | translate }}</option>
+        <option value="source">{{ 'liveTv.admin.guide.kind_source' | translate }}</option>
+      </select>
+    </label>
+    @if (formKind() === 'xmltv') {
       <label class="form-control w-full">
-        <span class="label-text">{{ 'liveTv.admin.sources.field_name' | translate }}</span>
-        <input type="text" class="input input-bordered input-sm w-full" [ngModel]="formName()" (ngModelChange)="formName.set($event)" />
+        <span class="label-text">{{ 'liveTv.admin.sources.field_url' | translate }}</span>
+        <input type="url" class="input input-bordered input-sm w-full" [ngModel]="formUrl()" (ngModelChange)="formUrl.set($event)" />
+        @if (!formUrl().trim()) {
+          <span class="label-text-alt text-error">{{ 'liveTv.admin.guide.url_required' | translate }}</span>
+        }
       </label>
+    } @else {
       <label class="form-control w-full">
-        <span class="label-text">{{ 'liveTv.admin.sources.field_kind' | translate }}</span>
-        <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="formKind()" (ngModelChange)="formKind.set($event)">
-          <option value="xmltv">{{ 'liveTv.admin.guide.kind_xmltv' | translate }}</option>
-          <option value="source">{{ 'liveTv.admin.guide.kind_source' | translate }}</option>
+        <span class="label-text">{{ 'liveTv.admin.guide.field_source' | translate }}</span>
+        <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="formSourceId()" (ngModelChange)="formSourceId.set($event)">
+          @for (s of sources(); track s.id) {
+            <option [ngValue]="s.id">{{ s.name }}</option>
+          }
         </select>
+        @if (formSourceId() === null) {
+          <span class="label-text-alt text-error">{{ 'liveTv.admin.guide.source_required' | translate }}</span>
+        }
       </label>
-      @if (formKind() === 'xmltv') {
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'liveTv.admin.sources.field_url' | translate }}</span>
-          <input type="url" class="input input-bordered input-sm w-full" [ngModel]="formUrl()" (ngModelChange)="formUrl.set($event)" />
-          @if (!formUrl().trim()) {
-            <span class="label-text-alt text-error">{{ 'liveTv.admin.guide.url_required' | translate }}</span>
-          }
-        </label>
-      } @else {
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'liveTv.admin.guide.field_source' | translate }}</span>
-          <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="formSourceId()" (ngModelChange)="formSourceId.set($event)">
-            @for (s of sources(); track s.id) {
-              <option [ngValue]="s.id">{{ s.name }}</option>
-            }
-          </select>
-          @if (formSourceId() === null) {
-            <span class="label-text-alt text-error">{{ 'liveTv.admin.guide.source_required' | translate }}</span>
-          }
-        </label>
-      }
-      <div class="grid grid-cols-2 gap-3">
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'liveTv.admin.sources.field_refresh_hours' | translate }}</span>
-          <input type="number" min="1" class="input input-bordered input-sm w-full" [ngModel]="formRefreshHours()" (ngModelChange)="formRefreshHours.set($event)" />
-        </label>
-        <label class="form-control w-full">
-          <span class="label-text">{{ 'liveTv.admin.guide.field_timezone_offset' | translate }}</span>
-          <input type="number" class="input input-bordered input-sm w-full" [ngModel]="formTimezoneOffset()" (ngModelChange)="formTimezoneOffset.set($event)" />
-        </label>
-      </div>
-      <label class="label cursor-pointer justify-start gap-3">
-        <input type="checkbox" class="toggle toggle-sm" [ngModel]="formEnabled()" (ngModelChange)="formEnabled.set($event)" />
-        <span class="label-text">{{ 'liveTv.admin.sources.field_enabled' | translate }}</span>
+    }
+    <div class="grid grid-cols-2 gap-3">
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'liveTv.admin.sources.field_refresh_hours' | translate }}</span>
+        <input type="number" min="1" class="input input-bordered input-sm w-full" [ngModel]="formRefreshHours()" (ngModelChange)="formRefreshHours.set($event)" />
+      </label>
+      <label class="form-control w-full">
+        <span class="label-text">{{ 'liveTv.admin.guide.field_timezone_offset' | translate }}</span>
+        <input type="number" class="input input-bordered input-sm w-full" [ngModel]="formTimezoneOffset()" (ngModelChange)="formTimezoneOffset.set($event)" />
       </label>
     </div>
-    <app-modal-footer flush>
-      <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">{{ 'common.cancel' | translate }}</button>
-      <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving() || !canSave()">
-        @if (saving()) {
-          <span class="loading loading-spinner loading-sm"></span>
-        }
-        {{ 'common.save' | translate }}
-      </button>
-    </app-modal-footer>
+    <label class="label cursor-pointer justify-start gap-3">
+      <input type="checkbox" class="toggle toggle-sm" [ngModel]="formEnabled()" (ngModelChange)="formEnabled.set($event)" />
+      <span class="label-text">{{ 'liveTv.admin.sources.field_enabled' | translate }}</span>
+    </label>
   </div>
-  <form method="dialog" class="modal-backdrop">
-    <button type="button" (click)="closeEditor()" [attr.aria-label]="'common.close' | translate">{{ 'common.close' | translate }}</button>
-  </form>
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="closeEditor()" [disabled]="saving()">{{ 'common.cancel' | translate }}</button>
+    <button type="button" class="btn btn-primary" (click)="save()" [disabled]="saving() || !canSave()">
+      @if (saving()) {
+        <span class="loading loading-spinner loading-sm"></span>
+      }
+      {{ 'common.save' | translate }}
+    </button>
+  </app-modal-footer>
 </dialog>

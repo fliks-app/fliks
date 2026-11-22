@@ -18,6 +18,7 @@ import {
   PluginSourceRow,
 } from '../../../../core/services/api/plugins-api.service';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
+import { ModalComponent } from '../../../../shared/components/modal';
 
 /** One `code` per backend refusal (`plugin-sources.controller.ts`) — never the raw `detail`, which is not translated. */
 function createErrorKey(code: string | undefined): string {
@@ -36,7 +37,7 @@ function createErrorKey(code: string | undefined): string {
 /** Sources list + add form — any number of sources, the official catalog is just the seeded first row. */
 @Component({
   selector: 'app-plugin-sources',
-  imports: [ModalHeaderComponent, FormsModule, DatePipe, TranslatePipe],
+  imports: [ModalComponent, ModalHeaderComponent, FormsModule, DatePipe, TranslatePipe],
   templateUrl: './plugin-sources.html',
 })
 export class PluginSourcesComponent implements OnInit {
@@ -45,7 +46,7 @@ export class PluginSourcesComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly confirmation = inject(ConfirmationService);
 
-  private readonly dialogRef = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialogRef = viewChild.required<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly sources = signal<PluginSourceRow[]>([]);
   readonly loading = signal(true);

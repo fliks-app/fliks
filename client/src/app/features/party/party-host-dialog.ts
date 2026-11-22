@@ -13,11 +13,12 @@ import { AUTO_COVER, PartyCoverPickerComponent, coverChange, draftFromCover, typ
 import { itemThumb } from './party-thumb';
 import { toLocalInput } from './party-create-modal';
 import { partyWhen } from './party-time';
+import { ModalComponent } from '../../shared/components/modal';
 
 /** The host's settings for a party, opened from its page. */
 @Component({
   selector: 'app-party-host-dialog',
-  imports: [FormsModule, TranslatePipe, ModalHeaderComponent, ModalFooterComponent, PartyHostSwitchesComponent, PartyCoverPickerComponent, TvRowDirective],
+  imports: [ModalComponent, FormsModule, TranslatePipe, ModalHeaderComponent, ModalFooterComponent, PartyHostSwitchesComponent, PartyCoverPickerComponent, TvRowDirective],
   templateUrl: './party-host-dialog.html',
 })
 export class PartyHostDialogComponent {
@@ -25,7 +26,7 @@ export class PartyHostDialogComponent {
   private readonly confirm = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
   protected readonly keyboard = inject(KeyboardOverlayService);
-  private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly dialog = viewChild.required<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
 
   readonly view = input.required<PartyDto>();
   readonly link = input.required<string>();

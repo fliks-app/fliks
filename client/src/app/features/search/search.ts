@@ -45,7 +45,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { SearchFiltersComponent } from '../../shared/components/search-filters/search-filters';
 import { libraryFilterParams } from '../../shared/components/search-filters/search-filters.model';
-import { LucideSearch, LucideX, LucideSettings, LucideMusic } from '@lucide/angular';
+import { LucideSearch, LucideX, LucideSlidersHorizontal, LucideMusic } from '@lucide/angular';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { Capacitor } from '@capacitor/core';
@@ -60,6 +60,7 @@ import { musicItems, topResult, type MusicItem, type MusicItems, type RowState }
 import { SearchRunner, SOURCES } from './search-runner';
 import { canMarkWatched, kindOfListFilter, mediaDetailLink, kindOf } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
+import { ModalComponent } from '../../shared/components/modal';
 
 const DEBOUNCE_MS = 250;
 
@@ -72,7 +73,7 @@ const discoveryKind = (s: SearchScope): 'all' | MediaType | null =>
 
 @Component({
   selector: 'app-search',
-  imports: [TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, LucideSearch, LucideX, LucideSettings, LucideMusic, HitStateComponent, ResolveUrlPipe, CachedSrcDirective, ModalHeaderComponent, SearchFiltersComponent],
+  imports: [ModalComponent, TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, LucideSearch, LucideX, LucideSlidersHorizontal, LucideMusic, HitStateComponent, ResolveUrlPipe, CachedSrcDirective, ModalHeaderComponent, SearchFiltersComponent],
   templateUrl: './search.html',
   providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })
@@ -106,7 +107,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     social: this.social,
   });
 
-  readonly filterSheet = viewChild<ElementRef<HTMLDialogElement>>('filterSheet');
+  readonly filterSheet = viewChild<string, ElementRef<HTMLDialogElement>>('filterSheet', { read: ElementRef });
   private lastDiscoveryKey = '';
   /** Load discovery rows whenever the empty state is showing, keyed on the
    *  video kind + external-search toggle so a change of either refreshes them. */

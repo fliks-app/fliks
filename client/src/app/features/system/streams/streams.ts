@@ -14,10 +14,12 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { QoeBadgeComponent } from '../qoe-badge/qoe-badge';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { formatBitrate } from '../../../core/utils/format-bytes';
+import { ModalComponent } from '../../../shared/components/modal';
 
 @Component({
   selector: 'app-system-streams',
   imports: [
+    ModalComponent,
     ModalHeaderComponent,
     ModalFooterComponent,
     NgTemplateOutlet,
