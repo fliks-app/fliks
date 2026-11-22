@@ -1148,7 +1148,7 @@ mod guide_import {
     }
 
     #[sqlx::test(migrations = false)]
-    async fn the_shift_applies_after_the_window_test(pool: PgPool) {
+    async fn a_channels_shift_is_not_stored_with_its_programmes(pool: PgPool) {
         let c = ctx(pool).await;
         lineup(&c).await;
         sqlx::query(r#"UPDATE livetv_channels SET "guideShiftMinutes" = 60 WHERE name = 'One'"#)
@@ -1165,8 +1165,13 @@ mod guide_import {
         .await
         .unwrap();
         assert_eq!(mins.round(), 90.0);
-        let shifted: bool = sqlx::query_scalar(r#"SELECT "startsAt" > now() + interval '20 minutes' FROM livetv_programs WHERE title = 'Now One'"#).fetch_one(&c.pool).await.unwrap();
-        assert!(shifted);
+        let unshifted: bool = sqlx::query_scalar(
+            r#"SELECT "startsAt" < now() FROM livetv_programs WHERE title = 'Now One'"#,
+        )
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+        assert!(unshifted, "the shift is applied at read");
     }
 
     #[sqlx::test(migrations = false)]
@@ -1523,9 +1528,14 @@ mod sessions {
         assert_eq!(sent["channelId"], w.a.to_string());
         assert_eq!(sent["ownerId"], w.who.id.to_string());
         assert_eq!(sent["atCapacity"], false);
+        assert_eq!(sent["tags"]["sourceId"], w.src1.to_string());
         assert_eq!(
-            sent["tags"],
-            json!({"channelName": "A", "username": "owner", "device": "ua"})
+            (
+                &sent["tags"]["channelName"],
+                &sent["tags"]["username"],
+                &sent["tags"]["device"]
+            ),
+            (&json!("A"), &json!("owner"), &json!("ua"))
         );
         let ups = sent["upstreams"].as_array().unwrap();
         assert_eq!(
