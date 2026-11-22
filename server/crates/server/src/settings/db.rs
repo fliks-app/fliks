@@ -1,7 +1,8 @@
 use crate::http::json::iso_ms;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgExecutor, PgPool, Postgres, Transaction};
+use std::collections::HashMap;
 
 /// The saved `AppSetting` entity.
 #[derive(Debug, Serialize)]
@@ -16,7 +17,7 @@ pub struct Setting {
     pub value: Option<String>,
 }
 
-pub async fn list(pool: &PgPool) -> sqlx::Result<Vec<(String, Option<String>)>> {
+pub async fn all(pool: &PgPool) -> sqlx::Result<Vec<(String, Option<String>)>> {
     let rows = sqlx::query!(r#"SELECT "key", "value" FROM app_settings ORDER BY "key""#)
         .fetch_all(pool)
         .await?;
@@ -24,13 +25,86 @@ pub async fn list(pool: &PgPool) -> sqlx::Result<Vec<(String, Option<String>)>> 
 }
 
 /// The text of one setting, `None` for a missing key or a null value.
-pub async fn value(pool: &PgPool, key: &str) -> sqlx::Result<Option<String>> {
+pub async fn text(db: impl PgExecutor<'_>, key: &str) -> sqlx::Result<Option<String>> {
     Ok(
         sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = $1"#, key)
-            .fetch_optional(pool)
+            .fetch_optional(db)
             .await?
             .flatten(),
     )
+}
+
+/// The rows of `keys` holding a value; a missing row and a NULL are the same.
+pub async fn texts(db: &PgPool, keys: &[&str]) -> sqlx::Result<HashMap<String, String>> {
+    let keys: Vec<String> = keys.iter().map(|k| (*k).to_owned()).collect();
+    let rows = sqlx::query!(
+        r#"SELECT "key", "value" FROM app_settings WHERE "key" = ANY($1)"#,
+        &keys
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|r| Some((r.key, r.value?)))
+        .collect())
+}
+
+/// Every row whose key starts with `prefix`, by key.
+pub async fn with_prefix(
+    db: impl PgExecutor<'_>,
+    prefix: &str,
+) -> sqlx::Result<Vec<(String, Option<String>)>> {
+    sqlx::query_as(
+        r#"SELECT "key"::text, "value" FROM app_settings WHERE starts_with("key", $1) ORDER BY "key""#,
+    )
+    .bind(prefix)
+    .fetch_all(db)
+    .await
+}
+
+/// The base URL the server is reached on, trimmed and without a trailing slash.
+pub async fn public_url(db: impl PgExecutor<'_>) -> sqlx::Result<Option<String>> {
+    Ok(text(db, "public_url")
+        .await?
+        .map(|u| u.trim().trim_end_matches('/').to_owned())
+        .filter(|u| !u.is_empty()))
+}
+
+/// A read that falls back to the default: the error is logged, never the caller's problem.
+async fn lenient(db: &PgPool, key: &str) -> Option<String> {
+    text(db, key)
+        .await
+        .inspect_err(|e| tracing::warn!("setting {key}: {e}"))
+        .ok()
+        .flatten()
+}
+
+/// `true` or `false` exactly, else `default`.
+pub async fn flag(db: &PgPool, key: &str, default: bool) -> bool {
+    match lenient(db, key).await.as_deref() {
+        Some("true") => true,
+        Some("false") => false,
+        _ => default,
+    }
+}
+
+/// JS `Number(value)` when finite, else `default`.
+pub async fn number(db: &PgPool, key: &str, default: f64) -> f64 {
+    number_of(lenient(db, key).await.as_deref(), default)
+}
+
+/// A JSON array of strings, empty when unset or not one.
+pub async fn list(db: &PgPool, key: &str) -> Vec<String> {
+    lenient(db, key)
+        .await
+        .and_then(|v| serde_json::from_str(&v).ok())
+        .unwrap_or_default()
+}
+
+pub fn number_of(raw: Option<&str>, default: f64) -> f64 {
+    raw.and_then(fliks_domain::media::query::js_number)
+        .filter(|n| n.is_finite())
+        .unwrap_or(default)
 }
 
 pub async fn get(pool: &PgPool, key: &str) -> sqlx::Result<Option<Setting>> {

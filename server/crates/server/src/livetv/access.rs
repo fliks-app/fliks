@@ -7,7 +7,7 @@ use crate::{
         auth::Authed,
         validate::{PathParams, ValidJson, int_param},
     },
-    settings::setting_value,
+    settings,
     state::AppState,
 };
 use axum::{Json, extract::State};
@@ -36,7 +36,7 @@ pub fn permissions(a: &Authed) -> Vec<String> {
 }
 
 async fn load(db: &PgPool) -> sqlx::Result<Groups> {
-    let get = |k| async move { setting_value(db, k).await };
+    let get = |k| async move { settings::text(db, k).await };
     let (restricted, exempt, vanished) = (
         get(RESTRICTED_KEY).await?,
         get(EXEMPT_KEY).await?,
@@ -151,7 +151,7 @@ pub async fn denied_groups(
     user_id: i32,
     permissions: &[String],
 ) -> sqlx::Result<Vec<String>> {
-    let restricted = read_group_set(setting_value(db, RESTRICTED_KEY).await?.as_deref());
+    let restricted = read_group_set(settings::text(db, RESTRICTED_KEY).await?.as_deref());
     if restricted.is_empty() {
         return Ok(vec![]);
     }
@@ -263,7 +263,7 @@ pub async fn set_grants(
         .fetch_one(&st.db)
         .await?;
     if !known && groups.iter().any(|g| !g.trim().is_empty()) {
-        let restricted = read_group_set(setting_value(&st.db, RESTRICTED_KEY).await?.as_deref());
+        let restricted = read_group_set(settings::text(&st.db, RESTRICTED_KEY).await?.as_deref());
         let (matched, _) = fliks_domain::livetv::access::plan_grants(&groups, &restricted);
         if !matched.is_empty() {
             return Err(AppError::not_found(format!("User #{id} not found")));

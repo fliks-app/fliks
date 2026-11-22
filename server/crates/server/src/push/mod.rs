@@ -471,7 +471,7 @@ impl Push {
     }
 
     async fn vapid_sub(&self, db: &PgPool) -> String {
-        if let Ok(Some(u)) = crate::auth::oidc::db::public_url(db).await {
+        if let Ok(Some(u)) = crate::settings::public_url(db).await {
             return u;
         }
         match db::admin_email(db).await {

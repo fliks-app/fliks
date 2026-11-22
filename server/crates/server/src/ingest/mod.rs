@@ -188,35 +188,23 @@ pub async fn load_media(db: &PgPool, id: i32) -> Result<Option<MediaRow>, sqlx::
 }
 
 pub async fn naming_formats(db: &PgPool) -> Result<NamingFormats, sqlx::Error> {
-    let keys: Vec<String> = MediaKind::ALL
+    let keys: Vec<&str> = MediaKind::ALL
         .into_iter()
         .flat_map(|k| Scope::ALL.map(|s| setting_key(k, s)))
         .flatten()
-        .map(String::from)
         .collect();
-    let rows = sqlx::query!(
-        r#"SELECT key, value FROM app_settings WHERE key = ANY($1)"#,
-        &keys
-    )
-    .fetch_all(db)
-    .await?;
+    let rows = crate::settings::texts(db, &keys).await?;
     Ok(formats_from_rows(
         &rows
             .into_iter()
-            .map(|r| (r.key, r.value))
+            .map(|(k, v)| (k, Some(v)))
             .collect::<Vec<_>>(),
     ))
 }
 
 /// `true` when unset or exactly `'true'` (`ingest.md` rule 37).
 pub async fn setting_on(db: &PgPool, key: &str) -> Result<bool, sqlx::Error> {
-    let v = sqlx::query_scalar!(
-        r#"SELECT value FROM app_settings WHERE key = $1 LIMIT 1"#,
-        key
-    )
-    .fetch_optional(db)
-    .await?
-    .flatten();
+    let v = crate::settings::text(db, key).await?;
     Ok(v.is_none_or(|v| v == "true"))
 }
 

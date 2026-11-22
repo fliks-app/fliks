@@ -219,7 +219,7 @@ impl Qoe {
 
     /// Reads `qoe_enabled` (unset means on); a failed read keeps the previous state.
     pub async fn reload_enabled(&self) {
-        match store::setting(&self.0.db, ENABLED_KEY).await {
+        match crate::settings::text(&self.0.db, ENABLED_KEY).await {
             Ok(v) => self
                 .0
                 .enabled
@@ -671,7 +671,7 @@ impl Qoe {
 
     /// Rows older than `qoe_retention_days` (30 when unset or not a positive number) go.
     pub async fn purge_old(&self) {
-        let days = store::setting(&self.0.db, RETENTION_KEY)
+        let days = crate::settings::text(&self.0.db, RETENTION_KEY)
             .await
             .ok()
             .flatten()

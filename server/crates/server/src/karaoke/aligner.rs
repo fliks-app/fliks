@@ -1,9 +1,9 @@
 //! The aligner of a language, the library's languages and the re-alignment (`docs/spec/karaoke.md` rules 38-41).
 use super::run;
-use super::{engine_err, flag, manage_settings};
+use super::{engine_err, manage_settings};
 use crate::{
     http::{AppError, auth::Authed},
-    settings::setting_value,
+    settings,
     state::AppState,
 };
 use axum::{
@@ -42,7 +42,7 @@ pub(crate) const QUALITY_MODEL: &str = "w2v-bert-music-ctc";
 
 /// `karaoke.aligner` is `quality`: the admin chose the quality model over the per-language choice.
 pub(crate) async fn quality(st: &AppState) -> bool {
-    setting_value(&st.db, "karaoke.aligner")
+    settings::text(&st.db, "karaoke.aligner")
         .await
         .ok()
         .flatten()
@@ -119,7 +119,7 @@ pub(crate) fn validate_overrides(value: &str) -> Result<(), &'static str> {
 
 /// The admin's per-language choices; an entry that is not a model id is skipped.
 pub(crate) async fn overrides(st: &AppState) -> HashMap<String, String> {
-    let Some(raw) = setting_value(&st.db, "karaoke.aligners")
+    let Some(raw) = settings::text(&st.db, "karaoke.aligners")
         .await
         .ok()
         .flatten()
@@ -195,7 +195,8 @@ pub async fn languages(State(st): State<AppState>, a: Authed) -> Result<Json<Val
 
 /// Rule 39: downloads what the library's languages are missing.
 pub(super) async fn auto_download(st: &AppState) {
-    if !flag(st, "karaoke.enabled", false).await || !flag(st, "karaoke.auto_download", false).await
+    if !settings::flag(&st.db, "karaoke.enabled", false).await
+        || !settings::flag(&st.db, "karaoke.auto_download", false).await
     {
         return;
     }
@@ -407,7 +408,7 @@ pub async fn realign(
     a: Authed,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     manage_settings(&a)?;
-    if !flag(&st, "karaoke.enabled", false).await {
+    if !settings::flag(&st.db, "karaoke.enabled", false).await {
         return Err(AppError::conflict("karaoke_disabled"));
     }
     if !super::caps(&st).await.align {

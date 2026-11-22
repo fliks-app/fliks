@@ -251,12 +251,7 @@ impl Metadata {
 
     /// Reads `metadata.provider_order.<kind>` of every kind; an entry that names no known provider is skipped.
     pub async fn load_orders(&self, known: &Namespaces) -> sqlx::Result<()> {
-        let rows: Vec<(String, Option<String>)> = sqlx::query_as(
-            r#"SELECT "key"::text, "value" FROM app_settings WHERE starts_with("key", $1)"#,
-        )
-        .bind(ORDER_PREFIX)
-        .fetch_all(&self.db)
-        .await?;
+        let rows = crate::settings::with_prefix(&self.db, ORDER_PREFIX).await?;
         let orders = rows
             .into_iter()
             .filter_map(|(k, v)| {

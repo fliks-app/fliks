@@ -63,19 +63,8 @@ pub struct Smtp {
 
 /// `None` until the host and the sender are set, which is also what hides "Send to…" from users.
 pub async fn load(db: &PgPool) -> sqlx::Result<Option<Smtp>> {
-    let rows = sqlx::query!(
-        r#"SELECT "key", "value" FROM app_settings WHERE "key" = ANY($1)"#,
-        &KEYS.map(String::from)[..]
-    )
-    .fetch_all(db)
-    .await?;
-    let get = |k: &str| {
-        rows.iter()
-            .find(|r| r.key == k)
-            .and_then(|r| r.value.as_deref())
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-    };
+    let rows = crate::settings::texts(db, &KEYS).await?;
+    let get = |k: &str| rows.get(k).map(|v| v.trim()).filter(|v| !v.is_empty());
     let (Some(host), Some(from)) = (get("smtp_host"), get("smtp_from")) else {
         return Ok(None);
     };
@@ -96,11 +85,7 @@ pub async fn load(db: &PgPool) -> sqlx::Result<Option<Smtp>> {
             .unwrap_or_else(|| security.default_port()),
         security,
         username: get("smtp_username").map(String::from),
-        password: rows
-            .iter()
-            .find(|r| r.key == "smtp_password")
-            .and_then(|r| r.value.clone())
-            .filter(|v| !v.is_empty()),
+        password: rows.get("smtp_password").cloned().filter(|v| !v.is_empty()),
         from,
         max_bytes: max_mb * 1024 * 1024,
     }))

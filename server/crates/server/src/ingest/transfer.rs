@@ -18,12 +18,7 @@ const DEFAULT_COMPANIONS: &str =
 
 /// Rule 16: a stored empty value means no companions at all.
 pub async fn companion_exts(db: &PgPool) -> Result<Vec<String>, sqlx::Error> {
-    let v = sqlx::query_scalar!(
-        r#"SELECT value FROM app_settings WHERE key = 'companion_file_extensions' LIMIT 1"#
-    )
-    .fetch_optional(db)
-    .await?
-    .flatten();
+    let v = crate::settings::text(db, "companion_file_extensions").await?;
     Ok(parse_exts(v.as_deref().unwrap_or(DEFAULT_COMPANIONS)))
 }
 

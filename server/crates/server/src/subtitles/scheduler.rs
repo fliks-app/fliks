@@ -8,7 +8,7 @@ use super::{
     sync::{self, episode_of, progress_subject},
 };
 use crate::sync::MutexExt;
-use crate::{http::AppError, state::AppState};
+use crate::{http::AppError, settings, state::AppState};
 use fliks_domain::subtitle_flags::{
     Flags, LanguageItem, Servable, has_covering_sub, is_ocr_supported_codec,
     matches_requested_flags, prefers_hearing_impaired,
@@ -25,23 +25,13 @@ struct Opts {
     burn_in_covers: bool,
 }
 
-/// `Number(x)` finite, else the default.
-fn number(v: Option<String>, default: f64) -> f64 {
-    v.and_then(|s| fliks_domain::media::query::js_number(&s))
-        .filter(|n| n.is_finite())
-        .unwrap_or(default)
-}
-
 async fn setting(st: &AppState, key: &str) -> Option<String> {
-    crate::settings::setting_value(&st.db, key)
-        .await
-        .ok()
-        .flatten()
+    settings::text(&st.db, key).await.ok().flatten()
 }
 
 async fn resolve_opts(st: &AppState) -> Opts {
     Opts {
-        min_score: number(setting(st, "subtitle_min_score").await, 70.0),
+        min_score: settings::number(&st.db, "subtitle_min_score", 70.0).await,
         auto_sync: setting(st, "subtitle_auto_sync").await.as_deref() == Some("true"),
         burn_in_covers: setting(st, "subtitle_burn_in_covers_language")
             .await
@@ -376,7 +366,7 @@ pub async fn upgrade(st: &AppState) -> Result<(), String> {
     if setting(st, "subtitle_auto_search").await.as_deref() == Some("false") {
         return Ok(());
     }
-    let threshold = number(setting(st, "subtitle_upgrade_threshold").await, 90.0);
+    let threshold = settings::number(&st.db, "subtitle_upgrade_threshold", 90.0).await;
     let opts = resolve_opts(st).await;
     let mut last = 0;
     loop {
@@ -534,8 +524,10 @@ pub fn spawn_tick(st: &AppState) {
 
 pub(crate) async fn tick(st: &AppState, last: &Mutex<(i64, i64)>) {
     let now = chrono::Utc::now().timestamp_millis();
-    let search_interval = number(setting(st, "subtitle_search_interval").await, 360.0) * 60_000.0;
-    let upgrade_interval = number(setting(st, "subtitle_upgrade_interval").await, 720.0) * 60_000.0;
+    let search_interval =
+        settings::number(&st.db, "subtitle_search_interval", 360.0).await * 60_000.0;
+    let upgrade_interval =
+        settings::number(&st.db, "subtitle_upgrade_interval", 720.0).await * 60_000.0;
     let (ls, lu) = *last.lock_clean();
     if (now - ls) as f64 >= search_interval {
         if let Some(_claim) = st.jobs.claim("SubtitleSearch") {

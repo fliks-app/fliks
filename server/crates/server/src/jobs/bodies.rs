@@ -169,9 +169,8 @@ async fn refresh_missing(st: &AppState) -> Outcome {
     if !provider_available(st, JOB) {
         return Ok(());
     }
-    let months =
-        refresh::stale_months(std::env::var("METADATA_STALE_AFTER_MONTHS").ok().as_deref());
-    let before = refresh::stale_before(Utc::now(), months, &super::cron::server_tz());
+    let before =
+        refresh::stale_before(Utc::now(), refresh::STALE_MONTHS, &super::cron::server_tz());
     let (identified, total) = identified_media(&st.db).await.map_err(|e| e.to_string())?;
     let unidentified = total - identified.len();
     let candidates: Vec<_> = identified

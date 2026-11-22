@@ -3,11 +3,11 @@ use super::{
     events,
     files::{self, MediaCtx},
     model::{self, New, Row},
-    service::{clean_options, flag_on},
+    service::clean_options,
     translation as engines, translation_providers as providers,
 };
 use crate::sync::MutexExt;
-use crate::{events::SseEvent, http::AppError, state::AppState};
+use crate::{events::SseEvent, http::AppError, settings, state::AppState};
 use fliks_domain::{
     language::normalize_language_code,
     srt::{Cue, decode_text, parse_srt, serialize_srt},
@@ -80,7 +80,7 @@ pub async fn start(
     provider_id: Option<i32>,
     remove_hi_tags: bool,
 ) -> Result<Value, AppError> {
-    if !flag_on(st, "subtitle_translation_enabled").await? {
+    if !settings::flag(&st.db, "subtitle_translation_enabled", false).await {
         return Err(AppError::bad_request("errors.translation_disabled"));
     }
     let provider = match provider_id {
@@ -116,7 +116,8 @@ pub async fn start(
     if target == source.language {
         return Err(AppError::bad_request("errors.source_target_language_same"));
     }
-    let remove_hi = remove_hi_tags || flag_on(st, "subtitle_remove_hi_tags").await?;
+    let remove_hi =
+        remove_hi_tags || settings::flag(&st.db, "subtitle_remove_hi_tags", false).await;
     let hi = source.hearing_impaired && !remove_hi;
     let key = format!(
         "{}:{}:{target}:{}:{hi}",
@@ -171,7 +172,7 @@ pub async fn start(
         provider.name,
         provider.engine
     );
-    let max = crate::settings::setting_value(&st.db, "subtitle_translation_max_concurrency")
+    let max = settings::text(&st.db, "subtitle_translation_max_concurrency")
         .await?
         .and_then(|v| v.trim().parse::<f64>().ok())
         .filter(|n| n.is_finite() && *n >= 1.0)

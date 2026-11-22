@@ -1,6 +1,6 @@
 //! The engine feed, the sweep and the background pass (`docs/spec/karaoke.md` rules 6, 15-17).
-use super::{Shared, aligner, flag, gpu_provider, run, store, verified_providers};
-use crate::{engine::Feed, state::AppState};
+use super::{Shared, aligner, gpu_provider, run, store, verified_providers};
+use crate::{engine::Feed, settings, state::AppState};
 use fliks_engine_core::api::{EngineEvent, JobPriority, ModelKind, ModelState};
 use std::{sync::atomic::Ordering, time::Duration};
 
@@ -16,8 +16,8 @@ pub enum Route {
 
 /// Rule 16, minus the budget: where the pass runs now, `None` when it must not.
 pub async fn route(st: &AppState) -> Option<Route> {
-    if !flag(st, "karaoke.enabled", false).await
-        || !flag(st, "karaoke.background", true).await
+    if !settings::flag(&st.db, "karaoke.enabled", false).await
+        || !settings::flag(&st.db, "karaoke.background", true).await
         || !super::caps(st).await.separate
     {
         return None;
@@ -26,7 +26,7 @@ pub async fn route(st: &AppState) -> Option<Route> {
         return Some(Route::Workers);
     }
     let features = st.engine.engine_features();
-    let local = flag(st, "karaoke.background_cpu", false).await
+    let local = settings::flag(&st.db, "karaoke.background_cpu", false).await
         || gpu_provider(&features, &verified_providers(st).await).is_some();
     (local && !st.karaoke.stopped.load(Ordering::Relaxed)).then_some(Route::Local)
 }
@@ -198,7 +198,7 @@ async fn pass_local(st: &AppState) -> Result<(), sqlx::Error> {
         match handle.await {
             Ok(Ok(out))
                 if out.provider.as_deref() == Some("cpu")
-                    && !flag(st, "karaoke.background_cpu", false).await =>
+                    && !settings::flag(&st.db, "karaoke.background_cpu", false).await =>
             {
                 st.karaoke.stopped.store(true, Ordering::Relaxed);
                 tracing::info!("karaoke background pass stopped: the engine ran on the CPU");

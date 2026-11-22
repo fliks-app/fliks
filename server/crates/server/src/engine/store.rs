@@ -2,30 +2,14 @@
 use fliks_engine_core::api::PathMapping;
 use serde_json::Value;
 use sqlx::PgPool;
-use std::collections::HashMap;
 
 pub const URL_KEY: &str = "engine_url";
 pub const TOKEN_KEY: &str = "engine_token";
 pub const MAPPINGS_KEY: &str = "engine_path_mappings";
 
-/// Rows holding a value; a missing row and a NULL are the same here.
-pub async fn values(db: &PgPool, keys: &[&str]) -> sqlx::Result<HashMap<String, String>> {
-    let keys: Vec<String> = keys.iter().map(|k| (*k).to_owned()).collect();
-    let rows = sqlx::query!(
-        r#"SELECT "key", "value" FROM app_settings WHERE "key" = ANY($1)"#,
-        &keys
-    )
-    .fetch_all(db)
-    .await?;
-    Ok(rows
-        .into_iter()
-        .filter_map(|r| Some((r.key, r.value?)))
-        .collect())
-}
-
 /// Saved engine URL and token (empty when unset) and the parsed path mappings.
 pub async fn engine_settings(db: &PgPool) -> sqlx::Result<(String, String, Vec<PathMapping>)> {
-    let mut v = values(db, &[URL_KEY, TOKEN_KEY, MAPPINGS_KEY]).await?;
+    let mut v = crate::settings::texts(db, &[URL_KEY, TOKEN_KEY, MAPPINGS_KEY]).await?;
     let mappings = parse_path_mappings(v.get(MAPPINGS_KEY).map(String::as_str));
     Ok((
         v.remove(URL_KEY).unwrap_or_default(),

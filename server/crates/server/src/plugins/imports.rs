@@ -56,12 +56,7 @@ pub async fn config_for(
 ) -> sqlx::Result<Vec<(String, String)>> {
     let ids = installed_ids(core).await?;
     let prefix = format!("plugin.{id}.");
-    let rows: Vec<(String, Option<String>)> = sqlx::query_as(
-        r#"SELECT "key"::text, "value" FROM app_settings WHERE starts_with("key", $1) ORDER BY "key""#,
-    )
-    .bind(&prefix)
-    .fetch_all(core)
-    .await?;
+    let rows = crate::settings::with_prefix(core, &prefix).await?;
     let mut stored: Vec<(String, String)> = rows
         .into_iter()
         .filter(|(k, _)| {

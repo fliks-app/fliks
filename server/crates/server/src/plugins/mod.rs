@@ -403,7 +403,7 @@ impl Plugins {
     }
 
     async fn skip_compat(&self) -> bool {
-        crate::settings::setting_value(&self.db, "plugins.skip_compatibility_check")
+        crate::settings::text(&self.db, "plugins.skip_compatibility_check")
             .await
             .ok()
             .flatten()

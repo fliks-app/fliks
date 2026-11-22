@@ -9,7 +9,7 @@ async fn target(st: &AppState, id: &str, declared: &str) -> Option<String> {
     let Some(key) = declared.strip_prefix("setting:") else {
         return Some(declared.to_owned());
     };
-    crate::settings::setting_value(&st.db, &format!("plugin.{id}.{key}"))
+    crate::settings::text(&st.db, &format!("plugin.{id}.{key}"))
         .await
         .ok()
         .flatten()

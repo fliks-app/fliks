@@ -1,6 +1,6 @@
 //! Sidecar and embedded lyrics of a file (`docs/spec/music.md` rule 64).
 use super::store::{self, New};
-use crate::{settings::setting_value, state::AppState};
+use crate::{settings, state::AppState};
 use fliks_domain::lyrics::{Format, Parsed, lang_infix, parse, ultrastar_stems};
 use std::{
     collections::HashMap,
@@ -18,7 +18,7 @@ pub struct Embedded {
 }
 
 pub async fn sidecar_order(st: &AppState) -> Vec<String> {
-    let set: Option<Vec<String>> = setting_value(&st.db, "lyrics.sidecars")
+    let set: Option<Vec<String>> = settings::text(&st.db, "lyrics.sidecars")
         .await
         .ok()
         .flatten()

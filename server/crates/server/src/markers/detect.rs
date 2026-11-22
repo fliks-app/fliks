@@ -36,7 +36,7 @@ pub fn positive_or(value: Option<&str>, default: f64) -> f64 {
 }
 
 async fn setting(st: &AppState, key: &str) -> Result<Option<String>, String> {
-    crate::settings::setting_value(&st.db, key)
+    crate::settings::text(&st.db, key)
         .await
         .map_err(|e| e.to_string())
 }
@@ -501,7 +501,7 @@ pub async fn list_seasons_for_scan(
 
 /// Rules 7 and 15 (post-import): only the string `true` enables it, absent is on.
 pub async fn auto_detect_missing(st: &AppState, media_id: i32) -> sqlx::Result<()> {
-    let on = crate::settings::setting_value(&st.db, "markers_auto_detect_on_import")
+    let on = crate::settings::text(&st.db, "markers_auto_detect_on_import")
         .await?
         .is_none_or(|v| v == "true");
     if !on {

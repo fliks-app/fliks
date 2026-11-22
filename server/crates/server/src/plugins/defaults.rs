@@ -53,11 +53,7 @@ async fn import_with(
             .map(|v| v.trim().to_owned())
             .filter(|v| !v.is_empty())
     };
-    if crate::settings::setting_value(pool, IMPORTED)
-        .await?
-        .as_deref()
-        == Some("true")
-    {
+    if crate::settings::text(pool, IMPORTED).await?.as_deref() == Some("true") {
         for (var, ..) in ENV_KEYS.iter().filter(|(v, ..)| set(v).is_some()) {
             tracing::warn!("{var} is ignored: set the key in the plugin settings");
         }
@@ -66,7 +62,7 @@ async fn import_with(
     let mut tx = pool.begin().await?;
     for (var, p, key) in ENV_KEYS {
         let compiled = defaults.iter().find(|(d, n, _)| *d == p && *n == "apiKey");
-        let kept = crate::settings::setting_value(pool, key)
+        let kept = crate::settings::text(pool, key)
             .await?
             .is_some_and(|v| !v.is_empty());
         if let Some(v) = set(var)
@@ -215,7 +211,7 @@ mod tests {
     }
 
     async fn stored(pool: &sqlx::PgPool, key: &str) -> Option<String> {
-        crate::settings::setting_value(pool, key).await.unwrap()
+        crate::settings::text(pool, key).await.unwrap()
     }
 
     #[sqlx::test(migrations = false)]

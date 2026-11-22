@@ -21,7 +21,7 @@ use crate::{
         people::{self, Credited},
         works::{self, WorkSpec},
     },
-    settings::setting_value,
+    settings,
     state::AppState,
 };
 use fliks_domain::{
@@ -55,7 +55,7 @@ pub fn is_music_file(name: &str) -> bool {
 
 /// The separators of the settings `music.artist_separators` and `music.genre_separators` (JSON arrays).
 pub async fn separators_of(st: &AppState) -> Separators {
-    let get = |k| async move { setting_value(&st.db, k).await.ok().flatten() };
+    let get = |k| async move { settings::text(&st.db, k).await.ok().flatten() };
     Separators {
         artists: separators(
             get("music.artist_separators").await.as_deref(),
@@ -337,7 +337,7 @@ pub async fn refresh(
 
 /// The setting `music.unrequested_tracks`: `skip` keeps the tracks nobody asked for out of the library.
 pub async fn skips_unrequested(st: &AppState) -> bool {
-    setting_value(&st.db, "music.unrequested_tracks")
+    settings::text(&st.db, "music.unrequested_tracks")
         .await
         .ok()
         .flatten()

@@ -10,6 +10,7 @@ f ~ /\.rs$/ {
   if ($0 ~ /let _ = sqlx::/) bad("discarded sqlx result")
   if ($0 ~ /unwrap_or\(Value::Null\)/) bad("unwrap_or(Value::Null)")
 }
+f ~ /^server\/crates\/server\/src\// && f !~ /^server\/crates\/server\/src\/settings\// && f !~ /(\/tests?\/|_tests?\.rs$|\/tests?\.rs$)/ && $0 ~ /FROM app_settings/ {bad("raw app_settings read outside settings/, use settings::text/texts/with_prefix")}
 f ~ /^client\/src\/.*\.ts$/ && $0 ~ /catch *(\{ *\}|\{ *\/\* *interceptor *\*\/ *\})/ {bad("silent catch")}
 f ~ /^client\/src\// {
   if ($0 ~ /(^|[^A-Za-z0-9_-])text-xs([^A-Za-z0-9_-]|$)/ || $0 ~ /text-\[(0\.[0-7][0-9]*rem|1[0-3]px|[0-9]px)\]/) bad("font size below text-sm")

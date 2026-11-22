@@ -191,7 +191,7 @@ impl Plugins {
     }
 
     pub async fn allow_unsigned(&self) -> bool {
-        crate::settings::setting_value(&self.db, "plugins.allow_unsigned")
+        crate::settings::text(&self.db, "plugins.allow_unsigned")
             .await
             .ok()
             .flatten()
@@ -544,14 +544,10 @@ impl Plugins {
             return Ok(());
         };
         let ids = super::imports::installed_ids(&self.db).await?;
-        let keys: Vec<String> = sqlx::query_scalar(
-            r#"SELECT "key"::text FROM app_settings WHERE starts_with("key", $1)"#,
-        )
-        .bind(format!("plugin.{id}."))
-        .fetch_all(&self.db)
-        .await?;
+        let keys = crate::settings::with_prefix(&self.db, &format!("plugin.{id}.")).await?;
         let owned: Vec<String> = keys
             .into_iter()
+            .map(|(k, _)| k)
             .filter(|k| {
                 fliks_domain::plugins::setting_owner(k, ids.iter().map(String::as_str)) == Some(id)
             })

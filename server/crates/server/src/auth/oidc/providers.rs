@@ -241,7 +241,7 @@ impl ProviderIn {
 
 /// An enabled provider needs `public_url` for its URIs and an IdP that enforces PKCE.
 async fn check_enable(st: &AppState, p: &ProviderIn, ca: Option<&str>) -> Result<(), AppError> {
-    if db::public_url(&st.db).await?.is_none() {
+    if crate::settings::public_url(&st.db).await?.is_none() {
         return Err(AppError::bad_request(
             "public_url must be set before a provider can be enabled",
         ));
@@ -261,13 +261,7 @@ async fn check_enable(st: &AppState, p: &ProviderIn, ca: Option<&str>) -> Result
 
 /// With password login restricted to admins, the last enabled provider is the way in for everyone else.
 async fn keep_one_provider(c: &mut PgConnection, leaving: i32) -> Result<(), AppError> {
-    let admins =
-        sqlx::query_scalar!(r#"SELECT value FROM app_settings WHERE key = 'password_login'"#)
-            .fetch_optional(&mut *c)
-            .await?
-            .flatten()
-            .as_deref()
-            == Some("admins");
+    let admins = db::password_login_admins_only(&mut *c).await?;
     let others = sqlx::query_scalar!(
         r#"SELECT count(*) AS "n!" FROM oidc_providers WHERE enabled AND id <> $1"#,
         leaving

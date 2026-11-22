@@ -14,7 +14,7 @@ use crate::{
         auth::{Authed, FileBoundAuthed},
         validate::{PathParams, ValidJson},
     },
-    settings::setting_value,
+    settings,
     state::AppState,
 };
 use axum::{
@@ -156,16 +156,8 @@ pub fn router() -> Router<AppState> {
         .route("/api/media-files/{mediaFileId}/cdg", get(cdg_file))
 }
 
-pub(crate) async fn flag(st: &AppState, key: &str, default: bool) -> bool {
-    match setting_value(&st.db, key).await.ok().flatten().as_deref() {
-        Some("true") => true,
-        Some("false") => false,
-        _ => default,
-    }
-}
-
 pub(crate) async fn budget_bytes(st: &AppState) -> i64 {
-    let mb = setting_value(&st.db, "karaoke.disk_budget_mb")
+    let mb = settings::text(&st.db, "karaoke.disk_budget_mb")
         .await
         .ok()
         .flatten()
@@ -175,7 +167,7 @@ pub(crate) async fn budget_bytes(st: &AppState) -> i64 {
 }
 
 pub(crate) async fn verified_providers(st: &AppState) -> Vec<String> {
-    setting_value(&st.db, "karaoke.verified_providers")
+    settings::text(&st.db, "karaoke.verified_providers")
         .await
         .ok()
         .flatten()
@@ -241,7 +233,7 @@ fn manage_settings(a: &Authed) -> Result<(), AppError> {
 
 #[utoipa::path(get, path = "/api/karaoke/status", responses((status = 200)))]
 pub async fn status(State(st): State<AppState>, _a: Authed) -> Json<Value> {
-    let enabled = flag(&st, "karaoke.enabled", false).await;
+    let enabled = settings::flag(&st.db, "karaoke.enabled", false).await;
     let c = caps(&st).await;
     let features = st.engine.engine_features();
     let gpu = gpu_provider(&features, &verified_providers(&st).await).is_some();
@@ -486,7 +478,7 @@ pub async fn prepare(
     if dto.force {
         a.require(Action::Update, Subject::Media)?;
     }
-    if !flag(&st, "karaoke.enabled", false).await {
+    if !settings::flag(&st.db, "karaoke.enabled", false).await {
         return Err(AppError::conflict("karaoke_disabled"));
     }
     if !caps(&st).await.separate {

@@ -182,6 +182,31 @@
       </div>
     </div>
 
+    <!-- Watch party voice -->
+    <div class="card bg-base-100 border border-base-200">
+      <div class="card-body gap-5">
+        <h2 class="card-title text-base">{{ 'settings.general.section_party' | translate }}</h2>
+        <label class="form-control w-full">
+          <span class="label-text mb-1">{{ 'settings.general.party_ice_servers' | translate }}</span>
+          <textarea
+            class="textarea textarea-bordered w-full font-mono text-sm"
+            rows="5"
+            spellcheck="false"
+            placeholder='[{"urls": "turn:turn.example.com:3478", "username": "user", "credential": "secret"}]'
+            [ngModel]="partyIceServers()"
+            (ngModelChange)="partyIceServers.set($event)"
+          ></textarea>
+          <span class="label-text-alt text-base-content/60 mt-1">{{ 'settings.general.party_ice_servers_hint' | translate }}</span>
+        </label>
+        <div class="card-actions justify-end">
+          <button type="button" class="btn btn-primary" (click)="saveParty()" [disabled]="savingParty()">
+            @if (savingParty()) { <span class="loading loading-spinner loading-sm"></span> }
+            {{ 'common.save' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Kobo -->
     <div class="card bg-base-100 border border-base-200">
       <div class="card-body gap-5">

@@ -9,7 +9,10 @@ mod media;
 mod playlists;
 mod render;
 
-use crate::{auth::client_ip, http::auth::Authed, state::AppState};
+use crate::{
+    http::{auth::Authed, client_ip},
+    state::AppState,
+};
 use axum::{
     Router,
     body::Bytes,
@@ -95,27 +98,6 @@ impl Caller {
     }
 }
 
-async fn base_url(st: &AppState, headers: &HeaderMap) -> String {
-    let public: Option<String> =
-        sqlx::query_scalar(r#"SELECT value FROM app_settings WHERE key = 'public_url'"#)
-            .fetch_optional(&st.db)
-            .await
-            .ok()
-            .flatten()
-            .filter(|u: &String| !u.is_empty());
-    let header = |n: &str| {
-        headers
-            .get(n)
-            .and_then(|v| v.to_str().ok())
-            .filter(|v| !v.is_empty())
-    };
-    match (public, header("host")) {
-        (Some(u), _) => u.trim_end_matches('/').to_owned(),
-        (None, Some(host)) => format!("{}://{host}", header("x-forwarded-proto").unwrap_or("http")),
-        (None, None) => format!("http://localhost:{}", st.cfg.port),
-    }
-}
-
 async fn rest(
     State(st): State<AppState>,
     Path(endpoint): Path<String>,
@@ -155,7 +137,7 @@ async fn rest(
                         a,
                         libraries,
                         token,
-                        base: base_url(&st, &headers).await,
+                        base: crate::http::public_base(&st, &headers).await,
                     };
                     match endpoint {
                         "getCoverArt" => return media::cover_art(&st, &caller, &p, &format).await,

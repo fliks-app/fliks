@@ -444,3 +444,53 @@ pub enum IceUrls {
     One(String),
     Many(Vec<String>),
 }
+
+/// The `party_voice_ice_servers` setting: a JSON array of servers with `stun:` or `turn:` URLs.
+pub fn parse_ice_servers(raw: &str) -> Result<Vec<IceServer>, String> {
+    let servers: Vec<IceServer> = serde_json::from_str(raw)
+        .map_err(|_| "party_voice_ice_servers must be a JSON array of ICE servers".to_owned())?;
+    let valid = |u: &str| {
+        ["stun:", "stuns:", "turn:", "turns:"]
+            .iter()
+            .any(|p| u.starts_with(p))
+    };
+    let urls = |s: &IceServer| match &s.urls {
+        IceUrls::One(u) => vec![u.clone()],
+        IceUrls::Many(v) => v.clone(),
+    };
+    if servers
+        .iter()
+        .any(|s| urls(s).is_empty() || !urls(s).iter().all(|u| valid(u)))
+    {
+        return Err(
+            "party_voice_ice_servers urls must start with stun:, stuns:, turn: or turns:"
+                .to_owned(),
+        );
+    }
+    Ok(servers)
+}
+
+#[cfg(test)]
+mod ice_tests {
+    use super::parse_ice_servers;
+
+    #[test]
+    fn ice_servers_need_stun_or_turn_urls() {
+        assert!(
+            parse_ice_servers(
+                r#"[{"urls":"turn:t.example:3478","username":"u","credential":"p"}]"#
+            )
+            .is_ok()
+        );
+        assert!(parse_ice_servers(r#"[{"urls":["stun:a.example","turns:b.example"]}]"#).is_ok());
+        assert!(parse_ice_servers("[]").is_ok());
+        for bad in [
+            "not json",
+            r#"[{"urls":"http://x"}]"#,
+            r#"[{"urls":[]}]"#,
+            r#"{"urls":"stun:x"}"#,
+        ] {
+            assert!(parse_ice_servers(bad).is_err(), "{bad}");
+        }
+    }
+}

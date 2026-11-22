@@ -35,24 +35,8 @@ pub fn is_due<Z: TimeZone>(m: &Row, now: DateTime<Utc>, tz: &Z) -> bool {
             .is_none_or(|t| (now - t).num_seconds() >= 7 * DAY)
 }
 
-/// `METADATA_STALE_AFTER_MONTHS`: `max(1, parseInt(raw, 10) || 3)`.
-pub fn stale_months(raw: Option<&str>) -> u32 {
-    let t = raw.unwrap_or("3").trim_start();
-    let (sign, digits) = match t.strip_prefix('-') {
-        Some(rest) => (-1, rest),
-        None => (1, t.strip_prefix('+').unwrap_or(t)),
-    };
-    let n: i64 = digits
-        .chars()
-        .take_while(char::is_ascii_digit)
-        .collect::<String>()
-        .parse()
-        .unwrap_or(0);
-    match sign * n {
-        0 => 3,
-        n => n.clamp(1, 1200) as u32,
-    }
-}
+/// A title is refreshed once its last refresh is this many calendar months old.
+pub const STALE_MONTHS: u32 = 3;
 
 /// `now` minus `months` like JS `setMonth` in the local zone: an overflowing day rolls into the next month.
 pub fn stale_before<Z: TimeZone>(now: DateTime<Utc>, months: u32, tz: &Z) -> DateTime<Utc> {
@@ -143,21 +127,6 @@ mod tests {
             at("2030-01-02T00:00:00Z"),
             &Utc
         ));
-    }
-
-    #[test]
-    fn stale_months_parses_like_parse_int() {
-        for (raw, want) in [
-            (None, 3),
-            (Some("6"), 6),
-            (Some(" 12abc"), 12),
-            (Some("0"), 3),
-            (Some("-5"), 1),
-            (Some("abc"), 3),
-            (Some(""), 3),
-        ] {
-            assert_eq!(stale_months(raw), want, "{raw:?}");
-        }
     }
 
     #[test]

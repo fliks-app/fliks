@@ -160,7 +160,7 @@ pub async fn find_source(db: &PgPool, id: i32) -> sqlx::Result<Option<Source>> {
 }
 
 pub async fn setting_int(db: &PgPool, key: &str, default: i64) -> sqlx::Result<i64> {
-    let raw = crate::settings::setting_value(db, key).await?;
+    let raw = crate::settings::text(db, key).await?;
     Ok(raw
         .as_deref()
         .and_then(fliks_domain::js::parse_int)
