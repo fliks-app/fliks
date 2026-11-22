@@ -44,7 +44,7 @@ pub async fn refresh_sources(st: &AppState) -> Result<(), String> {
         if !s.enabled || !is_due(s.last_sync_at, s.refresh_interval_hours, Utc::now()) {
             continue;
         }
-        match sync::sync(st, s.id).await {
+        match sync::sync(st, s.id, false).await {
             Ok(_) => {}
             Err(SyncError::Running) => {
                 tracing::warn!("Source #{} sync skipped: already running", s.id)

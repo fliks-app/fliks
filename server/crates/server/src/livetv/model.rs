@@ -164,6 +164,8 @@ pub struct ChannelItem {
     pub group_name: Option<String>,
     #[sqlx(rename = "guideChannelId")]
     pub guide_channel_id: Option<String>,
+    #[sqlx(rename = "guideShiftMinutes")]
+    pub guide_shift_minutes: i32,
     pub favorite: bool,
 }
 

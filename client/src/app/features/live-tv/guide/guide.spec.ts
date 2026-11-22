@@ -37,7 +37,7 @@ describe('LiveTvGuideComponent — loadWindow sequencing', () => {
     const http = TestBed.inject(HttpTestingController);
     const component = TestBed.createComponent(LiveTvGuideComponent).componentInstance;
     await tick();
-    http.expectOne({ url: '/api/livetv/channels', method: 'GET' }).flush([]);
+    http.expectOne({ url: '/api/livetv/channels/groups', method: 'GET' }).flush([]);
     http
       .expectOne((r) => r.url === '/api/livetv/guide' && r.params.get('page') === '1')
       .flush(guidePage(total));
@@ -125,7 +125,7 @@ describe('LiveTvGuideComponent: row window', () => {
     const http = TestBed.inject(HttpTestingController);
     const component = TestBed.createComponent(LiveTvGuideComponent).componentInstance;
     await tick();
-    http.expectOne({ url: '/api/livetv/channels', method: 'GET' }).flush([]);
+    http.expectOne({ url: '/api/livetv/channels/groups', method: 'GET' }).flush([]);
     http.expectOne((r) => r.url === '/api/livetv/guide').flush(guidePage(0));
     await tick();
 
@@ -205,12 +205,12 @@ describe('LiveTvGuideComponent — now/next follows the clock', () => {
     const http = TestBed.inject(HttpTestingController);
     const component = TestBed.createComponent(LiveTvGuideComponent).componentInstance;
     await flush();
-    http.expectOne({ url: '/api/livetv/channels', method: 'GET' }).flush([]);
+    http.expectOne({ url: '/api/livetv/channels/groups', method: 'GET' }).flush([]);
     http
       .expectOne((r) => r.url === '/api/livetv/guide' && r.params.get('page') === '1')
       .flush({
         channels: [channel],
-        programs: { ch1: [current, upcoming] },
+        programs: { 1: [current, upcoming] },
         page: 1,
         pageSize: 50,
         total: 1,

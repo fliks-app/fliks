@@ -1847,6 +1847,17 @@
         }
       }
     },
+    "/api/livetv/channels/groups": {
+      "get": {
+        "tags": [
+          "livetv::channels"
+        ],
+        "operationId": "groups",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/livetv/channels/on-now": {
       "get": {
         "tags": [
@@ -1898,29 +1909,6 @@
           "livetv::guide"
         ],
         "operationId": "window",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
-    "/api/livetv/programs/{id}": {
-      "get": {
-        "tags": [
-          "livetv::guide"
-        ],
-        "operationId": "program",
-        "responses": {
-          "200": {},
-          "404": {}
-        }
-      }
-    },
-    "/api/livetv/search": {
-      "get": {
-        "tags": [
-          "livetv::guide"
-        ],
-        "operationId": "search",
         "responses": {
           "200": {}
         }

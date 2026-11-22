@@ -59,6 +59,7 @@ export class LiveTvComponent implements OnInit, OnDestroy {
   private readonly sentinel = viewChild<ElementRef<HTMLElement>>('sentinel');
   private observer?: IntersectionObserver;
   private loadSeq = 0;
+  private refreshing = false;
   private queryDebounce: ReturnType<typeof setTimeout> | null = null;
   /** Ticks every minute so a finished "now" programme and its progress bar
    *  don't sit stale until the next unrelated reload. */
@@ -122,12 +123,39 @@ export class LiveTvComponent implements OnInit, OnDestroy {
   }
 
   /** A programme that ended since the last fetch would otherwise sit "now"
-   *  forever: reload once any visible entry's programme has lapsed. */
+   *  forever: refetch the loaded pages once any visible entry's programme has lapsed. */
   private onClockTick(): void {
     const now = Date.now();
     this.clock.set(now);
     const stale = this.entries().some((e) => e.now && new Date(e.now.endsAt).getTime() <= now);
-    if (stale && !this.loading() && !this.loadingMore()) void this.load(true);
+    if (stale && !this.loading() && !this.loadingMore() && !this.refreshing) void this.refresh();
+  }
+
+  /** Refetches pages 1..page in place: the list keeps its length and the user keeps their place. */
+  private async refresh(): Promise<void> {
+    this.refreshing = true;
+    const seq = ++this.loadSeq;
+    try {
+      const entries: OnNowEntry[] = [];
+      let total = 0;
+      for (let p = 1; p <= this.page(); p++) {
+        const res = await this.api.getOnNow({
+          page: p,
+          pageSize: PAGE_SIZE,
+          query: this.query().trim() || undefined,
+          group: this.groupFilter() || undefined,
+        });
+        if (seq !== this.loadSeq) return;
+        entries.push(...res.entries);
+        total = res.total;
+      }
+      this.total.set(total);
+      this.entries.set(entries);
+    } catch {
+      // the list stays as it was; the next tick tries again
+    } finally {
+      this.refreshing = false;
+    }
   }
 
   private readonly bindSentinel = effect(() => {
@@ -145,10 +173,7 @@ export class LiveTvComponent implements OnInit, OnDestroy {
 
   private async loadGroups(): Promise<void> {
     try {
-      const channels = await this.api.getChannels();
-      const set = new Set<string>();
-      for (const c of channels) if (c.groupName) set.add(c.groupName);
-      this.groups.set([...set].sort());
+      this.groups.set(await this.api.getChannelGroups());
     } catch {
       // filter dropdown stays empty; not fatal
     }
@@ -171,7 +196,7 @@ export class LiveTvComponent implements OnInit, OnDestroy {
       this.loadingMore.set(false); // a reset supersedes any pagination fetch in flight
       // The previous list stays on screen (see `applyPage`) until the new page
       // lands, so a reload never drops back to the loading skeleton.
-    } else if (!this.hasMore() || this.loadingMore() || this.loading()) {
+    } else if (!this.hasMore() || this.loadingMore() || this.loading() || this.refreshing) {
       return;
     }
     const seq = ++this.loadSeq;

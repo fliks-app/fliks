@@ -54,7 +54,6 @@ pub struct Visible<'a> {
     pub group: Option<&'a str>,
     pub favorites_only: bool,
     pub query: Option<&'a str>,
-    pub guide_channel_id: Option<&'a str>,
 }
 
 impl<'a> Visible<'a> {
@@ -65,7 +64,6 @@ impl<'a> Visible<'a> {
             group: None,
             favorites_only: false,
             query: None,
-            guide_channel_id: None,
         }
     }
 
@@ -74,8 +72,7 @@ impl<'a> Visible<'a> {
             r#"WHERE channel.enabled = true AND (pref.hidden IS NULL OR pref.hidden = false)
                AND {} AND ($3::text IS NULL OR channel."groupName" = $3)
                AND (NOT $4::bool OR pref.favorite = true)
-               AND ($5::text IS NULL OR channel.name ILIKE $5 ESCAPE '\')
-               AND ($6::text IS NULL OR channel."guideChannelId" = $6)"#,
+               AND ($5::text IS NULL OR channel.name ILIKE $5 ESCAPE '\')"#,
             not_denied("channel")
         )
     }
@@ -95,10 +92,11 @@ impl<'a> Visible<'a> {
         let items = sqlx::query_as::<_, ChannelItem>(sqlx::AssertSqlSafe(format!(
             r#"SELECT channel.id, channel.name, channel.number,
                       CASE WHEN channel."logoPath" LIKE '/api/livetv/channels/%' THEN channel."logoPath" END AS "logoPath",
-                      channel."groupName", channel."guideChannelId", COALESCE(pref.favorite, false) AS favorite
+                      channel."groupName", channel."guideChannelId", channel."guideShiftMinutes",
+                      COALESCE(pref.favorite, false) AS favorite
                {VISIBLE_JOIN} {}
                ORDER BY COALESCE(pref.favorite, false) DESC, channel.number ASC NULLS LAST, channel."sortIndex" ASC,
-                        channel.name ASC, channel.id ASC OFFSET $7 LIMIT $8"#,
+                        channel.name ASC, channel.id ASC OFFSET $6 LIMIT $7"#,
             self.where_clause()
         )))
         .bind(self.user_id)
@@ -106,7 +104,6 @@ impl<'a> Visible<'a> {
         .bind(group)
         .bind(self.favorites_only)
         .bind(query.as_deref())
-        .bind(self.guide_channel_id)
         .bind(offset)
         .bind(limit)
         .fetch_all(db)
@@ -129,8 +126,27 @@ impl<'a> Visible<'a> {
         .bind(self.group.filter(|g| !g.is_empty()))
         .bind(self.favorites_only)
         .bind(query.as_deref())
-        .bind(self.guide_channel_id)
         .fetch_one(db)
+        .await
+    }
+
+    /// The distinct groups of the visible channels, by name.
+    pub async fn groups(&self, db: &PgPool) -> sqlx::Result<Vec<String>> {
+        let query = self
+            .query
+            .filter(|q| !q.is_empty())
+            .map(fliks_domain::media::search::contains_pattern);
+        sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            r#"SELECT DISTINCT channel."groupName" {VISIBLE_JOIN} {} AND channel."groupName" IS NOT NULL
+               ORDER BY channel."groupName""#,
+            self.where_clause()
+        )))
+        .bind(self.user_id)
+        .bind(self.denied)
+        .bind(self.group.filter(|g| !g.is_empty()))
+        .bind(self.favorites_only)
+        .bind(query.as_deref())
+        .fetch_all(db)
         .await
     }
 }
@@ -198,6 +214,13 @@ pub async fn list(
         ..Visible::new(a.user.id, &denied)
     };
     Ok(Json(v.list(&st.db, None).await?.0))
+}
+
+#[utoipa::path(get, path = "/api/livetv/channels/groups", responses((status = 200)))]
+pub async fn groups(State(st): State<AppState>, a: Authed) -> Result<Json<Vec<String>>, AppError> {
+    read(&a)?;
+    let denied = denied_for(&st, &a).await?;
+    Ok(Json(Visible::new(a.user.id, &denied).groups(&st.db).await?))
 }
 
 #[derive(sqlx::FromRow)]
@@ -509,6 +532,7 @@ pub async fn bulk_update(
         renumber(&mut tx, &ordered, start).await?;
     }
     tx.commit().await?;
+    super::session::revoke_lost_access(&st).await;
     Ok(Json(json!({"affected": matched_ids.len()})))
 }
 
@@ -597,6 +621,7 @@ pub async fn merge(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    super::session::revoke_lost_access(&st).await;
     Ok(StatusCode::CREATED)
 }
 
@@ -670,7 +695,9 @@ pub async fn update_channel(
     .bind(guide.val())
     .fetch_optional(&st.db)
     .await?;
-    row.map(Json).ok_or_else(|| not_found(id))
+    let row = row.ok_or_else(|| not_found(id))?;
+    super::session::revoke_lost_access(&st).await;
+    Ok(Json(row))
 }
 
 pub async fn find_playable_row(

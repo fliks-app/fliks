@@ -57,56 +57,6 @@
       },
       "method": "GET",
       "path": "/api/livetv/channels/on-now"
-    },
-    {
-      "as": "anon",
-      "expect": {
-        "body": {
-          "message": "Unauthorized",
-          "statusCode": 401
-        },
-        "status": 401
-      },
-      "method": "GET",
-      "path": "/api/livetv/programs/1"
-    },
-    {
-      "as": "noread",
-      "expect": {
-        "body": {
-          "error": "Forbidden",
-          "message": "Forbidden resource",
-          "statusCode": 403
-        },
-        "status": 403
-      },
-      "method": "GET",
-      "path": "/api/livetv/programs/1"
-    },
-    {
-      "as": "anon",
-      "expect": {
-        "body": {
-          "message": "Unauthorized",
-          "statusCode": 401
-        },
-        "status": 401
-      },
-      "method": "GET",
-      "path": "/api/livetv/search?q=a"
-    },
-    {
-      "as": "noread",
-      "expect": {
-        "body": {
-          "error": "Forbidden",
-          "message": "Forbidden resource",
-          "statusCode": 403
-        },
-        "status": 403
-      },
-      "method": "GET",
-      "path": "/api/livetv/search?q=a"
     }
   ]
 }

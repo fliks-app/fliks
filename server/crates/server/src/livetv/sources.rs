@@ -282,6 +282,7 @@ pub async fn update(
     .bind(changed)
     .fetch_one(&st.db)
     .await?;
+    super::session::revoke_lost_access(&st).await;
     Ok(Json(row))
 }
 
@@ -312,6 +313,7 @@ pub async fn remove(
     sync::delete_orphans(&mut tx, &candidates).await?;
     tx.commit().await?;
     playlist_file::remove(&source.url).await;
+    super::session::revoke_lost_access(&st).await;
     Ok(StatusCode::OK)
 }
 
@@ -551,9 +553,9 @@ pub async fn sync_route(
     admin(&a)?;
     let id = int_param(&id.0)?;
     let done = if sync::wants_async(&headers) {
-        sync::start(&st, id).await.map(sync::accepted)
+        sync::start(&st, id, true).await.map(sync::accepted)
     } else {
-        sync::sync(&st, id)
+        sync::sync(&st, id, true)
             .await
             .map(|r| (StatusCode::CREATED, Json(r)).into_response())
     };

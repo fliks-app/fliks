@@ -197,7 +197,7 @@ pub struct Plan {
     pub new_channels: Vec<usize>,
     /// `(channel id, entry index, priority)`: the entry joins a channel of another source.
     pub folds: Vec<(i32, usize, i32)>,
-    /// `(stream id, entry index)`.
+    /// `(stream id, entry index)`; a stream a provider re-id'd is here too and takes the entry's `externalId`.
     pub updates: Vec<(i32, usize)>,
     /// `(channel id, guide channel id, group name)`: the values to write, only for touched channels.
     pub patches: Vec<(i32, Option<String>, Option<String>)>,
@@ -213,7 +213,8 @@ impl Plan {
 }
 
 /// The upsert of rule 38: match on `externalId`, else fold onto the first same-named channel
-/// without a stream of this source, else create; then drop streams unseen for `stale_days`.
+/// without a stream of this source, else create (or re-key the one same-named stream the pass left unseen);
+/// then drop streams unseen for `stale_days`.
 pub fn plan_upsert(
     entries: &[Entry],
     existing: &[StreamRow],
@@ -280,6 +281,41 @@ pub fn plan_upsert(
             plan.new_channels.push(i);
         }
     }
+    let name_key = |chans: &HashMap<i32, ChannelRow>, channel: i32| {
+        chans
+            .get(&channel)
+            .map(|c| normalize_channel_name(&c.name))
+            .filter(|k| !k.is_empty())
+    };
+    let mut unseen: HashMap<String, Vec<&StreamRow>> = HashMap::new();
+    for s in existing
+        .iter()
+        .filter(|s| !seen.contains(s.external_id.as_str()))
+    {
+        if let Some(k) = name_key(&chans, s.channel_id) {
+            unseen.entry(k).or_default().push(s);
+        }
+    }
+    let mut fresh: HashMap<String, usize> = HashMap::new();
+    for i in &plan.new_channels {
+        *fresh
+            .entry(normalize_channel_name(&entries[*i].name))
+            .or_default() += 1;
+    }
+    let mut rekeyed: HashSet<i32> = HashSet::new();
+    let mut new_channels = vec![];
+    for i in std::mem::take(&mut plan.new_channels) {
+        let key = normalize_channel_name(&entries[i].name);
+        match (fresh.get(&key), unseen.get(&key).map(Vec::as_slice)) {
+            (Some(1), Some([s])) if !key.is_empty() => {
+                plan.updates.push((s.id, i));
+                touch(&mut chans, s.channel_id, &entries[i], &mut touched);
+                rekeyed.insert(s.id);
+            }
+            _ => new_channels.push(i),
+        }
+    }
+    plan.new_channels = new_channels;
     plan.patches = touched
         .iter()
         .filter_map(|id| chans.get(id))
@@ -287,7 +323,10 @@ pub fn plan_upsert(
         .collect();
     let cutoff = now - Duration::days(stale_days);
     for s in existing {
-        if !seen.contains(s.external_id.as_str()) && s.last_seen_at.is_none_or(|t| t < cutoff) {
+        if !seen.contains(s.external_id.as_str())
+            && !rekeyed.contains(&s.id)
+            && s.last_seen_at.is_none_or(|t| t < cutoff)
+        {
             plan.removed_streams.push(s.id);
             if !plan.affected_channels.contains(&s.channel_id) {
                 plan.affected_channels.push(s.channel_id);
@@ -443,6 +482,36 @@ mod tests {
                 (4, None, Some("Fun".into()))
             ]
         );
+    }
+
+    #[test]
+    fn a_re_id_d_stream_keeps_its_channel_only_when_one_candidate_matches() {
+        let now = Utc.with_ymd_and_hms(2026, 1, 20, 0, 0, 0).unwrap();
+        let stream = |id, channel, ext: &str| StreamRow {
+            id,
+            channel_id: channel,
+            external_id: ext.into(),
+            last_seen_at: Some(now - Duration::days(30)),
+        };
+        let mine = |id, name: &str| ChannelRow {
+            has_stream_of_source: true,
+            ..channel(id, name, "News")
+        };
+        let existing = vec![
+            stream(1, 1, "old1"),
+            stream(2, 2, "old2"),
+            stream(3, 3, "old3"),
+        ];
+        let channels = vec![mine(1, "Alpha"), mine(2, "Beta"), mine(3, "beta")];
+        let entries = vec![
+            entry("n1", "Alpha HD", "Sport", None),
+            entry("n2", "Beta", "Sport", None),
+        ];
+        let plan = plan_upsert(&entries, &existing, &channels, now, 7);
+        assert_eq!(plan.updates, [(1, 0)]);
+        assert_eq!(plan.new_channels, [1]);
+        assert_eq!(plan.removed_streams, [2, 3]);
+        assert_eq!(plan.affected_channels, [2, 3]);
     }
 
     #[test]

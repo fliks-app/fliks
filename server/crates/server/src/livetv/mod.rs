@@ -45,6 +45,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/livetv/status", get(channels::status))
         .route("/api/livetv/channels", get(channels::list))
+        .route("/api/livetv/channels/groups", get(channels::groups))
         .route("/api/livetv/channels/on-now", get(guide::on_now))
         .route("/api/livetv/channels/{id}/logo", get(channels::logo))
         .route("/api/livetv/channels/{id}/prefs", put(channels::set_prefs))
@@ -55,8 +56,6 @@ pub fn router() -> Router<AppState> {
             put(session::heartbeat),
         )
         .route("/api/livetv/guide", get(guide::window))
-        .route("/api/livetv/programs/{id}", get(guide::program))
-        .route("/api/livetv/search", get(guide::search))
         .route(
             "/api/livetv/admin/sources",
             get(sources::list).post(sources::create),

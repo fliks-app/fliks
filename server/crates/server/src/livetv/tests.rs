@@ -333,7 +333,7 @@ mod sources_sync {
         let c = ctx(pool).await;
         c.prov.lock_clean().playlist = PLAYLIST.into();
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
-        let r = sync::sync(&c.st, id).await.unwrap();
+        let r = sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!(
             (r.ok, r.added, r.updated, r.removed, r.channel_count),
             (true, 3, 0, 0, 3)
@@ -355,7 +355,7 @@ mod sources_sync {
             (3, false, "ok".into()),
             "the header's max-conn lifts an unset limit"
         );
-        let r = sync::sync(&c.st, id).await.unwrap();
+        let r = sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!((r.added, r.updated, r.removed), (0, 3, 0));
         assert_eq!(count(&c.pool, "livetv_channels").await, 3);
     }
@@ -370,7 +370,7 @@ mod sources_sync {
             .execute(&c.pool)
             .await
             .unwrap();
-        sync::sync(&c.st, id).await.unwrap();
+        sync::sync(&c.st, id, false).await.unwrap();
         let max: i32 =
             sqlx::query_scalar(r#"SELECT "maxStreams" FROM livetv_sources WHERE id = $1"#)
                 .bind(id)
@@ -389,8 +389,8 @@ mod sources_sync {
             p.etag = Some("\"v1\"");
         }
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
-        sync::sync(&c.st, id).await.unwrap();
-        let r = sync::sync(&c.st, id).await.unwrap();
+        sync::sync(&c.st, id, false).await.unwrap();
+        let r = sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!((r.ok, r.added, r.updated, r.channel_count), (true, 0, 0, 3));
         let etag: Option<String> =
             sqlx::query_scalar(r#"SELECT "playlistEtag" FROM livetv_sources WHERE id = $1"#)
@@ -403,14 +403,26 @@ mod sources_sync {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_manual_sync_takes_a_lineup_that_lost_most_of_its_entries(pool: PgPool) {
+        let c = ctx(pool).await;
+        c.prov.lock_clean().playlist = PLAYLIST.into();
+        let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
+        sync::sync(&c.st, id, false).await.unwrap();
+        c.prov.lock_clean().playlist =
+            "#EXTM3U\n#EXTINF:-1,One HD\nhttp://h/live/u/p/101.ts\n".into();
+        let r = sync::sync(&c.st, id, true).await.unwrap();
+        assert!(r.ok && r.channel_count == 1, "{:?}", r.error);
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_response_that_lost_most_of_the_lineup_is_refused(pool: PgPool) {
         let c = ctx(pool).await;
         c.prov.lock_clean().playlist = PLAYLIST.into();
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
-        sync::sync(&c.st, id).await.unwrap();
+        sync::sync(&c.st, id, false).await.unwrap();
         c.prov.lock_clean().playlist =
             "#EXTM3U\n#EXTINF:-1,One HD\nhttp://h/live/u/p/101.ts\n".into();
-        let r = sync::sync(&c.st, id).await.unwrap();
+        let r = sync::sync(&c.st, id, false).await.unwrap();
         assert!(!r.ok && r.channel_count == 3);
         assert!(
             r.error
@@ -439,7 +451,7 @@ mod sources_sync {
             0,
         )
         .await;
-        let r = sync::sync(&c.st, id).await.unwrap();
+        let r = sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!(
             r.error.as_deref(),
             Some("Request failed with status code 404")
@@ -464,7 +476,7 @@ mod sources_sync {
         let recent = channel(&c.pool, "Recent", "News", true).await;
         stream(&c.pool, recent, id, "http://h/recent", 0).await;
         sqlx::query(r#"UPDATE livetv_channel_streams SET "lastSeenAt" = now() - interval '1 day' WHERE "channelId" = $1"#).bind(recent).execute(&c.pool).await.unwrap();
-        let r = sync::sync(&c.st, id).await.unwrap();
+        let r = sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!(r.removed, 1);
         let names: Vec<String> = sqlx::query_scalar(
             "SELECT name FROM livetv_channels WHERE name IN ('Gone', 'Recent') ORDER BY name",
@@ -483,7 +495,7 @@ mod sources_sync {
         let ch = channel(&c.pool, "Two", "Sport", true).await;
         stream(&c.pool, ch, other, "http://h/two", 0).await;
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
-        let r = sync::sync(&c.st, id).await.unwrap();
+        let r = sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!(r.added, 3);
         assert_eq!(
             count(&c.pool, "livetv_channels").await,
@@ -504,7 +516,7 @@ mod sources_sync {
         let c = ctx(pool).await;
         c.prov.lock_clean().playlist = PLAYLIST.into();
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
-        sync::sync(&c.st, id).await.unwrap();
+        sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!(
             setting(&c.pool, "livetv_restricted_groups")
                 .await
@@ -538,13 +550,13 @@ mod sources_sync {
         .execute(&c.pool)
         .await
         .unwrap();
-        sync::sync(&c.st, id).await.unwrap();
+        sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!(
             count(&c.pool, "livetv_group_access").await,
             1,
             "marked absent, not yet expired"
         );
-        sync::sync(&c.st, id).await.unwrap();
+        sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!(count(&c.pool, "livetv_group_access").await, 0);
         let restricted = setting(&c.pool, "livetv_restricted_groups").await.unwrap();
         assert!(!restricted.contains("Vanished"), "{restricted}");
@@ -560,15 +572,15 @@ mod sources_sync {
         }
         let id = source(&c, "S", "m3u", &format!("{}/playlist.m3u", c.base), 0).await;
         let st = c.st.clone();
-        let first = tokio::spawn(async move { sync::sync(&st, id).await });
+        let first = tokio::spawn(async move { sync::sync(&st, id, false).await });
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert!(matches!(
-            sync::sync(&c.st, id).await,
+            sync::sync(&c.st, id, false).await,
             Err(sync::SyncError::Running)
         ));
         assert!(first.await.unwrap().unwrap().ok);
         assert!(
-            sync::sync(&c.st, id).await.is_ok(),
+            sync::sync(&c.st, id, false).await.is_ok(),
             "the claim is released with the sync"
         );
     }
@@ -656,7 +668,7 @@ mod sources_sync {
             .execute(&c.pool)
             .await
             .unwrap();
-        let r = sync::sync(&c.st, id).await.unwrap();
+        let r = sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!((r.ok, r.added), (true, 2));
         let urls: Vec<String> =
             sqlx::query_scalar("SELECT url FROM livetv_channel_streams ORDER BY id")
@@ -867,9 +879,9 @@ mod sources_sync {
         .await;
         assert_eq!(s, 201, "{created}");
         let id = created["id"].as_i64().unwrap() as i32;
-        let r = sync::sync(&c.st, id).await.unwrap();
+        let r = sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!((r.ok, r.added), (true, 3));
-        let again = sync::sync(&c.st, id).await.unwrap();
+        let again = sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!(
             (again.ok, again.updated),
             (true, 0),
@@ -899,7 +911,7 @@ mod sources_sync {
     async fn a_typed_file_path_is_never_read(pool: PgPool) {
         let c = ctx(pool).await;
         let id = source(&c, "S", "m3u", "/etc/passwd", 0).await;
-        let r = sync::sync(&c.st, id).await.unwrap();
+        let r = sync::sync(&c.st, id, false).await.unwrap();
         assert_eq!(r.error.as_deref(), Some("Not an uploaded playlist"));
     }
 }
@@ -985,6 +997,62 @@ mod guide_import {
                 .await
                 .unwrap();
         assert!(kind.is_none());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_missing_stop_ends_at_the_next_start_and_the_shift_applies_at_read(pool: PgPool) {
+        let c = ctx(pool).await;
+        let one = channel(&c.pool, "One", "News", true).await;
+        let plus = channel(&c.pool, "One +1", "News", true).await;
+        sqlx::query(r#"UPDATE livetv_channels SET "guideChannelId" = 'one.fr', "guideMatchKind" = 'id', "guideShiftMinutes" = CASE WHEN id = $1 THEN 60 ELSE 0 END WHERE id IN ($1, $2)"#)
+            .bind(plus)
+            .bind(one)
+            .execute(&c.pool)
+            .await
+            .unwrap();
+        let feed = format!(
+            r#"<tv><channel id="one.fr"><display-name>One</display-name></channel>
+<programme start="{}" channel="one.fr"><title>First</title></programme>
+<programme start="{}" stop="{}" channel="one.fr"><title>Second</title></programme></tv>"#,
+            stamp(-30),
+            stamp(60),
+            stamp(120)
+        );
+        c.prov.lock_clean().guide = feed.into_bytes();
+        let g = guide_source(&c, "A", "/guide.xml").await;
+        guide::sync(&c.st, g).await.unwrap();
+        let (first_ends, second_starts): (
+            chrono::DateTime<chrono::Utc>,
+            chrono::DateTime<chrono::Utc>,
+        ) = sqlx::query_as(
+            r#"SELECT (SELECT "endsAt" FROM livetv_programs WHERE title = 'First'),
+                          (SELECT "startsAt" FROM livetv_programs WHERE title = 'Second')"#,
+        )
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            first_ends, second_starts,
+            "a missing stop is the next start"
+        );
+        let (_, admin) = viewer(&c, "boss", true).await;
+        let (s, b) = call(&c.app, "GET", "/api/livetv/channels/on-now", &admin, None).await;
+        assert_eq!(s, 200, "{b}");
+        let now_of = |name: &str| {
+            b["entries"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|e| e["channel"]["name"] == name)
+                .unwrap()["now"]["title"]
+                .clone()
+        };
+        assert_eq!(now_of("One"), json!("First"));
+        assert_eq!(
+            now_of("One +1"),
+            json!(null),
+            "the +1 channel airs the first programme an hour later"
+        );
     }
 
     #[sqlx::test(migrations = false)]
@@ -2433,6 +2501,60 @@ mod sessions {
         assert!(c.fake.seen("DELETE", "/v1/sessions/sid-a").is_empty());
     }
 
+    #[sqlx::test(migrations = false)]
+    async fn restricting_a_group_ends_a_direct_viewer_of_a_user_without_a_grant(pool: PgPool) {
+        let w = world(pool).await;
+        let c = &w.c;
+        let (_, admin) = viewer(c, "boss", true).await;
+        let (sid, _) = opened(&w).await;
+        c.fake
+            .script("DELETE", "/v1/sessions/sid-1", vec![status(204)]);
+        let (s, _) = call(
+            &c.app,
+            "PUT",
+            "/api/livetv/admin/access/restricted-groups",
+            &admin,
+            Some(json!({"groups": ["Live"]})),
+        )
+        .await;
+        assert_eq!(s, 200);
+        assert_eq!(
+            c.fake.seen("DELETE", &format!("/v1/sessions/{sid}")).len(),
+            1
+        );
+        assert!(session::peek(&c.st).0.is_empty());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_disabled_user_and_a_role_without_livetv_read_lose_their_viewers(pool: PgPool) {
+        let w = world(pool).await;
+        let c = &w.c;
+        let (_, _) = opened(&w).await;
+        c.fake
+            .script("DELETE", "/v1/sessions/sid-1", vec![status(204)]);
+        sqlx::query("UPDATE users SET enabled = false WHERE id = $1")
+            .bind(w.who.id)
+            .execute(&c.pool)
+            .await
+            .unwrap();
+        session::revoke_lost_access(&c.st).await;
+        assert!(session::peek(&c.st).0.is_empty(), "a disabled owner ends");
+        assert_eq!(
+            resolve(c, "sid-1", w.who.id, &["media.read"]).await,
+            Ok(false)
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_resolver_denies_an_owner_whose_role_lost_livetv_read(pool: PgPool) {
+        let w = world(pool).await;
+        let (sid, _) = opened(&w).await;
+        assert_eq!(
+            resolve(&w.c, &sid, w.who.id, &["media.read"]).await,
+            Ok(false)
+        );
+    }
+
     // The resolver's `live` purpose.
     async fn resolve(c: &Ctx, sid: &str, user_id: i32, perms: &[&str]) -> Result<bool, u16> {
         let perms: Vec<String> = perms.iter().map(|p| (*p).to_owned()).collect();
@@ -2492,7 +2614,7 @@ mod sessions {
             "the owner lost the group"
         );
         assert_eq!(
-            resolve(c, &sid, w.who.id, &["settings.access"]).await,
+            resolve(c, &sid, w.who.id, &["livetv.read", "settings.access"]).await,
             Ok(true),
             "an administrator is never filtered"
         );

@@ -75,7 +75,7 @@ pub fn match_guide_channels(channels: &[Matchable], candidates: &[Candidate]) ->
     let mut fuzzy: Vec<FuzzyEntry> = vec![];
     let mut by_token: HashMap<String, Vec<usize>> = HashMap::new();
     for c in candidates {
-        by_id.insert(c.id.to_lowercase(), &c.id);
+        by_id.entry(c.id.to_lowercase()).or_insert(&c.id);
         for name in std::iter::once(&c.id).chain(&c.display_names) {
             let key = normalize_channel_name(name);
             if !key.is_empty() {
