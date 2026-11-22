@@ -90,9 +90,9 @@ fn named(id: i64) -> ParsedReleaseQuality {
     }
 }
 
-/// A lone `web` tag: not the title's first word and no other source tag, so "Web Therapy 720p HDTV" is HDTV.
+/// A lone `web` tag counts as WEB-DL only when no other source tag is present, so "Web Therapy 720p HDTV" is HDTV.
 pub(super) fn is_bare_web(t: &str) -> bool {
-    rx!(r"^\S+.*\bweb\b").is_match(t)
+    rx!(r"\bweb\b").is_match(t)
         && !rx!(r"\b(hdtv|sdtv|dvd|dvdrip|dvd-?r|bluray|blu-?ray|bdrip|brrip|bdr)\b").is_match(t)
 }
 
