@@ -27,7 +27,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use fliks_domain::media::{family::Family, kind::MediaKind};
-use fliks_engine_core::api::{HeartbeatRequest, SessionKind};
+use fliks_engine_core::api::HeartbeatRequest;
 use serde_json::{Map, Value, json};
 use std::{collections::HashMap, sync::Mutex};
 
@@ -263,15 +263,12 @@ async fn engine_beat(
 
 /// `servedRungBitrate`: the video bitrate of the rung a transcode session is encoding.
 fn served_rung_bitrate(s: &LiveSession) -> Option<f64> {
-    if s.kind != SessionKind::Transcode {
-        return None;
-    }
-    let (q, ladder) = (s.quality.as_deref()?, s.bitrate_by_quality.as_ref()?);
-    let hdr = format!("{q}-hdr");
-    let hint = (s.hdr_ladder && !q.ends_with("-hdr"))
-        .then(|| ladder.get(&hdr))
-        .flatten()
-        .or_else(|| ladder.get(q))?;
+    let hint = crate::stream::served_rung(
+        s.kind,
+        s.quality.as_deref()?,
+        s.hdr_ladder,
+        s.bitrate_by_quality.as_ref(),
+    )?;
     (hint.video_bitrate_bps != 0).then_some(f64::from(hint.video_bitrate_bps))
 }
 
@@ -764,6 +761,7 @@ pub async fn heartbeat(
 mod tests {
     use super::*;
     use crate::events::event::StemMode;
+    use fliks_engine_core::api::SessionKind;
 
     fn live() -> LiveSession {
         LiveSession {

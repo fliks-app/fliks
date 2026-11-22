@@ -123,6 +123,7 @@ struct Inner {
     segment_seconds: std::sync::atomic::AtomicI32,
     feed: broadcast::Sender<Feed>,
     adoptions: watch::Sender<u64>,
+    resyncs: watch::Sender<u64>,
     jobs: jobs::Waiters,
 }
 
@@ -165,6 +166,7 @@ impl Engine {
                 segment_seconds: std::sync::atomic::AtomicI32::new(2),
                 feed: broadcast::channel(4096).0,
                 adoptions: watch::channel(0).0,
+                resyncs: watch::channel(0).0,
                 jobs: jobs::Waiters::default(),
             }),
         }
@@ -261,8 +263,17 @@ impl Engine {
         self.inner.adoptions.subscribe()
     }
 
-    /// Drops and reopens the events connection, which resyncs the sessions (a lagged subscriber does it).
+    /// Bumps on every request to reopen the events connection (a lagged subscriber asks).
+    pub fn resyncs(&self) -> watch::Receiver<u64> {
+        self.inner.resyncs.subscribe()
+    }
+
+    /// Drops and reopens the events connection, which resyncs the sessions; not an adoption.
     pub fn resync_events(&self) {
+        self.inner.resyncs.send_modify(|g| *g += 1);
+    }
+
+    fn adopted(&self) {
         self.inner.adoptions.send_modify(|g| *g += 1);
     }
 
@@ -277,7 +288,7 @@ impl Engine {
             (s.client, s.candidate, s.hello, s.reachable) = (None, None, None, false);
             s.epoch
         };
-        self.resync_events();
+        self.adopted();
         self.init(epoch).await;
     }
 
@@ -458,7 +469,7 @@ impl Engine {
                 s.client.take().is_some()
             };
             if was_adopted {
-                self.resync_events();
+                self.adopted();
             }
             return Adopt::Refused;
         }
@@ -499,7 +510,7 @@ impl Engine {
             h.features.join(",")
         );
         self.push_logged().await;
-        self.resync_events();
+        self.adopted();
         Adopt::Adopted
     }
 

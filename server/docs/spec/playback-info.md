@@ -58,8 +58,8 @@ Validation failure -> 400 `{statusCode:400, message:string[], error:"Bad Request
 4. **Step 1 gateway guard.** `engine.gatewayMismatch` (saved engine URL differs from `FLIKS_ENGINE_URL`) -> 503 `The saved engine URL is not the one this process forwards video to`. Evaluated before anything else.
 5. **Step 2 runtime guard.** `!engine.runtime` (no adopted engine with features `sessions`,`serve`,`events`) -> 503 `The streaming engine is unreachable` when `engine.status === 'down'`, else 503 `Playback needs the streaming engine, which is not running`.
 6. **Step 3 resolve file** (rules 38-39). 404 propagates. `info = mediaFile.streamInfo` (jsonb, may be null). On the per-file route, an `info` with audio streams and no video stream (a track, an audiobook part) is 422 `errors.no_video_stream` before any engine call: the video ladder has nothing to encode, so the session could never serve a segment. Audio plays through the item route.
-7. **Step 4 burn-in.** `burnInSubtitleId` falsy (0, NaN, absent) -> no burn-in. Otherwise `SubtitleBurnInService.resolve` then `buildFilter`; **any** throw (404 subtitle, file missing, DB) is logged `warn` and the playback proceeds without burn-in (never an error response). Result `{filter: string|null, streamIndex?, type:'text'|'image'}`. Resolve and filter rules: 42-44.
-8. **Step 5 hardware.** `await hardware.apply(await settingsCache.get())` on every call (rule 47). A rejection of `settingsCache.get()` (DB) is not caught -> 500.
+7. **Step 4 burn-in.** `burnInSubtitleId` falsy (0, NaN, absent) -> no burn-in. Otherwise `SubtitleBurnInService.resolve` then `buildFilter`; a missing subtitle or file (404) is logged `warn` and answers 422 `errors.subtitle_unavailable`, so the client drops its pick; any other error propagates. A falsy id never fails. Result `{filter: string|null, streamIndex?, type:'text'|'image'}`. Resolve and filter rules: 42-44.
+8. **Step 5 hardware.** None: playback-info reads no streaming setting. The GPU pin is applied by the settings write (`hardware::settings_changed`) and by each engine adoption; a feed lag only reopens the events connection.
 9. **Step 6 scan lookup.** `sourceScans.lookup(mediaFileId, absolutePath, info)` -> `{scan: SourceScan|null, version: string|null}` (rule 48). Never throws. It may mutate `info.timestampBreakSeconds` in place and update the DB row.
 10. **Step 7 start position** (returned as `startAtSeconds`, so clients need no resume rule of their own; it and the `preRollFirst` pre-roll are read right after the file is resolved, so a deferral (rule 20) returns before steps 4-6; the markers/pre-roll/EDL reads and the engine open then run concurrently, `mark_started` follows a successful open inside the same branch). `position = startAt` when `startAt !== undefined` (so `0` restarts, `NaN` passes through); else `getState(userId, mediaFile.mediaId, episodeId)` and, when a row exists, `!completed` and `positionSeconds > 10`, use its `positionSeconds`; else `0`. On the per-file route only, a file of an audio item resumes at `0` (the row's position is on the item's timeline, not the file's); the item route resumes at the row's position. The item route's `mark_started` names the part containing the start position. `episodeId` = the file's first item when it is an episode (`items.md` rule 22), else `undefined`. DB errors -> 500.
 11. **Step 8 subtitle renditions.** Only when `device.supportsHlsSubtitles` is truthy: `listTextSubtitleRenditions(mediaFileId, user)` (rule 45); any failure -> `undefined` (swallowed, silently).
@@ -202,8 +202,12 @@ Read through `SettingsService.get(key)` (string or null) by `StreamingSettingsCa
 | `streaming_gpu_render_node` | trimmed, blank -> `'auto'` |
 | `streaming_throttle_enabled` | `false` only for the exact string `'false'` |
 | `streaming_throttle_threshold_seconds` | `max(60, positive(v) ?? 90)` |
+| `streaming_opencl_device` | trimmed, blank -> none |
+| `streaming_ort_threads` | positive integer, else none |
+| `streaming_optimize_pause_restart` | `true` only for the exact string `'true'` |
+| `streaming_max_sessions_per_user` | positive integer, else 10 (lifetime, not streaming) |
 
-"positive" = `Number(v)` finite and `> 0`. Env defaults: `STREAM_LIVE_SESSION_TTL_MS` 30 000, `STREAM_LIVE_SESSION_GC_INTERVAL_MS` 5 000, `STREAM_SESSION_REVIVE_TTL_MS` 900 000, `STREAM_MAX_SESSIONS_PER_USER` 10, `STREAM_JOB_GRACE_MS` 60 000, `STREAM_JOB_FALLBACK_TIMEOUT_MS` 1 800 000, `TRANSCODE_CACHE_GC_INTERVAL_MS` 300 000 (positive integers only, else default): pushed to the engine as `lifetime` by the config owner (engine glue spec).
+"positive" = `Number(v)` finite and `> 0`. Env defaults: `STREAM_LIVE_SESSION_TTL_MS` 30 000, `STREAM_LIVE_SESSION_GC_INTERVAL_MS` 5 000, `STREAM_SESSION_REVIVE_TTL_MS` 900 000, `TRANSCODE_CACHE_GC_INTERVAL_MS` 300 000 (positive integers only, else default): pushed to the engine as `lifetime` by the config owner (engine glue spec).
 
 ## Jobs/timers
 

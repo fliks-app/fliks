@@ -157,7 +157,7 @@ pub(super) async fn attempt(st: &AppState, ev: &EngineEvent) {
     let done = sqlx::query(
         r#"UPDATE livetv_channel_streams SET
              "probedVideoCodec" = COALESCE($2, "probedVideoCodec"), "probedAudioCodec" = COALESCE($3, "probedAudioCodec"),
-             "probedContainer" = COALESCE($4, "probedContainer"),
+             "probedContainer" = COALESCE($4, "probedContainer"), "probedFieldOrder" = COALESCE($6, "probedFieldOrder"),
              "lastOkAt" = CASE WHEN $5::text IS NULL THEN now() ELSE "lastOkAt" END, "lastError" = $5
            WHERE id = $1"#,
     )
@@ -166,6 +166,7 @@ pub(super) async fn attempt(st: &AppState, ev: &EngineEvent) {
     .bind(non_empty(&probe.audio_codec))
     .bind(non_empty(&probe.container))
     .bind(last_error)
+    .bind(non_empty(&probe.field_order))
     .execute(&st.db)
     .await;
     if let Err(e) = done {

@@ -78,7 +78,7 @@ none (presence is in memory). Readers that join presence with the database (admi
 
 ## Settings keys
 
-none. Env (lazy, positive int else default): `STREAM_LIVE_SESSION_TTL_MS` 30 000, `STREAM_LIVE_SESSION_GC_INTERVAL_MS` 5 000, `STREAM_SESSION_REVIVE_TTL_MS` 900 000, `STREAM_MAX_SESSIONS_PER_USER` 10, `STREAM_JOB_GRACE_MS` 60 000, `STREAM_JOB_FALLBACK_TIMEOUT_MS` 1 800 000: pushed to the engine as `lifetime`; the host itself only reads `liveSessionTtlMs` (remote staleness, admin fallback). `liveSessionGcIntervalMs` has no host-side consumer: the registry has no GC.
+none. Env (lazy, positive int else default): `STREAM_LIVE_SESSION_TTL_MS` 30 000, `STREAM_LIVE_SESSION_GC_INTERVAL_MS` 5 000, `STREAM_SESSION_REVIVE_TTL_MS` 900 000: pushed to the engine as `lifetime`; the host itself only reads `liveSessionTtlMs` (remote staleness, admin fallback). `liveSessionGcIntervalMs` has no host-side consumer: the registry has no GC.
 
 ## Jobs/timers
 

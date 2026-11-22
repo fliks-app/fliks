@@ -48,7 +48,7 @@ import { NavigationHistoryService } from '../../core/services/navigation-history
 import { NavbarService } from '../../core/services/navbar.service';
 import { PlaybackQueueService } from '../../core/services/playback-queue.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
-import { buildPlayerStats, formatAudioLabel, formatAudioParts, playbackModeOf, readyDownloadFor, snapToKeyframe, SpriteMetadata, widthForProfile, type CropRect, type OfflineCrop, type PlaybackMode } from '../../core/utils/player.utils';
+import { buildPlayerStats, formatAudioLabel, formatAudioParts, playbackModeOf, readyDownloadFor, snapToKeyframe, SpriteMetadata, type CropRect, type OfflineCrop, type PlaybackMode } from '../../core/utils/player.utils';
 import { formatErrorDiagnostics, isNetworkOrAbort, type PlaybackError } from '../../core/services/playback-engine/playback-error';
 import { environment } from '../../../environments/environment';
 import { normalizeLangCode } from '../../core/utils/language.utils';
@@ -99,6 +99,9 @@ const FORCED_SAVE_COALESCE_MS = 300;
 const RELOAD_NEGOTIATE_TIMEOUT_MS = 15_000;
 /** A cold launch may wait on a transcode or a scan; a reload keeps the shorter bound. */
 const LAUNCH_NEGOTIATE_TIMEOUT_MS = 30_000;
+
+const isSubtitleUnavailable = (e: unknown): boolean =>
+  e instanceof HttpErrorResponse && e.status === 422 && e.error?.message === 'errors.subtitle_unavailable';
 
 
 interface PipPlugin {
@@ -1088,9 +1091,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           w = this.loader.info()?.source?.width ?? 3840;
           h = this.loader.info()?.source?.height ?? 2160;
         } else {
-          w = widthForProfile(savedQualityId) ?? 1920;
-          h = this.qualityManager.availableQualities()
-            .find(q => q.id === savedQualityId)?.height ?? 1080;
+          const rung = this.qualityManager.availableQualities().find(q => q.id === savedQualityId);
+          w = rung?.width ?? 1920;
+          h = rung?.height ?? 1080;
         }
         this.engine.selectVariantTrack({ width: w, height: h });
       }
@@ -2630,16 +2633,26 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       quality: this.resolveStartQuality(),
       ...over,
     };
-    return this.streamingApi.getPlaybackInfo(
-      fileId,
-      request.profile,
-      request.burnInId ?? undefined,
-      request.audioStreamIndex,
-      request.quality,
-      startAt,
-      undefined,
-      opts,
-    );
+    try {
+      return await this.streamingApi.getPlaybackInfo(
+        fileId,
+        request.profile,
+        request.burnInId ?? undefined,
+        request.audioStreamIndex,
+        request.quality,
+        startAt,
+        undefined,
+        opts,
+      );
+    } catch (e) {
+      // A stale burn-in pick (after a rescan) is dropped and the stream renegotiated without it.
+      if (onScreen && over.burnInId === undefined && request.burnInId != null && isSubtitleUnavailable(e)) {
+        this.subs.activeBurnInId = null;
+        this.subs.activeSubtitleId.set(null);
+        return this.negotiatePlayback(startAt, { ...over, burnInId: null }, opts);
+      }
+      throw e;
+    }
   }
 
   private readonly muteRangesByFile = new Map<number, Promise<boolean>>();
@@ -2908,8 +2921,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         // Extract profile name from active variant URL (e.g. "/720p/" → "720p")
         const active = this.getActiveVariant();
         const urlMatch = active?.originalVideoId?.match(/\/(\d+p)\//);
-        const label = urlMatch?.[1]
-          ?? this.qualityManager.resolutionLabel(variant.width, variant.height);
+        const rung = this.qualityManager.availableQualities().find((q) => q.id === urlMatch?.[1])
+          ?? this.qualityManager.rungForVariant(variant.width, variant.height);
+        const label = rung?.label ?? `${variant.width}x${variant.height}`;
         this.qualityManager.activeResolution.set(label);
       }
       if (this.statsVisible()) {

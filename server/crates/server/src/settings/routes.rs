@@ -105,6 +105,7 @@ pub(crate) async fn notify(st: &AppState, keys: &[String], origin: Option<&str>)
     let known = st.namespaces();
     tokio::join!(
         st.engine.settings_changed(keys),
+        crate::stream::settings_changed(st, keys),
         st.qoe.settings_changed(keys),
         st.metadata.settings_changed(&known, keys)
     );

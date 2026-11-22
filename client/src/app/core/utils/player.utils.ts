@@ -7,26 +7,8 @@ import type { AudioStreamInfo, VideoStreamInfo } from '../services/api/media.ser
 import type { PlayerStats } from '../../features/player/overlay/player-stats-overlay';
 import { formatBitrate } from './format-bytes';
 
-/** Pixel widths per ladder rung id (must match the backend `PROFILES`); ExoPlayer matches tracks by exact width x height.
- *  `original` is absent: callers pass a sentinel resolution (source dimensions, or 99999 if unknown). */
-export const PROFILE_WIDTHS: Record<string, number> = {
-  '2160p': 3840,
-  '1080p': 1920,
-  '720p': 1280,
-  '480p': 854,
-  '360p': 640,
-  '240p': 426,
-  '144p': 256,
-};
-
-/** Resolves a quality id to its rung width, stripping `eco-` and `-hdr`; undefined for unknown ids. */
-export function widthForProfile(id: string): number | undefined {
-  const base = id.replace(/^eco-/, '').replace(/-hdr$/, '');
-  return PROFILE_WIDTHS[base];
-}
-
-/** Buckets width x height into a label ("4K", "1080p"...) using ceilings on both axes, since scope crops (1920x800) miss single-axis thresholds.
- *  Mirrors the backend's `resolveQuality`; null when neither dimension is known. */
+/** Buckets a file's width x height into a label ("4K", "1080p"...) using ceilings on both axes, since scope crops (1920x800) miss single-axis thresholds.
+ *  For files only: a stream takes its label from the playback-info `qualities`. Null when neither dimension is known. */
 export function bucketResolutionLabel(
   width?: number | null,
   height?: number | null,

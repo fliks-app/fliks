@@ -64,12 +64,13 @@ fn block_end(b: &[u8]) -> Option<(usize, usize)> {
 /// Runs for the life of the process: follows the events whenever the adopted engine runs playback and
 /// starts over (backoff and all) on every adoption.
 pub(super) async fn follow(engine: Engine) {
-    let mut adopted = engine.adoptions();
+    let (mut adopted, mut resync) = (engine.adoptions(), engine.resyncs());
     loop {
         if engine.runtime() {
             tokio::select! {
                 () = engine.connect_loop() => {}
                 changed = adopted.changed() => if changed.is_err() { return },
+                changed = resync.changed() => if changed.is_err() { return },
             }
         } else if adopted.changed().await.is_err() {
             return;
@@ -148,6 +149,17 @@ impl Engine {
                 result,
                 error,
             } => self.job_ended(job_id, *state, result.clone(), error.clone()),
+            EngineEvent::Log {
+                level,
+                target,
+                message,
+            } => {
+                match level.as_str() {
+                    "error" => tracing::error!(target: "engine", "{target}: {message}"),
+                    _ => tracing::warn!(target: "engine", "{target}: {message}"),
+                }
+                return;
+            }
             _ => {}
         }
         let _ = self.inner.feed.send(Feed::Event(Arc::new(event)));

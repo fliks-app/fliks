@@ -67,6 +67,14 @@
       </div>
     }
 
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.max_sessions_per_user' | translate }}</span></label>
+      <input
+        type="number" min="1" step="1" class="input input-bordered w-full" placeholder="10"
+        [ngModel]="maxSessionsPerUser()" (ngModelChange)="maxSessionsPerUser.set($event)" />
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.max_sessions_per_user_help' | translate }}</span></label>
+    </div>
+
     <!-- QSV / libx264 encoder preset -->
     <div class="form-control">
       <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.qsv_preset' | translate }}</span></label>
@@ -136,6 +144,31 @@
         <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.gpu_device_help' | translate }}</span></label>
       </div>
     }
+
+    <div class="divider">{{ 'settings.streaming.advanced_title' | translate }}</div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.opencl_device' | translate }}</span></label>
+      <input
+        type="text" class="input input-bordered w-full" placeholder="0.0"
+        [ngModel]="openclDevice()" (ngModelChange)="openclDevice.set($event)" />
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.opencl_device_help' | translate }}</span></label>
+    </div>
+
+    <div class="form-control">
+      <label class="label"><span class="label-text font-medium">{{ 'settings.streaming.ort_threads' | translate }}</span></label>
+      <input
+        type="number" min="1" step="1" class="input input-bordered w-full"
+        [placeholder]="'settings.streaming.ort_threads_auto' | translate"
+        [ngModel]="ortThreads()" (ngModelChange)="ortThreads.set($event)" />
+      <label class="label"><span class="label-text-alt text-base-content/60">{{ 'settings.streaming.ort_threads_help' | translate }}</span></label>
+    </div>
+
+    <app-toggle-field
+      [(value)]="optimizePauseRestart"
+      [label]="'settings.streaming.optimize_pause_restart' | translate"
+      [hint]="'settings.streaming.optimize_pause_restart_help' | translate"
+    />
 
     <!-- Transcode cache footprint + manual purge -->
     <div class="divider">{{ 'settings.streaming.cache_title' | translate }}</div>

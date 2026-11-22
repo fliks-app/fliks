@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import type { PlaybackEngine, VariantTrack } from './playback-engine/playback-engine';
-import { bucketResolutionLabel, widthForProfile, type PlaybackMode } from '../utils/player.utils';
+import { bucketResolutionLabel, type PlaybackMode } from '../utils/player.utils';
 import { PlayerSettingsService } from './player-settings.service';
 import { ServerConfigService } from './server-config.service';
 
@@ -165,9 +165,7 @@ export class QualityManagerService {
       const isOriginal = option.id === 'original';
       const w = isOriginal
         ? 99999
-        : (option.width ??
-          widthForProfile(option.id) ??
-          Math.round((option.height * 16) / 9));
+        : (option.width ?? Math.round((option.height * 16) / 9));
       const h = isOriginal ? 99999 : option.height;
       engine.selectVariantTrack?.({ height: h, width: w }, true);
       return;
@@ -251,17 +249,23 @@ export class QualityManagerService {
     }
   }
 
-  /** Resolution label from width/height via the shared bucketing helper (anamorphic/scope crops, e.g. 1918×872 → 1080p). */
+  /** Resolution label of a file (source dimensions) via the bucketing helper (anamorphic/scope crops, e.g. 1918×872 → 1080p). */
   resolutionLabel(w?: number, h?: number): string {
     return bucketResolutionLabel(w, h) ?? (w && h ? `${w}x${h}` : '?');
   }
 
-  /** Map a variant's dimensions to its transcode profile name via {@link bucketResolutionLabel}; width matters since cropped sources expose cropped dimensions. */
+  /** The served rung (from playback-info) holding a variant: smallest width x height box that contains it, since a cropped source's variant is smaller than its rung. */
+  rungForVariant(w?: number, h?: number): QualityOption | undefined {
+    if (!w || !h) return undefined;
+    return this.availableQualities()
+      .filter((q) => q.id !== 'auto' && q.width && q.width >= w && q.height >= h)
+      .sort((a, b) => a.width! * a.height - b.width! * b.height || +!!a.lowBandwidth - +!!b.lowBandwidth || +(a.id === 'original') - +(b.id === 'original'))[0];
+  }
+
+  /** Transcode rung name of a variant, the key of `transcodeBitrateByQuality`; null for a copy (`original`) or no match. */
   transcodeTierFromVariantHeight(h: number, w?: number): string | null {
-    if (h <= 0) return null;
-    const label = bucketResolutionLabel(w, h);
-    if (!label) return null;
-    return label === '4K' ? '2160p' : label;
+    const rung = this.rungForVariant(w, h);
+    return rung && rung.id !== 'original' ? rung.id : null;
   }
 
   // ── Private helpers ──

@@ -100,17 +100,11 @@ services:
       # FLIKS_SKIP_PRE_MIGRATION_BACKUP: '1'
 
       # ---- Streaming (optional) ----
-      # Session timings. Everything an admin tunes day to day, including the
-      # transcode-cache budget, the GPU, the tone-map algorithm and curve and
-      # the background ffmpeg job count, lives in Settings > Streaming.
+      # Everything an admin tunes day to day lives in Settings > Streaming: the
+      # transcode-cache budget, the GPU and OpenCL device, the tone-map algorithm
+      # and curve, the background ffmpeg job count and the sessions per user.
       # STREAM_LIVE_SESSION_TTL_MS: 30000        # viewer TTL without a heartbeat
-      # STREAM_JOB_GRACE_MS: 60000               # encoder kill delay after the last viewer
-      # STREAM_JOB_FALLBACK_TIMEOUT_MS: 1800000  # idle session timeout
-      # STREAM_MAX_SESSIONS_PER_USER: 10
       # TRANSCODE_CACHE_GC_INTERVAL_MS: 300000
-
-      # ---- Hardware (optional) ----
-      # FLIKS_OPENCL_DEVICE: '0.0'               # pin platform.device for the OpenCL tone-map
     volumes:
       # Library root — this is the path you type when adding a library in the UI.
       - /path/to/your/media:/medias

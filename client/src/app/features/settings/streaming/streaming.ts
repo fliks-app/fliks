@@ -76,6 +76,11 @@ export class StreamingSettingsComponent implements OnInit {
   readonly gpuRenderNode = signal('auto');
   /** The device-picker row shows only with more than one GPU. */
   readonly gpus = signal<{ renderNode: string; label: string; kind: string; accel: string }[]>([]);
+  /** Blank = engine default for the three advanced fields and 10 for the session cap. */
+  readonly openclDevice = signal('');
+  readonly ortThreads = signal('');
+  readonly optimizePauseRestart = signal(false);
+  readonly maxSessionsPerUser = signal('');
 
   ngOnInit(): void {
     void this.load();
@@ -100,6 +105,10 @@ export class StreamingSettingsComponent implements OnInit {
       this.autoQualityMode.set(
         all['streaming_auto_quality_mode'] === 'abr' ? 'abr' : 'directplay',
       );
+      this.openclDevice.set(all['streaming_opencl_device'] ?? '');
+      this.ortThreads.set(all['streaming_ort_threads'] ?? '');
+      this.optimizePauseRestart.set(all['streaming_optimize_pause_restart'] === 'true');
+      this.maxSessionsPerUser.set(all['streaming_max_sessions_per_user'] ?? '');
       this.tonemapAlgosAvailable.set(algos.available ?? ['auto']);
       this.gpus.set(gpusResp.gpus ?? []);
       // Pre-fill from resolved values: raw keys would show "auto" while an env var drives the session, and saving would overwrite it.
@@ -142,6 +151,10 @@ export class StreamingSettingsComponent implements OnInit {
         streaming_auto_crop_enabled: String(this.autoCropEnabled()),
         streaming_throttle_enabled: String(this.throttleEnabled()),
         streaming_throttle_threshold_seconds: this.throttleThresholdSeconds(),
+        streaming_opencl_device: this.openclDevice(),
+        streaming_ort_threads: this.ortThreads(),
+        streaming_optimize_pause_restart: String(this.optimizePauseRestart()),
+        streaming_max_sessions_per_user: this.maxSessionsPerUser(),
       });
       this.toast.success(this.translate.instant('settings.streaming.saved'));
     } catch { /* interceptor */ }

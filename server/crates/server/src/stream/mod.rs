@@ -17,6 +17,7 @@ mod system;
 
 pub(crate) use edl::find as edl_sidecar;
 pub use file::{ResolvedFile, book_format, extname, resolve_file};
+pub(crate) use hardware::settings_changed;
 pub use info::{__path_item_playback_info, __path_playback_info};
 pub(crate) use item::audio_parts_of_file;
 pub(crate) use media_jobs::{scan_file, sprite_file};
@@ -25,6 +26,7 @@ pub use routes::{
     __path_keyframes, __path_qualities, __path_tonemap_algos,
 };
 pub(crate) use scan::{keep_now as keep_scan, scan_now, spawn_scan, version_of};
+pub(crate) use system::served_rung;
 pub use system::{
     __path_command, __path_purge_all, __path_purge_file, __path_stats, __path_streams,
 };
@@ -48,6 +50,7 @@ pub struct Shared {
     edl: Mutex<EdlCache>,
     edl_warned: Mutex<HashSet<String>>,
     scans: scan::Scans,
+    codecs: db::CodecWrites,
     booted: Instant,
 }
 
@@ -58,6 +61,7 @@ impl Default for Shared {
             edl: Mutex::default(),
             edl_warned: Mutex::default(),
             scans: scan::Scans::default(),
+            codecs: db::CodecWrites::default(),
             booted: Instant::now(),
         }
     }
