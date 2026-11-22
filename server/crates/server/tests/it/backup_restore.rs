@@ -1,6 +1,6 @@
 //! Backup and restore through the real router on a scratch database (`docs/spec/system.md`, Vectors).
-//! Skipped without `DATABASE_URL`, `pg_dump` or `psql`; refuses to touch a database named `fliks`.
-use crate::session;
+//! Skipped locally without `DATABASE_URL`, `pg_dump` or `psql` (a failure under CI); refuses to touch a database named `fliks`.
+use crate::{fakes::skip, session};
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, db, state::AppState};
 use serde_json::{Value, json};
@@ -209,10 +209,10 @@ async fn setting(pool: &PgPool, key: &str) -> Option<String> {
 #[tokio::test]
 async fn backup_and_restore_on_a_scratch_database() {
     let Ok(url) = std::env::var("DATABASE_URL") else {
-        return;
+        return skip("DATABASE_URL unset");
     };
     if !have("pg_dump") || !have("psql") {
-        return;
+        return skip("pg_dump or psql missing");
     }
     let _ = std::fs::remove_dir_all(fliks_server::system::backup::dir());
     let scratch = Scratch::create(&url, None).await;
@@ -674,10 +674,10 @@ async fn pre_backup(
 #[tokio::test]
 async fn pre_migration_backup_on_scratch_databases() {
     let Ok(url) = std::env::var("DATABASE_URL") else {
-        return;
+        return skip("DATABASE_URL unset");
     };
     if !have("pg_dump") {
-        return;
+        return skip("pg_dump missing");
     }
     let total = sqlx::migrate!("../../migrations").migrations.len();
     let dir = PathBuf::from(format!(

@@ -343,3 +343,11 @@ impl Net for Dns {
         SocketAddr::from(([127, 0, 0, 1], self.port))
     }
 }
+
+/// Under CI a missing input fails the test; locally it skips it, loudly.
+pub fn skip(what: &str) {
+    if std::env::var("CI").is_ok_and(|v| !matches!(v.as_str(), "" | "0" | "false")) {
+        panic!("{what}: required under CI");
+    }
+    eprintln!("\n\x1b[1;33mWARNING: {what}: test SKIPPED\x1b[0m\n");
+}

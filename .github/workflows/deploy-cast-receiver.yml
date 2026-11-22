@@ -1,17 +1,18 @@
-# Deploys the Cast receiver shell to GitHub Pages on every push to main
-# that touches cast-receiver/. The receiver is static (no build step) —
-# we just publish the directory as-is. The published URL is what gets
-# registered once in the Google Cast Developer Console.
+# Deploys the Cast receiver shell to GitHub Pages. The receiver is static (no build step): the
+# directory is published as-is. Pages has one site per repository, so one artifact holds both:
+#   /          the latest release tag, registered as the prod app in the Google Cast Developer Console
+#   /staging/  `main`, registered as an unpublished app (the dev app ID of `cast-receiver/README.md`)
+# Released senders talk to the receiver of their release, not to whatever `main` holds.
 #
-# After the first successful run, enable Pages in the repo settings:
-#   Settings → Pages → Source = "GitHub Actions"
-# Then register the URL `https://<owner>.github.io/<repo>/` (or your
-# custom domain) in the Cast Console as the receiver app's URL.
+# Settings → Pages → Source = "GitHub Actions", and the `github-pages` environment must allow
+# deployments from `main` and from `v*` tags.
 name: Deploy Cast receiver
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
+    # Path filters don't apply to tag pushes.
     paths:
       - 'cast-receiver/**'
       - 'server/public/emoji/**'
@@ -35,17 +36,39 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: cp -r server/public/emoji cast-receiver/emoji
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: node --test cast-receiver/*.test.js
+      # A tag run publishes that tag; any other run keeps the latest release in place.
+      - name: check out the release and main sides
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then release=$GITHUB_REF_NAME; else release=$(git tag --list 'v*' --sort=-v:refname | head -1); fi
+          [ -n "$release" ]
+          echo "release receiver: $release"
+          git worktree add --detach ../release "refs/tags/$release"
+          git worktree add --detach ../staging origin/main
       # The Cast OS has no emoji font and its Chrome cannot read COLRv1: ship Noto's CBDT build.
-      - run: |
-          mkdir -p cast-receiver/fonts
+      - name: assemble the site
+        run: |
           base=https://raw.githubusercontent.com/googlefonts/noto-emoji/v2.051/fonts
-          curl -fsSL -o cast-receiver/fonts/NotoColorEmoji.ttf "$base/NotoColorEmoji.ttf"
-          curl -fsSL -o cast-receiver/fonts/LICENSE "$base/LICENSE"
-          echo "72a635cb3d2f3524c51620cdde406b217204e8a6a06c6a096ff8ed4b5fd6e27b  cast-receiver/fonts/NotoColorEmoji.ttf" | sha256sum -c
+          curl -fsSL -o NotoColorEmoji.ttf "$base/NotoColorEmoji.ttf"
+          curl -fsSL -o NotoEmoji.LICENSE "$base/LICENSE"
+          echo "72a635cb3d2f3524c51620cdde406b217204e8a6a06c6a096ff8ed4b5fd6e27b  NotoColorEmoji.ttf" | sha256sum -c
+          for side in release staging; do
+            cp -r "../$side/server/public/emoji" "../$side/cast-receiver/emoji"
+            mkdir -p "../$side/cast-receiver/fonts"
+            cp NotoColorEmoji.ttf "../$side/cast-receiver/fonts/NotoColorEmoji.ttf"
+            cp NotoEmoji.LICENSE "../$side/cast-receiver/fonts/LICENSE"
+          done
+          mkdir site
+          cp -r ../release/cast-receiver/. site/
+          cp -r ../staging/cast-receiver site/staging
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
-          path: cast-receiver
+          path: site
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

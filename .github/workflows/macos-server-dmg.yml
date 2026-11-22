@@ -92,7 +92,7 @@ jobs:
         working-directory: client
         run: |
           npm ci
-          npx ng build --configuration=production
+          npm run build
 
       # ── Generate Xcode project ──
       - name: Generate Xcode project

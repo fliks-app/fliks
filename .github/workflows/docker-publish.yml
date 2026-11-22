@@ -50,6 +50,7 @@ on:
 permissions:
   contents: read
   packages: write
+  actions: read
 
 # A newer main push supersedes a running one; a tag build always finishes.
 concurrency:
@@ -63,11 +64,13 @@ env:
 jobs:
   setup:
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     outputs:
       platforms: ${{ steps.set.outputs.platforms }}
       reuse: ${{ steps.reuse.outputs.reuse }}
     steps:
-      # A tag on a commit whose main push already published `sha-<sha>` re-tags that image.
+      # A tag on a commit whose main push published `sha-<sha>` re-tags that image. release-please tags seconds
+      # after the merge, so the tag run waits for the main run of the same commit.
       - name: Log in to GHCR
         if: startsWith(github.ref, 'refs/tags/v')
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
@@ -77,13 +80,24 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]] \
-            && docker buildx imagetools inspect "$REGISTRY/$IMAGE_NAME:sha-$GITHUB_SHA" > /dev/null 2>&1; then
-            echo "reuse=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "reuse=false" >> "$GITHUB_OUTPUT"
+          reuse=false
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            absent=0
+            for _ in $(seq 180); do
+              status=$(gh run list --workflow docker-publish.yml --branch main --event push --commit "$GITHUB_SHA" \
+                --json status --jq '.[0].status // "none"')
+              [ "$status" = completed ] && break
+              # No main run after 3 minutes: the commit only touched ignored paths.
+              if [ "$status" = none ]; then absent=$((absent + 1)); [ "$absent" -ge 9 ] && break; fi
+              sleep 20
+            done
+            docker buildx imagetools inspect "$REGISTRY/$IMAGE_NAME:sha-$GITHUB_SHA" > /dev/null 2>&1 && reuse=true
           fi
+          echo "reuse=$reuse" >> "$GITHUB_OUTPUT"
 
       - id: set
         run: |

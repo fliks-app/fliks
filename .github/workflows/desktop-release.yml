@@ -11,7 +11,7 @@
 #   1. native C++ compositor addon (desktop/native) — node-gyp rebuild against
 #      the Electron 45 ABI, linked to libmpv + SDL3 + GL/EGL.
 #   2. esbuild main/preload bundle  (cd desktop && npm run build).
-#   3. the Angular client           (cd client && npx ng build), staged into
+#   3. the Angular client           (cd client && npm run build), staged into
 #      desktop/web so electron-builder ships it at resources/web.
 #   + a vendored self-contained libmpv into desktop/native/vendor per OS.
 #
@@ -293,7 +293,7 @@ jobs:
       # desktop/web → resources/web (read at runtime via process.resourcesPath).
       - name: Build Angular client
         working-directory: client
-        run: npx ng build --configuration=production
+        run: npm run build
 
       - name: Stage client into desktop/web
         shell: bash
