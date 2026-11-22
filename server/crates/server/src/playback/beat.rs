@@ -737,7 +737,7 @@ pub async fn heartbeat(
     let saved = watched::record_watch(&st.db, history_user, media, &watch).await?;
     let completed = saved
         .as_ref()
-        .is_some_and(|s| s["completed"] == json!(true));
+        .is_some_and(|s| s.row["completed"] == json!(true));
     if let (true, Some(sid)) = (completed, sid) {
         st.account_sessions.complete(&st, history_user, sid).await;
     }
@@ -757,7 +757,7 @@ pub async fn heartbeat(
         )
         .await;
     }
-    Ok(reply(lost, superseded, Some(saved)))
+    Ok(reply(lost, superseded, Some(saved.map(|s| s.row))))
 }
 
 #[cfg(test)]

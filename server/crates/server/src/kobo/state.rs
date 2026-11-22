@@ -101,16 +101,6 @@ fn build(r: &Row, created: DateTime<Utc>) -> Value {
     out
 }
 
-async fn updated_at(db: &PgPool, user: i32, item: i32) -> sqlx::Result<Option<DateTime<Utc>>> {
-    sqlx::query_scalar(
-        r#"SELECT "updatedAt" FROM playback_states WHERE "userId" = $1 AND "itemId" = $2"#,
-    )
-    .bind(user)
-    .bind(item)
-    .fetch_optional(db)
-    .await
-}
-
 pub async fn get(
     State(st): State<AppState>,
     k: Kobo,
@@ -127,11 +117,12 @@ pub async fn get(
     Ok(json_response(StatusCode::OK, json!([s[&b.item]])))
 }
 
-/// When the device last changed the state, clamped to now: its bookmark's `LastModified`, else its status'.
+/// When the device last changed the state, clamped to now: the later of its bookmark's and status' `LastModified`.
 fn modified(s: &Value) -> Option<DateTime<Utc>> {
     [&s["CurrentBookmark"], &s["StatusInfo"]]
         .into_iter()
-        .find_map(|v| DateTime::parse_from_rfc3339(v["LastModified"].as_str()?).ok())
+        .filter_map(|v| DateTime::parse_from_rfc3339(v["LastModified"].as_str()?).ok())
+        .max()
         .map(|d| d.with_timezone(&Utc).min(Utc::now()))
 }
 
@@ -187,7 +178,6 @@ pub async fn put(
     if let Some(p) = progression {
         let _one = serialise(user, b.item).await;
         let (family, last_chapter_start) = finish_context(&st.db, b.item, b.file).await?;
-        let before = updated_at(&st.db, user, b.item).await?;
         let watch = Watch {
             position: 0.0,
             duration: 0.0,
@@ -203,14 +193,16 @@ pub async fn put(
             external: true,
         };
         let saved = record_watch(&st.db, user, b.media, &watch).await?;
-        if saved.is_some_and(|s| s["completed"] == json!(true)) {
+        if saved
+            .as_ref()
+            .is_some_and(|s| s.row["completed"] == json!(true))
+        {
             st.account_sessions
                 .complete_reading(&st, user, b.item)
                 .await;
         }
-        let at = updated_at(&st.db, user, b.item).await?;
         // A state older than the server's was dropped: the next sync sends the device the newer one.
-        if let Some(at) = at.filter(|a| before != Some(*a)) {
+        if let Some(at) = saved.and_then(|s| s.written) {
             let kept = json!({
                 "at": at.timestamp_micros(), "StatusInfo": s["StatusInfo"],
                 "Statistics": s["Statistics"], "CurrentBookmark": s["CurrentBookmark"],

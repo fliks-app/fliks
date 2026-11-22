@@ -95,7 +95,7 @@ pub fn child_main() -> ExitCode {
             Some(b) => w.write_all(&[1]).and_then(|()| write_bytes(w, b)),
             None => w.write_all(&[0]),
         }),
-        Some("probe") => answer(&mut out, local::probe(path), write_probe),
+        Some("probe") => answer(&mut out, local::probe(path, n != 0), write_probe),
         Some("page-at") => answer(&mut out, local::page_at(path, n), |w, b| write_bytes(w, b)),
         _ => return ExitCode::from(2),
     };
@@ -359,10 +359,10 @@ pub fn info(path: &Path) -> Result<Option<Vec<u8>>, Error> {
     })
 }
 
-/// The page count, `ComicInfo.xml` and first page in one pass.
-pub fn probe(path: &Path) -> Result<Probe, Error> {
+/// The page count, `ComicInfo.xml` and, when `first` asks, the first page in one pass.
+pub fn probe(path: &Path, first: bool) -> Result<Probe, Error> {
     let limit = MAX_INFO_BYTES + MAX_ENTRY_BYTES + (1 << 20);
-    call("probe", path, 0, limit, |r| {
+    call("probe", path, usize::from(first), limit, |r| {
         status(r)?;
         let pages = u64_of(r)?;
         if pages > MAX_PAGES as u64 {

@@ -70,14 +70,14 @@ fn write(path: &Path, f: &Facts) -> Result<bool, String> {
             .is_none_or(|v| tag.get_string(*k) == Some(v))
     }) && number.is_none_or(|n| tag.track() == Some(n))
         && tag.disk() == Some(disc)
-        && (year.is_none() || tag.get_string(ItemKey::RecordingDate).is_some());
+        && (year.is_none() || tag.date().is_some());
     if current {
         return Ok(false);
     }
     for (k, v) in text {
         set(&mut tag, k, v);
     }
-    if let Some(y) = year.filter(|_| tag.get_string(ItemKey::RecordingDate).is_none()) {
+    if let Some(y) = year.filter(|_| tag.date().is_none()) {
         tag.insert_text(ItemKey::RecordingDate, y.to_string());
     }
     if let Some(n) = number {
@@ -216,6 +216,18 @@ mod tests {
             "matching tags are not rewritten"
         );
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_year_only_tag_holds_a_date() {
+        let mut tag = Tag::new(lofty::tag::TagType::VorbisComments);
+        tag.insert_text(ItemKey::Year, "2011".into());
+        assert!(tag.date().is_some());
+        assert!(
+            Tag::new(lofty::tag::TagType::VorbisComments)
+                .date()
+                .is_none()
+        );
     }
 
     #[cfg(unix)]

@@ -1267,4 +1267,5 @@ async fn playlist_totals_count_the_visible_tracks_in_one_pass(pool: PgPool) {
     assert_eq!(by("Empty")["songCount"], 0);
     let full = c.bob("getPlaylist", "id=pl-1").await;
     assert_eq!(full["playlist"]["songCount"], 2);
+    assert_eq!(full["playlist"]["duration"], by("Mix")["duration"]);
 }

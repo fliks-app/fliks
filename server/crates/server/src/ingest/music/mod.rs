@@ -76,6 +76,7 @@ fn stem(rel: &str) -> &str {
 /// What a folder's sample file says: the record that names the album, and the ids its tags carry.
 pub struct Sample {
     pub record: Record,
+    /// The credited album artists as a line, empty for a compilation that names none.
     pub artist: String,
     pub release_group: Option<String>,
     pub release: Option<String>,
@@ -88,7 +89,7 @@ pub async fn sample(st: &AppState, path: &Path) -> Option<Sample> {
     let t = TrackTags::read(&p.info, &seps, stem(&file_name(path)));
     Some(Sample {
         record: album_record(std::slice::from_ref(&t)),
-        artist: AlbumTags::of(std::slice::from_ref(&t)).artist,
+        artist: AlbumTags::of(std::slice::from_ref(&t)).credited_line(),
         release_group: t.release_group.clone(),
         release: t.release.clone(),
     })

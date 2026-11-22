@@ -131,6 +131,7 @@ pub async fn provider_credits(
     a: Authed,
     id: Result<PathParams<i32>, AppError>,
 ) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     Ok(Json(service::provider_credits(&st, &a, id?.0).await?))
 }
 

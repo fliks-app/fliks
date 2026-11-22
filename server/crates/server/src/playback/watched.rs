@@ -345,8 +345,8 @@ async fn write_state(
     at: DateTime<Utc>,
     completed: bool,
     watched: bool,
-) -> sqlx::Result<()> {
-    sqlx::query(
+) -> sqlx::Result<DateTime<Utc>> {
+    sqlx::query_scalar(
         r#"INSERT INTO playback_states
              ("userId", "itemId", "mediaFileId", "positionSeconds", "durationSeconds", completed,
               "lastPlayedAt", "playedAt", progression, locator)
@@ -360,7 +360,8 @@ async fn write_state(
              "playedAt" = CASE WHEN $8 THEN $7 ELSE playback_states."playedAt" END,
              "mediaFileId" = EXCLUDED."mediaFileId",
              progression = COALESCE($9, playback_states.progression),
-             locator = CASE WHEN $11 THEN NULL ELSE COALESCE($10, playback_states.locator) END"#,
+             locator = CASE WHEN $11 THEN NULL ELSE COALESCE($10, playback_states.locator) END
+           RETURNING "updatedAt""#,
     )
     .bind(user)
     .bind(w.item)
@@ -373,9 +374,8 @@ async fn write_state(
     .bind(w.progression)
     .bind(&w.locator)
     .bind(w.clear_locator)
-    .execute(db)
+    .fetch_one(db)
     .await
-    .map(drop)
 }
 
 /// Completes the other items the file plays, and returns those that were not completed yet.
@@ -412,14 +412,21 @@ async fn replaced(db: &PgPool, item: i32) -> sqlx::Result<bool> {
         .await
 }
 
-/// Upserts the viewer's row for the item the beat names and returns it as `repo.save` did,
-/// `None` after an FK violation (file gone mid-session).
+/// What `record_watch` stored: the row as `repo.save` returned it, and the `updatedAt` this call
+/// wrote (`None` when the replay guard dropped it).
+pub struct Saved {
+    pub row: Value,
+    pub written: Option<DateTime<Utc>>,
+}
+
+/// Upserts the viewer's row for the item the beat names; `None` after an FK violation (file gone
+/// mid-session).
 pub async fn record_watch(
     db: &PgPool,
     user: i32,
     media: i32,
     w: &Watch,
-) -> Result<Option<Value>, AppError> {
+) -> Result<Option<Saved>, AppError> {
     let existing = find_state(db, user, w.item).await?;
     let replay = w.client_played_at;
     let stale = replay
@@ -456,14 +463,14 @@ pub async fn record_watch(
     };
     let write = |file: Option<i32>| async move {
         if stale {
-            Ok(())
-        } else if let Some(at) = replay {
-            write_state(db, user, w, file, at, completed, watched).await
-        } else {
-            write_state(db, user, w, file, Utc::now(), completed, watched).await
+            return Ok(None);
         }
+        let at = replay.unwrap_or_else(Utc::now);
+        write_state(db, user, w, file, at, completed, watched)
+            .await
+            .map(Some)
     };
-    let is_fk = |r: &sqlx::Result<()>| matches!(r, Err(sqlx::Error::Database(d)) if d.code().as_deref() == Some("23503"));
+    let is_fk = |r: &sqlx::Result<Option<DateTime<Utc>>>| matches!(r, Err(sqlx::Error::Database(d)) if d.code().as_deref() == Some("23503"));
     let mut saved = write(Some(w.file)).await;
     // A merge replaced the item's files meanwhile: keep the progress, name no file.
     if is_fk(&saved) && replaced(db, w.item).await? {
@@ -472,7 +479,7 @@ pub async fn record_watch(
     if is_fk(&saved) {
         return Ok(None);
     }
-    saved?;
+    let written = saved?;
     if completed && !was_completed && !stale {
         log_play(db, user, w.item).await?;
         let mut done = vec![w.item];
@@ -497,5 +504,5 @@ pub async fn record_watch(
         out["episode"] = w.episode.map_or(Value::Null, |id| json!({"id": id}));
     }
     out["mediaFile"] = json!({"id": w.file});
-    Ok(Some(out))
+    Ok(Some(Saved { row: out, written }))
 }

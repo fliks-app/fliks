@@ -60,14 +60,19 @@ pub(crate) async fn read_info(abs: &Path, format: &str) -> Option<ComicInfo> {
     }
 }
 
-/// An archive's page count, `ComicInfo.xml` and first page from one read; nothing for a PDF or an
-/// archive that cannot be read.
-async fn probe(abs: &Path, format: &str) -> (Option<i32>, Option<ComicInfo>, Option<Vec<u8>>) {
+/// An archive's page count and `ComicInfo.xml`, and its first page when `first` asks, from one read;
+/// nothing for a PDF or an archive that cannot be read.
+async fn probe(
+    abs: &Path,
+    format: &str,
+    first: bool,
+) -> (Option<i32>, Option<ComicInfo>, Option<Vec<u8>>) {
     if format == "pdf" {
         return (None, None, None);
     }
     let p = abs.to_path_buf();
-    let Some(Ok(read)) = crate::comics::blocking_ingest(move || archive::probe(&p)).await else {
+    let Some(Ok(read)) = crate::comics::blocking_ingest(move || archive::probe(&p, first)).await
+    else {
         return (None, None, None);
     };
     (
@@ -103,19 +108,6 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
                 continue;
             }
         };
-        let (pages, info, first) = probe(&f.abs, format).await;
-        if let Some(first) = first.filter(|_| wants_poster) {
-            let n = name::parse_path(&n);
-            let key = n.sort.and_then(|s| s.parse().ok()).unwrap_or(f64::MAX);
-            if poster.as_ref().is_none_or(|p| key < p.0)
-                && let Some(jpeg) =
-                    crate::comics::blocking_ingest(move || crate::comics::poster_of(&first))
-                        .await
-                        .flatten()
-            {
-                poster = Some((key, jpeg));
-            }
-        }
         let Some(file) = sqlx::query_scalar!(
             r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality, "mtimeMs")
                VALUES ($1, $2, $3, $4, $5, $6)
@@ -137,6 +129,21 @@ pub async fn register(st: &AppState, media: i32, files: &[Placed]) -> Result<Reg
             conflicts.push(format!("{n}: file already linked to another media"));
             continue;
         };
+        let key = name::parse_path(&n)
+            .sort
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(f64::MAX);
+        // Only a file that can beat the poster so far is read for its first page.
+        let wants = wants_poster && poster.as_ref().is_none_or(|p| key < p.0);
+        let (pages, info, first) = probe(&f.abs, format, wants).await;
+        if let Some(first) = first
+            && let Some(jpeg) =
+                crate::comics::blocking_ingest(move || crate::comics::poster_of(&first))
+                    .await
+                    .flatten()
+        {
+            poster = Some((key, jpeg));
+        }
         rows.push(Row {
             file,
             rel: f.rel.replace('\\', "/"),

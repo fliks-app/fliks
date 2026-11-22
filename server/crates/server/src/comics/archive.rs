@@ -417,10 +417,10 @@ pub(super) mod local {
         page_name(raw).or_else(|| info_name(raw))
     }
 
-    /// The page count, `ComicInfo.xml` and first page in reading order, in one pass.
-    pub fn probe(src: &Src<'_>) -> Result<Probe, Error> {
+    /// The page count, `ComicInfo.xml` and, when `first` asks, the first page in reading order, in one pass.
+    pub fn probe(src: &Src<'_>, first: bool) -> Result<Probe, Error> {
         let (mut pages, mut info) = (0usize, None);
-        let mut first: Option<(String, Vec<u8>)> = None;
+        let mut lead: Option<(String, Vec<u8>)> = None;
         each(src, MAX_TOTAL_BYTES, probe_name, |_, name, size, r| {
             if info_name(&name).is_some() {
                 if size <= MAX_INFO_BYTES && info.is_none() {
@@ -433,17 +433,18 @@ pub(super) mod local {
                 return Err(Error::TooLarge);
             }
             if first
-                .as_ref()
-                .is_none_or(|f| natural(&name, &f.0) == Ordering::Less)
+                && lead
+                    .as_ref()
+                    .is_none_or(|f| natural(&name, &f.0) == Ordering::Less)
             {
-                first = Some((name, take(r, size, MAX_ENTRY_BYTES)?));
+                lead = Some((name, take(r, size, MAX_ENTRY_BYTES)?));
             }
             Ok(true)
         })?;
         Ok(Probe {
             pages,
             info,
-            first: first.map(|f| f.1),
+            first: lead.map(|f| f.1),
         })
     }
 
@@ -475,7 +476,7 @@ pub(super) mod local {
         Err(Error::Unsupported("libarchive"))
     }
 
-    pub fn probe(_: &Path) -> Result<Probe, Error> {
+    pub fn probe(_: &Path, _: bool) -> Result<Probe, Error> {
         Err(Error::Unsupported("libarchive"))
     }
 
@@ -522,11 +523,11 @@ mod lib {
         }
     }
 
-    pub fn probe(path: &Path) -> Result<Probe, Error> {
+    pub fn probe(path: &Path, first: bool) -> Result<Probe, Error> {
         if sandbox::enabled() {
-            sandbox::probe(path)
+            sandbox::probe(path, first)
         } else {
-            local::probe(&Src::Path(path))
+            local::probe(&Src::Path(path), first)
         }
     }
 
@@ -624,15 +625,16 @@ pub fn info(path: &Path) -> Result<Option<Vec<u8>>, Error> {
     }
 }
 
-/// The page count, `ComicInfo.xml` and first page of an archive: a solid one is decoded once.
-pub fn probe(path: &Path) -> Result<Probe, Error> {
+/// The page count and `ComicInfo.xml` of an archive, and its first page when `first` asks: a solid
+/// one is decoded once.
+pub fn probe(path: &Path, first: bool) -> Result<Probe, Error> {
     let probe = match sniff(path)? {
         Kind::Zip => Probe {
             pages: page_count(path)?,
             info: info(path).ok().flatten(),
-            first: page(path, 0).ok(),
+            first: first.then(|| page(path, 0).ok()).flatten(),
         },
-        Kind::Lib => lib::probe(path)?,
+        Kind::Lib => lib::probe(path, first)?,
     };
     if probe.pages == 0 {
         Err(Error::NoPages)

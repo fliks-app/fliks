@@ -22,7 +22,7 @@
       "expect": {
         "body": {
           "error": "Bad Request",
-          "message": "itemIds must list every item in the playlist exactly once",
+          "message": "itemIds must list each item shown to the caller exactly once",
           "statusCode": 400
         },
         "status": 400
@@ -38,7 +38,7 @@
       "expect": {
         "body": {
           "error": "Bad Request",
-          "message": "itemIds must list every item in the playlist exactly once",
+          "message": "itemIds must list each item shown to the caller exactly once",
           "statusCode": 400
         },
         "status": 400

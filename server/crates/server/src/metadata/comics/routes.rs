@@ -11,6 +11,7 @@ use crate::{
 };
 use axum::{Json, Router, extract::State, routing::get};
 use fliks_domain::{
+    acl::{Action, Subject},
     comics::provider::{self, Work},
     external_id::{Namespace, Namespaces},
     media::kind::MediaKind,
@@ -71,6 +72,7 @@ pub(crate) fn hit(known: &Namespaces, p: Namespace, v: &Value) -> Option<Value> 
 /// `GET /api/metadata/{provider}/comic/{externalId}` (rule 40).
 #[utoipa::path(get, path = "/api/metadata/{provider}/comic/{externalId}", responses((status = 200)))]
 pub async fn preview_comic(State(st): State<AppState>, a: Authed, ids: Ids) -> Res {
+    a.require(Action::Read, Subject::Media)?;
     let PathParams((name, id)) = ids?;
     let ns = comic_provider(&st, &name)?;
     let known = st.namespaces();

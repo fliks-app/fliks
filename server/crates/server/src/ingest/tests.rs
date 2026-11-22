@@ -1787,8 +1787,31 @@ mod book_ingest {
         .execute(&c.st.db)
         .await
         .unwrap();
+        // The reader was 20 s into the second part, which was its own version.
+        sqlx::query(
+            r#"INSERT INTO playback_states ("userId", "itemId", "mediaFileId", "positionSeconds")
+               SELECT (SELECT min(id) FROM users), p."itemId", p."mediaFileId", 20
+               FROM item_parts p JOIN media_files f ON f.id = p."mediaFileId"
+               WHERE p."mediaId" = $1 AND f."relativePath" LIKE '%Part 2.m4b'"#,
+        )
+        .bind(m)
+        .execute(&c.st.db)
+        .await
+        .unwrap();
         let again = layout_of(&c, m, "Orfaline", &["Title Part 1.m4b", "Title Part 2.m4b"]).await;
         assert_eq!(again, one, "a rescan lays the old layout out again");
+        let state: (Option<i32>, f64) =
+            sqlx::query_as(r#"SELECT version, "positionSeconds" FROM playback_states"#)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(state, (Some(0), 80.0), "the saved place follows the part");
+        let alias: Option<i32> =
+            sqlx::query_scalar(r#"SELECT "toVersion" FROM item_version_aliases WHERE version = 1"#)
+                .fetch_optional(&c.st.db)
+                .await
+                .unwrap();
+        assert_eq!(alias, Some(0), "the old version number still resolves");
     }
 
     #[sqlx::test(migrations = false)]

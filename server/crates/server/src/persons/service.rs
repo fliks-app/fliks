@@ -6,7 +6,9 @@ use crate::{
     metadata::{
         Credits, Metadata, PersonDetails, Upstream,
         books::{ANCHOR, author_works, routes::hit as book_hit},
-        mark_existing, unavailable,
+        mark_existing,
+        music::aliases::Moved,
+        unavailable,
     },
     state::AppState,
 };
@@ -210,6 +212,21 @@ async fn try_refresh(
     } else {
         return Ok(());
     };
+    // A folded person is gone: the details and the avatar belong to the survivor.
+    if let (Some(asked), Some(now)) = (&p.musicbrainz, &d.canonical_id)
+        && asked != now
+    {
+        let moved = crate::metadata::music::aliases::redirect_person(db, p.id, asked, now)
+            .await
+            .map_err(|e| e.to_string())?;
+        tracing::info!("person {} merged upstream: {moved:?}", p.id);
+        if let Moved::Folded(into) = moved {
+            p.id = into;
+        }
+        if matches!(moved, Moved::Folded(_) | Moved::Renamed) {
+            p.musicbrainz = Some(now.clone());
+        }
+    }
     let avatar = match d.avatar_url.as_deref().filter(|u| !u.is_empty()) {
         Some(url) => images.download_and_store(url, &Target::person(p.id)).await,
         None => None,
@@ -237,14 +254,6 @@ WHERE id = $1"#,
     .execute(db)
     .await
     .map_err(|e| e.to_string())?;
-    if let (Some(asked), Some(now)) = (&p.musicbrainz, &d.canonical_id)
-        && asked != now
-    {
-        let moved = crate::metadata::music::aliases::redirect_person(db, p.id, asked, now)
-            .await
-            .map_err(|e| e.to_string())?;
-        tracing::info!("person {} merged upstream: {moved:?}", p.id);
-    }
     Ok(())
 }
 
@@ -331,6 +340,7 @@ pub async fn detail(st: &AppState, a: &Authed, id: i32) -> Result<Value, AppErro
     let mut p = find(&st.db, id).await?;
     let lang = st.metadata.lang.resolve(None).await?;
     ensure_details_loaded(&st.db, &st.metadata, &st.images, &lang, &mut p).await;
+    let id = p.id;
     let person = person_json(&st.db, id).await?;
     let (cast, crew) = tokio::try_join!(
         credit_rows(st, a, id, &person, false),
@@ -615,6 +625,7 @@ pub async fn discography(st: &AppState, a: &Authed, id: i32) -> Result<Value, Ap
     let mut p = find(&st.db, id).await?;
     let lang = st.metadata.lang.resolve(None).await?;
     ensure_details_loaded(&st.db, &st.metadata, &st.images, &lang, &mut p).await;
+    let id = p.id;
     let acl = if a.kinds.has(MediaKind::Album) {
         accessible_library_ids(&st.db, a).await?
     } else {

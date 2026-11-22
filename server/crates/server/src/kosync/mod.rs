@@ -260,17 +260,17 @@ async fn put_progress(
         external: true,
     };
     let saved = record_watch(&st.db, caller.user, r.media, &watch).await?;
-    sqlx::query(
-        r#"UPDATE kosync_progress SET "stateAt" = (SELECT "updatedAt" FROM playback_states
-             WHERE "userId" = $1 AND "itemId" = $3)
-           WHERE "userId" = $1 AND "document" = $2"#,
-    )
-    .bind(caller.user)
-    .bind(&u.document)
-    .bind(r.item)
-    .execute(&st.db)
-    .await?;
-    if saved.is_some_and(|s| s["completed"] == json!(true)) {
+    if let Some(at) = saved.as_ref().and_then(|s| s.written) {
+        sqlx::query(
+            r#"UPDATE kosync_progress SET "stateAt" = $3 WHERE "userId" = $1 AND "document" = $2"#,
+        )
+        .bind(caller.user)
+        .bind(&u.document)
+        .bind(at)
+        .execute(&st.db)
+        .await?;
+    }
+    if saved.is_some_and(|s| s.row["completed"] == json!(true)) {
         st.account_sessions
             .complete_reading(&st, caller.user, r.item)
             .await;
