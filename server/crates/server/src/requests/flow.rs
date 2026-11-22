@@ -688,6 +688,10 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     if dto.delete {
         return create_delete(st, a, &dto).await;
     }
+    if !can_manage(a) {
+        dto.quality_profile_id = None;
+        dto.language_profile_id = None;
+    }
     let key = dto.key();
     if let Some(p) = st.metadata.get(key.provider)
         && key.media_type.is_video()
@@ -751,6 +755,11 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     {
         dto.quality_profile_id = q.or(dto.quality_profile_id);
         dto.language_profile_id = l.or(dto.language_profile_id);
+    }
+    if dto.media_type.is_video() && dto.quality_profile_id.is_none() {
+        let library_default = crate::libraries::default_quality_profile(&st.db, library_id).await?;
+        dto.quality_profile_id =
+            profiles::resolve_quality_profile_id_for_import(&st.db, None, library_default).await?;
     }
     let (quality, language) = (
         some_id(dto.quality_profile_id),

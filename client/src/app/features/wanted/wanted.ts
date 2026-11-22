@@ -30,6 +30,7 @@ export class WantedComponent {
   protected readonly total = signal(0);
   protected readonly loading = signal(true);
   protected readonly failed = signal(false);
+  protected readonly moreFailed = signal(false);
   protected readonly more = computed(() => this.rows().length < this.total());
 
   /** A response for an older filter must not land over a newer one. */
@@ -70,6 +71,7 @@ export class WantedComponent {
     const gen = ++this.generation;
     this.loading.set(true);
     this.failed.set(false);
+    this.moreFailed.set(false);
     const page = append ? this.page + 1 : 1;
     const params: Record<string, string | number> = { page, limit: PAGE };
     const kind = this.kind();
@@ -83,7 +85,15 @@ export class WantedComponent {
       this.rows.update((r) => (append ? [...r, ...answer.data] : answer.data));
       this.total.set(answer.total);
     } catch {
-      if (gen === this.generation && !append) this.failed.set(true);
+      if (gen === this.generation) {
+        if (append) {
+          this.moreFailed.set(true);
+        } else {
+          this.rows.set([]);
+          this.total.set(0);
+          this.failed.set(true);
+        }
+      }
     } finally {
       if (gen === this.generation) this.loading.set(false);
     }

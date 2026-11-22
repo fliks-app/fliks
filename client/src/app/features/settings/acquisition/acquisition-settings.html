@@ -63,7 +63,9 @@
               } @empty {
                 <p class="text-sm text-base-content/60">
                   {{ 'settings.acquisition.providers_empty' | translate }}
-                  <a routerLink="/admin/settings/plugin-catalogue" class="link link-primary">{{ 'settings.acquisition.providers_empty_link' | translate }}</a>
+                  @if (isAdmin()) {
+                    <a routerLink="/admin/settings/plugin-catalogue" class="link link-primary">{{ 'settings.acquisition.providers_empty_link' | translate }}</a>
+                  }
                 </p>
               }
           </div>

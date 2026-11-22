@@ -5,7 +5,7 @@
       <header class="flex items-center justify-between gap-3 flex-wrap">
         <h2 class="card-title text-base">
           {{ 'setup_checklist.title' | translate }}
-          <span class="badge badge-sm" [class.badge-error]="pendingRequiredCount() > 0" [class.badge-ghost]="pendingRequiredCount() === 0">
+          <span class="badge" [class.badge-error]="pendingRequiredCount() > 0" [class.badge-ghost]="pendingRequiredCount() === 0">
             {{ 'setup_checklist.progress' | translate: { done: doneCount(), total: openCount() } }}
           </span>
         </h2>

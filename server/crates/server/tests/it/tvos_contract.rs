@@ -9,9 +9,10 @@ use tower::ServiceExt;
 
 const MEDIA: [&str; 4] = ["id", "title", "type", "additionalFanartUrls"];
 const FILE: [&str; 4] = ["id", "quality", "relativePath", "size"];
-const CONTINUE: [&str; 6] = [
+const CONTINUE: [&str; 7] = [
     "mediaId",
     "positionSeconds",
+    "durationSeconds",
     "progressPercent",
     "lastPlayedAt",
     "mediaTitle",
@@ -156,4 +157,5 @@ async fn requests_keep_the_keys_tvos_decodes(pool: PgPool) {
     let rows = page["data"].as_array().unwrap();
     assert_eq!(rows.len(), 1);
     require(&rows[0], &REQUEST, "requests");
+    assert!(page["total"].is_i64(), "requests: total");
 }

@@ -1233,6 +1233,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       return (await this.loader.run(kind, (op) => this.launch(op, resumeTime))) ?? false;
     } finally {
       settle();
+      this.drainPendingReload();
     }
   }
 
@@ -1553,7 +1554,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // No `replaces`: the film's session stays open until a candidate answers, so a launch where every one fails
       // is byte-identical to a plugin-free one, on any server.
       const info = await op.negotiate(
-        () => this.negotiatePlayback(undefined, { fileId: item.mediaFileId }, { timeoutMs: LAUNCH_NEGOTIATE_TIMEOUT_MS }),
+        () => this.negotiatePlayback(undefined, { fileId: item.mediaFileId }, { skipErrorToast: true, timeoutMs: LAUNCH_NEGOTIATE_TIMEOUT_MS }),
         { replace: false },
       ).catch((e) => {
         if (isLoadSuperseded(e)) throw e;
@@ -1706,10 +1707,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.wireNativePlayerEngine(engine);
   }
 
+  /** Swapped by specs, since a relative `vi.mock` is refused. */
+  private readonly surfaceFactory = createEngineSurface;
+
   /** Engine plus the surface contract that goes with it; the wiring below is
    *  this player's own. */
   private async createSurface(op: LoadOp, kind: EngineSurfaceKind) {
-    const surface = await op.engine(createEngineSurface({
+    const surface = await op.engine(this.surfaceFactory({
       kind,
       video: this.videoEl()!.nativeElement,
       container: this.containerEl()?.nativeElement,
@@ -3078,7 +3082,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Back on this device at `position`: reload the engine, or open it for the first time when the route started
    *  on another output. The pre-handoff LiveSession was GC'd, so mint a fresh sid rather than reuse
-   *  `playbackInfo?.sessionId`, which would race the heartbeat fallback and flash a reload. */
+   *  the loader's held sid, which would race the heartbeat fallback and flash a reload. */
   private async resumeLocal(s: PlaybackSnapshot): Promise<void> {
     if (this.destroyed) return;
     this.screen.applyLandscapeOnOpen();
@@ -3677,8 +3681,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  serialise against other reloads/recoveries; `at` overrides the resume anchor. */
   async reloadStream(at?: number, why: ReloadWhy = { reason: 'other' }) {
     if (!this.engine) return;
-    if (this.reloadingStream) {
-      // A pick made mid-reload is already persisted; replay it once the running reload settles.
+    if (this.reloadingStream || this.loader.busy()) {
+      // A pick made mid-reload or mid-launch is already persisted; replay it once that run settles.
       if (at === undefined) this.pendingReload = why;
       return;
     }
@@ -3735,7 +3739,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }): Promise<void> {
     const engine = this.engine!;
     const pi = await this.negotiatePlayback(o.negotiateAt, {}, { ...o.replace, timeoutMs: o.timeoutMs });
-    this.loader.adopt(pi);
+    this.loader.adopt(pi, o.replace?.replaces);
     this.adoptPlaybackInfo(pi);
     // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
     // load.

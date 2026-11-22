@@ -350,6 +350,7 @@ pub async fn import_watch_history(
         let ran = run_audited(&st, "ImportWatchHistory", Trigger::Manual, async move {
             match import::import_server(&job_state.db, &server).await {
                 Ok(s) => {
+                    crate::settings::checklist::mark_data_imported(&job_state.db).await;
                     job_state.hub.emit(SseEvent::WatchHistoryImportCompleted {
                         server_id,
                         server_name: job_name,

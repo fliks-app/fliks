@@ -219,7 +219,7 @@ pub async fn probe_hashed(st: &AppState, path: &Path, crop: bool) -> Result<Prob
     probe_with(st, path, crop, true).await
 }
 
-async fn probe_with(
+pub(crate) async fn probe_with(
     st: &AppState,
     path: &Path,
     crop: bool,

@@ -62,9 +62,10 @@ export class PlayerLoader {
     return this.carried ?? this.committed()?.sessionId;
   }
 
-  /** Commits an answer negotiated outside an op. */
-  adopt(pi: PlaybackInfoResponse): void {
+  /** Commits an answer negotiated outside an op; `replaced` is the session that answer retired. */
+  adopt(pi: PlaybackInfoResponse, replaced?: string): void {
     this.committed.set(pi);
+    this.dropCarried(replaced);
   }
 
   forget(): void {
@@ -137,7 +138,7 @@ export class PlayerLoader {
               throw new LoadSuperseded();
             }
             this.committed.set(pi);
-            this.carried = undefined;
+            this.dropCarried(replaces);
             return pi;
           }),
         );
@@ -174,8 +175,9 @@ export class PlayerLoader {
     }
   }
 
-  private dropCarried(): void {
-    if (this.carried) this.host.stopSession(this.carried);
+  /** Deletes the carried session unless `except` (the one a negotiation just replaced) already retired it. */
+  private dropCarried(except?: string): void {
+    if (this.carried && this.carried !== except) this.host.stopSession(this.carried);
     this.carried = undefined;
   }
 }

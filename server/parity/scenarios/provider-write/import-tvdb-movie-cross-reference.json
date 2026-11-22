@@ -48,7 +48,7 @@
           "languageProfile": {
             "audioLanguages": [],
             "id": 1,
-            "name": "Toutes les langues (défaut)",
+            "name": "All languages",
             "subtitleLanguages": []
           },
           "languageProfileId": 1,
@@ -142,7 +142,7 @@
           "languageProfile": {
             "audioLanguages": [],
             "id": 1,
-            "name": "Toutes les langues (défaut)",
+            "name": "All languages",
             "subtitleLanguages": []
           },
           "languageProfileId": 1,

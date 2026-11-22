@@ -20,7 +20,7 @@ const PAGE = 60;
 /** The artists or the composers of a library, as a grid of avatars. */
 @Component({
   selector: 'app-music-people',
-  imports: [RowSkeletonComponent, 
+  imports: [RowSkeletonComponent,
     FormsModule,
     TranslatePipe,
     TranslatePluralPipe,

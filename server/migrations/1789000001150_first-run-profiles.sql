@@ -19,5 +19,5 @@ WHERE NOT EXISTS (SELECT 1 FROM "quality_profiles" WHERE "family" = 'image');
 
 ALTER TABLE "language_profiles" DISABLE TRIGGER set_updated_at;
 UPDATE "language_profiles" SET "name" = 'All languages'
- WHERE "name" = 'Toutes les langues (défaut)';
+ WHERE "name" = 'Toutes les langues (défaut)' AND "audioLanguages" = '[]' AND "subtitleLanguages" = '[]';
 ALTER TABLE "language_profiles" ENABLE TRIGGER set_updated_at;

@@ -60,6 +60,7 @@ pub(super) async fn start(st: AppState, a: Authed) -> Res<(StatusCode, Json<Valu
         let ran = run_audited(&st, "ImportSeerrRequests", Trigger::Manual, async move {
             match import(&job_state.db).await {
                 Ok(s) => {
+                    crate::settings::checklist::mark_data_imported(&job_state.db).await;
                     job_state.hub.emit(SseEvent::SeerrImportCompleted {
                         users: s.users.len() as i64,
                         users_created: s.users_created,

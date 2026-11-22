@@ -34,7 +34,7 @@ Guards run before the key check (auth rule 17): unauthenticated with a bad key i
 | 6 | `notification` | recommended | `["/admin","settings","notifications"]` | any row (enabled or not) | `notification_connections` |
 | 7 | `non-admin-user` | recommended | `["/admin","settings","users"]` | any user with `"isAdmin" <> true` (disabled users count) | `users` |
 | 8 | `auto-approval-rule` | recommended | `["/admin","settings","auto-approval"]` | any row (`enabled` ignored) | `auto_approval_rules` |
-| 9 | `data-import` | recommended | `["/admin","settings","data-imports"]` | a `commands` row `ImportWatchHistory` or `ImportSeerrRequests` with `status = 'completed'` | `commands` |
+| 9 | `data-import` | recommended | `["/admin","settings","data-imports"]` | the `app_settings` row `data_import_done`, written when a watch-history or Seerr import finishes (the audit rows are pruned after 30 days) | `app_settings` |
 
 4. Items 1-3 read other domains' tables with no service call and no per-user scope: a restricted viewer is irrelevant, the route needs `settings.access`. Library ACL does not apply (the checklist asks "does any exist").
 5. Checks run concurrently, one existence query each; results keep item order.

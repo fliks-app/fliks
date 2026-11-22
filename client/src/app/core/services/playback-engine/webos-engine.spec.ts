@@ -148,6 +148,18 @@ describe('WebOsEngine load failures', () => {
     expect(v.load).toHaveBeenCalledTimes(1);
     expect(removed).toEqual(expect.arrayContaining(['loadedmetadata', 'error']));
   });
+
+  it('keeps suppressing <video> errors while a newer load runs after the one it cancelled', async () => {
+    const engine = new WebOsEngine();
+    (engine as unknown as { video: unknown }).video = loading();
+    const first = engine.load('/api/stream/1/direct', 0).then(() => null, (err) => err);
+    const second = engine.load('/api/stream/2/direct', 0).then(() => null, (err) => err);
+    expect(await first).toMatchObject({ name: 'WebOsLoadCancelled' });
+    expect((engine as unknown as { loadingPhase: boolean }).loadingPhase).toBe(true);
+    await engine.unload();
+    await second;
+    expect((engine as unknown as { loadingPhase: boolean }).loadingPhase).toBe(false);
+  });
 });
 
 describe('WebOsEngine audio tracks', () => {

@@ -3282,7 +3282,7 @@ describe('PlayerComponent negotiation entry points', () => {
 
     await startPreRoll(h, undefined);
 
-    expect(negotiate).toHaveBeenCalledWith(undefined, { fileId: TRAILER_FILE_ID }, { timeoutMs: 30_000 });
+    expect(negotiate).toHaveBeenCalledWith(undefined, { fileId: TRAILER_FILE_ID }, { skipErrorToast: true, timeoutMs: 30_000 });
     const call = h.streamingApi.getPlaybackInfo.mock.calls[0] as unknown[];
     expect(call[0]).toBe(TRAILER_FILE_ID);
     expect(call[1]).toEqual(DEVICE_PROFILE);
@@ -3608,6 +3608,23 @@ describe('PlayerComponent review fixes', () => {
     expect(h.component.reloadStream).toHaveBeenCalledWith(undefined, { reason: 'quality' });
   });
 
+  it('parks a reload picked while the launch loads and replays it once the launch ends', async () => {
+    const h = createHarness();
+    let endLaunch!: () => void;
+    h.component.launch = () => new Promise<boolean>((r) => (endLaunch = () => r(true)));
+    h.component.doReloadStream = vi.fn(async () => {});
+
+    const starting = h.component.startLocal(undefined, 'launch');
+    await h.component.reloadStream(undefined, { reason: 'quality' });
+    expect(h.component.doReloadStream).not.toHaveBeenCalled();
+
+    endLaunch();
+    await starting;
+    await flush();
+
+    expect(h.component.doReloadStream).toHaveBeenCalledTimes(1);
+  });
+
   it('writes no position while an episode switch holds the old stream under the new ids', async () => {
     const h = createHarness();
     h.engine.currentTime = 95;
@@ -3722,13 +3739,13 @@ describe('PlayerComponent: leaving during the launch', () => {
     );
     const surfaces: { resolve: () => void; engine: ReturnType<typeof fakeEngine> }[] = [];
     h.component.engine = null;
-    h.component.createShakaEngine = async (op: { engine: (p: Promise<unknown>) => Promise<unknown> }) => {
+    h.component.videoEl = () => ({ nativeElement: document.createElement('video') });
+    h.component.surfaceFactory = () => {
       const engine = fakeEngine();
       let resolve!: () => void;
       const created = new Promise<{ engine: unknown }>((r) => (resolve = () => r({ engine })));
       surfaces.push({ resolve, engine });
-      await op.engine(created);
-      h.component.engine = engine;
+      return created;
     };
     (TestBed.inject(ActivatedRoute).snapshot.queryParams as any) = { mediaId: String(MEDIA_ID) };
     const launching = h.component.ngAfterViewInit();
