@@ -6,8 +6,21 @@
   <svg drawerIcon lucideShield class="h-5 w-5"></svg>
 
   <ng-container drawerMenu>
+    <li class="sticky top-0 z-10 bg-base-100 pb-2">
+      <input
+        #filterInput
+        type="search"
+        class="input input-bordered input-sm w-full"
+        [placeholder]="'admin.filter_placeholder' | translate"
+        [attr.aria-label]="'admin.filter_placeholder' | translate"
+        [value]="filter()"
+        (input)="filter.set(filterInput.value)"
+        (keydown.enter)="openFirst()"
+        (keydown.escape)="filter.set(''); filterInput.blur()"
+      />
+    </li>
     @for (section of sections(); track section.id; let i = $index) {
-      <li class="menu-title text-xs uppercase tracking-wider" [class.mt-2]="i === 0" [class.mt-4]="i !== 0">{{ section.label | translate }}</li>
+      <li class="menu-title text-sm uppercase tracking-wider" [class.mt-2]="i === 0" [class.mt-4]="i !== 0">{{ section.label | translate }}</li>
       @for (item of section.items; track item.id) {
         <li>
           <a [routerLink]="item.route" [class.menu-active]="activeItemId() === item.id">

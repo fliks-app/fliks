@@ -77,7 +77,7 @@ pub async fn preview_comic(State(st): State<AppState>, a: Authed, ids: Ids) -> R
     let id = known
         .normalize(ns, &id)
         .ok_or_else(|| AppError::bad_request(format!("Invalid id for provider: {name}")))?;
-    let lang = lang(&st).await?;
+    let lang = lang(&st, &a).await?;
     let Fetched { work, issues } = fetch(&st, ns, &id, &lang, GO).await?;
     let mut out = card(
         ns,

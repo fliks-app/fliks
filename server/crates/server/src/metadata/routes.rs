@@ -122,8 +122,9 @@ pub(crate) fn stamp(records: &mut [Value], ns: Namespace, kind: MediaKind) {
     }
 }
 
-pub(crate) async fn lang(st: &AppState) -> Result<Resolved, AppError> {
-    Ok(st.metadata.lang.resolve(None).await?)
+/// The viewer's language for provider answers, else the global setting.
+pub(crate) async fn lang(st: &AppState, a: &Authed) -> Result<Resolved, AppError> {
+    Ok(st.metadata.lang.for_viewer(a.lang).await?)
 }
 
 /// Whether the TMDB provider answers (a client keys a request by `tmdbId` only then), and the available
@@ -163,7 +164,7 @@ async fn listed(
     let Some(id) = st.metadata.lister(kind) else {
         return Ok(Json(json!([])));
     };
-    let l = lang(st).await?;
+    let l = lang(st, a).await?;
     let v = st
         .metadata
         .list(id, kind, name, params, &l, Priority::Interactive)
@@ -217,12 +218,12 @@ pub async fn upcoming_tv(State(st): State<AppState>, a: Authed) -> Res {
     listed(&st, &a, true, "upcoming", &[]).await
 }
 
-async fn genres(st: &AppState, tv: bool) -> Res {
+async fn genres(st: &AppState, a: &Authed, tv: bool) -> Res {
     let kind = MediaKind::from_tv(tv);
     let Some(id) = st.metadata.lister(kind) else {
         return Ok(Json(json!([])));
     };
-    let l = lang(st).await?;
+    let l = lang(st, a).await?;
     let v = st
         .metadata
         .list(id, kind, "genres", &[], &l, Priority::Interactive)
@@ -234,13 +235,13 @@ async fn genres(st: &AppState, tv: bool) -> Res {
 #[utoipa::path(get, path = "/api/metadata/genres/movie", responses((status = 200)))]
 pub async fn genres_movie(State(st): State<AppState>, a: Authed) -> Res {
     a.require(Action::Read, Subject::Media)?;
-    genres(&st, false).await
+    genres(&st, &a, false).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/genres/tv", responses((status = 200)))]
 pub async fn genres_tv(State(st): State<AppState>, a: Authed) -> Res {
     a.require(Action::Read, Subject::Media)?;
-    genres(&st, true).await
+    genres(&st, &a, true).await
 }
 
 async fn discovered(st: AppState, a: Authed, q: Vec<(String, String)>, tv: bool) -> Res {
@@ -281,8 +282,8 @@ fn target(st: &AppState, provider: &str, id: &str) -> Result<(Namespace, String)
 type Legacy = Result<PathParams<String>, AppError>;
 pub(crate) type Ids = Result<PathParams<(String, String)>, AppError>;
 
-async fn details(st: &AppState, p: Namespace, kind: MediaKind, id: &str) -> Res {
-    let l = lang(st).await?;
+async fn details(st: &AppState, a: &Authed, p: Namespace, kind: MediaKind, id: &str) -> Res {
+    let l = lang(st, a).await?;
     let v = st
         .metadata
         .of(p)
@@ -292,8 +293,8 @@ async fn details(st: &AppState, p: Namespace, kind: MediaKind, id: &str) -> Res 
     Ok(Json(v))
 }
 
-async fn seasons_of(st: &AppState, p: Namespace, id: &str, stubs: bool) -> Res {
-    let l = lang(st).await?;
+async fn seasons_of(st: &AppState, a: &Authed, p: Namespace, id: &str, stubs: bool) -> Res {
+    let l = lang(st, a).await?;
     let (go, series) = (Priority::Interactive, MediaKind::Series);
     let provider = st.metadata.of(p);
     let found = if stubs {
@@ -309,7 +310,7 @@ pub async fn details_movie(State(st): State<AppState>, a: Authed, ids: Ids) -> R
     a.require(Action::Read, Subject::Media)?;
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st, &p, &id)?;
-    details(&st, p, MediaKind::Movie, &id).await
+    details(&st, &a, p, MediaKind::Movie, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}", responses((status = 200)))]
@@ -317,7 +318,7 @@ pub async fn details_tv(State(st): State<AppState>, a: Authed, ids: Ids) -> Res 
     a.require(Action::Read, Subject::Media)?;
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st, &p, &id)?;
-    details(&st, p, MediaKind::Series, &id).await
+    details(&st, &a, p, MediaKind::Series, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}/seasons", responses((status = 200)))]
@@ -325,7 +326,7 @@ pub async fn seasons(State(st): State<AppState>, a: Authed, ids: Ids) -> Res {
     a.require(Action::Read, Subject::Media)?;
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st, &p, &id)?;
-    seasons_of(&st, p, &id, false).await
+    seasons_of(&st, &a, p, &id, false).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/{provider}/tv/{externalId}/season-stubs", responses((status = 200)))]
@@ -333,26 +334,26 @@ pub async fn season_stubs(State(st): State<AppState>, a: Authed, ids: Ids) -> Re
     a.require(Action::Read, Subject::Media)?;
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st, &p, &id)?;
-    seasons_of(&st, p, &id, true).await
+    seasons_of(&st, &a, p, &id, true).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/movie/{tmdbId}", responses((status = 200)))]
 pub async fn legacy_movie(State(st): State<AppState>, a: Authed, id: Legacy) -> Res {
     a.require(Action::Read, Subject::Media)?;
     let (p, id) = target(&st, "tmdb", &id?.0)?;
-    details(&st, p, MediaKind::Movie, &id).await
+    details(&st, &a, p, MediaKind::Movie, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}", responses((status = 200)))]
 pub async fn legacy_tv(State(st): State<AppState>, a: Authed, id: Legacy) -> Res {
     a.require(Action::Read, Subject::Media)?;
     let (p, id) = target(&st, "tmdb", &id?.0)?;
-    details(&st, p, MediaKind::Series, &id).await
+    details(&st, &a, p, MediaKind::Series, &id).await
 }
 
 #[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}/seasons", responses((status = 200)))]
 pub async fn legacy_seasons(State(st): State<AppState>, a: Authed, id: Legacy) -> Res {
     a.require(Action::Read, Subject::Media)?;
     let (p, id) = target(&st, "tmdb", &id?.0)?;
-    seasons_of(&st, p, &id, false).await
+    seasons_of(&st, &a, p, &id, false).await
 }

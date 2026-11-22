@@ -144,6 +144,14 @@ async fn resolve_sole_library(st: &AppState, a: &Authed, media_type: MediaKind) 
     }
 }
 
+/// Window length of a user's quota (rule 13): 7 days when unset.
+fn quota_period(a: &Authed) -> i32 {
+    match a.user.quota_period_days {
+        0 => 7,
+        n => n,
+    }
+}
+
 /// Rule 13: the ADD requests of the window still pending or approved count against the limit; the
 /// caller holds the user's quota lock, so the count is still true at the insert.
 async fn check_quota(tx: &mut PgConnection, a: &Authed, media_type: MediaKind) -> Res<()> {
@@ -151,18 +159,44 @@ async fn check_quota(tx: &mut PgConnection, a: &Authed, media_type: MediaKind) -
     if limit == 0 {
         return Ok(());
     }
-    let period = match a.user.quota_period_days {
-        0 => 7,
-        n => n,
-    };
+    let period = quota_period(a);
     let since = Utc::now() - chrono::Duration::days(i64::from(period));
     let count = db::quota_count(&mut *tx, a.user.id, media_type, since).await?;
     if count >= i64::from(limit) {
         return Err(AppError::forbidden(format!(
             "Quota exceeded: {count}/{limit} {media_type} requests in last {period} days"
-        )));
+        ))
+        .keyed(
+            "requests.quotaExceeded",
+            json!({ "count": count, "limit": limit, "kind": media_type.as_str(), "days": period }),
+        ));
     }
     Ok(())
+}
+
+/// Per kind with a limit: `{limit, used, periodDays, nextFreeAt}`, counted as `check_quota` does.
+pub async fn allowance(st: &AppState, a: &Authed) -> Res<Value> {
+    let period = quota_period(a);
+    let since = Utc::now() - chrono::Duration::days(i64::from(period));
+    let mut out = Map::new();
+    for kind in MediaKind::ALL {
+        let limit = a.user.quotas.limit(kind);
+        if limit == 0 {
+            continue;
+        }
+        let used = db::quota_count(&st.db, a.user.id, kind, since).await?;
+        let next_free = match db::quota_oldest(&st.db, a.user.id, kind, since).await? {
+            Some(t) => json!(fliks_domain::js::iso(
+                t + chrono::Duration::days(i64::from(period))
+            )),
+            None => Value::Null,
+        };
+        out.insert(
+            kind.to_string(),
+            json!({ "limit": limit, "used": used, "periodDays": period, "nextFreeAt": next_free }),
+        );
+    }
+    Ok(Value::Object(out))
 }
 
 /// Rule 12a.

@@ -156,6 +156,17 @@ export interface RequestsPage {
   total: number;
 }
 
+/** A kind's request limit over its period; `nextFreeAt` is when the oldest counted request leaves the window. */
+export interface KindAllowance {
+  limit: number;
+  used: number;
+  periodDays: number;
+  nextFreeAt: string | null;
+}
+
+/** Kinds without a limit are absent. */
+export type RequestAllowance = Partial<Record<MediaType, KindAllowance>>;
+
 /** Aggregate active-request state for a title across all users (no requester identity); drives the "already requested" gate and the series season/profile-lock UI. */
 export interface TitleRequestState {
   requested: boolean;
@@ -242,6 +253,16 @@ export class RequestsService {
   unwatch(id: number) {
     const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
     return firstValueFrom(this.http.delete<void>(`/api/requests/${id}/watch`, { context }));
+  }
+
+  /** Null when the caller may not request: the allowance is a hint, never an error. */
+  async allowance(): Promise<RequestAllowance | null> {
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    try {
+      return await firstValueFrom(this.http.get<RequestAllowance>('/api/requests/allowance', { context }));
+    } catch {
+      return null;
+    }
   }
 
   getTitleState(key: TitleKey, mediaType: MediaType) {

@@ -165,7 +165,7 @@ pub async fn preview_book(State(st): State<AppState>, a: Authed, ids: Ids) -> Re
     }
     let work = work_id(&id)
         .ok_or_else(|| AppError::bad_request("externalId must be an Open Library work id"))?;
-    let lang = lang(&st).await?;
+    let lang = lang(&st, &a).await?;
     let md = &st.metadata;
     let Value::Object(record) = md
         .work(ANCHOR, MediaKind::Book, &work, &lang, GO)

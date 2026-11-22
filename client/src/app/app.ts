@@ -18,6 +18,7 @@ import { RemoteNotificationService } from './core/services/remote-notification.s
 import { DownloadManagerService } from './core/services/download-manager.service';
 import { AutoDownloadService } from './core/services/auto-download.service';
 import { BrowserDeviceProfileService } from './core/services/browser-device-profile.service';
+import { SearchShortcutService } from './core/services/search-shortcut.service';
 import { TvService } from './core/services/tv.service';
 import { TvSpatialNavService } from './core/services/tv-spatial-nav.service';
 import { ToastContainerComponent } from './shared/components/toast-container';
@@ -62,6 +63,8 @@ export class App implements OnInit, OnDestroy {
   /** Eagerly instantiate to bind the global D-pad handler on TV. */
   private readonly tvSpatialNav = inject(TvSpatialNavService);
   private readonly router = inject(Router);
+  /** Eagerly instantiate to bind the global search shortcuts. */
+  private readonly searchShortcut = inject(SearchShortcutService);
   private readonly dismissStack = inject(DismissableStackService);
   private readonly navbar = inject(NavbarService);
   private readonly backGesture = inject(BackGestureService);

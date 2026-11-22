@@ -178,6 +178,24 @@ pub async fn quota_count(
     .await
 }
 
+/// Oldest `createdAt` among the requests `quota_count` counts: when the window frees a slot.
+pub async fn quota_oldest(
+    db: impl PgExecutor<'_>,
+    user_id: i32,
+    media_type: MediaKind,
+    since: chrono::DateTime<chrono::Utc>,
+) -> sqlx::Result<Option<chrono::DateTime<chrono::Utc>>> {
+    sqlx::query_scalar(
+        r#"SELECT min("createdAt") FROM requests WHERE "userId" = $1 AND "mediaType" = $2
+        AND kind = 'add' AND status IN ('pending', 'approved') AND "createdAt" >= $3"#,
+    )
+    .bind(user_id)
+    .bind(media_type.as_str())
+    .bind(since)
+    .fetch_one(db)
+    .await
+}
+
 /// First key of the quota advisory lock; the second is the user id.
 const QUOTA_LOCK_NS: i32 = 0x7271_7574;
 

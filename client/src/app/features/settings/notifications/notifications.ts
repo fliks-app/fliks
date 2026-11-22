@@ -29,6 +29,15 @@ type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 const isNotificationType = (t: string): t is NotificationType => (NOTIFICATION_TYPES as readonly string[]).includes(t);
 
+const EVENT_GROUPS = [
+  { id: 'requests', prefixes: ['request.'], onByDefault: true },
+  { id: 'downloads', prefixes: ['grab.', 'download.'], onByDefault: false },
+  { id: 'subtitles', prefixes: ['subtitle.'], onByDefault: false },
+  { id: 'library', prefixes: ['media.', 'optimize.'], onByDefault: false },
+  { id: 'livetv', prefixes: ['livetv.'], onByDefault: false },
+  { id: 'system', prefixes: ['health.'], onByDefault: true },
+] as const;
+
 interface NotificationConnection {
   id: number;
   name: string;
@@ -117,6 +126,17 @@ export class NotificationsSettingsComponent implements OnInit {
   /** Advertised by the API rather than restated here, so an event added server-side shows up. */
   readonly allEvents = signal<string[]>([]);
 
+  /** The advertised events by group; an id no prefix claims lands in System. */
+  readonly eventGroups = computed(() => {
+    const events = this.allEvents();
+    const claimed = (g: (typeof EVENT_GROUPS)[number]) => events.filter((e) => g.prefixes.some((p) => e.startsWith(p)));
+    const all = new Set(EVENT_GROUPS.flatMap(claimed));
+    return EVENT_GROUPS.map((g) => ({
+      ...g,
+      events: g.id === 'system' ? [...claimed(g), ...events.filter((e) => !all.has(e))] : claimed(g),
+    })).filter((g) => g.events.length > 0);
+  });
+
   readonly connectionTypes = NOTIFICATION_TYPES;
   readonly secretMask = SECRET_MASK;
 
@@ -169,7 +189,9 @@ export class NotificationsSettingsComponent implements OnInit {
     this.tokenStoredType.set(null);
     this.formTokenCleared.set(false);
     this.formTopic.set('');
-    this.formEvents.set([...this.allEvents()]);
+    this.formEvents.set(
+      this.eventGroups().filter((g) => g.onByDefault).flatMap((g) => g.events),
+    );
     this.testResult.set(null);
     this.editorDialog()?.nativeElement.showModal();
   }
@@ -227,6 +249,18 @@ export class NotificationsSettingsComponent implements OnInit {
     this.formEvents.update((evts) =>
       evts.includes(event) ? evts.filter((e) => e !== event) : [...evts, event],
     );
+  }
+
+  groupCount(events: readonly string[]): number {
+    return events.filter((e) => this.formEvents().includes(e)).length;
+  }
+
+  toggleGroup(events: readonly string[]) {
+    const all = this.groupCount(events) === events.length;
+    this.formEvents.update((evts) => [
+      ...evts.filter((e) => !events.includes(e)),
+      ...(all ? [] : events),
+    ]);
   }
 
   private buildSettings(): Record<string, unknown> {

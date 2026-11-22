@@ -116,6 +116,9 @@
         }
       </button>
     </app-modal-footer>
+    @if (allowance(); as a) {
+      <p class="mt-2 text-end text-sm text-base-content/60" [class.text-warning]="a.blocked" data-testid="request-allowance">{{ a.text }}</p>
+    }
   </div>
   <form method="dialog" class="modal-backdrop">
     <button type="button" (click)="close()">{{ 'common.close' | translate }}</button>

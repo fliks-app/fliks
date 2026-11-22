@@ -673,7 +673,8 @@
     "section_users": "Utilizadores",
     "section_optimize": "Otimização",
     "section_advanced": "Avançado",
-    "section_livetv": "TV em direto"
+    "section_livetv": "TV em direto",
+    "filter_placeholder": "Filtrar definições (tecla /)"
   },
   "home": {
     "libraries": "Bibliotecas",
@@ -1008,7 +1009,9 @@
     "state_pending": "Pedido",
     "state_downloading": "A transferir",
     "state_owned": "Na sua biblioteca",
-    "state_failed": "Falhou, tente novamente"
+    "state_failed": "Falhou, tente novamente",
+    "recent": "Recentes",
+    "recent_clear": "Limpar"
   },
   "discover": {
     "seasons_failed": "Não foi possível carregar as temporadas",
@@ -1552,7 +1555,12 @@
     "tracks_of_one": "{{count}} de {{total}} faixa",
     "tracks_of_other": "{{count}} de {{total}} faixas",
     "tracks_count_one": "{{count}} faixa",
-    "tracks_count_other": "{{count}} faixas"
+    "tracks_count_other": "{{count}} faixas",
+    "allowance_left_one": "Resta {{count}} de {{limit}} pedidos por período de {{days}} dias",
+    "allowance_left_other": "Restam {{count}} de {{limit}} pedidos por período de {{days}} dias",
+    "allowance_none_one": "Limite atingido, próximo pedido em {{count}} dia",
+    "allowance_none_other": "Limite atingido, próximo pedido em {{count}} dias",
+    "quotaExceeded": "Limite de pedidos atingido: {{count}} de {{limit}} nos últimos {{days}} dias"
   },
   "activity": {
     "queue_empty": "Nenhuma transferência ativa.",
@@ -1605,7 +1613,26 @@
     "legend_digital": "Estreia digital",
     "legend_physical": "Estreia física",
     "legend_airing": "Emissão",
-    "legend_release": "Lançamento"
+    "legend_release": "Lançamento",
+    "today": "Hoje",
+    "tomorrow": "Amanhã",
+    "view_label": "Vista do calendário",
+    "view_month": "Mês",
+    "view_agenda": "Agenda",
+    "scope_label": "Títulos mostrados",
+    "scope_all": "Todos os títulos",
+    "scope_monitored": "Monitorizados",
+    "scope_mine": "Adicionados por mim",
+    "state_ok": "No disco",
+    "state_miss": "Em falta",
+    "state_up": "Em breve",
+    "load_more": "Carregar mais 6 semanas",
+    "empty": "Nada agendado.",
+    "event_cinema": "Nos cinemas",
+    "event_digital": "Lançamento digital",
+    "event_physical": "Lançamento físico",
+    "event_airing": "Em exibição",
+    "event_release": "Lançamento"
   },
   "system": {
     "title": "Sistema",
@@ -2638,7 +2665,128 @@
       "relay_pending": "Eliminação pendente num relay que não responde:",
       "relay_pending_drop": "Desistir",
       "event_count_one": "{{count}} evento",
-      "event_count_other": "{{count}} eventos"
+      "event_count_other": "{{count}} eventos",
+      "per_user": "por utilizador",
+      "groups": {
+        "requests": "Pedidos",
+        "downloads": "Transferências",
+        "subtitles": "Legendas",
+        "library": "Biblioteca",
+        "livetv": "TV em direto",
+        "system": "Sistema"
+      },
+      "events": {
+        "request": {
+          "created": {
+            "label": "Pedido criado",
+            "hint": "Alguém pediu um título."
+          },
+          "approved": {
+            "label": "Pedido aprovado",
+            "hint": "Um pedido foi aprovado."
+          },
+          "declined": {
+            "label": "Pedido recusado",
+            "hint": "Um pedido foi recusado."
+          },
+          "processing": {
+            "label": "Pedido em curso",
+            "hint": "Um pedido aprovado está a ser obtido."
+          },
+          "available": {
+            "label": "Pedido disponível",
+            "hint": "Um título pedido está pronto a ver."
+          },
+          "delete": {
+            "created": {
+              "label": "Remoção pedida",
+              "hint": "Alguém pediu para remover um título."
+            },
+            "approved": {
+              "label": "Remoção aprovada",
+              "hint": "Um pedido de remoção foi aprovado."
+            },
+            "declined": {
+              "label": "Remoção recusada",
+              "hint": "Um pedido de remoção foi recusado."
+            }
+          }
+        },
+        "grab": {
+          "started": {
+            "label": "Transferência iniciada",
+            "hint": "Uma transferência foi enviada ao cliente de transferências."
+          }
+        },
+        "download": {
+          "complete": {
+            "label": "Transferência concluída",
+            "hint": "Uma transferência terminou."
+          }
+        },
+        "subtitle": {
+          "downloaded": {
+            "label": "Legenda transferida",
+            "hint": "Uma legenda foi adicionada a um título."
+          },
+          "upgraded": {
+            "label": "Legenda melhorada",
+            "hint": "Uma legenda melhor substituiu a antiga."
+          },
+          "failed": {
+            "label": "Legenda falhada",
+            "hint": "Não foi possível obter uma legenda."
+          },
+          "synced": {
+            "label": "Legenda sincronizada",
+            "hint": "Uma legenda foi reajustada ao vídeo."
+          }
+        },
+        "media": {
+          "leaving_soon": {
+            "label": "A sair em breve",
+            "hint": "Um título vai ser removido da biblioteca."
+          },
+          "cleaned_up": {
+            "label": "Limpeza feita",
+            "hint": "Títulos antigos foram removidos da biblioteca."
+          }
+        },
+        "optimize": {
+          "completed": {
+            "label": "Otimização concluída",
+            "hint": "Um ficheiro foi otimizado."
+          },
+          "failed": {
+            "label": "Otimização falhada",
+            "hint": "Não foi possível otimizar um ficheiro."
+          }
+        },
+        "livetv": {
+          "account_expiring": {
+            "label": "Conta a expirar",
+            "hint": "Uma conta de TV em direto vai expirar."
+          },
+          "account_expired": {
+            "label": "Conta expirada",
+            "hint": "Uma conta de TV em direto expirou."
+          },
+          "adult_guard_failed": {
+            "label": "Filtro adulto falhado",
+            "hint": "O filtro de canais para adultos não conseguiu correr."
+          }
+        },
+        "health": {
+          "corrupt": {
+            "label": "Ficheiro corrompido encontrado",
+            "hint": "Uma análise encontrou um ficheiro multimédia danificado."
+          },
+          "issue": {
+            "label": "Problema de saúde",
+            "hint": "Algo no servidor precisa de atenção."
+          }
+        }
+      }
     },
     "media_servers": {
       "title": "Servidores de media",
@@ -3999,6 +4147,30 @@
       "sidecars_hint": "Extensões lidas junto a uma faixa, por ordem, separadas por vírgulas. Vazio: ttml, elrc, lrc, srt, txt.",
       "load_error": "Não foi possível carregar as definições das letras.",
       "saved": "Definições das letras guardadas."
+    },
+    "nav_words": {
+      "email": "smtp correio email mail",
+      "streams": "transcodificação gpu vaapi qsv nvenc aceleração por hardware codificação",
+      "system": "versão atualização cópia de segurança disco armazenamento registos",
+      "statistics": "estatísticas gráficos utilização",
+      "optimize_queue": "otimizar comprimir recodificar",
+      "libraries": "pastas caminhos análise media",
+      "naming": "renomear ficheiros pastas formato",
+      "notifications": "avisos alertas webhook discord telegram push",
+      "users": "contas membros palavras-passe",
+      "roles": "permissões acesso direitos",
+      "sso": "oidc início de sessão openid autenticação única",
+      "plugins": "extensões suplementos fornecedores",
+      "media_servers": "plex jellyfin emby",
+      "data_imports": "importar histórico de reprodução migrar seerr",
+      "subtitles": "legendas srt idiomas",
+      "subtitle_providers": "opensubtitles legendas transferência",
+      "quality_profiles": "resolução bitrate limite",
+      "metadata": "tmdb tvdb cartazes ilustrações",
+      "general": "nome do servidor idioma url porta",
+      "live_tv_settings": "iptv epg sintonizador canais",
+      "lyrics": "letras karaoke canções",
+      "karaoke": "letras canções cantar"
     }
   },
   "roles": {
@@ -4335,7 +4507,9 @@
   "data_table": {
     "load_error": "Não foi possível carregar a lista.",
     "empty": "Nada para exibir.",
-    "refresh": "Atualizar"
+    "refresh": "Atualizar",
+    "filters": "Filtros",
+    "more": "Mais"
   },
   "bulk": {
     "selected_one": "{{count}} selecionado",

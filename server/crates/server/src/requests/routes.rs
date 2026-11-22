@@ -47,6 +47,12 @@ pub async fn list(State(st): State<AppState>, a: Authed, Query(q): Pairs) -> Res
     Ok(Json(flow::list(&st, &a, dto::list(&q)?).await?))
 }
 
+#[utoipa::path(get, path = "/api/requests/allowance", responses((status = 200)))]
+pub async fn allowance(State(st): State<AppState>, a: Authed) -> Res<Json<Value>> {
+    a.require(Action::Create, Subject::FliksRequest)?;
+    Ok(Json(flow::allowance(&st, &a).await?))
+}
+
 #[utoipa::path(get, path = "/api/requests/title-state", responses((status = 200)))]
 pub async fn title_state(
     State(st): State<AppState>,

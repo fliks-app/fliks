@@ -32,6 +32,7 @@ import {
   searchResultKey,
 } from '../../core/services/api/metadata.service';
 import { AuthService } from '../../core/services/auth.service';
+import { RecentSearchesService } from '../../core/services/recent-searches.service';
 import { SearchStateService, type SearchScope } from '../../core/services/search-state.service';
 import { SocialApiService } from '../../core/services/api/social-api.service';
 import { TvService } from '../../core/services/tv.service';
@@ -80,6 +81,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly booksApi = inject(BooksApiService);
   private readonly musicApi = inject(MusicApiService);
   private readonly router = inject(Router);
+  protected readonly recent = inject(RecentSearchesService);
   private readonly auth = inject(AuthService);
   private readonly social = inject(SocialApiService);
   protected readonly resultKey = searchResultKey;
@@ -254,6 +256,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Called from the <form> ngSubmit (virtual-keyboard Enter on iOS and
    *  Android both fire it through the native browser form contract). */
   protected dismissKeyboard() {
+    this.recent.add(this.state.query());
     this.searchInput()?.nativeElement.blur();
   }
 
@@ -262,6 +265,11 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       document.removeEventListener('pointerdown', this.outsidePointerHandler, { capture: true });
       this.outsidePointerHandler = null;
     }
+  }
+
+  /** A click on a result card or link commits the query. */
+  protected onResultClick(e: Event) {
+    if ((e.target as HTMLElement).closest('a[href], [data-card-link]')) this.recent.add(this.state.query());
   }
 
   onQueryInput(value: string) {
@@ -377,7 +385,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
         this.state.discoverySuggestions.set([]);
         return;
       }
-      const [trending, popular, genres] = await Promise.all([
+      const [trendingAll, popularAll, genres] = await Promise.all([
         this.fetchTrending(ct, this.state.trendingWindow()),
         this.fetchPopular(ct),
         this.metadata.genresByKind(kindOfListFilter(ct)).catch(
@@ -385,15 +393,22 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
         ),
       ]);
       if (this.staleDiscovery(ct, external)) return;
-      this.state.discoveryTrending.set(trending);
-      this.state.discoveryPopular.set(popular);
+      // One seen set across the three rows: a title shows once.
+      const seen = new Set<string>();
+      const unseen = (rows: MetadataSearchResult[]) =>
+        rows.filter((r) => {
+          const k = `${r.mediaType}:${searchResultKey(r)}`;
+          return !seen.has(k) && !!seen.add(k);
+        });
+      this.state.discoveryTrending.set(unseen(trendingAll));
+      this.state.discoveryPopular.set(unseen(popularAll));
       this.state.discoverGenres.set(genres);
 
-      // "Suggestions pour vous": TMDB catalog matching taste, not library-limited; derive top genres from library recommendations.
+      // "Suggestions for you": TMDB catalog matching taste, not library-limited; top genres come from library recommendations.
       const topGenreIds = this.deriveTasteGenreIds(this.state.discoveryRecommendations(), genres);
       const suggestions = await this.fetchSuggestions(ct, topGenreIds);
       if (this.staleDiscovery(ct, external)) return;
-      this.state.discoverySuggestions.set(suggestions);
+      this.state.discoverySuggestions.set(unseen(suggestions));
     } finally {
       this.state.discoveryLoading.set(false);
     }

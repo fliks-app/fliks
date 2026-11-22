@@ -80,12 +80,22 @@
             {{ 'bulk.rows' | translate: { count: paged() ? total() : rows().length } }}
           </span>
         }
-        @for (filter of filters(); track filter.key) {
+        @if (phone() && filters().length) {
+          <button
+            type="button"
+            class="btn btn-ghost min-h-11"
+            [attr.aria-expanded]="filtersOpen()"
+            (click)="filtersOpen.set(!filtersOpen())"
+          >
+            {{ 'data_table.filters' | translate }}
+          </button>
+        }
+        @for (filter of phone() && !filtersOpen() ? [] : filters(); track filter.key) {
           @switch (filter.kind) {
             @case ('search') {
               <input
                 type="search"
-                class="input input-bordered input-sm w-full max-w-xs"
+                class="input input-bordered input-sm w-full max-w-xs max-sm:input-md"
                 [placeholder]="filter.placeholderKey | translate"
                 [value]="filterValue(filter.key)"
                 (input)="onSearchInput(filter.key, $event)"
@@ -122,6 +132,135 @@
     <div role="alert" class="alert alert-error">{{ listError() }}</div>
   } @else if (rows().length === 0) {
     <p class="text-center py-12 text-base-content/60">{{ emptyKey() | translate }}</p>
+  } @else if (phone()) {
+    <ul class="flex flex-col gap-2 scroll-ring-safe" [class.opacity-50]="loading()">
+      @if (bulkSelect()) {
+        <li class="flex items-center gap-2 px-1">
+          <label class="flex min-h-11 items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              class="checkbox"
+              [checked]="allSelected()"
+              [indeterminate]="selectedRows().length > 0 && !allSelected()"
+              (change)="toggleAllSelected()"
+            />
+            {{ 'bulk.select_all' | translate }}
+          </label>
+        </li>
+      }
+      @for (row of rows(); track row.id) {
+        <li class="flex items-start gap-2 rounded-lg border border-base-200 p-3">
+          @if (bulkSelect()) {
+            <input
+              type="checkbox"
+              class="checkbox mt-1"
+              [checked]="isSelected(row.id)"
+              [attr.aria-label]="'bulk.select_row' | translate: { name: rowSelectLabel(row) }"
+              (change)="toggleSelected(row.id)"
+            />
+          }
+          <div class="min-w-0 flex-1">
+            @if (titleColumn(); as title) {
+              @if (cellLink(title, row); as open) {
+                <button
+                  type="button"
+                  class="link link-hover min-h-11 text-start font-medium"
+                  (click)="open()"
+                >
+                  {{ cellLabel(title, row[title.key]) }}
+                </button>
+              } @else {
+                <div class="break-words font-medium">{{ cellLabel(title, row[title.key]) }}</div>
+              }
+              @if (title.subValues?.length) {
+                <div class="mt-1 flex flex-wrap items-center gap-1">
+                  @for (sub of title.subValues; track sub.key) {
+                    @if (
+                      row[sub.key] !== null && row[sub.key] !== undefined && row[sub.key] !== ''
+                    ) {
+                      @if (badgeClass(sub, row[sub.key]); as badge) {
+                        <span class="badge badge-sm" [class]="badge">{{
+                          subValueText(sub, row[sub.key])
+                        }}</span>
+                      } @else {
+                        <span class="text-sm text-base-content/60">{{
+                          subValueText(sub, row[sub.key])
+                        }}</span>
+                      }
+                    }
+                  }
+                </div>
+              }
+            }
+            @if (statusColumn(); as status) {
+              <div class="mt-2 flex items-center gap-2">
+                @if (detailValue(status, row)) {
+                  <app-error-badge
+                    [error]="detailValue(status, row)"
+                    [label]="cellLabel(status, row[status.key])"
+                    [badgeClass]="badgeClass(status, row[status.key])"
+                    [titleKey]="status.detailTitleKey ?? status.labelKey"
+                  />
+                } @else if (badgeClass(status, row[status.key]); as badge) {
+                  <span class="badge" [class]="badge">{{
+                    cellLabel(status, row[status.key])
+                  }}</span>
+                }
+                @if (cellProgress(status, row); as percent) {
+                  <span class="text-sm text-base-content/60 tabular-nums">{{ percent }} %</span>
+                }
+              </div>
+              @if (cellProgress(status, row); as percent) {
+                <progress
+                  class="progress progress-primary mt-1 w-full"
+                  [value]="percent"
+                  max="100"
+                ></progress>
+              }
+            }
+            @if (metaLine(row); as meta) {
+              <div class="mt-2 break-words text-sm text-base-content/60">{{ meta }}</div>
+            }
+          </div>
+          @if (rowActions().length) {
+            @if (inlineActions(row); as inline) {
+              @for (item of inline; track item.action.labelKey) {
+                <button type="button" class="btn btn-ghost min-h-11" (click)="item.run()">
+                  {{ item.action.labelKey | translate }}
+                </button>
+              }
+            }
+            @if (menuActions(row); as menu) {
+              @if (menu.length) {
+                <button
+                  #menuTrigger
+                  type="button"
+                  class="btn btn-ghost btn-square min-h-11 min-w-11"
+                  [attr.aria-label]="'data_table.more' | translate"
+                  (click)="toggleRowMenu(row)"
+                >
+                  <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+                </button>
+                <ng-container
+                  *ngTemplateOutlet="
+                    rowMenu;
+                    context: { $implicit: row, anchor: menuTrigger, menu: menu }
+                  "
+                />
+              }
+            }
+          }
+        </li>
+      }
+    </ul>
+    @if (paged() && totalPages() > 1) {
+      <app-pagination
+        class="pt-2"
+        [current]="page()"
+        [total]="totalPages()"
+        (pageChange)="goToPage($event)"
+      />
+    }
   } @else {
     <div class="overflow-x-auto rounded-lg border border-base-200" [class.opacity-50]="loading()">
       <table class="table table-zebra">
@@ -257,77 +396,12 @@
                         >
                           <svg lucideEllipsisVertical class="h-4 w-4"></svg>
                         </button>
-                        <app-popover-menu
-                          [open]="openMenuRow() === row.id"
-                          [anchor]="menuTrigger"
-                          (closed)="openMenuRow.set(null); closeSubmenu()"
-                        >
-                          @if (sheetSubmenu(menu); as sub) {
-                            <div class="panel-slide-fwd">
-                              <button
-                                type="button"
-                                class="dropdown-item mb-1"
-                                (click)="closeSubmenu()"
-                              >
-                                <svg lucideArrowLeft class="h-4 w-4 shrink-0 opacity-60"></svg>
-                                <span class="flex-1 truncate text-left font-medium">{{
-                                  sub.action.labelKey | translate
-                                }}</span>
-                              </button>
-                              <div class="h-px bg-base-content/10 my-1" role="separator"></div>
-                              @for (child of sub.children; track child.action.labelKey) {
-                                <ng-container
-                                  *ngTemplateOutlet="
-                                    menuRow;
-                                    context: { $implicit: child, row: row }
-                                  "
-                                />
-                              }
-                            </div>
-                          } @else {
-                            @for (item of menu; track item.action.labelKey) {
-                              @if (item.children) {
-                                <button
-                                  #subTrigger
-                                  type="button"
-                                  class="dropdown-item"
-                                  [attr.aria-expanded]="openSubmenu() === item.action.labelKey"
-                                  (click)="toggleSubmenu(item, subTrigger)"
-                                >
-                                  <span class="flex-1 truncate text-left">{{
-                                    item.action.labelKey | translate
-                                  }}</span>
-                                  <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
-                                </button>
-                                @if (!menuSheet()) {
-                                  <app-popover-menu
-                                    [open]="openSubmenu() === item.action.labelKey"
-                                    [anchor]="submenuAnchor()"
-                                    placement="right-start"
-                                    [submenu]="true"
-                                    (closed)="closeSubmenu()"
-                                  >
-                                    @for (child of item.children; track child.action.labelKey) {
-                                      <ng-container
-                                        *ngTemplateOutlet="
-                                          menuRow;
-                                          context: { $implicit: child, row: row }
-                                        "
-                                      />
-                                    }
-                                  </app-popover-menu>
-                                }
-                              } @else {
-                                <ng-container
-                                  *ngTemplateOutlet="
-                                    menuRow;
-                                    context: { $implicit: item, row: row }
-                                  "
-                                />
-                              }
-                            }
-                          }
-                        </app-popover-menu>
+                        <ng-container
+                          *ngTemplateOutlet="
+                            rowMenu;
+                            context: { $implicit: row, anchor: menuTrigger, menu: menu }
+                          "
+                        />
                       }
                     }
                   </div>
@@ -348,6 +422,61 @@
     }
   }
 </div>
+
+<ng-template #rowMenu let-row let-anchor="anchor" let-menu="menu">
+  <app-popover-menu
+    [open]="openMenuRow() === row.id"
+    [anchor]="anchor"
+    (closed)="openMenuRow.set(null); closeSubmenu()"
+  >
+    @if (sheetSubmenu(menu); as sub) {
+      <div class="panel-slide-fwd">
+        <button type="button" class="dropdown-item mb-1" (click)="closeSubmenu()">
+          <svg lucideArrowLeft class="h-4 w-4 shrink-0 opacity-60"></svg>
+          <span class="flex-1 truncate text-left font-medium">{{
+            sub.action.labelKey | translate
+          }}</span>
+        </button>
+        <div class="h-px bg-base-content/10 my-1" role="separator"></div>
+        @for (child of sub.children; track child.action.labelKey) {
+          <ng-container *ngTemplateOutlet="menuRow; context: { $implicit: child, row: row }" />
+        }
+      </div>
+    } @else {
+      @for (item of menu; track item.action.labelKey) {
+        @if (item.children) {
+          <button
+            #subTrigger
+            type="button"
+            class="dropdown-item"
+            [attr.aria-expanded]="openSubmenu() === item.action.labelKey"
+            (click)="toggleSubmenu(item, subTrigger)"
+          >
+            <span class="flex-1 truncate text-left">{{ item.action.labelKey | translate }}</span>
+            <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
+          </button>
+          @if (!menuSheet()) {
+            <app-popover-menu
+              [open]="openSubmenu() === item.action.labelKey"
+              [anchor]="submenuAnchor()"
+              placement="right-start"
+              [submenu]="true"
+              (closed)="closeSubmenu()"
+            >
+              @for (child of item.children; track child.action.labelKey) {
+                <ng-container
+                  *ngTemplateOutlet="menuRow; context: { $implicit: child, row: row }"
+                />
+              }
+            </app-popover-menu>
+          }
+        } @else {
+          <ng-container *ngTemplateOutlet="menuRow; context: { $implicit: item, row: row }" />
+        }
+      }
+    }
+  </app-popover-menu>
+</ng-template>
 
 <ng-template #menuRow let-item let-row="row">
   <button

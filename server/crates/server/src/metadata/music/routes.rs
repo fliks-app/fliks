@@ -47,7 +47,7 @@ pub async fn preview_album(State(st): State<AppState>, a: Authed, ids: Ids) -> R
     let group = known
         .normalize(ns, &id)
         .ok_or_else(|| AppError::bad_request("externalId is not a provider id"))?;
-    let lang = lang(&st).await?;
+    let lang = lang(&st, &a).await?;
     let (fetched, edition) = if ns == Namespace::MUSICBRAINZ {
         match classify(&st, ns, &group, &lang, Priority::Interactive).await? {
             Asked::Group(f) if f.releases.is_empty() => (*f, None),

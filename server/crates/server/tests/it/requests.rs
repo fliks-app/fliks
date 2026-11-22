@@ -646,6 +646,16 @@ async fn quota_counts_only_pending_and_approved_adds_and_blocks_at_the_limit(poo
             json!("Quota exceeded: 2/2 movie requests in last 7 days")
         )
     );
+    assert_eq!(r["key"], "requests.quotaExceeded");
+    assert_eq!(r["params"]["limit"], 2);
+    let (s, al) = call(&c, "GET", "/api/requests/allowance", &c.user, json!(null)).await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        (al["movie"]["limit"].clone(), al["movie"]["used"].clone()),
+        (json!(2), json!(2))
+    );
+    assert!(al["movie"]["nextFreeAt"].is_string());
+    assert!(al.get("series").is_none(), "an unlimited kind is omitted");
     // a request that moved on or was declined stops counting; a series is another quota
     q(
         &c.pool(),

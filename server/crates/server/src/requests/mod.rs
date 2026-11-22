@@ -102,6 +102,7 @@ pub struct Removed {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/requests", get(routes::list).post(routes::create))
+        .route("/api/requests/allowance", get(routes::allowance))
         .route("/api/requests/title-state", get(routes::title_state))
         .route(
             "/api/requests/{id}",
