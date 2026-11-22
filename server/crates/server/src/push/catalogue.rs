@@ -366,7 +366,7 @@ async fn build(st: &AppState, media: i32) -> sqlx::Result<Option<(Vec<i32>, Noti
         return Ok(None);
     }
     let row: Option<(String, Option<i32>)> = sqlx::query_as(
-        r#"SELECT title, "libraryId" FROM media WHERE id = $1 AND "mediaType"::text = 'series'"#,
+        r#"SELECT title, "libraryId" FROM media WHERE id = $1 AND type::text = 'series'"#,
     )
     .bind(media)
     .fetch_optional(&st.db)

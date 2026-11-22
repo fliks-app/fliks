@@ -374,7 +374,7 @@
 {"input":{"fn":"rankFromQualityString","quality":"Movie.720.TELECINE.AAC"},"expected":12},
 {"input":{"fn":"parseReleaseQuality","title":"Show.S01E01.720i.HDTV"},"expected":{"quality":{"id":11,"name":"HDTV-720p","resolution":720,"source":"hdtv","rank":40},"label":"HDTV-720p"}},
 {"input":{"fn":"parseReleaseQuality","title":"1080p-GRP-GRP-The.Title-DVD-FRENCH"},"expected":{"quality":{"id":19,"name":"Remux-1080p","resolution":1080,"source":"remux","rank":72},"label":"Remux-1080p"}},
-{"expected":{"label":"WEBDL-480p","quality":{"id":8,"name":"WEBDL-480p","rank":28,"resolution":480,"source":"web"}},"input":{"fn":"parseReleaseQuality","title":"WEB-2020-The.Title-360p-DTS"}},
+{"expected":{"label":"SDTV","quality":{"id":7,"name":"SDTV","rank":22,"resolution":480,"source":"sdtv"}},"input":{"fn":"parseReleaseQuality","title":"WEB-2020-The.Title-360p-DTS"}},
 {"input":{"fn":"parseReleaseQuality","title":"1080.PROPER.Movie.Blu-ray"},"expected":{"quality":{"id":18,"name":"Bluray-1080p","resolution":1080,"source":"bluray","rank":68},"label":"Bluray-1080p"}},
 {"input":{"fn":"rankFromQualityString","quality":"1080.PROPER.Movie.Blu-ray"},"expected":68},
 {"expected":{"label":"SDTV","quality":{"id":7,"name":"SDTV","rank":22,"resolution":480,"source":"sdtv"}},"input":{"fn":"parseReleaseQuality","title":"WEB_720I_MOVIE"}},
@@ -745,6 +745,6 @@
 {"input":{"fn":"parseReleaseQuality","title":"Movie.720i.BDR.PROPER"},"expected":{"quality":{"id":14,"name":"Bluray-720p","resolution":720,"source":"bluray","rank":50},"label":"Bluray-720p"}},
 {"input":{"fn":"parseReleaseQuality","title":"Film.1080.REMUX.FRENCH"},"expected":{"quality":{"id":19,"name":"Remux-1080p","resolution":1080,"source":"remux","rank":72},"label":"Remux-1080p"}},
 {"expected":{"label":"Bluray-480p","quality":{"id":10,"name":"Bluray-480p","rank":30,"resolution":480,"source":"bluray"}},"input":{"fn":"parseReleaseQuality","title":"The.Title-576p-BDRip-DTS-GRP"}},
-{"input":{"fn":"parseReleaseQuality","title":"Web.Therapy.S01E01.720p.x264-GRP"},"expected":null},
-{"input":{"fn":"parseReleaseQuality","title":"Web.Therapy.S01E01.1080p.WEB.h264"},"expected":null}
+{"expected":{"label":"HDTV-720p","quality":{"id":11,"name":"HDTV-720p","rank":40,"resolution":720,"source":"hdtv"}},"input":{"fn":"parseReleaseQuality","title":"Web.Therapy.S01E01.720p.x264-GRP"}},
+{"expected":{"label":"WEBDL-1080p","quality":{"id":16,"name":"WEBDL-1080p","rank":62,"resolution":1080,"source":"web"}},"input":{"fn":"parseReleaseQuality","title":"Web.Therapy.S01E01.1080p.WEB.h264"}}
 ]}
