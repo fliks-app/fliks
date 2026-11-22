@@ -155,7 +155,7 @@ describe('DataTableComponent — characterisation', () => {
     expect(fixture.componentInstance.visibleActions({ id: 1, name: 'A' })).toHaveLength(0);
   });
 
-  it('keeps a submenu only with a child left for the row, and fills the children\'s :id', async () => {
+  it("keeps a submenu only with a child left for the row, and fills the children's :id", async () => {
     const open = vi.fn();
     const rowActions: RowAction[] = [
       {
@@ -163,7 +163,13 @@ describe('DataTableComponent — characterisation', () => {
         labelKey: 'x.replace',
         children: [
           { kind: 'proxy', labelKey: 'x.auto', method: 'POST', path: '/q/:id/replace' },
-          { kind: 'releases', labelKey: 'x.manual', titleKey: 'x.t', search: '/q/:id/r', grab: '/q/:id/replace' },
+          {
+            kind: 'releases',
+            labelKey: 'x.manual',
+            titleKey: 'x.t',
+            search: '/q/:id/r',
+            grab: '/q/:id/replace',
+          },
         ],
         visibleWhen: { key: 'replaceable', in: [true] },
       },
@@ -178,7 +184,10 @@ describe('DataTableComponent — characterisation', () => {
     const [menu] = table.visibleActions({ id: 4, replaceable: true });
     expect(menu.children?.map((c) => c.action.labelKey)).toEqual(['x.auto', 'x.manual']);
     menu.children![1].run();
-    expect(open).toHaveBeenCalledWith({ titleKey: 'x.t', search: '/q/4/r', grab: '/q/4/replace' }, expect.any(Function));
+    expect(open).toHaveBeenCalledWith(
+      { titleKey: 'x.t', search: '/q/4/r', grab: '/q/4/replace' },
+      expect.any(Function),
+    );
   });
 
   it('drops a releases action, and a submenu left empty, when the host opens no picker', async () => {
@@ -188,7 +197,9 @@ describe('DataTableComponent — characterisation', () => {
         {
           kind: 'submenu',
           labelKey: 'x.replace',
-          children: [{ kind: 'releases', labelKey: 'x.manual', titleKey: 'x.t', search: '/r', grab: '/g' }],
+          children: [
+            { kind: 'releases', labelKey: 'x.manual', titleKey: 'x.t', search: '/r', grab: '/g' },
+          ],
         },
       ],
     });
@@ -746,11 +757,23 @@ describe('DataTableComponent row patches', () => {
   it('replaces only the rows of the same id and ignores an unknown one', async () => {
     const patches = new Subject<readonly Record<string, unknown>[] | null>();
     const fixture = await createComponent({
-      http: { get: () => of([{ id: 1, name: 'A' }, { id: 2, name: 'B' }]) },
+      http: {
+        get: () =>
+          of([
+            { id: 1, name: 'A' },
+            { id: 2, name: 'B' },
+          ]),
+      },
       rowPatches: patches,
     });
-    patches.next([{ id: 2, name: 'B2' }, { id: 9, name: 'ghost' }]);
-    expect(fixture.componentInstance.rows()).toEqual([{ id: 1, name: 'A' }, { id: 2, name: 'B2' }]);
+    patches.next([
+      { id: 2, name: 'B2' },
+      { id: 9, name: 'ghost' },
+    ]);
+    expect(fixture.componentInstance.rows()).toEqual([
+      { id: 1, name: 'A' },
+      { id: 2, name: 'B2' },
+    ]);
   });
 
   it('a null emission reloads the list', async () => {
@@ -1282,5 +1305,106 @@ describe('DataTableComponent: bulk selection', () => {
     select.dispatchEvent(new Event('change'));
     await new Promise((r) => setTimeout(r, 0));
     expect(c.selectedIds().size).toBe(0);
+  });
+});
+
+describe('DataTableComponent phone rows', () => {
+  const PHONE_COLUMNS: TableColumn[] = [
+    {
+      key: 'title',
+      labelKey: 'x.title',
+      linkActionId: 'open' as TableRowActionId,
+      subValues: [{ key: 'kind' }],
+    },
+    { key: 'state', labelKey: 'x.state', badges: { active: 'info' }, progressField: 'progress' },
+    { key: 'size', labelKey: 'x.size' },
+    { key: 'speed', labelKey: 'x.speed' },
+  ];
+  const PHONE_ROWS = [
+    {
+      id: 1,
+      title: 'Series A',
+      kind: 'torrent',
+      state: 'active',
+      progress: 64,
+      size: '2 GB',
+      speed: '',
+    },
+  ];
+
+  const stubPhone = (matches: boolean) => {
+    window.matchMedia = (() => ({
+      matches,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+  };
+  afterEach(() => {
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it('renders cards instead of the table below sm', async () => {
+    stubPhone(true);
+    const fixture = await createComponent({
+      http: { get: () => of(PHONE_ROWS) },
+      columns: PHONE_COLUMNS,
+      resolveAction: () => () => {},
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('table')).toBeNull();
+    const card = el.querySelector('li') as HTMLElement;
+    expect(card.textContent).toContain('Series A');
+    expect(card.textContent).toContain('torrent');
+    expect(card.textContent).toContain('64 %');
+    expect(card.querySelector('progress')).not.toBeNull();
+    expect(card.textContent).toContain('x.size 2 GB');
+    expect(card.textContent).not.toContain('x.speed');
+    expect(el.querySelector('input[type=checkbox]')).toBeNull();
+  });
+
+  it('keeps the table on sm and up', async () => {
+    stubPhone(false);
+    const fixture = await createComponent({
+      http: { get: () => of(PHONE_ROWS) },
+      columns: PHONE_COLUMNS,
+    });
+    expect(fixture.nativeElement.querySelector('table')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('li')).toBeNull();
+  });
+
+  it('adds the leading checkbox only with bulkSelect and collapses filters behind a button', async () => {
+    stubPhone(true);
+    const fixture = await createComponent({
+      http: { get: () => of(PHONE_ROWS) },
+      columns: PHONE_COLUMNS,
+      bulkSelect: true,
+      filters: [{ kind: 'search', key: 'q', placeholderKey: 'x.search' }],
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('li input[type=checkbox]').length).toBe(2);
+    expect(el.querySelector('input[type=search]')).toBeNull();
+    const button = Array.from(el.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('data_table.filters'),
+    ) as HTMLButtonElement;
+    button.click();
+    fixture.detectChanges();
+    expect(el.querySelector('input[type=search]')).not.toBeNull();
+  });
+
+  it('opens the row menu from a More button', async () => {
+    stubPhone(true);
+    const fixture = await createComponent({
+      http: { get: () => of(PHONE_ROWS) },
+      columns: PHONE_COLUMNS,
+      rowActions: [
+        { kind: 'proxy', labelKey: 'x.pause', method: 'POST', path: '/p/:id' } as RowAction,
+      ],
+    });
+    const more = fixture.nativeElement.querySelector(
+      'li button[aria-label="data_table.more"]',
+    ) as HTMLButtonElement;
+    expect(more).not.toBeNull();
+    more.click();
+    expect(fixture.componentInstance.openMenuRow()).toBe(1);
   });
 });

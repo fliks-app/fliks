@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { AdminShellComponent } from './admin-shell';
@@ -109,14 +109,14 @@ function readSidebar(fixture: ComponentFixture<AdminShellComponent>) {
   return sections;
 }
 
-function createFixture(opts: { isAdmin?: boolean; permissions?: string[]; entries?: PluginUiEntry[] } = {}) {
+function createFixture(opts: { isAdmin?: boolean; permissions?: string[]; entries?: PluginUiEntry[]; translations?: object } = {}) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       provideRouter([]),
       provideTranslateService({
         lang: 'en',
-        loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
+        loader: { provide: TranslateLoader, useValue: { getTranslation: () => of(opts.translations ?? {}) } },
       }),
       { provide: Title, useValue: { setTitle: () => {} } },
       {
@@ -231,5 +231,62 @@ describe('AdminShellComponent — sidebar characterisation', () => {
       entries: [entry('fliks.noname', [contribution('page', 100)])],
     });
     expect(readSidebar(fixture)[9].label).toBe('fliks.noname');
+  });
+});
+
+describe('AdminShellComponent sidebar filter', () => {
+  const translations = {
+    settings: { nav: { email: 'Outgoing mail', libraries: 'Libraries' }, nav_words: { email: 'smtp mail' } },
+  };
+
+  function type(fixture: ComponentFixture<AdminShellComponent>, value: string) {
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input[type=search]');
+    input.value = value;
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    return input;
+  }
+
+  it('matches the translated label and the synonym words, and hides the sections left empty', () => {
+    const fixture = createFixture({ permissions: ALL_PERMISSIONS, translations });
+    type(fixture, 'smtp');
+    expect(readSidebar(fixture)).toEqual([
+      { label: 'admin.section_settings', links: [{ label: 'Outgoing mail', href: '/admin/settings/email' }] },
+    ]);
+    type(fixture, 'librar');
+    expect(readSidebar(fixture)[0].links.map((l) => l.href)).toEqual(['/admin/settings/libraries']);
+  });
+
+  it('matches a plugin page by label', () => {
+    const fixture = createFixture({
+      permissions: ALL_PERMISSIONS,
+      entries: [entry('fliks.b', [contribution('page', 100, { labelKey: 'Zebra page' })], { name: 'B Plugin' })],
+    });
+    type(fixture, 'zebra');
+    expect(readSidebar(fixture).map((s) => s.label)).toEqual(['B Plugin']);
+  });
+
+  it('opens the first match on Enter', () => {
+    const fixture = createFixture({ permissions: ALL_PERMISSIONS, translations });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const input = type(fixture, 'mail');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(navigate).toHaveBeenCalledWith('/admin/settings/email');
+  });
+
+  it('focuses the field on "/" unless focus is in a text field', () => {
+    const fixture = createFixture({ permissions: ALL_PERMISSIONS });
+    document.body.appendChild(fixture.nativeElement);
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input[type=search]');
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+    expect(document.activeElement).toBe(input);
+    input.blur();
+    const other = document.createElement('input');
+    document.body.appendChild(other);
+    other.focus();
+    other.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+    expect(document.activeElement).toBe(other);
+    other.remove();
+    fixture.nativeElement.remove();
   });
 });

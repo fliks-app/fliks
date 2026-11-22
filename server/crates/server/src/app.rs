@@ -455,6 +455,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         wanted::watch_delete,
         requests::create,
         requests::list,
+        requests::allowance,
         requests::title_state,
         requests::get_one,
         requests::update,

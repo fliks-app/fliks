@@ -18,6 +18,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import {
   RequestsService,
+  RequestAllowance,
   FliksRequestRow,
   FliksRequestStatus,
   REQUEST_STATUSES,
@@ -49,7 +50,8 @@ import { RequestStatusBadgeComponent } from './request-status-badge/request-stat
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { LucideCheck, LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
-import { KIND_REGISTRY, kindOf } from '../../core/media-kinds';
+import { KIND_REGISTRY, MEDIA_KINDS, kindOf } from '../../core/media-kinds';
+import { allowanceLine } from '../../core/utils/request-allowance';
 import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-skeleton';
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state';
 
@@ -128,6 +130,16 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return id != null ? (this.downloadProgress.progress().get(id) ?? null) : null;
   });
 
+  private readonly allowances = signal<RequestAllowance | null>(null);
+  /** One line per kind the member has a limit on. */
+  protected readonly allowanceLines = computed(() => {
+    const all = this.allowances();
+    return MEDIA_KINDS.flatMap((k) => {
+      const a = all?.[k];
+      return a ? [{ kind: k, ...allowanceLine(this.translate, a) }] : [];
+    });
+  });
+
   readonly rows = signal<FliksRequestRow[]>([]);
   readonly total = signal(0);
   readonly loading = signal(false);
@@ -200,6 +212,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.page = 1;
     this.rows.set([]);
     this.fetch(false);
+    void this.requestsService.allowance().then((a) => this.allowances.set(a));
   }
 
   private async fetch(append: boolean, force = false) {

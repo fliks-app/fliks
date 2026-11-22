@@ -176,13 +176,23 @@ export class DataTableComponent implements OnInit {
 
   private readonly destroyRef = inject(DestroyRef);
 
+  /** Below `sm` rows render as cards; the matchMedia query mirrors Tailwind's 640px breakpoint. */
+  readonly phone = signal(false);
+  readonly filtersOpen = signal(false);
+
   constructor() {
+    const mq =
+      typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 639.98px)') : null;
+    if (mq) {
+      this.phone.set(mq.matches);
+      const onChange = (e: MediaQueryListEvent) => this.phone.set(e.matches);
+      mq.addEventListener('change', onChange);
+      this.destroyRef.onDestroy(() => mq.removeEventListener('change', onChange));
+    }
     const sse = inject(SseService);
-    sse.events
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((event) => {
-        if (this.refreshOn().includes(event.type)) this.requestRefresh();
-      });
+    sse.events.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((event) => {
+      if (this.refreshOn().includes(event.type)) this.requestRefresh();
+    });
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', this.onVisible);
     }
@@ -348,13 +358,20 @@ export class DataTableComponent implements OnInit {
       if (value === null || value === undefined || value === '') continue;
       if (field.kind === 'link') {
         const href = safeExternalUrl(value);
-        if (href) lines.push({ labelKey: field.labelKey, text: this.translate.instant(field.textKey), href });
+        if (href)
+          lines.push({
+            labelKey: field.labelKey,
+            text: this.translate.instant(field.textKey),
+            href,
+          });
         continue;
       }
       const text = this.subValueText(field, value);
       // A plugin's row message is sometimes one of its own i18n keys, sometimes raw text from
       // whatever it talks to; a key resolves, anything else is shown as it came.
-      const resolved = field.format ? text : (translatedServerMessage(text, this.translate) ?? text);
+      const resolved = field.format
+        ? text
+        : (translatedServerMessage(text, this.translate) ?? text);
       lines.push({ labelKey: field.labelKey, text: resolved });
     }
     return lines;
@@ -372,7 +389,6 @@ export class DataTableComponent implements OnInit {
     const percent = Math.round(value);
     return percent >= 100 ? null : percent;
   }
-
 
   /** The row's raw detail text for this column, or null when there is none — `app-error-badge`
    *  resolves and trims it itself, this only decides whether the cell becomes a button. */
@@ -482,6 +498,33 @@ export class DataTableComponent implements OnInit {
     return result;
   }
 
+  readonly titleColumn = computed(
+    () => this.columns().find((c) => c.linkActionId) ?? this.columns()[0],
+  );
+  readonly statusColumn = computed(() => {
+    const title = this.titleColumn();
+    return this.columns().find((c) => c.badges && c !== title);
+  });
+  private readonly metaColumns = computed(() =>
+    this.columns().filter((c) => c !== this.titleColumn() && c !== this.statusColumn()),
+  );
+
+  /** The remaining columns as one `label value · label value` line; empty values are skipped. */
+  metaLine(row: TableRow): string {
+    const parts: string[] = [];
+    for (const col of this.metaColumns()) {
+      const value = row[col.key];
+      if (value === null || value === undefined || value === '') continue;
+      const { format } = col;
+      const text =
+        format === 'peers'
+          ? `▲${value} ▼${row[col.leechersKey ?? ''] ?? 0}`
+          : this.subValueText({ ...col, format }, value);
+      parts.push(`${this.translate.instant(col.labelKey)} ${text}`);
+    }
+    return parts.join(' · ');
+  }
+
   /** Row whose action menu is open, by row id. */
   readonly openMenuRow = signal<CellValue | null>(null);
 
@@ -531,7 +574,11 @@ export class DataTableComponent implements OnInit {
     return this.visibleActions(row).filter((i) => i.action.kind !== 'detail');
   }
 
-  private openRowDetail(titleKey: string, fields: readonly TableDetailField[], row: TableRow): void {
+  private openRowDetail(
+    titleKey: string,
+    fields: readonly TableDetailField[],
+    row: TableRow,
+  ): void {
     this.rowDetail.set({ titleKey, lines: this.detailLines(fields, row) });
     this.rowDetailDialog()?.nativeElement.showModal();
   }

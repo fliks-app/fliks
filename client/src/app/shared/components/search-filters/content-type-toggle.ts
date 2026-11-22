@@ -1,6 +1,6 @@
 import { Component, model } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { SearchContentType } from './search-filters';
+import { SearchContentType } from './search-filters.model';
 
 /** All / movies / series switch of the media picker. */
 @Component({

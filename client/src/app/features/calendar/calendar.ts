@@ -5,15 +5,32 @@ import {
   OnInit,
   computed,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { NgClass } from '@angular/common';
 import { TranslatePipe } from '@ngx-translate/core';
 import { MediaService, CalendarEntry } from '../../core/services/api/media.service';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { mediaDetailLink, kindOf } from '../../core/media-kinds';
+import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
+import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../core/utils/viewport';
+import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
+
+export type CalendarView = 'month' | 'agenda';
+export type CalendarScope = 'all' | 'monitored' | 'mine';
+export type EntryState = 'ok' | 'miss' | 'up';
+
+const AGENDA_WEEKS = 6;
+const MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
 interface CalendarWeek {
   days: CalendarDay[];
+}
+
+interface AgendaDay {
+  dateStr: string;
+  isToday: boolean;
+  isTomorrow: boolean;
+  entries: CalendarEntry[];
 }
 
 interface CalendarDay {
@@ -26,13 +43,19 @@ interface CalendarDay {
 
 @Component({
   selector: 'app-calendar',
-  imports: [RouterLink, TranslatePipe, NgClass, LocaleDatePipe],
+  imports: [RouterLink, TranslatePipe, NgClass, LocaleDatePipe, ResolveUrlPipe, CachedSrcDirective],
   templateUrl: './calendar.html',
 })
 export class CalendarComponent implements OnInit {
   private readonly mediaService = inject(MediaService);
-
-  readonly currentDate = signal(new Date());
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly isMd = mediaQuerySignal(MD_BREAKPOINT_QUERY);
+  private loadSeq = 0;
+  readonly view = signal<CalendarView>(this.initialView());
+  readonly scope = signal<CalendarScope>(this.initialScope());
+  readonly agendaPages = signal(1);
+  readonly currentDate = signal(this.initialMonth());
   /** Monday-first like the grid; 2024-01-01 is a Monday. */
   readonly weekdayReference = Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i));
   readonly entries = signal<CalendarEntry[]>([]);
@@ -100,42 +123,173 @@ export class CalendarComponent implements OnInit {
     return weeks;
   });
 
+  readonly agendaDays = computed<AgendaDay[]>(() => {
+    const today = this.toDateStr(new Date());
+    const tomorrow = this.toDateStr(new Date(Date.now() + 86_400_000));
+    const byDay = new Map<string, CalendarEntry[]>();
+    for (const e of this.filteredEntries()) {
+      const key = e.date.substring(0, 10);
+      if (key < today) continue;
+      const list = byDay.get(key);
+      if (list) list.push(e);
+      else byDay.set(key, [e]);
+    }
+    return [...byDay.keys()]
+      .sort()
+      .map((dateStr) => ({
+        dateStr,
+        isToday: dateStr === today,
+        isTomorrow: dateStr === tomorrow,
+        entries: byDay.get(dateStr)!,
+      }));
+  });
+
   ngOnInit() {
-    this.loadMonth();
+    void this.load();
+  }
+
+  setView(view: CalendarView) {
+    this.view.set(view);
+    this.store('calendar_view', view);
+    this.syncUrl();
+    void this.load();
+  }
+
+  setScope(value: string) {
+    const scope: CalendarScope = value === 'monitored' || value === 'mine' ? value : 'all';
+    this.scope.set(scope);
+    this.store('calendar_scope', scope);
+    void this.load();
   }
 
   prevMonth() {
-    this.currentDate.update((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
-    this.loadMonth();
+    this.shiftMonth(-1);
   }
 
   nextMonth() {
-    this.currentDate.update((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
-    this.loadMonth();
+    this.shiftMonth(1);
   }
 
-  private async loadMonth() {
+  goToday() {
+    const now = new Date();
+    this.currentDate.set(new Date(now.getFullYear(), now.getMonth(), 1));
+    this.agendaPages.set(1);
+    this.syncUrl();
+    void this.load();
+  }
+
+  loadMore() {
+    this.agendaPages.update((n) => n + 1);
+    void this.load();
+  }
+
+  private shiftMonth(delta: number) {
+    this.currentDate.update((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
+    this.syncUrl();
+    void this.load();
+  }
+
+  private syncUrl() {
     const d = this.currentDate();
-    const start = new Date(d.getFullYear(), d.getMonth(), 1 - 7);
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 7);
-    const startStr = this.toDateStr(start);
-    const endStr = this.toDateStr(end);
+    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { view: this.view(), month },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  }
+
+  private initialView(): CalendarView {
+    const q = this.route.snapshot?.queryParamMap?.get('view');
+    if (q === 'month' || q === 'agenda') return q;
+    const saved = this.read('calendar_view');
+    if (saved === 'month' || saved === 'agenda') return saved;
+    return this.isMd() ? 'month' : 'agenda';
+  }
+
+  private initialScope(): CalendarScope {
+    const saved = this.read('calendar_scope');
+    return saved === 'monitored' || saved === 'mine' ? saved : 'all';
+  }
+
+  private initialMonth(): Date {
+    const m = MONTH_RE.exec(this.route.snapshot?.queryParamMap?.get('month') ?? '');
+    const now = new Date();
+    return m ? new Date(+m[1], +m[2] - 1, 1) : new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+
+  private read(key: string): string | null {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+
+  private store(key: string, value: string) {
+    try {
+      localStorage.setItem(key, value);
+    } catch { /* storage unavailable */ }
+  }
+
+  private window(): [string, string] {
+    if (this.view() === 'agenda') {
+      const start = new Date();
+      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7 * AGENDA_WEEKS * this.agendaPages());
+      return [this.toDateStr(start), this.toDateStr(end)];
+    }
+    const d = this.currentDate();
+    return [
+      this.toDateStr(new Date(d.getFullYear(), d.getMonth(), 1 - 7)),
+      this.toDateStr(new Date(d.getFullYear(), d.getMonth() + 1, 7)),
+    ];
+  }
+
+  private async load() {
+    const [startStr, endStr] = this.window();
+    const monitored = this.scope() === 'monitored';
+    const mine = this.scope() === 'mine';
+    const seq = ++this.loadSeq;
     this.loading.set(true);
     this.error.set('');
     try {
-      const data = await this.mediaService.getCalendar(startStr, endStr);
-      this.entries.set(data);
+      const data = await this.mediaService.getCalendar(startStr, endStr, monitored, mine);
+      if (seq === this.loadSeq) this.entries.set(data);
     } catch {
-      this.error.set('calendar.load_error');
+      if (seq === this.loadSeq) this.error.set('calendar.load_error');
     } finally {
-      this.loading.set(false);
+      if (seq === this.loadSeq) this.loading.set(false);
     }
     queueMicrotask(() => {
       void this.mediaService
-        .getCalendar(startStr, endStr, false, false, { force: true })
-        .then((fresh) => this.entries.set(fresh))
+        .getCalendar(startStr, endStr, monitored, mine, { force: true })
+        .then((fresh) => {
+          if (seq === this.loadSeq) this.entries.set(fresh);
+        })
         .catch(() => { /* keep cached entries */ });
     });
+  }
+
+  readonly states: EntryState[] = ['ok', 'miss', 'up'];
+
+  stateDot(s: EntryState): string {
+    return s === 'ok' ? 'bg-success' : s === 'miss' ? 'bg-error' : 'bg-base-content/40';
+  }
+
+  entryState(e: CalendarEntry): EntryState {
+    if (e.hasFile) return 'ok';
+    return e.date.substring(0, 10) < this.toDateStr(new Date()) ? 'miss' : 'up';
+  }
+
+  entrySub(e: CalendarEntry): string {
+    if (!kindOf(e.type).hasSeasons) return '';
+    const ep = `S${String(e.seasonNumber ?? 0).padStart(2, '0')}E${String(e.episodeNumber ?? 0).padStart(2, '0')}`;
+    return e.episodeTitle ? `${ep} · ${e.episodeTitle}` : ep;
+  }
+
+  hasEpisode(e: CalendarEntry): boolean {
+    return kindOf(e.type).hasSeasons;
   }
 
   private toDateStr(d: Date): string {
@@ -183,12 +337,12 @@ export class CalendarComponent implements OnInit {
   }
 
   private loadFilter(event: string): boolean {
-    const val = localStorage.getItem(`calendar_filter_${event}`);
+    const val = this.read(`calendar_filter_${event}`);
     return val === null ? true : val === '1';
   }
 
   private saveFilter(event: string, active: boolean) {
-    localStorage.setItem(`calendar_filter_${event}`, active ? '1' : '0');
+    this.store(`calendar_filter_${event}`, active ? '1' : '0');
   }
 
   eventClass(e: CalendarEntry): string {

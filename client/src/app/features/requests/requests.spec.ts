@@ -42,7 +42,7 @@ function setup(opts: SetupOpts = {}) {
       }),
       { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: query.value }, queryParamMap: query } },
       { provide: Router, useValue: { navigate } },
-      { provide: RequestsService, useValue: { list, approve } },
+      { provide: RequestsService, useValue: { list, approve, allowance: async () => null } },
       { provide: ProfilesService, useValue: { getQualityProfiles: async () => [], getLanguageProfiles: async () => [] } },
       { provide: LibrariesApiService, useValue: { listMine: async () => [] } },
       { provide: ConfirmationService, useValue: { confirm } },

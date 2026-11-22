@@ -80,6 +80,13 @@ pub struct Resolved {
     pub release_date_priority: Vec<String>,
 }
 
+/// The supported language `code` names (`fr`, `fr-CA`), else `None`.
+pub fn supported(code: &str) -> Option<&'static str> {
+    let norm = code.trim().to_lowercase();
+    let head = norm.split(['-', '_']).next()?;
+    LANGUAGES.iter().find(|l| l.iso1 == head).map(|l| l.iso1)
+}
+
 /// Unknown or empty language is English; an empty region is the language's default.
 pub fn resolve(language: Option<&str>, region: Option<&str>) -> Resolved {
     let norm = language

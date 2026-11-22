@@ -5,13 +5,14 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import { kindOf } from '../../../core/media-kinds';
+import { allowanceLine } from '../../../core/utils/request-allowance';
 import { BooksApiService } from '../../../core/services/api/books-api.service';
 import { LibrariesApiService, type LibrarySummary } from '../../../core/services/api/libraries-api.service';
 import { MetadataService, type SeasonStub } from '../../../core/services/api/metadata.service';
 import { MusicApiService } from '../../../core/services/api/music-api.service';
 import { ProfilesService } from '../../../core/services/api/profiles.service';
 import { extractMessage } from '../../../core/interceptors/error.interceptor';
-import { RequestsService, type CreateRequestBody } from '../../../core/services/api/requests.service';
+import { RequestsService, type CreateRequestBody, type RequestAllowance } from '../../../core/services/api/requests.service';
 import { PushService } from '../../../core/services/push.service';
 import type { WantSpec } from '../../../core/services/api/wants-api.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -77,6 +78,7 @@ export class AddDialogComponent {
   protected readonly selectedSeasons = signal<Set<number>>(new Set());
   protected readonly seasonsLoading = signal(false);
   protected readonly seasonsFailed = signal(false);
+  private readonly allowances = signal<RequestAllowance | null>(null);
   protected readonly kind = computed<MediaType>(() => this.req()?.kind ?? 'movie');
   protected readonly hasSeasons = computed(() => kindOf(this.kind()).hasSeasons);
   protected readonly isVideo = computed(() => this.kind() === 'movie' || this.kind() === 'series');
@@ -90,7 +92,13 @@ export class AddDialogComponent {
   protected readonly noLibrary = computed(() => !this.loading() && this.libraries().length === 0);
   protected readonly nothingPicked = computed(() => this.hasSeasons() && !this.seasonsFailed() && this.selectedSeasons().size === 0);
   protected readonly wantsReady = computed(() => this.wants().every((w) => w.qualityProfileId != null));
+  /** The member's remaining requests of this kind; none while importing or without a limit. */
+  protected readonly allowance = computed(() => {
+    const a = this.mode() === 'request' ? this.allowances()?.[this.kind()] : undefined;
+    return a ? allowanceLine(this.translate, a) : null;
+  });
   protected readonly canSubmit = computed(() => {
+    if (this.allowance()?.blocked) return false;
     if (this.busy() || this.loading() || this.noLibrary() || this.seasonsLoading() || this.nothingPicked()) return false;
     if (this.isVideo()) return !this.canChoose() || this.qualityId() != null;
     if (this.kind() === 'book') return this.wantsReady();
@@ -146,6 +154,7 @@ export class AddDialogComponent {
     this.selectedSeasons.set(new Set());
     this.seasonsFailed.set(false);
     this.wants.set([{ family: 'text', language: null }]);
+    this.allowances.set(null);
   }
 
   private show() {
@@ -160,12 +169,14 @@ export class AddDialogComponent {
     try {
       const video = r.kind === 'movie' || r.kind === 'series';
       const family = r.kind === 'book' ? 'text' : 'audio';
-      const [libraries, quality, language, wantQuality] = await Promise.all([
+      const [libraries, quality, language, wantQuality, allowances] = await Promise.all([
         this.librariesApi.listMine(),
         video ? this.profilesApi.getQualityProfiles() : Promise.resolve([]),
         video ? this.profilesApi.getLanguageProfiles() : Promise.resolve([]),
         video ? Promise.resolve([]) : this.profilesApi.getQualityProfiles(family),
+        this.mode() === 'request' ? this.requestsApi.allowance() : Promise.resolve(null),
       ]);
+      this.allowances.set(allowances);
       const pairs = (l: Profile[]) => l.map((p) => ({ id: p.id, name: p.name }));
       this.choices.set({ libraries, quality: pairs(quality), language: pairs(language), wantQuality: pairs(wantQuality) });
       if (r.kind === 'book') this.wants.set([{ family: 'text', language: null, qualityProfileId: wantQuality[0]?.id ?? null }]);

@@ -673,7 +673,8 @@
     "section_users": "Users",
     "section_optimize": "Optimization",
     "section_advanced": "Advanced",
-    "section_livetv": "Live TV"
+    "section_livetv": "Live TV",
+    "filter_placeholder": "Filter settings (press /)"
   },
   "home": {
     "libraries": "Libraries",
@@ -1008,7 +1009,9 @@
     "state_failed": "Failed, try again",
     "scope_video": "Video",
     "scope_people": "Members",
-    "kind_all": "All"
+    "kind_all": "All",
+    "recent": "Recent",
+    "recent_clear": "Clear"
   },
   "discover": {
     "add_music": "Add music",
@@ -1552,7 +1555,12 @@
       "available": "Downloaded",
       "failed": "Failed",
       "removed": "Removed"
-    }
+    },
+    "allowance_left_one": "{{count}} of {{limit}} requests left per {{days}} days",
+    "allowance_left_other": "{{count}} of {{limit}} requests left per {{days}} days",
+    "allowance_none_one": "Limit reached, next request in {{count}} day",
+    "allowance_none_other": "Limit reached, next request in {{count}} days",
+    "quotaExceeded": "Request limit reached: {{count}} of {{limit}} in the last {{days}} days"
   },
   "activity": {
     "queue_empty": "No active downloads.",
@@ -1605,7 +1613,26 @@
     "legend_digital": "Digital release",
     "legend_physical": "Physical release",
     "legend_airing": "Airing",
-    "legend_release": "Release"
+    "legend_release": "Release",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "view_label": "Calendar view",
+    "view_month": "Month",
+    "view_agenda": "Agenda",
+    "scope_label": "Titles shown",
+    "scope_all": "All titles",
+    "scope_monitored": "Monitored",
+    "scope_mine": "Added by me",
+    "state_ok": "On disk",
+    "state_miss": "Missing",
+    "state_up": "Upcoming",
+    "load_more": "Load 6 more weeks",
+    "empty": "Nothing scheduled.",
+    "event_cinema": "In cinemas",
+    "event_digital": "Digital release",
+    "event_physical": "Physical release",
+    "event_airing": "Airing",
+    "event_release": "Release"
   },
   "system": {
     "title": "System",
@@ -2638,7 +2665,128 @@
       "relay_pending": "Deletion pending at a relay that does not answer:",
       "relay_pending_drop": "Give up",
       "event_count_one": "{{count}} event",
-      "event_count_other": "{{count}} events"
+      "event_count_other": "{{count}} events",
+      "per_user": "per user",
+      "groups": {
+        "requests": "Requests",
+        "downloads": "Downloads",
+        "subtitles": "Subtitles",
+        "library": "Library",
+        "livetv": "Live TV",
+        "system": "System"
+      },
+      "events": {
+        "request": {
+          "created": {
+            "label": "Request created",
+            "hint": "Someone asked for a title."
+          },
+          "approved": {
+            "label": "Request approved",
+            "hint": "A request was approved."
+          },
+          "declined": {
+            "label": "Request declined",
+            "hint": "A request was declined."
+          },
+          "processing": {
+            "label": "Request in progress",
+            "hint": "An approved request is being fetched."
+          },
+          "available": {
+            "label": "Request available",
+            "hint": "A requested title is ready to watch."
+          },
+          "delete": {
+            "created": {
+              "label": "Removal requested",
+              "hint": "Someone asked to remove a title."
+            },
+            "approved": {
+              "label": "Removal approved",
+              "hint": "A removal request was approved."
+            },
+            "declined": {
+              "label": "Removal declined",
+              "hint": "A removal request was declined."
+            }
+          }
+        },
+        "grab": {
+          "started": {
+            "label": "Download started",
+            "hint": "A download was sent to the download client."
+          }
+        },
+        "download": {
+          "complete": {
+            "label": "Download complete",
+            "hint": "A download finished."
+          }
+        },
+        "subtitle": {
+          "downloaded": {
+            "label": "Subtitle downloaded",
+            "hint": "A subtitle was added to a title."
+          },
+          "upgraded": {
+            "label": "Subtitle upgraded",
+            "hint": "A better subtitle replaced the old one."
+          },
+          "failed": {
+            "label": "Subtitle failed",
+            "hint": "A subtitle could not be fetched."
+          },
+          "synced": {
+            "label": "Subtitle synced",
+            "hint": "A subtitle was re-timed to the video."
+          }
+        },
+        "media": {
+          "leaving_soon": {
+            "label": "Leaving soon",
+            "hint": "A title is about to be removed from the library."
+          },
+          "cleaned_up": {
+            "label": "Cleaned up",
+            "hint": "Old titles were removed from the library."
+          }
+        },
+        "optimize": {
+          "completed": {
+            "label": "Optimization done",
+            "hint": "A file was optimized."
+          },
+          "failed": {
+            "label": "Optimization failed",
+            "hint": "A file could not be optimized."
+          }
+        },
+        "livetv": {
+          "account_expiring": {
+            "label": "Account expiring soon",
+            "hint": "A Live TV account is about to expire."
+          },
+          "account_expired": {
+            "label": "Account expired",
+            "hint": "A Live TV account has expired."
+          },
+          "adult_guard_failed": {
+            "label": "Adult filter failed",
+            "hint": "The adult channel filter could not run."
+          }
+        },
+        "health": {
+          "corrupt": {
+            "label": "Corrupt file found",
+            "hint": "A scan found a damaged media file."
+          },
+          "issue": {
+            "label": "Health issue",
+            "hint": "Something on the server needs attention."
+          }
+        }
+      }
     },
     "media_servers": {
       "title": "Media servers",
@@ -3999,6 +4147,30 @@
       "sidecars_hint": "Extensions read next to a track, in order, separated by commas. Empty uses ttml, elrc, lrc, srt, txt.",
       "load_error": "Lyrics settings could not be loaded.",
       "saved": "Lyrics settings saved."
+    },
+    "nav_words": {
+      "email": "smtp mail email",
+      "streams": "transcode gpu vaapi qsv nvenc hardware acceleration encoding",
+      "system": "version update backup disk storage logs",
+      "statistics": "stats charts usage",
+      "optimize_queue": "optimise compress reencode",
+      "libraries": "folders paths scan media",
+      "naming": "rename files folders format",
+      "notifications": "alerts webhook discord telegram push",
+      "users": "accounts members passwords",
+      "roles": "permissions access rights",
+      "sso": "oidc login openid single sign-on",
+      "plugins": "extensions addons providers",
+      "media_servers": "plex jellyfin emby",
+      "data_imports": "import watch history migrate seerr",
+      "subtitles": "captions srt languages",
+      "subtitle_providers": "opensubtitles captions download",
+      "quality_profiles": "resolution bitrate cutoff",
+      "metadata": "tmdb tvdb posters artwork",
+      "general": "server name language url port",
+      "live_tv_settings": "iptv epg tuner channels",
+      "lyrics": "karaoke songs",
+      "karaoke": "lyrics songs singing"
     }
   },
   "roles": {
@@ -4335,7 +4507,9 @@
   "data_table": {
     "load_error": "Unable to load the list.",
     "empty": "Nothing to show.",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "filters": "Filters",
+    "more": "More"
   },
   "bulk": {
     "selected_one": "{{count}} selected",

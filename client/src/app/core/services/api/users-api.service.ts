@@ -19,7 +19,10 @@ export function passwordErrorMessage(err: unknown, translate: TranslateService):
     : serverMessage(err, translate, 'account.save_error');
 }
 
-export interface UserRow {
+/** Requests allowed per `quotaPeriodDays`, by kind; 0 is unlimited. */
+export type QuotaLimits = Partial<Record<`${MediaType}QuotaLimit`, number>>;
+
+export interface UserRow extends QuotaLimits {
   id: number;
   username: string;
   roleId: number | null;
@@ -30,10 +33,6 @@ export interface UserRow {
   createdAt: string;
   lastLogin: string | null;
   libraryIds: number[];
-  /** Requests allowed per `quotaPeriodDays`, by kind; 0 is unlimited. */
-  movieQuotaLimit?: number;
-  seriesQuotaLimit?: number;
-  bookQuotaLimit?: number;
   quotaPeriodDays?: number;
   /** Linked SSO providers. */
   identities?: { providerId: number; name: string }[];
@@ -55,7 +54,7 @@ export interface CreateUserBody {
   libraryIds?: number[];
 }
 
-export interface UpdateUserBody {
+export interface UpdateUserBody extends QuotaLimits {
   username?: string;
   password?: string;
   /** Required with `password` when changing one's own password. */
@@ -65,9 +64,6 @@ export interface UpdateUserBody {
   enabled?: boolean;
   requirePasswordChange?: boolean;
   libraryIds?: number[];
-  movieQuotaLimit?: number;
-  seriesQuotaLimit?: number;
-  bookQuotaLimit?: number;
   quotaPeriodDays?: number;
   /** Self-editable: preferred library display order (library ids). */
   libraryOrder?: number[];

@@ -1,13 +1,29 @@
 <div class="flex flex-col gap-4">
-  <div class="flex items-center justify-between">
+  <div class="flex flex-wrap items-center justify-between gap-2">
     <div>
       <h1 class="page-title">{{ 'calendar.title' | translate }}</h1>
       <p class="text-sm text-base-content/60 capitalize">{{ currentDate() | localeDate:{ month: 'long', year: 'numeric' } }}</p>
     </div>
-    <div class="flex gap-2">
-      <a routerLink="/wanted" class="btn btn-ghost btn-sm" data-testid="calendar-wanted">{{ 'wanted.title' | translate }}</a>
+    <a routerLink="/wanted" class="btn btn-ghost btn-sm" data-testid="calendar-wanted">{{ 'wanted.title' | translate }}</a>
+  </div>
+
+  <div class="flex flex-wrap items-center gap-2 p-1">
+    @if (view() === 'month') {
       <button type="button" class="btn btn-ghost btn-sm" [attr.aria-label]="'calendar.prev_month' | translate" (click)="prevMonth()">«</button>
+    }
+    <button type="button" class="btn btn-outline btn-sm" data-testid="calendar-today" (click)="goToday()">{{ 'calendar.today' | translate }}</button>
+    @if (view() === 'month') {
       <button type="button" class="btn btn-ghost btn-sm" [attr.aria-label]="'calendar.next_month' | translate" (click)="nextMonth()">»</button>
+    }
+    <span class="flex-1"></span>
+    <select class="select select-sm w-auto" data-testid="calendar-scope" [attr.aria-label]="'calendar.scope_label' | translate" [value]="scope()" (change)="setScope($any($event.target).value)">
+      <option value="all">{{ 'calendar.scope_all' | translate }}</option>
+      <option value="monitored">{{ 'calendar.scope_monitored' | translate }}</option>
+      <option value="mine">{{ 'calendar.scope_mine' | translate }}</option>
+    </select>
+    <div class="join" role="group" [attr.aria-label]="'calendar.view_label' | translate">
+      <button type="button" class="btn btn-sm join-item" data-testid="calendar-view-month" [class.btn-active]="view() === 'month'" [attr.aria-pressed]="view() === 'month'" (click)="setView('month')">{{ 'calendar.view_month' | translate }}</button>
+      <button type="button" class="btn btn-sm join-item" data-testid="calendar-view-agenda" [class.btn-active]="view() === 'agenda'" [attr.aria-pressed]="view() === 'agenda'" (click)="setView('agenda')">{{ 'calendar.view_agenda' | translate }}</button>
     </div>
   </div>
 
@@ -15,61 +31,106 @@
     <div role="alert" class="alert alert-error">{{ error() | translate }}</div>
   }
 
-  <div class="overflow-x-auto">
-    <div class="min-w-[640px]">
-      <!-- Day headers -->
+  @if (loading()) {
+    <div class="flex justify-center py-16">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  } @else if (view() === 'agenda') {
+    @for (day of agendaDays(); track day.dateStr) {
+      <section data-testid="calendar-day">
+        <h2 class="sticky top-0 z-10 flex items-baseline gap-2 bg-base-100 py-2 text-sm font-semibold capitalize">
+          @if (day.isToday) {
+            <span>{{ 'calendar.today' | translate }}</span>
+            <span class="font-normal text-base-content/60">{{ day.dateStr | localeDate:{ weekday: 'short', day: 'numeric', month: 'short' } }}</span>
+          } @else if (day.isTomorrow) {
+            <span>{{ 'calendar.tomorrow' | translate }}</span>
+            <span class="font-normal text-base-content/60">{{ day.dateStr | localeDate:{ weekday: 'short', day: 'numeric', month: 'short' } }}</span>
+          } @else {
+            <span>{{ day.dateStr | localeDate:{ weekday: 'short', day: 'numeric', month: 'short' } }}</span>
+          }
+        </h2>
+        <ul class="flex flex-col gap-1 scroll-ring-safe">
+          @for (entry of day.entries; track $index) {
+            <li>
+              <a [routerLink]="routeForEntry(entry)" class="flex items-center gap-3 rounded-lg p-2 hover:bg-base-200" data-testid="calendar-agenda-row">
+                <span class="relative w-10 shrink-0 aspect-2/3 rounded bg-base-300 overflow-hidden">
+                  @if (entry.posterUrl) {
+                    <img class="size-full object-cover" [cachedSrc]="entry.posterUrl | resolveUrl: 'thumb'" alt="" />
+                  }
+                </span>
+                <span class="flex-1 min-w-0">
+                  <span class="block font-medium truncate">{{ entry.title }}</span>
+                  <span class="block text-sm text-base-content/60 truncate">
+                    @if (hasEpisode(entry)) { {{ entrySub(entry) }} } @else { {{ 'calendar.event_' + entry.event | translate }} }
+                  </span>
+                </span>
+                <span class="flex shrink-0 items-center gap-1.5 text-sm">
+                  <span class="size-2 shrink-0 rounded-full" [ngClass]="stateDot(entryState(entry))" aria-hidden="true"></span>
+                  {{ 'calendar.state_' + entryState(entry) | translate }}
+                </span>
+              </a>
+            </li>
+          }
+        </ul>
+      </section>
+    } @empty {
+      <p class="py-8 text-center text-base-content/60">{{ 'calendar.empty' | translate }}</p>
+    }
+    <div class="flex justify-center p-1">
+      <button type="button" class="btn btn-ghost" data-testid="calendar-load-more" (click)="loadMore()">{{ 'calendar.load_more' | translate }}</button>
+    </div>
+  } @else {
+    <div>
       <div class="grid grid-cols-7 gap-px mb-px">
         @for (day of weekdayReference; track $index) {
           <div class="text-center text-sm font-medium text-base-content/60 py-2 capitalize">{{ day | localeDate:{ weekday: 'short' } }}</div>
         }
       </div>
-
-      <!-- Calendar grid -->
-      @if (loading()) {
-        <div class="flex justify-center py-16">
-          <span class="loading loading-spinner loading-lg"></span>
-        </div>
-      } @else {
-        <div class="flex flex-col gap-px bg-base-200 rounded-lg overflow-hidden border border-base-200">
-          @for (week of weeks(); track $index) {
-            <div class="grid grid-cols-7 gap-px bg-base-200">
-              @for (day of week.days; track day.dateStr) {
-                <div
-                  class="min-h-[6rem] p-1.5 flex flex-col gap-1"
-                  [class.bg-base-100]="day.isCurrentMonth"
-                  [class.bg-base-200/50]="!day.isCurrentMonth"
+      <div class="flex flex-col gap-px bg-base-200 rounded-lg overflow-hidden border border-base-200">
+        @for (week of weeks(); track $index) {
+          <div class="grid grid-cols-7 gap-px bg-base-200">
+            @for (day of week.days; track day.dateStr) {
+              <div
+                class="min-h-[6rem] min-w-0 p-1 md:p-1.5 flex flex-col gap-1"
+                [class.bg-base-100]="day.isCurrentMonth"
+                [class.bg-base-200/50]="!day.isCurrentMonth"
+              >
+                <span
+                  class="text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full self-start"
+                  [class.bg-primary]="day.isToday"
+                  [class.text-primary-content]="day.isToday"
+                  [class.text-base-content/60]="!day.isCurrentMonth && !day.isToday"
                 >
-                  <span
-                    class="text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full self-start"
-                    [class.bg-primary]="day.isToday"
-                    [class.text-primary-content]="day.isToday"
-                    [class.text-base-content/60]="!day.isCurrentMonth && !day.isToday"
-                  >
-                    {{ day.date.getDate() }}
-                  </span>
-                  <div class="flex flex-col gap-0.5">
-                    @for (entry of day.entries; track $index) {
-                      <a
-                        [routerLink]="routeForEntry(entry)"
-                        class="text-sm px-2 py-1 rounded truncate leading-snug font-medium"
-                        [ngClass]="eventClass(entry)"
-                        [title]="entryLabel(entry)"
-                      >
-                        {{ entryLabel(entry) }}
-                      </a>
-                    }
-                  </div>
+                  {{ day.date.getDate() }}
+                </span>
+                <div class="flex flex-col gap-0.5 p-0.5">
+                  @for (entry of day.entries; track $index) {
+                    <a
+                      [routerLink]="routeForEntry(entry)"
+                      class="flex items-center gap-1 text-sm px-1 md:px-2 py-1 rounded font-medium leading-snug min-w-0"
+                      [ngClass]="eventClass(entry)"
+                      [title]="entryLabel(entry) + ' · ' + ('calendar.state_' + entryState(entry) | translate)"
+                    >
+                      <span class="size-2 shrink-0 rounded-full" [ngClass]="stateDot(entryState(entry))" aria-hidden="true"></span>
+                      <span class="truncate">{{ entryLabel(entry) }}</span>
+                    </a>
+                  }
                 </div>
-              }
-            </div>
-          }
-        </div>
-      }
+              </div>
+            }
+          </div>
+        }
+      </div>
+      <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-base-content/60">
+        @for (s of states; track s) {
+          <span class="flex items-center gap-1.5"><span class="size-2 rounded-full" [ngClass]="stateDot(s)"></span>{{ 'calendar.state_' + s | translate }}</span>
+        }
+      </div>
     </div>
-  </div>
+  }
 
   <!-- Legend / Filters -->
-  <div class="flex flex-wrap gap-2 text-sm">
+  <div class="flex flex-wrap gap-2 p-1 text-sm">
     <button type="button"
       class="flex items-center gap-1.5 px-2 py-1 rounded-lg transition-opacity cursor-pointer"
       [class.opacity-100]="isFilterActive('cinema')"

@@ -188,10 +188,23 @@ describe('NotificationsSettingsComponent — event vocabulary', () => {
     expect(c.allEvents()).toEqual(['request.created', 'subtitle.downloaded']);
   });
 
-  it('pre-checks every advertised event on a new connection', async () => {
-    const c = await createComponent(['request.created', 'subtitle.downloaded']);
+  const ALL = ['request.created', 'grab.started', 'subtitle.downloaded', 'media.cleaned_up', 'livetv.account_expired', 'health.corrupt'];
+
+  it('groups the events and starts a new connection with Requests and System only', async () => {
+    const c = await createComponent(ALL);
+    expect(c.eventGroups().map((g) => g.id)).toEqual(['requests', 'downloads', 'subtitles', 'library', 'livetv', 'system']);
     c.openCreate();
-    expect(c.formEvents()).toEqual(['request.created', 'subtitle.downloaded']);
+    expect(c.formEvents()).toEqual(['request.created', 'health.corrupt']);
+  });
+
+  it('toggles a whole group: all when partial or empty, none when full', async () => {
+    const c = await createComponent(['optimize.completed', 'media.cleaned_up']);
+    const lib = c.eventGroups()[0].events;
+    c.formEvents.set(['media.cleaned_up']);
+    c.toggleGroup(lib);
+    expect(c.groupCount(lib)).toBe(2);
+    c.toggleGroup(lib);
+    expect(c.groupCount(lib)).toBe(0);
   });
 });
 

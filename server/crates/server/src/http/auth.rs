@@ -239,6 +239,8 @@ pub struct Authed {
     pub session: Option<i32>,
     /// The kinds the client declared (`X-Fliks-Kinds`); every kind off the request path.
     pub kinds: Kinds,
+    /// The supported UI language the client declared (`X-Fliks-Language`), for provider metadata.
+    pub lang: Option<&'static str>,
 }
 
 impl Authed {
@@ -248,6 +250,7 @@ impl Authed {
         scope: Option<TokenScope>,
         session: Option<i32>,
         kinds: Kinds,
+        lang: Option<&'static str>,
     ) -> Self {
         let perms = Permissions::from(
             role.as_ref().map_or(&[][..], |r| &r.permissions),
@@ -260,6 +263,7 @@ impl Authed {
             scope,
             session,
             kinds,
+            lang,
         }
     }
 
@@ -273,7 +277,7 @@ impl Authed {
     pub async fn load(db: &PgPool, id: i32) -> Result<Option<Self>, sqlx::Error> {
         Ok(load_enabled(db, id)
             .await?
-            .map(|(user, role)| Self::new(user, role, None, None, Kinds::all())))
+            .map(|(user, role)| Self::new(user, role, None, None, Kinds::all(), None)))
     }
 
     /// The handler's first line: 403 with the 4.x policy body unless the role grants it at class level.
@@ -376,6 +380,11 @@ async fn authenticate_bound(
             claims.scope,
             Some(sid),
             Kinds::from_headers(&parts.headers),
+            parts
+                .headers
+                .get("x-fliks-language")
+                .and_then(|v| v.to_str().ok())
+                .and_then(fliks_domain::metadata::language::supported),
         ),
         claims.mf,
     )))

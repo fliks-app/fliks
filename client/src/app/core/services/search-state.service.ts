@@ -5,7 +5,7 @@ import type { MusicPersonRow, TrackRow } from './api/music.models';
 import type { CollectionSummary, PersonListItem } from './api/books.models';
 import { RecommendationItem } from './api/streaming-api.service';
 import { SocialUser } from './api/social-api.service';
-import { DEFAULT_SORT, filtersEngaged } from '../../shared/components/search-filters/search-filters';
+import { DEFAULT_SORT, filtersEngaged } from '../../shared/components/search-filters/search-filters.model';
 
 const EXTERNAL_KEY = 'fliks-search-external';
 

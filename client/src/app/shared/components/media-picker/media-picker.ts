@@ -15,7 +15,8 @@ import { MediaCardComponent } from '../media-card/media-card';
 import { ModalHeaderComponent } from '../modal-header';
 import { SynopsisComponent } from '../synopsis/synopsis';
 import { ContentTypeToggleComponent } from '../search-filters/content-type-toggle';
-import { DEFAULT_SORT, SearchContentType, SearchFiltersComponent, filtersEngaged, libraryFilterParams } from '../search-filters/search-filters';
+import { SearchFiltersComponent } from '../search-filters/search-filters';
+import { DEFAULT_SORT, SearchContentType, filtersEngaged, libraryFilterParams } from '../search-filters/search-filters.model';
 import { KIND_REGISTRY, kindOfListFilter, kindOf } from '../../../core/media-kinds';
 
 export interface MediaPick {

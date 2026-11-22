@@ -673,7 +673,8 @@
     "section_users": "Benutzer",
     "section_optimize": "Optimierung",
     "section_advanced": "Erweitert",
-    "section_livetv": "Live-TV"
+    "section_livetv": "Live-TV",
+    "filter_placeholder": "Einstellungen filtern (Taste /)"
   },
   "home": {
     "libraries": "Bibliotheken",
@@ -1008,7 +1009,9 @@
     "state_pending": "Angefragt",
     "state_downloading": "Wird heruntergeladen",
     "state_owned": "In Ihrer Bibliothek",
-    "state_failed": "Fehlgeschlagen, erneut versuchen"
+    "state_failed": "Fehlgeschlagen, erneut versuchen",
+    "recent": "Zuletzt",
+    "recent_clear": "Löschen"
   },
   "discover": {
     "seasons_failed": "Staffeln konnten nicht geladen werden",
@@ -1552,7 +1555,12 @@
     "tracks_of_one": "{{count}} von {{total}} Titel",
     "tracks_of_other": "{{count}} von {{total}} Titeln",
     "tracks_count_one": "{{count}} Titel",
-    "tracks_count_other": "{{count}} Titel"
+    "tracks_count_other": "{{count}} Titel",
+    "allowance_left_one": "Noch {{count}} von {{limit}} Anfragen pro {{days}} Tage",
+    "allowance_left_other": "Noch {{count}} von {{limit}} Anfragen pro {{days}} Tage",
+    "allowance_none_one": "Limit erreicht, nächste Anfrage in {{count}} Tag",
+    "allowance_none_other": "Limit erreicht, nächste Anfrage in {{count}} Tagen",
+    "quotaExceeded": "Anfragelimit erreicht: {{count}} von {{limit}} in den letzten {{days}} Tagen"
   },
   "activity": {
     "queue_empty": "Kein aktiver Download.",
@@ -1605,7 +1613,26 @@
     "legend_digital": "Digitalveröffentlichung",
     "legend_physical": "Physische Veröffentlichung",
     "legend_airing": "Ausstrahlung",
-    "legend_release": "Erscheinung"
+    "legend_release": "Erscheinung",
+    "today": "Heute",
+    "tomorrow": "Morgen",
+    "view_label": "Kalenderansicht",
+    "view_month": "Monat",
+    "view_agenda": "Agenda",
+    "scope_label": "Angezeigte Titel",
+    "scope_all": "Alle Titel",
+    "scope_monitored": "Überwacht",
+    "scope_mine": "Von mir hinzugefügt",
+    "state_ok": "Auf der Platte",
+    "state_miss": "Fehlt",
+    "state_up": "Bevorstehend",
+    "load_more": "6 weitere Wochen laden",
+    "empty": "Nichts geplant.",
+    "event_cinema": "Im Kino",
+    "event_digital": "Digitale Veröffentlichung",
+    "event_physical": "Physische Veröffentlichung",
+    "event_airing": "Ausstrahlung",
+    "event_release": "Veröffentlichung"
   },
   "system": {
     "title": "System",
@@ -2638,7 +2665,128 @@
       "relay_pending": "Löschung steht bei einem Relay aus, das nicht antwortet:",
       "relay_pending_drop": "Aufgeben",
       "event_count_one": "{{count}} Ereignis",
-      "event_count_other": "{{count}} Ereignisse"
+      "event_count_other": "{{count}} Ereignisse",
+      "per_user": "pro Benutzer",
+      "groups": {
+        "requests": "Anfragen",
+        "downloads": "Downloads",
+        "subtitles": "Untertitel",
+        "library": "Mediathek",
+        "livetv": "Live-TV",
+        "system": "System"
+      },
+      "events": {
+        "request": {
+          "created": {
+            "label": "Anfrage erstellt",
+            "hint": "Jemand hat einen Titel angefragt."
+          },
+          "approved": {
+            "label": "Anfrage genehmigt",
+            "hint": "Eine Anfrage wurde genehmigt."
+          },
+          "declined": {
+            "label": "Anfrage abgelehnt",
+            "hint": "Eine Anfrage wurde abgelehnt."
+          },
+          "processing": {
+            "label": "Anfrage in Bearbeitung",
+            "hint": "Eine genehmigte Anfrage wird beschafft."
+          },
+          "available": {
+            "label": "Anfrage verfügbar",
+            "hint": "Ein angefragter Titel ist bereit zum Ansehen."
+          },
+          "delete": {
+            "created": {
+              "label": "Entfernung angefragt",
+              "hint": "Jemand möchte einen Titel entfernen lassen."
+            },
+            "approved": {
+              "label": "Entfernung genehmigt",
+              "hint": "Eine Entfernungsanfrage wurde genehmigt."
+            },
+            "declined": {
+              "label": "Entfernung abgelehnt",
+              "hint": "Eine Entfernungsanfrage wurde abgelehnt."
+            }
+          }
+        },
+        "grab": {
+          "started": {
+            "label": "Download gestartet",
+            "hint": "Ein Download wurde an den Download-Client gesendet."
+          }
+        },
+        "download": {
+          "complete": {
+            "label": "Download abgeschlossen",
+            "hint": "Ein Download ist fertig."
+          }
+        },
+        "subtitle": {
+          "downloaded": {
+            "label": "Untertitel geladen",
+            "hint": "Ein Untertitel wurde zu einem Titel hinzugefügt."
+          },
+          "upgraded": {
+            "label": "Untertitel verbessert",
+            "hint": "Ein besserer Untertitel hat den alten ersetzt."
+          },
+          "failed": {
+            "label": "Untertitel fehlgeschlagen",
+            "hint": "Ein Untertitel konnte nicht geladen werden."
+          },
+          "synced": {
+            "label": "Untertitel synchronisiert",
+            "hint": "Ein Untertitel wurde zeitlich ans Video angepasst."
+          }
+        },
+        "media": {
+          "leaving_soon": {
+            "label": "Läuft bald ab",
+            "hint": "Ein Titel wird bald aus der Mediathek entfernt."
+          },
+          "cleaned_up": {
+            "label": "Aufgeräumt",
+            "hint": "Alte Titel wurden aus der Mediathek entfernt."
+          }
+        },
+        "optimize": {
+          "completed": {
+            "label": "Optimierung abgeschlossen",
+            "hint": "Eine Datei wurde optimiert."
+          },
+          "failed": {
+            "label": "Optimierung fehlgeschlagen",
+            "hint": "Eine Datei konnte nicht optimiert werden."
+          }
+        },
+        "livetv": {
+          "account_expiring": {
+            "label": "Konto läuft bald ab",
+            "hint": "Ein Live-TV-Konto läuft bald ab."
+          },
+          "account_expired": {
+            "label": "Konto abgelaufen",
+            "hint": "Ein Live-TV-Konto ist abgelaufen."
+          },
+          "adult_guard_failed": {
+            "label": "Jugendschutzfilter fehlgeschlagen",
+            "hint": "Der Filter für Erwachsenenkanäle konnte nicht laufen."
+          }
+        },
+        "health": {
+          "corrupt": {
+            "label": "Beschädigte Datei gefunden",
+            "hint": "Ein Scan hat eine defekte Mediendatei gefunden."
+          },
+          "issue": {
+            "label": "Zustandsproblem",
+            "hint": "Auf dem Server braucht etwas Aufmerksamkeit."
+          }
+        }
+      }
     },
     "media_servers": {
       "title": "Medienserver",
@@ -3999,6 +4147,30 @@
       "sidecars_hint": "Neben einem Titel gelesene Endungen, der Reihe nach, durch Kommas getrennt. Leer: ttml, elrc, lrc, srt, txt.",
       "load_error": "Die Songtext-Einstellungen konnten nicht geladen werden.",
       "saved": "Songtext-Einstellungen gespeichert."
+    },
+    "nav_words": {
+      "email": "smtp mail e-mail email",
+      "streams": "transkodierung gpu vaapi qsv nvenc hardwarebeschleunigung kodierung",
+      "system": "version update sicherung backup festplatte speicher protokolle",
+      "statistics": "statistik diagramme nutzung",
+      "optimize_queue": "optimieren komprimieren neu kodieren",
+      "libraries": "ordner pfade scan medien",
+      "naming": "umbenennen dateien ordner format",
+      "notifications": "benachrichtigungen webhook discord telegram push",
+      "users": "konten mitglieder passwörter",
+      "roles": "berechtigungen zugriff rechte",
+      "sso": "oidc anmeldung openid single sign-on",
+      "plugins": "erweiterungen addons anbieter",
+      "media_servers": "plex jellyfin emby",
+      "data_imports": "import wiedergabeverlauf migrieren seerr",
+      "subtitles": "untertitel srt sprachen",
+      "subtitle_providers": "opensubtitles untertitel download",
+      "quality_profiles": "auflösung bitrate grenzwert",
+      "metadata": "tmdb tvdb poster artwork",
+      "general": "servername sprache url port",
+      "live_tv_settings": "iptv epg tuner sender",
+      "lyrics": "liedtexte karaoke lieder",
+      "karaoke": "liedtexte lieder singen"
     }
   },
   "roles": {
@@ -4335,7 +4507,9 @@
   "data_table": {
     "load_error": "Liste konnte nicht geladen werden.",
     "empty": "Nichts anzuzeigen.",
-    "refresh": "Aktualisieren"
+    "refresh": "Aktualisieren",
+    "filters": "Filter",
+    "more": "Mehr"
   },
   "bulk": {
     "selected_one": "{{count}} ausgewählt",

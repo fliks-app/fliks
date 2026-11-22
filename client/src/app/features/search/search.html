@@ -1,4 +1,4 @@
-<div appDefaultFocus="input" focusKey="search" focusIdAttr="data-card-link" class="flex flex-col gap-4">
+<div appDefaultFocus="input" focusKey="search" focusIdAttr="data-card-link" class="flex flex-col gap-4" (click)="onResultClick($event)">
   <form class="relative" (ngSubmit)="dismissKeyboard()">
     <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-base-content/40 pointer-events-none z-10"></svg>
     <input
@@ -20,6 +20,16 @@
       </button>
     }
   </form>
+
+  @if (!state.hasQuery() && recent.terms().length) {
+    <div class="flex flex-wrap items-center gap-2" data-testid="recent-searches">
+      <span class="text-sm text-base-content/60">{{ 'search.recent' | translate }}</span>
+      @for (term of recent.terms(); track term) {
+        <button type="button" class="btn btn-sm btn-ghost" (click)="onQueryInput(term)">{{ term }}</button>
+      }
+      <button type="button" class="link text-sm" (click)="recent.clear()">{{ 'search.recent_clear' | translate }}</button>
+    </div>
+  }
 
   <!-- Scope: one selector, with the movies/series split of Video on its own row -->
   <div class="flex flex-col gap-2">

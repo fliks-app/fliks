@@ -418,7 +418,7 @@ pub async fn search_hits(
         language: language.as_deref(),
         page,
     };
-    let lang = lang(&st).await?;
+    let lang = lang(&st, &a).await?;
     let key = cache_key(&search, target, (named, pinned), &lang.tmdb_locale);
     let cached = super::search_cache::enabled().then(|| md.search_cache.get(&key, Instant::now()));
     let mut hits = match cached.flatten() {
@@ -428,6 +428,7 @@ pub async fn search_hits(
             let walk = Walk {
                 target,
                 cut: Some(PROVIDER_CUT),
+                lang: a.lang,
             };
             let (mut hits, degraded) =
                 walk_with(&st, order, &search, Priority::Interactive, &walk).await?;
@@ -487,7 +488,7 @@ pub async fn trending_album(State(st): State<AppState>, a: Authed, Query(q): Pai
         "target".to_owned(),
         target.map_or("album", Target::as_str).to_owned(),
     )];
-    let lang = lang(&st).await?;
+    let lang = lang(&st, &a).await?;
     let v = st
         .metadata
         .list(p, kind, "trending", &params, &lang, Priority::Interactive)
@@ -682,6 +683,8 @@ async fn recording_requests(
 pub(crate) struct Walk {
     pub target: Option<Target>,
     pub cut: Option<Duration>,
+    /// The viewer's language; `None` is the global setting.
+    pub lang: Option<&'static str>,
 }
 
 /// The hits of the first provider with any, trying `first` then the providers serving the kind; an
@@ -701,6 +704,7 @@ pub(crate) async fn walk(
         &Walk {
             target: None,
             cut: None,
+            lang: None,
         },
     )
     .await?
@@ -727,7 +731,7 @@ pub(crate) async fn walk_with(
             order.push(p);
         }
     }
-    let lang = lang(st).await?;
+    let lang = st.metadata.lang.for_viewer(how.lang).await?;
     let (mut answered, mut failed) = (false, None);
     for p in order {
         let provider = md.of(p);

@@ -59,6 +59,15 @@ impl LanguageCache {
         ))
     }
 
+    /// The viewer's language (its region the language's default) unless it is the global one, else the global setting.
+    pub async fn for_viewer(&self, lang: Option<&str>) -> Result<Resolved, sqlx::Error> {
+        let global = self.resolve(None).await?;
+        Ok(match lang {
+            Some(l) if l != global.iso1 => resolve(Some(l), None),
+            _ => global,
+        })
+    }
+
     async fn global(&self) -> Result<Global, sqlx::Error> {
         if let Some(v) = self.slot.lock_clean().value.clone() {
             return Ok(v);

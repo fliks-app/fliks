@@ -17,7 +17,14 @@
       "expect": {
         "body": {
           "error": "Forbidden",
+          "key": "requests.quotaExceeded",
           "message": "Quota exceeded: 1/1 movie requests in last 7 days",
+          "params": {
+            "count": 1,
+            "days": 7,
+            "kind": "movie",
+            "limit": 1
+          },
           "statusCode": 403
         },
         "status": 403

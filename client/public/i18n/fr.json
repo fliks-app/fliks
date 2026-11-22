@@ -673,7 +673,8 @@
     "section_users": "Utilisateurs",
     "section_optimize": "Optimisation",
     "section_advanced": "Avancé",
-    "section_livetv": "TV en direct"
+    "section_livetv": "TV en direct",
+    "filter_placeholder": "Filtrer les réglages (touche /)"
   },
   "home": {
     "libraries": "Bibliothèques",
@@ -1008,7 +1009,9 @@
     "state_failed": "Échec, réessayer",
     "scope_video": "Vidéo",
     "scope_people": "Membres",
-    "kind_all": "Tous"
+    "kind_all": "Tous",
+    "recent": "Récentes",
+    "recent_clear": "Effacer"
   },
   "discover": {
     "add_music": "Ajouter une musique",
@@ -1552,7 +1555,12 @@
       "available": "Téléchargé",
       "failed": "Échec",
       "removed": "Retirée"
-    }
+    },
+    "allowance_left_one": "Il reste {{count}} demande sur {{limit}} par période de {{days}} jours",
+    "allowance_left_other": "Il reste {{count}} demandes sur {{limit}} par période de {{days}} jours",
+    "allowance_none_one": "Limite atteinte, prochaine demande dans {{count}} jour",
+    "allowance_none_other": "Limite atteinte, prochaine demande dans {{count}} jours",
+    "quotaExceeded": "Limite de demandes atteinte : {{count}} sur {{limit}} ces {{days}} derniers jours"
   },
   "activity": {
     "queue_empty": "Aucun téléchargement actif.",
@@ -1605,7 +1613,26 @@
     "legend_digital": "Sortie digitale",
     "legend_physical": "Sortie physique",
     "legend_airing": "Diffusion",
-    "legend_release": "Parution"
+    "legend_release": "Parution",
+    "today": "Aujourd'hui",
+    "tomorrow": "Demain",
+    "view_label": "Affichage du calendrier",
+    "view_month": "Mois",
+    "view_agenda": "Agenda",
+    "scope_label": "Titres affichés",
+    "scope_all": "Tous les titres",
+    "scope_monitored": "Surveillés",
+    "scope_mine": "Ajoutés par moi",
+    "state_ok": "Sur disque",
+    "state_miss": "Manquant",
+    "state_up": "À venir",
+    "load_more": "Charger 6 semaines de plus",
+    "empty": "Rien de prévu.",
+    "event_cinema": "Au cinéma",
+    "event_digital": "Sortie numérique",
+    "event_physical": "Sortie physique",
+    "event_airing": "Diffusion",
+    "event_release": "Sortie"
   },
   "system": {
     "title": "Système",
@@ -2638,7 +2665,128 @@
       "relay_pending": "Suppression en attente auprès d'un relais qui ne répond pas :",
       "relay_pending_drop": "Abandonner",
       "event_count_one": "{{count}} événement",
-      "event_count_other": "{{count}} événements"
+      "event_count_other": "{{count}} événements",
+      "per_user": "par utilisateur",
+      "groups": {
+        "requests": "Demandes",
+        "downloads": "Téléchargements",
+        "subtitles": "Sous-titres",
+        "library": "Bibliothèque",
+        "livetv": "TV en direct",
+        "system": "Système"
+      },
+      "events": {
+        "request": {
+          "created": {
+            "label": "Demande créée",
+            "hint": "Quelqu'un a demandé un titre."
+          },
+          "approved": {
+            "label": "Demande approuvée",
+            "hint": "Une demande a été approuvée."
+          },
+          "declined": {
+            "label": "Demande refusée",
+            "hint": "Une demande a été refusée."
+          },
+          "processing": {
+            "label": "Demande en cours",
+            "hint": "Une demande approuvée est en cours de récupération."
+          },
+          "available": {
+            "label": "Demande disponible",
+            "hint": "Un titre demandé est prêt à regarder."
+          },
+          "delete": {
+            "created": {
+              "label": "Suppression demandée",
+              "hint": "Quelqu'un a demandé le retrait d'un titre."
+            },
+            "approved": {
+              "label": "Suppression approuvée",
+              "hint": "Une demande de retrait a été approuvée."
+            },
+            "declined": {
+              "label": "Suppression refusée",
+              "hint": "Une demande de retrait a été refusée."
+            }
+          }
+        },
+        "grab": {
+          "started": {
+            "label": "Téléchargement lancé",
+            "hint": "Un téléchargement a été envoyé au client de téléchargement."
+          }
+        },
+        "download": {
+          "complete": {
+            "label": "Téléchargement terminé",
+            "hint": "Un téléchargement est terminé."
+          }
+        },
+        "subtitle": {
+          "downloaded": {
+            "label": "Sous-titre téléchargé",
+            "hint": "Un sous-titre a été ajouté à un titre."
+          },
+          "upgraded": {
+            "label": "Sous-titre amélioré",
+            "hint": "Un meilleur sous-titre a remplacé l'ancien."
+          },
+          "failed": {
+            "label": "Sous-titre en échec",
+            "hint": "Un sous-titre n'a pas pu être récupéré."
+          },
+          "synced": {
+            "label": "Sous-titre resynchronisé",
+            "hint": "Un sous-titre a été recalé sur la vidéo."
+          }
+        },
+        "media": {
+          "leaving_soon": {
+            "label": "Bientôt retiré",
+            "hint": "Un titre va être retiré de la bibliothèque."
+          },
+          "cleaned_up": {
+            "label": "Nettoyage effectué",
+            "hint": "D'anciens titres ont été retirés de la bibliothèque."
+          }
+        },
+        "optimize": {
+          "completed": {
+            "label": "Optimisation terminée",
+            "hint": "Un fichier a été optimisé."
+          },
+          "failed": {
+            "label": "Optimisation en échec",
+            "hint": "Un fichier n'a pas pu être optimisé."
+          }
+        },
+        "livetv": {
+          "account_expiring": {
+            "label": "Compte bientôt expiré",
+            "hint": "Un compte TV en direct va expirer."
+          },
+          "account_expired": {
+            "label": "Compte expiré",
+            "hint": "Un compte TV en direct a expiré."
+          },
+          "adult_guard_failed": {
+            "label": "Filtre adulte en échec",
+            "hint": "Le filtre des chaînes pour adultes n'a pas pu s'exécuter."
+          }
+        },
+        "health": {
+          "corrupt": {
+            "label": "Fichier corrompu détecté",
+            "hint": "Une analyse a trouvé un fichier média endommagé."
+          },
+          "issue": {
+            "label": "Problème de santé",
+            "hint": "Quelque chose sur le serveur demande votre attention."
+          }
+        }
+      }
     },
     "media_servers": {
       "title": "Serveurs de medias",
@@ -3999,6 +4147,30 @@
       "sidecars_hint": "Extensions lues à côté d'un titre, dans l'ordre, séparées par des virgules. Vide : ttml, elrc, lrc, srt, txt.",
       "load_error": "Impossible de charger les réglages des paroles.",
       "saved": "Réglages des paroles enregistrés."
+    },
+    "nav_words": {
+      "email": "smtp mail email courriel e-mail",
+      "streams": "transcodage gpu vaapi qsv nvenc accélération matérielle encodage",
+      "system": "version mise à jour sauvegarde disque stockage journaux",
+      "statistics": "stats graphiques usage",
+      "optimize_queue": "optimiser compresser réencoder",
+      "libraries": "dossiers chemins analyse médias",
+      "naming": "renommer fichiers dossiers format",
+      "notifications": "alertes webhook discord telegram push",
+      "users": "comptes membres mots de passe",
+      "roles": "permissions accès droits",
+      "sso": "oidc connexion openid authentification unique",
+      "plugins": "extensions modules fournisseurs",
+      "media_servers": "plex jellyfin emby",
+      "data_imports": "import historique de lecture migrer seerr",
+      "subtitles": "sous-titres srt langues",
+      "subtitle_providers": "opensubtitles sous-titres téléchargement",
+      "quality_profiles": "résolution débit seuil",
+      "metadata": "tmdb tvdb affiches illustrations",
+      "general": "nom du serveur langue url port",
+      "live_tv_settings": "iptv epg tuner chaînes",
+      "lyrics": "paroles karaoké chansons",
+      "karaoke": "paroles chansons chant"
     }
   },
   "roles": {
@@ -4335,7 +4507,9 @@
   "data_table": {
     "load_error": "Impossible de charger la liste.",
     "empty": "Rien à afficher.",
-    "refresh": "Actualiser"
+    "refresh": "Actualiser",
+    "filters": "Filtres",
+    "more": "Plus"
   },
   "bulk": {
     "selected_one": "{{count}} sélectionné",

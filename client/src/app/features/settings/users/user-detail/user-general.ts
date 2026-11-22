@@ -25,9 +25,17 @@ import { ToastService } from '../../../../core/services/toast.service';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import { LucideIconComponent } from '../../../../shared/components/lucide-icon';
 import { SERVER_SINCE, ServerVersionService } from '../../../../core/services/server-version.service';
+import type { MediaType } from '../../../../core/enums/media-type.enum';
+import { KIND_REGISTRY, MEDIA_KINDS } from '../../../../core/media-kinds';
 
-type QuotaKey = 'movieQuotaLimit' | 'seriesQuotaLimit' | 'bookQuotaLimit' | 'quotaPeriodDays';
-const QUOTA_KEYS: QuotaKey[] = ['movieQuotaLimit', 'seriesQuotaLimit', 'bookQuotaLimit', 'quotaPeriodDays'];
+type QuotaKey = `${MediaType}QuotaLimit` | 'quotaPeriodDays';
+const KIND_QUOTAS = MEDIA_KINDS.map((k) => ({ key: `${k}QuotaLimit` as const, label: KIND_REGISTRY[k].requestLabelKey }));
+const QUOTA_KEYS: QuotaKey[] = [...KIND_QUOTAS.map((q) => q.key), 'quotaPeriodDays'];
+
+function quotasOf(user: UserRow): Record<QuotaKey, number> {
+  const q = Object.fromEntries(KIND_QUOTAS.map(({ key }) => [key, user[key] ?? 0]));
+  return { ...q, quotaPeriodDays: user.quotaPeriodDays ?? 7 } as Record<QuotaKey, number>;
+}
 
 @Component({
   selector: 'app-user-general',
@@ -76,17 +84,8 @@ export class UserGeneralComponent implements OnInit {
   readonly formLibraryIds = signal<ReadonlySet<number>>(new Set());
   readonly libraries = signal<Library[]>([]);
   /** Request quotas as typed: a limit counts requests per period, 0 is unlimited. */
-  readonly formQuotas = signal<Record<QuotaKey, number>>({
-    movieQuotaLimit: 0,
-    seriesQuotaLimit: 0,
-    bookQuotaLimit: 0,
-    quotaPeriodDays: 7,
-  });
-  protected readonly quotaKinds = [
-    { key: 'movieQuotaLimit', label: 'requests.type_movie' },
-    { key: 'seriesQuotaLimit', label: 'requests.type_series' },
-    { key: 'bookQuotaLimit', label: 'kinds.book' },
-  ] as const;
+  readonly formQuotas = signal<Record<QuotaKey, number>>(quotasOf({} as UserRow));
+  protected readonly quotaKinds = KIND_QUOTAS;
 
   ngOnInit() {
     const user = this.state.user();
@@ -98,12 +97,7 @@ export class UserGeneralComponent implements OnInit {
       this.formRequirePasswordChange.set(user.requirePasswordChange ?? false);
       this.formWhatsNew.set(user.whatsNewEnabled ?? true);
       this.formLibraryIds.set(new Set(user.libraryIds ?? []));
-      this.formQuotas.set({
-        movieQuotaLimit: user.movieQuotaLimit ?? 0,
-        seriesQuotaLimit: user.seriesQuotaLimit ?? 0,
-        bookQuotaLimit: user.bookQuotaLimit ?? 0,
-        quotaPeriodDays: user.quotaPeriodDays ?? 7,
-      });
+      this.formQuotas.set(quotasOf(user));
     }
     void this.loadLibraries();
   }
@@ -124,12 +118,7 @@ export class UserGeneralComponent implements OnInit {
   /** Only the quota fields that changed: they need `users.manage`, which a plain edit must not demand. */
   private changedQuotas(user: UserRow): Partial<Record<QuotaKey, number>> {
     const form = this.formQuotas();
-    const before: Record<QuotaKey, number> = {
-      movieQuotaLimit: user.movieQuotaLimit ?? 0,
-      seriesQuotaLimit: user.seriesQuotaLimit ?? 0,
-      bookQuotaLimit: user.bookQuotaLimit ?? 0,
-      quotaPeriodDays: user.quotaPeriodDays ?? 7,
-    };
+    const before = quotasOf(user);
     return Object.fromEntries(QUOTA_KEYS.filter((k) => form[k] !== before[k]).map((k) => [k, form[k]]));
   }
 

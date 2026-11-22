@@ -10,7 +10,7 @@ import { LibrariesApiService, type LibrarySummary } from '../../../core/services
 import { MetadataService } from '../../../core/services/api/metadata.service';
 import { MusicApiService } from '../../../core/services/api/music-api.service';
 import { ProfilesService } from '../../../core/services/api/profiles.service';
-import { RequestsService } from '../../../core/services/api/requests.service';
+import { RequestsService, type RequestAllowance } from '../../../core/services/api/requests.service';
 import { PushService } from '../../../core/services/push.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -27,7 +27,7 @@ const lib = (id: number, types: string[], folders: number[] = [10], q: number | 
     folders: folders.map((f) => ({ id: f, name: `f${f}` })),
   }) as unknown as LibrarySummary;
 
-function setup(libraries: LibrarySummary[], perms: string[] = ['media.create']) {
+function setup(libraries: LibrarySummary[], perms: string[] = ['media.create'], allowance: RequestAllowance | null = null) {
   const calls: Record<string, unknown[]> = { import: [], request: [], book: [], album: [], want: [], tracks: [] };
   const toast = { success: vi.fn(), error: vi.fn() };
   const ask = vi.fn();
@@ -68,7 +68,7 @@ function setup(libraries: LibrarySummary[], perms: string[] = ['media.create']) 
           wantRecording: async (b: unknown) => (calls['want']!.push(b), { mediaId: 44, itemId: 5 }),
         },
       },
-      { provide: RequestsService, useValue: { create: async (b: unknown) => (calls['request']!.push(b), { mediaId: null }) } },
+      { provide: RequestsService, useValue: { allowance: async () => allowance, create: async (b: unknown) => (calls['request']!.push(b), { mediaId: null }) } },
       { provide: AuthService, useValue: { hasPermission: (p: string) => perms.includes(p) } },
       { provide: ToastService, useValue: toast },
       { provide: PushService, useValue: { askInContext: ask } },
@@ -109,6 +109,23 @@ describe('AddDialogComponent', () => {
     await (cmp as unknown as { submit(): Promise<void> }).submit();
     expect((calls['import']![0] as { libraryId: number }).libraryId).toBe(2);
     expect(localStorage.getItem('fliks-add-library-movie')).toBe('2');
+  });
+
+  it('shows the remaining requests and blocks the button at zero', async () => {
+    const libs = [lib(1, ['movie']), lib(2, ['movie'])];
+    const left = { movie: { limit: 5, used: 3, periodDays: 7, nextFreeAt: null } };
+    const a = setup(libs, ['requests.create'], left);
+    await a.cmp.add(movie);
+    const c = a.cmp as unknown as { allowance(): { blocked: boolean } | null; canSubmit(): boolean };
+    expect(c.allowance()?.blocked).toBe(false);
+    expect(c.canSubmit()).toBe(true);
+    TestBed.resetTestingModule();
+    const soon = new Date(Date.now() + 1.5 * 86_400_000).toISOString();
+    const b = setup(libs, ['requests.create'], { movie: { limit: 5, used: 5, periodDays: 7, nextFreeAt: soon } });
+    await b.cmp.add(movie);
+    const d = b.cmp as unknown as { allowance(): { blocked: boolean } | null; canSubmit(): boolean };
+    expect(d.allowance()?.blocked).toBe(true);
+    expect(d.canSubmit()).toBe(false);
   });
 
   it('keeps the remembered library as a preselection only', async () => {
