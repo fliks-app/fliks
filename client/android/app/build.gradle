@@ -86,9 +86,9 @@ repositories {
 
 configurations.all {
     resolutionStrategy {
-        force 'org.jetbrains.kotlin:kotlin-stdlib:2.0.21'
-        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.0.21'
-        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21'
+        force 'org.jetbrains.kotlin:kotlin-stdlib:2.4.21'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.4.21'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.4.21'
     }
 }
 
@@ -105,7 +105,7 @@ dependencies {
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
     proprietaryImplementation 'com.google.android.gms:play-services-cast-framework:22.0.0'
-    proprietaryImplementation 'androidx.mediarouter:mediarouter:1.7.0'
+    proprietaryImplementation 'androidx.mediarouter:mediarouter:1.9.0'
     // FCM only: no analytics library, auto-init is off in the manifest.
     proprietaryImplementation 'com.google.firebase:firebase-messaging:24.1.2'
     // ExoPlayer (Media3) for native HLS playback
