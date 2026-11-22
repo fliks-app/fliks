@@ -1,6 +1,6 @@
 # Bundled provider archives embedded by server/crates/server/build.rs: id version sha256 zipUrl. Bump: scripts/bump-providers.sh
-fliks.tmdb 0.3.1 baa3fcdab8a05e2cd9397464066dbe5db497473fee95839bbef50461ada9b255 https://github.com/fliks-app/plugins/releases/download/tmdb-v0.3.1/fliks.tmdb-0.3.1.fkplugin
-fliks.tvdb 0.3.2 e60cd6db25dbafde430c9ecbd9240bf785c14cbfc271c453529cef16483fae2c https://github.com/fliks-app/plugins/releases/download/tvdb-v0.3.2/fliks.tvdb-0.3.2.fkplugin
+fliks.tmdb 1.0.1 4966a97662fbb0e35ff237e43a91d5f1ef1316bdcdac76663ae232d88ed60e9c https://github.com/fliks-app/plugins/releases/download/tmdb-v1.0.1/fliks.tmdb-1.0.1.fkplugin
+fliks.tvdb 1.0.1 15ac9680859124de3a0b76ca31f2e15c59abdd534d76c6616055227cd65a8cf7 https://github.com/fliks-app/plugins/releases/download/tvdb-v1.0.1/fliks.tvdb-1.0.1.fkplugin
 fliks.openlibrary 0.3.2 7257ebeb0045e19b5802cb80aee60a487ba4e6dc56476b08d95eea68fea0375a https://github.com/fliks-app/plugins/releases/download/openlibrary-v0.3.2/fliks.openlibrary-0.3.2.fkplugin
 fliks.bnf 0.3.1 da2ee39cb23a822b2f73d7e9e67d78962144056db5b0e9e16cd9cb5ffc8489be https://github.com/fliks-app/plugins/releases/download/bnf-v0.3.1/fliks.bnf-0.3.1.fkplugin
 fliks.googlebooks 0.3.1 a20d7c368e80dda6a69ebb032c8f061d24deb4f3081d3948cfbcf41f93668a13 https://github.com/fliks-app/plugins/releases/download/googlebooks-v0.3.1/fliks.googlebooks-0.3.1.fkplugin
