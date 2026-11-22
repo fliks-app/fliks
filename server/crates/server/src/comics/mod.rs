@@ -2,10 +2,10 @@
 #[cfg(all(target_os = "linux", feature = "libarchive"))]
 mod ar;
 pub mod archive;
-mod cache;
+pub(crate) mod cache;
 mod pages;
 #[cfg(all(target_os = "linux", feature = "libarchive"))]
 pub mod sandbox;
 
 pub use pages::{__path_page, __path_pages, page, pages, router};
-pub(crate) use pages::{MAX_WIDTH, blocking_ingest, first_page_cover, serve_page};
+pub(crate) use pages::{MAX_WIDTH, blocking_ingest, first_page_cover, poster_of, serve_page};

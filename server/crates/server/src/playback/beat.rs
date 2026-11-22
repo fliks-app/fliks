@@ -712,6 +712,7 @@ pub async fn heartbeat(
         progression,
         locator,
         clear_locator: false,
+        external: false,
     };
     let reading = (sid.is_none() && client_played_at.is_none())
         .then_some(progression)

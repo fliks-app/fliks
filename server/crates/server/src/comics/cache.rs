@@ -18,6 +18,44 @@ pub struct Key {
     pub ctime: i128,
 }
 
+impl Key {
+    /// The identity of a resolved file: it changes with the file's bytes.
+    pub async fn of(file: i32, f: &crate::stream::ResolvedFile) -> Key {
+        let meta = tokio::fs::metadata(&f.absolute).await.ok();
+        let since_epoch = |t: Option<std::time::SystemTime>| {
+            t.and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_millis())
+        };
+        let mtime = since_epoch(meta.as_ref().and_then(|m| m.modified().ok()));
+        #[cfg(unix)]
+        let (ino, ctime) = {
+            use std::os::unix::fs::MetadataExt;
+            meta.as_ref().map_or((0, 0), |m| {
+                (
+                    m.ino(),
+                    i128::from(m.ctime()) * 1_000_000_000 + i128::from(m.ctime_nsec()),
+                )
+            })
+        };
+        #[cfg(not(unix))]
+        let (ino, ctime) = (0, 0);
+        Key {
+            file,
+            size: f.size,
+            mtime,
+            ino,
+            ctime,
+        }
+    }
+
+    pub fn tag(&self) -> String {
+        format!(
+            "{}-{}-{}-{}-{}",
+            self.file, self.size, self.mtime, self.ino, self.ctime
+        )
+    }
+}
+
 /// What one pass learned of an archive.
 pub struct Entry {
     pub pages: Vec<Page>,

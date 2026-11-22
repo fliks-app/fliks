@@ -40,7 +40,8 @@ pub struct Book {
 const UPDATED: &str = r#"GREATEST(i."updatedAt", m."updatedAt", f."updatedAt", e."updatedAt",
   (SELECT max(c."updatedAt") FROM media_credits c WHERE c."mediaId" = m.id))"#;
 
-/// The EPUB items `$1` (library ids) lets the caller read; `$2` narrows to item ids (NULL: all).
+/// The EPUB items `$1` (library ids) lets the caller read; `$2` narrows to item ids (NULL: all), `$3` to
+/// those after an id, `$4` to the first n (NULL: all).
 fn from_where() -> String {
     let readable = readable_file("$1", "mf.id");
     format!(
@@ -55,8 +56,8 @@ JOIN LATERAL (
   ORDER BY ip.version DESC, ip.position, mf.id LIMIT 1) f ON true
 WHERE i."groupId" IS NULL
   AND NOT EXISTS (SELECT 1 FROM items i2 WHERE i2."editionId" = e.id AND i2."groupId" IS NULL AND i2.id < i.id)
-  AND ($2::int[] IS NULL OR i.id = ANY($2))
-ORDER BY i.id"#
+  AND ($2::int[] IS NULL OR i.id = ANY($2)) AND i.id > $3
+ORDER BY i.id LIMIT $4"#
     )
 }
 
@@ -79,8 +80,26 @@ pub async fn index<'e>(
     )))
     .bind(acl)
     .bind(only)
+    .bind(0)
+    .bind(None::<i64>)
     .fetch_all(db)
     .await
+}
+
+/// The ids of the next `n` readable books after `after`.
+pub async fn page<'e>(
+    db: impl sqlx::PgExecutor<'e>,
+    acl: &[i32],
+    after: i32,
+    n: usize,
+) -> Result<Vec<i32>, sqlx::Error> {
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT i.id {}", from_where())))
+        .bind(acl)
+        .bind(None::<&[i32]>)
+        .bind(after)
+        .bind(n as i64)
+        .fetch_all(db)
+        .await
 }
 
 pub async fn fetch<'e>(
@@ -99,6 +118,8 @@ pub async fn fetch<'e>(
     )))
     .bind(acl)
     .bind(only)
+    .bind(0)
+    .bind(None::<i64>)
     .fetch_all(db)
     .await
 }

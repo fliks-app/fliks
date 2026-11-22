@@ -56,6 +56,31 @@ pub(super) fn work_dir(path: &str) -> String {
     segs.join("/")
 }
 
+/// The disc folder of a path (`CD2/Title.m4b`) as a number, `None` for a path not in one.
+fn disc_folder(path: &str) -> Option<u32> {
+    let dir = path.rsplit('/').nth(1).filter(|d| is_disc(d))?;
+    let digits: String = dir.chars().filter(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+/// The part number a name says (`Title Part 2`, `Title CD2`): the last disc or part token.
+fn token_number(stem: &str) -> Option<u32> {
+    let t = DISC_TOKEN.find_iter(stem).last()?.as_str();
+    let digits: String = t.chars().filter(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+/// `(disc, part)` an `m4b` says by its disc folder and its name, `None` when it says neither.
+fn m4b_part(path: &str) -> Option<(u32, u32)> {
+    let (disc, n) = (disc_folder(path), token_number(stem_of(path)));
+    (disc.is_some() || n.is_some()).then(|| (disc.unwrap_or(0), n.unwrap_or(0)))
+}
+
+/// An `m4b` stem without its brackets and part tokens: the files of one audiobook share it.
+fn m4b_key(path: &str) -> String {
+    alnum(&DISC_TOKEN.replace_all(&BRACKETS.replace_all(stem_of(path), ""), ""))
+}
+
 /// The stem of a file name and its trailing ` (fr)` language, when it has one.
 fn split_language(name: &str) -> (&str, Option<&str>) {
     let stem = name.rfind('.').map_or(name, |d| &name[..d]);
@@ -201,7 +226,7 @@ fn audio_keys(dir: &str, files: &[(String, String)]) -> HashMap<String, String> 
     let mut parts: HashMap<&str, String> = HashMap::new();
     for (p, f) in files {
         if f == "m4b" {
-            let k = alnum(&DISC_TOKEN.replace_all(&BRACKETS.replace_all(stem_of(p), ""), ""));
+            let k = m4b_key(p);
             if !k.is_empty() && Some(&k) != folder.as_ref() {
                 whole.insert(p, k);
             }
@@ -297,8 +322,12 @@ fn group_by(paths: &[String], split_books: bool) -> Vec<Work> {
         let book = split.get(&p).map_or(String::new(), |k| format!("\u{1}{k}"));
         let key = if dir.is_empty() {
             let stem = stem_key(&p);
+            let part_key = Some(m4b_key(&p))
+                .filter(|k| format == "m4b" && !k.is_empty() && m4b_part(&p).is_some());
             if works.contains_key(&(String::new(), stem.clone())) {
                 (dir.clone(), stem)
+            } else if let Some(k) = part_key {
+                (dir.clone(), format!("\u{0}{k}"))
             } else {
                 (dir.clone(), format!("\u{0}{}", p.to_lowercase()))
             }
@@ -324,6 +353,28 @@ fn group_by(paths: &[String], split_books: bool) -> Vec<Work> {
     out
 }
 
+/// The versions of a work's `m4b` files: the files of one name that say distinct disc or part
+/// numbers are the parts of one version, every other file is a version of its own.
+fn m4b_versions(files: Vec<String>) -> Vec<Vec<String>> {
+    let mut groups: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for p in &files {
+        groups.entry(m4b_key(p)).or_default().push(p.clone());
+    }
+    let mut out = vec![];
+    for (_, mut g) in groups {
+        let numbers: Vec<Option<(u32, u32)>> = g.iter().map(|p| m4b_part(p)).collect();
+        let distinct: BTreeSet<_> = numbers.iter().flatten().collect();
+        if g.len() > 1 && distinct.len() == g.len() && numbers.iter().all(Option::is_some) {
+            g.sort_by_key(|p| (m4b_part(p), natural(p)));
+            out.push(g);
+        } else {
+            out.extend(g.into_iter().map(|p| vec![p]));
+        }
+    }
+    out.sort_by_key(|g| natural(&g[0]));
+    out
+}
+
 fn finish(a: Acc) -> Work {
     let mut versions: Vec<Version> = vec![];
     let mut text = a.text;
@@ -336,21 +387,21 @@ fn finish(a: Acc) -> Work {
         });
     }
     let mut by_format: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut whole: Vec<(String, String)> = vec![];
+    let mut whole: Vec<String> = vec![];
     for (p, f) in a.audio {
         if f == "m4b" {
-            whole.push((p, f));
+            whole.push(p);
         } else {
             by_format.entry(f).or_default().push(p);
         }
     }
-    whole.sort_by_key(|(p, _)| natural(p));
-    let mut audio: Vec<Version> = whole
+    whole.sort_by_key(|p| natural(p));
+    let mut audio: Vec<Version> = m4b_versions(whole)
         .into_iter()
-        .map(|(p, f)| Version {
+        .map(|files| Version {
             family: Family::Audio,
-            format: f,
-            files: vec![p],
+            format: "m4b".into(),
+            files,
         })
         .collect();
     for (format, mut files) in by_format {
@@ -409,6 +460,13 @@ mod tests {
         assert_eq!(group_whole(&two).len(), 1);
         let parts = p(&["F/Title Part 1.m4b", "F/Title Part 2.m4b"]);
         assert_eq!(group(&parts).len(), 1);
+        assert_eq!(group(&parts)[0].versions.len(), 1);
+        assert_eq!(
+            group(&p(&["F/03 - Title.m4b", "F/04 - Title.m4b"]))[0]
+                .versions
+                .len(),
+            2
+        );
         let renamed = p(&[
             "F/Old Title - 01.mp3",
             "F/Old Title - 02.mp3",
@@ -428,7 +486,7 @@ mod tests {
         let mut fx: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let bless = std::env::var("BLESS").is_ok_and(|v| v == "1");
         let cases = fx["cases"].as_array().unwrap().clone();
-        assert_eq!(cases.len(), 28);
+        assert_eq!(cases.len(), 34);
         for (i, c) in cases.iter().enumerate() {
             let paths: Vec<String> = c["input"]["paths"]
                 .as_array()

@@ -8,7 +8,7 @@ use crate::{
         validate::{PathParams, ValidJson},
     },
     libraries::{accessible_library_ids, readable_file},
-    playback::{Watch, finish_context, record_watch},
+    playback::{Watch, finish_context, record_watch, serialise},
     state::AppState,
 };
 use axum::{
@@ -194,6 +194,25 @@ async fn put_progress(
         );
         return Ok(reply());
     };
+    let _one = serialise(caller.user, r.item).await;
+    let state: Option<(Option<f64>, DateTime<Utc>)> = sqlx::query_as(
+        r#"SELECT progression, "updatedAt" FROM playback_states WHERE "userId" = $1 AND "itemId" = $2"#,
+    )
+    .bind(caller.user)
+    .bind(r.item)
+    .fetch_optional(&st.db)
+    .await?;
+    let seen: Option<DateTime<Utc>> = sqlx::query_scalar(
+        r#"SELECT "stateAt" FROM kosync_progress WHERE "userId" = $1 AND "document" = $2"#,
+    )
+    .bind(caller.user)
+    .bind(&u.document)
+    .fetch_optional(&st.db)
+    .await?
+    .flatten();
+    // KOReader cannot see a write it has not pulled: it never moves the state back past one.
+    let behind = state
+        .is_some_and(|(p, at)| seen.is_none_or(|s| at > s) && p.is_some_and(|p| u.percentage < p));
     sqlx::query(
         r#"INSERT INTO kosync_progress
              ("userId", "document", "mediaFileId", "progress", "percentage", "device", "deviceId", "syncedAt")
@@ -213,6 +232,13 @@ async fn put_progress(
     .bind(now)
     .execute(&st.db)
     .await?;
+    if behind {
+        tracing::debug!(
+            "KOSync progress of user #{} not applied: below a write it has not seen",
+            caller.user
+        );
+        return Ok(reply());
+    }
     let (family, last_chapter_start) = finish_context(&st.db, r.item, r.file).await?;
     let watch = Watch {
         position: 0.0,
@@ -226,8 +252,19 @@ async fn put_progress(
         progression: Some(u.percentage.clamp(0.0, 1.0)),
         locator: None,
         clear_locator: true,
+        external: true,
     };
     let saved = record_watch(&st.db, caller.user, r.media, &watch).await?;
+    sqlx::query(
+        r#"UPDATE kosync_progress SET "stateAt" = (SELECT "updatedAt" FROM playback_states
+             WHERE "userId" = $1 AND "itemId" = $3)
+           WHERE "userId" = $1 AND "document" = $2"#,
+    )
+    .bind(caller.user)
+    .bind(&u.document)
+    .bind(r.item)
+    .execute(&st.db)
+    .await?;
     if saved.is_some_and(|s| s["completed"] == json!(true)) {
         st.account_sessions
             .complete_reading(&st, caller.user, r.item)

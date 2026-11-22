@@ -103,18 +103,6 @@ async fn rows(db: &PgPool, token: i32, lo: i32, hi: i32) -> sqlx::Result<Rows> {
     Ok(r.into_iter().map(|(i, s, a, x)| (i, (s, a, x))).collect())
 }
 
-/// The next `n` text items after `after`: a superset of the Kobo books, narrowed by `books::index`.
-async fn candidates(db: &PgPool, after: i32, n: usize) -> sqlx::Result<Vec<i32>> {
-    sqlx::query_scalar(
-        r#"SELECT i.id FROM items i JOIN editions e ON e.id = i."editionId" AND e.family = 'text'
-           WHERE i."groupId" IS NULL AND i.id > $1 ORDER BY i.id LIMIT $2"#,
-    )
-    .bind(after)
-    .bind(n as i64)
-    .fetch_all(db)
-    .await
-}
-
 #[derive(Clone, Copy)]
 enum Change {
     New,
@@ -162,7 +150,7 @@ pub async fn library_sync(
     let mut after = start;
     let window = WINDOW.load(Ordering::Relaxed);
     loop {
-        let mut ids = candidates(db, after, window).await?;
+        let mut ids = books::page(db, &k.acl, after, window).await?;
         let last = ids.len() < window;
         let hi = if last { i32::MAX } else { ids[window - 1] };
         let have = rows(db, tid, after, hi).await?;
