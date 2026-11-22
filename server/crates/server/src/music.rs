@@ -318,6 +318,8 @@ pub async fn recordings(
       WHERE c."itemId" = i.id AND c.role NOT IN ('composer', 'lyricist')), '[]'::jsonb),
   'year', m.year, 'durationSeconds', (SELECT td."durationMs"::float8 / 1000 FROM track_details td
       WHERE td."itemId" = i.id),
+  'gain', (SELECT td.gain FROM track_details td WHERE td."itemId" = i.id),
+  'peak', (SELECT td.peak FROM track_details td WHERE td."itemId" = i.id),
   'mediaFileId', (SELECT p."mediaFileId" FROM item_parts p WHERE p."itemId" = i.id
       ORDER BY p.version DESC, p.position LIMIT 1))
 {} GROUP BY i.id, m.id ORDER BY m.title, i.id"#,

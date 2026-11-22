@@ -115,7 +115,9 @@ pub async fn songs(
         SongOrder::Album => r#"m.id, td."discNumber", td.position, i.id"#,
         SongOrder::Random => "random()",
         SongOrder::Title => "lower(COALESCE(i.title, td.label, '')), i.id",
-        SongOrder::Starred => r#"starred DESC, i.id"#,
+        SongOrder::Starred => {
+            r#"(SELECT l."createdAt" FROM likes l WHERE l."userId" = $1 AND l."itemId" = i.id) DESC, i.id"#
+        }
     };
     // One ILIKE per word, so the trigram index on the stored text serves each.
     let search: String = match &f.patterns {
@@ -125,7 +127,21 @@ pub async fn songs(
         None => " AND $8::text[] IS NULL".to_owned(),
     };
     let sql = format!(
-        r#"SELECT i.id AS item_id, m.id AS album_id, COALESCE(i.title, td.label) AS title, m.title AS album, m.year,
+        r#"WITH page AS MATERIALIZED (SELECT id, row_number() OVER () AS n FROM (
+  SELECT i.id FROM items i
+  JOIN track_details td ON td."itemId" = i.id
+  JOIN editions e ON e.id = i."editionId"
+  JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
+  WHERE m."libraryId" = ANY($2) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+    AND track_file(i.id) IS NOT NULL
+    AND ($3::text IS NULL OR {GENRE_OF_ALBUM})
+    AND ($4::int IS NULL OR m.year >= $4) AND ($5::int IS NULL OR m.year <= $5)
+    {search}
+    AND ($9::int[] IS NULL OR i.id = ANY($9))
+    AND ($10::int IS NULL OR m.id = $10)
+    AND (NOT $11 OR EXISTS (SELECT 1 FROM likes l WHERE l."userId" = $1 AND l."itemId" = i.id))
+  ORDER BY {order} LIMIT $6 OFFSET $7) s)
+SELECT i.id AS item_id, m.id AS album_id, COALESCE(i.title, td.label) AS title, m.title AS album, m.year,
   m.genres, m."posterUrl" IS NOT NULL AS has_cover, td."discNumber" AS disc, td."trackNumber" AS track,
   td."recordingMbid"::text AS recording, td.isrc, td."durationMs" AS duration_ms, td.explicit, td.gain, td.peak,
   e."albumGain" AS album_gain, e."albumPeak" AS album_peak, f.size, f."relativePath" AS rel_path,
@@ -133,20 +149,13 @@ pub async fn songs(
   (SELECT l."createdAt" FROM likes l WHERE l."userId" = $1 AND l."itemId" = i.id) AS starred,
   (SELECT count(*) FROM playback_history h WHERE h."userId" = $1 AND h."itemId" = i.id) AS plays,
   (SELECT max(h."playedAt") FROM playback_history h WHERE h."userId" = $1 AND h."itemId" = i.id) AS played
-FROM items i
+FROM page
+JOIN items i ON i.id = page.id
 JOIN track_details td ON td."itemId" = i.id
 JOIN editions e ON e.id = i."editionId"
-JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
-JOIN LATERAL (SELECT mf.id, mf.size, mf."relativePath", mf."streamInfo" FROM media_files mf
-  WHERE mf.id = track_file(i.id)) f ON true
-WHERE m."libraryId" = ANY($2) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-  AND ($3::text IS NULL OR {GENRE_OF_ALBUM})
-  AND ($4::int IS NULL OR m.year >= $4) AND ($5::int IS NULL OR m.year <= $5)
-  {search}
-  AND ($9::int[] IS NULL OR i.id = ANY($9))
-  AND ($10::int IS NULL OR m.id = $10)
-  AND (NOT $11 OR EXISTS (SELECT 1 FROM likes l WHERE l."userId" = $1 AND l."itemId" = i.id))
-ORDER BY {order} LIMIT $6 OFFSET $7"#
+JOIN media m ON m.id = i."mediaId"
+JOIN media_files f ON f.id = track_file(i.id)
+ORDER BY page.n"#
     );
     sqlx::query_as::<_, SongRow>(AssertSqlSafe(sql))
         .bind(user)
@@ -202,14 +211,20 @@ pub enum AlbumOrder {
     YearDesc,
 }
 
+const ALBUM_PLAYS: &str = r#"(SELECT count(*) FROM playback_history h JOIN items hi ON hi.id = h."itemId" WHERE h."userId" = $1 AND hi."mediaId" = m.id)"#;
+const ALBUM_PLAYED: &str = r#"(SELECT max(h."playedAt") FROM playback_history h JOIN items hi ON hi.id = h."itemId" WHERE h."userId" = $1 AND hi."mediaId" = m.id)"#;
+const ALBUM_STARRED: &str = r#"(SELECT l."createdAt" FROM likes l WHERE l."userId" = $1 AND l."mediaId" = m.id AND l."itemId" IS NULL AND l."groupId" IS NULL)"#;
+const ALBUM_ARTIST_SORT: &str = r#"(SELECT lower(COALESCE(p."sortName", p.name)) FROM media_credits mc JOIN persons p ON p.id = mc."personId"
+    WHERE mc."mediaId" = m.id AND mc.role = 'artist' ORDER BY mc.position LIMIT 1)"#;
+
 pub async fn albums(
     db: &PgPool,
     user: i32,
     libs: &[i32],
     f: &Filter,
-    order: AlbumOrder,
+    sort: AlbumOrder,
 ) -> Result<Vec<AlbumRow>, sqlx::Error> {
-    let order = match order {
+    let order = match sort {
         AlbumOrder::Random => "random()",
         AlbumOrder::Newest => "created DESC, id DESC",
         AlbumOrder::Frequent => "plays DESC, id",
@@ -221,34 +236,57 @@ pub async fn albums(
         AlbumOrder::YearDesc => "year DESC, lower(title), id",
     };
     let visible = album_visible("$2");
+    // The page is picked on the columns its filters and order read; the rest is decorated after the limit.
+    let plays = if matches!(sort, AlbumOrder::Frequent) {
+        ALBUM_PLAYS
+    } else {
+        "NULL::bigint"
+    };
+    let played = if f.played || matches!(sort, AlbumOrder::Recent) {
+        ALBUM_PLAYED
+    } else {
+        "NULL::timestamptz"
+    };
+    let starred = if f.starred || matches!(sort, AlbumOrder::Starred) {
+        ALBUM_STARRED
+    } else {
+        "NULL::timestamptz"
+    };
+    let artist_sort = if matches!(sort, AlbumOrder::Artist) {
+        ALBUM_ARTIST_SORT
+    } else {
+        "NULL::text"
+    };
     let sql = format!(
-        r#"SELECT * FROM (SELECT m.id, m.title, m.year, m.genres, m."createdAt" AS created, m.overview,
+        r#"WITH page AS MATERIALIZED (SELECT id, row_number() OVER () AS n FROM (
+  SELECT id FROM (SELECT m.id, m.title, m.year, m."createdAt" AS created, {plays} AS plays, {played} AS played,
+    {starred} AS starred, {artist_sort} AS artist_sort
+  FROM media m
+  WHERE {visible}
+    AND ($3::text IS NULL OR {GENRE_OF_ALBUM})
+    AND ($4::int IS NULL OR m.year >= $4) AND ($5::int IS NULL OR m.year <= $5)
+    AND ($8::text[] IS NULL OR (m.title || ' ' || {ALBUM_ARTISTS_TEXT}) ILIKE ALL ($8))
+    AND ($9::int[] IS NULL OR m.id = ANY($9))
+    AND ($10::int IS NULL OR EXISTS (SELECT 1 FROM media_credits mc WHERE mc."mediaId" = m.id AND mc."personId" = $10 AND mc.role = 'artist'))
+  ) a WHERE (NOT $11 OR starred IS NOT NULL) AND (NOT $12 OR played IS NOT NULL)
+  ORDER BY {order} LIMIT $6 OFFSET $7) s)
+SELECT m.id, m.title, m.year, m.genres, m."createdAt" AS created, m.overview,
   (SELECT x.value FROM media_external_ids x WHERE x."mediaId" = m.id AND x.kind = 'album' AND x.provider = 'musicbrainz' LIMIT 1) AS mbid,
   m."posterUrl" IS NOT NULL AS has_cover, st.songs, st.duration,
-  (SELECT count(*) FROM playback_history h JOIN items hi ON hi.id = h."itemId" WHERE h."userId" = $1 AND hi."mediaId" = m.id) AS plays,
-  (SELECT max(h."playedAt") FROM playback_history h JOIN items hi ON hi.id = h."itemId" WHERE h."userId" = $1 AND hi."mediaId" = m.id) AS played,
-  (SELECT l."createdAt" FROM likes l WHERE l."userId" = $1 AND l."mediaId" = m.id AND l."itemId" IS NULL AND l."groupId" IS NULL) AS starred,
+  {ALBUM_PLAYS} AS plays, {ALBUM_PLAYED} AS played, {ALBUM_STARRED} AS starred,
   ad."firstReleaseDate"::text AS first_release, ad."isCompilation" AS compilation, ad."primaryType" AS primary_type,
   ad."secondaryTypes" AS secondary,
   (SELECT e2.publisher FROM editions e2 WHERE e2."mediaId" = m.id AND e2.publisher IS NOT NULL ORDER BY e2.id LIMIT 1) AS publisher,
-  (SELECT e2.disambiguation FROM editions e2 WHERE e2."mediaId" = m.id AND e2.family = 'audio' ORDER BY e2.id LIMIT 1) AS version,
-  (SELECT lower(COALESCE(p."sortName", p.name)) FROM media_credits mc JOIN persons p ON p.id = mc."personId"
-    WHERE mc."mediaId" = m.id AND mc.role = 'artist' ORDER BY mc.position LIMIT 1) AS artist_sort
-FROM media m
+  (SELECT e2.disambiguation FROM editions e2 WHERE e2."mediaId" = m.id AND e2.family = 'audio' ORDER BY e2.id LIMIT 1) AS version
+FROM page
+JOIN media m ON m.id = page.id
 LEFT JOIN album_details ad ON ad."mediaId" = m.id
 JOIN LATERAL (SELECT count(*)::int AS songs,
     COALESCE(round(sum(COALESCE(td."durationMs" / 1000.0, (f."streamInfo"->>'durationSeconds')::float8, 0))), 0)::int AS duration
   FROM items i JOIN track_details td ON td."itemId" = i.id JOIN editions e ON e.id = i."editionId"
   JOIN LATERAL (SELECT mf."streamInfo" FROM media_files mf WHERE mf.id = track_file(i.id)) f ON true
-  WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) st ON st.songs > 0
-WHERE {visible}
-  AND ($3::text IS NULL OR {GENRE_OF_ALBUM})
-  AND ($4::int IS NULL OR m.year >= $4) AND ($5::int IS NULL OR m.year <= $5)
-  AND ($8::text[] IS NULL OR (m.title || ' ' || {ALBUM_ARTISTS_TEXT}) ILIKE ALL ($8))
-  AND ($9::int[] IS NULL OR m.id = ANY($9))
-  AND ($10::int IS NULL OR EXISTS (SELECT 1 FROM media_credits mc WHERE mc."mediaId" = m.id AND mc."personId" = $10 AND mc.role = 'artist'))
-) a WHERE (NOT $11 OR starred IS NOT NULL) AND (NOT $12 OR played IS NOT NULL)
-ORDER BY {order} LIMIT $6 OFFSET $7"#
+  WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) st ON true
+ORDER BY page.n"#
     );
     sqlx::query_as::<_, AlbumRow>(AssertSqlSafe(sql))
         .bind(user)
@@ -295,9 +333,10 @@ pub async fn artists(
   (SELECT x.value FROM person_external_ids x WHERE x."personId" = p.id AND x.provider = 'musicbrainz' LIMIT 1) AS mbid,
   COALESCE(a.albums, 0) AS albums
 FROM persons p
-LEFT JOIN LATERAL (SELECT count(DISTINCT mc."mediaId")::int AS albums FROM media_credits mc
+LEFT JOIN (SELECT mc."personId" AS id, count(DISTINCT mc."mediaId")::int AS albums FROM media_credits mc
   JOIN media m ON m.id = mc."mediaId"
-  WHERE mc."personId" = p.id AND mc.role = 'artist' AND {visible}) a ON true
+  WHERE mc.role = 'artist' AND ($3::int[] IS NULL OR mc."personId" = ANY($3)) AND {visible}
+  GROUP BY mc."personId") a ON a.id = p.id
 WHERE ($3::int[] IS NULL OR p.id = ANY($3)) AND ($3::int[] IS NOT NULL OR a.albums > 0)
   AND ($2::text[] IS NULL OR p.name ILIKE ALL ($2))
 ORDER BY lower(COALESCE(p."sortName", p.name)), p.name, p.id LIMIT $4 OFFSET $5"#

@@ -210,6 +210,7 @@ pub(crate) async fn playlist_tracks(
                     "itemId": t["itemId"], "title": t["title"], "artists": artists,
                     "albumTitle": t["albumTitle"], "mediaId": t["mediaId"], "posterUrl": t["posterUrl"],
                     "durationSeconds": t["durationSeconds"], "mediaFileId": t["mediaFileId"],
+                    "gain": t["gain"], "peak": t["peak"],
                 }),
             ))
         })

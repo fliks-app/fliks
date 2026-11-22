@@ -236,6 +236,8 @@ export interface WorkRecording {
   year: number | null;
   durationSeconds: number | null;
   mediaFileId: number | null;
+  gain: number | null;
+  peak: number | null;
 }
 
 // GET /api/metadata/:provider/album/:externalId

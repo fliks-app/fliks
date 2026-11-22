@@ -417,8 +417,48 @@ pub async fn absorb_into(st: &AppState, from: i32, into: i32) -> sqlx::Result<bo
     Ok(true)
 }
 
+/// Moves everything of person `from` onto `into` and deletes `from`; a row `into` already holds is dropped.
+async fn fold_person(c: &mut PgConnection, from: i32, into: i32, old: &str) -> sqlx::Result<()> {
+    for sql in [
+        r#"DELETE FROM media_credits d USING media_credits k WHERE d."personId" = $1 AND k."personId" = $2
+             AND k."mediaId" = d."mediaId" AND k.role = d.role AND k."editionId" IS NOT DISTINCT FROM d."editionId""#,
+        r#"UPDATE media_credits SET "personId" = $2 WHERE "personId" = $1"#,
+        r#"DELETE FROM item_credits d USING item_credits k WHERE d."personId" = $1 AND k."personId" = $2
+             AND k."itemId" = d."itemId" AND k.role = d.role AND k.instrument IS NOT DISTINCT FROM d.instrument"#,
+        r#"UPDATE item_credits SET "personId" = $2 WHERE "personId" = $1"#,
+        r#"DELETE FROM person_follows d USING person_follows k WHERE d."personId" = $1 AND k."personId" = $2
+             AND k."userId" = d."userId" AND k.role = d.role"#,
+        r#"UPDATE person_follows SET "personId" = $2 WHERE "personId" = $1"#,
+        r#"UPDATE works SET "composerPersonId" = $2 WHERE "composerPersonId" = $1"#,
+        r#"DELETE FROM person_external_ids d USING person_external_ids k WHERE d."personId" = $1 AND k."personId" = $2
+             AND k.provider = d.provider"#,
+        r#"UPDATE person_external_ids SET "personId" = $2 WHERE "personId" = $1"#,
+        r#"UPDATE person_external_id_aliases SET "personId" = $2 WHERE "personId" = $1"#,
+    ] {
+        sqlx::query(sql)
+            .bind(from)
+            .bind(into)
+            .execute(&mut *c)
+            .await?;
+    }
+    sqlx::query(
+        r#"INSERT INTO person_external_id_aliases ("personId", provider, value) VALUES ($1, $2, $3)
+           ON CONFLICT (provider, value) DO UPDATE SET "personId" = EXCLUDED."personId""#,
+    )
+    .bind(into)
+    .bind(MB)
+    .bind(old)
+    .execute(&mut *c)
+    .await?;
+    sqlx::query("DELETE FROM persons WHERE id = $1")
+        .bind(from)
+        .execute(c)
+        .await
+        .map(drop)
+}
+
 /// The person `person` held `old` and the provider now answers `new`; a person that already holds `new`
-/// keeps it and nothing moves.
+/// absorbs it (credits, follows, works, ids), and `old` becomes its alias.
 pub async fn redirect_person(
     db: &PgPool,
     person: i32,
@@ -433,8 +473,10 @@ pub async fn redirect_person(
     .bind(new)
     .fetch_optional(&mut *tx)
     .await?;
-    if held.is_some_and(|h| h != person) {
-        return Ok(Moved::Folded(held.unwrap_or_default()));
+    if let Some(into) = held.filter(|h| *h != person) {
+        fold_person(&mut tx, person, into, old).await?;
+        tx.commit().await?;
+        return Ok(Moved::Folded(into));
     }
     sqlx::query(r#"DELETE FROM person_external_id_aliases WHERE provider = $1 AND value = $2"#)
         .bind(MB)

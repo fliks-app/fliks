@@ -543,24 +543,40 @@ pub async fn reorder(
     writable(&playlist)?;
     let mut tx = st.db.begin().await?;
     lock(&mut tx, id).await?;
-    let current: HashSet<i32> = sqlx::query_scalar!(
-        r#"SELECT id FROM playlist_items WHERE "playlistId" = $1"#,
-        id
+    let accessible = accessible_library_ids(&st.db, &a).await?;
+    // Every row in order, flagged when the caller's list shows it; hidden rows keep their slot.
+    let rows: Vec<(i32, bool)> = sqlx::query_as(
+        r#"SELECT pi.id, (m.id IS NOT NULL AND m.type = ANY($3) AND m."libraryId" = ANY($2))
+           FROM playlist_items pi JOIN items it ON it.id = pi."itemId" LEFT JOIN media m ON m.id = it."mediaId"
+           WHERE pi."playlistId" = $1 ORDER BY pi.position, pi.id"#,
     )
+    .bind(id)
+    .bind(&accessible)
+    .bind(a.kinds.names())
     .fetch_all(&mut *tx)
-    .await?
-    .into_iter()
-    .collect();
+    .await?;
+    let visible: HashSet<i32> = rows.iter().filter(|r| r.1).map(|r| r.0).collect();
     let wanted: HashSet<i32> = dto.item_ids.iter().copied().collect();
-    if wanted.len() != dto.item_ids.len() || wanted != current {
+    if wanted.len() != dto.item_ids.len() || wanted != visible {
         return Err(AppError::bad_request(
             "itemIds must list every item in the playlist exactly once",
         ));
     }
+    let mut next = dto.item_ids.iter();
+    let order: Vec<i32> = rows
+        .iter()
+        .map(|&(row, shown)| {
+            if shown {
+                *next.next().unwrap_or(&row)
+            } else {
+                row
+            }
+        })
+        .collect();
     sqlx::query!(
         r#"UPDATE playlist_items pi SET position = (t.n - 1)::int
            FROM unnest($1::int[]) WITH ORDINALITY AS t(id, n) WHERE pi.id = t.id"#,
-        &dto.item_ids
+        &order
     )
     .execute(&mut *tx)
     .await?;

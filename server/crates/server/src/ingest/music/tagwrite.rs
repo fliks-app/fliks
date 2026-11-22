@@ -13,8 +13,6 @@ use std::path::{Path, PathBuf};
 #[derive(sqlx::FromRow)]
 struct Facts {
     file: i32,
-    folder: String,
-    rel: String,
     title: Option<String>,
     disc: i32,
     number: Option<i32>,
@@ -71,14 +69,15 @@ fn write(path: &Path, f: &Facts) -> Result<bool, String> {
         v.filter(|v| !v.is_empty())
             .is_none_or(|v| tag.get_string(*k) == Some(v))
     }) && number.is_none_or(|n| tag.track() == Some(n))
-        && tag.disk() == Some(disc);
+        && tag.disk() == Some(disc)
+        && (year.is_none() || tag.get_string(ItemKey::RecordingDate).is_some());
     if current {
         return Ok(false);
     }
     for (k, v) in text {
         set(&mut tag, k, v);
     }
-    if let Some(y) = year {
+    if let Some(y) = year.filter(|_| tag.get_string(ItemKey::RecordingDate).is_none()) {
         tag.insert_text(ItemKey::RecordingDate, y.to_string());
     }
     if let Some(n) = number {
@@ -105,7 +104,7 @@ fn write(path: &Path, f: &Facts) -> Result<bool, String> {
 /// logged and left as it was.
 pub async fn write_album_tags(st: &AppState, media: i32) -> Result<usize, String> {
     let rows: Vec<Facts> = sqlx::query_as(
-        r#"SELECT mf.id AS file, lf.path AS folder, mf."relativePath" AS rel, i.title, td."discNumber" AS disc,
+        r#"SELECT mf.id AS file, i.title, td."discNumber" AS disc,
              td."trackNumber" AS number, td."recordingMbid"::text AS recording,
              td."releaseTrackMbid"::text AS release_track, m.title AS album, m.year,
              (SELECT x.value FROM media_external_ids x
@@ -116,7 +115,6 @@ pub async fn write_album_tags(st: &AppState, media: i32) -> Result<usize, String
              (SELECT string_agg(p.name, '; ' ORDER BY c.position) FROM media_credits c
                JOIN persons p ON p.id = c."personId" WHERE c."mediaId" = m.id AND c.role = 'artist') AS album_artists
            FROM media_files mf
-             JOIN library_folders lf ON lf.id = mf."folderId"
              JOIN item_parts ip ON ip."mediaFileId" = mf.id
              JOIN items i ON i.id = ip."itemId"
              JOIN track_details td ON td."itemId" = i.id
@@ -129,7 +127,13 @@ pub async fn write_album_tags(st: &AppState, media: i32) -> Result<usize, String
     .map_err(|e| e.to_string())?;
     let mut done = 0;
     for f in rows {
-        let path = Path::new(&f.folder).join(&f.rel);
+        let Some((path, _)) = super::super::post_import::file_path(st, f.file)
+            .await
+            .map_err(|e| e.to_string())?
+        else {
+            tracing::warn!("tags of file #{} not written: no contained path", f.file);
+            continue;
+        };
         let (p, file) = (path.clone(), f.file);
         let facts = f;
         let written = tokio::task::spawn_blocking(move || write(&p, &facts))
@@ -181,8 +185,6 @@ mod tests {
     fn facts() -> Facts {
         Facts {
             file: 1,
-            folder: String::new(),
-            rel: String::new(),
             title: Some("Low Tide".into()),
             disc: 1,
             number: Some(5),

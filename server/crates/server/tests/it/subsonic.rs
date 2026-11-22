@@ -1217,3 +1217,54 @@ async fn a_hit_from_a_plugin_namespace_is_stored_and_served(pool: PgPool) {
         "provider:fliks.lrclib:lrclib"
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn the_folder_mode_aliases_answer_the_same_albums_as_directories(pool: PgPool) {
+    let c = ctx(pool).await;
+    let v = c.alice("getAlbumList", "type=alphabeticalByName").await;
+    assert_eq!(
+        names(&v["albumList"]["album"], "name"),
+        ["First Album", "Second Album", "Secret Album"]
+    );
+    assert_eq!(v["albumList"]["album"][0]["isDir"], true);
+    assert_eq!(v["albumList"]["album"][0]["parent"], "ar-1");
+    let v = c.alice("search2", "query=first").await;
+    assert_eq!(names(&v["searchResult2"]["album"], "name"), ["First Album"]);
+    assert_eq!(v["searchResult2"]["song"].as_array().unwrap().len(), 2);
+    let v = c.alice("getStarred", "").await;
+    assert!(v["starred"]["album"].as_array().unwrap().is_empty());
+    assert!(
+        c.alice("getNowPlaying", "").await["nowPlaying"]["entry"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let v = c.alice("getMusicFolders", "").await;
+    assert_eq!(v["musicFolders"]["musicFolder"][0]["id"], 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn playlist_totals_count_the_visible_tracks_in_one_pass(pool: PgPool) {
+    let c = ctx(pool).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'Mix', 2), (2, 'Empty', 2);
+           INSERT INTO playlist_items ("playlistId", "itemId", position, "addedById") VALUES
+             (1, 100, 0, 2), (1, 101, 1, 2), (1, 103, 2, 2);"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    let v = c.bob("getPlaylists", "").await;
+    let list = v["playlists"]["playlist"].as_array().unwrap();
+    let by = |n: &str| list.iter().find(|p| p["name"] == n).unwrap().clone();
+    assert_eq!(
+        (
+            by("Mix")["songCount"].clone(),
+            by("Mix")["duration"].clone()
+        ),
+        (json!(2), json!(380))
+    );
+    assert_eq!(by("Empty")["songCount"], 0);
+    let full = c.bob("getPlaylist", "id=pl-1").await;
+    assert_eq!(full["playlist"]["songCount"], 2);
+}

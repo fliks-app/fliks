@@ -64,6 +64,8 @@ export interface PlaylistTrack {
   posterUrl: string | null;
   durationSeconds: number | null;
   mediaFileId: number | null;
+  gain: number | null;
+  peak: number | null;
 }
 
 export interface PlaylistItem {

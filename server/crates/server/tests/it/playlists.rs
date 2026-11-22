@@ -198,6 +198,37 @@ async fn reorder_closes_gaps_and_rejects_bad_lists(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn an_editor_reorders_what_they_see_and_hidden_rows_keep_their_slot(pool: PgPool) {
+    let c = ctx(pool).await;
+    c.sql(r#"INSERT INTO libraries (name) VALUES ('hidden')"#)
+        .await;
+    c.sql(r#"INSERT INTO media (title, type, "libraryId") VALUES ('secret', 'movie', 2)"#)
+        .await;
+    c.sql(r#"INSERT INTO editions ("mediaId", family) VALUES (3, 'video')"#)
+        .await;
+    c.sql(r#"INSERT INTO items ("mediaId", "editionId") VALUES (3, 3)"#)
+        .await;
+    c.sql(r#"INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'p', 2)"#)
+        .await;
+    c.sql(
+        r#"INSERT INTO playlist_items ("playlistId", "itemId", position) VALUES (1, 4, 0), (1, 5, 1), (1, 1, 2)"#,
+    )
+    .await;
+    let order = "/api/playlists/1/items/order";
+    assert_eq!(
+        c.call(1, "PUT", order, json!({"itemIds": [1, 2, 3]}))
+            .await
+            .0,
+        400
+    );
+    assert_eq!(
+        c.call(1, "PUT", order, json!({"itemIds": [3, 1]})).await.0,
+        200
+    );
+    assert_eq!(c.positions().await, vec![(3, 0), (2, 1), (1, 2)]);
+}
+
+#[sqlx::test(migrations = false)]
 async fn add_expands_series_and_seasons_and_skips_present(pool: PgPool) {
     let c = ctx(pool).await;
     c.sql(r#"INSERT INTO playlists (id, name, "ownerId") VALUES (1, 'p', 2)"#)

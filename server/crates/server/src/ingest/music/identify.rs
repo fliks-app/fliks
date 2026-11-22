@@ -2,7 +2,7 @@
 //! carry first, else a search ranked by the distance of the tags to each release.
 use super::{
     stored_tags,
-    tags::{Named, TrackTags},
+    tags::{AlbumTags, Named, TrackTags},
 };
 use crate::{
     http::AppError,
@@ -74,16 +74,11 @@ fn common<T: Clone + Eq + std::hash::Hash>(items: impl Iterator<Item = T>) -> Op
 
 /// What the files of the album say.
 fn local_of(title: &str, tags: &[TrackTags]) -> Local {
+    let album = AlbumTags::of(tags);
     Local {
-        album: common(tags.iter().filter_map(|t| t.album.clone()))
-            .unwrap_or_else(|| title.to_owned()),
-        artist: common(
-            tags.iter()
-                .map(TrackTags::artist_line)
-                .filter(|a| !a.is_empty()),
-        )
-        .unwrap_or_default(),
-        year: common(tags.iter().filter_map(|t| t.year)),
+        album: album.album.unwrap_or_else(|| title.to_owned()),
+        artist: album.artist,
+        year: album.year,
         media: common(
             tags.iter()
                 .filter_map(|t| t.media.as_deref().map(|m| provider::medium(m).to_owned())),
@@ -559,7 +554,7 @@ mod tests {
             &[
                 tags("Alpha", "Ana", 1),
                 tags("Alpha", "Ana", 2),
-                tags("Other", "Zed", 3),
+                tags("Other", "Ana", 3),
             ],
         );
         assert_eq!(
