@@ -121,6 +121,8 @@ export class SubtitlesModalComponent {
   /** Language profile ID from the media — used to compute required subtitle languages */
   readonly languageProfileId = input<number | null>(null);
   readonly streams = input<MediaStream[]>([]);
+  /** The page is parked in the route cache: no toasts or reloads for events, the list is re-read on return. */
+  readonly parked = input(false);
   /** The selected file's `streamInfo.subtitles`, for the embedded track titles and tags. */
   readonly streamSubtitles = input<SubtitleStreams>(null);
 
@@ -644,13 +646,20 @@ export class SubtitlesModalComponent {
     }
   });
 
+  private wasParked = false;
+  private readonly unparkEffect = effect(() => {
+    const parked = this.parked();
+    if (!parked && this.wasParked) untracked(() => { const id = this.mediaId(); if (id) void this.loadSubtitles(id); });
+    this.wasParked = parked;
+  });
+
   /** SSE: reload subtitles on sync/download events */
   private readonly subtitleEvents = this.sse
     .on('subtitle.list_changed', 'subtitle.synced', 'subtitle.downloaded', 'subtitle.failed')
     .pipe(takeUntilDestroyed())
     .subscribe((event) => {
       const mediaId = this.mediaId();
-      if (!mediaId || (event['mediaId'] as number) !== mediaId) return;
+      if (this.parked() || !mediaId || (event['mediaId'] as number) !== mediaId) return;
 
       const automatic = event['automatic'] === true;
       if (event.type === 'subtitle.list_changed') {

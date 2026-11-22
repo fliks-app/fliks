@@ -1,6 +1,6 @@
 import { Subject, filter } from 'rxjs';
 import type { PushNotification } from '../core/services/push.service';
-import type { SseEvent } from '../core/services/sse.service';
+import type { SseEvent, SseStreamType } from '../core/services/sse.service';
 
 /** The part of `SseService` that consumers subscribe to, with `deliver` to push a frame the way the wire does. */
 export function sseStub(over: Record<string, unknown> = {}) {
@@ -9,8 +9,8 @@ export function sseStub(over: Record<string, unknown> = {}) {
   return {
     events,
     notifications,
-    on: (...types: string[]) => events.pipe(filter((e) => types.includes(e.type))),
-    deliver: (event: SseEvent) => events.next(event),
+    on: (...types: SseStreamType[]) => events.pipe(filter((e) => (types as string[]).includes(e.type))),
+    deliver: (event: SseEvent & { type: SseStreamType | `plugin.${string}` }) => events.next(event),
     ...over,
   };
 }

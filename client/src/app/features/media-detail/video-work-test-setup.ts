@@ -45,6 +45,7 @@ export function fakeHost(overrides: Partial<MediaDetailHost> = {}): MediaDetailH
     notFound: signal(false),
     episodeSeed: signal(null),
     navTitle: signal<string | null>(null),
+    parked: signal(false),
     returns: signal(0),
     requestFlow: {} as RequestFlowController,
     deleteLoading: signal(false),

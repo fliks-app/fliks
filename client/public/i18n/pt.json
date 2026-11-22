@@ -422,6 +422,7 @@
     },
     "version": "Versão {{version}}",
     "licenses": "Licenças de código aberto",
+    "licenses_unavailable": "Não foi possível carregar as licenças.",
     "notifications": {
       "device_title": "Este dispositivo",
       "device": "Notificações do sistema neste dispositivo",

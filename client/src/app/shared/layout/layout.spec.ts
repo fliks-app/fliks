@@ -142,6 +142,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         provide: SseService,
         useValue: {
           on: (...types: string[]) => (f.sseEvents ?? new Subject<SseEvent>()).pipe(filter((e) => types.includes(e.type))),
+          notifications: new Subject<never>(),
           pairingEvents: f.pairingEvents ?? new Subject<SseEvent>(),
           connectionId: f.connectionId ?? (() => null),
           connect: () => {},

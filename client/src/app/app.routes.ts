@@ -532,6 +532,11 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'licenses',
+        loadComponent: () =>
+          import('./features/app-settings/licenses/licenses').then((m) => m.LicensesPageComponent),
+      },
+      {
         path: 'update',
         canActivate: [desktopGuard],
         loadComponent: () =>

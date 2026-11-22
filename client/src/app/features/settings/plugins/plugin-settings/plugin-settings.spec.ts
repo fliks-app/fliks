@@ -124,6 +124,17 @@ describe('PluginSettingsComponent: unsigned plugins switch', () => {
     expect(fixture.nativeElement.querySelectorAll('app-toggle-field')).toHaveLength(3);
   });
 
+  it('leaves the compatibility switch disabled for a non-admin', async () => {
+    const { fixture, opened } = await open(false);
+    await opened;
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const toggles = fixture.nativeElement.querySelectorAll('app-toggle-field input');
+    expect(toggles[1].disabled).toBe(true);
+    expect(toggles[0].disabled).toBe(false);
+  });
+
   it('offers it to an admin', async () => {
     const { fixture, http, opened } = await open(true);
     http.expectOne({ url: '/api/settings/plugins.allow_unsigned', method: 'GET' }).flush({ key: 'plugins.allow_unsigned', value: 'false' });
