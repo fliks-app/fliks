@@ -475,7 +475,9 @@
       "pending_expired": "Sign in again to open this notification.",
       "tray_open": "Open Fliks",
       "tray_quit": "Quit Fliks",
-      "badge_label": "Notifications"
+      "badge_label": "Notifications",
+      "cat_system": "System",
+      "cat_system_hint": "Health checks that fail on this server."
     }
   },
   "update_settings": {
@@ -653,7 +655,8 @@
     "change_server": "Switch server",
     "playlists": "Playlists",
     "account": "My account",
-    "no_library": "No library yet"
+    "no_library": "No library yet",
+    "system_attention": "System issues need attention"
   },
   "history": {
     "title": "History",
@@ -6161,6 +6164,14 @@
     },
     "outcome_done": "Done.",
     "outcome_failed": "The action failed.",
-    "outcome_signin": "Open Fliks to sign in again."
+    "outcome_signin": "Open Fliks to sign in again.",
+    "health_broken": {
+      "title": "System issue",
+      "body": "{{message}}"
+    },
+    "health_fixed": {
+      "title": "System issue resolved",
+      "body": "{{message}}"
+    }
   }
 }

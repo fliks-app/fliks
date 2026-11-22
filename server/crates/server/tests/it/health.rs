@@ -136,6 +136,8 @@ async fn an_unreachable_folder_is_announced_once_and_survives_runs(pool: PgPool)
     assert_eq!(open[0]["state"], "error");
     assert_eq!(open[0]["code"], "library_unmounted");
     assert_eq!(open[0]["link"], "/admin/settings/libraries/1");
+    let (_, counts) = call(&c, "GET", "/api/counts").await;
+    assert_eq!(counts["systemAttention"], 1);
     let since = open[0]["since"].clone();
     assert_eq!(sent(&c, 1).await.len(), 1);
 
@@ -149,6 +151,8 @@ async fn an_unreachable_folder_is_announced_once_and_survives_runs(pool: PgPool)
     std::fs::create_dir_all(&dir).unwrap();
     health::run(&c.st).await.unwrap();
     assert!(folder_checks(&c).await.is_empty());
+    let (_, counts) = call(&c, "GET", "/api/counts").await;
+    assert_eq!(counts["systemAttention"], 0);
     let seen = sent(&c, 2).await;
     assert_eq!(seen.len(), 2);
     assert_eq!(seen[0]["event"], "health.issue");

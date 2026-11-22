@@ -115,11 +115,19 @@ fn announce(st: &AppState, t: Transition) {
             format!("Resolved: {}", checks::text(&t.code, &t.params)),
         ),
     };
+    crate::push::health_event(st, &t.key, matches!(t.kind, Kind::Broken), &text);
     notifications::dispatch(
         &st.db,
         "health.issue",
         payload!({ "check": t.key, "state": state, "message": text }),
     );
+}
+
+/// Open errors: `systemAttention` of `/api/counts`.
+pub async fn error_count(db: &sqlx::PgPool) -> sqlx::Result<i64> {
+    sqlx::query_scalar(r#"SELECT count(*) FROM health_checks WHERE "state" = 'error'"#)
+        .fetch_one(db)
+        .await
 }
 
 /// Evaluates every check, stores the open ones and notifies each error that opened or closed.

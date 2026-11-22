@@ -33,7 +33,7 @@ async function render(o: { block: SystemBlock | null; canOpen: boolean; desktop?
       provideZonelessChangeDetection(),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
       { provide: PushService, useValue: push },
-      { provide: AuthService, useValue: { user: () => ({ id: 1, pushMuted: [] }) } },
+      { provide: AuthService, useValue: { user: () => ({ id: 1, pushMuted: [] }), canAccessSettings: () => false } },
       { provide: UsersApiService, useValue: {} },
       { provide: ToastService, useValue: {} },
       { provide: TvService, useValue: { isTv: () => false } },

@@ -80,7 +80,7 @@ Scope: the push pipeline (`push::notify`), the relay client, the identity file, 
 
 ### D. Catalogue
 
-31. Categories: `requests`, `parties`, `social`, `episodes`, `account` and `plugin.<id>`. The category is what `users.pushMuted` stores.
+31. Categories: `requests`, `parties`, `social`, `episodes`, `account`, `system` and `plugin.<id>`. `system` carries `health.issue` (an error that opened or closed, `system.md` section H) to the users who can `Manage` `Settings`; text keys `health_broken` and `health_fixed` take `message`. The category is what `users.pushMuted` stores.
 32. Catalogue:
 
     | Category | Source | Recipient | Text key | `ttl` | Image | Actions |

@@ -283,6 +283,11 @@ pub async fn request_recipients(db: &sqlx::PgPool, id: i32, requester: Option<i3
 
 /// Users who can manage requests; with a `library`, only those who read it.
 pub async fn approvers(st: &AppState, library: Option<i32>) -> Vec<i32> {
+    managers(st, &Subject::FliksRequest, library).await
+}
+
+/// Users who can manage `subject`; with a `library`, only those who read it.
+async fn managers(st: &AppState, subject: &Subject, library: Option<i32>) -> Vec<i32> {
     let Ok(users) = load_users(&st.db, None, true).await else {
         return vec![];
     };
@@ -292,7 +297,7 @@ pub async fn approvers(st: &AppState, library: Option<i32>) -> Vec<i32> {
             role.as_ref().map_or(&[][..], |r| &r.permissions),
             u.is_admin,
         );
-        if !perms.can(Action::Manage, &Subject::FliksRequest) {
+        if !perms.can(Action::Manage, subject) {
             continue;
         }
         if let Some(l) = library {
@@ -305,6 +310,29 @@ pub async fn approvers(st: &AppState, library: Option<i32>) -> Vec<i32> {
         out.push(u.id);
     }
     out
+}
+
+/// `health.issue` as a push to the users who manage settings: an error that opened or closed.
+pub fn health_event(st: &AppState, check: &str, broken: bool, message: &str) {
+    let st = st.clone();
+    let key = if broken {
+        "health_broken"
+    } else {
+        "health_fixed"
+    };
+    let url = "/admin/system";
+    let mut n = Notification::core(
+        "system",
+        key,
+        &params(json!({"message": message})),
+        url.into(),
+        DAY,
+    );
+    n.tag = Some(format!("health:{check}"));
+    n.actions = vec![open(url)];
+    tokio::spawn(async move {
+        notify(&st, managers(&st, &Subject::Settings, None).await, n);
+    });
 }
 
 /// What a problem-report notification needs beyond the admin payload.

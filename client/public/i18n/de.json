@@ -475,7 +475,9 @@
       "pending_expired": "Melden Sie sich erneut an, um diese Benachrichtigung zu öffnen.",
       "tray_open": "Fliks öffnen",
       "tray_quit": "Fliks beenden",
-      "badge_label": "Benachrichtigungen"
+      "badge_label": "Benachrichtigungen",
+      "cat_system": "System",
+      "cat_system_hint": "Fehlgeschlagene Integritätsprüfungen dieses Servers."
     }
   },
   "update_settings": {
@@ -653,7 +655,8 @@
     "change_server": "Server wechseln",
     "playlists": "Playlists",
     "account": "Mein Konto",
-    "no_library": "Noch keine Bibliothek"
+    "no_library": "Noch keine Bibliothek",
+    "system_attention": "Systemprobleme erfordern Aufmerksamkeit"
   },
   "history": {
     "title": "Verlauf",
@@ -6161,6 +6164,14 @@
     },
     "outcome_done": "Erledigt.",
     "outcome_failed": "Die Aktion ist fehlgeschlagen.",
-    "outcome_signin": "Öffne Fliks, um dich erneut anzumelden."
+    "outcome_signin": "Öffne Fliks, um dich erneut anzumelden.",
+    "health_broken": {
+      "title": "Systemproblem",
+      "body": "{{message}}"
+    },
+    "health_fixed": {
+      "title": "Systemproblem behoben",
+      "body": "{{message}}"
+    }
   }
 }
