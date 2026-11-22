@@ -201,7 +201,7 @@ async fn dump(cfg: &Config, pool: &PgPool, dir: &Path, filename: String) -> Resu
         let file =
             create_private(&tmp).map_err(|e| internal(format!("cannot write the backup: {e}")))?;
         let mut args = conn_args(cfg);
-        args.extend(["-Fc", "--no-large-objects"].map(String::from));
+        args.push("-Fc".to_owned());
         args.extend(skipped.iter().map(|s| format!("--exclude-schema={s}")));
         match exec("pg_dump", &args, cfg.db_password.expose(), file.into()).await {
             Ok(_) => break,

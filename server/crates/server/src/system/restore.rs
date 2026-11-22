@@ -250,6 +250,14 @@ fn tool(f: ToolFail) -> AppError {
     internal(f.message)
 }
 
+/// The first `pg_restore: error:` line says what failed; the last line is often a `Command was:` or a detail.
+fn why(f: ToolFail) -> String {
+    f.stderr
+        .lines()
+        .find_map(|l| l.strip_prefix("pg_restore: error: "))
+        .map_or(f.message, str::to_owned)
+}
+
 /// The archive's table of contents.
 async fn toc(archive: &Path) -> Result<String, AppError> {
     let out = exec(
@@ -319,7 +327,7 @@ async fn plugin_pass(
     args.extend([s(&main_list), s(archive)]);
     exec("pg_restore", &args, &password, Stdio::null())
         .await
-        .map_err(|f| f.message)?;
+        .map_err(why)?;
     // The foreign keys come last, one by one: a key into `public` cannot be created by a plugin and is dropped.
     for line in held {
         let one = scratch
@@ -340,7 +348,7 @@ async fn plugin_pass(
         if let Err(f) = exec("pg_restore", &args, &password, Stdio::null()).await {
             // The rows are in already: empty the schema so a failed plugin never keeps half a restore.
             let _ = empty_schema(db, schema, id, refs).await;
-            return Err(f.message);
+            return Err(why(f));
         }
     }
     Ok(())
@@ -596,15 +604,15 @@ mod tests {
     async fn screening_refuses_a_migration_this_build_does_not_know() {
         let dir = std::env::temp_dir().join(format!("fliks-screen-v-{}", std::process::id()));
         tokio::fs::create_dir_all(&dir).await.unwrap();
+        let first = sqlx::migrate!("../../migrations").migrations[0].version;
         let rows = |v: &str| {
             format!(
                 "COPY public._sqlx_migrations (version, description, success) FROM stdin;\n\
-                 1\tinit\tt\n{v}\tlater\tt\n\\.\n"
+                 {first}\tinit\tt\n{v}\tlater\tt\n\\.\n"
             )
         };
         let newer = screened(&dir, 0, &rows("99999999999999")).await;
         assert!(newer.unwrap_err().text().contains("newer Fliks"));
-        let first = sqlx::migrate!("../../migrations").migrations[0].version;
         assert!(screened(&dir, 1, &rows(&first.to_string())).await.is_ok());
         // Another table's first column is not a version.
         let other = screened(
@@ -640,7 +648,7 @@ mod tests {
     const LIST: &str = "\
 ;
 ; Archive created at 2026-11-22
-2615; 2615 16393 SCHEMA - plugin_fliks_download fliks
+2615; 2615 16393 SCHEMA - plugin_acme_thing fliks
 2616; 2615 16394 SCHEMA - public pg_database_owner
 2617; 2615 16395 SCHEMA - plugin_a-b fliks
 2618; 2615 16396 SCHEMA - plugin_EVIL fliks
@@ -655,7 +663,7 @@ mod tests {
 
     #[test]
     fn plugin_schemas_come_from_schema_lines_only() {
-        assert_eq!(plugin_schemas(LIST), ["plugin_fliks_download"]);
+        assert_eq!(plugin_schemas(LIST), ["plugin_acme_thing"]);
     }
 
     #[test]
@@ -672,8 +680,8 @@ mod tests {
     #[test]
     fn plugin_ids_come_back_from_their_schema() {
         assert_eq!(
-            plugin_id("plugin_fliks_download").as_deref(),
-            Some("fliks.download")
+            plugin_id("plugin_acme_thing").as_deref(),
+            Some("acme.thing")
         );
     }
 }

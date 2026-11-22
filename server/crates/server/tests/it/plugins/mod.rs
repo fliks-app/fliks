@@ -12,6 +12,7 @@ mod pickers;
 mod provider;
 mod provider_host;
 mod queue;
+mod restore;
 mod roles;
 mod runtime;
 mod sql;

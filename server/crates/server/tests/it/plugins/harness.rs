@@ -161,6 +161,24 @@ impl Scratch {
     }
 }
 
+/// The server config of a scratch database: its `DB_*` variables, for `pg_dump` and `pg_restore`.
+pub fn config_for(url: &str, name: &str) -> Config {
+    let rest = url.strip_prefix("postgres://").expect("postgres url");
+    let (auth, host) = rest.split_once('@').expect("credentials");
+    let (user, pass) = auth.split_once(':').unwrap_or((auth, ""));
+    let (hostport, _) = host.split_once('/').unwrap_or((host, ""));
+    let (h, p) = hostport.split_once(':').unwrap_or((hostport, "5432"));
+    let env: std::collections::HashMap<&str, &str> = [
+        ("DB_HOST", h),
+        ("DB_PORT", p),
+        ("DB_USERNAME", user),
+        ("DB_PASSWORD", pass),
+        ("DB_NAME", name),
+    ]
+    .into();
+    Config::from_lookup(|k| env.get(k).map(|v| (*v).to_owned()))
+}
+
 pub struct H {
     pub st: AppState,
     pub app: Router,
