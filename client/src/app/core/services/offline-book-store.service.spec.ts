@@ -136,7 +136,7 @@ describe('OfflineBookStoreService', () => {
     expect(await (await svc.fetch(`${BASE}ch1.xhtml`)).text()).toContain('blob:local/2');
   });
 
-  it('stores the manifest and every resource it names, once each', async () => {
+  it('stores the manifest, the marks and every resource it names, once each', async () => {
     const body = (url: string) =>
       url.endsWith('manifest.json')
         ? JSON.stringify({
@@ -151,7 +151,7 @@ describe('OfflineBookStoreService', () => {
     (svc as unknown as Priv).put = async (key) => void puts.push(key);
     const progress = vi.fn();
     await svc.storeEpub(7, progress);
-    expect(puts.map((k) => k.replace(BASE, '')).sort()).toEqual(['s|ch1.xhtml', 's|img/a.png', 's|manifest.json', 's|positions.json']);
+    expect(puts.map((k) => k.replace(BASE, '')).sort()).toEqual(['s|annotations|7', 's|ch1.xhtml', 's|img/a.png', 's|manifest.json', 's|positions.json']);
     expect(progress).toHaveBeenLastCalledWith(1);
     vi.unstubAllGlobals();
   });
