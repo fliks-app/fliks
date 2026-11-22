@@ -14,6 +14,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
+import { waitForServer } from '../../../core/utils/wait-for-server';
 import { subjectEpisodeLine, subjectEpisodeLink, subjectMediaLink } from '../../../shared/utils/media-subject';
 
 export interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
@@ -307,20 +308,8 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
       this.restarting.set(false);
       return;
     }
-    await this.waitForServer();
+    await waitForServer(this.http);
     location.reload();
-  }
-
-  private async waitForServer() {
-    for (let attempt = 0; attempt < 60; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      try {
-        await firstValueFrom(this.http.get('/api/system/health'));
-        return;
-      } catch {
-        // Still down — keep polling.
-      }
-    }
   }
 
   formatUptime(seconds: number): string {

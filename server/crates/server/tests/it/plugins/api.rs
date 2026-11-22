@@ -918,7 +918,7 @@ async fn restore_stops_and_reregisters_plugins() {
         h.st.plugins.rt("fliks.fixture").is_none(),
         "stopped before the replay"
     );
-    h.st.plugins.after_restore(&[]).await;
+    h.st.plugins.boot().await;
     super::harness::until("registered again", Duration::from_secs(15), async || {
         h.st.plugins.state_of("fliks.fixture") == Some(fliks_server::plugins::runtime::State::Ready)
     })

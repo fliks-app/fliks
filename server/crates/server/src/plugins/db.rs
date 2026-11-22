@@ -31,7 +31,6 @@ pub struct PluginDb {
     idle: Mutex<Vec<(Client, Instant)>>,
     sem: Arc<Semaphore>,
     migrating: tokio::sync::Mutex<()>,
-    lock_key: i64,
     deadline: Duration,
 }
 
@@ -70,16 +69,12 @@ impl PluginDb {
                 (deadline + Duration::from_secs(1)).as_millis()
             ))
             .connect_timeout(CONNECT_TIMEOUT);
-        let lock_key = schema
-            .bytes()
-            .fold(0x5138_i64, |h, b| h.wrapping_mul(31).wrapping_add(b as i64));
         Arc::new(PluginDb {
             cfg,
             core,
             idle: Mutex::new(Vec::new()),
             sem: Arc::new(Semaphore::new(cap)),
             migrating: tokio::sync::Mutex::new(()),
-            lock_key,
             deadline,
         })
     }
@@ -176,11 +171,10 @@ impl PluginDb {
         let _one = self.migrating.lock().await;
         let mut lease = self.lease().await?;
         lease.busy = true;
-        let key = self.lock_key;
         let work = async {
             let c = lease.client.as_mut().expect("leased");
-            let lock = format!(
-                "SET LOCAL statement_timeout = {}; SELECT pg_advisory_xact_lock({key})",
+            let timeout = format!(
+                "SET LOCAL statement_timeout = {}",
                 MIGRATE_DEADLINE.as_millis()
             );
             let exists: bool = c
@@ -192,7 +186,7 @@ impl PluginDb {
             if !exists && !migrations.is_empty() {
                 let tx = c.transaction().await.map_err(pg_err)?;
                 tx.batch_execute(&format!(
-                    "{lock};
+                    "{timeout};
                      CREATE TABLE IF NOT EXISTS \"_migrations\" (
                        \"name\" text PRIMARY KEY,
                        \"appliedAt\" timestamptz NOT NULL DEFAULT now())"
@@ -204,7 +198,12 @@ impl PluginDb {
             let mut applied = Vec::new();
             for (name, up) in migrations {
                 let tx = c.transaction().await.map_err(pg_err)?;
-                tx.batch_execute(&lock).await.map_err(pg_err)?;
+                // The ledger's own table lock serialises two hosts: plugins hold no advisory locks.
+                tx.batch_execute(&format!(
+                    "{timeout}; LOCK TABLE \"_migrations\" IN SHARE ROW EXCLUSIVE MODE"
+                ))
+                .await
+                .map_err(pg_err)?;
                 let done = tx
                     .query_opt("SELECT 1 FROM \"_migrations\" WHERE \"name\" = $1", &[name])
                     .await

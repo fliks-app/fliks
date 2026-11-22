@@ -1,4 +1,4 @@
-use super::{backup, logs, supervisor, update::UpdateStatus};
+use super::{backup, logs, restore, update::UpdateStatus};
 use crate::{
     http::{
         AppError,
@@ -71,7 +71,7 @@ pub async fn health(State(st): State<AppState>, a: Authed) -> Result<Json<Health
         },
         installed_plugins: count("SELECT count(*) FROM plugin_packages").await,
         running_plugins: count("SELECT count(*) FROM plugin_packages WHERE enabled = true").await,
-        restart_supervisor: supervisor::current(),
+        restart_supervisor: st.system.supervisor(),
         conf_persistent: crate::jwt_secret::conf_persistent(),
         data_persistent: crate::paths::data_persistent(),
     }))
@@ -81,10 +81,20 @@ pub async fn health(State(st): State<AppState>, a: Authed) -> Result<Json<Health
 #[utoipa::path(post, path = "/api/system/restart", responses((status = 201)))]
 pub async fn restart(State(st): State<AppState>, a: Authed) -> Result<Response, AppError> {
     a.require(Action::Manage, Subject::Settings)?;
-    let Some(sup) = supervisor::current() else {
+    let Some(sup) = st.system.supervisor() else {
         return Err(AppError::bad_request("No process supervisor detected"));
     };
     tracing::warn!("Restart requested (supervisor: {sup})");
+    schedule_restart(st);
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({"ok": true, "supervisor": sup})),
+    )
+        .into_response())
+}
+
+/// Shuts down through the normal path 300 ms later and exits non-zero, so the supervisor starts us again.
+fn schedule_restart(st: AppState) {
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(300)).await;
         st.system
@@ -92,11 +102,6 @@ pub async fn restart(State(st): State<AppState>, a: Authed) -> Result<Response, 
             .store(true, std::sync::atomic::Ordering::SeqCst);
         interrupt();
     });
-    Ok((
-        StatusCode::CREATED,
-        Json(json!({"ok": true, "supervisor": sup})),
-    )
-        .into_response())
 }
 
 #[cfg(unix)]
@@ -176,7 +181,8 @@ pub async fn stats(State(st): State<AppState>, a: Authed) -> Result<Json<Value>,
 #[utoipa::path(post, path = "/api/system/backup", responses((status = 201)))]
 pub async fn backup_create(State(st): State<AppState>, a: Authed) -> Result<Response, AppError> {
     manage_all(&a)?;
-    let made = detached(async move { backup::create(&st.cfg, &backup::dir()).await }).await?;
+    let made =
+        detached(async move { backup::create(&st.cfg, &st.db, &backup::dir()).await }).await?;
     Ok((StatusCode::CREATED, Json(made)).into_response())
 }
 
@@ -191,7 +197,7 @@ pub async fn backup_restore(
     State(st): State<AppState>,
     a: Authed,
     req: Request,
-) -> Result<StatusCode, AppError> {
+) -> Result<Response, AppError> {
     manage_all(&a)?;
     let ValidJson(body) = ValidJson::<Value>::from_request(req, &()).await?;
     let name = backup::js_string(body.get("filename"));
@@ -201,13 +207,30 @@ pub async fn backup_restore(
         )));
     }
     let path = backup::locate(&backup::dir(), &name).await?;
-    detached(async move {
-        backup::restore(&st.cfg, &st.db, &st.jobs, &st.plugins, &path, &name).await?;
-        st.queue.recover.notify_one();
-        Ok(())
+    let supervised = st.system.supervisor().is_some();
+    let outcome = detached({
+        let st = st.clone();
+        async move {
+            let o = restore::restore(
+                &st.cfg,
+                &st.db,
+                &st.jobs,
+                &st.plugins,
+                &path,
+                &name,
+                supervised,
+            )
+            .await?;
+            st.queue.recover.notify_one();
+            Ok(o)
+        }
     })
     .await?;
-    Ok(StatusCode::CREATED)
+    if outcome.restarting {
+        tracing::warn!("Restart after the restore");
+        schedule_restart(st);
+    }
+    Ok((StatusCode::CREATED, Json(outcome)).into_response())
 }
 
 /// A client that goes away must not kill `pg_dump` / `psql` halfway (a dropped handler would).
@@ -231,7 +254,13 @@ pub async fn backup_download(
     let meta = tokio::fs::metadata(&path)
         .await
         .map_err(|e| AppError::internal(e.to_string()))?;
-    let mime = "application/sql".parse().expect("mime");
+    let mime = if name.ends_with(".dump") {
+        "application/octet-stream"
+    } else {
+        "application/sql"
+    }
+    .parse()
+    .expect("mime");
     let mut res = ServeFile::new_with_mime(&path, &mime)
         .oneshot(req)
         .await

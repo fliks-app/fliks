@@ -126,7 +126,7 @@ impl Plugins {
     pub(super) async fn try_register(&self, pkg: &Package) -> Result<Pending, Fail> {
         let id = &pkg.plugin_id;
         let m = &pkg.manifest;
-        // The ladder retries it; `after_restore` registers everything again anyway.
+        // The ladder retries it; `boot` registers everything again after a restore.
         if self.restoring() {
             return Err(fail(DB_UNAVAILABLE, "a restore is running"));
         }

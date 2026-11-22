@@ -58,10 +58,10 @@ async fn run_unit(st: &AppState, name: &str) -> Outcome {
 
 async fn backup_job(st: &AppState) -> Outcome {
     let dir = backup::dir();
-    let made = backup::create(&st.cfg, &dir)
+    let made = backup::create(&st.cfg, &st.db, &dir)
         .await
         .map_err(|e| e.to_string())?;
-    let pruned = backup::prune(&dir, backup::KEEP, ".sql")
+    let pruned = backup::prune(&dir, backup::KEEP, &[".sql", ".dump"])
         .await
         .map_err(|e| e.to_string())?;
     let mut line = format!("Backup: wrote {} ({} bytes)", made.filename, made.size);
