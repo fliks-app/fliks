@@ -218,10 +218,7 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
 
   private async loadGroups(): Promise<void> {
     try {
-      const channels = await this.api.getChannels();
-      const set = new Set<string>();
-      for (const c of channels) if (c.groupName) set.add(c.groupName);
-      this.groups.set([...set].sort());
+      this.groups.set(await this.api.getChannelGroups());
     } catch {
       // filter dropdown stays empty; not fatal
     }
@@ -251,10 +248,7 @@ export class LiveTvGuideComponent implements OnInit, OnDestroy {
       if (seq !== this.loadSeq) return;
       if (!reset) this.page = requestedPage;
       const newRows: GuideRow[] = (res.channels ?? []).map((channel) =>
-        this.buildRow(
-          channel,
-          (channel.guideChannelId && res.programs?.[channel.guideChannelId]) || [],
-        ),
+        this.buildRow(channel, res.programs?.[channel.id] ?? []),
       );
       this.rows.update((r) => (reset ? newRows : [...r, ...newRows]));
       this.total.set(res.total ?? 0);

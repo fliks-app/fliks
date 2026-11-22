@@ -483,17 +483,15 @@ struct ChannelMatchRow {
     guide_channel_id: Option<String>,
     #[sqlx(rename = "guideMatchKind")]
     guide_match_kind: Option<String>,
-    #[sqlx(rename = "guideShiftMinutes")]
-    guide_shift_minutes: i32,
 }
 
-/// Persists the feed's channels, matches the lineup against them and answers which guide ids are wanted
-/// (enabled channels only) with their shifts (rule 33).
+/// Persists the feed's channels, matches the lineup against every enabled feed's channels (by priority) and
+/// answers which guide ids are wanted: those of enabled channels (rule 33).
 async fn match_pass(
     db: &PgPool,
     guide_source_id: i32,
     feed: &[fliks_domain::livetv::xmltv::Channel],
-) -> Result<HashMap<String, i32>, String> {
+) -> Result<HashSet<String>, String> {
     let e = |e: sqlx::Error| e.to_string();
     let mut tx = db.begin().await.map_err(e)?;
     sqlx::query(r#"DELETE FROM livetv_guide_channels WHERE "guideSourceId" = $1"#)
@@ -516,7 +514,7 @@ async fn match_pass(
     }
     tx.commit().await.map_err(e)?;
     let channels: Vec<ChannelMatchRow> = sqlx::query_as(
-        r#"SELECT id, name, enabled, "guideChannelId", "guideMatchKind", "guideShiftMinutes" FROM livetv_channels ORDER BY id"#,
+        r#"SELECT id, name, enabled, "guideChannelId", "guideMatchKind" FROM livetv_channels ORDER BY id"#,
     )
     .fetch_all(db)
     .await
@@ -530,11 +528,20 @@ async fn match_pass(
             guide_match_kind: c.guide_match_kind.clone(),
         })
         .collect();
-    let candidates: Vec<Candidate> = feed
-        .iter()
-        .map(|c| Candidate {
-            id: c.id.clone(),
-            display_names: c.display_names.clone(),
+    let union: Vec<(String, sqlx::types::Json<Vec<String>>)> = sqlx::query_as(
+        r#"SELECT gc."channelId", gc."displayNames" FROM livetv_guide_channels gc
+           JOIN livetv_guide_sources gs ON gs.id = gc."guideSourceId"
+           WHERE gs.enabled OR gs.id = $1 ORDER BY gs.priority DESC, gs.id, gc.id"#,
+    )
+    .bind(guide_source_id)
+    .fetch_all(db)
+    .await
+    .map_err(e)?;
+    let candidates: Vec<Candidate> = union
+        .into_iter()
+        .map(|(id, names)| Candidate {
+            id,
+            display_names: names.0,
         })
         .collect();
     let report = matching::match_guide_channels(&matchable, &candidates);
@@ -555,42 +562,46 @@ async fn match_pass(
         .iter()
         .map(|a| (a.channel_id, a.guide_channel_id.as_str()))
         .collect();
-    let mut shift: HashMap<String, i32> = HashMap::new();
-    for c in channels.iter().filter(|c| c.enabled) {
-        let guide = assigned
-            .get(&c.id)
-            .map(|g| (*g).to_owned())
-            .or(c.guide_channel_id.clone());
-        if let Some(g) = guide.filter(|g| !g.is_empty()) {
-            shift.entry(g).or_insert(c.guide_shift_minutes);
-        }
-    }
-    Ok(shift)
+    let wanted = channels
+        .iter()
+        .filter(|c| c.enabled)
+        .filter_map(|c| {
+            assigned
+                .get(&c.id)
+                .map(|g| (*g).to_owned())
+                .or(c.guide_channel_id.clone())
+        })
+        .filter(|g| !g.is_empty())
+        .collect();
+    Ok(wanted)
 }
 
 type Row = Box<fliks_domain::livetv::xmltv::Programme>;
-/// An accepted programme with its shifted start and end.
-type Accepted = (Row, DateTime<Utc>, DateTime<Utc>);
+/// An accepted programme with its end: `None` until the swap derives it from the next start.
+type Accepted = (Row, Option<DateTime<Utc>>);
 
-/// Inserts one chunk of accepted programmes (`INSERT ... SELECT FROM UNNEST`).
+/// The connection-local table the feed streams into; the swap into `livetv_programs` is one short transaction.
+const STAGE: &str = "livetv_programs_stage";
+
+/// Inserts one chunk of accepted programmes (`INSERT ... SELECT FROM UNNEST`) into the stage.
 async fn insert_chunk(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    conn: &mut sqlx::PgConnection,
     guide_source_id: i32,
     rows: &[Accepted],
 ) -> sqlx::Result<()> {
-    sqlx::query(
-        r#"INSERT INTO livetv_programs ("guideSourceId", "guideChannelId", "startsAt", "endsAt", title, subtitle, description,
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        r#"INSERT INTO {STAGE} ("guideSourceId", "guideChannelId", "startsAt", "endsAt", title, subtitle, description,
              categories, "iconUrl", "seasonNumber", "episodeNumber", "seriesId", "isNew", "isLive", rating, year)
            SELECT $1, t.channel, t.starts, t.ends, t.title, t.subtitle, t.descr, t.categories, t.icon, t.season, t.episode,
                   t.series, t.is_new, t.is_live, t.rating, t.year
            FROM UNNEST($2::text[], $3::timestamptz[], $4::timestamptz[], $5::text[], $6::text[], $7::text[], $8::jsonb[],
                        $9::text[], $10::int[], $11::int[], $12::text[], $13::bool[], $14::bool[], $15::text[], $16::int[])
-                AS t(channel, starts, ends, title, subtitle, descr, categories, icon, season, episode, series, is_new, is_live, rating, year)"#,
-    )
+                AS t(channel, starts, ends, title, subtitle, descr, categories, icon, season, episode, series, is_new, is_live, rating, year)"#
+    )))
     .bind(guide_source_id)
     .bind(rows.iter().map(|r| r.0.channel_id.clone()).collect::<Vec<_>>())
+    .bind(rows.iter().map(|r| r.0.starts_at).collect::<Vec<_>>())
     .bind(rows.iter().map(|r| r.1).collect::<Vec<_>>())
-    .bind(rows.iter().map(|r| r.2).collect::<Vec<_>>())
     .bind(rows.iter().map(|r| r.0.title.clone()).collect::<Vec<_>>())
     .bind(rows.iter().map(|r| r.0.subtitle.clone()).collect::<Vec<_>>())
     .bind(rows.iter().map(|r| r.0.description.clone()).collect::<Vec<_>>())
@@ -603,7 +614,7 @@ async fn insert_chunk(
     .bind(rows.iter().map(|r| r.0.is_live).collect::<Vec<_>>())
     .bind(rows.iter().map(|r| r.0.rating.clone()).collect::<Vec<_>>())
     .bind(rows.iter().map(|r| r.0.year).collect::<Vec<_>>())
-    .execute(&mut **tx)
+    .execute(conn)
     .await
     .map(drop)
 }
@@ -655,68 +666,63 @@ async fn run(st: &AppState, g: &GuideSource) -> Result<GuideSyncResult, String> 
         net::describe(e, idle, &target)
     });
     let mut channels: Vec<fliks_domain::livetv::xmltv::Channel> = vec![];
-    let mut shift: HashMap<String, i32> = HashMap::new();
     let mut touched: HashSet<String> = HashSet::new();
     let (mut accepted, mut chunk): (usize, Vec<Accepted>) = (0, vec![]);
-    let mut tx: Option<(sqlx::Transaction<'_, sqlx::Postgres>, i32)> = None;
-    while let Some(item) = items.recv().await {
-        match item {
-            Item::Channel(c) => {
-                // A repeated channel id keeps its first occurrence.
-                if !channels.iter().any(|x| x.id == c.id) {
-                    channels.push(c);
+    let mut stage: Option<sqlx::pool::PoolConnection<sqlx::Postgres>> = None;
+    let streamed: Result<(), String> = async {
+        while let Some(item) = items.recv().await {
+            match item {
+                Item::Channel(c) => {
+                    // A repeated channel id keeps its first occurrence.
+                    if !channels.iter().any(|x| x.id == c.id) {
+                        channels.push(c);
+                    }
                 }
-            }
-            Item::ChannelsDone {
-                programmes_follow,
-                wanted,
-            } => {
-                if channels.is_empty() && !programmes_follow {
-                    return Err("empty guide feed".into());
+                Item::ChannelsDone {
+                    programmes_follow,
+                    wanted,
+                } => {
+                    if channels.is_empty() && !programmes_follow {
+                        return Err("empty guide feed".into());
+                    }
+                    let ids = match_pass(db, g.id, &channels).await?;
+                    let _ = wanted.send(std::sync::Arc::new(ids));
                 }
-                shift = match_pass(db, g.id, &channels).await?;
-                let _ = wanted.send(std::sync::Arc::new(shift.keys().cloned().collect()));
-            }
-            Item::Programme(p) => {
-                let ends = p
-                    .ends_at
-                    .unwrap_or(p.starts_at + Duration::minutes(DEFAULT_PROGRAMME_MINUTES));
-                if p.starts_at >= window_end || ends <= window_start {
-                    continue;
-                }
-                let by =
-                    Duration::minutes(i64::from(shift.get(&p.channel_id).copied().unwrap_or(0)));
-                touched.insert(p.channel_id.clone());
-                accepted += 1;
-                let starts = p.starts_at + by;
-                chunk.push((p, starts, ends + by));
-                if chunk.len() >= CHUNK {
-                    flush(db, &mut tx, g.id, &mut chunk).await?;
+                Item::Programme(p) => {
+                    let default_end = p.starts_at + Duration::minutes(DEFAULT_PROGRAMME_MINUTES);
+                    if p.starts_at >= window_end || p.ends_at.unwrap_or(default_end) <= window_start
+                    {
+                        continue;
+                    }
+                    touched.insert(p.channel_id.clone());
+                    accepted += 1;
+                    let ends = p.ends_at;
+                    chunk.push((p, ends));
+                    if chunk.len() >= CHUNK {
+                        flush(db, &mut stage, g.id, &mut chunk).await?;
+                    }
                 }
             }
         }
+        reader
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())?;
+        flush(db, &mut stage, g.id, &mut chunk).await
     }
-    reader
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
-    flush(db, &mut tx, g.id, &mut chunk).await?;
-    if let Some((mut t, high_id)) = tx {
-        let ids: Vec<String> = touched.iter().cloned().collect();
-        sqlx::query(
-            r#"DELETE FROM livetv_programs WHERE "guideSourceId" = $1 AND "guideChannelId" = ANY($2)
-               AND "startsAt" < $3 AND "endsAt" > $4 AND id <= $5"#,
-        )
-        .bind(g.id)
-        .bind(&ids)
-        .bind(window_end)
-        .bind(window_start)
-        .bind(high_id)
-        .execute(&mut *t)
-        .await
-        .map_err(dberr)?;
-        t.commit().await.map_err(dberr)?;
+    .await;
+    let swapped = match (streamed, stage.as_mut()) {
+        (Ok(()), Some(conn)) => swap(conn, g.id, &touched, window_start, window_end).await,
+        (streamed, _) => streamed,
+    };
+    if let Some(mut conn) = stage
+        && let Err(e) = sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE IF EXISTS {STAGE}")))
+            .execute(&mut *conn)
+            .await
+    {
+        tracing::warn!("guide stage not dropped: {e}");
     }
+    swapped?;
     sqlx::query(
         r#"UPDATE livetv_guide_sources SET "lastSyncAt" = now(), "lastSyncStatus" = 'ok', "lastSyncError" = NULL,
            "programCount" = $2, etag = $3, "lastModified" = $4 WHERE id = $1"#,
@@ -741,10 +747,10 @@ async fn run(st: &AppState, g: &GuideSource) -> Result<GuideSyncResult, String> 
     })
 }
 
-/// Writes the chunk, opening the transaction (and noting the highest id of its tail delete) at the first one.
-async fn flush<'a>(
-    db: &'a PgPool,
-    tx: &mut Option<(sqlx::Transaction<'a, sqlx::Postgres>, i32)>,
+/// Writes the chunk into the stage, creating it on the first one.
+async fn flush(
+    db: &PgPool,
+    stage: &mut Option<sqlx::pool::PoolConnection<sqlx::Postgres>>,
     guide_source_id: i32,
     chunk: &mut Vec<Accepted>,
 ) -> Result<(), String> {
@@ -752,20 +758,66 @@ async fn flush<'a>(
         return Ok(());
     }
     let dberr = |e: sqlx::Error| e.to_string();
-    if tx.is_none() {
-        let mut t = db.begin().await.map_err(dberr)?;
-        let high: i32 = sqlx::query_scalar("SELECT coalesce(max(id), 0) FROM livetv_programs")
-            .fetch_one(&mut *t)
+    if stage.is_none() {
+        let mut conn = db.acquire().await.map_err(dberr)?;
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "CREATE TEMP TABLE IF NOT EXISTS {STAGE} AS SELECT * FROM livetv_programs WITH NO DATA"
+        )))
+        .execute(&mut *conn)
+        .await
+        .map_err(dberr)?;
+        sqlx::query(sqlx::AssertSqlSafe(format!("TRUNCATE {STAGE}")))
+            .execute(&mut *conn)
             .await
             .map_err(dberr)?;
-        *tx = Some((t, high));
+        *stage = Some(conn);
     }
-    let (t, _) = tx.as_mut().expect("opened");
-    insert_chunk(t, guide_source_id, chunk)
+    let conn = stage.as_mut().expect("opened");
+    insert_chunk(conn, guide_source_id, chunk)
         .await
         .map_err(dberr)?;
     chunk.clear();
     Ok(())
+}
+
+/// Replaces the touched channels' window with the stage in one short transaction (rule 37). A missing `stop`
+/// ends where the channel's next programme starts, the default slot after the last one.
+async fn swap(
+    conn: &mut sqlx::PgConnection,
+    guide_source_id: i32,
+    touched: &HashSet<String>,
+    window_start: DateTime<Utc>,
+    window_end: DateTime<Utc>,
+) -> Result<(), String> {
+    let dberr = |e: sqlx::Error| e.to_string();
+    let ids: Vec<String> = touched.iter().cloned().collect();
+    let mut tx = sqlx::Connection::begin(conn).await.map_err(dberr)?;
+    sqlx::query(
+        r#"DELETE FROM livetv_programs WHERE "guideSourceId" = $1 AND "guideChannelId" = ANY($2)
+           AND "startsAt" < $3 AND "endsAt" > $4"#,
+    )
+    .bind(guide_source_id)
+    .bind(&ids)
+    .bind(window_end)
+    .bind(window_start)
+    .execute(&mut *tx)
+    .await
+    .map_err(dberr)?;
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        r#"INSERT INTO livetv_programs ("guideSourceId", "guideChannelId", "startsAt", "endsAt", title, subtitle, description,
+             categories, "iconUrl", "seasonNumber", "episodeNumber", "seriesId", "isNew", "isLive", rating, year)
+           SELECT "guideSourceId", "guideChannelId", "startsAt",
+                  COALESCE("endsAt", lead("startsAt") OVER (PARTITION BY "guideChannelId" ORDER BY "startsAt"),
+                           "startsAt" + make_interval(mins => $1)),
+                  title, subtitle, description, categories, "iconUrl", "seasonNumber", "episodeNumber", "seriesId",
+                  "isNew", "isLive", rating, year
+           FROM {STAGE} ORDER BY "startsAt""#
+    )))
+    .bind(DEFAULT_PROGRAMME_MINUTES as i32)
+    .execute(&mut *tx)
+    .await
+    .map_err(dberr)?;
+    tx.commit().await.map_err(dberr)
 }
 
 pub use super::guide_reads::*;

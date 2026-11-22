@@ -263,6 +263,9 @@ pub(crate) async fn update(
     if let Some(ids) = &dto.default_library_ids {
         db::set_libraries(&st.db, id, ids).await?;
     }
+    if dto.permissions.is_some() {
+        crate::livetv::session::revoke_lost_access(&st).await;
+    }
     Ok(Json(one(&st, id).await?.json(paths_visible(&a.perms))))
 }
 

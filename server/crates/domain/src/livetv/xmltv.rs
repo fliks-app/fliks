@@ -75,9 +75,9 @@ pub fn decode_xml_text(raw: &str) -> String {
     js::trim(&s).replace('\0', "")
 }
 
-/// `YYYYMMDDHHMM[SS] [+-HHMM]`: the stamp's own offset, else `fallback_offset_minutes`. An impossible
-/// date is `None` rather than rolled over.
-pub fn parse_xmltv_date(raw: Option<&str>, fallback_offset_minutes: i32) -> Option<DateTime<Utc>> {
+/// `YYYYMMDDHHMM[SS] [+-HHMM]`: the stamp's own offset (none: UTC) plus the feed's `correction_minutes`, which
+/// is for a feed whose clock is wrong. An impossible date is `None` rather than rolled over.
+pub fn parse_xmltv_date(raw: Option<&str>, correction_minutes: i32) -> Option<DateTime<Utc>> {
     let t = js::trim(raw?);
     let m = rx!(r"^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?\s*([+-]\d{4})?").captures(t)?;
     let n = |i: usize| {
@@ -87,12 +87,12 @@ pub fn parse_xmltv_date(raw: Option<&str>, fallback_offset_minutes: i32) -> Opti
     let year = i32::try_from(n(1)).ok().filter(|y| *y >= 1970)?;
     let date = NaiveDate::from_ymd_opt(year, n(2), n(3))?;
     let at = date.and_hms_opt(n(4), n(5), n(6))?.and_utc();
-    let offset = m.get(7).map_or(i64::from(fallback_offset_minutes), |o| {
+    let own = m.get(7).map_or(0, |o| {
         let o = o.as_str();
         let sign = if o.starts_with('-') { -1 } else { 1 };
         sign * (o[1..3].parse::<i64>().unwrap_or(0) * 60 + o[3..5].parse::<i64>().unwrap_or(0))
     });
-    Some(at - Duration::minutes(offset))
+    Some(at - Duration::minutes(own + i64::from(correction_minutes)))
 }
 
 fn attrs(open_tag: &str) -> Vec<(String, String)> {
@@ -650,13 +650,15 @@ mod tests {
 
     #[test]
     fn dates_reject_what_date_utc_would_roll_over() {
-        let ok = parse_xmltv_date(Some("20260101120000 -0230"), 60).unwrap();
+        let ok = parse_xmltv_date(Some("20260101120000 -0230"), 0).unwrap();
         assert_eq!(ok, Utc.with_ymd_and_hms(2026, 1, 1, 14, 30, 0).unwrap());
-        let fallback = parse_xmltv_date(Some("202601011200"), 60).unwrap();
+        let corrected = parse_xmltv_date(Some("20260101120000 -0230"), 60).unwrap();
         assert_eq!(
-            fallback,
-            Utc.with_ymd_and_hms(2026, 1, 1, 11, 0, 0).unwrap()
+            corrected,
+            Utc.with_ymd_and_hms(2026, 1, 1, 13, 30, 0).unwrap()
         );
+        let naive = parse_xmltv_date(Some("202601011200"), 60).unwrap();
+        assert_eq!(naive, Utc.with_ymd_and_hms(2026, 1, 1, 11, 0, 0).unwrap());
         for bad in [
             "20261301120000",
             "20260231120000",

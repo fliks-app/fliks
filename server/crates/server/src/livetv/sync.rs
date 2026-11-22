@@ -167,23 +167,25 @@ pub async fn setting_int(db: &PgPool, key: &str, default: i64) -> sqlx::Result<i
         .unwrap_or(default))
 }
 
-pub async fn sync(st: &AppState, id: i32) -> Result<SyncResult, SyncError> {
+/// `manual`: an admin asked for it, so a lineup that shrank by half is taken as the new lineup.
+pub async fn sync(st: &AppState, id: i32, manual: bool) -> Result<SyncResult, SyncError> {
     let Some(_flight) = Flight::claim(st, "LiveTvSourceSync", id) else {
         return Err(SyncError::Running);
     };
-    run(st, id).await
+    run(st, id, manual).await
 }
 
 /// The async twin of `sync`: the queued row of a sync that runs on.
-pub async fn start(st: &AppState, id: i32) -> Result<Command, SyncError> {
+pub async fn start(st: &AppState, id: i32, manual: bool) -> Result<Command, SyncError> {
     let Some(flight) = Flight::claim(st, "LiveTvSourceSync", id) else {
         return Err(SyncError::Running);
     };
     find_source(&st.db, id)
         .await?
         .ok_or(SyncError::NotFound(id))?;
-    let work =
-        move |st: AppState| async move { outcome(run(&st, id).await.map(|r| (r.ok, r.error))) };
+    let work = move |st: AppState| async move {
+        outcome(run(&st, id, manual).await.map(|r| (r.ok, r.error)))
+    };
     Ok(detach(
         st,
         flight,
@@ -244,7 +246,7 @@ fn classify(source: &Source, entries: Vec<Entry>) -> Classified {
     }
 }
 
-async fn run(st: &AppState, id: i32) -> Result<SyncResult, SyncError> {
+async fn run(st: &AppState, id: i32, manual: bool) -> Result<SyncResult, SyncError> {
     let db = &st.db;
     let source = find_source(db, id).await?.ok_or(SyncError::NotFound(id))?;
     let conn = lineup::Conn {
@@ -285,7 +287,8 @@ async fn run(st: &AppState, id: i32) -> Result<SyncResult, SyncError> {
         on_demand_count,
         groups,
     } = classify(&source, fetched.entries.clone());
-    if source.channel_count > 0
+    if !manual
+        && source.channel_count > 0
         && (live.len() as f64) < f64::from(source.channel_count) * SHRINK_RATIO
     {
         let message = format!(
@@ -334,6 +337,7 @@ async fn run(st: &AppState, id: i32) -> Result<SyncResult, SyncError> {
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
+    super::session::revoke_lost_access(st).await;
     tracing::info!(
         "Sync \"{}\": added={} updated={} removed={} (live={} onDemandSkipped={on_demand_count})",
         source.name,
@@ -494,10 +498,10 @@ async fn apply_plan(
     }
     if !plan.updates.is_empty() {
         sqlx::query(
-            r#"UPDATE livetv_channel_streams s SET url = t.url, "providerName" = t.name, "qualityLabel" = t.quality,
-                      "userAgent" = t.ua, referer = t.referer, "lastSeenAt" = $1
-               FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[])
-                    AS t(id, url, name, quality, ua, referer)
+            r#"UPDATE livetv_channel_streams s SET "externalId" = t.ext, url = t.url, "providerName" = t.name,
+                      "qualityLabel" = t.quality, "userAgent" = t.ua, referer = t.referer, "lastSeenAt" = $1
+               FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[])
+                    AS t(id, url, name, quality, ua, referer, ext)
                WHERE s.id = t.id"#,
         )
         .bind(now)
@@ -507,6 +511,7 @@ async fn apply_plan(
         .bind(plan.updates.iter().map(|u| e(u.1).quality_label.clone()).collect::<Vec<_>>())
         .bind(plan.updates.iter().map(|u| e(u.1).user_agent.clone()).collect::<Vec<_>>())
         .bind(plan.updates.iter().map(|u| e(u.1).referer.clone()).collect::<Vec<_>>())
+        .bind(plan.updates.iter().map(|u| e(u.1).external_id.clone()).collect::<Vec<_>>())
         .execute(&mut **tx)
         .await?;
     }

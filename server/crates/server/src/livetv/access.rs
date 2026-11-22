@@ -196,7 +196,9 @@ pub async fn set_restricted_groups(
 ) -> Result<Json<Vec<String>>, AppError> {
     admin(&a)?;
     let groups = groups_body(&body)?;
-    Ok(Json(locked(&st, |g| g.set_restricted(&groups)).await?))
+    let set = locked(&st, |g| g.set_restricted(&groups)).await?;
+    super::session::revoke_lost_access(&st).await;
+    Ok(Json(set))
 }
 
 #[utoipa::path(get, path = "/api/livetv/admin/access/users", responses((status = 200)))]
@@ -270,6 +272,6 @@ pub async fn set_grants(
         }
     }
     let (stored, ignored) = locked(&st, |g| g.set_grants(id, &groups)).await?;
-    super::session::revoke_lost_access(&st, id).await;
+    super::session::revoke_lost_access(&st).await;
     Ok(Json(json!({"groups": stored, "ignored": ignored})))
 }

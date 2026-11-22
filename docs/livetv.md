@@ -81,9 +81,10 @@ excludes on its own regardless of these patterns.
   last time that source was synced. If the source doesn't publish one, this fails — check with
   **Test connection** on the source itself ("A program guide was found for this source.").
 
-Also on the form: **Refresh interval (hours)** (12 by default), **Timezone offset (minutes)** —
-shifts every program in the whole feed, for a feed whose clock is published in a different zone than
-the channels actually air in — and **Source active**.
+Also on the form: **Refresh interval (hours)** (12 by default), **Timezone offset (minutes)**
+(corrects every time stamp of the feed by that many minutes ahead of UTC, for a feed that publishes its
+local time as if it were UTC: set 60 for a feed running one hour ahead; it is a fixed correction, so it
+does not follow daylight saving changes) and **Source active**.
 
 ### Automatic matching, and the match report
 

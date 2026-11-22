@@ -168,6 +168,8 @@ struct Hold {
     /// Position of the upstream feeding the session now.
     fed: Option<u32>,
     pending: bool,
+    /// When the hold was made, in ms: a resync that listed the engine earlier does not own it.
+    opened_at: f64,
     mode: Option<LiveMode>,
     /// Who an open in flight belongs to (`None` for a hold rebuilt from the engine).
     owner: Option<i32>,
@@ -330,7 +332,7 @@ pub async fn open(
     let grace = grace_of(crate::settings::text(&st.db, "livetv_slot_release_seconds").await?);
     let cap = super::sync::setting_int(&st.db, "livetv_max_viewers_per_user", 0).await?;
     let token = crate::events::uuid_v4();
-    let (verdict, vetoes): (Option<AtCapacity>, Vec<bool>) = {
+    let (verdict, vetoes, source_id): (Option<AtCapacity>, Vec<bool>, i32) = {
         let mut g = st.livetv.live.lock();
         let held = g
             .viewers
@@ -375,11 +377,16 @@ pub async fn open(
                 streams: streams.clone(),
                 fed: None,
                 pending: true,
+                opened_at: now_ms(),
                 mode: None,
                 owner: Some(who.id),
             },
         );
-        (per_stream.into_iter().next().flatten(), vetoes)
+        (
+            per_stream.into_iter().next().flatten(),
+            vetoes,
+            feeding.source.id,
+        )
     };
     let req = OpenLiveRequest {
         channel_id: channel_id.to_string(),
@@ -400,6 +407,7 @@ pub async fn open(
             ("channelName".to_owned(), channel_name.to_owned()),
             ("username".to_owned(), who.username.clone()),
             ("device".to_owned(), device.clone().unwrap_or_default()),
+            ("sourceId".to_owned(), source_id.to_string()),
         ]),
     };
     let mut guard = PendingHold {
@@ -674,50 +682,64 @@ pub async fn heartbeat(
     Ok(Json(json!({"ok": true})))
 }
 
-/// The live viewers of a user whose channel is no longer playable for them end now.
-pub async fn revoke_lost_access(st: &AppState, user_id: i32) {
-    let mine: Vec<(String, i32)> = {
-        let g = st.livetv.live.lock();
-        g.viewers
-            .iter()
-            .filter(|(_, v)| v.user_id == Some(user_id))
-            .map(|(s, v)| (s.clone(), v.channel_id))
-            .collect()
-    };
-    if mine.is_empty() {
-        return;
+/// Whether `perms` still lets a user watch live TV at all.
+fn may_watch(perms: &[String]) -> bool {
+    fliks_domain::acl::Permissions::from(perms, false).can(Action::Read, &AclSubject::LiveTvChannel)
+}
+
+/// Every live viewer whose owner can no longer watch its channel ends now: a disabled or deleted user, a role
+/// without `livetv.read`, a restricted group, a disabled channel, a removed source. `direct.ts` is resolved once.
+pub async fn revoke_lost_access(st: &AppState) {
+    let mut by_owner: BTreeMap<i32, Vec<(String, i32)>> = BTreeMap::new();
+    for (sid, v) in &st.livetv.live.lock().viewers {
+        if let Some(owner) = v.user_id {
+            by_owner
+                .entry(owner)
+                .or_default()
+                .push((sid.clone(), v.channel_id));
+        }
     }
-    let (user, role) = match load_enabled(&st.db, user_id).await {
-        Ok(Some(u)) => u,
-        Ok(None) => return,
-        Err(e) => {
-            tracing::warn!("live access re-check of user #{user_id} failed: {e}");
-            return;
-        }
-    };
-    let perms = if user.is_admin {
-        vec!["manage:all".to_owned()]
-    } else {
-        role.map(|r| r.permissions).unwrap_or_default()
-    };
-    let denied = match super::access::denied_groups(&st.db, user_id, &perms).await {
-        Ok(d) => d,
-        Err(e) => {
-            tracing::warn!("live access re-check of user #{user_id} failed: {e}");
-            return;
-        }
-    };
-    for (sid, channel) in mine {
-        match playable(&st.db, channel, &denied).await {
-            Ok(Some((_, streams))) if !streams.is_empty() => {}
-            Ok(_) => {
-                if let Err(e) = st.engine.delete_session(&sid, Some("revoked")).await {
-                    tracing::warn!("live viewer {sid} not ended after a grant change: {e}");
-                    continue;
+    for (user_id, viewers) in by_owner {
+        let access = match load_enabled(&st.db, user_id).await {
+            Ok(Some((user, role))) => {
+                let perms = if user.is_admin {
+                    vec!["manage:all".to_owned()]
+                } else {
+                    role.map(|r| r.permissions).unwrap_or_default()
+                };
+                match super::access::denied_groups(&st.db, user_id, &perms).await {
+                    Ok(denied) => Some((may_watch(&perms), denied)),
+                    Err(e) => {
+                        tracing::warn!("live access re-check of user #{user_id} failed: {e}");
+                        continue;
+                    }
                 }
-                drop_viewer(st, &sid, false).await;
             }
-            Err(e) => tracing::warn!("live access re-check failed: {e}"),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::warn!("live access re-check of user #{user_id} failed: {e}");
+                continue;
+            }
+        };
+        for (sid, channel) in viewers {
+            let keep = match &access {
+                Some((true, denied)) => match playable(&st.db, channel, denied).await {
+                    Ok(found) => matches!(found, Some((_, s)) if !s.is_empty()),
+                    Err(e) => {
+                        tracing::warn!("live access re-check of viewer {sid} failed: {e}");
+                        continue;
+                    }
+                },
+                _ => false,
+            };
+            if keep {
+                continue;
+            }
+            if let Err(e) = st.engine.delete_session(&sid, Some("revoked")).await {
+                tracing::warn!("live viewer {sid} not ended after an access change: {e}");
+                continue;
+            }
+            drop_viewer(st, &sid, false).await;
         }
     }
 }
@@ -753,6 +775,9 @@ pub async fn resolve_live(
     // Another user's credential is not a denial of the owner (the engine answers 403 by itself).
     if viewer.user_id != Some(user_id) {
         return Ok(true);
+    }
+    if !may_watch(perms) {
+        return Ok(false);
     }
     let denied = super::access::denied_groups(&st.db, user_id, perms).await?;
     Ok(matches!(playable(&st.db, viewer.channel_id, &denied).await?, Some((_, s)) if !s.is_empty()))

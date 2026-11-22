@@ -51,15 +51,11 @@ export interface OnNowPage {
 
 export interface GuidePage {
   channels: LiveChannel[];
+  /** Keyed by channel id, each channel's own `guideShiftMinutes` applied. */
   programs: Record<string, LiveProgram[]>;
   page: number;
   pageSize: number;
   total: number;
-}
-
-export interface LiveSearchResult {
-  channels: LiveChannel[];
-  programs: LiveProgram[];
 }
 
 export interface PlayRequestBody {
@@ -305,10 +301,8 @@ export class LiveTvApiService {
 
   // ── User routes ──
 
-  getChannels(opts: { group?: string; favoritesOnly?: boolean; query?: string } = {}) {
-    return firstValueFrom(
-      this.http.get<LiveChannel[]>('/api/livetv/channels', { params: queryParams(opts) }),
-    );
+  getChannelGroups() {
+    return firstValueFrom(this.http.get<string[]>('/api/livetv/channels/groups'));
   }
 
   /** Whether the signed-in user has any channel. Silent on failure: it only gates a nav entry. */
@@ -338,16 +332,6 @@ export class LiveTvApiService {
   }) {
     return firstValueFrom(
       this.http.get<GuidePage>('/api/livetv/guide', { params: queryParams(opts) }),
-    );
-  }
-
-  getProgram(id: number) {
-    return firstValueFrom(this.http.get<LiveProgram>(`/api/livetv/programs/${id}`));
-  }
-
-  search(q: string) {
-    return firstValueFrom(
-      this.http.get<LiveSearchResult>('/api/livetv/search', { params: queryParams({ q }) }),
     );
   }
 

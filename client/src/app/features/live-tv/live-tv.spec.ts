@@ -7,7 +7,7 @@ import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { LiveTvComponent } from './live-tv';
-import type { OnNowEntry, OnNowPage } from '../../core/services/api/livetv-api.service';
+import type { LiveProgram, OnNowEntry, OnNowPage } from '../../core/services/api/livetv-api.service';
 
 /** Lets the promise chain inside the component advance between two flushes. */
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -57,7 +57,7 @@ describe('LiveTvComponent — on-now search', () => {
     const http = TestBed.inject(HttpTestingController);
     const component = TestBed.createComponent(LiveTvComponent).componentInstance;
     await tick();
-    http.expectOne({ url: '/api/livetv/channels', method: 'GET' }).flush([]);
+    http.expectOne({ url: '/api/livetv/channels/groups', method: 'GET' }).flush([]);
     http
       .expectOne((r) => r.url === '/api/livetv/channels/on-now' && r.params.get('page') === '1')
       .flush(onNowPage([], 0));
@@ -91,6 +91,29 @@ describe('LiveTvComponent — on-now search', () => {
     );
     req.flush(onNowPage([], 0));
     await vi.advanceTimersByTimeAsync(0);
+  });
+
+  it('refetches the loaded pages in place when a programme lapses', async () => {
+    const { component, http } = await setup();
+    vi.useFakeTimers();
+    const lapsed = entry(1, 'CNN');
+    lapsed.now = { id: 1, endsAt: new Date(Date.now() - 1000).toISOString() } as LiveProgram;
+    component.entries.set([lapsed, entry(2, 'BBC')]);
+    component.page.set(2);
+
+    component['onClockTick']();
+    await vi.advanceTimersByTimeAsync(0);
+    http
+      .expectOne((r) => r.url === '/api/livetv/channels/on-now' && r.params.get('page') === '1')
+      .flush(onNowPage([entry(1, 'CNN')], 2));
+    await vi.advanceTimersByTimeAsync(0);
+    http
+      .expectOne((r) => r.url === '/api/livetv/channels/on-now' && r.params.get('page') === '2')
+      .flush(onNowPage([entry(2, 'BBC')], 2));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(component.entries().map((e) => e.channel.id)).toEqual([1, 2]);
+    expect(component.page()).toBe(2);
   });
 
   it('drops a stale response overtaken by a newer query', async () => {
@@ -160,7 +183,7 @@ describe('LiveTvComponent — ungrouped sentinel display', () => {
 
     const ungroupedEntry = entry(1, 'CNN');
     ungroupedEntry.channel.groupName = '__livetv_ungrouped__';
-    http.expectOne({ url: '/api/livetv/channels', method: 'GET' }).flush([ungroupedEntry.channel]);
+    http.expectOne({ url: '/api/livetv/channels/groups', method: 'GET' }).flush([ungroupedEntry.channel.groupName]);
     http
       .expectOne((r) => r.url === '/api/livetv/channels/on-now' && r.params.get('page') === '1')
       .flush(onNowPage([ungroupedEntry], 1));

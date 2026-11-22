@@ -244,7 +244,7 @@ pub async fn resync(st: &AppState) -> Result<(), EngineError> {
         .lock()
         .holds
         .iter()
-        .filter(|(t, h)| !tokens.contains(t.as_str()) && !h.pending)
+        .filter(|(t, h)| !tokens.contains(t.as_str()) && !h.pending && h.opened_at < listed_at)
         .map(|(t, _)| t.clone())
         .collect();
     for token in gone {
@@ -277,23 +277,26 @@ pub(super) async fn restore_holds(st: &AppState, snaps: &[LiveSnapshot]) {
                 continue;
             }
         };
-        let Some(fed) = streams
+        // The URL names the feeding stream unless a sync rewrote it; the open's `sourceId` tag covers that.
+        let by_url = streams
             .iter()
             .find(|x| x.url == s.upstream_url && x.priority == s.upstream_priority)
-            .cloned()
-        else {
+            .map(|x| x.source.id);
+        let tagged = s.tags.get("sourceId").and_then(|v| v.parse().ok());
+        let Some(source_id) = by_url.or(tagged) else {
             tracing::warn!(
-                "live hold of channel #{channel_id} not restored: no stream matches its URL"
+                "live hold of channel #{channel_id} not restored: its source is unknown"
             );
             continue;
         };
         let mut g = st.livetv.live.lock();
         g.holds.entry(s.capacity_token.clone()).or_insert(Hold {
-            source_id: fed.source.id,
+            source_id,
             channel_id,
             streams,
             fed: Some(s.upstream),
             pending: false,
+            opened_at: now_ms(),
             mode: Some(s.mode),
             owner: None,
         });
