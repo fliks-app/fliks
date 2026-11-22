@@ -351,6 +351,18 @@ body.native.hero-page {
   animation: slide-up 0.18s ease-out;
 }
 
+/* A sheet resting on the phone dock rises and fades in place: sliding in from the screen edge would cross the dock. */
+@keyframes sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+}
+
+.animate-sheet-rise {
+  animation: sheet-rise 0.18s ease-out;
+}
+
 /* Full-width gradient strip with transparent edges so the 100% to -100% reset doesn't read as a gap. */
 @keyframes seekbar-indeterminate {
   from {

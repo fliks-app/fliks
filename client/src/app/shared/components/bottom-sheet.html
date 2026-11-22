@@ -19,13 +19,15 @@
       (fullHeight()
         ? 'inset-x-0 top-0 flex flex-col bg-base-100 text-base-content'
         : aboveDock()
-          ? layers().bg + ' inset-x-0 rounded-t-2xl max-h-[70vh]'
+          ? layers().bg + ' inset-x-0 rounded-t-2xl max-h-[70vh] border-b border-base-content/20'
           : layers().bg + ' rounded-t-2xl max-h-[70vh] portrait:left-1 portrait:right-1 landscape:right-2 landscape:w-[28rem] landscape:max-w-md landscape:rounded-2xl landscape:bottom-1 ' +
             (rightAligned() ? 'landscape:left-auto' : 'landscape:left-2 landscape:mx-auto'))
     "
-    [class.animate-slide-up]="!dismissing()"
+    [class.animate-slide-up]="!dismissing() && !aboveDock()"
+    [class.animate-sheet-rise]="!dismissing() && aboveDock()"
+    [class.opacity-0]="dismissing() && aboveDock()"
     [style.transform]="sheetTransform()"
-    [style.transition]="dragging() ? 'none' : 'transform 0.18s ease-out'"
+    [style.transition]="dragging() ? 'none' : 'transform 0.18s ease-out, opacity 0.18s ease-out'"
     [style.bottom]="aboveDock() ? 'var(--dock-h, 0px)' : null"
     [style.padding-bottom]="aboveDock() ? null : 'env(safe-area-inset-bottom)'"
     (touchstart)="onTouchStart($event)"
