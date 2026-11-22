@@ -287,6 +287,10 @@ impl Episodes {
         fresh
     }
 
+    fn pending(&self) -> Vec<i32> {
+        self.groups.lock_clean().keys().copied().collect()
+    }
+
     fn take(&self, media: i32) -> BTreeMap<i64, BTreeSet<i64>> {
         self.groups.lock_clean().remove(&media).unwrap_or_default()
     }
@@ -317,7 +321,9 @@ async fn listen(st: AppState) {
                     });
                 }
             }
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("new-episode listener lagged {n} events");
+            }
             Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
         }
     }
@@ -358,11 +364,11 @@ pub(super) async fn episode_recipients(
     Ok(to)
 }
 
-async fn flush(st: &AppState, media: i32) -> sqlx::Result<()> {
+async fn build(st: &AppState, media: i32) -> sqlx::Result<Option<(Vec<i32>, Notification)>> {
     let seasons = st.push.episodes.take(media);
     let count: usize = seasons.values().map(BTreeSet::len).sum();
     if count == 0 {
-        return Ok(());
+        return Ok(None);
     }
     let row: Option<(String, Option<i32>)> = sqlx::query_as(
         r#"SELECT title, "libraryId" FROM media WHERE id = $1 AND "mediaType"::text = 'series'"#,
@@ -371,7 +377,7 @@ async fn flush(st: &AppState, media: i32) -> sqlx::Result<()> {
     .fetch_optional(&st.db)
     .await?;
     let Some((title, library)) = row else {
-        return Ok(());
+        return Ok(None);
     };
     let to = episode_recipients(st, media, library).await?;
     let url = media_url(media, MediaKind::Series);
@@ -408,8 +414,29 @@ async fn flush(st: &AppState, media: i32) -> sqlx::Result<()> {
     n.image = Some(poster(media));
     n.tag = Some(format!("episodes:{media}"));
     n.actions = vec![open(&url)];
-    notify(st, to, n);
+    Ok(Some((to, n)))
+}
+
+async fn flush(st: &AppState, media: i32) -> sqlx::Result<()> {
+    if let Some((to, n)) = build(st, media).await? {
+        notify(st, to, n);
+    }
     Ok(())
+}
+
+/// Sends the groups still waiting on their window; the process is about to stop.
+pub async fn flush_pending(st: &AppState) {
+    for media in st.push.episodes.pending() {
+        match build(st, media).await {
+            Ok(Some((to, n))) if !to.is_empty() => {
+                if let Err(e) = st.push.run(st, to, n).await {
+                    tracing::warn!("new-episode notification at shutdown: {e}");
+                }
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!("new-episode notification at shutdown: {e}"),
+        }
+    }
 }
 
 #[cfg(test)]

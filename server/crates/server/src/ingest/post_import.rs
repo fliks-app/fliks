@@ -105,6 +105,7 @@ impl Queue {
     }
 
     async fn drain(&self, st: &AppState) {
+        let _unwind = ResetOnPanic { queue: self, st };
         loop {
             let next = {
                 let mut q = self.lock();
@@ -169,6 +170,22 @@ impl Queue {
                 );
             }
             progress(st, done, total, None);
+        }
+    }
+}
+
+/// A panic in the drain would leave `active` set and every later import undrained.
+struct ResetOnPanic<'a> {
+    queue: &'a Queue,
+    st: &'a AppState,
+}
+
+impl Drop for ResetOnPanic<'_> {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.st.hub.activity().remove(QUEUE_PARENT);
+            *self.queue.lock() = Q::default();
+            self.queue.idle.notify_waiters();
         }
     }
 }
