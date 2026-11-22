@@ -23,7 +23,7 @@ function setup() {
   const service = TestBed.inject(ReleaseSearchStreamService);
   const releases = signal<MovieRelease[]>([]);
   const indexers = signal<IndexerRosterEntry[]>([]);
-  const deliver = async (type: string, payload: unknown) => {
+  const deliver = async (type: `plugin.${string}`, payload: unknown) => {
     sse.deliver({ type, payload });
     await Promise.resolve();
   };

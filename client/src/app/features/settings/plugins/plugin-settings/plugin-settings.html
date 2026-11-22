@@ -25,7 +25,7 @@
         <app-toggle-field
           [value]="skipCompatibility()"
           (valueChange)="toggleSkipCompatibility($event)"
-          [disabled]="saving()"
+          [disabled]="saving() || !isAdmin()"
           [label]="'settings.plugins.settings.skip_compatibility' | translate"
           [hint]="'settings.plugins.settings.skip_compatibility_hint' | translate"
         />

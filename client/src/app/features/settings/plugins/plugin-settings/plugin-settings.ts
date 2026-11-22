@@ -2,7 +2,6 @@ import {
   Component,
   ElementRef,
   WritableSignal,
-  computed,
   inject,
   signal,
   viewChild,
@@ -12,7 +11,7 @@ import { LucideX } from '@lucide/angular';
 import { ToggleFieldComponent } from '../../../../shared/components/forms/toggle-field/toggle-field';
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
 import { PluginsApiService } from '../../../../core/services/api/plugins-api.service';
-import { AuthService } from '../../../../core/services/auth.service';
+import { PluginsState } from '../plugins-state';
 import { ToastService } from '../../../../core/services/toast.service';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../../shared/components/modal-footer';
@@ -36,10 +35,9 @@ export class PluginSettingsComponent {
   private readonly plugins = inject(PluginsApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
-  private readonly auth = inject(AuthService);
 
-  /** The unsigned-plugin switch is an admin-only key: reading or writing it is a 403 for anyone else. */
-  protected readonly isAdmin = computed(() => !!this.auth.user()?.isAdmin);
+  /** The unsigned-plugin switch and the source refresh are admin-only: a 403 for anyone else. */
+  protected readonly isAdmin = inject(PluginsState).isAdmin;
 
   private readonly dialogRef = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
@@ -87,6 +85,7 @@ export class PluginSettingsComponent {
 
   /** The catalogue reads each source's cache filtered under the old value, so every source is refreshed to widen/narrow the list without waiting for the nightly job. */
   async toggleSkipCompatibility(next: boolean): Promise<void> {
+    if (!this.isAdmin()) return;
     if (!(await this.persist(SKIP_COMPATIBILITY_KEY, next, this.skipCompatibility))) return;
     this.saving.set(true);
     try {

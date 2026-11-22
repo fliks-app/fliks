@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, type ParamMap } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap, type ParamMap } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { BehaviorSubject, EMPTY, of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
@@ -32,6 +32,7 @@ function setup(opts: SetupOpts = {}) {
   const confirm = vi.fn(opts.confirm ?? (async () => true));
   const toast = { success: vi.fn(), error: vi.fn() };
   const sse = sseStub();
+  const navigate = vi.fn(async () => true);
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -40,6 +41,7 @@ function setup(opts: SetupOpts = {}) {
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
       { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: query.value }, queryParamMap: query } },
+      { provide: Router, useValue: { navigate } },
       { provide: RequestsService, useValue: { list, approve } },
       { provide: ProfilesService, useValue: { getQualityProfiles: async () => [], getLanguageProfiles: async () => [] } },
       { provide: LibrariesApiService, useValue: { listMine: async () => [] } },
@@ -57,7 +59,7 @@ function setup(opts: SetupOpts = {}) {
   TestBed.overrideComponent(RequestsComponent, { set: { template: '', imports: [] } });
   const fixture = TestBed.createComponent(RequestsComponent);
   fixture.detectChanges();
-  return { cmp: fixture.componentInstance, query, list, sse, approve, confirm, toast };
+  return { cmp: fixture.componentInstance, query, list, sse, approve, confirm, toast, navigate };
 }
 
 const statusOfLastFetch = (list: ReturnType<typeof vi.fn>) => (list.mock.calls.at(-1) as unknown as [{ status?: string }])[0].status;
@@ -75,14 +77,22 @@ describe('RequestsComponent', () => {
     expect(statusOfLastFetch(list)).toBe('pending');
   });
 
-  it('keeps the chosen filter when the same status is pushed again', async () => {
-    const { cmp, query } = setup();
-    query.next(convertToParamMap({ status: 'pending' }));
+  it('writes the chosen filter to the URL, which is the only place it lives', async () => {
+    const { cmp, navigate } = setup();
+
     cmp.onStatusChange('approved');
 
+    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { status: 'approved' }, replaceUrl: true }));
+  });
+
+  it('follows the URL back to a pushed status after another was chosen', async () => {
+    const { cmp, query } = setup();
+    query.next(convertToParamMap({ status: 'approved' }));
+    expect(cmp.statusFilter()).toBe('approved');
+
     query.next(convertToParamMap({ status: 'pending' }));
 
-    expect(cmp.statusFilter()).toBe('approved');
+    expect(cmp.statusFilter()).toBe('pending');
   });
 
   it('refetches when one of the user requests changes status, and only then', async () => {
@@ -105,16 +115,15 @@ describe('RequestsComponent', () => {
     ];
     const pendingSetup = async (opts: SetupOpts) => {
       const h = setup({ rows, ...opts });
-      h.cmp.statusFilter.set('pending');
-      h.cmp.reload();
+      h.query.next(convertToParamMap({ status: 'pending' }));
       await vi.waitFor(() => expect(h.cmp.rows().length).toBe(3));
       return h;
     };
 
     it('counts the pending rows, on the Pending filter only', async () => {
-      const { cmp } = await pendingSetup({});
+      const { cmp, query } = await pendingSetup({});
       expect(cmp.approvableRows().map((r) => r.id)).toEqual([1, 2]);
-      cmp.statusFilter.set('');
+      query.next(convertToParamMap({}));
       expect(cmp.approvableRows()).toEqual([]);
     });
 

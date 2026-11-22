@@ -20,6 +20,8 @@ export interface MediaDetailHost {
   readonly episodeSeed: Signal<HandedEpisode | null>;
   /** Navbar title of the page, when it is not the title's own. */
   readonly navTitle: WritableSignal<string | null>;
+  /** True while a cached page is parked off screen: it must not toast or refetch for events. */
+  readonly parked: Signal<boolean>;
   /** Bumped each time a cached page comes back on screen. */
   readonly returns: Signal<number>;
   readonly requestFlow: RequestFlowController;

@@ -1,4 +1,4 @@
-import { fromEvent, startWith } from 'rxjs';
+import { filter, fromEvent, merge, startWith } from 'rxjs';
 import { NgTemplateOutlet } from '@angular/common';
 import {
   Component,
@@ -366,8 +366,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   /** Refresh counts when relevant SSE events arrive */
   // import.complete / import.failed reach only the requester, so library counts ride the broadcast queue.updated after each import.
-  private readonly sseCounts = this.sse
-    .on('queue.updated', 'stalled.removed', 'request.approved', 'request.declined')
+  private readonly sseCounts = merge(
+    this.sse.on('queue.updated', 'stalled.removed'),
+    this.sse.notifications.pipe(filter((n) => n.cat === 'requests')),
+  )
     .pipe(takeUntilDestroyed(this.destroyRef))
     .subscribe(() => this.debouncedRefreshSidebarCounts());
 

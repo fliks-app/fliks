@@ -9,8 +9,8 @@ import {
 } from '@angular/core';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, ParamMap, RouterLink } from '@angular/router';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { distinctUntilChanged, filter, map, skip } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe, translatePlural } from '../../core/pipes/translate-plural.pipe';
@@ -80,6 +80,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   protected readonly kinds = KIND_REGISTRY;
   protected readonly isTrackRequest = isTrackRequest;
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly requestsService = inject(RequestsService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly librariesApi = inject(LibrariesApiService);
@@ -106,14 +107,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
     .pipe(filter((n) => n.cat === 'requests'), takeUntilDestroyed())
     .subscribe(() => void this.refreshStatuses());
 
-  /** A push to `/requests?status=…` lands on a cached or visible page, where `ngOnInit` does not run again. */
+  /** The URL is the filter: a push to `/requests?status=…` lands on a cached or visible page, where `ngOnInit` does not run again. */
+  readonly statusFilter = toSignal(
+    this.route.queryParamMap.pipe(map((q) => RequestsComponent.statusOf(q) ?? '')),
+    { initialValue: RequestsComponent.statusOf(this.route.snapshot.queryParamMap) ?? '' },
+  );
   private readonly statusParam = this.route.queryParamMap
     .pipe(map(RequestsComponent.statusOf), distinctUntilChanged(), skip(1), takeUntilDestroyed())
-    .subscribe((status) => {
-      if (!status || status === this.statusFilter()) return;
-      this.statusFilter.set(status);
-      this.reload();
-    });
+    .subscribe(() => this.reload());
 
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   private readonly viewDeclineModal = viewChild(RequestViewDeclineModalComponent);
@@ -130,7 +131,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly rows = signal<FliksRequestRow[]>([]);
   readonly total = signal(0);
   readonly loading = signal(false);
-  readonly statusFilter = signal<FliksRequestStatus | ''>('');
   readonly kindFilter = signal<RequestKind | ''>('');
   /** Read-only modal: motif affiché après un refus. */
   readonly viewDeclineReasonModal = signal<{
@@ -165,8 +165,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.scrollMemory.activate(RequestsComponent.SCROLL_KEY);
-    const status = RequestsComponent.statusOf(this.route.snapshot.queryParamMap);
-    if (status) this.statusFilter.set(status);
     this.reload();
     try {
       const [qp, lp, libs] = await Promise.all([
@@ -185,8 +183,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   onStatusChange(value: string) {
-    this.statusFilter.set(value as FliksRequestStatus | '');
-    this.reload();
+    void this.router.navigate([], { queryParams: { status: value || null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
   onKindChange(value: string) {

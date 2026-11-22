@@ -39,6 +39,17 @@ export interface SseEvent {
   [key: string]: unknown;
 }
 
+/** The frame types components subscribe to with `on()`: only those delivered on `events`, never the ones owned by a dedicated Subject. */
+export const SSE_STREAM_TYPES = [
+  'acquisition.sources', 'activity.changed', 'command.completed', 'command.started', 'import.complete',
+  'media.move.completed', 'metadata.failed', 'metadata.refreshed', 'player.command', 'queue.updated',
+  'remote.targets_changed', 'rescan.completed', 'seerr.import.completed', 'seerr.import.failed',
+  'social.content_recommended', 'social.follow_request', 'stalled.removed', 'subtitle.downloaded',
+  'subtitle.failed', 'subtitle.list_changed', 'subtitle.synced', 'watch-history.import.completed',
+  'watch-history.import.failed',
+] as const;
+export type SseStreamType = (typeof SSE_STREAM_TYPES)[number];
+
 /** One rung of a target's quality ladder. `lowBandwidth` marks an eco rung, of
  *  which there is one per height, so a list without it shows the label twice. */
 export interface RemoteQualityRung {
@@ -290,6 +301,8 @@ export class SseService implements OnDestroy {
   private retryDelay = 5000;
   /** A stream already opened for this session: its next `sse.connected` is a re-dial. */
   private dialled = false;
+  /** Cleared by a re-dial of a healthy stream (resume, language): nothing was missed, so its `sse.connected` refreshes nothing. */
+  private refreshOnConnect = true;
   private retryHandle: ReturnType<typeof setTimeout> | null = null;
   private lastMessageAt = 0;
   private livenessHandle: ReturnType<typeof setInterval> | null = null;
@@ -314,7 +327,10 @@ export class SseService implements OnDestroy {
     effect(() => {
       this.translate.currentLang();
       untracked(() => {
-        if (this.eventSource) this.reconnect();
+        if (this.eventSource) {
+          this.refreshOnConnect = false;
+          this.reconnect();
+        }
       });
     });
 
@@ -328,8 +344,8 @@ export class SseService implements OnDestroy {
   }
 
   /** The frames of these types, in arrival order. */
-  on(...types: string[]): Observable<SseEvent> {
-    return this.events.pipe(filter((e) => types.includes(e.type)));
+  on(...types: SseStreamType[]): Observable<SseEvent> {
+    return this.events.pipe(filter((e) => (types as string[]).includes(e.type)));
   }
 
   /** Logged-out is never "unreachable": nothing is trying to connect. */
@@ -357,6 +373,7 @@ export class SseService implements OnDestroy {
    *  nothing about the server, so the fresh dial gets the full grace period. */
   resume() {
     this.clearUnreachable();
+    this.refreshOnConnect = false;
     this.reconnect();
     this.syncUnreachable();
   }
@@ -492,8 +509,9 @@ export class SseService implements OnDestroy {
         // A reconnect means we don't know what we missed while disconnected: the open page rereads too.
         void invalidateResource('/api/media');
         void invalidateResource('/api/likes');
-        if (this.dialled) this.appResume.refresh();
+        if (this.dialled && this.refreshOnConnect) this.appResume.refresh();
         this.dialled = true;
+        this.refreshOnConnect = true;
         this.optimizeEvents.next(data);
         this.karaokeEvents.next(data);
         return;

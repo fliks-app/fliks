@@ -422,6 +422,7 @@
     },
     "version": "Version {{version}}",
     "licenses": "Open-Source-Lizenzen",
+    "licenses_unavailable": "Die Lizenzen konnten nicht geladen werden.",
     "notifications": {
       "device_title": "Dieses Gerät",
       "device": "Systembenachrichtigungen auf diesem Gerät",

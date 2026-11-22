@@ -95,6 +95,7 @@
     [canManage]="canManageSubtitles()"
     [searchDisabled]="!ep.hasFile"
     [languageProfileId]="m.languageProfile?.id ?? null"
+    [parked]="host.parked()"
   />
 
   @if (episodeView.episodeActiveFile(); as sf) {

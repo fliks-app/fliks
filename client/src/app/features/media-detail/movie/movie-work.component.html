@@ -66,6 +66,7 @@
   [streamSubtitles]="activeFile()?.streamInfo?.subtitles"
   [canManage]="canManageSubtitles()"
   [languageProfileId]="m.languageProfile?.id ?? null"
+  [parked]="host.parked()"
 />
 
 @if (activeFile(); as af) {

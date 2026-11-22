@@ -131,6 +131,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     onDetach: () => this.releaseChrome(),
     onAttach: () => this.restoreChrome(),
   });
+  readonly parked = this.routeFresh;
 
   /** Last fanart declared, so returning to a cached page can re-declare it. */
   private fanartUrl: string | null = null;
@@ -212,7 +213,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     .pipe(takeUntilDestroyed())
     .subscribe((event) => {
       const m = this.media();
-      if (!m || (event['mediaId'] as number) !== m.id) return;
+      if (this.parked() || !m || (event['mediaId'] as number) !== m.id) return;
       if (
         event.type === 'rescan.completed' ||
         event.type === 'import.complete' ||
