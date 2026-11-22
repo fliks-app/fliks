@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { AuthService } from '../../core/services/auth.service';
@@ -19,6 +19,7 @@ import {
   RequestsService,
   FliksRequestRow,
   FliksRequestStatus,
+  REQUEST_STATUSES,
   RequestKind,
   isTrackRequest,
   requestAddLink,
@@ -74,6 +75,7 @@ import { KIND_REGISTRY, kindOf } from '../../core/media-kinds';
 export class RequestsComponent implements OnInit, OnDestroy {
   protected readonly kinds = KIND_REGISTRY;
   protected readonly isTrackRequest = isTrackRequest;
+  private readonly route = inject(ActivatedRoute);
   private readonly requestsService = inject(RequestsService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly librariesApi = inject(LibrariesApiService);
@@ -139,6 +141,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.scrollMemory.activate(RequestsComponent.SCROLL_KEY);
+    const status = this.route.snapshot.queryParamMap.get('status');
+    if (status && REQUEST_STATUSES.includes(status as FliksRequestStatus)) {
+      this.statusFilter.set(status as FliksRequestStatus);
+    }
     this.reload();
     try {
       const [qp, lp, libs] = await Promise.all([

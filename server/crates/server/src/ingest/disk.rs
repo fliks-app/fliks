@@ -36,7 +36,7 @@ use fliks_domain::{
         path::resolve,
     },
     metadata::{
-        book_match::{MIN_TITLE_SIMILARITY, title_similarity},
+        book_match::{MIN_CONFIDENCE, title_similarity},
         limiter::Priority,
     },
     naming::{
@@ -920,11 +920,16 @@ async fn auto_pick(st: &AppState, d: &mut RelinkDto) -> Result<(), AppError> {
     Ok(())
 }
 
-/// The hit whose title is at least `MIN_TITLE_SIMILARITY` like the folder's, the closest first; a
-/// year within one of it breaks ties, then the provider's order. None below the floor.
+/// The hit whose title or original title is at least `MIN_CONFIDENCE` like the folder's, the closest
+/// first; a year within one of it breaks ties, then the provider's order. None below the floor.
 fn best_hit<'a>(hits: &'a [Value], title: &str, year: Option<i32>) -> Option<&'a Value> {
     let key = |h: &Value| {
-        let similarity = title_similarity(title, h["title"].as_str().unwrap_or_default());
+        let similarity = ["title", "originalTitle"]
+            .iter()
+            .filter_map(|k| h[*k].as_str())
+            .map(|t| title_similarity(title, t))
+            .max()
+            .unwrap_or(0);
         let near = year
             .zip(h["year"].as_i64())
             .is_some_and(|(y, hy)| (i64::from(y) - hy).abs() <= 1);
@@ -932,7 +937,7 @@ fn best_hit<'a>(hits: &'a [Value], title: &str, year: Option<i32>) -> Option<&'a
     };
     hits.iter()
         .rev()
-        .filter(|h| key(h).0 >= MIN_TITLE_SIMILARITY)
+        .filter(|h| key(h).0 >= MIN_CONFIDENCE)
         .max_by_key(|h| key(h))
 }
 
@@ -1187,6 +1192,14 @@ mod tests {
             "a same-year wrong hit is no match"
         );
         assert_eq!(best_hit(&[], "Alpha", None), None);
+    }
+
+    #[test]
+    fn a_folder_in_the_original_language_matches_the_original_title() {
+        let hits =
+            [json!({"title": "Spirited Away", "originalTitle": "Sen to Chihiro", "year": 2001})];
+        assert!(best_hit(&hits, "Sen to Chihiro", Some(2001)).is_some());
+        assert!(best_hit(&hits, "Other Film", Some(2001)).is_none());
     }
 
     #[test]

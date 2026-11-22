@@ -374,6 +374,9 @@ async fn act(
             crate::plugins::sweep::RouteError::TimedOut => {
                 AppError::plain(StatusCode::GATEWAY_TIMEOUT, "PLUGIN_TIMEOUT")
             }
+            crate::plugins::sweep::RouteError::InFlight => {
+                AppError::plain(StatusCode::CONFLICT, "ALREADY_IN_FLIGHT")
+            }
             crate::plugins::sweep::RouteError::Failed(m) => {
                 AppError::with_message(StatusCode::BAD_GATEWAY, m)
             }

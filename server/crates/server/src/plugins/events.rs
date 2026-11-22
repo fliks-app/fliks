@@ -372,6 +372,9 @@ pub async fn publish(
                 st.hub
                     .emit_to_users(&to, SseEvent::StalledRemoved { title: s.title });
                 st.hub.emit(SseEvent::QueueUpdated {});
+                if let Some(m) = s.media_id {
+                    st.plugins.request_sweep(st, vec![m]);
+                }
             }
         }
     }

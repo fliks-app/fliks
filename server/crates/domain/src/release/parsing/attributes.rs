@@ -41,8 +41,8 @@ fn detect_source(t: &str) -> Option<&'static str> {
         &[
             ("remux", rx!(r"\bremux\b")),
             ("bluray", rx!(r"\b(bluray|blu-?ray|bdrip|brrip|bdr)\b")),
-            ("web-dl", rx!(r"\bweb-?dl\b")),
-            ("webrip", rx!(r"\bweb-?rip\b")),
+            ("web-dl", rx!(r"\bweb[ -]?dl\b")),
+            ("webrip", rx!(r"\bweb[ -]?rip\b")),
             ("hdtv", rx!(r"\bhdtv\b")),
             ("dvd", rx!(r"\b(dvd|dvdrip|dvd-?r)\b")),
             ("sdtv", rx!(r"\bsdtv\b")),
@@ -135,7 +135,18 @@ pub fn parse_revision(title: &str) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_revision;
+    use super::{parse_release_attributes, parse_revision};
+
+    #[test]
+    fn web_dl_matches_every_separator() {
+        for t in [
+            "Show.1080p.WEB.DL-GRP",
+            "Show 1080p WEB-DL",
+            "Show.1080p.WEBDL",
+        ] {
+            assert_eq!(parse_release_attributes(t).source, Some("web-dl"), "{t}");
+        }
+    }
 
     #[test]
     fn proper_repack_and_rerip_are_revision_two() {

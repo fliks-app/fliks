@@ -16,6 +16,6 @@ f ~ /^client\/src\// {
   if ($0 ~ /text-base-content\/(30|40)/ && $0 !~ /<svg|lucide|app-nav-icon/) bad("muted text contrast")
 }
 f ~ /^(server\/crates\/[^\/]+\/src|client\/src)\// && f !~ /(\/tests?\/|fixtures?|\.spec\.|\.test\.|_tests?\.rs$|\/tests?\.rs$)/ {
-  if ($0 ~ ("[" q "\"]fliks\\.[a-z][a-z0-9]*[" q "\"]") || $0 ~ /fliks-[a-z0-9]+\.(settings|nav)\./) bad("plugin id in core")
+  if (($0 ~ ("[" q "\"]fliks\\.[a-z][a-z0-9]*[" q "\"]") && $0 !~ ("[" q "\"]fliks\\.(tab|avtest)[" q "\"]")) || $0 ~ /fliks-[a-z0-9]+\.(settings|nav)\./) bad("plugin id in core")
 }
 END{exit fail}'

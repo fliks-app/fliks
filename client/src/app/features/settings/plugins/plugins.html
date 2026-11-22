@@ -5,9 +5,11 @@
       <p class="text-sm text-base-content/60 mt-1">{{ 'settings.plugins.subtitle' | translate }}</p>
     </div>
     <div class="flex items-center gap-2 self-start sm:self-auto">
-      <a routerLink="/admin/settings/plugin-catalogue" class="btn btn-primary">
-        {{ 'settings.plugins.catalogue.browse_button' | translate }}
-      </a>
+      @if (state.isAdmin()) {
+        <a routerLink="/admin/settings/plugin-catalogue" class="btn btn-primary">
+          {{ 'settings.plugins.catalogue.browse_button' | translate }}
+        </a>
+      }
       <app-dropdown-menu placement="bottom-end">
         <button
           trigger
@@ -17,24 +19,28 @@
         >
           <svg lucideEllipsisVertical class="h-5 w-5"></svg>
         </button>
-        <button type="button" class="dropdown-item text-white" [disabled]="state.refreshing()" (click)="state.refreshAllSources()">
-          @if (state.refreshing()) {
-            <span class="loading loading-spinner loading-xs"></span>
-          }
-          {{ 'settings.plugins.sources.refresh_all' | translate }}
-        </button>
-        <button type="button" class="dropdown-item text-white" (click)="openSources()">
-          {{ 'settings.plugins.sources.manage_button' | translate }}
-        </button>
+        @if (state.isAdmin()) {
+          <button type="button" class="dropdown-item text-white" [disabled]="state.refreshing()" (click)="state.refreshAllSources()">
+            @if (state.refreshing()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'settings.plugins.sources.refresh_all' | translate }}
+          </button>
+          <button type="button" class="dropdown-item text-white" (click)="openSources()">
+            {{ 'settings.plugins.sources.manage_button' | translate }}
+          </button>
+        }
         <button type="button" class="dropdown-item text-white" (click)="openSettings()">
           {{ 'settings.plugins.settings.title' | translate }}
         </button>
-        <button type="button" class="dropdown-item text-white" [disabled]="uploading()" (click)="pickFile()">
-          @if (uploading()) {
-            <span class="loading loading-spinner loading-xs"></span>
-          }
-          {{ 'settings.plugins.upload' | translate }}
-        </button>
+        @if (state.isAdmin()) {
+          <button type="button" class="dropdown-item text-white" [disabled]="uploading()" (click)="pickFile()">
+            @if (uploading()) {
+              <span class="loading loading-spinner loading-xs"></span>
+            }
+            {{ 'settings.plugins.upload' | translate }}
+          </button>
+        }
       </app-dropdown-menu>
     </div>
     <input #fileInput type="file" accept=".fkplugin,.zip" class="hidden" (change)="onFilePicked($event)" />

@@ -591,7 +591,7 @@ export const routes: Routes = [
           { path: 'media-servers', loadComponent: () => import('./features/settings/media-servers/media-servers').then((m) => m.MediaServersSettingsComponent) },
           { path: 'plugins', data: { reuse: true }, loadComponent: () => import('./features/settings/plugins/plugins').then((m) => m.PluginsSettingsComponent) },
           { path: 'plugins/:pluginId', loadComponent: () => import('./features/settings/plugins/plugin-detail/plugin-detail').then((m) => m.PluginDetailComponent) },
-          { path: 'plugin-catalogue', loadComponent: () => import('./features/settings/plugins/plugin-catalogue/plugin-catalogue-page').then((m) => m.PluginCataloguePageComponent) },
+          { path: 'plugin-catalogue', canActivate: [isAdminGuard], loadComponent: () => import('./features/settings/plugins/plugin-catalogue/plugin-catalogue-page').then((m) => m.PluginCataloguePageComponent) },
           {
             path: 'plugins/:pluginId/:view',
             canActivate: [pluginViewGuard],
