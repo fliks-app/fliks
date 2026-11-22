@@ -209,6 +209,26 @@ describe('cache.interceptor: ETag', () => {
     expect(await read(answer('W/"b"', [{ id: 1 }]))).not.toBe(first);
   });
 
+  it('restarts the entry TTL when a revalidation answers the same ETag', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const next = vi.fn(answer('W/"a"', [1]));
+      const get = () =>
+        new Promise<void>((resolve) =>
+          cacheInterceptor(new HttpRequest('GET', '/api/libraries/mine'), next).subscribe({ complete: resolve }),
+        );
+      await get();
+      vi.advanceTimersByTime(6 * 60_000);
+      await get();
+      expect(next).toHaveBeenCalledTimes(2);
+      vi.advanceTimersByTime(60_000);
+      await get();
+      expect(next).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the new body for an answer without ETag', async () => {
     const first = await read(answer(null, [1]));
     expect(await read(answer(null, [1]))).not.toBe(first);

@@ -12,10 +12,10 @@ import {
   CdkVirtualScrollViewport,
   CdkFixedSizeVirtualScroll,
   CdkVirtualForOf,
-  CdkVirtualScrollableWindow,
 } from '@angular/cdk/scrolling';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
+import { PageScrollWindowDirective } from '../../shared/directives/page-scroll-window.directive';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import { PersonsApiService, Person } from '../../core/services/api/persons-api.service';
@@ -43,7 +43,7 @@ const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
     CdkVirtualScrollViewport,
     CdkFixedSizeVirtualScroll,
     CdkVirtualForOf,
-    CdkVirtualScrollableWindow,
+    PageScrollWindowDirective,
   ],
   templateUrl: './persons.html',
 })
@@ -58,7 +58,7 @@ export class PersonsComponent implements OnInit, OnDestroy {
   private readonly scrollKey = 'persons';
   /** Cached route: revalidate on return, keeping the listed people on screen
    *  while the request goes out. */
-  private readonly routeFresh = keepRouteFresh({
+  protected readonly detached = keepRouteFresh({
     refresh: () => void this.load(true),
     scrollKey: this.scrollKey,
   });

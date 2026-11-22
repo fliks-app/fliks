@@ -159,7 +159,9 @@ body.tv [data-scroller]::after {
 
 /* Run the focus lift on the compositor, only for the rail or grid holding focus: a layer per card exhausts TV GPU memory. */
 body.tv :is([data-scroller], [data-tv-zone]):focus-within app-media-card figure,
-body.tv :is([data-scroller], [data-tv-zone]):focus-within app-media-card figure + div {
+body.tv :is([data-scroller], [data-tv-zone]):focus-within app-media-card figure + div,
+body.tv app-media-card:focus-within figure,
+body.tv app-media-card:focus-within figure + div {
   will-change: transform;
 }
 

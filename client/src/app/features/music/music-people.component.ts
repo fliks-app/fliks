@@ -1,17 +1,17 @@
-import { Component, DestroyRef, ElementRef, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, effect, inject, input, Signal, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
   CdkVirtualScrollViewport,
   CdkFixedSizeVirtualScroll,
   CdkVirtualForOf,
-  CdkVirtualScrollableWindow,
 } from '@angular/cdk/scrolling';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { MusicApiService } from '../../core/services/api/music-api.service';
 import type { MusicPersonRow } from '../../core/services/api/music.models';
 import { PersonAvatarCardComponent } from '../../shared/components/person-avatar-card/person-avatar-card';
 import { VirtualGrid } from '../../shared/utils/infinite-scroll-list';
+import { PageScrollWindowDirective } from '../../shared/directives/page-scroll-window.directive';
 import { PagedList } from './paged-list';
 import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-skeleton';
 
@@ -28,7 +28,7 @@ const PAGE = 60;
     CdkVirtualScrollViewport,
     CdkFixedSizeVirtualScroll,
     CdkVirtualForOf,
-    CdkVirtualScrollableWindow,
+    PageScrollWindowDirective,
   ],
   templateUrl: './music-people.component.html',
   host: { class: 'block' },
@@ -36,6 +36,8 @@ const PAGE = 60;
 export class MusicPeopleComponent {
   readonly role = input.required<'artist' | 'composer'>();
   readonly libraryId = input<number | undefined>(undefined);
+  /** The hosting page's `keepRouteFresh` signal. */
+  readonly detached = input.required<Signal<boolean>>();
 
   private readonly api = inject(MusicApiService);
   protected readonly query = signal('');

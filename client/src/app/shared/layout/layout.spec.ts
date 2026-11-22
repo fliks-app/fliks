@@ -1,5 +1,5 @@
 import { CORE_NAV_CONTRIBUTIONS } from '../../core/plugin-ui/core-contributions';
-import { provideZonelessChangeDetection, signal, NO_ERRORS_SCHEMA } from '@angular/core';
+import { Component, provideZonelessChangeDetection, signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Title } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router, provideRouter } from '@angular/router';
@@ -104,6 +104,12 @@ const lib = (id: number, name: string, opts: Partial<LibrarySummary> = {}): Libr
   folders: [],
   ...opts,
 });
+
+const openUpdateModal = vi.fn();
+@Component({ selector: 'app-update-modal', template: '' })
+class UpdateModalStub {
+  open = openUpdateModal;
+}
 
 async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutComponent>> {
   nativeState.value = f.isNative;
@@ -244,6 +250,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
         LucideIconComponent,
         NavIconComponent,
+        UpdateModalStub,
         TvRowDirective,
         ResolveUrlPipe,
       ],
@@ -627,6 +634,20 @@ describe('LayoutComponent pairing requests', () => {
 
     pairingEvents.next({ type: 'pairing.cancelled', userId: mine, pairingId: 'a' });
     expect(dismiss).toHaveBeenCalledExactlyOnceWith(11);
+  });
+});
+
+describe('LayoutComponent update dialog', () => {
+  it('opens on every request, not only the first', async () => {
+    const fixture = await createFixture(NON_ADMIN_NO_LIBRARIES);
+    openUpdateModal.mockClear();
+    for (const calls of [1, 2]) {
+      fixture.componentInstance.openUpdateModal();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(openUpdateModal).toHaveBeenCalledTimes(calls);
+    }
   });
 });
 
