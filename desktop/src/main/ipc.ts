@@ -1,4 +1,5 @@
 import { IPC } from '../shared/contract';
+import { fliksClientHeader } from './client-header';
 import { handle, handle1, none, str, num, bool } from './ipc-handle';
 import { redactQuery } from './log-file';
 import type { PlayerBackend } from './mpv/player-backend';
@@ -23,7 +24,7 @@ export function registerPlayerIpc(
 ): void {
   handle1(IPC.load, parseLoadOptions, async (opts) => {
     console.log('[ipc] load:', redactQuery(opts.url), 'start=', opts.startTime ?? 0, 'headers=', Object.keys(opts.headers ?? {}).join(','));
-    return (await host.player()).load(opts);
+    return (await host.player()).load({ ...opts, headers: { ...opts.headers, ...fliksClientHeader() } });
   });
   handle(IPC.play, none, async () => (await host.player()).play());
   handle(IPC.pause, none, async () => (await host.player()).pause());

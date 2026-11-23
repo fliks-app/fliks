@@ -1,4 +1,5 @@
 import { net } from 'electron';
+import { fliksClientHeader } from './client-header';
 import { httpsUpgradeOrigin } from './trusted-servers';
 
 const TIMEOUT_MS = 5000;
@@ -7,7 +8,7 @@ const TIMEOUT_MS = 5000;
 export async function httpsUpgrade(url: unknown): Promise<string | undefined> {
   if (typeof url !== 'string' || !url.startsWith('http://')) return undefined;
   return new Promise((resolve) => {
-    const request = net.request({ url: `${new URL(url).origin}/api/auth/me`, redirect: 'manual' });
+    const request = net.request({ url: `${new URL(url).origin}/api/auth/me`, redirect: 'manual', headers: fliksClientHeader() });
     const done = (origin: string | null) => {
       clearTimeout(timer);
       request.abort();

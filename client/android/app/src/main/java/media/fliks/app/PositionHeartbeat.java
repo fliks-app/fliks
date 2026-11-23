@@ -77,6 +77,7 @@ final class PositionHeartbeat {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");
             c.setRequestProperty("Authorization", auth);
+            c.setRequestProperty("X-Fliks-Client", FliksApi.CLIENT);
             try (OutputStream out = c.getOutputStream()) {
                 out.write(payload.getBytes(StandardCharsets.UTF_8));
             }

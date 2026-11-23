@@ -7,6 +7,7 @@ import {
   output,
   signal,
   viewChild,
+  type Signal,
 } from '@angular/core';
 import { formatTime, calcDragTime, calcHoverPercent, snapToKeyframe, SpriteMetadata } from '../../../core/utils/player.utils';
 import { muteRangesOf, type EdlRange } from '../../../core/utils/edl-policy';
@@ -16,6 +17,8 @@ import { TvService } from '../../../core/services/tv.service';
  *  playhead again, whatever the player decided to do with it. */
 const SEEK_SETTLE_TIMEOUT_MS = 4000;
 
+const NO_TIME = signal(0).asReadonly();
+
 @Component({
   selector: 'app-seekbar',
   templateUrl: './seekbar.html',
@@ -23,9 +26,12 @@ const SEEK_SETTLE_TIMEOUT_MS = 4000;
 export class SeekbarComponent {
   private readonly tv = inject(TvService);
 
-  readonly currentTime = input(0);
+  /** The playhead and the buffered end arrive as signals, so only the bar re-renders on a tick. */
+  readonly playhead = input<Signal<number>>(NO_TIME);
+  readonly buffered = input<Signal<number>>(NO_TIME);
+  protected readonly currentTime = computed(() => this.playhead()());
+  protected readonly bufferedEnd = computed(() => this.buffered()());
   readonly duration = input(0);
-  readonly bufferedEnd = input(0);
   /** The span a seek can land in. Both default to the whole bar; a live stream
    *  narrows them, having neither the rolled-out past nor the unaired future. */
   readonly seekableStart = input(0);

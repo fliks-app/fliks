@@ -280,6 +280,10 @@ export class RemoteService {
   private readonly wallClock = signal(0);
   private ackTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingCmdId: string | null = null;
+  /** Undoes the optimistic reading of the command in flight when its target refuses it. */
+  private pendingRevert: (() => void) | null = null;
+  /** An answer that beat the POST response carrying its cmdId. */
+  private earlyAck: { cmdId: string; refused: string | null } | null = null;
   private coalesceTimers = new Map<RemoteAction, ReturnType<typeof setTimeout>>();
   /** Bumped when the reading is cleared for a load; a refusal gives back only the reading its own load cleared. */
   private loadSeq = 0;
@@ -415,6 +419,14 @@ export class RemoteService {
     this.sse.stopped.subscribe((e) => this.noteTargetStopped(e.targetId, e.sessionId));
 
     this.sse.remoteStates.subscribe((s) => this.ingestState(s));
+
+    this.sse.on('remote.ack').subscribe((e) => {
+      if (e['targetId'] !== this.observedTargetId()) return;
+      const cmdId = String(e['cmdId'] ?? '');
+      const refused = typeof e['refused'] === 'string' ? e['refused'] : null;
+      if (cmdId !== this.pendingCmdId) this.earlyAck = { cmdId, refused };
+      this.settleAck(cmdId, refused);
+    });
 
     // Before the ticker's: the grace window it measures starts here.
     effect(() => {
@@ -719,6 +731,8 @@ export class RemoteService {
     this.expectedMediaFileId = null;
     // Reports from a deselected target are dropped, so its pending ack can never land.
     this.pendingCmdId = null;
+    this.pendingRevert = null;
+    this.earlyAck = null;
     this.pendingAction.set(null);
     if (this.ackTimer) clearTimeout(this.ackTimer);
   }
@@ -794,7 +808,7 @@ export class RemoteService {
       if (input.action === 'stop') {
         this.noteStopSent();
       } else {
-        this.armAck(res.cmdId, input.action);
+        this.armAck(res.cmdId, input.action, () => this.revertRefused(targetId, input, loadSeq, pinSeq, before));
       }
     } catch (err) {
       if (retry && err instanceof HttpErrorResponse && err.status === 404) {
@@ -824,8 +838,9 @@ export class RemoteService {
 
   /** The ack is the target echoing our cmdId in its own state report, so it
    *  confirms effect rather than mere receipt. */
-  private armAck(cmdId: string, action: RemoteAction): void {
+  private armAck(cmdId: string, action: RemoteAction, revert: () => void): void {
     this.pendingCmdId = cmdId;
+    this.pendingRevert = revert;
     if (this.ackTimer) clearTimeout(this.ackTimer);
     this.ackTimer = setTimeout(() => {
       if (this.pendingCmdId !== cmdId) return;
@@ -837,6 +852,23 @@ export class RemoteService {
       console.warn('[remote] no ack for', cmdId, action);
       this.toast.error(this.translate.instant('remote.error_no_response'));
     }, SLOW_ACK_ACTIONS.has(action) ? LOAD_ACK_TIMEOUT_MS : ACK_TIMEOUT_MS);
+    const early = this.earlyAck;
+    this.earlyAck = null;
+    if (early) this.settleAck(early.cmdId, early.refused);
+  }
+
+  /** The target answered `cmdId`: a refusal gives the reading back and says so, an acceptance only ends the wait. */
+  private settleAck(cmdId: string, refused: string | null): void {
+    if (cmdId !== this.pendingCmdId) return;
+    this.pendingCmdId = null;
+    this.pendingAction.set(null);
+    if (this.ackTimer) clearTimeout(this.ackTimer);
+    const revert = this.pendingRevert;
+    this.pendingRevert = null;
+    if (!refused) return;
+    revert?.();
+    console.warn('[remote] command refused by the target', cmdId, refused);
+    this.toast.error(this.translate.instant('remote.error_refused'));
   }
 
   /** Fold one state report from the observed target into the controller UI; with none, the latest frame received. */
@@ -906,11 +938,7 @@ export class RemoteService {
         this.pinnedPosition.set(null);
       }
     }
-    if (s.lastCmdId && s.lastCmdId === this.pendingCmdId) {
-      this.pendingCmdId = null;
-      this.pendingAction.set(null);
-      if (this.ackTimer) clearTimeout(this.ackTimer);
-    }
+    if (s.lastCmdId) this.settleAck(s.lastCmdId, s.lastCmdRefused ?? null);
   }
 
   /** A listed playback is the reading until the next report; its queue is held apart. */

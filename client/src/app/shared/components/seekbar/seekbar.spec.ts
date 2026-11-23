@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi, afterEach, beforeEach, describe, it, expect } from 'vitest';
 import { SeekbarComponent } from './seekbar';
@@ -18,7 +18,7 @@ describe('SeekbarComponent keyboard preview', () => {
     const fixture = TestBed.createComponent(SeekbarComponent);
     bar = fixture.componentInstance;
     fixture.componentRef.setInput('duration', 600);
-    fixture.componentRef.setInput('currentTime', 100);
+    fixture.componentRef.setInput('playhead', signal(100));
     bar.focus();
   });
 
@@ -81,7 +81,7 @@ describe('SeekbarComponent keyboard preview', () => {
   it('commits a scrub on the keyframe the video will land on', () => {
     const fixture = TestBed.createComponent(SeekbarComponent);
     fixture.componentRef.setInput('duration', 600);
-    fixture.componentRef.setInput('currentTime', 100);
+    fixture.componentRef.setInput('playhead', signal(100));
     fixture.componentRef.setInput('keyframes', [96, 108.5, 120]);
     const b = fixture.componentInstance;
     const seeks: number[] = [];
@@ -195,7 +195,7 @@ describe('SeekbarComponent pointer drag vs pending key scrub', () => {
     const fixture = TestBed.createComponent(SeekbarComponent);
     bar = fixture.componentInstance;
     fixture.componentRef.setInput('duration', 600);
-    fixture.componentRef.setInput('currentTime', 100);
+    fixture.componentRef.setInput('playhead', signal(100));
     bar.focus();
   });
 
@@ -261,7 +261,7 @@ describe('SeekbarComponent chapters', () => {
     fixture = TestBed.createComponent(SeekbarComponent);
     bar = fixture.componentInstance;
     fixture.componentRef.setInput('duration', 600);
-    fixture.componentRef.setInput('currentTime', 100);
+    fixture.componentRef.setInput('playhead', signal(100));
     fixture.componentRef.setInput('chapters', CHAPTERS);
     bar.focus();
   });
@@ -302,7 +302,7 @@ describe('SeekbarComponent chapters', () => {
 
   it('snaps when the accumulated target is inside the window', () => {
     const seeks: number[] = [];
-    fixture.componentRef.setInput('currentTime', 113);
+    fixture.componentRef.setInput('playhead', signal(113));
     bar.seek.subscribe((t) => seeks.push(t));
 
     bar.onKeydown(press('ArrowRight'));

@@ -118,6 +118,7 @@ final class PositionHeartbeat {
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(FliksClient.value, forHTTPHeaderField: "X-Fliks-Client")
         request.httpBody = data
         URLSession.shared.dataTask(with: request).resume()
     }

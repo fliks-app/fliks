@@ -355,9 +355,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     /// 4-second forward buffer hint (about one HLS segment plus margin): without it AVPlayer can start audio
     /// decode while video still resolves its first IDR, and sound plays over a black frame.
     func buildPlayerItem(url: URL, assetHeaders: [String: String]) -> AVPlayerItem {
-        let assetOptions: [String: Any]? = assetHeaders.isEmpty
-            ? nil
-            : ["AVURLAssetHTTPHeaderFieldsKey": assetHeaders]
+        let assetOptions: [String: Any] = [
+            "AVURLAssetHTTPHeaderFieldsKey": assetHeaders.merging(["X-Fliks-Client": FliksClient.value]) { $1 }
+        ]
         let asset = AVURLAsset(url: url, options: assetOptions)
         if #available(iOS 18.0, *) { asset.resourceLoader.sendsCommonMediaClientDataAsHTTPHeaders = true }
         // Preload `playable`/`tracks`/`duration` so `.readyToPlay` fires

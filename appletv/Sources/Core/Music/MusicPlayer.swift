@@ -383,7 +383,7 @@ enum MusicTransport: Equatable {
             return .failure(failure)
         case .success(let r):
             guard let url = await streamUrl(r) else { return .failure(.unavailable) }
-            let item = AVPlayerItem(url: url)
+            let item = AVPlayerItem(asset: AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": ["X-Fliks-Client": FliksClient.value]]))
             item.audioTimePitchAlgorithm = .timeDomain
             return .success(item)
         }

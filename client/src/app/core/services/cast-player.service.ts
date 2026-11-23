@@ -7,7 +7,7 @@ import { hasQoeData } from './playback-engine/playback-engine';
 import { QoeReporter, newPlaybackId } from './qoe-reporter.service';
 import type { QoeRecoveryReason } from './api/qoe-api.service';
 import { CastDeviceCapabilities, CastSettingsService } from './cast-settings.service';
-import { StreamingApiService, lostCurrentSession, type PlayMethod } from './api/streaming-api.service';
+import { StreamingApiService, type PlayMethod } from './api/streaming-api.service';
 import { SubtitlesApiService, type SubtitleFileRow } from './api/subtitles-api.service';
 import { AppSettingsService } from './app-settings.service';
 import { buildSubtitleTracks, burnsIn } from '../utils/subtitle-tracks';
@@ -35,7 +35,10 @@ import {
 import { TrackManagerService, launchPickFor, type LaunchTracks, type SubtitleOption } from './track-manager.service';
 import type { Media } from './api/media.service';
 import { NO_NOW_PLAYING, NowPlayingMetadataService } from './playback/now-playing-metadata.service';
+import type { HeartbeatSource, PlaybackHeartbeat } from './playback/playback-heartbeat';
+import { CastPlaybackTarget } from './cast-playback-target';
 import { NO_TIMELINE, type PlaybackTimeline } from './playback/playback-output';
+import { PlaybackSession } from './playback/playback-session';
 import { ToastService } from './toast.service';
 
 export interface CastSubtitleOption {
@@ -182,8 +185,14 @@ const fromOtherLoad = (q: ReceiverSample, sid: string | null) => !!q.sid && q.si
 export class CastPlayerService {
   readonly cast = inject(CastService);
   private readonly injector = inject(Injector);
-  private readonly _destroyed = inject(DestroyRef).onDestroy(() => (this.destroyed = true));
+  private readonly _destroyed = inject(DestroyRef).onDestroy(() => {
+    this.destroyed = true;
+    this.unregisterHeartbeat?.();
+  });
   private readonly sessionSync = inject(SessionSyncService);
+  /** Loaded on the first Cast session: the beater and its offline stack stay off the initial bundle. */
+  private heartbeat: PlaybackHeartbeat | null = null;
+  private heartbeatWanted = false;
   private readonly castSettings = inject(CastSettingsService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly qoeReporter = inject(QoeReporter);
@@ -380,7 +389,7 @@ export class CastPlayerService {
   /** File the active picks were made on; survives {@link clear} so a player that
    *  outlives the session can adopt them. */
   private selectionFileId = 0;
-  private saveInterval: ReturnType<typeof setInterval> | null = null;
+  private unregisterHeartbeat: (() => void) | null = null;
 
   /** Whether a Cast session is actively playing media (not just connected). */
   readonly hasMedia = signal(false);
@@ -440,7 +449,7 @@ export class CastPlayerService {
     this.availableQualities.set(opts.qualities);
     this.availableAudioTracks.set(opts.audioTracks);
     this.hasMedia.set(true);
-    this.startPositionSaving();
+    this.registerHeartbeat();
     this.loadSpriteMetadata(opts.mediaFileId);
   }
 
@@ -524,7 +533,7 @@ export class CastPlayerService {
     this.activeBurnInId = s.activeBurnInId;
     this.timeline.set(s.timeline ?? NO_TIMELINE);
     this.hasMedia.set(true);
-    if (!this.controlOnly()) this.startPositionSaving();
+    if (!this.controlOnly()) this.registerHeartbeat();
     this.loadSpriteMetadata(s.mediaFileId);
   }
 
@@ -550,8 +559,10 @@ export class CastPlayerService {
       this.disconnectGrace = null;
     }
     const castSid = this.liveSessionId();
-    this.saveCastPosition(); // Save final position before clearing
-    this.stopPositionSaving();
+    void this.heartbeat?.bank();
+    this.heartbeatWanted = false;
+    this.unregisterHeartbeat?.();
+    this.unregisterHeartbeat = null;
     if (castSid) this.qoeReporter.flushKeepalive(castSid);
     // Sid-scoped kill so a sender that's still watching locally on a
     // different profile isn't torn down by the cast stop.
@@ -696,6 +707,11 @@ export class CastPlayerService {
       return 'superseded';
     }
 
+    if (pi.burnInDropped != null && pi.burnInDropped === this.activeBurnInId) {
+      this.activeBurnInId = null;
+      this.activeSubtitleId.set(null);
+    }
+
     if (snapQualityId) {
       const qualities = buildCastQualityOptions(pi.qualities, this.castSettings.get().maxQuality);
       transcodeQuality = qualities.find(q => q.id === snapQualityId)?.id ?? qualities[0]?.id ?? '1080p';
@@ -747,7 +763,7 @@ export class CastPlayerService {
     const castUrl = built.url;
     const contentType = built.contentType;
 
-    // The sender heartbeat (`savePosition`) must beat the Cast session, not the paused browser one.
+    // The heartbeat must beat the Cast session, not the paused browser one.
     this.setLiveSession(pi.sessionId ?? null);
 
     const loaded = this.availableSubtitles().filter(s => !s.burnIn);
@@ -938,59 +954,38 @@ export class CastPlayerService {
     };
   }
 
-  private startPositionSaving() {
-    this.stopPositionSaving();
-    this.saveInterval = setInterval(() => this.saveCastPosition(), 10_000);
+  private registerHeartbeat(): void {
+    this.heartbeatWanted = true;
+    void import('./playback/playback-heartbeat').then((m) => {
+      if (this.destroyed) return;
+      this.heartbeat = this.injector.get(m.PlaybackHeartbeat);
+      if (this.heartbeatWanted) this.unregisterHeartbeat ??= this.heartbeat.register(this.heartbeatSource, 'receiver');
+    });
   }
 
-  private stopPositionSaving() {
-    if (this.saveInterval) {
-      clearInterval(this.saveInterval);
-      this.saveInterval = null;
-    }
-  }
+  /** Beats for the receiver once the player page is gone: without it the backend GCs the session and the receiver 410s. */
+  readonly heartbeatSource: HeartbeatSource = {
+    output: () => this.injector.get(CastPlaybackTarget),
+    item: () => ({ mediaId: this.mediaId(), fileId: this.mediaFileId(), episodeId: this.episodeId() }),
+    reportable: () => !!this.mediaFileId() && !!this.mediaId(),
+    extras: (sid) => ({
+      castDevice: this.cast.deviceName() ?? undefined,
+      episodeLabel: sid ? this.injector.get(PlaybackSession).nowPlaying()?.episodeLabel || null : undefined,
+      qoe: (sid && this.qoeSample()) || undefined,
+    }),
+    background: async ({ url, body, token }) => {
+      const t = await token();
+      if (t) this.cast.saveHeartbeat({ url, token: t, body });
+    },
+    onLostSession: (position) => this.recoverLostSession(position),
+  };
 
-  private async saveCastPosition() {
-    const mfId = this.mediaFileId();
-    const mId = this.mediaId();
-    if (!mfId || !mId || this.controlOnly() || !this.cast.receiverPlays(mfId)) return;
-    const pos = this.cast.currentTime();
-    const dur = this.cast.duration();
-    if (!pos || pos < 1) return;
+  /** The backend lost the session: reload with a fresh sid, preserving the receiver's pause state. */
+  async recoverLostSession(position: number): Promise<void> {
+    if (this.reloading()) return;
     try {
-      // Once the player page is gone this loop is the only keep-alive; without the sid the backend GCs the session and the receiver 410s.
-      const sid = this.liveSessionId();
-      const heartbeat = sid
-        ? {
-            sessionId: sid,
-            state: (this.cast.isPaused() ? 'paused' : 'playing') as
-              | 'paused'
-              | 'playing',
-          }
-        : {};
-      const body = {
-        positionSeconds: pos,
-        durationSeconds: dur || 0,
-        mediaFileId: mfId,
-        episodeId: this.episodeId(),
-        castDevice: this.cast.deviceName() ?? undefined,
-        ...heartbeat,
-      };
-      const token = (await this.authService.ensureStreamToken(mfId)) ?? this.authService.accessToken;
-      if (token) {
-        this.cast.saveHeartbeat({ url: this.serverConfig.resolveUrl(`/api/playback/media/${mId}/state`), token, body });
-      }
-      const response = await this.streamingApi.updatePlaybackState(mId, {
-        ...body,
-        ...(sid ? { qoe: this.qoeSample() ?? undefined } : {}),
-      });
-      if (sid && response?.superseded) void this.sessionSync.handleSuperseded(sid);
-      // Backend lost the session: reload with a fresh sid, preserving the receiver's pause state.
-      if (sid) void this.qoeReporter.flush(sid);
-      if (lostCurrentSession(response, sid, this.liveSessionId()) && !this.reloading()) {
-        await this.reloadCastStream(pos, !this.cast.isPaused());
-        this.recordRecovery(pos, 'session_lost');
-      }
+      await this.reloadCastStream(position, !this.cast.isPaused());
+      this.recordRecovery(position, 'session_lost');
     } catch { /* ignore */ }
   }
 

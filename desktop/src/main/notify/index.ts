@@ -1,5 +1,6 @@
 import { isQuitting } from '../quitting.ts';
 import { app, Menu, nativeImage, net, Notification, Tray } from 'electron';
+import { fliksClientHeader } from '../client-header.ts';
 import { handle, none } from '../ipc-handle.ts';
 import { appendLog } from '../log-file.ts';
 import { NOTIFY_IPC } from '../../shared/contract.ts';
@@ -29,6 +30,7 @@ async function fetchImage(path: string, serverUrl: string): Promise<Electron.Nat
     const res = await net.fetch(new URL(path, serverUrl).href, {
       credentials: 'omit',
       redirect: 'error',
+      headers: fliksClientHeader(),
       signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
     });
     const buf = await readCapped(res);

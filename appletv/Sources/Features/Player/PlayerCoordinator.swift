@@ -184,7 +184,7 @@ import UIKit
     }
 
     private static func makeItem(url: URL) -> AVPlayerItem {
-        let asset = AVURLAsset(url: url)
+        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": ["X-Fliks-Client": FliksClient.value]])
         if #available(tvOS 18.0, *) { asset.resourceLoader.sendsCommonMediaClientDataAsHTTPHeaders = true }
         return AVPlayerItem(asset: asset)
     }

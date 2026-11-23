@@ -215,6 +215,7 @@ public class FlixDownloadUtil {
     /** HTTP source whose `token` query param is swapped for a live file-bound stream token on every request. */
     public static DataSource.Factory buildHttpDataSourceFactory(Context ctx) {
         DefaultHttpDataSource.Factory factory = new DefaultHttpDataSource.Factory()
+            .setDefaultRequestProperties(java.util.Collections.singletonMap("X-Fliks-Client", FliksApi.CLIENT))
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(120_000)  // long timeout for server-side waitForFile
             .setAllowCrossProtocolRedirects(true);

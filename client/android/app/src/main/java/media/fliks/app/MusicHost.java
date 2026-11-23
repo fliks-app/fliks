@@ -197,7 +197,9 @@ final class MusicHost {
                         .build();
             }
         };
-        DataSource.Factory http = new DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true);
+        DataSource.Factory http = new DefaultHttpDataSource.Factory()
+                .setDefaultRequestProperties(Collections.singletonMap("X-Fliks-Client", FliksApi.CLIENT))
+                .setAllowCrossProtocolRedirects(true);
         DataSource.Factory source = new ResolvingDataSource.Factory(new DefaultDataSource.Factory(context, http), this::resolve);
         DefaultMediaSourceFactory base = new DefaultMediaSourceFactory(context).setDataSourceFactory(source);
         exo = new ExoPlayer.Builder(context, renderers)

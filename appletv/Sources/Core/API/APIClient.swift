@@ -1,6 +1,11 @@
 import Foundation
 import os
 
+/// The `X-Fliks-Client` value every request to the server carries.
+enum FliksClient {
+    static let value = "tvos/" + ((Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0")
+}
+
 enum APIError: Error, CustomStringConvertible {
     case badURL
     /// `message` is the server's error body message, a translation key for the party routes.
@@ -203,6 +208,7 @@ final class APIClient {
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(MediaKind.known.map(\.rawValue).joined(separator: ","), forHTTPHeaderField: "X-Fliks-Kinds")
+        req.setValue(FliksClient.value, forHTTPHeaderField: "X-Fliks-Client")
 
         // The refresh endpoint itself never gets a Bearer header or a retry —
         // if it 401s, it's terminal (matches the Angular interceptor).

@@ -63,6 +63,7 @@ final class ServerEventStream {
             guard let url = comps.url else { return false }
             var req = URLRequest(url: url)
             req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+            req.setValue(FliksClient.value, forHTTPHeaderField: "X-Fliks-Client")
             let (bytes, response) = try await session.bytes(for: req)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { return false }
             var parser = SSEParser()

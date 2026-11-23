@@ -13,7 +13,6 @@ export interface ControlsModel {
   paused: boolean;
   spinner: boolean;
   videoStarted: boolean;
-  currentTime: number;
   duration: number;
   volume: number;
   muted: boolean;
@@ -53,7 +52,6 @@ export function outputModel(o: PlaybackOutput, meta: NowPlayingMetadata | null):
     paused: o.uiPaused(),
     spinner: o.buffering() || o.isStarting(),
     videoStarted: true,
-    currentTime: o.position(),
     duration: o.duration(),
     volume: o.volume(),
     muted: o.muted(),

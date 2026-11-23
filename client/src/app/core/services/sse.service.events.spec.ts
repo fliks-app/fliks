@@ -103,7 +103,7 @@ describe('SseService against the server fixture', () => {
     'optimize.job_progress', 'optimize.queue_changed', 'orphan_import.completed', 'pairing.cancelled',
     'pairing.requested', 'party.closed', 'party.invited', 'party.members', 'party.message', 'party.programme',
     'party.proposals', 'party.reaction', 'party.settings', 'party.signal', 'party.starting', 'party.state',
-    'party.updated', 'remote.ack', 'remote.command', 'remote.state', 'remote.stopped', 'rescan.failed', 'rescan.started',
+    'party.updated', 'remote.command', 'remote.state', 'remote.stopped', 'rescan.failed', 'rescan.started',
     'seerr.import.started', 'session.changed', 'session.superseded', 'social.follow_accepted', 'social.followed',
     'sse.connected', 'subtitle.sync_cancelled', 'subtitle.sync_failed', 'subtitle.translation_progress',
     'task.progress', 'watch-history.import.started',

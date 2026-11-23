@@ -329,6 +329,7 @@ public class NativePlayerPlugin extends Plugin {
                 }
             }
 
+            headerMap.put("X-Fliks-Client", FliksApi.CLIENT);
             httpFactory = new DefaultHttpDataSource.Factory()
                     .setDefaultRequestProperties(headerMap)
                     .setConnectTimeoutMs(15_000)

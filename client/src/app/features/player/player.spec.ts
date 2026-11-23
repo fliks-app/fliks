@@ -18,6 +18,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { MusicCastOutput } from '../../core/services/audio-player/music-cast-output';
 import { CastPlayerService } from '../../core/services/cast-player.service';
+import { PlaybackHeartbeat } from '../../core/services/playback/playback-heartbeat';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
 import { RemotePlaybackTarget } from '../../core/services/remote-playback-target';
 import { CastSettingsService } from '../../core/services/cast-settings.service';
@@ -403,10 +404,7 @@ async function createHarness(opts: {
   };
 
   // Seed the state ngAfterViewInit would have produced for a main-item launch.
-  component.mediaFileId = MAIN_FILE_ID;
-  component.mediaId = MEDIA_ID;
-  component.episodeId = undefined;
-  component.media = MOVIE;
+  component.setItem({ fileId: MAIN_FILE_ID, mediaId: MEDIA_ID, episodeId: undefined, media: MOVIE });
   await seed(component, buildPi(MAIN_FILE_ID, { preRoll: opts.preRoll }));
   component.initCompleted = true;
   const engine = fakeEngine();
@@ -417,6 +415,7 @@ async function createHarness(opts: {
     fixture,
     component,
     state,
+    heartbeat: TestBed.inject(PlaybackHeartbeat),
     streamingApi,
     engine,
     router,
@@ -509,7 +508,7 @@ describe('PlayerComponent pre-roll', () => {
 
     // A later reading of 0 is the truth: the user seeked to the start.
     h.engine.currentTime = 0;
-    h.component.lastSaveAt = 0;
+    h.heartbeat.lastSaveAt = 0;
     await h.component.savePosition();
 
     expect(h.streamingApi.updatePlaybackState).toHaveBeenLastCalledWith(
@@ -580,6 +579,19 @@ describe('PlayerComponent pre-roll', () => {
     expect(h.streamingApi.getPlaybackState).not.toHaveBeenCalled();
     expect(h.engine.loadCalls.at(-1)?.startTime).toBe(42);
     expect(h.engine.loadCalls.at(-1)?.url).toBe(`stream://${NEXT_FILE_ID}?sid=sid-${NEXT_FILE_ID}`);
+  });
+
+  it('clears the burn-in pick the server reports as dropped', async () => {
+    const h = await createHarness();
+    h.component.subs.activeBurnInId = 7;
+    h.component.subs.activeSubtitleId.set('burn-7');
+    h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(buildPi(MAIN_FILE_ID, { burnInDropped: 7 }));
+
+    await h.component.negotiatePlayback();
+
+    expect((h.streamingApi.getPlaybackInfo.mock.calls.at(-1) as unknown[])[2]).toBe(7);
+    expect(h.component.subs.activeBurnInId).toBeNull();
+    expect(h.component.subs.activeSubtitleId()).toBeNull();
   });
 
   it('a pre-roll transition does not resume it from the main film\'s stored position', async () => {
@@ -746,12 +758,12 @@ describe('PlayerComponent wake / resume', () => {
   it('a native tick beats the heartbeat once 10 s have passed since the last save', async () => {
     const h = await createHarness();
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true }) as any));
-    h.component.lastSaveAt = Date.now() - 4_000;
+    h.heartbeat.lastSaveAt = Date.now() - 4_000;
     h.component.heartbeatOnNativeTick();
     await flush();
     expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
 
-    h.component.lastSaveAt = Date.now() - 10_500;
+    h.heartbeat.lastSaveAt = Date.now() - 10_500;
     h.component.heartbeatOnNativeTick();
     await flush();
     expect(h.streamingApi.updatePlaybackState).toHaveBeenCalledTimes(1);
@@ -770,7 +782,7 @@ describe('PlayerComponent wake / resume', () => {
     // Next tick, still online: the resume path runs again on its own.
     h.component.recovery.lastTickAt = Date.now();
     h.component.recovery.lastResumeAt = 0;
-    h.component.lastSaveAt = 0;
+    h.heartbeat.lastSaveAt = 0;
     h.component.recovery.tickClockWatch();
     await flush();
     expect(h.component.recovery.resumeDue).toBe(false);
@@ -1799,7 +1811,7 @@ describe('PlayerComponent reload QoE event', () => {
   async function spied() {
     const h = await createHarness();
     h.state.videoStarted.set(true);
-    h.component.media = AUDIO_MEDIA;
+    h.component.setItem({ media: AUDIO_MEDIA });
     await seed(h.component, buildPi(MAIN_FILE_ID, { sessionId: 'sid-old' }));
     return { h, spy: vi.spyOn((h.component as any).qoe, 'onReload') };
   }
@@ -1984,7 +1996,7 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
 
   it('reloadForEpisode: the new file falls back when its remux fails to load', async () => {
     const h = await createHarness();
-    h.component.mediaFileId = 7;
+    h.component.setItem({ fileId: 7 });
     h.streamingApi.getPlaybackInfo
       .mockResolvedValueOnce(REMUX_PI('sid-ep'))
       .mockResolvedValueOnce(TRANSCODE_PI());
@@ -2321,7 +2333,7 @@ const AUDIO_MEDIA: Media = {
 
 async function audioHarness() {
   const h = await createHarness();
-  h.component.media = AUDIO_MEDIA;
+  h.component.setItem({ media: AUDIO_MEDIA });
   h.component.activeAudioStreamIndex = 0;
   return h;
 }
@@ -2545,7 +2557,7 @@ describe('PlayerComponent item change', () => {
 
   async function episodeHarness() {
     const h = await createHarness();
-    h.component.media = TWO_EPISODES;
+    h.component.setItem({ media: TWO_EPISODES });
     h.component.activeAudioStreamIndex = 1;
     h.component.availableAudioTracks.set([
       { id: 'audio-0', label: 'English', language: 'en' },
@@ -2596,7 +2608,7 @@ describe('PlayerComponent native sidecar subtitles', () => {
 
   async function sidecarHarness(lists: Record<number, unknown[]>) {
     const h = await createHarness();
-    h.component.media = TWO_EPISODES;
+    h.component.setItem({ media: TWO_EPISODES });
     const engine = nativeStub();
     h.component.engine = engine;
     TestBed.inject(TrackManagerService).loadSubtitles = vi.fn(async (_m: number, fileId: number) => lists[fileId] ?? []) as any;
@@ -2631,7 +2643,7 @@ describe('PlayerComponent native sidecar subtitles', () => {
 
     await h.component.prepareLoad();
     // Next episode, still direct play: never the previous episode's files.
-    h.component.mediaFileId = EP2_FILE_ID;
+    h.component.setItem({ fileId: EP2_FILE_ID });
     await h.component.prepareLoad();
     // HLS carries its subtitles as renditions: a list here would show each twice.
     h.state.playbackMode.set('transcode');
@@ -2769,7 +2781,7 @@ describe('PlayerComponent subtitle selection', () => {
 
   it('does not let a pick of the previous episode land on the next one', async () => {
     const { h } = await subtitleHarness();
-    h.component.media = TWO_EPISODES;
+    h.component.setItem({ media: TWO_EPISODES });
     const a = ext(1, 'en');
     h.component.subs.availableSubtitles.set([a]);
     let finish: (t: unknown) => void = () => {};
@@ -2805,7 +2817,7 @@ describe('PlayerComponent subtitle selection', () => {
 
   it('decides the automatic pick from the audio that will play, before any engine lists a track', async () => {
     const { h, tracks } = await subtitleHarness();
-    h.component.media = AUDIO_MEDIA;
+    h.component.setItem({ media: AUDIO_MEDIA });
     h.component.activeAudioStreamIndex = 1;
 
     await h.component.completeEpisodeSwitchSetup();
@@ -3201,7 +3213,7 @@ describe('PlayerComponent subtitle delivery', () => {
 
       it('applies to the next episode\'s first negotiation too', async () => {
         const h = await deliveryHarness(EngineKind.IOS);
-        h.component.media = TWO_EPISODES;
+        h.component.setItem({ media: TWO_EPISODES });
         withAutoPick(h, text());
 
         await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
@@ -3499,7 +3511,7 @@ describe('PlayerComponent stall counting', () => {
     const spy = vi.spyOn(Date, 'now').mockReturnValue(100_000);
     const h = await createHarness();
     const c = h.component as any;
-    c.mediaFileId = 1;
+    c.setItem({ fileId: 1 });
     await seed(c, { sessionId: 's1' });
     c.qoe.current('s1');
     const record = vi.spyOn(c.qoe.reporter, 'record').mockImplementation(() => {});

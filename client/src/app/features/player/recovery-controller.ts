@@ -1,6 +1,7 @@
 import type { EngineEventMap, PlaybackEngine } from '../../core/services/playback-engine/playback-engine';
 import type { QoeRecoveryReason } from '../../core/services/api/qoe-api.service';
 import { isUndecodableError, type PlaybackError } from '../../core/services/playback-engine/playback-error';
+import { HEARTBEAT_MS } from '../../core/services/playback/playback-heartbeat';
 
 export type EngineError = EngineEventMap['error'];
 
@@ -61,7 +62,6 @@ export interface RecoveryHost {
 /** A 1 s tick this late means the process was frozen (sleep, throttled tab); `visibilitychange` doesn't
  *  fire for a sleep, so the clock gap is the signal. */
 const WAKE_GAP_MS = 5_000;
-export const HEARTBEAT_MS = 10_000;
 const STALL_TIMEOUT_MS = 15_000;
 /** A backward seek can trigger a 10-30s backend respawn with a frozen-but-healthy playhead. */
 const SEEK_STALL_GRACE_MS = 32_000;

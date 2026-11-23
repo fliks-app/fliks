@@ -31,6 +31,8 @@ export interface PlaybackInfoResponse {
   mediaFileId: number;
   playMethod: PlayMethod;
   playUrl: string;
+  /** The burn-in subtitle id the server could not apply: it opened the session without it, so the pick is cleared. */
+  burnInDropped?: number;
   contentType: string;
   transcodeReasons: { flag: string; message: string }[];
   videoCopyStream: boolean;

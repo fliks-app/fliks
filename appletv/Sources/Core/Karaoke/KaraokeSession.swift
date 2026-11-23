@@ -88,7 +88,10 @@ enum KaraokeMode: String, CaseIterable {
     }
 
     private func fetch(_ path: String, token: String) async -> Data? {
-        guard let url = url(path, token: token), let (data, response) = try? await URLSession.shared.data(from: url),
+        guard let url = url(path, token: token) else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue(FliksClient.value, forHTTPHeaderField: "X-Fliks-Client")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         return data
     }

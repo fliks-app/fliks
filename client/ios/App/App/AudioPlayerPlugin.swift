@@ -471,6 +471,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             request.setValue("Bearer \(s.token)", forHTTPHeaderField: "Authorization")
             // The kinds of the bundled web registry (`KIND_REGISTRY`).
             request.setValue("movie,series,book,comic,album", forHTTPHeaderField: "X-Fliks-Kinds")
+            request.setValue(FliksClient.value, forHTTPHeaderField: "X-Fliks-Client")
             guard let (data, response) = try? await URLSession.shared.data(for: request),
                   let status = (response as? HTTPURLResponse)?.statusCode else { return nil }
             if status == 401, attempt == 0, await refreshed(key, rejected: s.token) { continue }

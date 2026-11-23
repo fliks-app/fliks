@@ -9,6 +9,7 @@ import {
   type DesktopDownloadRequest,
   type DesktopDownloadStatus,
 } from '../shared/contract';
+import { fliksClientHeader } from './client-header';
 import { httpUrl, parseDownloadRequest, parseManifest, resolveExt } from './download-parse';
 import { mirrorHls } from './hls-mirror';
 import { handle, none, str } from './ipc-handle';
@@ -164,7 +165,7 @@ async function startFile(req: DesktopDownloadRequest, task: FileTask): Promise<v
   // A leftover .part from a pause or crash is resumed with a Range request.
   const offset = await fsp.stat(tmpPath).then((s) => s.size, () => 0);
   if (task.stopped) return;
-  const request = net.request({ url: req.url, method: 'GET' });
+  const request = net.request({ url: req.url, method: 'GET', headers: fliksClientHeader() });
   task.request = request;
   if (offset > 0) request.setHeader('Range', `bytes=${offset}-`);
 
@@ -379,7 +380,7 @@ async function saveFile(key: string, url: string): Promise<boolean> {
   await fsp.mkdir(filesDir(), { recursive: true });
   const dest = path.join(filesDir(), safe(key));
   return new Promise<boolean>((resolve) => {
-    const request = net.request({ url, method: 'GET' });
+    const request = net.request({ url, method: 'GET', headers: fliksClientHeader() });
     request.on('response', (res) => {
       const body = res as unknown as Readable;
       if ((res.statusCode ?? 0) >= 400) {

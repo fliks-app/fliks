@@ -36,7 +36,7 @@
     [paused]="paused()"
     [spinner]="!playbackError() && (loading() || recovering())"
     [videoStarted]="true"
-    [currentTime]="dvrPosition()"
+    [playhead]="dvrPosition"
     [duration]="dvrWindow()"
     [seekableEnd]="liveBarPosition()"
     [seekableStart]="seekableStart()"

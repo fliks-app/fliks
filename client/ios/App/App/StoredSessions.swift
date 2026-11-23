@@ -7,6 +7,11 @@ struct KeychainError: LocalizedError {
     var errorDescription: String? { "Keychain error \(status)" }
 }
 
+/// The `X-Fliks-Client` value every request to the server carries.
+enum FliksClient {
+    static let value = "ios/" + ((Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0")
+}
+
 /// The signed-in sessions: one JSON blob in the Keychain, written by the web layer through `SessionVault`, read and rotated natively.
 /// Its own access group keeps it out of the push group the notification extension reads.
 enum StoredSessions {
@@ -141,6 +146,7 @@ enum StoredSessions {
         request.httpMethod = "POST"
         request.httpBody = try? JSONSerialization.data(withJSONObject: ["refreshToken": refresh])
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(FliksClient.value, forHTTPHeaderField: "X-Fliks-Client")
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let status = (response as? HTTPURLResponse)?.statusCode else { return nil }
         if (400..<500).contains(status) { return false }

@@ -144,6 +144,7 @@ final class NowPlayingController {
         // The bearer token is for the Fliks server only.
         if url.host == streamHost {
             for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
+            request.setValue(FliksClient.value, forHTTPHeaderField: "X-Fliks-Client")
         }
         URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
             guard let data = data, let image = UIImage(data: data) else { return }

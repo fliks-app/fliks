@@ -55,12 +55,14 @@ function setup(opts: { selected?: string | null; held?: { targetId: string; medi
   const kinds = signal<string[] | null>(null);
   const remoteState = signal<RemoteState | null>(null);
   const connectionId = signal<string | null>(null);
+  const acks = new Subject<Record<string, unknown>>();
   const sse = {
+    acks,
     commands: new Subject<RemoteCommand>(),
     stopped: new Subject<{ targetId: string; sessionId: string | null }>(),
     remoteState,
     remoteStates: new Subject<RemoteState>(),
-    on: () => EMPTY,
+    on: (type: string) => (type === 'remote.ack' ? acks : EMPTY),
     connectionId,
     connected: computed(() => connectionId() !== null),
     targetId: signal<string | null>('phone#1'),
@@ -317,6 +319,61 @@ describe('RemoteService frames', () => {
     sse.remoteStates.next(frame({ lastCmdId: null }));
     TestBed.tick();
     expect(service.pendingAction()).toBeNull();
+  });
+});
+
+describe('RemoteService acknowledgements', () => {
+  async function sent() {
+    const ctx = setup({ selected: 'tv#1' });
+    const http = TestBed.inject(HttpTestingController);
+    const toast = TestBed.inject(ToastService) as unknown as { error: ReturnType<typeof vi.fn> };
+    const p = ctx.service.send('tv#1', { action: 'next' });
+    http.expectOne('/api/remote/tv%231/command').flush({ cmdId: 'c1' });
+    await p;
+    return { ...ctx, toast };
+  }
+
+  it('settles the command on a sessionless ack from its target', async () => {
+    const { service, sse, toast } = await sent();
+    expect(service.pendingAction()).toBe('next');
+    sse.acks.next({ type: 'remote.ack', targetId: 'tv#1', cmdId: 'c1', refused: null });
+    expect(service.pendingAction()).toBeNull();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('reports a refused ack and settles', async () => {
+    const { service, sse, toast } = await sent();
+    sse.acks.next({ type: 'remote.ack', targetId: 'tv#1', cmdId: 'c1', refused: 'no_next' });
+    expect(service.pendingAction()).toBeNull();
+    expect(toast.error).toHaveBeenCalledWith('remote.error_refused');
+  });
+
+  it('reports a refusal carried by the target beat', async () => {
+    const { service, sse, toast } = await sent();
+    sse.remoteStates.next(frame({ lastCmdId: 'c1', lastCmdRefused: 'no_next' }));
+    TestBed.tick();
+    expect(service.pendingAction()).toBeNull();
+    expect(toast.error).toHaveBeenCalledWith('remote.error_refused');
+  });
+
+  it('ignores an ack of another target or command', async () => {
+    const { service, sse, toast } = await sent();
+    sse.acks.next({ type: 'remote.ack', targetId: 'tv#2', cmdId: 'c1', refused: 'no_next' });
+    sse.acks.next({ type: 'remote.ack', targetId: 'tv#1', cmdId: 'other', refused: 'no_next' });
+    expect(service.pendingAction()).toBe('next');
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps an ack that beats the POST response', async () => {
+    const { service, sse } = setup({ selected: 'tv#1' });
+    const http = TestBed.inject(HttpTestingController);
+    const toast = TestBed.inject(ToastService) as unknown as { error: ReturnType<typeof vi.fn> };
+    const p = service.send('tv#1', { action: 'next' });
+    sse.acks.next({ type: 'remote.ack', targetId: 'tv#1', cmdId: 'c1', refused: 'no_next' });
+    http.expectOne('/api/remote/tv%231/command').flush({ cmdId: 'c1' });
+    await p;
+    expect(service.pendingAction()).toBeNull();
+    expect(toast.error).toHaveBeenCalledWith('remote.error_refused');
   });
 });
 
