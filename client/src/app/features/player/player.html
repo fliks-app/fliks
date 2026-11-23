@@ -72,7 +72,7 @@
       @if (fanartUrl()) {
         <img [src]="fanartUrl()!" alt="" class="absolute inset-0 w-full h-full object-cover opacity-30" />
       }
-      <svg lucideAirplay class="relative h-12 w-12 text-white/80"></svg>
+      <svg [lucideIcon]="icons.Airplay" class="relative h-12 w-12 text-white/80"></svg>
       <p class="relative text-white/80 text-sm px-6 text-center">
         @if (airPlay.deviceName(); as name) {
           {{ 'player.airplay_playing_on' | translate: { name } }}
@@ -97,7 +97,7 @@
     <!-- The middle row leaves the center controls' height free: the status sits above them, the play-here button below. -->
     <div class="absolute inset-0 z-[45] grid grid-rows-[1fr_auto_1fr] justify-items-center px-6 text-center text-white/80 pointer-events-none">
       <div class="self-end flex flex-col items-center gap-3 pb-2 landscape:gap-2 landscape:pb-0">
-        <svg lucideCast class="h-12 w-12 landscape:h-10 landscape:w-10"></svg>
+        <svg [lucideIcon]="icons.Cast" class="h-12 w-12 landscape:h-10 landscape:w-10"></svg>
         <p class="text-base">{{ 'player.playing_on' | translate: { name: session.deviceName() } }}</p>
         <!-- Always laid out: a status line coming and going would shift the layout. -->
         <p class="min-h-5 text-sm text-white/60">
@@ -143,7 +143,7 @@
       style="top: max(1.5rem, env(safe-area-inset-top))"
     >
       <div class="alert alert-info shadow-lg">
-        <svg lucideInfo class="h-5 w-5 shrink-0"></svg>
+        <svg [lucideIcon]="icons.Info" class="h-5 w-5 shrink-0"></svg>
         <span class="text-sm flex-1 break-words">{{ msg }}</span>
         <button
           type="button"
@@ -151,7 +151,7 @@
           (click)="remote.dismissAdminMessage()"
           [attr.aria-label]="'common.close_notification' | translate"
         >
-          <svg lucideX class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.X" class="h-4 w-4"></svg>
         </button>
       </div>
     </div>
@@ -180,7 +180,7 @@
       class="absolute right-4 z-[55] pointer-events-none flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-sm text-white/80"
       style="top: max(4.5rem, env(safe-area-inset-top))"
     >
-      <svg lucideVolumeX class="h-3.5 w-3.5"></svg>
+      <svg [lucideIcon]="icons.VolumeX" class="h-3.5 w-3.5"></svg>
       {{ 'player.edl.muted' | translate }}
     </div>
   }

@@ -10,7 +10,8 @@ import {
   CdkDropList,
   moveItemInArray,
 } from '@angular/cdk/drag-drop';
-import { LucideArrowDown, LucideArrowUp, LucideGripVertical } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ToastService } from '../../../core/services/toast.service';
@@ -42,14 +43,12 @@ export type UnrequestedTracks = 'import_unmonitored' | 'skip';
     DropListSettleDirective,
     CdkDrag,
     CdkDragHandle,
-    CdkDragPlaceholder,
-    LucideGripVertical,
-    LucideArrowUp,
-    LucideArrowDown,
-  ],
+    CdkDragPlaceholder, LucideDynamicIcon],
   templateUrl: './acquisition-settings.html',
 })
 export class AcquisitionSettingsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);

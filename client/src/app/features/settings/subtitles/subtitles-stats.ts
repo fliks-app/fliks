@@ -6,7 +6,8 @@ import {
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { LucideSearch } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { TranslatePipe } from '@ngx-translate/core';
 import {
   SubtitlesApiService,
@@ -20,10 +21,12 @@ import { MediaLinkPipe } from '../../../core/pipes/media-link.pipe';
 
 @Component({
   selector: 'app-subtitles-stats',
-  imports: [MediaLinkPipe, LucideSearch, RouterLink, TranslatePipe, PaginationComponent],
+  imports: [MediaLinkPipe, RouterLink, TranslatePipe, PaginationComponent, LucideDynamicIcon],
   templateUrl: './subtitles-stats.html',
 })
 export class SubtitlesStatsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(SubtitlesApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);

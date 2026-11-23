@@ -17,7 +17,8 @@ import { TvSectionDirective } from '../../shared/directives/tv-section.directive
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { LiveTvGuideComponent } from './guide/guide';
-import { LucideStar, LucideSearch, LucideTv } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { TvSelectDirective } from '../../shared/directives/tv-select.directive';
 import { programmeProgressPercent } from './programme-progress';
 
@@ -44,14 +45,12 @@ const QUERY_DEBOUNCE_MS = 350;
     TvSectionDirective,
     TvRowDirective,
     DefaultFocusDirective,
-    LiveTvGuideComponent,
-    LucideStar,
-    LucideSearch,
-    LucideTv,
-  ],
+    LiveTvGuideComponent, LucideDynamicIcon],
   templateUrl: './live-tv.html',
 })
 export class LiveTvComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly api = inject(LiveTvApiService);
   private readonly router = inject(Router);
   readonly auth = inject(AuthService);

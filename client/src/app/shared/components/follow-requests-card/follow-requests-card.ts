@@ -8,7 +8,8 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCheck, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { SocialApiService, SocialUser } from '../../../core/services/api/social-api.service';
 import { keepRouteFresh } from '../../../core/services/keep-route-fresh';
 import { SseService } from '../../../core/services/sse.service';
@@ -18,10 +19,12 @@ import { UserAvatarComponent } from '../user-avatar/user-avatar';
 /** Home widget listing incoming follow requests; renders nothing when there are none or on TV, and refreshes on the `social.follow_request` SSE. */
 @Component({
   selector: 'app-follow-requests-card',
-  imports: [UserAvatarComponent, RouterLink, TranslatePipe, LucideCheck, LucideX],
+  imports: [UserAvatarComponent, RouterLink, TranslatePipe, LucideDynamicIcon],
   templateUrl: './follow-requests-card.html',
 })
 export class FollowRequestsCardComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(SocialApiService);
   private readonly sse = inject(SseService);
   readonly tv = inject(TvService);

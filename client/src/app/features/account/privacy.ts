@@ -5,7 +5,8 @@ import {
   signal,
 } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideCheck, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { ToggleFieldComponent } from '../../shared/components/forms/toggle-field/toggle-field';
 import { UsersApiService } from '../../core/services/api/users-api.service';
 import { AuthService, ProfileVisibility } from '../../core/services/auth.service';
@@ -27,10 +28,12 @@ interface SocialPrefs {
 
 @Component({
   selector: 'app-account-privacy',
-  imports: [TranslatePipe, ToggleFieldComponent, LucideCheck, LucideX],
+  imports: [TranslatePipe, ToggleFieldComponent, LucideDynamicIcon],
   templateUrl: './privacy.html',
 })
 export class AccountPrivacyComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(UsersApiService);
   private readonly social = inject(SocialApiService);
   private readonly auth = inject(AuthService);

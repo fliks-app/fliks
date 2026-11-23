@@ -37,7 +37,7 @@
       autocomplete="off"
     />
     <button type="submit" class="btn btn-primary btn-sm btn-square" [attr.aria-label]="'party.chat_send' | translate" [disabled]="!draft().trim()">
-      <svg lucideSend class="h-4 w-4"></svg>
+      <svg [lucideIcon]="icons.Send" class="h-4 w-4"></svg>
     </button>
   </form>
 }

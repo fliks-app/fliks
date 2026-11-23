@@ -14,11 +14,8 @@ import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { NgTemplateOutlet } from '@angular/common';
-import {
-  LucideChevronDown,
-  LucideEllipsisVertical,
-  LucideUpload,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 import { formatSubtitleLabel, formatSubtitleParts } from '../../../core/utils/player.utils';
 import { embeddedSubtitleTag, embeddedSubtitleTitle, type SubtitleStreams } from '../../../core/utils/subtitle-tracks';
@@ -97,15 +94,14 @@ function readTranslateRemoveHi(): boolean {
     ErrorBadgeComponent,
     MediaDetailSubtitleSearchModalComponent,
     SubtitleViewerModalComponent,
-    LucideChevronDown,
-    LucideEllipsisVertical,
-    LucideUpload,
     NgTemplateOutlet,
-    CompanionImportModalComponent,
+    CompanionImportModalComponent, LucideDynamicIcon,
   ],
   templateUrl: './subtitles-modal.html',
 })
 export class SubtitlesModalComponent {
+  protected readonly icons = icons;
+
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly subActions = inject(SubtitleActionsService);
   private readonly translationProvidersApi = inject(TranslationProvidersApiService);

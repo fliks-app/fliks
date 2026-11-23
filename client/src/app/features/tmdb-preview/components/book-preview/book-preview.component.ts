@@ -8,7 +8,8 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { RequestsService } from '../../../../core/services/api/requests.service';
 import { mediaDetailLink } from '../../../../core/media-kinds';
 import type { WantSpec } from '../../../../core/services/api/wants-api.service';
-import { LucidePlus } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { AddDialogComponent } from '../../../../shared/components/add-dialog/add-dialog';
 import type { AddResult } from '../../../../shared/components/add-dialog/add-plan';
 import { DetailSectionComponent } from '../../../../shared/components/detail-section/detail-section';
@@ -21,10 +22,12 @@ import { previewPosterName } from '../../../../shared/utils/view-transition';
 /** The add preview of a book: the work, its editions, and Add, or Request for a user who cannot add. */
 @Component({
   selector: 'app-book-preview',
-  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, AddDialogComponent, DetailSectionComponent, FactsGridComponent, HeroBaseComponent, LucidePlus],
+  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, AddDialogComponent, DetailSectionComponent, FactsGridComponent, HeroBaseComponent, LucideDynamicIcon],
   templateUrl: './book-preview.component.html',
 })
 export class BookPreviewComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly api = inject(BooksApiService);
   private readonly router = inject(Router);
   private readonly translate = inject(TranslateService);

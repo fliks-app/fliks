@@ -18,22 +18,22 @@ import { ToastService } from '../../core/services/toast.service';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
 import { SsoButtonsComponent } from '../../shared/components/sso-buttons';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
-import { LucideMonitorSmartphone, LucideKeyRound, LucideUserRoundPen } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 
 @Component({
   selector: 'app-select-user',
   imports: [
     TranslatePipe,
-    LucideMonitorSmartphone,
-    LucideKeyRound,
-    LucideUserRoundPen,
     UserAvatarComponent,
     DefaultFocusDirective,
-    SsoButtonsComponent,
+    SsoButtonsComponent, LucideDynamicIcon,
   ],
   templateUrl: './select-user.html',
 })
 export class SelectUserComponent {
+  protected readonly icons = icons;
+
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);

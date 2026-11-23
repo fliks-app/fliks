@@ -1,16 +1,8 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, ElementRef, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import {
-  LucideCaptions,
-  LucideDownload,
-  LucideFile,
-  LucideFileText,
-  LucideImage,
-  LucideScissors,
-  LucideTrash2,
-  LucideUpload,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { CompanionFile, MediaService } from '../../../core/services/api/media.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { formatBytes } from '../../utils/download-format';
@@ -32,20 +24,14 @@ const KIND_ORDER: CompanionFile['kind'][] = ['subtitle', 'edl', 'nfo', 'image', 
     TranslatePipe,
     NgTemplateOutlet,
     ModalHeaderComponent,
-    LucideCaptions,
-    LucideDownload,
-    LucideFile,
-    LucideFileText,
-    LucideImage,
-    LucideScissors,
-    LucideTrash2,
-    LucideUpload,
     CompanionImportModalComponent,
-    SelectFieldComponent,
+    SelectFieldComponent, LucideDynamicIcon,
   ],
   templateUrl: './companion-files-modal.html',
 })
 export class CompanionFilesModalComponent {
+  protected readonly icons = icons;
+
   private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });
   private readonly api = inject(MediaService);
   private readonly confirmation = inject(ConfirmationService);

@@ -1,14 +1,14 @@
 @switch (name()) {
-  @case ('home') { <svg lucideHome></svg> }
-  @case ('search') { <svg lucideSearch></svg> }
-  @case ('user-round') { <svg lucideUserRound></svg> }
-  @case ('list-video') { <svg lucideListVideo></svg> }
-  @case ('download') { <svg lucideDownload></svg> }
-  @case ('history') { <svg lucideHistory></svg> }
-  @case ('clipboard-list') { <svg lucideClipboardList></svg> }
-  @case ('calendar') { <svg lucideCalendar></svg> }
-  @case ('tv') { <svg lucideTv></svg> }
-  @case ('library') { <svg lucideLibrary></svg> }
-  @case ('target') { <svg lucideTarget></svg> }
-  @default { <svg lucideCircle></svg> }
+  @case ('home') { <svg [lucideIcon]="icons.Home"></svg> }
+  @case ('search') { <svg [lucideIcon]="icons.Search"></svg> }
+  @case ('user-round') { <svg [lucideIcon]="icons.UserRound"></svg> }
+  @case ('list-video') { <svg [lucideIcon]="icons.ListVideo"></svg> }
+  @case ('download') { <svg [lucideIcon]="icons.Download"></svg> }
+  @case ('history') { <svg [lucideIcon]="icons.History"></svg> }
+  @case ('clipboard-list') { <svg [lucideIcon]="icons.ClipboardList"></svg> }
+  @case ('calendar') { <svg [lucideIcon]="icons.Calendar"></svg> }
+  @case ('tv') { <svg [lucideIcon]="icons.Tv"></svg> }
+  @case ('library') { <svg [lucideIcon]="icons.Library"></svg> }
+  @case ('target') { <svg [lucideIcon]="icons.Target"></svg> }
+  @default { <svg [lucideIcon]="icons.Circle"></svg> }
 }

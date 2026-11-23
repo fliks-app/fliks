@@ -1,7 +1,8 @@
 import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { LucideEllipsisVertical } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { TranslatePipe } from '@ngx-translate/core';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { HorizontalScrollerComponent } from '../../../shared/components/horizontal-scroller';
@@ -18,18 +19,19 @@ import { PluginsState, pluginPosterName } from './plugins-state';
   imports: [
     NgTemplateOutlet,
     RouterLink,
-    LucideEllipsisVertical,
     TranslatePipe,
     DropdownMenuComponent,
     HorizontalScrollerComponent,
     MediaCardComponent,
     PluginInstallConsentComponent,
     PluginSettingsComponent,
-    PluginSourcesComponent,
+    PluginSourcesComponent, LucideDynamicIcon,
   ],
   templateUrl: './plugins.html',
 })
 export class PluginsSettingsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(PluginsApiService);
   protected readonly state = inject(PluginsState);
 

@@ -27,7 +27,7 @@
     @if (videoStream(); as v) {
       <div>
         <h3 class="text-sm font-semibold mb-2 flex items-center gap-2">
-          <svg lucideVideo class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Video" class="h-4 w-4"></svg>
           {{ 'file_info.video' | translate }}
         </h3>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-1 text-sm">
@@ -71,7 +71,7 @@
     @if (audioStreams().length) {
       <div>
         <h3 class="text-sm font-semibold mb-2 flex items-center gap-2">
-          <svg lucideVolume2 class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Volume2" class="h-4 w-4"></svg>
           {{ 'file_info.audio' | translate }}
         </h3>
         <div class="space-y-3">
@@ -105,7 +105,7 @@
       <div class="pt-2 flex flex-wrap gap-2">
         @if (mediaId() != null && !tv.isTv()) {
           <button type="button" class="btn btn-sm btn-outline" (click)="openCompanions()">
-            <svg lucideFiles class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.Files" class="h-4 w-4"></svg>
             {{ 'file_info.companions_button' | translate }}
           </button>
         }
@@ -115,7 +115,7 @@
             class="btn btn-sm btn-outline btn-error"
             (click)="onDeleteFileClick()"
           >
-            <svg lucideTrash2 class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
             {{ 'media_detail.delete_file' | translate }}
           </button>
         }

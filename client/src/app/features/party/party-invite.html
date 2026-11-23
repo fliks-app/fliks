@@ -1,5 +1,5 @@
 @if (button()) {
-  <button type="button" class="btn btn-sm btn-outline gap-1" (click)="open()"><svg lucidePlus class="h-4 w-4"></svg>{{ 'party.programme_add' | translate }}</button>
+  <button type="button" class="btn btn-sm btn-outline gap-1" (click)="open()"><svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>{{ 'party.programme_add' | translate }}</button>
 }
 <dialog #dialog appModal boxClass="max-w-md" (close)="shown.set(false)">
   <app-modal-header [title]="'party.add_people' | translate" />
@@ -9,9 +9,9 @@
         <input type="text" class="input input-sm min-w-0 flex-1" readonly [value]="url" />
         <button type="button" class="btn btn-sm btn-outline gap-1" (click)="party.shareLink(url, view().name)">
           @if (party.canShare()) {
-            <svg lucideShare2 class="h-4 w-4"></svg>{{ 'party.share_link' | translate }}
+            <svg [lucideIcon]="icons.Share2" class="h-4 w-4"></svg>{{ 'party.share_link' | translate }}
           } @else {
-            <svg lucideCopy class="h-4 w-4"></svg>{{ 'party.copy_link' | translate }}
+            <svg [lucideIcon]="icons.Copy" class="h-4 w-4"></svg>{{ 'party.copy_link' | translate }}
           }
         </button>
       </div>

@@ -66,10 +66,10 @@
     @if (!imgLoaded() && !posters().length) {
       <div class="absolute inset-0 flex items-center justify-center bg-base-300 text-base-content/20">
         @switch (media()?.type) {
-          @case ('book') { <svg lucideBook class="h-12 w-12" [strokeWidth]="1.5"></svg> }
-          @case ('comic') { <svg lucideBookOpen class="h-12 w-12" [strokeWidth]="1.5"></svg> }
-          @case ('album') { <svg lucideMusic class="h-12 w-12" [strokeWidth]="1.5"></svg> }
-          @default { <svg lucideFilm class="h-12 w-12" [strokeWidth]="1.5"></svg> }
+          @case ('book') { <svg [lucideIcon]="icons.Book" class="h-12 w-12" [strokeWidth]="1.5"></svg> }
+          @case ('comic') { <svg [lucideIcon]="icons.BookOpen" class="h-12 w-12" [strokeWidth]="1.5"></svg> }
+          @case ('album') { <svg [lucideIcon]="icons.Music" class="h-12 w-12" [strokeWidth]="1.5"></svg> }
+          @default { <svg [lucideIcon]="icons.Film" class="h-12 w-12" [strokeWidth]="1.5"></svg> }
         }
       </div>
     }
@@ -80,7 +80,7 @@
     <!-- Rating badge (bottom-left, portrait only) -->
     @if (_rating() > 0 && aspect() === 'portrait' && !bookInfo()) {
       <div class="absolute bottom-1.5 left-1.5 z-10 flex items-center gap-0.5 bg-black/60 rounded-md px-1.5 py-0.5">
-        <svg lucideStar class="h-3 w-3 text-yellow-400 fill-yellow-400"></svg>
+        <svg [lucideIcon]="icons.Star" class="h-3 w-3 text-yellow-400 fill-yellow-400"></svg>
         <span class="text-sm text-white font-semibold tabular-nums">{{ _rating() | number:'1.1-1' }}</span>
       </div>
     }
@@ -91,9 +91,9 @@
         <div class="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-white">
           @for (f of b.formats; track f) {
             @if (f === 'audio') {
-              <span [class.text-primary]="b.lastFamily === f"><svg lucideHeadphones class="h-3.5 w-3.5" [attr.aria-label]="'books_library.format_audio' | translate"></svg></span>
+              <span [class.text-primary]="b.lastFamily === f"><svg [lucideIcon]="icons.Headphones" class="h-3.5 w-3.5" [attr.aria-label]="'books_library.format_audio' | translate"></svg></span>
             } @else {
-              <span [class.text-primary]="b.lastFamily === f"><svg lucideBookOpen class="h-3.5 w-3.5" [attr.aria-label]="'books_library.format_text' | translate"></svg></span>
+              <span [class.text-primary]="b.lastFamily === f"><svg [lucideIcon]="icons.BookOpen" class="h-3.5 w-3.5" [attr.aria-label]="'books_library.format_text' | translate"></svg></span>
             }
           }
         </div>
@@ -113,7 +113,7 @@
         class="absolute bottom-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-black/60"
         [attr.title]="'downloads.on_device' | translate"
       >
-        <svg lucideDownload class="h-3 w-3 text-white" [strokeWidth]="2.5" [attr.aria-label]="'downloads.on_device' | translate"></svg>
+        <svg [lucideIcon]="icons.Download" class="h-3 w-3 text-white" [strokeWidth]="2.5" [attr.aria-label]="'downloads.on_device' | translate"></svg>
       </div>
     }
 
@@ -127,7 +127,7 @@
         }
         @if (_resolvedStatus() === 'missing') {
           <svg
-            lucideCircleX
+            [lucideIcon]="icons.CircleX"
             class="h-5 w-5 text-error drop-shadow"
             [attr.aria-label]="'media_card.missing_files' | translate"
             [attr.title]="'media_card.missing_files' | translate"
@@ -150,22 +150,22 @@
         @switch (badge()) {
           @case ('library') {
             <div class="w-5 h-5 rounded-full bg-success flex items-center justify-center shadow">
-              <svg lucideCheck class="h-3 w-3 text-success-content"></svg>
+              <svg [lucideIcon]="icons.Check" class="h-3 w-3 text-success-content"></svg>
             </div>
           }
           @case ('pending') {
             <div class="w-5 h-5 rounded-full bg-info flex items-center justify-center shadow">
-              <svg lucideClock class="h-3 w-3 text-info-content"></svg>
+              <svg [lucideIcon]="icons.Clock" class="h-3 w-3 text-info-content"></svg>
             </div>
           }
           @case ('added') {
             <div class="w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow">
-              <svg lucideCheck class="h-3 w-3 text-primary-content"></svg>
+              <svg [lucideIcon]="icons.Check" class="h-3 w-3 text-primary-content"></svg>
             </div>
           }
           @case ('declined') {
             <div class="w-5 h-5 rounded-full bg-error flex items-center justify-center shadow">
-              <svg lucideX class="h-3 w-3 text-error-content"></svg>
+              <svg [lucideIcon]="icons.X" class="h-3 w-3 text-error-content"></svg>
             </div>
           }
         }
@@ -183,12 +183,12 @@
         (click)="onWatchedClick($event)"
         [attr.aria-label]="(status() === 'watched' ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate"
       >
-        <svg lucideCheck class="h-3.5 w-3.5" [strokeWidth]="2"></svg>
+        <svg [lucideIcon]="icons.Check" class="h-3.5 w-3.5" [strokeWidth]="2"></svg>
       </button>
     } @else if (_resolvedStatus() === 'watched') {
       <div class="absolute top-1.5 right-1.5 z-10">
         <div class="w-5 h-5 rounded-full bg-success flex items-center justify-center shadow">
-          <svg lucideCheck class="h-3 w-3 text-success-content"></svg>
+          <svg [lucideIcon]="icons.Check" class="h-3 w-3 text-success-content"></svg>
         </div>
       </div>
     }
@@ -201,7 +201,7 @@
         }
         @if (_playable()) {
           <button type="button" class="relative z-10 w-12 h-12 rounded-full bg-black/50 hover:bg-neutral-500/50 transition-colors flex items-center justify-center text-white cursor-pointer" [attr.aria-label]="'player.play' | translate" (click)="onPlayClick($event)">
-            <svg lucidePlay class="h-6 w-6" [strokeWidth]="2"></svg>
+            <svg [lucideIcon]="icons.Play" class="h-6 w-6" [strokeWidth]="2"></svg>
           </button>
         }
       </div>
@@ -224,7 +224,7 @@
             (click)="onLikeClick($event)"
             [attr.aria-label]="(liked() ? 'likes.unlike' : 'likes.like') | translate"
           >
-            <svg lucideHeart [class]="liked() ? 'h-3.5 w-3.5 text-error' : 'h-3.5 w-3.5'" [strokeWidth]="2" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
+            <svg [lucideIcon]="icons.Heart" [class]="liked() ? 'h-3.5 w-3.5 text-error' : 'h-3.5 w-3.5'" [strokeWidth]="2" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
           </button>
         }
         @if (cardActions().length) {
@@ -234,7 +234,7 @@
             (click)="openActions($event)"
             [attr.aria-label]="'media_card.actions' | translate"
           >
-            <svg lucideEllipsisVertical class="h-3.5 w-3.5" [strokeWidth]="2"></svg>
+            <svg [lucideIcon]="icons.EllipsisVertical" class="h-3.5 w-3.5" [strokeWidth]="2"></svg>
           </button>
         }
       </div>

@@ -1,5 +1,6 @@
 import { Component, computed, inject, input } from '@angular/core';
-import { LucideClock, LucideDownload } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { TranslateService } from '@ngx-translate/core';
 import type { LastSearch } from '../../../core/services/api/last-search.model';
 import { translatePlural } from '../../../core/pipes/translate-plural.pipe';
@@ -10,10 +11,12 @@ const REASON_KEY = 'last_search.reason.';
 /** The one muted line saying what the last automatic search of a title found. `undefined` (a server that sends none) renders nothing; `null` is "not searched yet". */
 @Component({
   selector: 'app-last-search',
-  imports: [LucideClock, LucideDownload],
+  imports: [LucideDynamicIcon],
   templateUrl: './last-search.html',
 })
 export class LastSearchComponent {
+  protected readonly icons = icons;
+
   private readonly translate = inject(TranslateService);
 
   readonly search = input<LastSearch | null | undefined>(undefined);

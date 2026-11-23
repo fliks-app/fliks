@@ -2,7 +2,8 @@ import { Component, booleanAttribute, DestroyRef, ElementRef, InjectionToken, in
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones, LucideBook, LucideMusic } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { MediaType } from '../../../core/enums/media-type.enum';
 import { Media } from '../../../core/services/api/media.service';
@@ -74,8 +75,7 @@ export interface CardDownloadState {
   selector: 'app-media-card',
   imports: [
     CachedSrcDirective, PosterMosaicComponent,RouterLink, NgClass, DecimalPipe, ResolveUrlPipe, TranslatePipe,
-    LucideFilm, LucidePlay, LucideStar, LucideCheck, LucideClock, LucideEllipsisVertical, LucideCircleX, LucideHeart, LucideDownload, LucideBookOpen, LucideHeadphones, LucideBook, LucideMusic,
-    CardActionsDirective, SpoilerDirective],
+    CardActionsDirective, SpoilerDirective, LucideDynamicIcon],
   templateUrl: './media-card.html',
   // Stable card identity for focus memory (`focusIdAttr`); the focused figure wraps the link, so `href` can't serve.
   host: {
@@ -87,6 +87,8 @@ export interface CardDownloadState {
   },
 })
 export class MediaCardComponent {
+  protected readonly icons = icons;
+
   private readonly translate = inject(TranslateService);
   private readonly localeDate = new LocaleDatePipe();
   private readonly router = inject(Router);

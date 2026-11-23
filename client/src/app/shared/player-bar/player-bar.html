@@ -24,9 +24,9 @@
   @if (playing() !== null && !docked) {
     <button type="button" class="btn btn-ghost btn-circle" data-morph="toggle" [attr.aria-label]="(playing() ? 'player.pause' : 'player.play') | translate" (click)="toggled.emit()">
       @if (playing()) {
-        <svg lucidePause class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.Pause" class="h-5 w-5"></svg>
       } @else {
-        <svg lucidePlay class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.Play" class="h-5 w-5"></svg>
       }
     </button>
   }

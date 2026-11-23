@@ -6,12 +6,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import {
-  LucideDownload,
-  LucideExternalLink,
-  LucideRocket,
-  LucideTriangleAlert,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { AppUpdateService } from '../../../core/services/app-update.service';
 import { MarkdownPipe } from '../../pipes/markdown.pipe';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
@@ -28,15 +24,13 @@ import { ModalComponent } from '../modal';
     LocaleDatePipe,
     TranslatePipe,
     MarkdownPipe,
-    LucideDownload,
-    LucideExternalLink,
-    LucideRocket,
-    LucideTriangleAlert,
-    ModalHeaderComponent,
+    ModalHeaderComponent, LucideDynamicIcon,
   ],
   templateUrl: './app-update-modal.html',
 })
 export class AppUpdateModalComponent {
+  protected readonly icons = icons;
+
   readonly update = inject(AppUpdateService);
 
   private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });

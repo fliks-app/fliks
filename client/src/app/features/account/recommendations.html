@@ -28,7 +28,7 @@
           @if (resetting()) {
             <span class="loading loading-spinner loading-xs"></span>
           } @else {
-            <svg lucideRotateCcw class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.RotateCcw" class="h-4 w-4"></svg>
           }
           {{ 'account_settings.recommendations.reset' | translate }}
         </button>

@@ -45,7 +45,8 @@ import { NgTemplateOutlet } from '@angular/common';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { SearchFiltersComponent } from '../../shared/components/search-filters/search-filters';
 import { libraryFilterParams } from '../../shared/components/search-filters/search-filters.model';
-import { LucideSearch, LucideX, LucideSlidersHorizontal, LucideMusic } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../shared/directives/cached-src.directive';
 import { Capacitor } from '@capacitor/core';
@@ -74,11 +75,13 @@ const discoveryKind = (s: SearchScope): 'all' | MediaType | null =>
 
 @Component({
   selector: 'app-search',
-  imports: [ModalComponent, TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, LucideSearch, LucideX, LucideSlidersHorizontal, LucideMusic, HitStateComponent, ResolveUrlPipe, CachedSrcDirective, ModalHeaderComponent, SearchFiltersComponent],
+  imports: [ModalComponent, TranslatePluralPipe, AddDialogComponent, TrackLineComponent, DefaultFocusDirective, UserAvatarComponent, FormsModule, TranslatePipe, RouterLink, NgTemplateOutlet, MediaCardComponent, HorizontalScrollerComponent, HitStateComponent, ResolveUrlPipe, CachedSrcDirective, ModalHeaderComponent, SearchFiltersComponent, LucideDynamicIcon],
   templateUrl: './search.html',
   providers: [{ provide: SEARCH_CARD_CONTEXT, useValue: true }],
 })
 export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly mediaService = inject(MediaService);
   private readonly metadata = inject(MetadataService);
   private readonly booksApi = inject(BooksApiService);

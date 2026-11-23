@@ -6,7 +6,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucidePlay } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { Media } from '../../../core/services/api/media.service';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import { FactsGridComponent, type Fact } from '../facts-grid/facts-grid';
@@ -17,10 +18,12 @@ import { TrailerDialogComponent } from '../trailer-dialog/trailer-dialog';
 /** Jellyseerr-style "Extra info" table on the media-detail page; rows with an empty source hide, so freshly imported media collapse to nothing. */
 @Component({
   selector: 'app-media-info-extra',
-  imports: [FactsGridComponent, TranslatePipe, DetailSectionComponent, LucidePlay, TrailerDialogComponent],
+  imports: [FactsGridComponent, TranslatePipe, DetailSectionComponent, TrailerDialogComponent, LucideDynamicIcon],
   templateUrl: './media-info-extra.html',
 })
 export class MediaInfoExtraComponent {
+  protected readonly icons = icons;
+
   private readonly translate = inject(TranslateService);
   private readonly trailerDialog = viewChild(TrailerDialogComponent);
 

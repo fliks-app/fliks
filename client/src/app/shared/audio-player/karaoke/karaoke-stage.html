@@ -76,7 +76,7 @@
       <div class="flex items-center justify-between gap-2">
         <h3 class="text-lg font-bold">{{ 'karaoke.settings' | translate }}</h3>
         <button type="button" class="btn btn-ghost btn-circle btn-sm" autofocus (click)="closeSettings()" [attr.aria-label]="'karaoke.close' | translate">
-          <svg lucideX class="h-5 w-5"></svg>
+          <svg [lucideIcon]="icons.X" class="h-5 w-5"></svg>
         </button>
       </div>
       <div class="scroll-ring-safe flex flex-col gap-4" appTvSection>
@@ -94,13 +94,13 @@
           <span class="text-sm font-semibold">{{ 'karaoke.key' | translate }}</span>
           <div class="join items-center" role="group" [attr.aria-label]="'karaoke.key' | translate">
             <button type="button" class="btn btn-sm join-item" [disabled]="pitch() <= -12" (click)="setPitch(-1)" [attr.aria-label]="'karaoke.key_down' | translate">
-              <svg lucideMinus class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Minus" class="h-4 w-4"></svg>
             </button>
             <button type="button" class="btn btn-sm join-item min-w-14 tabular-nums text-primary" [disabled]="pitch() === 0" (click)="setPitch(0)" data-testid="karaoke-key">
               {{ pitch() > 0 ? '+' : '' }}{{ pitch() }}
             </button>
             <button type="button" class="btn btn-sm join-item" [disabled]="pitch() >= 12" (click)="setPitch(1)" [attr.aria-label]="'karaoke.key_up' | translate">
-              <svg lucidePlus class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>
             </button>
           </div>
         </div>
@@ -158,12 +158,12 @@
 <div class="flex items-center gap-1 rounded-full bg-base-200 p-1">
   @if (canSing) {
     <button type="button" class="btn btn-sm min-w-28 gap-1 rounded-full max-sm:btn-circle max-sm:min-w-0 short:btn-circle short:min-w-0 compact:sm:btn-circle compact:sm:min-w-0" [attr.aria-label]="(karaoke.singing() ? 'karaoke.stop' : 'karaoke.sing') | translate" [class.btn-primary]="!karaoke.singing()" [class.btn-error]="karaoke.singing()" [attr.aria-pressed]="karaoke.singing()" [disabled]="karaoke.starting()" (click)="toggleSinging()" data-testid="karaoke-sing">
-      <svg lucideMic class="h-4 w-4"></svg>
+      <svg [lucideIcon]="icons.Mic" class="h-4 w-4"></svg>
       <span class="max-sm:hidden short:hidden compact:sm:hidden">{{ (karaoke.singing() ? 'karaoke.stop' : 'karaoke.sing') | translate }}</span>
     </button>
   }
   <button type="button" class="btn btn-ghost btn-sm btn-circle" (click)="openSettings()" [attr.aria-label]="'karaoke.settings' | translate" data-testid="karaoke-settings">
-    <svg lucideSlidersHorizontal class="h-5 w-5"></svg>
+    <svg [lucideIcon]="icons.SlidersHorizontal" class="h-5 w-5"></svg>
   </button>
 </div>
 </ng-template>

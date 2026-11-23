@@ -25,19 +25,8 @@ import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
-import {
-  LucideArrowRightLeft,
-  LucideArrowUpDown,
-  LucideAudioLines,
-  LucideCaptions,
-  LucideCast,
-  LucideCircleStop,
-  LucideCircleX,
-  LucidePlay,
-  LucideRefreshCw,
-  LucideRotateCcw,
-  LucideTriangleAlert,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { QOE_CAUSE_DOT_CLASS, QOE_CAUSE_TEXT_CLASS, codecLabel, durationParts, hintParams, loadLine, pipelineChain, pipelineParts, qualityLabel, rungDisplay, stallBreakdown, stallExplanation, translateFmt, type Fmt } from '../qoe-stall';
 import { buildTimeline, isOngoing, type RungName, type TimelineBlock, type TimelineTransition } from '../qoe-timeline';
 import { blockSummary, blockTitle, clockLabel, detailsOpen, formatPosition, ownStalls, timelineSteps, unreportedStalls } from '../qoe-timeline-view';
@@ -66,27 +55,18 @@ type Tab = (typeof TABS)[number];
     InputFieldComponent,
     TranslatePipe,
     LocaleDatePipe,
-    LucideArrowRightLeft,
-    LucideArrowUpDown,
-    LucideAudioLines,
-    LucideCaptions,
-    LucideCast,
-    LucideCircleStop,
-    LucideCircleX,
-    LucidePlay,
-    LucideRefreshCw,
-    LucideRotateCcw,
-    LucideTriangleAlert,
     ModalFooterComponent,
     ModalHeaderComponent,
     PaginationComponent,
     RouterLink,
     SelectFieldComponent,
-    ToggleFieldComponent,
+    ToggleFieldComponent, LucideDynamicIcon,
   ],
   templateUrl: './playback-quality.html',
 })
 export class SystemPlaybackQualityComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(QoeApiService);
   private readonly settings = inject(SettingsApiService);
   private readonly users = inject(UsersApiService);

@@ -6,17 +6,20 @@ import {
   linkedSignal,
 } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCheck } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { ServerConfigService } from '../../../core/services/server-config.service';
 import { initialsAvatar } from '../../../core/utils/initials-avatar';
 
 /** A user's avatar, falling back to hashed-color initials also when the picture fails (URLs outlive files); the URL is computed so it follows the server URL, unlike a pure pipe. */
 @Component({
   selector: 'app-user-avatar',
-  imports: [TranslatePipe, LucideCheck],
+  imports: [TranslatePipe, LucideDynamicIcon],
   templateUrl: './user-avatar.html',
 })
 export class UserAvatarComponent {
+  protected readonly icons = icons;
+
   private readonly serverConfig = inject(ServerConfigService);
 
   readonly username = input.required<string>();

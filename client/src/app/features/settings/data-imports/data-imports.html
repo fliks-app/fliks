@@ -99,7 +99,7 @@
                         @if (embyImportingIds().has(server.id)) {
                           <span class="loading loading-spinner loading-xs"></span>
                         } @else {
-                          <svg lucideDownload class="h-4 w-4"></svg>
+                          <svg [lucideIcon]="icons.Download" class="h-4 w-4"></svg>
                         }
                         {{ 'settings.data_imports.emby.import_btn' | translate }}
                       </button>
@@ -182,7 +182,7 @@
             @if (seerrImporting()) {
               <span class="loading loading-spinner loading-xs"></span>
             } @else {
-              <svg lucideDownload class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Download" class="h-4 w-4"></svg>
             }
             {{ 'settings.data_imports.seerr.import_requests' | translate }}
           </button>
@@ -316,7 +316,7 @@
                 @if (st.loading() || st.previewing()) {
                   <span class="loading loading-spinner loading-xs"></span>
                 } @else {
-                  <svg lucideDownload class="h-4 w-4"></svg>
+                  <svg [lucideIcon]="icons.Download" class="h-4 w-4"></svg>
                 }
                 {{ 'import.continue_btn' | translate }}
               </button>

@@ -2,7 +2,8 @@ import { Component, OnInit, computed, effect, inject, signal } from '@angular/co
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideChevronLeft } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { OptimizeService } from '../../../../core/services/api/optimize.service';
 import { LibrariesApiService, Library } from '../../../../core/services/api/libraries-api.service';
 import { MediaService, type MediaFileInfo } from '../../../../core/services/api/media.service';
@@ -106,16 +107,17 @@ function lineOf(c: Change, track: Ordinal): Line {
     FormsModule,
     RouterLink,
     TranslatePipe,
-    LucideChevronLeft,
     ToggleFieldComponent,
     SelectFieldComponent,
     InputFieldComponent,
     MultiSelectComponent,
-    OrderedListComponent,
+    OrderedListComponent, LucideDynamicIcon,
   ],
   templateUrl: './profile-editor.html',
 })
 export class OptimizeProfileEditorComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(OptimizeService);

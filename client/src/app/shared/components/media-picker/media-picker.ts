@@ -2,7 +2,8 @@ import { Component, ElementRef, Injector, OnDestroy, afterNextRender, booleanAtt
 import { DecimalPipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCheck, LucideSlidersHorizontal, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { Episode, Media, MediaService, SearchParams, Season } from '../../../core/services/api/media.service';
 import { MetadataService, TmdbGenre } from '../../../core/services/api/metadata.service';
 import { RecommendationItem, StreamingApiService } from '../../../core/services/api/streaming-api.service';
@@ -101,18 +102,17 @@ export function pickEpisodes(mode: EpisodePickMode, episodes: Episode[], anchor:
     TranslatePipe,
     TranslatePluralPipe,
     SeasonLabelPipe,
-    LucideCheck,
-    LucideSlidersHorizontal,
-    LucideX,
     ModalHeaderComponent,
     MediaCardComponent,
     SynopsisComponent,
     SearchFiltersComponent,
-    ContentTypeToggleComponent,
+    ContentTypeToggleComponent, LucideDynamicIcon,
   ],
   templateUrl: './media-picker.html',
 })
 export class MediaPickerComponent implements OnDestroy {
+  protected readonly icons = icons;
+
   protected readonly kinds = KIND_REGISTRY;
   private readonly media = inject(MediaService);
   private readonly metadata = inject(MetadataService);

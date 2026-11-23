@@ -33,7 +33,7 @@
             @if (busyId() === u.id) {
               <span class="loading loading-spinner loading-sm"></span>
             } @else {
-              <svg lucideSend class="h-4 w-4 text-base-content/60"></svg>
+              <svg [lucideIcon]="icons.Send" class="h-4 w-4 text-base-content/60"></svg>
             }
           </button>
         </li>

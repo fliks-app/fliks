@@ -7,7 +7,7 @@
   [attr.aria-label]="'whats_new.title' | translate: { version: version() }">
   <app-modal-header>
     <div class="flex items-center gap-2">
-      <svg lucideRocket class="h-5 w-5 text-primary"></svg>
+      <svg [lucideIcon]="icons.Rocket" class="h-5 w-5 text-primary"></svg>
       <h3 class="text-lg font-bold">
         {{ 'whats_new.title' | translate: { version: version() } }}
       </h3>

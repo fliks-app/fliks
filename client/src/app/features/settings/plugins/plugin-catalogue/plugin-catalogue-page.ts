@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { LucideChevronLeft } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { PluginUiRegistryService } from '../../../../core/plugin-ui/plugin-ui-registry.service';
 import { ToastService } from '../../../../core/services/toast.service';
@@ -17,10 +18,12 @@ import { PluginCatalogueComponent } from './plugin-catalogue';
 /** Routed wrapper around the catalogue grid — owns installed-state + the consent sheet, same as the plugins page did before this moved to its own route. */
 @Component({
   selector: 'app-plugin-catalogue-page',
-  imports: [RouterLink, LucideChevronLeft, TranslatePipe, PluginInstallConsentComponent, PluginCatalogueComponent],
+  imports: [RouterLink, TranslatePipe, PluginInstallConsentComponent, PluginCatalogueComponent, LucideDynamicIcon],
   templateUrl: './plugin-catalogue-page.html',
 })
 export class PluginCataloguePageComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(PluginsApiService);
   private readonly settings = inject(SettingsApiService);
   private readonly registry = inject(PluginUiRegistryService);

@@ -1,7 +1,8 @@
 import { Component, ElementRef, OnInit, afterRenderEffect, computed, inject, input, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucidePlus } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { translatePlural } from '../../../../core/pipes/translate-plural.pipe';
 import { MusicApiService } from '../../../../core/services/api/music-api.service';
 import type { AlbumPreview, AlbumPreviewTrack } from '../../../../core/services/api/music.models';
@@ -18,10 +19,12 @@ import { PREVIEW_HOST, type PreviewSeed } from '../../preview-host';
 /** The add page of an album: the hit's title and cover at once, then its artists and tracklist, and Add, or Request for a user who cannot add. */
 @Component({
   selector: 'app-album-preview',
-  imports: [RouterLink, TranslatePipe, AddDialogComponent, HeroBaseComponent, LucidePlus, TrackLineComponent],
+  imports: [RouterLink, TranslatePipe, AddDialogComponent, HeroBaseComponent, TrackLineComponent, LucideDynamicIcon],
   templateUrl: './album-preview.component.html',
 })
 export class AlbumPreviewComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   private readonly host = inject(PREVIEW_HOST);

@@ -3,7 +3,8 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideChevronLeft, LucidePlay } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { NavbarService } from '../../core/services/navbar.service';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
@@ -17,10 +18,12 @@ import type { HandedPerson } from './artist-page.component';
 /** A composer: the works, and per work the recordings in the library (fetched when the work opens). */
 @Component({
   selector: 'app-composer-page',
-  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, PersonHeaderComponent, TrackLineComponent, LucidePlay, LucideChevronLeft],
+  imports: [RouterLink, TranslatePipe, TranslatePluralPipe, PersonHeaderComponent, TrackLineComponent, LucideDynamicIcon],
   templateUrl: './composer-page.component.html',
 })
 export class ComposerPageComponent {
+  protected readonly icons = icons;
+
   private readonly api = inject(MusicApiService);
   private readonly persons = inject(PersonsApiService);
   private readonly player = inject(AudioPlayerService);

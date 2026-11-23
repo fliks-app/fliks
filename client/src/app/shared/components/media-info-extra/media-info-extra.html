@@ -7,7 +7,7 @@
       <app-facts-grid [facts]="facts()" />
     @if (trailerKey()) {
       <button sectionTail type="button" class="btn btn-outline gap-2 mt-3" (click)="openTrailer()">
-        <svg lucidePlay class="h-4 w-4"></svg>{{ 'discover.watch_trailer' | translate }}
+        <svg [lucideIcon]="icons.Play" class="h-4 w-4"></svg>{{ 'discover.watch_trailer' | translate }}
       </button>
     }
   </app-detail-section>

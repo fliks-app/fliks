@@ -16,7 +16,8 @@ import {
 } from '../../../core/services/api/streaming-api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { desktopDownloaderOrNull } from '../../../core/plugins/desktop-downloader.bridge';
-import { LucideCircleCheck, LucideDownload, LucideTrash2, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { DownloadSettingsService } from '../../../core/services/download-settings.service';
 import { pickRung } from '../../../core/services/download-manager.service';
 import { formatBytes } from '../../utils/download-format';
@@ -24,10 +25,12 @@ import { ModalComponent } from '../modal';
 
 @Component({
   selector: 'app-download-quality-modal',
-  imports: [ModalComponent, TranslatePipe, LucideCircleCheck, LucideDownload, LucideTrash2, LucideX],
+  imports: [ModalComponent, TranslatePipe, LucideDynamicIcon],
   templateUrl: './download-quality-modal.html',
 })
 export class DownloadQualityModalComponent {
+  protected readonly icons = icons;
+
   private readonly streamingApi = inject(StreamingApiService);
   private readonly auth = inject(AuthService);
   private readonly settings = inject(DownloadSettingsService);

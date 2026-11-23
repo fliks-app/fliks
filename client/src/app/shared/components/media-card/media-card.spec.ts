@@ -870,14 +870,14 @@ describe('MediaCardComponent: book card', () => {
     const h = await createFixture(FULL_MEMBER, { media: bookMedia(bookListInfoFixture) });
     expect(host(h).textContent).toContain('Author One');
     expect(host(h).querySelector('.badge-neutral')?.textContent?.trim()).toBe('#1');
-    expect(host(h).querySelector('svg[lucideBookOpen]')).not.toBeNull();
-    expect(host(h).querySelector('svg[lucideHeadphones]')?.parentElement?.classList.contains('text-primary')).toBe(true);
-    expect(host(h).querySelector('svg[lucideBookOpen]')?.parentElement?.classList.contains('text-primary')).toBe(false);
+    expect(host(h).querySelector('svg.lucide-book-open')).not.toBeNull();
+    expect(host(h).querySelector('svg.lucide-headphones')?.parentElement?.classList.contains('text-primary')).toBe(true);
+    expect(host(h).querySelector('svg.lucide-book-open')?.parentElement?.classList.contains('text-primary')).toBe(false);
   });
 
   it('draws no missing or unreleased badge from the video status rules', async () => {
     const h = await createFixture(FULL_MEMBER, { media: bookMedia(bookListInfoFixture) });
-    expect(host(h).querySelector('svg[lucideCircleX]')).toBeNull();
+    expect(host(h).querySelector('svg.lucide-circle-x')).toBeNull();
     expect(host(h).querySelector('.badge-warning, .badge-error, .badge-info')).toBeNull();
   });
 

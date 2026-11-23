@@ -186,7 +186,7 @@ describe('ReleasesModalComponent — per-indexer tabs', () => {
 
     expect(fixture.nativeElement.textContent).toContain('cooling down');
     expect(fixture.nativeElement.textContent).not.toContain('Searching…');
-    expect(fixture.nativeElement.querySelector('svg[lucideCirclePause]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('svg.lucide-circle-pause')).not.toBeNull();
   });
 
   it('VERDICT: a failed indexer is not reported as an empty one — the fixes differ', async () => {
@@ -201,7 +201,7 @@ describe('ReleasesModalComponent — per-indexer tabs', () => {
 
     expect(fixture.nativeElement.textContent).toContain('This indexer did not answer.');
     expect(fixture.nativeElement.textContent).not.toContain('No results for this indexer.');
-    expect(fixture.nativeElement.querySelector('svg[lucideTriangleAlert]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('svg.lucide-triangle-exclamation-point')).not.toBeNull();
   });
 
   it('an answered indexer with no hits still reports no results', async () => {
@@ -215,7 +215,7 @@ describe('ReleasesModalComponent — per-indexer tabs', () => {
     await fixture.whenStable();
 
     expect(fixture.nativeElement.textContent).toContain('No results for this indexer.');
-    expect(fixture.nativeElement.querySelector('svg[lucideSearchX]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('svg.lucide-search-x')).not.toBeNull();
   });
 
   it('rows beat the spinner on a tab whose indexer is still running', async () => {
@@ -250,14 +250,14 @@ describe('ReleasesModalComponent — per-indexer tabs', () => {
     expect(fixture.nativeElement.textContent).toContain('No results for this indexer.');
     // Both empty states share one centred block, icon included — an indexer tab that fell back
     // to a bare paragraph would read as a different screen.
-    expect(fixture.nativeElement.querySelector('svg[lucideSearchX]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('svg.lucide-search-x')).not.toBeNull();
   });
 
   it('the whole-search empty message uses the same centred block', async () => {
     const fixture = await createFixture({ releases: [], indexers: ROSTER, searched: true });
     expect(fixture.componentInstance.emptyPanel().key).toBe('media_detail.releases_empty');
     expect(fixture.nativeElement.textContent).toContain('No releases found.');
-    expect(fixture.nativeElement.querySelector('svg[lucideSearchX]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('svg.lucide-search-x')).not.toBeNull();
   });
 });
 

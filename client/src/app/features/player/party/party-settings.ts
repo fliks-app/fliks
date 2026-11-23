@@ -1,6 +1,7 @@
 import { Component, ElementRef, afterNextRender, computed, inject, output, signal, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideRefreshCw } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { VoiceService } from '../../../core/services/party/voice.service';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
@@ -15,10 +16,12 @@ import { ModalComponent } from '../../../shared/components/modal';
 /** Party settings, opened from the party panel; lives in the player so it shows in fullscreen. */
 @Component({
   selector: 'app-party-settings',
-  imports: [ModalComponent, TranslatePipe, LucideRefreshCw, ModalHeaderComponent, TvSectionDirective, PartyHostSwitchesComponent, ToggleFieldComponent],
+  imports: [ModalComponent, TranslatePipe, ModalHeaderComponent, TvSectionDirective, PartyHostSwitchesComponent, ToggleFieldComponent, LucideDynamicIcon],
   templateUrl: './party-settings.html',
 })
 export class PartySettingsComponent {
+  protected readonly icons = icons;
+
   protected readonly party = inject(PartyService);
   protected readonly voice = inject(VoiceService);
   protected readonly keyboard = inject(KeyboardOverlayService);

@@ -4,9 +4,9 @@
       <div data-testid="edition-row">
         <h3 class="text-sm font-semibold mb-2 flex items-center gap-2">
           @if (e.family === 'audio') {
-            <svg lucideHeadphones class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.Headphones" class="h-4 w-4"></svg>
           } @else {
-            <svg lucideBookOpen class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.BookOpen" class="h-4 w-4"></svg>
           }
           {{ 'families.' + e.family | translate }}
           @if (e.format) {
@@ -38,9 +38,9 @@
             @if (canDeliver(e)) {
               <button type="button" class="btn btn-sm btn-outline" data-testid="deliver" (click)="deliver(e)">
                 @if (native) {
-                  <svg lucideShare2 class="h-4 w-4"></svg>
+                  <svg [lucideIcon]="icons.Share2" class="h-4 w-4"></svg>
                 } @else {
-                  <svg lucideDownload class="h-4 w-4"></svg>
+                  <svg [lucideIcon]="icons.Download" class="h-4 w-4"></svg>
                 }
                 {{ (native ? 'books_work.share' : 'books_work.download') | translate }}
               </button>
@@ -49,12 +49,12 @@
               @if (offlineTask(e); as t) {
                 @if (t.status === 'ready') {
                   <button type="button" class="btn btn-sm btn-outline" data-testid="offline" (click)="toggleOffline(e)">
-                    <svg lucideTrash2 class="h-4 w-4"></svg>
+                    <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
                     {{ 'books_work.offline_remove' | translate }}
                   </button>
                 } @else if (t.status === 'failed') {
                   <button type="button" class="btn btn-sm btn-outline btn-error" data-testid="offline" (click)="toggleOffline(e)">
-                    <svg lucideRotateCw class="h-4 w-4"></svg>
+                    <svg [lucideIcon]="icons.RotateCw" class="h-4 w-4"></svg>
                     {{ 'books_work.offline_retry' | translate }}
                   </button>
                 } @else {
@@ -62,7 +62,7 @@
                 }
               } @else {
                 <button type="button" class="btn btn-sm btn-outline" data-testid="offline" (click)="toggleOffline(e)">
-                  <svg lucideHardDriveDownload class="h-4 w-4"></svg>
+                  <svg [lucideIcon]="icons.HardDriveDownload" class="h-4 w-4"></svg>
                   {{ 'books_work.offline_save' | translate }}
                 </button>
               }

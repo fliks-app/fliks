@@ -55,7 +55,7 @@
     <app-load-failed [message]="error() | translate" (retry)="refresh()" />
   } @else if (requests().length === 0) {
     <div class="text-center py-12 text-base-content/60">
-      <svg lucideMonitorSmartphone class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
+      <svg [lucideIcon]="icons.MonitorSmartphone" class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
       <p class="text-lg">{{ 'pending_requests.empty' | translate }}</p>
     </div>
   } @else {
@@ -64,10 +64,10 @@
         <li class="flex flex-row items-center gap-3 rounded-md bg-base-100 shadow-sm p-3">
           <div class="text-base-content/60 shrink-0">
             @switch (iconFor(req.deviceName)) {
-              @case ('tv') { <svg lucideTv class="h-8 w-8"></svg> }
-              @case ('tablet') { <svg lucideTablet class="h-8 w-8"></svg> }
-              @case ('phone') { <svg lucideSmartphone class="h-8 w-8"></svg> }
-              @default { <svg lucideMonitor class="h-8 w-8"></svg> }
+              @case ('tv') { <svg [lucideIcon]="icons.Tv" class="h-8 w-8"></svg> }
+              @case ('tablet') { <svg [lucideIcon]="icons.Tablet" class="h-8 w-8"></svg> }
+              @case ('phone') { <svg [lucideIcon]="icons.Smartphone" class="h-8 w-8"></svg> }
+              @default { <svg [lucideIcon]="icons.Monitor" class="h-8 w-8"></svg> }
             }
           </div>
           <div class="flex-1 min-w-0">

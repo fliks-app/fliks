@@ -9,7 +9,7 @@
       [attr.aria-pressed]="showMembers()"
       (click)="showMembers.set(!showMembers())"
     >
-      <svg lucideUsers class="h-4 w-4"></svg><span class="text-sm">{{ connected() }}</span>
+      <svg [lucideIcon]="icons.Users" class="h-4 w-4"></svg><span class="text-sm">{{ connected() }}</span>
     </button>
     <button
       type="button"
@@ -17,10 +17,10 @@
       [attr.aria-label]="'party.settings' | translate"
       (click)="openSettings.emit()"
     >
-      <svg lucideSettings class="h-4 w-4"></svg>
+      <svg [lucideIcon]="icons.Settings" class="h-4 w-4"></svg>
     </button>
     <button type="button" class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'party.panel_close' | translate" (click)="close()">
-      <svg lucideX class="h-4 w-4"></svg>
+      <svg [lucideIcon]="icons.X" class="h-4 w-4"></svg>
     </button>
   </header>
 

@@ -1,5 +1,6 @@
 import { Component, computed, effect, inject, input, model, signal } from '@angular/core';
-import { LucidePlus, LucideTrash2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { Want, WantFamily, WantSpec } from '../../../core/services/api/wants-api.service';
@@ -15,10 +16,12 @@ export const wantKey = (w: Pick<Want, 'family' | 'language'>) => `${w.family}|${
 /** The formats and languages a work is wished in, e.g. ebook FR + audio EN. */
 @Component({
   selector: 'app-wants-editor',
-  imports: [FormsModule, LucidePlus, LucideTrash2, TranslatePipe, TvSelectDirective],
+  imports: [FormsModule, TranslatePipe, TvSelectDirective, LucideDynamicIcon],
   templateUrl: './wants-editor.html',
 })
 export class WantsEditorComponent {
+  protected readonly icons = icons;
+
   private readonly translate = inject(TranslateService);
 
   private readonly profilesApi = inject(ProfilesService);

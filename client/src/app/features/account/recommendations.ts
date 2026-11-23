@@ -1,7 +1,8 @@
 import { Component, inject, signal, OnInit } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { translatePlural } from '../../core/pipes/translate-plural.pipe';
-import { LucideRotateCcw } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -9,10 +10,12 @@ import { ToastService } from '../../core/services/toast.service';
 /** Account → Recommendations: lets the user undo every "Retirer de cette liste" dismissal. */
 @Component({
   selector: 'app-account-recommendations',
-  imports: [TranslatePipe, LucideRotateCcw],
+  imports: [TranslatePipe, LucideDynamicIcon],
   templateUrl: './recommendations.html',
 })
 export class AccountRecommendationsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(StreamingApiService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);

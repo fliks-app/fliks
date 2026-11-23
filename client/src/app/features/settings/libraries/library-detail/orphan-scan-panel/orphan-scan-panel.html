@@ -9,10 +9,10 @@
   @if (groups().length > 0 && !scanning()) {
     <button type="button" class="btn btn-ghost btn-sm gap-1" (click)="toggleAll()">
       @if (allExpanded()) {
-        <svg lucideChevronsDownUp class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.ChevronsDownUp" class="h-4 w-4"></svg>
         {{ 'settings.libraries.scan_collapse_all' | translate }}
       } @else {
-        <svg lucideChevronsUpDown class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.ChevronsUpDown" class="h-4 w-4"></svg>
         {{ 'settings.libraries.scan_expand_all' | translate }}
       }
     </button>
@@ -120,7 +120,7 @@
                         (click)="pickUnmatched(i)">
                         @if (!vm.pick) {
                           <span class="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-content">
-                            <svg lucideCheck class="h-3 w-3"></svg>
+                            <svg [lucideIcon]="icons.Check" class="h-3 w-3"></svg>
                           </span>
                         }
                         @if (vm.group.mediaType === 'book') {
@@ -156,7 +156,7 @@
                         (click)="pick(i, r)">
                         @if (isPicked(vm.pick, r)) {
                           <span class="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-content">
-                            <svg lucideCheck class="h-3 w-3"></svg>
+                            <svg [lucideIcon]="icons.Check" class="h-3 w-3"></svg>
                           </span>
                         }
                         @if (r.posterUrl) {

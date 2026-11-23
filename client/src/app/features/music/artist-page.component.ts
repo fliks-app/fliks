@@ -1,6 +1,7 @@
 import { DestroyRef, Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { LucideChevronLeft, LucideClock, LucideMusic, LucidePlus } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { NgTemplateOutlet } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
@@ -34,10 +35,12 @@ export interface HandedPerson {
 /** An artist: biography, follow, the most listened tracks, and the discography by release type, owned and missing albums together. */
 @Component({
   selector: 'app-artist-page',
-  imports: [NgTemplateOutlet, TranslatePipe, LucideChevronLeft, LucideClock, LucideMusic, LucidePlus, ResolveUrlPipe, CachedSrcDirective, AddDialogComponent, TrackLineComponent, CardSkeletonComponent, FollowToggleComponent, MusicDownloadButtonComponent, MediaCardComponent, MediaGridComponent, PersonHeaderComponent],
+  imports: [NgTemplateOutlet, TranslatePipe, ResolveUrlPipe, CachedSrcDirective, AddDialogComponent, TrackLineComponent, CardSkeletonComponent, FollowToggleComponent, MusicDownloadButtonComponent, MediaCardComponent, MediaGridComponent, PersonHeaderComponent, LucideDynamicIcon],
   templateUrl: './artist-page.component.html',
 })
 export class ArtistPageComponent {
+  protected readonly icons = icons;
+
   private readonly api = inject(MusicApiService);
   private readonly downloads = inject(MusicDownloadsService);
   private readonly navbar = inject(NavbarService);

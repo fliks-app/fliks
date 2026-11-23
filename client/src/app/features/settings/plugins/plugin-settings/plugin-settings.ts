@@ -7,7 +7,6 @@ import {
   viewChild,
 } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideX } from '@lucide/angular';
 import { ToggleFieldComponent } from '../../../../shared/components/forms/toggle-field/toggle-field';
 import { SettingsApiService } from '../../../../core/services/api/settings-api.service';
 import { PluginsApiService } from '../../../../core/services/api/plugins-api.service';

@@ -1,7 +1,8 @@
 import { Component, ElementRef, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideArrowDown, LucideArrowUp, LucideCopy, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import {
   OidcApiService,
   OidcPrompt,
@@ -27,15 +28,12 @@ const lines = (v: string): string[] => v.split('\n').map((s) => s.trim()).filter
     TranslatePipe,
     TvSelectDirective,
     ModalHeaderComponent,
-    ModalFooterComponent,
-    LucideArrowUp,
-    LucideArrowDown,
-    LucideCopy,
-    LucideX,
-  ],
+    ModalFooterComponent, LucideDynamicIcon],
   templateUrl: './sso-provider-editor.html',
 })
 export class SsoProviderEditorComponent {
+  protected readonly icons = icons;
+
   private readonly api = inject(OidcApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);

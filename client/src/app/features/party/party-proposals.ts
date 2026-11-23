@@ -1,6 +1,7 @@
 import { Component, ElementRef, Injector, afterNextRender, computed, effect, inject, input, linkedSignal, output, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideLightbulb, LucideThumbsDown, LucideThumbsUp, LucideTrash2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { PartyApiService, type PartyDto, type PartyProposal } from '../../core/services/api/party-api.service';
 import { MediaService } from '../../core/services/api/media.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -56,10 +57,12 @@ const bump = (value: 1 | -1, cast: boolean): Keyframe[] => [
 /** The party's film proposals: propose, vote, remove, and for the host pick one. */
 @Component({
   selector: 'app-party-proposals',
-  imports: [ModalComponent, TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, ModalHeaderComponent, UserAvatarComponent, LucideLightbulb, LucideThumbsDown, LucideThumbsUp, LucideTrash2],
+  imports: [ModalComponent, TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, ModalHeaderComponent, UserAvatarComponent, LucideDynamicIcon],
   templateUrl: './party-proposals.html',
 })
 export class PartyProposalsComponent {
+  protected readonly icons = icons;
+
   private readonly api = inject(PartyApiService);
   private readonly auth = inject(AuthService);
   private readonly media = inject(MediaService);

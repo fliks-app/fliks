@@ -8,7 +8,8 @@ import {
   CdkDropList,
   moveItemInArray,
 } from '@angular/cdk/drag-drop';
-import { LucideArrowDown, LucideArrowUp, LucideGripVertical } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { TvService } from '../../../core/services/tv.service';
 import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
@@ -37,14 +38,12 @@ interface Row {
     DropListSettleDirective,
     CdkDrag,
     CdkDragHandle,
-    CdkDragPlaceholder,
-    LucideGripVertical,
-    LucideArrowUp,
-    LucideArrowDown,
-  ],
+    CdkDragPlaceholder, LucideDynamicIcon],
   templateUrl: './metadata.html',
 })
 export class MetadataSettingsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly registry = inject(PluginUiRegistryService);
   private readonly settings = inject(SettingsApiService);
   readonly tv = inject(TvService);

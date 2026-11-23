@@ -51,7 +51,8 @@ import {
   userMessageKeyFor,
   type PlaybackError,
 } from '../../../core/services/playback-engine/playback-error';
-import { LucideChevronUp, LucideChevronDown, LucideListVideo, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { PlayerControlsComponent } from '../../player/controls/player-controls';
 import { DefaultFocusDirective } from '../../../shared/directives/default-focus.directive';
 import { ControlsVisibilityService } from '../../player/controls/controls-visibility';
@@ -89,11 +90,13 @@ const CLOCK_RESYNC_MS = 30_000;
 
 @Component({
   selector: 'app-live-player',
-  imports: [TranslatePipe, PlayerControlsComponent, PlayerStatsOverlayComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, LucideChevronUp, LucideChevronDown, LucideListVideo, LucideX],
+  imports: [TranslatePipe, PlayerControlsComponent, PlayerStatsOverlayComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, LucideDynamicIcon],
   templateUrl: './live-player.html',
   providers: [ControlsVisibilityService],
 })
 export class LivePlayerComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(LiveTvApiService);
@@ -824,7 +827,6 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   }
 
   // ── Overlay + remote/keyboard ──
-
 
   private readonly onKeydownCapture = (event: KeyboardEvent): void => this.onKeydown(event);
 

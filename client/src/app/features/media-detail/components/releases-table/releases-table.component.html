@@ -23,7 +23,7 @@
             <div class="overflow-x-auto overflow-y-hidden">
               <p class="whitespace-nowrap inline-flex items-center gap-1.5">
                 @if (r.isFullSeason) {
-                  <svg lucidePackage class="h-4 w-4 shrink-0 text-info" [attr.title]="'media_detail.season_pack' | translate"></svg>
+                  <svg [lucideIcon]="icons.Package" class="h-4 w-4 shrink-0 text-info" [attr.title]="'media_detail.season_pack' | translate"></svg>
                 }
                 @if (indexerPage(r); as page) {
                   <a
@@ -63,7 +63,7 @@
                     <div class="sm:tooltip sm:tooltip-top before:whitespace-pre-line shrink-0"
                       [attr.data-tip]="rejectionText(r.rejections)"
                       [attr.title]="rejectionText(r.rejections)">
-                      <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg>
+                      <svg [lucideIcon]="icons.TriangleAlert" class="h-4 w-4 text-warning"></svg>
                     </div>
                   }
                   @if (showCfScore() && r.customFormatScore !== 0) {
@@ -88,7 +88,7 @@
               </div>
               @if (canGrab() && !r.blocklisted) {
                 @if (grabState().get(grabKey(r)) === 'ok') {
-                  <svg lucideCheck class="h-5 w-5 text-success shrink-0"></svg>
+                  <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-success shrink-0"></svg>
                 } @else {
                   <button type="button" class="btn btn-xs btn-square shrink-0"
                     [class.btn-ghost]="r.allowed" [class.btn-warning]="!r.allowed"
@@ -97,9 +97,9 @@
                     @if (grabBusy() === grabKey(r)) {
                       <span class="loading loading-spinner loading-xs"></span>
                     } @else if (grabState().get(grabKey(r)) === 'error') {
-                      <svg lucideCircleAlert class="h-5 w-5 text-error"></svg>
+                      <svg [lucideIcon]="icons.CircleAlert" class="h-5 w-5 text-error"></svg>
                     } @else {
-                      <svg lucideDownload class="h-5 w-5"></svg>
+                      <svg [lucideIcon]="icons.Download" class="h-5 w-5"></svg>
                     }
                   </button>
                 }
@@ -126,7 +126,7 @@
               }
               @if (r.rejections.length > 0) {
                 <div class="tooltip tooltip-left before:whitespace-pre-line" [attr.data-tip]="rejectionText(r.rejections)">
-                  <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg>
+                  <svg [lucideIcon]="icons.TriangleAlert" class="h-4 w-4 text-warning"></svg>
                 </div>
               }
             </div>
@@ -162,7 +162,7 @@
           <td class="hidden sm:table-cell w-10">
             @if (canGrab() && !r.blocklisted) {
               @if (grabState().get(grabKey(r)) === 'ok') {
-                <svg lucideCheck class="h-5 w-5 text-success"></svg>
+                <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-success"></svg>
               } @else {
                 <button type="button" class="btn btn-xs btn-square"
                   [class.btn-ghost]="r.allowed" [class.btn-warning]="!r.allowed"
@@ -171,9 +171,9 @@
                   @if (grabBusy() === grabKey(r)) {
                     <span class="loading loading-spinner loading-xs"></span>
                   } @else if (grabState().get(grabKey(r)) === 'error') {
-                    <svg lucideCircleAlert class="h-5 w-5 text-error"></svg>
+                    <svg [lucideIcon]="icons.CircleAlert" class="h-5 w-5 text-error"></svg>
                   } @else {
-                    <svg lucideDownload class="h-5 w-5"></svg>
+                    <svg [lucideIcon]="icons.Download" class="h-5 w-5"></svg>
                   }
                 </button>
               }

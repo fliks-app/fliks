@@ -8,7 +8,6 @@ import {
   OnInit,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { LucideX } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { RolesApiService, RoleRow } from '../../../core/services/api/roles-api.service';
 import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';

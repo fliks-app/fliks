@@ -1,5 +1,6 @@
 import { Component, OnInit, input, signal } from '@angular/core';
-import { LucideChevronDown } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { CollapseComponent } from '../collapse/collapse';
 
 const LS_PREFIX = 'fliks.section.';
@@ -26,11 +27,13 @@ export function writeSectionOpen(key: string, open: boolean): void {
 /** Section with a fold/unfold header that animates to the content's height; a `persistKey` remembers the open state across pages and reloads. */
 @Component({
   selector: 'app-collapsible-section',
-  imports: [LucideChevronDown, CollapseComponent],
+  imports: [CollapseComponent, LucideDynamicIcon],
   templateUrl: './collapsible-section.html',
   host: { class: 'block' },
 })
 export class CollapsibleSectionComponent implements OnInit {
+  protected readonly icons = icons;
+
   readonly heading = input.required<string>();
   /** localStorage suffix. Empty means the section reopens at its default. */
   readonly persistKey = input('');

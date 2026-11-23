@@ -8,13 +8,8 @@ import {
   CdkDropList,
 } from '@angular/cdk/drag-drop';
 import { DropListSettleDirective } from '../../../../../shared/directives/drop-list-settle.directive';
-import {
-  LucideArrowDown,
-  LucideArrowUp,
-  LucideGripVertical,
-  LucidePencil,
-  LucideTrash2,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../../shared/icons';
 import {
   LibrariesApiService,
   LibraryFolder,
@@ -44,16 +39,13 @@ const isFolderInUse = (err: unknown): boolean => {
     DropListSettleDirective,
     CdkDrag,
     CdkDragHandle,
-    LucideArrowDown,
-    LucideArrowUp,
-    LucideGripVertical,
-    LucidePencil,
-    LucideTrash2,
-    ModalHeaderComponent,
+    ModalHeaderComponent, LucideDynamicIcon,
   ],
   templateUrl: './library-folders.html',
 })
 export class LibraryFoldersComponent {
+  protected readonly icons = icons;
+
   private readonly api = inject(LibrariesApiService);
   private readonly picker = inject(FolderPickerService);
   private readonly confirmation = inject(ConfirmationService);

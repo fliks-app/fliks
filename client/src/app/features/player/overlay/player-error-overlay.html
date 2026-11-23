@@ -1,7 +1,7 @@
 @if (error(); as err) {
   <div class="absolute inset-0 flex items-center justify-center z-50">
     <div class="max-w-lg px-6 text-center text-white">
-      <svg lucideCircleAlert class="h-12 w-12 mx-auto mb-4 text-error"></svg>
+      <svg [lucideIcon]="icons.CircleAlert" class="h-12 w-12 mx-auto mb-4 text-error"></svg>
       <p class="text-lg font-medium">{{ 'player.error' | translate }}</p>
       <p class="text-sm text-white/60 mt-1">{{ err.userMessage }}</p>
       @if (hasDetails()) {

@@ -94,7 +94,7 @@
       @if (media()) {
         @if (showImportButton()) {
           <button type="button" class="btn btn-primary gap-2 max-md:flex-1" (click)="openImportModal()">
-            <svg lucidePlus class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
+            <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
           </button>
         }
         @if (canRequest()) {
@@ -110,7 +110,7 @@
         }
         @if (trailerKey()) {
           <button type="button" class="btn btn-outline gap-2" (click)="openTrailer()">
-            <svg lucidePlay class="h-4 w-4"></svg>{{ 'discover.watch_trailer' | translate }}
+            <svg [lucideIcon]="icons.Play" class="h-4 w-4"></svg>{{ 'discover.watch_trailer' | translate }}
           </button>
         }
       }

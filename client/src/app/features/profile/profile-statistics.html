@@ -10,28 +10,28 @@
         <h3 class="card-title text-base">{{ 'social.stats_playback_title' | translate }}</h3>
         <ul class="flex flex-col gap-2">
           <li class="flex items-center gap-3">
-            <svg lucideClock class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <svg [lucideIcon]="icons.Clock" class="h-5 w-5 text-base-content/60 shrink-0"></svg>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-base-content/60">{{ 'social.stats_total_time' | translate }}</div>
               <div class="text-xl font-semibold">{{ totalHours() }} h</div>
             </div>
           </li>
           <li class="flex items-center gap-3">
-            <svg lucideFilm class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <svg [lucideIcon]="icons.Film" class="h-5 w-5 text-base-content/60 shrink-0"></svg>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-base-content/60">{{ 'social.stats_movies' | translate }}</div>
               <div class="text-xl font-semibold">{{ s.playback.moviesWatched }}</div>
             </div>
           </li>
           <li class="flex items-center gap-3">
-            <svg lucideTv class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <svg [lucideIcon]="icons.Tv" class="h-5 w-5 text-base-content/60 shrink-0"></svg>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-base-content/60">{{ 'social.stats_series' | translate }}</div>
               <div class="text-xl font-semibold">{{ s.playback.seriesStarted }}</div>
             </div>
           </li>
           <li class="flex items-center gap-3">
-            <svg lucideListVideo class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <svg [lucideIcon]="icons.ListVideo" class="h-5 w-5 text-base-content/60 shrink-0"></svg>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-base-content/60">{{ 'social.stats_episodes' | translate }}</div>
               <div class="text-xl font-semibold">{{ s.playback.episodesWatched }}</div>
@@ -46,7 +46,7 @@
       <div class="card-body gap-3">
         <h3 class="card-title text-base">{{ 'social.stats_requests_title' | translate }}</h3>
         <div class="flex items-center gap-3">
-          <svg lucideClipboardList class="h-6 w-6 text-base-content/60 shrink-0"></svg>
+          <svg [lucideIcon]="icons.ClipboardList" class="h-6 w-6 text-base-content/60 shrink-0"></svg>
           <div class="flex-1 min-w-0">
             <div class="text-sm text-base-content/60">{{ 'social.stats_requests_made' | translate }}</div>
             <div class="text-3xl font-bold">{{ totalRequests() }}</div>

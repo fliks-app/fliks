@@ -17,7 +17,7 @@
             class="cursor-grab text-base-content/60 hover:text-base-content/70"
             [attr.aria-label]="'settings.libraries.folder_drag' | translate"
           >
-            <svg lucideGripVertical class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.GripVertical" class="h-4 w-4"></svg>
           </button>
 
           @if (editId() === folder.id) {
@@ -69,7 +69,7 @@
               (click)="reorder(i, i - 1)"
               [attr.aria-label]="'settings.libraries.folder_move_up' | translate"
             >
-              <svg lucideArrowUp class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
             </button>
             <button
               type="button"
@@ -78,7 +78,7 @@
               (click)="reorder(i, i + 1)"
               [attr.aria-label]="'settings.libraries.folder_move_down' | translate"
             >
-              <svg lucideArrowDown class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
             </button>
             <button
               type="button"
@@ -87,7 +87,7 @@
               (click)="startEdit(folder)"
               [attr.aria-label]="'settings.libraries.folder_edit' | translate"
             >
-              <svg lucidePencil class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Pencil" class="h-4 w-4"></svg>
             </button>
             <button
               type="button"
@@ -96,7 +96,7 @@
               (click)="remove(folder)"
               [attr.aria-label]="'settings.libraries.folder_remove' | translate"
             >
-              <svg lucideTrash2 class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
             </button>
           }
         </div>

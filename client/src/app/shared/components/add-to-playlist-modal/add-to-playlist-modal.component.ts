@@ -8,7 +8,8 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideListPlus, LucidePlus } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import {
   AddToPlaylistBody,
   Playlist,
@@ -26,13 +27,13 @@ import { ModalComponent } from '../modal';
     ModalComponent,
     FormsModule,
     TranslatePipe,
-    LucideListPlus,
-    LucidePlus,
-    ModalHeaderComponent,
+    ModalHeaderComponent, LucideDynamicIcon,
   ],
   templateUrl: './add-to-playlist-modal.component.html',
 })
 export class AddToPlaylistModalComponent {
+  protected readonly icons = icons;
+
   private readonly api = inject(PlaylistsApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);

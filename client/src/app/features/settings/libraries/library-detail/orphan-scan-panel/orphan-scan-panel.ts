@@ -10,7 +10,8 @@ import { FormsModule } from '@angular/forms';
 import { UpperCasePipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe, translatePlural } from '../../../../../core/pipes/translate-plural.pipe';
-import { LucideCheck, LucideChevronsDownUp, LucideChevronsUpDown } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../../shared/icons';
 import { MediaType } from '../../../../../core/enums/media-type.enum';
 import { PaginationComponent } from '../../../../../shared/components/pagination/pagination';
 import { ResolveUrlPipe } from '../../../../../core/pipes/resolve-url.pipe';
@@ -90,15 +91,14 @@ interface GroupVM {
     UpperCasePipe,
     TranslatePipe, TranslatePluralPipe,
     ResolveUrlPipe,
-    LucideCheck,
-    LucideChevronsDownUp,
-    LucideChevronsUpDown,
-    PaginationComponent,
+    PaginationComponent, LucideDynamicIcon,
   ],
   templateUrl: './orphan-scan-panel.html',
   host: { class: 'flex flex-col min-h-0 flex-1' },
 })
 export class OrphanScanPanelComponent {
+  protected readonly icons = icons;
+
   protected readonly kinds = KIND_REGISTRY;
   private readonly importsApi = inject(ImportsApiService);
   private readonly metadata = inject(MetadataService);

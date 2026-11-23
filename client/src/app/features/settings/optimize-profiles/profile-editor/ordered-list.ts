@@ -1,16 +1,19 @@
 import { Component, computed, input, model } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideChevronDown, LucideChevronUp, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import type { MultiSelectOption } from '../../../../shared/components/forms/multi-select/multi-select';
 
 /** A preference list where the order is the value: rows move up and down, the add menu lists what is left. */
 @Component({
   selector: 'app-ordered-list',
-  imports: [TranslatePipe, LucideChevronDown, LucideChevronUp, LucideX],
+  imports: [TranslatePipe, LucideDynamicIcon],
   templateUrl: './ordered-list.html',
   host: { class: 'block' },
 })
 export class OrderedListComponent {
+  protected readonly icons = icons;
+
   readonly options = input.required<readonly MultiSelectOption<string>[]>();
   readonly value = model<string[]>([]);
   readonly ariaLabel = input<string | null>(null);

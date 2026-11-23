@@ -213,13 +213,13 @@
             }
           </select>
           <button type="button" class="btn btn-ghost btn-xs btn-square" [disabled]="i === 0" (click)="moveMapping(i, i - 1)" [attr.aria-label]="'settings.sso.move_up' | translate">
-            <svg lucideArrowUp class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
           </button>
           <button type="button" class="btn btn-ghost btn-xs btn-square" [disabled]="last" (click)="moveMapping(i, i + 1)" [attr.aria-label]="'settings.sso.move_down' | translate">
-            <svg lucideArrowDown class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
           </button>
           <button type="button" class="btn btn-ghost btn-xs btn-square" (click)="removeMapping(i)" [attr.aria-label]="'common.delete' | translate">
-            <svg lucideX class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.X" class="h-4 w-4"></svg>
           </button>
         </div>
       }
@@ -275,7 +275,7 @@
               <input type="text" readonly class="input input-bordered input-sm w-full font-mono text-sm" [value]="u.value" />
               @if (canCopy) {
                 <button type="button" class="btn btn-ghost btn-sm btn-square" (click)="copy(u.value)" [attr.aria-label]="'common.copy' | translate">
-                  <svg lucideCopy class="h-4 w-4"></svg>
+                  <svg [lucideIcon]="icons.Copy" class="h-4 w-4"></svg>
                 </button>
               }
             </div>

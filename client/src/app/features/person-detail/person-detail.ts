@@ -11,7 +11,8 @@ import {
   PersonDetail,
 } from '../../core/services/api/persons-api.service';
 import { NavbarService } from '../../core/services/navbar.service';
-import { LucideChevronLeft } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { PersonHeaderComponent } from '../../shared/components/person-header/person-header';
 import { PersonBooksComponent } from './person-books';
 import { FollowToggleComponent } from '../../shared/components/follow-toggle/follow-toggle';
@@ -20,10 +21,12 @@ import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-s
 @Component({
   selector: 'app-person-detail',
   imports: [RowSkeletonComponent,
-    PersonBooksComponent, PersonHeaderComponent, FollowToggleComponent, TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, LucideChevronLeft],
+    PersonBooksComponent, PersonHeaderComponent, FollowToggleComponent, TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, LucideDynamicIcon],
   templateUrl: './person-detail.html',
 })
 export class PersonDetailComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly route = inject(ActivatedRoute);
   private readonly personsApi = inject(PersonsApiService);
   private readonly navbar = inject(NavbarService);

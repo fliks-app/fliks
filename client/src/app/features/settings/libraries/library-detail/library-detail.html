@@ -7,7 +7,7 @@
     <div class="flex items-center justify-between gap-4">
       <div class="flex items-center gap-4 min-w-0">
         <a routerLink="/admin/settings/libraries" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.back' | translate">
-          <svg lucideChevronLeft class="h-5 w-5"></svg>
+          <svg [lucideIcon]="icons.ChevronLeft" class="h-5 w-5"></svg>
         </a>
         <div class="min-w-0">
           <h1 class="text-2xl font-bold truncate">{{ lib.name }}</h1>

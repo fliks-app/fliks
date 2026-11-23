@@ -16,24 +16,8 @@ import type { CardDownloadState } from '../../../../shared/components/media-card
 import { isActive } from '../../../../core/services/download-status';
 import type { DownloadTask } from '../../../../core/services/download-cache.service';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import {
-  LucideCheck,
-  LucideChevronRight,
-  LucideClipboardList,
-  LucideDownload,
-  LucideEllipsisVertical,
-  LucideEye,
-  LucideEyeOff,
-  LucideHeart,
-  LucideLayoutGrid,
-  LucideList,
-  LucideListChecks,
-  LucideListPlus,
-  LucideSearch,
-  LucideUserPlus,
-  LucideX,
-  LucideZap,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { HorizontalScrollerComponent } from '../../../../shared/components/horizontal-scroller';
 import { centerRailOnCard } from '../../../../shared/utils/center-rail';
 import { MediaCardComponent } from '../../../../shared/components/media-card/media-card';
@@ -80,13 +64,14 @@ function readEpisodeViewFromStorage(): EpisodeView {
   }
 }
 
-
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, DetailSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideCheck, LucideChevronRight, LucideClipboardList, LucideDownload, LucideEllipsisVertical, LucideEye, LucideEyeOff, LucideHeart, LucideLayoutGrid, LucideList, LucideListChecks, LucideListPlus, LucideSearch, LucideUserPlus, LucideX, LucideZap],
+  imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, DetailSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideDynamicIcon],
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {
+  protected readonly icons = icons;
+
   /** A title link stacks the episode page the same way its card does. */
   private readonly playableMedia = inject(PlayableMediaService);
   private readonly addToPlaylist = inject(AddToPlaylistService);

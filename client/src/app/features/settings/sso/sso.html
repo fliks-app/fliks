@@ -45,7 +45,7 @@
                   class="cursor-grab text-base-content/60 hover:text-base-content/70"
                   [attr.aria-label]="'settings.sso.drag' | translate"
                 >
-                  <svg lucideGripVertical class="h-4 w-4"></svg>
+                  <svg [lucideIcon]="icons.GripVertical" class="h-4 w-4"></svg>
                 </button>
               }
               <span class="flex flex-1 min-w-0 flex-col">
@@ -61,10 +61,10 @@
                 (toggle)="toggle(p)"
               />
               <button type="button" class="btn btn-ghost btn-xs btn-square" (click)="openEditor(p)" [attr.aria-label]="'common.edit' | translate">
-                <svg lucidePencil class="h-4 w-4"></svg>
+                <svg [lucideIcon]="icons.Pencil" class="h-4 w-4"></svg>
               </button>
               <button type="button" class="btn btn-ghost btn-xs btn-square text-error" (click)="remove(p)" [attr.aria-label]="'common.delete' | translate">
-                <svg lucideTrash2 class="h-4 w-4"></svg>
+                <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
               </button>
             </div>
           }

@@ -1,6 +1,7 @@
 import { Component, DestroyRef, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideMic, LucideMicOff } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { ReactionsService } from '../../../core/services/party/reactions.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { VoiceService } from '../../../core/services/party/voice.service';
@@ -14,13 +15,15 @@ const HOLD_MS = 250;
 /** The player's action strip: a row of emojis, one tap sends; in voice, a mic button follows (a tap toggles it, a hold talks while pressed). */
 @Component({
   selector: 'app-party-reaction-dock',
-  imports: [TranslatePipe, LucideMic, LucideMicOff, TvRowDirective],
+  imports: [TranslatePipe, TvRowDirective, LucideDynamicIcon],
   templateUrl: './party-reaction-dock.html',
   styleUrl: './party-reaction-dock.css',
   // The player wakes its controls on any click or pointer move; the dock is used without them.
   host: { '(click)': '$event.stopPropagation()', '(mousemove)': '$event.stopPropagation()' },
 })
 export class PartyReactionDockComponent {
+  protected readonly icons = icons;
+
   private readonly party = inject(PartyService);
   protected readonly reactions = inject(ReactionsService);
   protected readonly voice = inject(VoiceService);

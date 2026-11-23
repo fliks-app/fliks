@@ -5,17 +5,20 @@ import {
   output,
 } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 
 type Slot = number | 'ellipsis';
 
 @Component({
   selector: 'app-pagination',
-  imports: [TranslatePipe, LucideChevronLeft, LucideChevronRight],
+  imports: [TranslatePipe, LucideDynamicIcon],
   templateUrl: './pagination.html',
   host: { class: 'block' },
 })
 export class PaginationComponent {
+  protected readonly icons = icons;
+
   /** 1-indexed current page. */
   readonly current = input.required<number>();
   /** Total number of pages (≥ 1). */

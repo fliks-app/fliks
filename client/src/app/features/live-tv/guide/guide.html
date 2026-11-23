@@ -35,13 +35,13 @@
 
     <div class="join">
       <button type="button" class="btn btn-sm join-item" (click)="jumpWindow(-4)" [attr.aria-label]="'liveTv.guide.jump_back' | translate">
-        <svg lucideChevronLeft class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.ChevronLeft" class="h-4 w-4"></svg>
       </button>
       <button type="button" class="btn btn-sm join-item" (click)="jumpToNow()">
         {{ 'liveTv.guide.now' | translate }}
       </button>
       <button type="button" class="btn btn-sm join-item" (click)="jumpWindow(4)" [attr.aria-label]="'liveTv.guide.jump_forward' | translate">
-        <svg lucideChevronRight class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4"></svg>
       </button>
     </div>
   </div>
@@ -176,7 +176,7 @@
         <p class="text-sm text-base-content/80">{{ sheet.program.description }}</p>
       }
       <button type="button" class="btn btn-primary btn-sm mt-2 w-fit" (click)="watchFromSheet()">
-        <svg lucidePlay class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.Play" class="h-4 w-4"></svg>
         {{ 'liveTv.watch' | translate }} {{ sheet.channel.name }}
       </button>
     </div>

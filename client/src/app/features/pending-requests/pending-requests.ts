@@ -12,22 +12,19 @@ import { AuthService, PairingLookup, PendingRequest } from '../../core/services/
 import { ToastService } from '../../core/services/toast.service';
 import { SseService } from '../../core/services/sse.service';
 import { LoadFailedComponent } from '../../shared/components/load-failed/load-failed';
-import { LucideMonitor, LucideTablet, LucideSmartphone, LucideTv, LucideMonitorSmartphone } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 
 @Component({
   selector: 'app-pending-requests',
   imports: [
     TranslatePipe,
-    LoadFailedComponent,
-    LucideMonitor,
-    LucideTablet,
-    LucideSmartphone,
-    LucideTv,
-    LucideMonitorSmartphone,
-  ],
+    LoadFailedComponent, LucideDynamicIcon],
   templateUrl: './pending-requests.html',
 })
 export class PendingRequestsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);

@@ -1,29 +1,29 @@
 @switch (name()) {
-  @case ('search') { <svg lucideSearch></svg> }
-  @case ('film') { <svg lucideFilm></svg> }
-  @case ('tv') { <svg lucideTv></svg> }
-  @case ('layout-grid') { <svg lucideLayoutGrid></svg> }
-  @case ('book') { <svg lucideBook></svg> }
-  @case ('gamepad-2') { <svg lucideGamepad2></svg> }
-  @case ('music') { <svg lucideMusic></svg> }
-  @case ('heart') { <svg lucideHeart></svg> }
-  @case ('star') { <svg lucideStar></svg> }
-  @case ('globe') { <svg lucideGlobe></svg> }
-  @case ('monitor') { <svg lucideMonitor></svg> }
-  @case ('popcorn') { <svg lucidePopcorn></svg> }
-  @case ('clapperboard') { <svg lucideClapperboard></svg> }
-  @case ('users') { <svg lucideUsers></svg> }
-  @case ('folder') { <svg lucideFolder></svg> }
-  @case ('swords') { <svg lucideSwords></svg> }
-  @case ('book-open') { <svg lucideBookOpen></svg> }
-  @case ('book-marked') { <svg lucideBookMarked></svg> }
-  @case ('library-big') { <svg lucideLibraryBig></svg> }
-  @case ('book-headphones') { <svg lucideBookHeadphones></svg> }
-  @case ('book-audio') { <svg lucideBookAudio></svg> }
-  @case ('headphones') { <svg lucideHeadphones></svg> }
-  @case ('disc-3') { <svg lucideDisc3></svg> }
-  @case ('list-music') { <svg lucideListMusic></svg> }
-  @case ('guitar') { <svg lucideGuitar></svg> }
-  @case ('piano') { <svg lucidePiano></svg> }
-  @default { <svg lucideLibrary></svg> }
+  @case ('search') { <svg [lucideIcon]="icons.Search"></svg> }
+  @case ('film') { <svg [lucideIcon]="icons.Film"></svg> }
+  @case ('tv') { <svg [lucideIcon]="icons.Tv"></svg> }
+  @case ('layout-grid') { <svg [lucideIcon]="icons.LayoutGrid"></svg> }
+  @case ('book') { <svg [lucideIcon]="icons.Book"></svg> }
+  @case ('gamepad-2') { <svg [lucideIcon]="icons.Gamepad2"></svg> }
+  @case ('music') { <svg [lucideIcon]="icons.Music"></svg> }
+  @case ('heart') { <svg [lucideIcon]="icons.Heart"></svg> }
+  @case ('star') { <svg [lucideIcon]="icons.Star"></svg> }
+  @case ('globe') { <svg [lucideIcon]="icons.Globe"></svg> }
+  @case ('monitor') { <svg [lucideIcon]="icons.Monitor"></svg> }
+  @case ('popcorn') { <svg [lucideIcon]="icons.Popcorn"></svg> }
+  @case ('clapperboard') { <svg [lucideIcon]="icons.Clapperboard"></svg> }
+  @case ('users') { <svg [lucideIcon]="icons.Users"></svg> }
+  @case ('folder') { <svg [lucideIcon]="icons.Folder"></svg> }
+  @case ('swords') { <svg [lucideIcon]="icons.Swords"></svg> }
+  @case ('book-open') { <svg [lucideIcon]="icons.BookOpen"></svg> }
+  @case ('book-marked') { <svg [lucideIcon]="icons.BookMarked"></svg> }
+  @case ('library-big') { <svg [lucideIcon]="icons.LibraryBig"></svg> }
+  @case ('book-headphones') { <svg [lucideIcon]="icons.BookHeadphones"></svg> }
+  @case ('book-audio') { <svg [lucideIcon]="icons.BookAudio"></svg> }
+  @case ('headphones') { <svg [lucideIcon]="icons.Headphones"></svg> }
+  @case ('disc-3') { <svg [lucideIcon]="icons.Disc3"></svg> }
+  @case ('list-music') { <svg [lucideIcon]="icons.ListMusic"></svg> }
+  @case ('guitar') { <svg [lucideIcon]="icons.Guitar"></svg> }
+  @case ('piano') { <svg [lucideIcon]="icons.Piano"></svg> }
+  @default { <svg [lucideIcon]="icons.Library"></svg> }
 }

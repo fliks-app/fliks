@@ -755,7 +755,7 @@ describe('ProviderListComponent — cooldown column', () => {
     expect(
       fixture.componentInstance.cooldownOf(fixture.componentInstance.rows()[0]),
     ).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('svg[lucideRotateCcw]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('svg.lucide-rotate-ccw')).not.toBeNull();
   });
 
   it('a healthy row keeps the column but offers nothing to reset', async () => {
@@ -765,7 +765,7 @@ describe('ProviderListComponent — cooldown column', () => {
     );
     expect(fixture.componentInstance.showCooldown()).toBe(true);
     expect(fixture.componentInstance.cooldownOf(fixture.componentInstance.rows()[0])).toBeNull();
-    expect(fixture.nativeElement.querySelector('svg[lucideRotateCcw]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('svg.lucide-rotate-ccw')).toBeNull();
   });
 
   it('a resource that tracks no backoff shows no column at all', async () => {

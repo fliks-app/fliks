@@ -6,13 +6,8 @@ import {
   signal,
 } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import {
-  LucideClock,
-  LucideFilm,
-  LucideTv,
-  LucideListVideo,
-  LucideClipboardList,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { SocialApiService } from '../../core/services/api/social-api.service';
 import { UserStats } from '../../core/services/api/users-api.service';
 import { ProfileContextService } from './profile-context.service';
@@ -21,16 +16,12 @@ import { ProfileContextService } from './profile-context.service';
 @Component({
   selector: 'app-profile-statistics',
   imports: [
-    TranslatePipe,
-    LucideClock,
-    LucideFilm,
-    LucideTv,
-    LucideListVideo,
-    LucideClipboardList,
-  ],
+    TranslatePipe, LucideDynamicIcon],
   templateUrl: './profile-statistics.html',
 })
 export class ProfileStatisticsComponent {
+  protected readonly icons = icons;
+
   private readonly api = inject(SocialApiService);
   private readonly ctx = inject(ProfileContextService);
 

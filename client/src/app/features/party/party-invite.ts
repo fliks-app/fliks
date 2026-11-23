@@ -1,6 +1,7 @@
 import { Component, ElementRef, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCopy, LucidePlus, LucideShare2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { PartyApiService, type PartyDto } from '../../core/services/api/party-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DeviceService } from '../../core/services/device.service';
@@ -14,10 +15,12 @@ import { ModalComponent } from '../../shared/components/modal';
 /** The host's invite dialog: the link to share, then the followed people to add. A button opens it, or `open()` from a player. */
 @Component({
   selector: 'app-party-invite',
-  imports: [ModalComponent, TranslatePipe, LucideCopy, LucidePlus, LucideShare2, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent],
+  imports: [ModalComponent, TranslatePipe, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent, LucideDynamicIcon],
   templateUrl: './party-invite.html',
 })
 export class PartyInviteComponent {
+  protected readonly icons = icons;
+
   private readonly api = inject(PartyApiService);
   protected readonly party = inject(PartyService);
   private readonly device = inject(DeviceService);

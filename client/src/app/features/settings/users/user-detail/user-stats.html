@@ -13,28 +13,28 @@
         <h3 class="card-title text-base">{{ 'settings.user_detail.stats.playback_title' | translate }}</h3>
         <ul class="flex flex-col gap-2">
           <li class="flex items-center gap-3">
-            <svg lucideClock class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <svg [lucideIcon]="icons.Clock" class="h-5 w-5 text-base-content/60 shrink-0"></svg>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-base-content/60">{{ 'settings.user_detail.stats.playback_total_time' | translate }}</div>
               <div class="text-xl font-semibold">{{ totalHours() }} h</div>
             </div>
           </li>
           <li class="flex items-center gap-3">
-            <svg lucideFilm class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <svg [lucideIcon]="icons.Film" class="h-5 w-5 text-base-content/60 shrink-0"></svg>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-base-content/60">{{ 'settings.user_detail.stats.playback_movies' | translate }}</div>
               <div class="text-xl font-semibold">{{ s.playback.moviesWatched }}</div>
             </div>
           </li>
           <li class="flex items-center gap-3">
-            <svg lucideTv class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <svg [lucideIcon]="icons.Tv" class="h-5 w-5 text-base-content/60 shrink-0"></svg>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-base-content/60">{{ 'settings.user_detail.stats.playback_series' | translate }}</div>
               <div class="text-xl font-semibold">{{ s.playback.seriesStarted }}</div>
             </div>
           </li>
           <li class="flex items-center gap-3">
-            <svg lucideListVideo class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <svg [lucideIcon]="icons.ListVideo" class="h-5 w-5 text-base-content/60 shrink-0"></svg>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-base-content/60">{{ 'settings.user_detail.stats.playback_episodes' | translate }}</div>
               <div class="text-xl font-semibold">{{ s.playback.episodesWatched }}</div>
@@ -53,21 +53,21 @@
         <h3 class="card-title text-base">{{ 'settings.user_detail.stats.requests_title' | translate }}</h3>
         <ul class="flex flex-col gap-2">
           <li class="flex items-center gap-3">
-            <svg lucideClipboardList class="h-5 w-5 text-warning shrink-0"></svg>
+            <svg [lucideIcon]="icons.ClipboardList" class="h-5 w-5 text-warning shrink-0"></svg>
             <div class="flex-1 min-w-0 flex justify-between">
               <span class="text-sm">{{ 'settings.user_detail.stats.requests_pending' | translate }}</span>
               <span class="font-semibold">{{ s.requests.pending }}</span>
             </div>
           </li>
           <li class="flex items-center gap-3">
-            <svg lucideCheckCircle class="h-5 w-5 text-success shrink-0"></svg>
+            <svg [lucideIcon]="icons.CheckCircle" class="h-5 w-5 text-success shrink-0"></svg>
             <div class="flex-1 min-w-0 flex justify-between">
               <span class="text-sm">{{ 'settings.user_detail.stats.requests_approved' | translate }}</span>
               <span class="font-semibold">{{ s.requests.approved }}</span>
             </div>
           </li>
           <li class="flex items-center gap-3">
-            <svg lucideXCircle class="h-5 w-5 text-error shrink-0"></svg>
+            <svg [lucideIcon]="icons.XCircle" class="h-5 w-5 text-error shrink-0"></svg>
             <div class="flex-1 min-w-0 flex justify-between">
               <span class="text-sm">{{ 'settings.user_detail.stats.requests_declined' | translate }}</span>
               <span class="font-semibold">{{ s.requests.declined }}</span>
@@ -83,14 +83,14 @@
         <h3 class="card-title text-base">{{ 'settings.user_detail.stats.activity_title' | translate }}</h3>
         <ul class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <li class="flex items-center gap-3">
-            <svg lucideZap class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <svg [lucideIcon]="icons.Zap" class="h-5 w-5 text-base-content/60 shrink-0"></svg>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-base-content/60">{{ 'settings.user_detail.stats.activity_last_active' | translate }}</div>
               <div class="font-medium">{{ formatRelative(s.activity.lastActiveAt) }}</div>
             </div>
           </li>
           <li class="flex items-center gap-3">
-            <svg lucideUserPlus class="h-5 w-5 text-base-content/60 shrink-0"></svg>
+            <svg [lucideIcon]="icons.UserPlus" class="h-5 w-5 text-base-content/60 shrink-0"></svg>
             <div class="flex-1 min-w-0">
               <div class="text-sm text-base-content/60">{{ 'settings.user_detail.stats.activity_member_since' | translate }}</div>
               <div class="font-medium">{{ formatRelative(s.activity.memberSince) }}</div>

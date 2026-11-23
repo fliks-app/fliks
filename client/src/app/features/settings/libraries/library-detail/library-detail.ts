@@ -7,7 +7,8 @@ import {
   RouterLinkActive,
   RouterOutlet,
 } from '@angular/router';
-import { LucideChevronLeft } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LibrariesApiService } from '../../../../core/services/api/libraries-api.service';
 import { UsersApiService, UserRow } from '../../../../core/services/api/users-api.service';
@@ -23,17 +24,18 @@ import { ImportProgressBannerComponent } from '../../../../shared/components/imp
 @Component({
   selector: 'app-library-detail',
   imports: [
-    LucideChevronLeft,
     TranslatePipe,
     RouterLink,
     RouterLinkActive,
     RouterOutlet,
-    ImportProgressBannerComponent,
+    ImportProgressBannerComponent, LucideDynamicIcon,
   ],
   providers: [LibraryDetailState],
   templateUrl: './library-detail.html',
 })
 export class LibraryDetailComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(LibrariesApiService);

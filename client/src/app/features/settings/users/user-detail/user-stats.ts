@@ -1,16 +1,7 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import {
-  LucideClock,
-  LucideFilm,
-  LucideTv,
-  LucideListVideo,
-  LucideClipboardList,
-  LucideCheckCircle,
-  LucideXCircle,
-  LucideUserPlus,
-  LucideZap,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { UsersApiService, UserStats } from '../../../../core/services/api/users-api.service';
 import { UserDetailState } from './user-detail.state';
 import { formatRelativeTime } from '../../../../core/utils/relative-time';
@@ -18,20 +9,12 @@ import { formatRelativeTime } from '../../../../core/utils/relative-time';
 @Component({
   selector: 'app-user-stats',
   imports: [
-    TranslatePipe,
-    LucideClock,
-    LucideFilm,
-    LucideTv,
-    LucideListVideo,
-    LucideClipboardList,
-    LucideCheckCircle,
-    LucideXCircle,
-    LucideUserPlus,
-    LucideZap,
-  ],
+    TranslatePipe, LucideDynamicIcon],
   templateUrl: './user-stats.html',
 })
 export class UserStatsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(UsersApiService);
   private readonly translate = inject(TranslateService);
   private readonly state = inject(UserDetailState);

@@ -1,6 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../icons';
 import { DeviceIconComponent } from '../device-chip/device-icon';
 import { kindOf } from '../../core/media-kinds';
 import { PlaybackDevice } from '../../core/services/playback-device.service';
@@ -21,10 +22,12 @@ import { PlayerBarComponent } from '../player-bar/player-bar';
 /** Bar over the page while playback is on another device: the output this device sends to, else the account session it follows. The player route holds the full controls. */
 @Component({
   selector: 'app-cast-overlay',
-  imports: [LucideX, CachedSrcDirective, DeviceIconComponent, ResolveUrlPipe, TranslatePipe, MarqueeComponent, SwipeTrackComponent, PlayerBarComponent],
+  imports: [CachedSrcDirective, DeviceIconComponent, ResolveUrlPipe, TranslatePipe, MarqueeComponent, SwipeTrackComponent, PlayerBarComponent, LucideDynamicIcon],
   templateUrl: './cast-overlay.html',
 })
 export class CastOverlayComponent {
+  protected readonly icons = icons;
+
   protected readonly session = inject(PlaybackSession);
   protected readonly sync = inject(SessionSyncService);
   private readonly target = inject(RemotePlaybackTarget);

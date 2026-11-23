@@ -1,6 +1,7 @@
 import { Component, computed, input } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideBookOpen, LucideFilm, LucideListVideo, LucideMusic } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
@@ -11,10 +12,12 @@ import { PosterMosaicComponent } from '../poster-mosaic/poster-mosaic';
 /** Desktop hero cover (poster or episode still) carrying the view-transition name of its card. */
 @Component({
   selector: 'app-hero-poster',
-  imports: [CachedSrcDirective, ResolveUrlPipe, ImgFadeInDirective, SpoilerDirective, TranslatePipe, PosterMosaicComponent, LucideBookOpen, LucideFilm, LucideListVideo, LucideMusic],
+  imports: [CachedSrcDirective, ResolveUrlPipe, ImgFadeInDirective, SpoilerDirective, TranslatePipe, PosterMosaicComponent, LucideDynamicIcon],
   templateUrl: './hero-poster.html',
 })
 export class HeroPosterComponent {
+  protected readonly icons = icons;
+
   /** Picks the placeholder glyph (a book for books and comics, a note for albums) and the frame: an album cover is square. */
   readonly kind = input<MediaType | null>(null);
   readonly url = input<string | null>(null);

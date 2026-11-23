@@ -4,7 +4,8 @@ import {
   OnInit,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { LucideChevronLeft, LucideUser } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { UsersApiService } from '../../../../core/services/api/users-api.service';
 import { RolesApiService } from '../../../../core/services/api/roles-api.service';
@@ -14,11 +15,13 @@ import { UserDetailState } from './user-detail.state';
 
 @Component({
   selector: 'app-user-detail',
-  imports: [LucideChevronLeft, LucideUser, TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [TranslatePipe, RouterLink, RouterLinkActive, RouterOutlet, LucideDynamicIcon],
   providers: [UserDetailState],
   templateUrl: './user-detail.html',
 })
 export class UserDetailComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(UsersApiService);

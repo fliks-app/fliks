@@ -24,7 +24,8 @@ import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
 import { PagedList } from '../music/paged-list';
-import { LucideSearch } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { PersonAvatarCardComponent } from '../../shared/components/person-avatar-card/person-avatar-card';
 import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-skeleton';
@@ -41,15 +42,16 @@ const PAGE = 50;
     FormsModule,
     TranslatePipe,
     PersonAvatarCardComponent,
-    LucideSearch,
     CdkVirtualScrollViewport,
     CdkFixedSizeVirtualScroll,
     CdkVirtualForOf,
-    PageScrollWindowDirective,
+    PageScrollWindowDirective, LucideDynamicIcon,
   ],
   templateUrl: './persons.html',
 })
 export class PersonsComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly personsApi = inject(PersonsApiService);
   private readonly booksApi = inject(BooksApiService);
   private readonly route = inject(ActivatedRoute);

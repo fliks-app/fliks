@@ -33,7 +33,7 @@
           [attr.aria-label]="'wants.remove' | translate"
           (click)="remove(i)"
         >
-          <svg lucideTrash2 class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
         </button>
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -62,7 +62,7 @@
     </div>
   }
   <button type="button" class="btn btn-ghost btn-sm self-start" [disabled]="!canAdd()" (click)="add()">
-    <svg lucidePlus class="h-4 w-4"></svg>
+    <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>
     {{ 'wants.add' | translate }}
   </button>
 </div>

@@ -12,7 +12,8 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../../../core/pipes/translate-plural.pipe';
-import { LucideSearch } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { PaginationComponent } from '../../../../shared/components/pagination/pagination';
 import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
 import { MediaService, Media } from '../../../../core/services/api/media.service';
@@ -35,15 +36,16 @@ const PAGE_SIZE = 30;
     FormsModule,
     TranslatePipe, TranslatePluralPipe,
     RouterLink,
-    LucideSearch,
     ResolveUrlPipe,
     PaginationComponent,
     OrphanScanModalComponent,
-    LibraryFoldersComponent,
+    LibraryFoldersComponent, LucideDynamicIcon,
   ],
   templateUrl: './library-media.html',
 })
 export class LibraryMediaComponent implements OnInit {
+  protected readonly icons = icons;
+
   protected readonly typeLabelKeys: Record<MediaType, string> = {
     movie: 'settings.libraries.media_type_movie',
     series: 'settings.libraries.media_type_series',

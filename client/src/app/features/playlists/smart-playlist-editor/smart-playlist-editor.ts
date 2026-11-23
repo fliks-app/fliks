@@ -1,7 +1,8 @@
 import { Component, DestroyRef, effect, ElementRef, inject, input, output, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucidePlus, LucideTrash2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
@@ -19,10 +20,12 @@ type Bag = Record<string, unknown>;
 /** Dialog to create a smart playlist (no `playlist`) or edit the rules of one. */
 @Component({
   selector: 'app-smart-playlist-editor',
-  imports: [ModalComponent, FormsModule, TranslatePipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, LucidePlus, LucideTrash2],
+  imports: [ModalComponent, FormsModule, TranslatePipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, LucideDynamicIcon],
   templateUrl: './smart-playlist-editor.html',
 })
 export class SmartPlaylistEditorComponent {
+  protected readonly icons = icons;
+
   private readonly api = inject(PlaylistsApiService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly toast = inject(ToastService);

@@ -7,7 +7,8 @@ import { FormsModule } from '@angular/forms';
 import { StreamsApiService, ActiveStream } from '../../../core/services/api/streams-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
-import { LucideMessageSquare, LucidePause, LucidePlay, LucideSquare } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { parseDeviceLabel } from '../../../core/utils/format-device-label';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
@@ -28,15 +29,12 @@ import { ModalComponent } from '../../../shared/components/modal';
     TranslatePipe,
     FormsModule,
     ResolveUrlPipe,
-    QoeBadgeComponent,
-    LucideMessageSquare,
-    LucidePause,
-    LucidePlay,
-    LucideSquare,
-  ],
+    QoeBadgeComponent, LucideDynamicIcon],
   templateUrl: './streams.html',
 })
 export class SystemStreamsComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly streamsApi = inject(StreamsApiService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);

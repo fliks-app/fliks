@@ -4,7 +4,7 @@
   <div class="flex flex-col gap-6">
     <div class="flex items-center gap-4 min-w-0">
       <a routerLink="/admin/settings/optimize-profiles" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.back' | translate">
-        <svg lucideChevronLeft class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.ChevronLeft" class="h-5 w-5"></svg>
       </a>
       <h1 class="text-2xl font-bold truncate">{{ name() || ('settings.optimize.profiles.new' | translate) }}</h1>
     </div>

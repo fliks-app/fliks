@@ -7,7 +7,8 @@ import {
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideChevronLeft } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { UsersApiService, UserRow } from '../../../../core/services/api/users-api.service';
 import {
   ProfilesService,
@@ -25,15 +26,16 @@ import { LibraryWizardMediaComponent } from './library-wizard-media';
   imports: [
     RouterLink,
     TranslatePipe,
-    LucideChevronLeft,
     LibraryFormFieldsComponent,
     LibraryUserPickerComponent,
-    LibraryWizardMediaComponent,
+    LibraryWizardMediaComponent, LucideDynamicIcon,
   ],
   templateUrl: './library-wizard.html',
   providers: [LibraryDetailState],
 })
 export class LibraryWizardComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly usersApi = inject(UsersApiService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly router = inject(Router);

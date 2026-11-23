@@ -26,7 +26,7 @@
         {{ (full() ? 'party.reaction_bar_full' : 'party.reaction_bar_hint') | translate: { max: max } }}
       </p>
       <label class="input input-bordered flex w-full items-center gap-2">
-        <svg lucideSearch class="h-4 w-4 text-base-content/50"></svg>
+        <svg [lucideIcon]="icons.Search" class="h-4 w-4 text-base-content/50"></svg>
         <input
           data-no-focus-ring
           type="text"
@@ -40,7 +40,7 @@
         />
         @if (query()) {
           <button type="button" class="btn btn-ghost btn-circle btn-sm -mr-2" [attr.aria-label]="'common.clear' | translate" (click)="query.set('')">
-            <svg lucideX class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.X" class="h-4 w-4"></svg>
           </button>
         }
       </label>
@@ -93,7 +93,7 @@
                     [attr.aria-label]="'party.reaction_remove' | translate"
                     (cdkDropListDropped)="$event.previousContainer !== $event.container && toggle($event.item.data)"
                   >
-                    <svg lucideTrash2 class="h-5 w-5"></svg>
+                    <svg [lucideIcon]="icons.Trash2" class="h-5 w-5"></svg>
                   </div>
                 </div>
               } @else {

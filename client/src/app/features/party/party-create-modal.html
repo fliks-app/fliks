@@ -11,14 +11,14 @@
           <div class="flex items-center justify-between gap-2">
             <span class="text-sm font-semibold">{{ 'party.programme' | translate }}</span>
             <button type="button" class="btn btn-sm btn-outline" (click)="picker().show()">
-              <svg lucidePlus class="h-4 w-4"></svg>{{ 'party.programme_add' | translate }}
+              <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>{{ 'party.programme_add' | translate }}
             </button>
           </div>
           @for (g of groups(); track g.mediaId) {
             <div class="flex items-center gap-2">
               <p class="min-w-0 flex-1 truncate text-sm">{{ g.title }}@if (g.count > 1) {<span class="ml-1 text-base-content/60">({{ g.count }})</span>}</p>
               <button type="button" class="btn btn-ghost btn-xs btn-square" [attr.aria-label]="'party.programme_remove' | translate" (click)="remove(g.mediaId)">
-                <svg lucideX class="h-4 w-4"></svg>
+                <svg [lucideIcon]="icons.X" class="h-4 w-4"></svg>
               </button>
             </div>
           } @empty {

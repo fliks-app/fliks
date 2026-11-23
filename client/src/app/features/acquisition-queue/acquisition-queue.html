@@ -7,7 +7,7 @@
     <span class="badge badge-outline h-auto gap-1 py-1 text-sm" data-testid="media-filter">
       {{ 'acquisition_queue.filter_media' | translate }}
       <button type="button" class="btn btn-ghost btn-xs btn-circle" [attr.aria-label]="'acquisition_queue.filter_media_clear' | translate" (click)="clearMedia()">
-        <svg lucideX class="size-3.5"></svg>
+        <svg [lucideIcon]="icons.X" class="size-3.5"></svg>
       </button>
     </span>
   </div>

@@ -1,7 +1,8 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCircleAlert, LucideCircleCheck, LucideTriangleAlert } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { SystemChecksApiService, SystemChecksReport } from '../../../core/services/api/system-checks-api.service';
 
@@ -19,10 +20,12 @@ const KNOWN_CODES = new Set([
 
 @Component({
   selector: 'app-needs-attention',
-  imports: [RouterLink, TranslatePipe, LocaleDatePipe, LucideCircleAlert, LucideCircleCheck, LucideTriangleAlert],
+  imports: [RouterLink, TranslatePipe, LocaleDatePipe, LucideDynamicIcon],
   templateUrl: './needs-attention.html',
 })
 export class NeedsAttentionComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(SystemChecksApiService);
 
   readonly report = signal<SystemChecksReport | null>(null);

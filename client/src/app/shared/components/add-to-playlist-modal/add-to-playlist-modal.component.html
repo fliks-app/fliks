@@ -14,7 +14,7 @@
               @if (busyId() === p.id) {
                 <span class="loading loading-spinner loading-xs"></span>
               } @else {
-                <svg lucideListPlus class="h-5 w-5"></svg>
+                <svg [lucideIcon]="icons.ListPlus" class="h-5 w-5"></svg>
               }
               <span class="flex-1 text-left truncate">{{ p.name }}</span>
               <span class="badge badge-ghost">{{ p.itemCount }}</span>
@@ -45,7 +45,7 @@
         @if (creating()) {
           <span class="loading loading-spinner loading-xs"></span>
         } @else {
-          <svg lucidePlus class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>
         }
         {{ 'playlists.create' | translate }}
       </button>

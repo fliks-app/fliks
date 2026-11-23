@@ -8,7 +8,8 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideUserPlus, LucideUserCheck, LucideClock } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { SocialApiService, SocialUser } from '../../core/services/api/social-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ProfileContextService } from './profile-context.service';
@@ -20,10 +21,12 @@ type ConnectionsMode = 'followers' | 'following';
  *  its own follow/unfollow control. */
 @Component({
   selector: 'app-profile-connections',
-  imports: [UserAvatarComponent, RouterLink, TranslatePipe, LucideUserPlus, LucideUserCheck, LucideClock],
+  imports: [UserAvatarComponent, RouterLink, TranslatePipe, LucideDynamicIcon],
   templateUrl: './profile-connections.html',
 })
 export class ProfileConnectionsComponent {
+  protected readonly icons = icons;
+
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(SocialApiService);
   private readonly ctx = inject(ProfileContextService);

@@ -1,6 +1,6 @@
 <div class="flex flex-col gap-6">
   <button type="button" (click)="goBack()" class="btn btn-sm btn-ghost gap-1 self-start">
-    <svg lucideChevronLeft class="h-4 w-4"></svg>
+    <svg [lucideIcon]="icons.ChevronLeft" class="h-4 w-4"></svg>
     {{ 'common.back' | translate }}
   </button>
 
@@ -58,10 +58,10 @@
                 </div>
                 <span class="flex size-8 shrink-0 items-center justify-center" data-testid="track-state">
                   @if (isAsked(p)) {
-                    <svg lucideClock class="size-5 text-base-content/60" role="img" [attr.aria-label]="(canAdd() ? 'music.status_searching' : 'music.status_requested') | translate" data-testid="track-wanted"></svg>
+                    <svg [lucideIcon]="icons.Clock" class="size-5 text-base-content/60" role="img" [attr.aria-label]="(canAdd() ? 'music.status_searching' : 'music.status_requested') | translate" data-testid="track-wanted"></svg>
                   } @else if (p.albumExternalId && (canAdd() || canRequest())) {
                     <button type="button" class="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-base-300 focus-visible:outline-2" (click)="want(p)" [attr.aria-label]="(canAdd() ? 'music.add_track' : 'music.request_track') | translate" data-testid="add-track">
-                      <svg lucidePlus class="size-5"></svg>
+                      <svg [lucideIcon]="icons.Plus" class="size-5"></svg>
                     </button>
                   }
                 </span>
@@ -126,7 +126,7 @@
 <ng-template #line let-p>
   <app-track-line [title]="p.title" [subtitle]="p.albumTitle" [durationSeconds]="p.durationMs ? p.durationMs / 1000 : null">
     <span lead class="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded bg-base-300">
-      <svg lucideMusic class="size-4 text-base-content/40"></svg>
+      <svg [lucideIcon]="icons.Music" class="size-4 text-base-content/40"></svg>
       @if (p.coverUrl) {
         <img [cachedSrc]="p.coverUrl | resolveUrl:'thumb'" alt="" loading="lazy" class="absolute inset-0 size-full object-cover" (error)="$any($event.target).hidden = true" />
       }

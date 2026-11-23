@@ -9,13 +9,8 @@ import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { TvService } from '../../../core/services/tv.service';
 import { TranslatePipe } from '@ngx-translate/core';
-import {
-  LucideCheck,
-  LucideChevronRight,
-  LucideCircleAlert,
-  LucideTriangleAlert,
-  LucideX,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import {
   ChecklistItem,
   ChecklistItemKey,
@@ -26,17 +21,13 @@ import {
   selector: 'app-setup-checklist',
   imports: [
     RouterLink,
-    TranslatePipe,
-    LucideCheck,
-    LucideChevronRight,
-    LucideCircleAlert,
-    LucideTriangleAlert,
-    LucideX,
-  ],
+    TranslatePipe, LucideDynamicIcon],
   templateUrl: './setup-checklist.html',
   host: { '[class.hidden]': '!shown()' },
 })
 export class SetupChecklistComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(SetupChecklistApiService);
   /** Off on TV entirely: a server-setup surface whose every step links into the
    *  admin pages, which the 10-foot UI was never designed for. */

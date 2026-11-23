@@ -8,7 +8,8 @@ import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { firstValueFrom } from 'rxjs';
-import { LucideTrash2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { SseService, type MediaProgressSubject } from '../../../core/services/sse.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { NeedsAttentionComponent } from '../../../shared/components/needs-attention/needs-attention';
@@ -42,10 +43,12 @@ const MAX_VISIBLE_CHILDREN = 5;
 
 @Component({
   selector: 'app-system-status',
-  imports: [TranslatePipe, TranslatePluralPipe, LocaleDatePipe, DecimalPipe, NgClass, RouterLink, LucideTrash2, PaginationComponent, DropdownMenuComponent, NeedsAttentionComponent],
+  imports: [TranslatePipe, TranslatePluralPipe, LocaleDatePipe, DecimalPipe, NgClass, RouterLink, PaginationComponent, DropdownMenuComponent, NeedsAttentionComponent, LucideDynamicIcon],
   templateUrl: './status.html',
 })
 export class SystemStatusComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);

@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { LucideBellOff } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { UsersApiService } from '../../../core/services/api/users-api.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -17,10 +18,12 @@ const ADMIN_CATEGORIES = ['system'] as const;
 /** What reaches this account and this device: categories apply to every device, the switch to this one. */
 @Component({
   selector: 'app-notification-settings',
-  imports: [TranslatePipe, ToggleFieldComponent, LucideBellOff],
+  imports: [TranslatePipe, ToggleFieldComponent, LucideDynamicIcon],
   templateUrl: './notification-settings.html',
 })
 export class NotificationSettingsPageComponent {
+  protected readonly icons = icons;
+
   protected readonly push = inject(PushService);
   private readonly auth = inject(AuthService);
   private readonly users = inject(UsersApiService);

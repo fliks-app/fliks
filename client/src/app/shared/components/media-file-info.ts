@@ -7,7 +7,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideVideo, LucideVolume2, LucideTrash2, LucideFiles } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../icons';
 import {
   MediaFileInfo,
   VideoStreamInfo,
@@ -32,15 +33,12 @@ type FileInput = {
   imports: [
     TranslatePipe,
     DetailSectionComponent,
-    CompanionFilesModalComponent,
-    LucideVideo,
-    LucideVolume2,
-    LucideTrash2,
-    LucideFiles,
-  ],
+    CompanionFilesModalComponent, LucideDynamicIcon],
   templateUrl: './media-file-info.html',
 })
 export class MediaFileInfoComponent {
+  protected readonly icons = icons;
+
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
   readonly file = input.required<FileInput | null>();

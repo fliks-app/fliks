@@ -8,7 +8,7 @@
   @if (sheetSub(); as sub) {
     <div class="panel-slide-fwd">
       <button type="button" class="dropdown-item mb-1" (click)="backToRoot()">
-        <svg lucideArrowLeft class="h-4 w-4 shrink-0 opacity-60"></svg>
+        <svg [lucideIcon]="icons.ArrowLeft" class="h-4 w-4 shrink-0 opacity-60"></svg>
         <span class="flex-1 truncate text-left font-medium">{{ sub.labelKey ? (sub.labelKey | translate) : sub.label }}</span>
       </button>
       <div class="h-px bg-base-content/10 my-1" role="separator"></div>
@@ -48,7 +48,7 @@
           >
             <ng-container *ngTemplateOutlet="icon; context: { $implicit: a }" />
             <span class="flex-1 truncate text-left">{{ a.labelKey ? (a.labelKey | translate) : a.label }}</span>
-            <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
+            <svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4 shrink-0 opacity-60"></svg>
           </button>
           <!-- Desktop only: in sheet mode the group takes over the panel above
                instead, since a second sheet would stack on top of this one. -->
@@ -113,47 +113,47 @@
      unrecognised one must fall back to a glyph rather than render blank. -->
 <ng-template #icon let-a>
   @switch (a.icon) {
-    @case ('play') { <svg lucidePlay class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('external-link') { <svg lucideExternalLink class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('eye') { <svg lucideEye class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('eye-off') { <svg lucideEyeOff class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('trash-2') { <svg lucideTrash2 class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('list-plus') { <svg lucideListPlus class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('plus') { <svg lucidePlus class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('user-plus') { <svg lucideUserPlus class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('check') { <svg lucideCheck class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('list-checks') { <svg lucideListChecks class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('clipboard-list') { <svg lucideClipboardList class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('settings') { <svg lucideSettings class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('folder') { <svg lucideFolder class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('captions') { <svg lucideCaptions class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('rotate-ccw') { <svg lucideRotateCcw class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('scan-line') { <svg lucideScanLine class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('search') { <svg lucideSearch class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('chevron-right') { <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('database') { <svg lucideDatabase class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('sliders-horizontal') { <svg lucideSlidersHorizontal class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('heart') { <svg lucideHeart class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('download') { <svg lucideDownload class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('file-text') { <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('languages') { <svg lucideLanguages class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('arrow-right-left') { <svg lucideArrowRightLeft class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('move-horizontal') { <svg lucideMoveHorizontal class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('wand-sparkles') { <svg lucideWandSparkles class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('badge-check') { <svg lucideBadgeCheck class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('ban') { <svg lucideBan class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('volume-2') { <svg lucideVolume2 class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('code') { <svg lucideCode class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('smile') { <svg lucideSmile class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('image') { <svg lucideImage class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('thermometer') { <svg lucideThermometer class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('maximize-2') { <svg lucideMaximize2 class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('clock') { <svg lucideClock class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('list-start') { <svg lucideListStart class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('list-end') { <svg lucideListEnd class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('mic') { <svg lucideMic class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('users') { <svg lucideUsers class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @case ('zap') { <svg lucideZap class="h-4 w-4 shrink-0 opacity-70"></svg> }
-    @default { <svg lucideCircle class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('play') { <svg [lucideIcon]="icons.Play" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('external-link') { <svg [lucideIcon]="icons.ExternalLink" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('eye') { <svg [lucideIcon]="icons.Eye" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('eye-off') { <svg [lucideIcon]="icons.EyeOff" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('trash-2') { <svg [lucideIcon]="icons.Trash2" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('list-plus') { <svg [lucideIcon]="icons.ListPlus" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('plus') { <svg [lucideIcon]="icons.Plus" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('user-plus') { <svg [lucideIcon]="icons.UserPlus" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('check') { <svg [lucideIcon]="icons.Check" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('list-checks') { <svg [lucideIcon]="icons.ListChecks" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('clipboard-list') { <svg [lucideIcon]="icons.ClipboardList" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('settings') { <svg [lucideIcon]="icons.Settings" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('folder') { <svg [lucideIcon]="icons.Folder" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('captions') { <svg [lucideIcon]="icons.Captions" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('rotate-ccw') { <svg [lucideIcon]="icons.RotateCcw" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('scan-line') { <svg [lucideIcon]="icons.ScanLine" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('search') { <svg [lucideIcon]="icons.Search" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('chevron-right') { <svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('database') { <svg [lucideIcon]="icons.Database" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('sliders-horizontal') { <svg [lucideIcon]="icons.SlidersHorizontal" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('heart') { <svg [lucideIcon]="icons.Heart" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('download') { <svg [lucideIcon]="icons.Download" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('file-text') { <svg [lucideIcon]="icons.FileText" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('languages') { <svg [lucideIcon]="icons.Languages" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('arrow-right-left') { <svg [lucideIcon]="icons.ArrowRightLeft" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('move-horizontal') { <svg [lucideIcon]="icons.MoveHorizontal" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('wand-sparkles') { <svg [lucideIcon]="icons.WandSparkles" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('badge-check') { <svg [lucideIcon]="icons.BadgeCheck" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('ban') { <svg [lucideIcon]="icons.Ban" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('volume-2') { <svg [lucideIcon]="icons.Volume2" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('code') { <svg [lucideIcon]="icons.Code" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('smile') { <svg [lucideIcon]="icons.Smile" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('image') { <svg [lucideIcon]="icons.Image" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('thermometer') { <svg [lucideIcon]="icons.Thermometer" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('maximize-2') { <svg [lucideIcon]="icons.Maximize2" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('clock') { <svg [lucideIcon]="icons.Clock" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('list-start') { <svg [lucideIcon]="icons.ListStart" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('list-end') { <svg [lucideIcon]="icons.ListEnd" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('mic') { <svg [lucideIcon]="icons.Mic" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('users') { <svg [lucideIcon]="icons.Users" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @case ('zap') { <svg [lucideIcon]="icons.Zap" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+    @default { <svg [lucideIcon]="icons.Circle" class="h-4 w-4 shrink-0 opacity-70"></svg> }
   }
 </ng-template>

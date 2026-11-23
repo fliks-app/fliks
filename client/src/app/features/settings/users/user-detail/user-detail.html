@@ -5,11 +5,11 @@
     <div class="flex items-center justify-between gap-4">
       <div class="flex items-center gap-4">
         <a routerLink="/admin/settings/users" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.back' | translate">
-          <svg lucideChevronLeft class="h-5 w-5"></svg>
+          <svg [lucideIcon]="icons.ChevronLeft" class="h-5 w-5"></svg>
         </a>
         <div class="flex items-center gap-3">
           <div class="w-12 h-12 rounded-full bg-base-300 flex items-center justify-center shrink-0">
-            <svg lucideUser class="h-6 w-6 text-base-content/40"></svg>
+            <svg [lucideIcon]="icons.User" class="h-6 w-6 text-base-content/40"></svg>
           </div>
           <div>
             <h1 class="text-2xl font-bold">{{ u.username }}</h1>

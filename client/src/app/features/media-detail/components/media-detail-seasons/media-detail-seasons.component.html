@@ -17,7 +17,7 @@
           [attr.title]="'media_detail.episode_view_grid' | translate"
           (click)="setEpisodeView('grid')"
         >
-          <svg lucideLayoutGrid class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.LayoutGrid" class="h-4 w-4"></svg>
         </button>
         <button
           type="button"
@@ -28,7 +28,7 @@
           [attr.title]="'media_detail.episode_view_list' | translate"
           (click)="setEpisodeView('list')"
         >
-          <svg lucideList class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.List" class="h-4 w-4"></svg>
         </button>
       </div>
     }
@@ -41,7 +41,7 @@
         [attr.aria-label]="'downloads.select' | translate"
         (click)="toggleSelectMode()"
       >
-        <svg lucideListChecks class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.ListChecks" class="h-4 w-4"></svg>
         <span class="max-sm:hidden">{{ 'downloads.select' | translate }}</span>
       </button>
     }
@@ -54,7 +54,7 @@
         [attr.aria-label]="(isSeasonLiked(selSeason.id) ? 'likes.unlike_season' : 'likes.like_season') | translate"
       >
         <svg
-          lucideHeart
+          [lucideIcon]="icons.Heart"
           class="h-5 w-5"
           [class.text-error]="isSeasonLiked(selSeason.id)"
           [attr.fill]="isSeasonLiked(selSeason.id) ? 'currentColor' : 'none'"
@@ -63,7 +63,7 @@
     }
     <app-dropdown-menu placement="bottom-end" class="order-last" [class.ms-auto]="!showViewToggle && !canSelect() && !selSeason">
       <button trigger type="button" class="btn btn-ghost btn-circle max-sm:btn-sm shrink-0" [attr.aria-label]="'common.more' | translate">
-        <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.EllipsisVertical" class="h-5 w-5"></svg>
       </button>
       <label class="dropdown-item text-white">
         <input
@@ -80,7 +80,7 @@
           class="dropdown-item text-white"
           (click)="addSeasonToPlaylist(selSeason)"
         >
-          <svg lucideListPlus class="h-5 w-5 shrink-0 opacity-80"></svg>
+          <svg [lucideIcon]="icons.ListPlus" class="h-5 w-5 shrink-0 opacity-80"></svg>
           <span class="flex-1">{{ 'playlists.add_season' | translate }}</span>
         </button>
         @if (!tv.isTv() && hasFiles(selSeason)) {
@@ -89,7 +89,7 @@
             class="dropdown-item text-white"
             (click)="downloadSeason.emit(selSeason)"
           >
-            <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg>
+            <svg [lucideIcon]="icons.Download" class="h-5 w-5 shrink-0 opacity-80"></svg>
             <span class="flex-1">{{ 'downloads.download_season' | translate }}</span>
           </button>
         }
@@ -99,7 +99,7 @@
             class="dropdown-item text-white"
             (click)="optimizeSeason.emit(selSeason)"
           >
-            <svg lucideZap class="h-5 w-5 shrink-0 opacity-80"></svg>
+            <svg [lucideIcon]="icons.Zap" class="h-5 w-5 shrink-0 opacity-80"></svg>
             <span class="flex-1">{{ 'optimize.action.menu' | translate }}</span>
           </button>
         }
@@ -109,7 +109,7 @@
           (click)="toggleSeasonLike.emit(selSeason.id)"
         >
           <svg
-            lucideHeart
+            [lucideIcon]="icons.Heart"
             class="h-5 w-5 shrink-0 opacity-80"
             [class.text-error]="isSeasonLiked(selSeason.id)"
             [attr.fill]="isSeasonLiked(selSeason.id) ? 'currentColor' : 'none'"
@@ -124,7 +124,7 @@
             class="dropdown-item text-white"
             (click)="recommendSeason.emit(selSeason.id)"
           >
-            <svg lucideUserPlus class="h-5 w-5 shrink-0 opacity-80"></svg>
+            <svg [lucideIcon]="icons.UserPlus" class="h-5 w-5 shrink-0 opacity-80"></svg>
             <span class="flex-1">{{ 'recommend.menu_item_season' | translate }}</span>
           </button>
         }
@@ -138,10 +138,10 @@
             <span class="loading loading-spinner loading-sm"></span>
             <span class="flex-1"></span>
           } @else if (seasonFullyWatched(selSeason)) {
-            <svg lucideX class="h-5 w-5 shrink-0 opacity-80"></svg>
+            <svg [lucideIcon]="icons.X" class="h-5 w-5 shrink-0 opacity-80"></svg>
             <span class="flex-1">{{ 'media_detail.mark_season_unwatched' | translate }}</span>
           } @else {
-            <svg lucideCheck class="h-5 w-5 shrink-0 opacity-80"></svg>
+            <svg [lucideIcon]="icons.Check" class="h-5 w-5 shrink-0 opacity-80"></svg>
             <span class="flex-1">{{ 'media_detail.mark_season_watched' | translate }}</span>
           }
         </button>
@@ -152,7 +152,7 @@
               class="dropdown-item text-white"
               (click)="requestSeason.emit(selSeason)"
             >
-              <svg lucideClipboardList class="h-5 w-5 shrink-0 opacity-80"></svg>
+              <svg [lucideIcon]="icons.ClipboardList" class="h-5 w-5 shrink-0 opacity-80"></svg>
               <span class="flex-1">{{ 'media_detail.request_season' | translate }}</span>
             </button>
           }
@@ -164,9 +164,9 @@
                 [attr.aria-expanded]="seasonSubOpen() === item.id"
                 (click)="$event.stopPropagation(); seasonSubOpen.set(seasonSubOpen() === item.id ? null : item.id)"
               >
-                <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg>
+                <svg [lucideIcon]="icons.Download" class="h-5 w-5 shrink-0 opacity-80"></svg>
                 <span class="flex-1">{{ item.labelKey | translate }}</span>
-                <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60 transition-transform" [class.rotate-90]="seasonSubOpen() === item.id"></svg>
+                <svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4 shrink-0 opacity-60 transition-transform" [class.rotate-90]="seasonSubOpen() === item.id"></svg>
               </button>
               @if (seasonSubOpen() === item.id) {
                 <div class="ps-4">
@@ -191,10 +191,10 @@
                 <span class="flex-1"></span>
               } @else {
                 @switch (item.icon) {
-                  @case ('search') { <svg lucideSearch class="h-5 w-5 shrink-0 opacity-80"></svg> }
-                  @case ('zap') { <svg lucideZap class="h-5 w-5 shrink-0 opacity-80"></svg> }
-                  @case ('list-checks') { <svg lucideListChecks class="h-5 w-5 shrink-0 opacity-80"></svg> }
-                  @default { <svg lucideDownload class="h-5 w-5 shrink-0 opacity-80"></svg> }
+                  @case ('search') { <svg [lucideIcon]="icons.Search" class="h-5 w-5 shrink-0 opacity-80"></svg> }
+                  @case ('zap') { <svg [lucideIcon]="icons.Zap" class="h-5 w-5 shrink-0 opacity-80"></svg> }
+                  @case ('list-checks') { <svg [lucideIcon]="icons.ListChecks" class="h-5 w-5 shrink-0 opacity-80"></svg> }
+                  @default { <svg [lucideIcon]="icons.Download" class="h-5 w-5 shrink-0 opacity-80"></svg> }
                 }
                 <span class="flex-1">{{ item.labelKey | translate }}</span>
               }
@@ -211,10 +211,10 @@
                 <span class="loading loading-spinner loading-sm"></span>
                 <span class="flex-1"></span>
               } @else if (selSeason.monitored) {
-                <svg lucideEyeOff class="h-5 w-5 shrink-0 opacity-80"></svg>
+                <svg [lucideIcon]="icons.EyeOff" class="h-5 w-5 shrink-0 opacity-80"></svg>
                 <span class="flex-1">{{ 'media_detail.unmonitor' | translate }}</span>
               } @else {
-                <svg lucideEye class="h-5 w-5 shrink-0 opacity-80"></svg>
+                <svg [lucideIcon]="icons.Eye" class="h-5 w-5 shrink-0 opacity-80"></svg>
                 <span class="flex-1">{{ 'media_detail.monitor' | translate }}</span>
               }
             </button>
@@ -384,7 +384,7 @@
       @if (selectMode()) {
         <div class="sticky bottom-[var(--chrome-bottom-total,0px)] z-30 bg-base-200 border border-base-300 p-2 flex items-center gap-1 shadow-lg rounded-lg">
           <button type="button" class="btn btn-sm btn-ghost btn-circle" [attr.aria-label]="'library.bulk_cancel' | translate" (click)="toggleSelectMode()">
-            <svg lucideX class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.X" class="h-4 w-4"></svg>
           </button>
           <span class="font-semibold text-sm whitespace-nowrap">{{ (selectedEpisodeIds().size === 1 ? 'bulk.selected_one' : 'bulk.selected_other') | translate: { count: selectedEpisodeIds().size } }}</span>
           <span class="flex-1"></span>
@@ -393,7 +393,7 @@
           </button>
           <button type="button" class="btn btn-sm btn-primary" [disabled]="selectedEpisodeIds().size === 0"
                   [attr.aria-label]="'downloads.download' | translate" (click)="downloadSelectedEpisodes()">
-            <svg lucideDownload class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.Download" class="h-4 w-4"></svg>
             <span class="hidden sm:inline">{{ 'downloads.download' | translate }}</span>
           </button>
         </div>

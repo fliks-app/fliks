@@ -23,7 +23,8 @@ import { LiveTvGroupLabelPipe } from '../../../core/pipes/live-tv-group-label.pi
 import { TvSectionDirective } from '../../../shared/directives/tv-section.directive';
 import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
-import { LucideChevronLeft, LucideChevronRight, LucidePlay } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../../core/utils/viewport';
 import { ModalComponent } from '../../../shared/components/modal';
@@ -65,14 +66,12 @@ interface DisplayRow extends GuideRow {
     LiveTvGroupLabelPipe,
     TvSectionDirective,
     TvRowDirective,
-    ModalHeaderComponent,
-    LucideChevronLeft,
-    LucideChevronRight,
-    LucidePlay,
-  ],
+    ModalHeaderComponent, LucideDynamicIcon],
   templateUrl: './guide.html',
 })
 export class LiveTvGuideComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly api = inject(LiveTvApiService);
   private readonly router = inject(Router);
 

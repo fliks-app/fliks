@@ -95,7 +95,7 @@
                       @if (searchBusy() === rowKey(row)) {
                         <span class="loading loading-spinner loading-xs"></span>
                       } @else {
-                        <svg lucideSearch class="h-4 w-4"></svg>
+                        <svg [lucideIcon]="icons.Search" class="h-4 w-4"></svg>
                       }
                     </button>
                   </td>

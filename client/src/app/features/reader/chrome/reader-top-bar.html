@@ -15,7 +15,7 @@
     [attr.aria-label]="'reader.back' | translate"
     (click)="s.close()"
   >
-    <svg lucideArrowLeft class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+    <svg [lucideIcon]="icons.ArrowLeft" class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
   </button>
   <div class="flex min-w-0 flex-1 items-center gap-3 px-1">
     @if (s.info()?.coverUrl; as cover) {
@@ -40,7 +40,7 @@
       [disabled]="!z.canOut()"
       (click)="z.by(-1)"
     >
-      <svg lucideZoomOut class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+      <svg [lucideIcon]="icons.ZoomOut" class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
     <button
       type="button"
@@ -49,7 +49,7 @@
       [disabled]="!z.canIn()"
       (click)="z.by(1)"
     >
-      <svg lucideZoomIn class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+      <svg [lucideIcon]="icons.ZoomIn" class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
   }
   @if (f().contents || f().bookmarks) {
@@ -60,7 +60,7 @@
       [attr.aria-label]="'reader.contents' | translate"
       (click)="s.openPanel('sidebar', s.browseTab())"
     >
-      <svg lucideListTree class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+      <svg [lucideIcon]="icons.ListTree" class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
   }
   @if (f().search) {
@@ -71,7 +71,7 @@
       [attr.aria-label]="'reader.search' | translate"
       (click)="s.openPanel('sidebar', 'search')"
     >
-      <svg lucideSearch class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+      <svg [lucideIcon]="icons.Search" class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
   }
   @if (f().bookmarks) {
@@ -84,7 +84,7 @@
       (click)="s.act('bookmark')"
     >
       <svg
-        lucideBookmark
+        [lucideIcon]="icons.Bookmark"
         class="h-6 w-6 max-sm:h-5 max-sm:w-5"
         [attr.fill]="bookmarked() ? 'currentColor' : 'none'"
       ></svg>
@@ -98,7 +98,7 @@
       [attr.aria-label]="'reader.tab_notes' | translate"
       (click)="s.openPanel('sidebar', 'notes')"
     >
-      <svg lucideNotebookPen class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+      <svg [lucideIcon]="icons.NotebookPen" class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
   }
   @if (s.canListen()) {
@@ -108,7 +108,7 @@
       [attr.aria-label]="'reader.listen' | translate"
       (click)="s.listen()"
     >
-      <svg lucideHeadphones class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+      <svg [lucideIcon]="icons.Headphones" class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
   }
   @if (f().appearance.length) {
@@ -120,7 +120,7 @@
       [attr.aria-expanded]="s.panel() === 'appearance'"
       (click)="s.openPanel('appearance')"
     >
-      <svg lucideType class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+      <svg [lucideIcon]="icons.Type" class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
   }
   @if (s.canFullscreen) {
@@ -132,9 +132,9 @@
       (click)="s.toggleFullscreen()"
     >
       @if (s.fullscreen()) {
-        <svg lucideMinimize class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+        <svg [lucideIcon]="icons.Minimize" class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
       } @else {
-        <svg lucideMaximize class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
+        <svg [lucideIcon]="icons.Maximize" class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
       }
     </button>
   }

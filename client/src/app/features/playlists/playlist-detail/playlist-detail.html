@@ -16,12 +16,12 @@
     <ng-container ngProjectAs="[heroActions]">
       @if (items().length) {
         <button type="button" class="btn btn-primary" (click)="playAll()">
-          <svg lucidePlay class="size-4" fill="currentColor"></svg>
+          <svg [lucideIcon]="icons.Play" class="size-4" fill="currentColor"></svg>
           {{ 'player.play' | translate }}
         </button>
         @if (hasTracks()) {
           <button type="button" [class]="actionClass()" [attr.aria-label]="'music.shuffle' | translate" (click)="shuffleAll()">
-            <svg lucideShuffle class="size-4"></svg>
+            <svg [lucideIcon]="icons.Shuffle" class="size-4"></svg>
             @if (desktop()) {
               {{ 'music.shuffle' | translate }}
             }
@@ -30,7 +30,7 @@
         }
         @if (m3uSupported()) {
           <button type="button" [class]="actionClass()" [attr.aria-label]="'playlists.export_m3u' | translate" [title]="'playlists.export_m3u' | translate" (click)="exportM3u()">
-            <svg lucideDownload class="size-4"></svg>
+            <svg [lucideIcon]="icons.Download" class="size-4"></svg>
             @if (desktop()) {
               {{ 'playlists.export_m3u' | translate }}
             }
@@ -38,7 +38,7 @@
         }
         @if (partyApi.canCreate()) {
           <button type="button" [class]="actionClass()" [attr.aria-label]="'party.watch_together' | translate" (click)="watchTogether()">
-            <svg lucideUserPlus class="size-4"></svg>
+            <svg [lucideIcon]="icons.UserPlus" class="size-4"></svg>
             @if (desktop()) {
               {{ 'party.watch_together' | translate }}
             }
@@ -47,7 +47,7 @@
       }
       @if (pl.rules && canManage()) {
         <button type="button" [class]="actionClass()" [attr.aria-label]="'playlists.smart_edit' | translate" (click)="rulesEditor.open()">
-          <svg lucidePencil class="size-4"></svg>
+          <svg [lucideIcon]="icons.Pencil" class="size-4"></svg>
           @if (desktop()) {
             {{ 'playlists.smart_edit' | translate }}
           }
@@ -63,10 +63,10 @@
           (click)="toggleSave()"
         >
           @if (pl.saved) {
-            <svg lucideBookmarkCheck class="size-4"></svg>
+            <svg [lucideIcon]="icons.BookmarkCheck" class="size-4"></svg>
             {{ 'playlists.saved_label' | translate }}
           } @else {
-            <svg lucideBookmark class="size-4"></svg>
+            <svg [lucideIcon]="icons.Bookmark" class="size-4"></svg>
             {{ 'playlists.save' | translate }}
           }
         </button>
@@ -80,27 +80,27 @@
             class="btn btn-outline btn-square"
             [attr.aria-label]="'common.more' | translate"
           >
-            <svg lucideEllipsisVertical class="size-5"></svg>
+            <svg [lucideIcon]="icons.EllipsisVertical" class="size-5"></svg>
           </div>
           @if (canManage()) {
             @if (!sharingDisabled()) {
               <button type="button" class="dropdown-item text-white" (click)="openMembers()">
-                <svg lucideUsers class="h-4 w-4"></svg>
+                <svg [lucideIcon]="icons.Users" class="h-4 w-4"></svg>
                 {{ 'playlists.members' | translate }}
               </button>
             }
             <button type="button" class="dropdown-item text-white" (click)="openSettings()">
-              <svg lucideSettings class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Settings" class="h-4 w-4"></svg>
               {{ 'playlists.settings' | translate }}
             </button>
             <button type="button" class="dropdown-item text-white" (click)="openRename()">
-              <svg lucidePencil class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Pencil" class="h-4 w-4"></svg>
               {{ 'playlists.rename' | translate }}
             </button>
           }
           @if (isOwner()) {
             <button type="button" class="dropdown-item text-error" (click)="deletePlaylist()">
-              <svg lucideTrash2 class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
               {{ 'common.delete' | translate }}
             </button>
           }
@@ -136,7 +136,7 @@
                     class="btn btn-ghost btn-xs btn-square cursor-grab shrink-0"
                     [attr.aria-label]="'playlists.drag' | translate"
                   >
-                    <svg lucideGripVertical class="h-4 w-4"></svg>
+                    <svg [lucideIcon]="icons.GripVertical" class="h-4 w-4"></svg>
                   </button>
                 } @else {
                   <div class="flex flex-col shrink-0">
@@ -147,7 +147,7 @@
                       (click)="moveGroup(i, -1)"
                       [attr.aria-label]="'playlists.move_up' | translate"
                     >
-                      <svg lucideArrowUp class="h-4 w-4"></svg>
+                      <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
                     </button>
                     <button
                       type="button"
@@ -156,7 +156,7 @@
                       (click)="moveGroup(i, 1)"
                       [attr.aria-label]="'playlists.move_down' | translate"
                     >
-                      <svg lucideArrowDown class="h-4 w-4"></svg>
+                      <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
                     </button>
                   </div>
                 }
@@ -184,7 +184,7 @@
                       (click)="$event.stopPropagation()"
                       [attr.aria-label]="'playlists.drag' | translate"
                     >
-                      <svg lucideGripVertical class="h-4 w-4"></svg>
+                      <svg [lucideIcon]="icons.GripVertical" class="h-4 w-4"></svg>
                     </button>
                   } @else {
                     <div class="flex flex-col shrink-0">
@@ -195,7 +195,7 @@
                         (click)="$event.stopPropagation(); moveGroup(i, -1)"
                         [attr.aria-label]="'playlists.move_up' | translate"
                       >
-                        <svg lucideArrowUp class="h-4 w-4"></svg>
+                        <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
                       </button>
                       <button
                         type="button"
@@ -204,7 +204,7 @@
                         (click)="$event.stopPropagation(); moveGroup(i, 1)"
                         [attr.aria-label]="'playlists.move_down' | translate"
                       >
-                        <svg lucideArrowDown class="h-4 w-4"></svg>
+                        <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
                       </button>
                     </div>
                   }
@@ -237,7 +237,7 @@
                     (click)="$event.stopPropagation(); removeSeries(entry.group)"
                     [attr.aria-label]="'playlists.remove_series_title' | translate"
                   >
-                    <svg lucideTrash2 class="h-4 w-4"></svg>
+                    <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
                   </button>
                 }
               </div>
@@ -337,27 +337,27 @@
         class="btn btn-ghost btn-sm btn-circle"
         [attr.aria-label]="'common.more' | translate"
       >
-        <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.EllipsisVertical" class="h-5 w-5"></svg>
       </div>
       <a class="dropdown-item text-white" [routerLink]="itemLink(item)">
-        <svg lucideInfo class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.Info" class="h-4 w-4"></svg>
         {{ 'playlists.view_details' | translate }}
       </a>
       @if (item.track && musicDownloads.available()) {
         <button type="button" class="dropdown-item text-white" (click)="toggleTrackDownload(item)">
-          <svg lucideDownload class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Download" class="h-4 w-4"></svg>
           {{ (musicDownloads.itemIds().has(item.track.itemId) ? 'downloads.remove_from_device' : 'downloads.download') | translate }}
         </button>
       }
       @if (!item.track) {
         <button type="button" class="dropdown-item text-white" (click)="toggleItemWatched(item)">
-          <svg lucideCheck class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Check" class="h-4 w-4"></svg>
           {{ (item.watched ? 'media_card.mark_unwatched' : 'media_card.mark_watched') | translate }}
         </button>
       }
       @if (canEditItems()) {
         <button type="button" class="dropdown-item text-error" (click)="removeItem(item)">
-          <svg lucideTrash2 class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
           {{ 'common.delete' | translate }}
         </button>
       }
@@ -491,7 +491,7 @@
             (click)="removeMember(m.userId)"
             [attr.aria-label]="'playlists.remove_item_action' | translate"
           >
-            <svg lucideTrash2 class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
           </button>
         }
       </li>
@@ -520,7 +520,7 @@
             (click)="addMember(u)"
           >
             <span class="flex-1 min-w-0 truncate">{{ u.username }}</span>
-            <svg lucideUserPlus class="h-4 w-4 text-base-content/60"></svg>
+            <svg [lucideIcon]="icons.UserPlus" class="h-4 w-4 text-base-content/60"></svg>
           </button>
         </li>
       }

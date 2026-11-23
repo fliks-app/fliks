@@ -1,13 +1,7 @@
 import { Component, OnInit, computed, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import {
-  LucideCircleAlert,
-  LucideCircleCheck,
-  LucideDownload,
-  LucideExternalLink,
-  LucideRocket,
-  LucideTriangleAlert,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { AppUpdateService } from '../../../core/services/app-update.service';
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
@@ -20,17 +14,12 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
     LocaleDatePipe,
     ToggleFieldComponent,
     TranslatePipe,
-    MarkdownPipe,
-    LucideCircleAlert,
-    LucideCircleCheck,
-    LucideDownload,
-    LucideExternalLink,
-    LucideRocket,
-    LucideTriangleAlert,
-  ],
+    MarkdownPipe, LucideDynamicIcon],
   templateUrl: './update-settings.html',
 })
 export class UpdateSettingsPageComponent implements OnInit {
+  protected readonly icons = icons;
+
   readonly update = inject(AppUpdateService);
 
   /** A manual re-check only makes sense for the desktop self-updater and the

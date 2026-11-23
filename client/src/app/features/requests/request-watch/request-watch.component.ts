@@ -1,6 +1,7 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideBell, LucideBellOff, LucideCheck, LucideEllipsis, LucideUsers } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { translatePlural } from '../../../core/pipes/translate-plural.pipe';
 import {
   FliksRequestDetail,
@@ -17,17 +18,13 @@ import { RequestRequestersComponent } from '../request-requesters/request-reques
   imports: [
     TranslatePipe,
     DropdownMenuComponent,
-    RequestRequestersComponent,
-    LucideBell,
-    LucideBellOff,
-    LucideCheck,
-    LucideEllipsis,
-    LucideUsers,
-  ],
+    RequestRequestersComponent, LucideDynamicIcon],
   templateUrl: './request-watch.component.html',
   host: { class: 'contents' },
 })
 export class RequestWatchComponent {
+  protected readonly icons = icons;
+
   private readonly requests = inject(RequestsService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);

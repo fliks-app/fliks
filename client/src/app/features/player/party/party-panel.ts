@@ -1,7 +1,8 @@
 import { Component, computed, effect, inject, output, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
-import { LucideSettings, LucideUsers, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { DeviceService } from '../../../core/services/device.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
 import { DismissableStackService } from '../../../core/services/dismissable-stack.service';
@@ -15,12 +16,14 @@ import { PartyVoiceBarComponent } from './party-voice-bar';
 
 @Component({
   selector: 'app-party-panel',
-  imports: [TranslatePipe, TranslatePluralPipe, LucideSettings, LucideUsers, LucideX, TvSectionDirective, PartyChatComponent, PartyPersonRowComponent, PartyVoiceBarComponent],
+  imports: [TranslatePipe, TranslatePluralPipe, TvSectionDirective, PartyChatComponent, PartyPersonRowComponent, PartyVoiceBarComponent, LucideDynamicIcon],
   templateUrl: './party-panel.html',
   styleUrl: './party-panel.css',
   host: { '[attr.data-dock]': 'party.dock()', '[class.party-tv]': 'isTv()', '[style.padding-bottom.px]': 'keyboard.height()' },
 })
 export class PartyPanelComponent {
+  protected readonly icons = icons;
+
   protected readonly party = inject(PartyService);
   protected readonly voice = inject(VoiceService);
   private readonly dismissStack = inject(DismissableStackService);

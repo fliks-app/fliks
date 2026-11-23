@@ -13,7 +13,8 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, NavigationStart, Router } from '@angular/router';
-import { LucideChevronLeft, LucideChevronRight } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../icons';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
@@ -23,11 +24,13 @@ import { RAIL_RESTORED_ATTR } from '../utils/center-rail';
 
 @Component({
   selector: 'app-horizontal-scroller',
-  imports: [LucideChevronLeft, LucideChevronRight, TvRowDirective],
+  imports: [TvRowDirective, LucideDynamicIcon],
   templateUrl: './horizontal-scroller.html',
   styleUrl: './horizontal-scroller.css',
 })
 export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly tv = inject(TvService);
   private readonly reuse = inject(CachingReuseStrategy);

@@ -8,12 +8,8 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
-import {
-  LucideEllipsisVertical,
-  LucideHeart,
-  LucideListPlus,
-  LucideX,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import {
   ReceivedRecommendation,
   SocialApiService,
@@ -40,16 +36,13 @@ import { mediaDetailLink } from '../../../core/media-kinds';
     TranslatePipe,
     DropdownMenuComponent,
     TvRowDirective,
-    ResolveUrlPipe,
-    LucideX,
-    LucideEllipsisVertical,
-    LucideHeart,
-    LucideListPlus,
-  ],
+    ResolveUrlPipe, LucideDynamicIcon],
   templateUrl: './received-recommendations-card.html',
   host: { class: 'contents' },
 })
 export class ReceivedRecommendationsCardComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(SocialApiService);
   private readonly sse = inject(SseService);
   private readonly addToPlaylistService = inject(AddToPlaylistService);

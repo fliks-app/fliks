@@ -46,7 +46,7 @@
         [attr.aria-label]="'reader.add_note' | translate"
         (click)="writing.set(true)"
       >
-        <svg lucideStickyNote class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.StickyNote" class="h-5 w-5"></svg>
       </button>
       <button
         type="button"
@@ -54,7 +54,7 @@
         [attr.aria-label]="'reader.copy' | translate"
         (click)="copy()"
       >
-        <svg lucideCopy class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.Copy" class="h-5 w-5"></svg>
       </button>
       <button
         type="button"
@@ -62,7 +62,7 @@
         [attr.aria-label]="'reader.search_selection' | translate"
         (click)="find()"
       >
-        <svg lucideSearch class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.Search" class="h-5 w-5"></svg>
       </button>
       <button
         type="button"
@@ -70,7 +70,7 @@
         [attr.aria-label]="'reader.share_quote' | translate"
         (click)="share()"
       >
-        <svg lucideShare2 class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.Share2" class="h-5 w-5"></svg>
       </button>
     }
   </div>

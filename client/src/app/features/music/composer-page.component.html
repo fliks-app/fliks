@@ -1,6 +1,6 @@
 <div class="flex flex-col gap-6">
   <button type="button" (click)="goBack()" class="btn btn-sm btn-ghost gap-1 self-start">
-    <svg lucideChevronLeft class="h-4 w-4"></svg>
+    <svg [lucideIcon]="icons.ChevronLeft" class="h-4 w-4"></svg>
     {{ 'common.back' | translate }}
   </button>
   @if (head(); as p) {
@@ -31,7 +31,7 @@
               @for (r of recordings()[w.workId] ?? []; track r.itemId) {
                 <li class="flex items-center gap-1" data-testid="recording">
                   <button type="button" class="btn btn-ghost btn-xs btn-square shrink-0" [disabled]="r.mediaFileId == null" [attr.aria-label]="'music.play_track' | translate: { title: r.title }" (click)="play(r)">
-                    <svg lucidePlay class="size-4"></svg>
+                    <svg [lucideIcon]="icons.Play" class="size-4"></svg>
                   </button>
                   <a class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-1 hover:bg-base-300 focus-visible:outline-2" [routerLink]="['/albums', r.mediaId]">
                     <app-track-line [title]="r.albumTitle" [subtitle]="performers(r)" [durationSeconds]="r.durationSeconds">

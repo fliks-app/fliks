@@ -17,13 +17,8 @@ import {
 } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
-import {
-  LucideUserPlus,
-  LucideUserCheck,
-  LucideClock,
-  LucideSettings,
-  LucideCamera,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { SocialApiService } from '../../core/services/api/social-api.service';
 import { UsersApiService } from '../../core/services/api/users-api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -42,16 +37,13 @@ import { UserAvatarComponent } from '../../shared/components/user-avatar/user-av
     RouterLinkActive,
     RouterOutlet,
     TranslatePipe, TranslatePluralPipe,
-    LucideUserPlus,
-    LucideUserCheck,
-    LucideClock,
-    LucideSettings,
-    LucideCamera,
-    AvatarEditorComponent,
+    AvatarEditorComponent, LucideDynamicIcon,
   ],
   templateUrl: './profile.html',
 })
 export class ProfileComponent {
+  protected readonly icons = icons;
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(SocialApiService);
@@ -71,7 +63,6 @@ export class ProfileComponent {
 
   readonly profile = this.ctx.profile;
   readonly busy = signal(false);
-
 
   constructor() {
     effect(() => {

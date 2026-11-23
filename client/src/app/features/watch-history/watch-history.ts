@@ -1,7 +1,8 @@
 import { Component, inject, signal, computed, Injector, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { PlaybackState, StreamingApiService, WatchHistoryItem } from '../../core/services/api/streaming-api.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
@@ -19,10 +20,12 @@ import { EmptyStateComponent } from '../../shared/components/empty-state/empty-s
   selector: 'app-watch-history',
   imports: [EmptyStateComponent, RowSkeletonComponent,
     CachedSrcDirective,
-    TranslatePipe, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, LucideTrash2, LucidePlay, LucideFilm, LucideTv, LucideCheck, LucideEllipsisVertical, DefaultFocusDirective],
+    TranslatePipe, ResolveUrlPipe, PaginationComponent, DropdownMenuComponent, DefaultFocusDirective, LucideDynamicIcon],
   templateUrl: './watch-history.html',
 })
 export class WatchHistoryComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   protected readonly kinds = KIND_REGISTRY;
   private readonly streamingApi = inject(StreamingApiService);
   private readonly confirmation = inject(ConfirmationService);

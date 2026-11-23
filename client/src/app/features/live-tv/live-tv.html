@@ -40,7 +40,7 @@
          it would drop focus on every keystroke. -->
     <div appTvRow class="flex flex-wrap items-center gap-2">
       <label class="input input-bordered input-sm flex items-center gap-2 w-auto">
-        <svg lucideSearch class="h-4 w-4 text-base-content/50"></svg>
+        <svg [lucideIcon]="icons.Search" class="h-4 w-4 text-base-content/50"></svg>
         <!-- The `.input` wrapper is what shows focus; the field's own ring
              would draw a second one inside it. -->
         <input
@@ -73,12 +73,12 @@
 
     @if (noResults()) {
       <div class="flex flex-col items-center gap-3 py-16 text-center">
-        <svg lucideSearch class="h-10 w-10 text-base-content/30"></svg>
+        <svg [lucideIcon]="icons.Search" class="h-10 w-10 text-base-content/30"></svg>
         <p class="text-base-content/60 max-w-md">{{ 'liveTv.on_now.no_results' | translate }}</p>
       </div>
     } @else if (isEmpty()) {
       <div class="flex flex-col items-center gap-3 py-16 text-center">
-        <svg lucideTv class="h-10 w-10 text-base-content/30"></svg>
+        <svg [lucideIcon]="icons.Tv" class="h-10 w-10 text-base-content/30"></svg>
         <p class="text-base-content/60 max-w-md">{{ 'liveTv.empty_no_channels' | translate }}</p>
         @if (auth.user()?.isAdmin) {
           <a routerLink="/admin/settings/live-tv" class="btn btn-primary btn-sm">
@@ -173,7 +173,7 @@
       (click)="toggleFavorite(entry, $event)"
       [attr.aria-label]="'liveTv.toggle_favorite' | translate"
     >
-      <svg lucideStar class="h-4 w-4" [attr.fill]="entry.channel.favorite ? 'currentColor' : 'none'"></svg>
+      <svg [lucideIcon]="icons.Star" class="h-4 w-4" [attr.fill]="entry.channel.favorite ? 'currentColor' : 'none'"></svg>
     </button>
   </div>
 </ng-template>

@@ -17,7 +17,7 @@
           class="btn btn-ghost btn-circle"
           [attr.aria-label]="'common.more' | translate"
         >
-          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+          <svg [lucideIcon]="icons.EllipsisVertical" class="h-5 w-5"></svg>
         </button>
         @if (state.isAdmin()) {
           <button type="button" class="dropdown-item text-white" [disabled]="state.refreshing()" (click)="state.refreshAllSources()">

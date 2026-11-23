@@ -12,7 +12,8 @@ import {
   ElementRef,
 } from '@angular/core';
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
-import { LucideArrowLeft, LucideChevronRight, LucideEllipsisVertical } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -80,20 +81,19 @@ const BADGE_CLASSES: Readonly<Record<BadgeTone, string>> = {
     TvSelectDirective,
     PopoverMenuComponent,
     NgTemplateOutlet,
-    LucideEllipsisVertical,
-    LucideChevronRight,
-    LucideArrowLeft,
     ModalHeaderComponent,
     TranslatePipe,
     LocaleDatePipe,
     PaginationComponent,
     ProgressBadgeComponent,
-    ErrorBadgeComponent,
+    ErrorBadgeComponent, LucideDynamicIcon,
   ],
   providers: [LocaleDatePipe],
   templateUrl: './data-table.html',
 })
 export class DataTableComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly translate = inject(TranslateService);

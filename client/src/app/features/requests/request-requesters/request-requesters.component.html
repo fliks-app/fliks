@@ -1,6 +1,6 @@
 @if (line()) {
   <div class="flex items-center gap-2 text-sm text-base-content/60">
-    <svg lucideUsers class="h-4 w-4 shrink-0"></svg>
+    <svg [lucideIcon]="icons.Users" class="h-4 w-4 shrink-0"></svg>
     <button type="button" class="link link-hover text-start" (click)="open()">{{ line() }}</button>
   </div>
 }

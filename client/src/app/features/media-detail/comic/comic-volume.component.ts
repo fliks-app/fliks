@@ -2,7 +2,8 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { Component, ElementRef, computed, inject, input, linkedSignal, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideEllipsisVertical, LucidePencil } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import type { MediaActionHandlers } from '../../../core/plugin-ui/media-action-registry';
 import { ComicsApiService } from '../../../core/services/api/comics-api.service';
 import type { Media } from '../../../core/services/api/media.service';
@@ -40,15 +41,15 @@ import { ModalComponent } from '../../../shared/components/modal';
     DetailHeroComponent,
     DetailSectionComponent,
     ProviderAttributionComponent,
-    LucideEllipsisVertical,
-    LucidePencil,
     ModalHeaderComponent,
-    ModalFooterComponent,
+    ModalFooterComponent, LucideDynamicIcon,
   ],
   templateUrl: './comic-volume.component.html',
   host: { class: 'block' },
 })
 export class ComicVolumeComponent {
+  protected readonly icons = icons;
+
   /** The card handoff (list shape) until the full volume lands. */
   readonly media = input.required<Media>();
   protected readonly isWanted = isWanted;

@@ -23,7 +23,7 @@
         </span>
       </span>
       <button barActions type="button" class="btn btn-ghost btn-circle" (click)="o.disconnect()" [attr.aria-label]="'remote.disconnect_row' | translate">
-        <svg lucideX class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.X" class="h-5 w-5"></svg>
       </button>
     </app-player-bar>
   }
@@ -59,7 +59,7 @@
     </ng-template>
     @if (!s) {
       <button barActions type="button" class="btn btn-ghost btn-circle" (click)="output()?.disconnect()" [attr.aria-label]="'remote.disconnect_row' | translate">
-        <svg lucideX class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.X" class="h-5 w-5"></svg>
       </button>
     }
   </app-player-bar>

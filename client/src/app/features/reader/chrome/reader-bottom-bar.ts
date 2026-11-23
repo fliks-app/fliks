@@ -1,6 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideHeadphones, LucideListTree, LucideNotebookPen, LucideType } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { ReaderSession } from '../reader-session';
 import { ReaderScrubberComponent } from './reader-scrubber';
@@ -11,16 +12,13 @@ import { ReaderScrubberComponent } from './reader-scrubber';
   imports: [
     TranslatePipe,
     TranslatePluralPipe,
-    ReaderScrubberComponent,
-    LucideHeadphones,
-    LucideListTree,
-    LucideNotebookPen,
-    LucideType,
-  ],
+    ReaderScrubberComponent, LucideDynamicIcon],
   templateUrl: './reader-bottom-bar.html',
   host: { class: 'contents' },
 })
 export class ReaderBottomBarComponent {
+  protected readonly icons = icons;
+
   protected readonly s = inject(ReaderSession);
   protected readonly f = this.s.features;
   protected readonly status = computed(() => this.s.engine()?.status() ?? null);
