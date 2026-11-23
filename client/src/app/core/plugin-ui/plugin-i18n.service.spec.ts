@@ -118,6 +118,26 @@ describe('PluginI18nService', () => {
     expect(translate.instant('p.a')).toBe('Aa');
   });
 
+  it('a repeated merge with nothing new skips the store write and its translation-change event', () => {
+    loaderData['en'] = { nav: { home: 'Home' } };
+    const { translate, i18n } = setup({ en: { 'nav.home': 'HACKED', 'nav.plugin_item': 'Item' } });
+    i18n.mergeIntoLang('en');
+    let changes = 0;
+    translate.onTranslationChange.subscribe(() => changes++);
+
+    i18n.mergeIntoLang('en');
+
+    expect(changes).toBe(0);
+    expect(translate.instant('nav.plugin_item')).toBe('Item');
+  });
+
+  it('a plugin leaf under a core string stays shadowed by core', () => {
+    loaderData['en'] = { nav: { home: 'Home' } };
+    const { translate, i18n } = setup({ en: { 'nav.home.sub': 'Sub' } });
+    i18n.mergeIntoLang('en');
+    expect(translate.instant('nav.home')).toBe('Home');
+  });
+
   it('init() merges whatever is already loaded without awaiting the network', () => {
     loaderData['en'] = { nav: { home: 'Home' } };
     const { translate, i18n } = setup({ en: { 'nav.plugin_item': 'Item' } });
