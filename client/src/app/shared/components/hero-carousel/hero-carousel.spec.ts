@@ -6,6 +6,7 @@ import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Media } from '../../../core/services/api/media.service';
+import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { BackgroundService } from '../../../core/services/background.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { AppResumeService } from '../../../core/services/app-resume.service';
@@ -164,7 +165,15 @@ describe('HeroCarouselComponent', () => {
     const primary = slide.querySelector('[data-home-focus="hero:primary"]')!;
     expect(primary.tagName).toBe('BUTTON');
     expect(primary.textContent).toContain('hero_carousel.resume_episode');
-    expect(slide.querySelector('a.btn-ghost')?.getAttribute('href')).toBe('/series/2');
+    expect(slide.querySelector('a.hc-btn-glass')?.getAttribute('href')).toBe('/series/2');
+  });
+
+  it('opens the add-to-playlist modal for the slide from the plus button, with the kind badge and facts in the line', () => {
+    const { el } = setup();
+    el.querySelector<HTMLButtonElement>('.hc-btn-square')!.click();
+    expect(TestBed.inject(AddToPlaylistService).request()?.target).toEqual({ mediaId: 1 });
+    expect(el.querySelector('.hc-slide:not(.hc-out) .hc-meta')?.textContent).toContain('2020');
+    expect(el.querySelector('.hc-slide:not(.hc-out) .hc-meta b')?.textContent).toContain('requests.type_movie');
   });
 
   it('keeps Details as the only button of a series with nothing to play', async () => {

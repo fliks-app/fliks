@@ -22,7 +22,5 @@ export class HeroMetaRowComponent {
   /** Desktop spacing; the mobile row sits tighter. */
   readonly desktop = input(true);
   readonly centered = input(false);
-  /** The host spaces the row itself, and it reads larger and brighter. */
-  readonly flush = input(false);
   readonly visible = computed(() => !!(this.rating() || this.parts().length || this.chips().length));
 }

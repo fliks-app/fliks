@@ -2,6 +2,7 @@
   <section
     class="relative"
     [class.hero-carousel-compact]="height() === 'compact'"
+    [class.hc-desktop]="desktop()"
     aria-roledescription="carousel"
     [attr.aria-label]="'hero_carousel.label' | translate"
   >
@@ -10,48 +11,61 @@
       <!-- Shade under the status bar and the transparent navbar. -->
       <div class="hc-top-shade pointer-events-none absolute inset-x-0 top-0 h-28" aria-hidden="true"></div>
     }
-    <div
-      class="grid relative z-20"
-      [class.hc-mobile-stage]="!desktop()"
-      [class.hero-carousel-stage]="desktop()"
-      [style.padding-top]="desktop() ? navbar.heroPaddingTop() : null"
-    >
+    <div class="grid relative z-20" [class.hc-mobile-stage]="!desktop()" [class.hero-carousel-stage]="desktop()">
       @for (s of [m]; track s.id) {
         <div
-          class="hc-slide [grid-area:1/1] flex flex-col justify-end"
-          [class.gap-3]="desktop()"
-          [class.max-w-3xl]="desktop()"
+          class="hc-slide [grid-area:1/1] flex flex-col"
+          [class.justify-end]="!desktop()"
           [class.items-center]="!desktop()"
           [class.text-center]="!desktop()"
           [style.--hc-delay]="changed() ? null : '0ms'"
           (animate.leave)="leave($event)"
           aria-live="off"
         >
-          <div class="hc-item" style="--i: 0">
+          <div class="hc-item hc-logo" style="--i: 0">
             @if (s.logoUrl) {
-              <img [src]="s.logoUrl | resolveUrl: 'medium'" [alt]="s.title" class="max-h-24 md:max-h-[140px] max-w-[72%] md:max-w-[480px] object-contain" [class.object-left]="desktop()" />
+              <img [src]="s.logoUrl | resolveUrl: 'medium'" [alt]="s.title" class="object-contain" />
             } @else {
-              <h2 class="text-3xl lg:text-5xl font-bold tracking-tight">{{ s.title }}</h2>
+              <h2 class="hc-title font-bold tracking-tight">{{ s.title }}</h2>
             }
           </div>
-          <div class="hc-item" style="--i: 1">
-            <app-hero-meta-row [rating]="desktop() ? (s.rating || null) : null" [parts]="metaParts()" [desktop]="desktop()" [centered]="!desktop()" [flush]="desktop()" />
+          <div class="hc-item hc-meta-wrap" style="--i: 1">
+            @if (desktop()) {
+              @if (facts(); as f) {
+                <div class="hc-meta">
+                  <b>{{ f.kindKey | translate }}</b>
+                  @if (f.year) { <span>{{ f.year }}</span> }
+                  @if (f.runtime) { <span>{{ f.runtime }}</span> }
+                  @if (f.rating) { <span>★ {{ f.rating }}</span> }
+                  @if (f.genres) { <span>{{ f.genres }}</span> }
+                </div>
+              }
+            } @else {
+              <app-hero-meta-row [rating]="null" [parts]="metaParts()" [desktop]="false" [centered]="true" />
+            }
           </div>
           @if (s.overview && desktop()) {
-            <p class="hc-item text-base-content/90 leading-relaxed line-clamp-3" style="--i: 2">{{ s.overview }}</p>
+            <p class="hc-item hc-overview" style="--i: 2">{{ s.overview }}</p>
           }
           <div class="hc-item" style="--i: 3">
-            <div appTvRow class="flex flex-wrap items-center gap-2" [class.mt-2]="desktop()" [class.mt-3]="!desktop()" [class.justify-center]="!desktop()">
+            <div appTvRow class="hc-actions flex items-center" [class.justify-center]="!desktop()" [class.mt-3]="!desktop()">
               @if (primary(); as p) {
                 @if (p.play) {
-                  <button type="button" data-home-focus="hero:primary" class="btn btn-primary" [class.hc-btn-compact]="!desktop()" (click)="play(s)">
-                    <svg [lucideIcon]="icons.Play" class="size-5" fill="currentColor"></svg>{{ p.labelKey | translate: { code: p.code } }}
+                  <button type="button" data-home-focus="hero:primary" class="btn hc-btn" [class.btn-primary]="!desktop()" [class.hc-btn-solid]="desktop()" [class.hc-btn-compact]="!desktop()" (click)="play(s)">
+                    <svg [lucideIcon]="icons.Play" class="hc-icon" fill="currentColor"></svg>{{ p.labelKey | translate: { code: p.code } }}
                   </button>
-                  <a [routerLink]="detailLink()" class="btn btn-ghost" [class.hc-btn-compact]="!desktop()">{{ 'hero_carousel.details' | translate }}</a>
-                } @else {
-                  <a [routerLink]="detailLink()" data-home-focus="hero:primary" class="btn btn-primary" [class.hc-btn-compact]="!desktop()">
-                    <svg [lucideIcon]="icons.Info" class="size-5"></svg>{{ p.labelKey | translate }}
+                  <a [routerLink]="detailLink()" class="btn hc-btn" [class.btn-ghost]="!desktop()" [class.hc-btn-glass]="desktop()" [class.hc-btn-compact]="!desktop()">
+                    @if (desktop()) { <svg [lucideIcon]="icons.Info" class="hc-icon"></svg> }{{ 'hero_carousel.details' | translate }}
                   </a>
+                } @else {
+                  <a [routerLink]="detailLink()" data-home-focus="hero:primary" class="btn hc-btn" [class.btn-primary]="!desktop()" [class.hc-btn-solid]="desktop()" [class.hc-btn-compact]="!desktop()">
+                    <svg [lucideIcon]="icons.Info" class="hc-icon"></svg>{{ p.labelKey | translate }}
+                  </a>
+                }
+                @if (desktop()) {
+                  <button type="button" class="btn hc-btn hc-btn-glass hc-btn-square" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addToPlaylist(s)">
+                    <svg [lucideIcon]="icons.Plus" class="hc-icon"></svg>
+                  </button>
                 }
               }
             </div>
@@ -71,7 +85,7 @@
 
 <ng-template #dotsTpl>
   @if (items().length > 1) {
-    <div appTvRow class="relative z-20 flex items-center gap-2" [class.mt-4]="desktop()">
+    <div appTvRow class="z-20 flex items-center gap-2" [class.relative]="!desktop()" [class.hc-desktop-dots]="desktop()">
       @for (_ of items(); track $index) {
         <button
           type="button"

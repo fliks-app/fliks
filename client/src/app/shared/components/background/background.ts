@@ -37,14 +37,14 @@ export class BackgroundComponent {
     const m = this.mix();
     if (m === 0) return null;
     const p = 1 - m * (1 - this.scroll());
-    const [from, to] = this.variant === 'compact' ? [12, 45] : [35, 72];
+    const [from, to] = this.variant === 'compact' ? [12, 45] : [50, 95];
     const rgba = (a: number) => `rgba(29, 35, 42, ${a.toFixed(3)})`;
     // The vertical layer reaches the ambient alpha by half way, so the stacked layers never let more picture through than either end.
     const q = Math.min(1, 2 * p);
     const side = (a: number) => rgba(a * (1 - p));
     return (
       `linear-gradient(to bottom, ${rgba(0.95 * q)} ${from}%, ${rgba(0.95)} ${to}%), ` +
-      `linear-gradient(to right, ${side(0.92)} 0%, ${side(0.8)} 40%, ${side(0.35)} 65%, ${side(0.08)} 90%, ${side(0)} 100%)`
+      `linear-gradient(to right, ${side(1)} 0%, ${side(0.85)} 28%, ${side(0)} 62%, ${side(0)} 100%)`
     );
   });
 

@@ -1,8 +1,6 @@
 /* Text swap, variant "Sobre": the outgoing text leaves left, the incoming one starts when it is gone.
    Only transform and filter, never individual translate/scale, so webOS (no CSS downlevel) keeps it.
    Swap a variant by editing the two keyframes and the durations below. */
-.hero-carousel-stage { min-height: 58vh; }
-.hero-carousel-compact .hero-carousel-stage { min-height: 30vh; }
 
 .hc-out {
   animation: hc-out 320ms cubic-bezier(0.55, 0, 1, 0.45) both;
@@ -64,3 +62,29 @@
   padding-inline: 1.1rem;
   font-size: 0.9rem;
 }
+
+/* Desktop and TV: the approved mockup in rem, scaled by --hc-s (a library page takes the compact strip). */
+.hc-desktop { --hc-s: 1; }
+.hc-desktop.hero-carousel-compact { --hc-s: 0.72; margin-bottom: 1rem; }
+.hc-desktop:not(.hero-carousel-compact) { height: 90vh; min-height: 34rem; }
+.hc-desktop:not(.hero-carousel-compact) .hero-carousel-stage { position: absolute; top: 28%; left: 0; width: min(45rem, 100%); }
+.hc-desktop.hero-carousel-compact .hero-carousel-stage { min-height: 30vh; }
+.hc-desktop.hero-carousel-compact .hc-slide { justify-content: flex-end; }
+.hc-desktop .hc-logo { margin-bottom: calc(1.625rem * var(--hc-s)); }
+.hc-desktop .hc-logo img { max-width: calc(32.5rem * var(--hc-s)); max-height: calc(11.25rem * var(--hc-s)); }
+.hc-desktop .hc-title { font-size: calc(4rem * var(--hc-s)); line-height: 1.1; }
+.hc-desktop .hc-meta-wrap { margin-bottom: calc(1.125rem * var(--hc-s)); }
+.hc-desktop .hc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: calc(0.875rem * var(--hc-s)); font-size: calc(1.25rem * var(--hc-s)); opacity: 0.8; }
+.hc-desktop .hc-meta b { background: rgba(236, 243, 249, 0.14); padding: 0.1875rem 0.625rem; border-radius: 0.5rem; font-size: calc(1.0625rem * var(--hc-s)); font-weight: 600; }
+.hc-desktop .hc-overview { font-size: calc(1.3125rem * var(--hc-s)); line-height: 1.5; opacity: 0.75; margin: 0 0 calc(1.875rem * var(--hc-s)); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hc-desktop .hc-actions { gap: calc(0.875rem * var(--hc-s)); }
+.hc-desktop .hc-btn { height: calc(3.625rem * var(--hc-s)); min-height: calc(3.625rem * var(--hc-s)); padding: 0 calc(1.875rem * var(--hc-s)); border: 0; border-radius: calc(1rem * var(--hc-s)); font-size: calc(1.25rem * var(--hc-s)); font-weight: 600; gap: 0.625rem; }
+.hc-desktop .hc-btn-solid { background-color: var(--color-base-content); color: var(--color-base-100); }
+.hc-desktop .hc-btn-glass { background-color: rgba(236, 243, 249, 0.14); color: var(--color-base-content); }
+.hc-desktop .hc-btn-square { padding-inline: calc(1.125rem * var(--hc-s)); }
+.hc-desktop .hc-icon { width: calc(1.5rem * var(--hc-s)); height: calc(1.5rem * var(--hc-s)); }
+.hc-desktop .hc-desktop-dots { gap: 0.625rem; }
+.hc-desktop:not(.hero-carousel-compact) .hc-desktop-dots { position: absolute; left: 0; bottom: 9.375rem; }
+.hc-desktop.hero-carousel-compact .hc-desktop-dots { margin-top: 1rem; }
+.hc-desktop .hc-dot { width: 0.75rem; height: 0.75rem; }
+.hc-desktop .hc-dot-on { width: 3.5rem; }

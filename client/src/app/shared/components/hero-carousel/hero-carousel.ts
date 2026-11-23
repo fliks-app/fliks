@@ -7,6 +7,7 @@ import { BackgroundService } from '../../../core/services/background.service';
 import { kindOf, mediaDetailLink } from '../../../core/media-kinds';
 import { episodeCode, type NextUp } from '../../../shared/utils/media-play.util';
 import { keepRouteFresh } from '../../../core/services/keep-route-fresh';
+import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { MediaStartService } from '../../../core/services/media-start.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
@@ -45,6 +46,7 @@ export class HeroCarouselComponent {
   private readonly background = inject(BackgroundService);
   private readonly navbar = inject(NavbarService);
   private readonly start = inject(MediaStartService);
+  private readonly playlists = inject(AddToPlaylistService);
   protected readonly desktop = heroDesktopLayout();
 
   protected readonly index = signal(0);
@@ -73,12 +75,23 @@ export class HeroCarouselComponent {
     () =>
       !this.reducedMotion && !this.hovered() && !this.focused() && !this.hidden() && !this.parked() && this.items().length > 1,
   );
+  /** Phone facts line: year and two genres. */
   protected readonly metaParts = computed(() => {
     const m = this.current();
-    if (!m) return [];
-    const desktop = this.desktop();
-    const parts = [m.year ? String(m.year) : '', desktop && m.runtime ? `${m.runtime}min` : '', (m.genres ?? []).slice(0, desktop ? 3 : 2).join(', ')];
-    return parts.filter(Boolean);
+    return m ? [m.year ? String(m.year) : '', (m.genres ?? []).slice(0, 2).join(', ')].filter(Boolean) : [];
+  });
+  /** Desktop and TV facts: kind badge, year, runtime as "2 h 53", rating and two genres. */
+  protected readonly facts = computed(() => {
+    const m = this.current();
+    if (!m) return null;
+    const h = Math.floor(m.runtime / 60);
+    return {
+      kindKey: kindOf(m.type).requestLabelKey,
+      year: m.year ? String(m.year) : '',
+      runtime: !m.runtime ? '' : h ? `${h} h ${String(m.runtime % 60).padStart(2, '0')}` : `${m.runtime} min`,
+      rating: m.rating ? m.rating.toFixed(1) : '',
+      genres: (m.genres ?? []).slice(0, 2).join(' · '),
+    };
   });
   /** The episode a series slide plays, loaded once per series; null while loading or when none is on disk. */
   private readonly episodes = signal(new Map<number, { next: NextUp; resuming: boolean } | null>());
@@ -162,6 +175,10 @@ export class HeroCarouselComponent {
   protected swipe(x: number): void {
     const dx = x - this.touchX;
     if (Math.abs(dx) > 50) this.go(this.index() + (dx < 0 ? 1 : -1));
+  }
+
+  protected addToPlaylist(m: Media): void {
+    this.playlists.open({ mediaId: m.id });
   }
 
   protected async play(m: Media): Promise<void> {
