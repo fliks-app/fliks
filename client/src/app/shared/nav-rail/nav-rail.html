@@ -36,7 +36,7 @@
     }
   </div>
 
-  <nav class="rail-list" [attr.aria-label]="'nav.rail_label' | translate">
+  <nav class="rail-list mt-4" [attr.aria-label]="'nav.rail_label' | translate">
     <ul class="flex flex-col gap-0.5">
       @for (item of before(); track item.id) {
         <li><ng-container [ngTemplateOutlet]="entry" [ngTemplateOutletContext]="{ $implicit: item }" /></li>
