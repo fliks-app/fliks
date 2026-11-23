@@ -36,6 +36,7 @@ import { routes } from './app.routes';
 import { resolveInitialLocale, DEFAULT_LOCALE } from './core/constants/app-locale';
 import { serverUrlInterceptor } from './core/interceptors/server-url.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
+import { clientInterceptor } from './core/interceptors/client.interceptor';
 import { kindsInterceptor } from './core/interceptors/kinds.interceptor';
 import { languageInterceptor } from './core/interceptors/language.interceptor';
 import { errorInterceptor } from './core/interceptors/error.interceptor';
@@ -207,6 +208,7 @@ export const appConfig: ApplicationConfig = {
         cacheInterceptor,
         serverUrlInterceptor,
         kindsInterceptor,
+        clientInterceptor,
         languageInterceptor,
         credentialsInterceptor,
         errorInterceptor,

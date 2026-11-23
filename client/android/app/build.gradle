@@ -18,6 +18,7 @@ static int versionCodeOf(String name) {
 
 android {
     namespace "media.fliks.app"
+    buildFeatures { buildConfig true }
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "media.fliks.app"

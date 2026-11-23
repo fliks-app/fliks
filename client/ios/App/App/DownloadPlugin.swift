@@ -207,9 +207,9 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         // not, so the header is the reliable channel. `AVURLAssetHTTPHeaderFieldsKey`
         // is applied to the asset's requests by the download task.
         var assetOptions: [String: Any] = [:]
-        if let token = call.getString("token"), !token.isEmpty {
-            assetOptions["AVURLAssetHTTPHeaderFieldsKey"] = ["Authorization": "Bearer \(token)"]
-        }
+        var assetHeaders = ["X-Fliks-Client": FliksClient.value]
+        if let token = call.getString("token"), !token.isEmpty { assetHeaders["Authorization"] = "Bearer \(token)" }
+        assetOptions["AVURLAssetHTTPHeaderFieldsKey"] = assetHeaders
 
         // Capture the (already localized) notification copy for this download.
         var copy: NotifCopy?

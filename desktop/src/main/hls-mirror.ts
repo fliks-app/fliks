@@ -18,8 +18,8 @@ type RequestFn = (url: string) => Pick<ClientRequest, 'on' | 'end' | 'abort'>;
 
 // Loaded lazily so the module imports under plain node (tests inject `request`).
 const netRequest: RequestFn = (url) => {
-  const { net } = require('electron') as typeof import('electron');
-  return net.request({ url }) as unknown as ReturnType<RequestFn>;
+  const { app, net } = require('electron') as typeof import('electron');
+  return net.request({ url, headers: { 'X-Fliks-Client': `desktop/${app.getVersion()}` } }) as unknown as ReturnType<RequestFn>;
 };
 
 function fetchText(

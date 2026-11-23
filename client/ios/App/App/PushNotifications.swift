@@ -119,6 +119,7 @@ enum PushNotifications {
         request.httpBody = try? JSONSerialization.data(withJSONObject: ["token": token])
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(session.token)", forHTTPHeaderField: "Authorization")
+        request.setValue(FliksClient.value, forHTTPHeaderField: "X-Fliks-Client")
         return (try? await URLSession.shared.data(for: request)).flatMap { ($0.1 as? HTTPURLResponse)?.statusCode }
     }
 }
