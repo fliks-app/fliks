@@ -253,10 +253,9 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private readonly heroVisible = computed(() => this.visibleSections().some((s) => s.type === 'hero-carousel'));
 
-  /** Resuming comes first and is declared whenever its zone shows: the target is read once on arrival, before any row has loaded.
-   *  Without it the wait ends on the first focusable, the carousel's button. */
+  /** Resuming comes first when there is something to resume, else the carousel's button. Read again while the page loads, so a row that arrives late still wins. */
   protected readonly defaultFocus = computed(() =>
-    this.visibleSections().some((s) => s.type === 'continue-watching')
+    this.visibleSections().some((s) => s.type === 'continue-watching') && this.continueWatching().length > 0
       ? "[data-home-focus^='cw:']"
       : "[data-home-focus='hero:primary']",
   );

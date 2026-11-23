@@ -43,17 +43,25 @@ export class DefaultFocusService {
   }
 
   /** Focus the default target on arrival (previous item on back-nav, else the declared one), waiting if not rendered yet. No-op for mouse/touch. */
-  applyOnArrival(t: DefaultFocusTarget): void {
+  applyOnArrival(get: () => DefaultFocusTarget): void {
     this.stopWaiting();
     if (!this.shouldAutoFocus()) return;
+    const t = get();
     const target = this.resolveTarget(t);
     if (target) {
-      target.focus({ preventScroll: false });
+      this.focusOnArrival(target);
       return;
     }
     // A declared selector that doesn't match anything visible yet means the
     // content is still loading — wait rather than grabbing a stray focusable.
-    if (t.selector) this.waitForTarget(t);
+    if (t.selector) this.waitForTarget(get);
+  }
+
+  /** Focuses without scrolling, then scrolls only if the element is out of view: a target below a hero must not push the hero away. */
+  private focusOnArrival(el: HTMLElement): void {
+    el.focus({ preventScroll: true });
+    const r = el.getBoundingClientRect();
+    if (r.bottom > window.innerHeight || r.top < 0) el.scrollIntoView({ block: 'nearest' });
   }
 
   /** Remember the focused item (while it's still in the host) so a later
@@ -96,27 +104,29 @@ export class DefaultFocusService {
     return this.firstVisibleFocusable(t.host);
   }
 
-  private waitForTarget(t: DefaultFocusTarget): void {
+  /** `get` is read again on every change: the declared selector may itself depend on the data that is loading. */
+  private waitForTarget(get: () => DefaultFocusTarget): void {
     if (typeof MutationObserver === 'undefined') return;
     const obs = new MutationObserver(() => {
       if (!this.shouldAutoFocus()) {
         this.stopWaiting();
         return;
       }
-      const target = this.resolveTarget(t);
+      const target = this.resolveTarget(get());
       if (target) {
-        target.focus({ preventScroll: false });
+        this.focusOnArrival(target);
         this.stopWaiting();
       }
     });
     this.pendingObserver = obs;
-    obs.observe(t.host, { childList: true, subtree: true });
+    obs.observe(get().host, { childList: true, subtree: true });
     // Give up after a window: focus the first visible focusable so the page is
     // never left unfocused if the declared target never renders (empty list).
     this.pendingTimeout = setTimeout(() => {
       this.stopWaiting();
       if (this.shouldAutoFocus()) {
-        this.firstVisibleFocusable(t.host)?.focus({ preventScroll: false });
+        const fallback = this.firstVisibleFocusable(get().host);
+        if (fallback) this.focusOnArrival(fallback);
       }
     }, WAIT_FOR_TARGET_MS);
   }
@@ -135,7 +145,12 @@ export class DefaultFocusService {
     const saved = this.focusMemory.retrieve(t.focusKey);
     if (!saved) return null;
     const items = this.itemsWithId(t, saved.id);
-    return this.firstVisibleFocusable(items[saved.nth] ?? items[0] ?? null);
+    // The nth item may be hidden now (a carousel slide that is no longer the active one): any visible one stands in.
+    return (
+      this.firstVisibleFocusable(items[saved.nth] ?? null) ??
+      items.map((i) => this.firstVisibleFocusable(i)).find((el) => !!el) ??
+      null
+    );
   }
 
   private itemsWithId(t: DefaultFocusTarget, id: string): HTMLElement[] {

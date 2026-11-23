@@ -29,7 +29,7 @@ export class DefaultFocusDirective implements OnInit, OnDestroy {
 
   constructor() {
     // Fresh navigation arrives with this component's next render; a back-nav re-attach doesn't re-render, so attached$ covers it.
-    afterNextRender(() => this.svc.applyOnArrival(this.target()));
+    afterNextRender(() => this.svc.applyOnArrival(this.targetGetter));
   }
 
   ngOnInit(): void {
@@ -42,7 +42,7 @@ export class DefaultFocusDirective implements OnInit, OnDestroy {
         .pipe(filter((key) => key === this.reuseStrategy.keyFor(this.route.snapshot)))
         // Deferred like the constructor's pass: a page can rebuild content on
         // reattach, and its DOM lands on the render after this event.
-        .subscribe(() => afterNextRender(() => this.svc.applyOnArrival(this.target()), { injector: this.injector })),
+        .subscribe(() => afterNextRender(() => this.svc.applyOnArrival(this.targetGetter), { injector: this.injector })),
     );
     // Capture the focused item the instant a navigation starts (host still in
     // the DOM) so a later back-navigation can return to it.
