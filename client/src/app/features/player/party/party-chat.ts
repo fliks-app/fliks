@@ -1,6 +1,7 @@
 import { Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideSend } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { type PartyMessage } from '../../../core/services/api/party-api.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { KeyboardOverlayService } from '../../../core/services/keyboard-overlay.service';
@@ -15,11 +16,13 @@ const MAX_LENGTH = 500;
 /** Messages and the composer of the current party: shared by the player panel and the lobby. */
 @Component({
   selector: 'app-party-chat',
-  imports: [TranslatePipe, LucideSend, TvRowDirective],
+  imports: [TranslatePipe, TvRowDirective, LucideDynamicIcon],
   templateUrl: './party-chat.html',
   host: { class: 'flex min-h-0 flex-1 flex-col' },
 })
 export class PartyChatComponent {
+  protected readonly icons = icons;
+
   protected readonly party = inject(PartyService);
   private readonly translate = inject(TranslateService);
   private readonly device = inject(DeviceService);

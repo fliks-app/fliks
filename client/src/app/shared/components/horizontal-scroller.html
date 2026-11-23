@@ -18,7 +18,7 @@
       [class.is-visible]="showLeft()"
       (click)="scrollLeft()"
     >
-      <svg lucideChevronLeft class="h-8 w-8"></svg>
+      <svg [lucideIcon]="icons.ChevronLeft" class="h-8 w-8"></svg>
     </button>
   }
 
@@ -41,7 +41,7 @@
       [class.is-visible]="showRight()"
       (click)="scrollRight()"
     >
-      <svg lucideChevronRight class="h-8 w-8"></svg>
+      <svg [lucideIcon]="icons.ChevronRight" class="h-8 w-8"></svg>
     </button>
   }
 </div>

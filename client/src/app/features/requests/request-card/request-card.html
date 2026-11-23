@@ -27,7 +27,7 @@
       <app-request-status-badge [request]="request()" (badgeClick)="badgeClick.emit()" />
       @if (request().kind === 'delete') {
         <span class="badge badge-error badge-outline badge-sm gap-1">
-          <svg lucideTrash2 class="h-3 w-3 shrink-0"></svg>
+          <svg [lucideIcon]="icons.Trash2" class="h-3 w-3 shrink-0"></svg>
           {{ 'requests.kind_delete' | translate }}
         </span>
       }

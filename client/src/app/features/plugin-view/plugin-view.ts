@@ -5,7 +5,8 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { translatePlural } from '../../core/pipes/translate-plural.pipe';
-import { LucideTriangleAlert } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { PluginUiRegistryService } from '../../core/plugin-ui/plugin-ui-registry.service';
 import { evaluateWhen } from '../../core/plugin-ui/when-evaluator';
 import { AuthService } from '../../core/services/auth.service';
@@ -121,16 +122,17 @@ const PLUGIN_PROVIDER_LABELS: ProviderListLabels = {
   selector: 'app-plugin-view',
   imports: [
     TranslatePipe,
-    LucideTriangleAlert,
     SchemaFormComponent,
     ProviderListComponent,
     DataTableComponent,
-    ReleasesModalComponent,
+    ReleasesModalComponent, LucideDynamicIcon,
   ],
   providers: [RowReleasePicker],
   templateUrl: './plugin-view.html',
 })
 export class PluginViewComponent implements OnDestroy {
+  protected readonly icons = icons;
+
   private readonly route = inject(ActivatedRoute);
   private readonly registry = inject(PluginUiRegistryService);
   private readonly http = inject(HttpClient);

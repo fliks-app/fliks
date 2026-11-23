@@ -19,16 +19,19 @@ import { Title } from '@angular/platform-browser';
 import { TranslatePipe } from '@ngx-translate/core';
 import { Location } from '@angular/common';
 import { Subscription, filter } from 'rxjs';
-import { LucideChevronLeft, LucideMenu } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { TvService } from '../../../core/services/tv.service';
 import { PageScrollerService } from '../../../core/services/page-scroller.service';
 
 @Component({
   selector: 'app-settings-drawer',
-  imports: [RouterOutlet, RouterLink, TranslatePipe, LucideChevronLeft, LucideMenu],
+  imports: [RouterOutlet, RouterLink, TranslatePipe, LucideDynamicIcon],
   templateUrl: './settings-drawer.html',
 })
 export class SettingsDrawerComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly location = inject(Location);
   private readonly router = inject(Router);
   private readonly titleService = inject(Title);

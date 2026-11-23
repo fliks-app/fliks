@@ -3,16 +3,8 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { FormsModule } from '@angular/forms';
-import {
-  LucideCheck,
-  LucideCircleCheck,
-  LucideDownload,
-  LucideEllipsisVertical,
-  LucideHeart,
-  LucideListPlus,
-  LucidePlay,
-  LucideRotateCcw,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { BrowserDeviceProfileService } from '../../../core/services/browser-device-profile.service';
 import { OptimizeModalService } from '../../../core/services/optimize-modal.service';
 import { ReportProblemService } from '../../../core/services/report-problem.service';
@@ -136,20 +128,13 @@ interface AudioTrack {
     TvSelectDirective,
     NgTemplateOutlet,
     FormsModule,
-    TranslatePipe,
-    LucideCheck,
-    LucideCircleCheck,
-    LucideDownload,
-    LucideEllipsisVertical,
-    LucideHeart,
-    LucideListPlus,
-    LucidePlay,
-    LucideRotateCcw,
-  ],
+    TranslatePipe, LucideDynamicIcon],
   templateUrl: './detail-hero.html',
   host: { class: 'block' },
 })
 export class DetailHeroComponent {
+  protected readonly icons = icons;
+
   protected readonly kinds = KIND_REGISTRY;
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);

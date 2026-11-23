@@ -6,7 +6,8 @@ import { PlayerSettingsService } from '../../../core/services/player-settings.se
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { persistOnChange } from '../../../core/utils/persist-on-change';
-import { LucideTrash2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { SubtitleAppearanceComponent } from '../../../shared/components/subtitle-appearance/subtitle-appearance';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
@@ -17,10 +18,12 @@ import {
 
 @Component({
   selector: 'app-subtitle-settings',
-  imports: [TvSelectDirective, FormsModule, TranslatePipe, LocalizeLanguagePipe, LucideTrash2, SubtitleAppearanceComponent, ToggleFieldComponent],
+  imports: [TvSelectDirective, FormsModule, TranslatePipe, LocalizeLanguagePipe, SubtitleAppearanceComponent, ToggleFieldComponent, LucideDynamicIcon],
   templateUrl: './subtitle-settings.html',
 })
 export class SubtitleSettingsPageComponent {
+  protected readonly icons = icons;
+
   private readonly ps = inject(PlayerSettingsService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly toast = inject(ToastService);

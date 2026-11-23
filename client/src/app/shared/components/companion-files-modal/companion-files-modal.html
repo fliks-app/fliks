@@ -7,11 +7,11 @@
       @for (c of rows; track c.relativePath) {
         <li class="flex items-center gap-3 rounded-lg bg-base-200 px-3 py-2">
           @switch (c.kind) {
-            @case ('subtitle') { <svg lucideCaptions class="h-4 w-4 shrink-0 opacity-70"></svg> }
-            @case ('edl') { <svg lucideScissors class="h-4 w-4 shrink-0 opacity-70"></svg> }
-            @case ('nfo') { <svg lucideFileText class="h-4 w-4 shrink-0 opacity-70"></svg> }
-            @case ('image') { <svg lucideImage class="h-4 w-4 shrink-0 opacity-70"></svg> }
-            @default { <svg lucideFile class="h-4 w-4 shrink-0 opacity-70"></svg> }
+            @case ('subtitle') { <svg [lucideIcon]="icons.Captions" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+            @case ('edl') { <svg [lucideIcon]="icons.Scissors" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+            @case ('nfo') { <svg [lucideIcon]="icons.FileText" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+            @case ('image') { <svg [lucideIcon]="icons.Image" class="h-4 w-4 shrink-0 opacity-70"></svg> }
+            @default { <svg [lucideIcon]="icons.File" class="h-4 w-4 shrink-0 opacity-70"></svg> }
           }
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium break-all">{{ c.name }}</p>
@@ -37,7 +37,7 @@
               [attr.aria-label]="'file_info.companions_download' | translate"
               (click)="download(c)"
             >
-              <svg lucideDownload class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Download" class="h-4 w-4"></svg>
             </button>
           }
           @if (canDelete()) {
@@ -48,7 +48,7 @@
               [attr.aria-label]="'file_info.companions_delete' | translate"
               (click)="remove(c)"
             >
-              <svg lucideTrash2 class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
             </button>
           }
         </li>
@@ -78,7 +78,7 @@
       }
       @if (importTypes().length) {
         <button type="button" class="btn btn-primary btn-sm ml-auto" (click)="openImport()">
-          <svg lucideUpload class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Upload" class="h-4 w-4"></svg>
           {{ 'file_info.import_button' | translate }}
         </button>
       }

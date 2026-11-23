@@ -9,7 +9,7 @@
        long heading wrapped; truncate keeps it on one line and the chevron beside it. -->
   <span class="truncate">{{ heading() }}</span>
   <svg
-    lucideChevronDown
+    [lucideIcon]="icons.ChevronDown"
     class="h-4 w-4 shrink-0 opacity-60 transition-transform duration-200"
     [class.rotate-180]="open()"
     aria-hidden="true"

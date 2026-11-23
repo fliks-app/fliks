@@ -2,7 +2,8 @@ import { Component, signal, inject, computed, effect, input, OnInit, OnDestroy, 
 import { ActivatedRoute, Router } from '@angular/router';
 import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucidePlay, LucidePlus } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { AuthService } from '../../../../core/services/auth.service';
 import { MetadataService, MetadataDetails, MetadataCredit } from '../../../../core/services/api/metadata.service';
 import { ProfilesService } from '../../../../core/services/api/profiles.service';
@@ -33,11 +34,13 @@ import { PREVIEW_HOST, type PreviewSeed } from '../../preview-host';
 /** The add preview of a movie or a series: its facts, seasons and cast, and Add, Request or the manager's pending requests. */
 @Component({
   selector: 'app-video-preview',
-  imports: [NgTemplateOutlet, TranslatePipe, AddDialogComponent, TvRowDirective, DetailSectionComponent, FactsGridComponent, HeroBaseComponent, MediaCastComponent, PreviewSeasonsComponent, RequestDeclineModalComponent, RequestEditModalComponent, RequestRequestersComponent, RequestWatchComponent, TrailerDialogComponent, LucidePlay, LucidePlus],
+  imports: [NgTemplateOutlet, TranslatePipe, AddDialogComponent, TvRowDirective, DetailSectionComponent, FactsGridComponent, HeroBaseComponent, MediaCastComponent, PreviewSeasonsComponent, RequestDeclineModalComponent, RequestEditModalComponent, RequestRequestersComponent, RequestWatchComponent, TrailerDialogComponent, LucideDynamicIcon],
   templateUrl: './video-preview.component.html',
   host: { class: 'block' },
 })
 export class VideoPreviewComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   protected readonly kinds = KIND_REGISTRY;
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -118,7 +121,6 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
   );
 
   readonly actionBusyId = signal<number | null>(null);
-
 
   private readonly addDialog = viewChild(AddDialogComponent);
   private readonly declineModal = viewChild(RequestDeclineModalComponent);

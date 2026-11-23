@@ -53,32 +53,8 @@ import {
   PickerRow,
   RemotePickerListComponent,
 } from '../../../shared/remote-picker/remote-picker-list';
-import {
-  LucideCaptions,
-  LucideCheck,
-  LucideChevronLeft,
-  LucideChevronRight,
-  LucideArrowLeft,
-  LucideExternalLink,
-  LucideMaximize,
-  LucideMinimize,
-  LucidePictureInPicture2,
-  LucideRotateCcw,
-  LucideRotateCw,
-  LucideSettings,
-  LucideSkipForward,
-  LucideSmilePlus,
-  LucideCast,
-  LucideUsers,
-  LucideUserPlus,
-  LucideLogOut,
-  LucideHeadphones,
-  LucideLeaf,
-  LucideLock,
-  LucideLockOpen,
-  LucideVolume2,
-  LucideVolumeX,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 
 /** The click-driven panels: a desktop dropdown, or a bottom sheet on touch. */
 type PanelName = 'subtitles' | 'audio' | 'speed' | 'settings' | 'devices';
@@ -124,35 +100,11 @@ const NO_TIME = signal(0).asReadonly();
     RemotePickerListComponent,
     DeviceChipComponent,
     TranslatePipe,
-    LucideCaptions,
-    LucideCheck,
-    LucideChevronLeft,
-    LucideMaximize,
-    LucideMinimize,
-    LucidePictureInPicture2,
-    LucideRotateCcw,
-    LucideRotateCw,
-    LucideSkipForward,
-    LucideSmilePlus,
-    LucideCast,
-    LucideUsers,
-    LucideUserPlus,
-    LucideLogOut,
-    LucideHeadphones,
-    LucideLeaf,
-    LucideLock,
-    LucideLockOpen,
-    LucideVolume2,
-    LucideVolumeX,
-    LucideSettings,
-    LucideChevronRight,
-    LucideArrowLeft,
-    LucideExternalLink,
     NgTemplateOutlet,
     BottomSheetComponent,
     SeekbarComponent,
     TimeLabelComponent,
-    ResolveUrlPipe,
+    ResolveUrlPipe, LucideDynamicIcon,
   ],
   templateUrl: './player-controls.html',
   // Bar insets live on the host so the floating cues inherit them and line up
@@ -167,6 +119,8 @@ const NO_TIME = signal(0).asReadonly();
   },
 })
 export class PlayerControlsComponent {
+  protected readonly icons = icons;
+
   private readonly device = inject(DeviceService);
   private readonly dismissStack = inject(DismissableStackService);
   private readonly auth = inject(AuthService);

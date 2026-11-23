@@ -225,7 +225,7 @@
         @if (clearing()) {
           <span class="loading loading-spinner loading-xs"></span>
         } @else {
-          <svg lucideTrash2 class="h-3.5 w-3.5"></svg>
+          <svg [lucideIcon]="icons.Trash2" class="h-3.5 w-3.5"></svg>
         }
         {{ 'system.clear_history' | translate }}
       </button>

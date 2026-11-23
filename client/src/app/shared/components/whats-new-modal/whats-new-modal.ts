@@ -9,7 +9,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideRocket } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { SwUpdate } from '@angular/service-worker';
 import { environment } from '../../../../environments/environment';
 import { DeviceService } from '../../../core/services/device.service';
@@ -71,10 +72,12 @@ async function fetchText(url: string): Promise<string | null> {
 /** Carousel of `public/whats-new/<version>/<lang>.md` for the versions listed in `whats-new/index.json`, shown on desktop and web, once per account. */
 @Component({
   selector: 'app-whats-new-modal',
-  imports: [ModalComponent, TranslatePipe, MarkdownPipe, LucideRocket, ModalHeaderComponent, ModalFooterComponent],
+  imports: [ModalComponent, TranslatePipe, MarkdownPipe, ModalHeaderComponent, ModalFooterComponent, LucideDynamicIcon],
   templateUrl: './whats-new-modal.html',
 })
 export class WhatsNewModalComponent {
+  protected readonly icons = icons;
+
   private readonly translate = inject(TranslateService);
   private readonly device = inject(DeviceService);
   private readonly auth = inject(AuthService);

@@ -2,7 +2,8 @@ import { Component, effect, inject, input, signal, untracked } from '@angular/co
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucidePlay } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { MusicApiService } from '../../core/services/api/music-api.service';
 import type { TrackRow, TracksQuery } from '../../core/services/api/music.models';
@@ -18,11 +19,13 @@ type Sort = NonNullable<TracksQuery['sortBy']>;
 /** Every track of a library, searchable and sortable; a click plays the list from that track. */
 @Component({
   selector: 'app-music-tracks',
-  imports: [RowSkeletonComponent, FormsModule, RouterLink, TranslatePipe, TvSelectDirective, TrackLineComponent, LucidePlay],
+  imports: [RowSkeletonComponent, FormsModule, RouterLink, TranslatePipe, TvSelectDirective, TrackLineComponent, LucideDynamicIcon],
   templateUrl: './music-tracks.component.html',
   host: { class: 'block' },
 })
 export class MusicTracksComponent {
+  protected readonly icons = icons;
+
   readonly libraryId = input<number | undefined>(undefined);
 
   private readonly api = inject(MusicApiService);

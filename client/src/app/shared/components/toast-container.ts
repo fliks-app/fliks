@@ -7,17 +7,12 @@ import {
 } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { ToastService } from '../../core/services/toast.service';
-import {
-  LucideCircleCheck,
-  LucideCircleX,
-  LucideTriangleAlert,
-  LucideInfo,
-  LucideX,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../icons';
 
 @Component({
   selector: 'app-toast-container',
-  imports: [TranslatePipe, LucideCircleCheck, LucideCircleX, LucideTriangleAlert, LucideInfo, LucideX],
+  imports: [TranslatePipe, LucideDynamicIcon],
   templateUrl: './toast-container.html',
   styles: [
     `
@@ -48,6 +43,8 @@ import {
   ],
 })
 export class ToastContainerComponent {
+  protected readonly icons = icons;
+
   readonly toastService = inject(ToastService);
   private readonly popover = viewChild<ElementRef<HTMLElement>>('popover');
 

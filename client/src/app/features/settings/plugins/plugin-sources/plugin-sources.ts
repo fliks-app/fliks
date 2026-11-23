@@ -9,7 +9,6 @@ import {
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { LucideX } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
 import { ToastService } from '../../../../core/services/toast.service';

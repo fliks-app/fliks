@@ -4,7 +4,8 @@ import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideCircleAlert, LucideClock, LucideEllipsisVertical, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { translatePlural, TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
@@ -54,20 +55,19 @@ interface DiscView {
   sections: WorkSection[];
 }
 
-
 /** The page of an album, rendered by the media detail page for the `album` kind. */
 @Component({
   selector: 'app-album-page',
   imports: [
     ModalComponent,
     LastSearchComponent, NgTemplateOutlet, RouterLink, TranslatePipe, TranslatePluralPipe, DetailHeroComponent, TrackDownloadGlyphComponent, MediaCardComponent, DetailSectionComponent, HorizontalScrollerComponent, FactsGridComponent,
-    ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent, AddDialogComponent, TvRowDirective,
-    LucideCircleAlert, LucideClock, LucideHeart, LucideListPlus, LucidePause, LucidePlay, LucidePlus, LucideShuffle, LucideEllipsisVertical,
-  ],
+    ModalHeaderComponent, MediaWantsComponent, MusicDownloadButtonComponent, AddDialogComponent, TvRowDirective, LucideDynamicIcon],
   templateUrl: './album-page.component.html',
   host: { class: 'block' },
 })
 export class AlbumPageComponent {
+  protected readonly icons = icons;
+
   /** The card handoff (list shape) until the full album lands. */
   readonly media = input.required<Media>();
   protected readonly isWanted = isWanted;

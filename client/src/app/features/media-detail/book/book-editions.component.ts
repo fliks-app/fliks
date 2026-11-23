@@ -1,7 +1,8 @@
 import { Component, OnInit, inject, input, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideBookOpen, LucideDownload, LucideHardDriveDownload, LucideHeadphones, LucideRotateCw, LucideShare2, LucideTrash2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { DetailSectionComponent } from '../../../shared/components/detail-section/detail-section';
 import { localizeLanguage } from '../../../core/utils/language.utils';
 import type { BookEdition } from '../../../core/services/api/books.models';
@@ -18,19 +19,13 @@ import { formatTime } from '../../../core/utils/player.utils';
   selector: 'app-book-editions',
   imports: [
     TranslatePipe,
-    DetailSectionComponent,
-    LucideBookOpen,
-    LucideDownload,
-    LucideHardDriveDownload,
-    LucideHeadphones,
-    LucideRotateCw,
-    LucideShare2,
-    LucideTrash2,
-  ],
+    DetailSectionComponent, LucideDynamicIcon],
   templateUrl: './book-editions.component.html',
   host: { class: 'block' },
 })
 export class BookEditionsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly mail = inject(EmailDevicesApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);

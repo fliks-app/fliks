@@ -104,7 +104,8 @@ interface PipPlugin {
 }
 const Pip = registerPlugin<PipPlugin>('Pip');
 
-import { LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { AirPlayService } from '../../core/services/airplay.service';
 import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerErrorOverlayComponent } from './overlay/player-error-overlay';
@@ -143,7 +144,7 @@ import { isMediaKind, mediaDetailLink, kindOf } from '../../core/media-kinds';
 import type { MediaType } from '../../core/enums/media-type.enum';
 
 @Component({
-  imports: [TranslatePipe, LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent, PartyInviteComponent],
+  imports: [TranslatePipe, PlayerControlsComponent, PlayerStatsOverlayComponent, SubtitleSyncPanelComponent, PlayerErrorOverlayComponent, DefaultFocusDirective, PartyPanelComponent, PartyFloatersComponent, PartyReactionDockComponent, PartyReactionSettingsComponent, PartySettingsComponent, PartyInviteComponent, LucideDynamicIcon],
   templateUrl: './player.html',
   host: { '(document:fullscreenchange)': 'onFullscreenChange()' },
   providers: [ControlsVisibilityService, CopyFallbackController, WebVideoCropController, QueueController, RemoteController, SubtitleController],
@@ -267,6 +268,8 @@ import type { MediaType } from '../../core/enums/media-type.enum';
   `],
 })
 export class PlayerComponent implements AfterViewInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   protected readonly sessionSync = inject(SessionSyncService);
@@ -1193,7 +1196,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     await op.wait(this.prepareLoad());
     await op.load(this.engine!, shakaUrl, startTime, shakaMimeType);
   }
-
 
   async ngAfterViewInit() {
     void this.audioPlayer.close();
@@ -3098,7 +3100,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       .replace(/([?&]token=)[^&\s]+/gi, '$1<redacted>')
       .replace(/(Bearer\s+)[\w.-]+/gi, '$1<redacted>');
   }
-
 
   /** True when the media is Dolby Vision served untouched (DirectPlay/DirectStream), so a decode failure is a
    *  DV-capability failure. Read live at error time via the PlayerStateService probe. */

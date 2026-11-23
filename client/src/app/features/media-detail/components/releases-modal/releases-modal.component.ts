@@ -13,7 +13,8 @@ import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { Want } from '../../../../core/services/api/wants-api.service';
 import { localizeLanguage } from '../../../../core/utils/language.utils';
-import { LucideCirclePause, LucideSearchX, LucideTriangleAlert } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { MovieRelease } from '../../media-detail-release-picker.service';
 import { IndexerRosterEntry, sourceKey } from '../../release-search-stream.service';
 import { ReleasesTableComponent } from '../releases-table/releases-table.component';
@@ -42,14 +43,12 @@ type IndexerSearchStateOrAll = IndexerRosterEntry['state'] | 'all';
     ModalHeaderComponent,
     FormsModule,
     TranslatePipe,
-    ReleasesTableComponent,
-    LucideSearchX,
-    LucideTriangleAlert,
-    LucideCirclePause,
-  ],
+    ReleasesTableComponent, LucideDynamicIcon],
   templateUrl: './releases-modal.component.html',
 })
 export class ReleasesModalComponent {
+  protected readonly icons = icons;
+
   readonly title = input.required<string>();
   readonly releases = input<MovieRelease[]>([]);
   /** Which indexers this search queries and where each one is. Empty when the search

@@ -75,20 +75,8 @@ import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { RemotePickerComponent } from '../remote-picker/remote-picker';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
-import {
-  LucideMenu,
-  LucideChevronLeft,
-  LucideSearch,
-  LucideCast,
-  LucideEllipsisVertical,
-  LucidePin,
-  LucideRocket,
-  LucideCloudOff,
-  LucideDownload,
-  LucideRotateCw,
-  LucideCheck,
-} from '@lucide/angular';
-
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../icons';
 
 interface TvTab {
   id: string;
@@ -111,8 +99,6 @@ const PAIRING_TTL_MS = 600_000;
   imports: [
     CachedSrcDirective, NgTemplateOutlet,
     RouterOutlet, RouterLink, RouterLinkActive, TranslatePipe,
-    LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
-    LucideCloudOff, LucideDownload, LucideRotateCw, LucideCheck,
     RemotePickerComponent,
     CastOverlayComponent,
     AudioPlayerComponent,
@@ -132,11 +118,13 @@ const PAIRING_TTL_MS = 600_000;
     NavIconComponent,
     BottomSheetComponent,
     TvRowDirective,
-    ResolveUrlPipe,
+    ResolveUrlPipe, LucideDynamicIcon,
   ],
   templateUrl: './layout.html',
 })
 export class LayoutComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly librariesApi = inject(LibrariesApiService);
@@ -596,9 +584,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   libraryIcon(lib: LibrarySummary): string {
     return lib.icon || 'library';
   }
-
-
-
 
   /** Bottom-dock search button: a same-URL navigation no-ops, so the click signals the search page via {@link SearchStateService.requestFocus}. */
   onSearchNavClick(): void {

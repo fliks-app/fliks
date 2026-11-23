@@ -3,7 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { CdkDrag, CdkDragHandle, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
-import { LucideGripVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { OidcApiService, OidcProviderBody, OidcProviderRow } from '../../../core/services/api/oidc-api.service';
 import { RolesApiService, RoleRow } from '../../../core/services/api/roles-api.service';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
@@ -33,14 +34,12 @@ function bodyOf(row: OidcProviderRow, patch: Partial<OidcProviderBody> = {}): Oi
     CdkDrag,
     CdkDragHandle,
     CdkDragPlaceholder,
-    DropListSettleDirective,
-    LucideGripVertical,
-    LucidePencil,
-    LucideTrash2,
-  ],
+    DropListSettleDirective, LucideDynamicIcon],
   templateUrl: './sso.html',
 })
 export class SsoSettingsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(OidcApiService);
   private readonly rolesApi = inject(RolesApiService);
   private readonly settings = inject(SettingsApiService);

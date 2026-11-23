@@ -71,14 +71,14 @@
       <div appTvRow [attr.data-party-actions]="actionsSettled() ? '' : null" class="flex flex-wrap items-center gap-2 mt-6 mb-2">
         @if (phase() === 'live') {
           <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" (click)="join()">
-            <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
+            <svg [lucideIcon]="icons.Play" class="h-5 w-5" fill="currentColor"></svg>
             {{ 'party.join' | translate }}
           </button>
         } @else if (phase() === 'lobby') {
           @if (joined()) {
             @if (party.isHost() && ready()) {
               <button type="button" class="btn btn-primary gap-2 whitespace-nowrap" [class.flex-auto]="!desktopLayout()" [disabled]="!canStart()" (click)="start()">
-                <svg lucidePlay class="h-5 w-5" fill="currentColor"></svg>
+                <svg [lucideIcon]="icons.Play" class="h-5 w-5" fill="currentColor"></svg>
                 {{ 'party.start' | translate }}
               </button>
             }
@@ -92,9 +92,9 @@
               (click)="toggleReady()"
             >
               @if (ready()) {
-                <svg lucideX class="h-5 w-5"></svg>
+                <svg [lucideIcon]="icons.X" class="h-5 w-5"></svg>
               } @else {
-                <svg lucideCheck class="h-5 w-5"></svg>
+                <svg [lucideIcon]="icons.Check" class="h-5 w-5"></svg>
               }
               {{ (ready() ? 'party.not_ready' : 'party.ready') | translate }}
             </button>
@@ -111,19 +111,19 @@
         }
         @if (view()?.inviteToken && !device.isTv()) {
           <button type="button" class="btn btn-ghost gap-2" (click)="copy()">
-            <svg lucideShare2 class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.Share2" class="h-4 w-4"></svg>
             {{ (party.canShare() ? 'party.share_link' : 'party.copy_link') | translate }}
           </button>
         }
         @if (h.status === 'scheduled' && h.scheduledAt && !device.isTv()) {
           <button type="button" class="btn btn-ghost gap-2" (click)="addToCalendar()">
-            <svg lucideCalendarPlus class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.CalendarPlus" class="h-4 w-4"></svg>
             {{ 'party.add_to_calendar' | translate }}
           </button>
         }
         @if (canHost() && view()) {
           <button type="button" class="btn btn-ghost gap-2" (click)="hostDialog()?.show()">
-            <svg lucideSettings class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.Settings" class="h-4 w-4"></svg>
             {{ 'party.settings' | translate }}
           </button>
         }
@@ -138,7 +138,7 @@
         <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           <p class="text-sm text-base-content/60">{{ (voteTied() ? 'party.start_tie' : 'party.start_top_vote') | translate }}</p>
           @if (voteTied()) {
-            <button type="button" class="btn btn-sm btn-outline gap-1" [disabled]="busy()" (click)="drawLots()"><svg lucideDices class="h-4 w-4"></svg>{{ 'party.draw_lots' | translate }}</button>
+            <button type="button" class="btn btn-sm btn-outline gap-1" [disabled]="busy()" (click)="drawLots()"><svg [lucideIcon]="icons.Dices" class="h-4 w-4"></svg>{{ 'party.draw_lots' | translate }}</button>
           }
         </div>
       }
@@ -195,12 +195,12 @@
                     @if (canHost() && !p.host) {
                       <app-dropdown-menu placement="bottom-end">
                         <button trigger type="button" class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.actions' | translate">
-                          <svg lucideEllipsisVertical class="h-4 w-4"></svg>
+                          <svg [lucideIcon]="icons.EllipsisVertical" class="h-4 w-4"></svg>
                         </button>
                         @if (v.status === 'live' && p.connected) {
-                          <button type="button" class="dropdown-item" (click)="party.makeHost(p.userId, v.id)"><svg lucideCrown class="h-4 w-4"></svg>{{ 'party.make_host' | translate }}</button>
+                          <button type="button" class="dropdown-item" (click)="party.makeHost(p.userId, v.id)"><svg [lucideIcon]="icons.Crown" class="h-4 w-4"></svg>{{ 'party.make_host' | translate }}</button>
                         }
-                        <button type="button" class="dropdown-item text-error" (click)="party.kick(p, v.id)"><svg lucideUserMinus class="h-4 w-4"></svg>{{ 'party.kick' | translate }}</button>
+                        <button type="button" class="dropdown-item text-error" (click)="party.kick(p, v.id)"><svg [lucideIcon]="icons.UserMinus" class="h-4 w-4"></svg>{{ 'party.kick' | translate }}</button>
                       </app-dropdown-menu>
                     }
                   </app-party-person-row>

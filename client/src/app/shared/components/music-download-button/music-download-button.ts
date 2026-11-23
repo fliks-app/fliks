@@ -1,17 +1,20 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCircleArrowDown, LucideDownload } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import type { MusicTrackRequest } from '../../../core/services/audio-player/music-queue';
 import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
 
 /** Keeps the tracks of an album, a playlist or an artist on the device, or removes them once they all are. */
 @Component({
   selector: 'app-music-download-button',
-  imports: [TranslatePipe, LucideCircleArrowDown, LucideDownload],
+  imports: [TranslatePipe, LucideDynamicIcon],
   templateUrl: './music-download-button.html',
   host: { class: 'contents' },
 })
 export class MusicDownloadButtonComponent {
+  protected readonly icons = icons;
+
   /** Loads the tracks when the button is pressed. */
   readonly tracks = input.required<() => Promise<readonly MusicTrackRequest[]>>();
   /** The tracks already known: they give the state and let a full set be removed. A source loaded on demand leaves it out. */

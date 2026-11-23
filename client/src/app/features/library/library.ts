@@ -52,7 +52,8 @@ import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { NavbarService } from '../../core/services/navbar.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { InfiniteScrollList, VirtualGrid } from '../../shared/utils/infinite-scroll-list';
-import { LucideSearch, LucideSlidersHorizontal, LucideArrowUp, LucideArrowDown, LucideX, LucideFilm } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { CardSkeletonComponent } from '../../shared/components/card-skeleton';
 import { ImportProgressBannerComponent } from '../../shared/components/import-progress-banner/import-progress-banner';
@@ -160,12 +161,6 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     LocalizeLanguagePipe,
     PersonAvatarCardComponent,
     TranslatePipe, TranslatePluralPipe,
-    LucideSearch,
-    LucideSlidersHorizontal,
-    LucideArrowUp,
-    LucideArrowDown,
-    LucideFilm,
-    LucideX,
     MosaicCardComponent,
     NgTemplateOutlet,
     CdkVirtualScrollViewport,
@@ -175,11 +170,13 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     CardSkeletonComponent,
     ImportProgressBannerComponent,
     MusicPeopleComponent,
-    MusicTracksComponent,
+    MusicTracksComponent, LucideDynamicIcon,
   ],
   templateUrl: './library.html',
 })
 export class LibraryComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly mediaService = inject(MediaService);
   private readonly auth = inject(AuthService);
   /** Monitoring is an admin notion: members get no filter for it. */

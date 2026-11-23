@@ -9,7 +9,7 @@
     }
     <!-- Laid out like app-toggle-field below: the icon takes the switch's column. -->
     <button type="button" class="group flex w-full cursor-pointer items-start gap-4 text-left" (click)="resync()">
-      <span class="btn btn-sm btn-circle shrink-0 group-hover:btn-active"><svg lucideRefreshCw class="h-4 w-4"></svg></span>
+      <span class="btn btn-sm btn-circle shrink-0 group-hover:btn-active"><svg [lucideIcon]="icons.RefreshCw" class="h-4 w-4"></svg></span>
       <span class="flex min-w-0 flex-1 flex-col gap-0.5">
         <span class="font-medium">{{ 'party.resync' | translate }}</span>
         <span class="text-sm text-base-content/60">{{ 'party.resync_hint' | translate }}</span>

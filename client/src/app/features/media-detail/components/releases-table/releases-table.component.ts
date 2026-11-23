@@ -6,13 +6,8 @@ import {
   output,
 } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import {
-  LucideTriangleAlert,
-  LucideCheck,
-  LucideCircleAlert,
-  LucideDownload,
-  LucidePackage,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { MovieRelease } from '../../media-detail-release-picker.service';
 import { formatMediaDetailBytes } from '../../media-detail.utils';
 import { formatReleaseRejection } from '../../media-detail-release.utils';
@@ -21,10 +16,12 @@ import { ConfirmationService } from '../../../../core/services/confirmation.serv
 
 @Component({
   selector: 'app-releases-table',
-  imports: [NgTemplateOutlet, TranslatePipe, LucideTriangleAlert, LucideCheck, LucideCircleAlert, LucideDownload, LucidePackage],
+  imports: [NgTemplateOutlet, TranslatePipe, LucideDynamicIcon],
   templateUrl: './releases-table.component.html',
 })
 export class ReleasesTableComponent {
+  protected readonly icons = icons;
+
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
 

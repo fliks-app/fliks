@@ -9,7 +9,8 @@ import {
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucidePlus, LucideUpload } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { ModalHeaderComponent } from '../../shared/components/modal-header';
 import { M3uImportResult, Playlist, PlaylistsApiService } from '../../core/services/api/playlists-api.service';
@@ -28,14 +29,14 @@ import { ModalComponent } from '../../shared/components/modal';
     MosaicCardComponent,
     TranslatePipe,
     FormsModule,
-    LucidePlus,
-    LucideUpload,
     ModalHeaderComponent,
-    SmartPlaylistEditorComponent,
+    SmartPlaylistEditorComponent, LucideDynamicIcon,
   ],
   templateUrl: './playlists.html',
 })
 export class PlaylistsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(PlaylistsApiService);
   protected readonly m3uSupported = this.api.m3uSupported;
   private readonly router = inject(Router);

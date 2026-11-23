@@ -78,8 +78,8 @@
     } @else if (!syncing()) {
       <p class="sync-hint pointer-events-none absolute inset-x-0 bottom-2 mx-auto hidden w-fit rounded bg-black/70 px-2 py-1 text-sm text-white/80">{{ 'player.subtitle_sync.adjust_hint' | translate }}</p>
     }
-    <svg lucideChevronRight class="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-white" [style.left.px]="rulerW()" aria-hidden="true"></svg>
-    <svg lucideChevronLeft class="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-white" [style.right.px]="scrollbarW()" aria-hidden="true"></svg>
+    <svg [lucideIcon]="icons.ChevronRight" class="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-white" [style.left.px]="rulerW()" aria-hidden="true"></svg>
+    <svg [lucideIcon]="icons.ChevronLeft" class="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-white" [style.right.px]="scrollbarW()" aria-hidden="true"></svg>
   </div>
 
   @if (syncing() && !phone()) {
@@ -104,13 +104,13 @@
         </div>
       } @else {
         <button type="button" class="btn btn-ghost btn-sm btn-square" [disabled]="!dirty()" [attr.aria-label]="'player.subtitle_sync.reset' | translate" [attr.title]="'player.subtitle_sync.reset' | translate" (click)="reset()">
-          <svg lucideRotateCcw class="h-5 w-5"></svg>
+          <svg [lucideIcon]="icons.RotateCcw" class="h-5 w-5"></svg>
         </button>
         <button type="button" class="btn btn-sm btn-square" [disabled]="!editable()" [attr.aria-label]="'player.subtitle_sync.sync_other' | translate" [attr.title]="'player.subtitle_sync.sync_other' | translate" (click)="openSyncModal()">
-          <svg lucideWandSparkles class="h-5 w-5"></svg>
+          <svg [lucideIcon]="icons.WandSparkles" class="h-5 w-5"></svg>
         </button>
         <button type="button" class="btn btn-primary btn-sm btn-square" [disabled]="!editable() || busy() || !dirty()" [attr.aria-label]="'player.subtitle_sync.save' | translate" [attr.title]="'player.subtitle_sync.save' | translate" (click)="save()">
-          <svg lucideCheck class="h-5 w-5"></svg>
+          <svg [lucideIcon]="icons.Check" class="h-5 w-5"></svg>
         </button>
       }
     </div>

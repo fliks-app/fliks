@@ -73,7 +73,7 @@
       <ng-content select="[heroActions]" />
       @if (selectedFileId() || resumeMediaFileId()) {
         <button class="btn btn-primary" [class]="desktop ? 'gap-1' : 'flex-1 gap-2'" [attr.autofocus]="desktop ? '' : null" (pointerenter)="warmPlayer()" (focus)="warmPlayer()" (click)="play(false)">
-          <svg lucidePlay [class]="desktop ? 'h-4 w-4' : 'h-5 w-5'" fill="currentColor"></svg>
+          <svg [lucideIcon]="icons.Play" [class]="desktop ? 'h-4 w-4' : 'h-5 w-5'" fill="currentColor"></svg>
           @if (resumeLabel()) {
             {{ 'player.resume_at' | translate:{ time: resumeLabel() } }}
           } @else {
@@ -82,7 +82,7 @@
         </button>
         @if (resumeLabel()) {
           <button class="btn btn-ghost" [class]="desktop ? 'gap-1' : 'gap-2'" (click)="play(true)">
-            <svg lucideRotateCcw class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.RotateCcw" class="h-4 w-4"></svg>
             {{ 'player.play_from_start' | translate }}
           </button>
         }
@@ -90,7 +90,7 @@
       @if (desktop) {
         @if (canToggleWatched()) {
           <button type="button" class="btn btn-outline btn-circle" [attr.aria-label]="'media_info.watched' | translate" [class.btn-success]="watched()" [class.btn-ghost]="!watched()" (click)="onToggleWatched()">
-            <svg lucideCheck class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.Check" class="h-4 w-4"></svg>
           </button>
         }
         @if (selectedFileId() || resumeMediaFileId()) {
@@ -98,7 +98,7 @@
             @if (download(); as d) {
               @if (d.status === 'ready') {
                 <button type="button" class="btn btn-ghost btn-circle text-success" [attr.aria-label]="'downloads.downloaded' | translate" [title]="'downloads.downloaded' | translate" (click)="openDownload.emit()">
-                  <svg lucideDownload class="h-5 w-5"></svg>
+                  <svg [lucideIcon]="icons.Download" class="h-5 w-5"></svg>
                 </button>
               } @else {
                 <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'downloads.downloading' | translate" [title]="'downloads.downloading' | translate" (click)="openDownload.emit()">
@@ -107,7 +107,7 @@
               }
             } @else {
               <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'downloads.download' | translate" (click)="openDownload.emit()">
-                <svg lucideDownload class="h-4 w-4"></svg>
+                <svg [lucideIcon]="icons.Download" class="h-4 w-4"></svg>
               </button>
             }
           }
@@ -116,13 +116,13 @@
           <ng-container *ngTemplateOutlet="downloadBadge; context: { badge: b }"></ng-container>
         }
         <button type="button" class="btn btn-ghost btn-circle" [class.text-error]="liked()" [attr.aria-label]="'likes.like' | translate" [attr.aria-pressed]="liked()" (click)="likeToggled.emit()">
-          <svg lucideHeart class="h-4 w-4" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
+          <svg [lucideIcon]="icons.Heart" class="h-4 w-4" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
         </button>
         <button type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addToPlaylist()">
-          <svg lucideListPlus class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.ListPlus" class="h-4 w-4"></svg>
         </button>
         <button #moreDesktop type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'common.more' | translate" (click)="openActionsMenu(moreDesktop)">
-          <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+          <svg [lucideIcon]="icons.EllipsisVertical" class="h-5 w-5"></svg>
         </button>
       }
   </ng-container>
@@ -168,7 +168,7 @@
       <div class="flex items-center justify-around gap-2 mt-4">
         @if (canToggleWatched()) {
           <button class="flex flex-col items-center gap-1 text-sm" [class.text-success]="watched()" (click)="onToggleWatched()">
-            <svg lucideCheck class="h-5 w-5"></svg>
+            <svg [lucideIcon]="icons.Check" class="h-5 w-5"></svg>
             {{ 'media_info.watched' | translate }}
           </button>
         }
@@ -176,7 +176,7 @@
           @if (download(); as d) {
             @if (d.status === 'ready') {
               <button class="flex flex-col items-center gap-1 text-sm text-success" (click)="openDownload.emit()">
-                <svg lucideCircleCheck class="h-5 w-5"></svg>
+                <svg [lucideIcon]="icons.CircleCheck" class="h-5 w-5"></svg>
                 {{ 'downloads.downloaded' | translate }}
               </button>
             } @else {
@@ -187,18 +187,18 @@
             }
           } @else {
             <button class="flex flex-col items-center gap-1 text-sm" (click)="openDownload.emit()">
-              <svg lucideDownload class="h-5 w-5"></svg>
+              <svg [lucideIcon]="icons.Download" class="h-5 w-5"></svg>
               {{ 'downloads.download' | translate }}
             </button>
           }
         }
         <!-- Like is a taste signal, not a playback action: available with or without a local file. -->
         <button type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer" [class.text-error]="liked()" [attr.aria-pressed]="liked()" (click)="likeToggled.emit()">
-          <svg lucideHeart class="h-5 w-5" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
+          <svg [lucideIcon]="icons.Heart" class="h-5 w-5" [attr.fill]="liked() ? 'currentColor' : 'none'"></svg>
           {{ 'likes.like' | translate }}
         </button>
         <button type="button" class="flex flex-col items-center gap-1 text-sm cursor-pointer" (click)="addToPlaylist()">
-          <svg lucideListPlus class="h-5 w-5"></svg>
+          <svg [lucideIcon]="icons.ListPlus" class="h-5 w-5"></svg>
           {{ 'playlists.add_to_playlist' | translate }}
         </button>
       </div>

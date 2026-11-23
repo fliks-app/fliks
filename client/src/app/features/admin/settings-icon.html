@@ -1,12 +1,12 @@
 @switch (name()) {
-  @case ('bar-chart-3') { <svg lucideBarChart3></svg> }
-  @case ('layout-grid') { <svg lucideLayoutGrid></svg> }
-  @case ('play') { <svg lucidePlay></svg> }
-  @case ('webhook') { <svg lucideWebhook></svg> }
-  @case ('download') { <svg lucideDownload></svg> }
-  @case ('search') { <svg lucideSearch></svg> }
-  @case ('server') { <svg lucideServer></svg> }
-  @case ('history') { <svg lucideHistory></svg> }
-  @case ('settings') { <svg lucideSettings></svg> }
-  @default { <svg lucideCircle></svg> }
+  @case ('bar-chart-3') { <svg [lucideIcon]="icons.BarChart3"></svg> }
+  @case ('layout-grid') { <svg [lucideIcon]="icons.LayoutGrid"></svg> }
+  @case ('play') { <svg [lucideIcon]="icons.Play"></svg> }
+  @case ('webhook') { <svg [lucideIcon]="icons.Webhook"></svg> }
+  @case ('download') { <svg [lucideIcon]="icons.Download"></svg> }
+  @case ('search') { <svg [lucideIcon]="icons.Search"></svg> }
+  @case ('server') { <svg [lucideIcon]="icons.Server"></svg> }
+  @case ('history') { <svg [lucideIcon]="icons.History"></svg> }
+  @case ('settings') { <svg [lucideIcon]="icons.Settings"></svg> }
+  @default { <svg [lucideIcon]="icons.Circle"></svg> }
 }

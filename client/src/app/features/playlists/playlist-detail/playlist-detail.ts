@@ -25,24 +25,8 @@ import {
   moveItemInArray,
 } from '@angular/cdk/drag-drop';
 import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
-import {
-  LucideArrowDown,
-  LucideArrowUp,
-  LucideCheck,
-  LucideDownload,
-  LucideEllipsisVertical,
-  LucideGripVertical,
-  LucideInfo,
-  LucidePencil,
-  LucidePlay,
-  LucideShuffle,
-  LucideSettings,
-  LucideTrash2,
-  LucideUsers,
-  LucideUserPlus,
-  LucideBookmark,
-  LucideBookmarkCheck,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
@@ -104,32 +88,18 @@ type PlaylistGroupedEntry =
     DropListSettleDirective,
     CdkDrag,
     CdkDragHandle,
-    LucideArrowDown,
-    LucideArrowUp,
-    LucideCheck,
-    LucideDownload,
-    LucideEllipsisVertical,
-    LucideGripVertical,
-    LucideInfo,
-    LucidePencil,
-    LucidePlay,
-    LucideShuffle,
-    LucideSettings,
-    LucideTrash2,
-    LucideUsers,
-    LucideUserPlus,
-    LucideBookmark,
-    LucideBookmarkCheck,
     ToggleFieldComponent,
     DropdownMenuComponent,
     ModalHeaderComponent,
     ResolveUrlPipe,
     HeroBaseComponent,
-    SmartPlaylistEditorComponent,
+    SmartPlaylistEditorComponent, LucideDynamicIcon,
   ],
   templateUrl: './playlist-detail.html',
 })
 export class PlaylistDetailComponent {
+  protected readonly icons = icons;
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(PlaylistsApiService);

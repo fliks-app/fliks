@@ -9,13 +9,8 @@ import {
   signal,
 } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import {
-  LucideChevronDown,
-  LucideMinus,
-  LucidePlus,
-  LucideRotateCcw,
-  LucideX,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import {
   FONT_SIZE_RANGE,
   FONT_STACKS,
@@ -37,11 +32,13 @@ import type { AppearanceSection } from './reader-features';
  *  phone with the extras folded away. */
 @Component({
   selector: 'app-reader-appearance',
-  imports: [TranslatePipe, LucideChevronDown, LucideMinus, LucidePlus, LucideRotateCcw, LucideX],
+  imports: [TranslatePipe, LucideDynamicIcon],
   templateUrl: './reader-appearance.html',
   styleUrl: './reader-panel.css',
 })
 export class ReaderAppearanceComponent {
+  protected readonly icons = icons;
+
   readonly sections = input.required<readonly AppearanceSection[]>();
   readonly settings = input.required<ReaderSettings>();
   readonly comic = input<ComicPrefs | null>(null);

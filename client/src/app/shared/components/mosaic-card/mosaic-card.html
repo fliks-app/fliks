@@ -7,7 +7,7 @@
   <div class="mosaic-art relative aspect-square rounded-xl overflow-hidden bg-base-300 shadow-md group-hover:shadow-xl transition-shadow">
     <app-poster-mosaic [posters]="posters()">
       <div class="w-full h-full flex items-center justify-center text-base-content/60">
-        <svg lucideFolder class="w-12 h-12" [strokeWidth]="1.5"></svg>
+        <svg [lucideIcon]="icons.Folder" class="w-12 h-12" [strokeWidth]="1.5"></svg>
       </div>
     </app-poster-mosaic>
     <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>

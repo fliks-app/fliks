@@ -2,7 +2,8 @@ import { Component, ElementRef, HostListener, computed, inject, signal, viewChil
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { isTypingTarget } from '../../core/utils/typing-target';
-import { LucideShield } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
 import { CardActionsPanelComponent } from '../../shared/components/card-actions-panel/card-actions-panel';
 import { SettingsIconComponent } from './settings-icon';
@@ -13,12 +14,12 @@ import { SettingsSectionsService } from './settings-sections.service';
   imports: [
     CardActionsPanelComponent,
     RouterLink, TranslatePipe,
-    SettingsDrawerComponent, SettingsIconComponent,
-    LucideShield,
-  ],
+    SettingsDrawerComponent, SettingsIconComponent, LucideDynamicIcon],
   templateUrl: './admin-shell.html',
 })
 export class AdminShellComponent {
+  protected readonly icons = icons;
+
   private readonly settings = inject(SettingsSectionsService);
   private readonly translate = inject(TranslateService);
   private readonly router = inject(Router);

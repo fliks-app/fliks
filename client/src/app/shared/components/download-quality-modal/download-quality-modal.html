@@ -2,7 +2,7 @@
   <div class="flex items-center justify-between mb-4">
     <h3 class="text-lg font-bold">{{ (current() ? 'downloads.change_quality' : 'downloads.choose_quality') | translate }}</h3>
     <button class="btn btn-ghost btn-sm btn-circle" [attr.aria-label]="'common.close' | translate" (click)="close()">
-      <svg lucideX class="h-4 w-4"></svg>
+      <svg [lucideIcon]="icons.X" class="h-4 w-4"></svg>
     </button>
   </div>
 
@@ -11,7 +11,7 @@
       <div class="flex items-center gap-2">
         <progress class="progress progress-info flex-1" [value]="progress()" max="100"></progress>
         <button class="btn btn-ghost btn-xs btn-circle" [attr.aria-label]="'common.cancel' | translate" [title]="'common.cancel' | translate" (click)="removeDownload()">
-          <svg lucideX class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.X" class="h-4 w-4"></svg>
         </button>
       </div>
       <p class="text-sm text-center mt-1 text-base-content/60">{{ 'downloads.downloading' | translate }} {{ progress() }}%</p>
@@ -50,9 +50,9 @@
         >
           <span class="flex items-center gap-2">
             @if (q.key === current()) {
-              <svg lucideCircleCheck class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.CircleCheck" class="h-4 w-4"></svg>
             } @else {
-              <svg lucideDownload class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Download" class="h-4 w-4"></svg>
             }
             {{ q.key === 'original' ? ('downloads.original' | translate) : q.key }}
           </span>
@@ -70,7 +70,7 @@
         [disabled]="downloading()"
         (click)="downloadOriginal()"
       >
-        <svg lucideDownload class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.Download" class="h-4 w-4"></svg>
         {{ 'downloads.original_file' | translate }}
       </button>
       <p class="text-sm text-base-content/60 mt-1">
@@ -81,7 +81,7 @@
     @if (current() && progress() === null) {
       <div class="divider my-2"></div>
       <button class="btn btn-outline btn-error justify-start gap-2 w-full" (click)="removeDownload()">
-        <svg lucideTrash2 class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
         {{ 'downloads.delete_download' | translate }}
       </button>
     }

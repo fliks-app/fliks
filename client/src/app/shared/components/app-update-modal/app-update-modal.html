@@ -1,7 +1,7 @@
 <dialog #dialog appModal boxClass="max-w-lg" [attr.aria-label]="'update.title' | translate">
   <app-modal-header>
     <div class="flex items-center gap-2">
-      <svg lucideRocket class="h-5 w-5 text-primary"></svg>
+      <svg [lucideIcon]="icons.Rocket" class="h-5 w-5 text-primary"></svg>
       <h3 class="text-lg font-bold">{{ 'update.title' | translate }}</h3>
     </div>
   </app-modal-header>
@@ -21,7 +21,7 @@
     @if (update.aheadOfServer()) {
       <div role="alert" class="rounded-box border border-warning/50 bg-warning/10 p-3 mb-3">
         <div class="flex items-start gap-2">
-          <svg lucideTriangleAlert class="h-5 w-5 shrink-0 text-warning"></svg>
+          <svg [lucideIcon]="icons.TriangleAlert" class="h-5 w-5 shrink-0 text-warning"></svg>
           <div class="flex flex-col items-start gap-2">
             <p class="text-sm">
               {{ 'update.ahead_of_server' | translate: { server: update.serverVersion() } }}
@@ -75,12 +75,12 @@
         </button>
       } @else if (canInstallInApp()) {
         <button class="btn btn-primary" [disabled]="downloading()" (click)="onAction()">
-          <svg lucideDownload class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Download" class="h-4 w-4"></svg>
           {{ 'update.install' | translate }}
         </button>
       } @else {
         <button class="btn btn-primary" (click)="onAction()">
-          <svg lucideExternalLink class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.ExternalLink" class="h-4 w-4"></svg>
           {{ 'update.open_release' | translate }}
         </button>
       }

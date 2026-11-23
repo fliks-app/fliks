@@ -16,14 +16,8 @@ import {
   moveItemInArray,
 } from '@angular/cdk/drag-drop';
 import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
-import {
-  LucideGripVertical,
-  LucideArrowUp,
-  LucideArrowDown,
-  LucideSettings,
-  LucideEye,
-  LucideEyeOff,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import {
   HomeSettingsService,
   ResolvedHomeSection,
@@ -53,18 +47,14 @@ import { ModalComponent } from '../../../shared/components/modal';
     DropListSettleDirective,
     CdkDrag,
     CdkDragHandle,
-    LucideGripVertical,
-    LucideArrowUp,
-    LucideArrowDown,
-    LucideSettings,
-    LucideEye,
-    LucideEyeOff,
     SelectFieldComponent,
-    ToggleFieldComponent,
+    ToggleFieldComponent, LucideDynamicIcon,
   ],
   templateUrl: './home-settings.html',
 })
 export class HomeSettingsPageComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly home = inject(HomeSettingsService);
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly libraryPrefs = inject(LibraryPrefsService);

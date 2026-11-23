@@ -1,30 +1,16 @@
 import { Component, input } from '@angular/core';
-import {
-  LucideHome,
-  LucideSearch,
-  LucideUserRound,
-  LucideListVideo,
-  LucideDownload,
-  LucideHistory,
-  LucideClipboardList,
-  LucideCalendar,
-  LucideTv,
-  LucideCircle,
-  LucideLibrary,
-  LucideTarget,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../icons';
 
 /** Renders a nav contribution's icon by name; a plugin can name any string, so unknown names fall back to a generic circle. */
 @Component({
   selector: 'app-nav-icon',
-  imports: [
-    LucideHome, LucideSearch, LucideUserRound, LucideListVideo,
-    LucideDownload, LucideHistory, LucideClipboardList, LucideCalendar, LucideTv, LucideCircle,
-    LucideLibrary, LucideTarget,
-  ],
+  imports: [LucideDynamicIcon],
   templateUrl: './nav-icon.html',
   styles: [`:host { display: inline-flex; } svg { width: 100%; height: 100%; }`],
 })
 export class NavIconComponent {
+  protected readonly icons = icons;
+
   readonly name = input.required<string>();
 }

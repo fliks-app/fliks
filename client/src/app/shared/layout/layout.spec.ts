@@ -6,15 +6,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet, Router, provideRouter } fro
 import { TranslateLoader, TranslatePipe, provideTranslateService } from '@ngx-translate/core';
 import { Subject, filter, of } from 'rxjs';
 import { vi } from 'vitest';
-import {
-  LucideMenu,
-  LucideChevronLeft,
-  LucideSearch,
-  LucideCast,
-  LucideEllipsisVertical,
-  LucidePin,
-  LucideRocket,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
 import { LayoutComponent } from './layout';
 import { NavIconComponent } from './nav-icon';
 import { LucideIconComponent } from '../components/lucide-icon';
@@ -248,7 +240,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
       schemas: [NO_ERRORS_SCHEMA],
       imports: [
         RouterOutlet, RouterLink, RouterLinkActive, TranslatePipe,
-        LucideMenu, LucideChevronLeft, LucideSearch, LucideCast, LucideEllipsisVertical, LucidePin, LucideRocket,
+        LucideDynamicIcon,
         LucideIconComponent,
         NavIconComponent,
         UpdateModalStub,
@@ -281,7 +273,7 @@ function readItem(anchor: Element | null): CapturedItem | null {
   const badge = badgeEl ? (badgeEl.textContent ?? '').trim() : null;
   const svg = anchor.querySelector('svg');
   const icon = svg
-    ? (Array.from(svg.attributes).map((a) => a.name).find((n) => n.startsWith('lucide')) ?? null)
+    ? (Array.from(svg.classList).find((c) => c.startsWith('lucide-')) ?? null)
     : null;
   const labelHost = anchor.querySelector(':scope > span:not(.badge)') ?? anchor;
   const label = (labelHost.textContent ?? '').trim();
@@ -372,18 +364,18 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
   it('sidebar: admin with libraries', async () => {
     const fixture = await createFixture(ADMIN_WITH_LIBRARIES);
     expect(sidebarItems(fixture.nativeElement)).toEqual([
-      { label: 'nav.home', icon: 'lucideHome', badge: null, href: '/' },
-      { label: 'search.title', icon: 'lucideSearch', badge: null, href: '/search' },
-      { label: 'nav.my_profile', icon: 'lucideUserRound', badge: null, href: '/profile/1' },
-      { label: 'liveTv.title', icon: 'lucideTv', badge: null, href: '/live-tv' },
-      { label: 'Movies', icon: 'lucideLibrary', badge: null, href: '/libraries/Movies' },
-      { label: 'Series', icon: 'lucideLibrary', badge: null, href: '/libraries/Series' },
-      { label: 'Anime', icon: 'lucideSwords', badge: null, href: '/libraries/Anime' },
-      { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
-      { label: 'downloads.title', icon: 'lucideDownload', badge: null, href: '/downloads' },
-      { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
-      { label: 'nav.requests', icon: 'lucideClipboardList', badge: '2', href: '/requests' },
-      { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
+      { label: 'nav.home', icon: 'lucide-house', badge: null, href: '/' },
+      { label: 'search.title', icon: 'lucide-search', badge: null, href: '/search' },
+      { label: 'nav.my_profile', icon: 'lucide-user-round', badge: null, href: '/profile/1' },
+      { label: 'liveTv.title', icon: 'lucide-tv', badge: null, href: '/live-tv' },
+      { label: 'Movies', icon: 'lucide-library', badge: null, href: '/libraries/Movies' },
+      { label: 'Series', icon: 'lucide-library', badge: null, href: '/libraries/Series' },
+      { label: 'Anime', icon: 'lucide-swords', badge: null, href: '/libraries/Anime' },
+      { label: 'nav.playlists', icon: 'lucide-list-video', badge: null, href: '/playlists' },
+      { label: 'downloads.title', icon: 'lucide-download', badge: null, href: '/downloads' },
+      { label: 'nav.history', icon: 'lucide-rotate-ccw-clock', badge: null, href: '/history' },
+      { label: 'nav.requests', icon: 'lucide-clipboard-list', badge: '2', href: '/requests' },
+      { label: 'nav.calendar', icon: 'lucide-calendar', badge: null, href: '/calendar' },
     ]);
     expect(dockItems(fixture.nativeElement)).toEqual([]);
     expect(sheetItems(fixture.nativeElement)).toEqual([]);
@@ -392,44 +384,44 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
   it('sidebar: non-admin without libraries', async () => {
     const fixture = await createFixture(NON_ADMIN_NO_LIBRARIES);
     expect(sidebarItems(fixture.nativeElement)).toEqual([
-      { label: 'nav.home', icon: 'lucideHome', badge: null, href: '/' },
-      { label: 'search.title', icon: 'lucideSearch', badge: null, href: '/search' },
-      { label: 'nav.my_profile', icon: 'lucideUserRound', badge: null, href: '/profile/2' },
-      { label: 'liveTv.title', icon: 'lucideTv', badge: null, href: '/live-tv' },
-      { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
-      { label: 'downloads.title', icon: 'lucideDownload', badge: null, href: '/downloads' },
-      { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
-      { label: 'nav.requests', icon: 'lucideClipboardList', badge: null, href: '/requests' },
-      { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
+      { label: 'nav.home', icon: 'lucide-house', badge: null, href: '/' },
+      { label: 'search.title', icon: 'lucide-search', badge: null, href: '/search' },
+      { label: 'nav.my_profile', icon: 'lucide-user-round', badge: null, href: '/profile/2' },
+      { label: 'liveTv.title', icon: 'lucide-tv', badge: null, href: '/live-tv' },
+      { label: 'nav.playlists', icon: 'lucide-list-video', badge: null, href: '/playlists' },
+      { label: 'downloads.title', icon: 'lucide-download', badge: null, href: '/downloads' },
+      { label: 'nav.history', icon: 'lucide-rotate-ccw-clock', badge: null, href: '/history' },
+      { label: 'nav.requests', icon: 'lucide-clipboard-list', badge: null, href: '/requests' },
+      { label: 'nav.calendar', icon: 'lucide-calendar', badge: null, href: '/calendar' },
     ]);
   });
 
   it('sidebar: TV form factor hides My profile and Downloads', async () => {
     const fixture = await createFixture(TV_FORM_FACTOR);
     expect(sidebarItems(fixture.nativeElement)).toEqual([
-      { label: 'nav.home', icon: 'lucideHome', badge: null, href: '/' },
-      { label: 'search.title', icon: 'lucideSearch', badge: null, href: '/search' },
-      { label: 'liveTv.title', icon: 'lucideTv', badge: null, href: '/live-tv' },
-      { label: 'Movies', icon: 'lucideLibrary', badge: null, href: '/libraries/Movies' },
-      { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
-      { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
-      { label: 'nav.requests', icon: 'lucideClipboardList', badge: null, href: '/requests' },
-      { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
+      { label: 'nav.home', icon: 'lucide-house', badge: null, href: '/' },
+      { label: 'search.title', icon: 'lucide-search', badge: null, href: '/search' },
+      { label: 'liveTv.title', icon: 'lucide-tv', badge: null, href: '/live-tv' },
+      { label: 'Movies', icon: 'lucide-library', badge: null, href: '/libraries/Movies' },
+      { label: 'nav.playlists', icon: 'lucide-list-video', badge: null, href: '/playlists' },
+      { label: 'nav.history', icon: 'lucide-rotate-ccw-clock', badge: null, href: '/history' },
+      { label: 'nav.requests', icon: 'lucide-clipboard-list', badge: null, href: '/requests' },
+      { label: 'nav.calendar', icon: 'lucide-calendar', badge: null, href: '/calendar' },
     ]);
   });
 
   it('native phone: dock primary row is Home, Library, Requests + the search FAB', async () => {
     const fixture = await createFixture(NATIVE_PHONE);
     expect(dockItems(fixture.nativeElement)).toEqual([
-      { label: 'nav.home', icon: 'lucideHome', badge: null, href: '/' },
+      { label: 'nav.home', icon: 'lucide-house', badge: null, href: '/' },
       // Three libraries: the cell opens the library sheet instead of linking.
-      { label: 'nav.section_library', icon: 'lucideLibrary', badge: null, href: null },
-      { label: 'nav.requests', icon: 'lucideClipboardList', badge: null, href: '/requests' },
-      { label: 'nav.more', icon: 'lucideEllipsisVertical', badge: null, href: null },
+      { label: 'nav.section_library', icon: 'lucide-library', badge: null, href: null },
+      { label: 'nav.requests', icon: 'lucide-clipboard-list', badge: null, href: '/requests' },
+      { label: 'nav.more', icon: 'lucide-ellipsis-vertical', badge: null, href: null },
     ]);
     expect(searchFab(fixture.nativeElement)).toEqual({
       label: '',
-      icon: 'lucideSearch',
+      icon: 'lucide-search',
       badge: null,
       href: '/search',
     });
@@ -445,11 +437,11 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     // Libraries have their own dock cell: main items first, then acquisition
     // items, each group ordered by weight.
     expect(sheetItems(fixture.nativeElement)).toEqual([
-      { label: 'liveTv.title', icon: 'lucideTv', badge: null, href: '/live-tv' },
-      { label: 'nav.playlists', icon: 'lucideListVideo', badge: null, href: '/playlists' },
-      { label: 'downloads.title', icon: 'lucideDownload', badge: null, href: '/downloads' },
-      { label: 'nav.history', icon: 'lucideHistory', badge: null, href: '/history' },
-      { label: 'nav.calendar', icon: 'lucideCalendar', badge: null, href: '/calendar' },
+      { label: 'liveTv.title', icon: 'lucide-tv', badge: null, href: '/live-tv' },
+      { label: 'nav.playlists', icon: 'lucide-list-video', badge: null, href: '/playlists' },
+      { label: 'downloads.title', icon: 'lucide-download', badge: null, href: '/downloads' },
+      { label: 'nav.history', icon: 'lucide-rotate-ccw-clock', badge: null, href: '/history' },
+      { label: 'nav.calendar', icon: 'lucide-calendar', badge: null, href: '/calendar' },
     ]);
   });
 
@@ -488,8 +480,8 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
 
     const inSidebar = sidebarItems(fixture.nativeElement).find((i) => i.label === 'x.weird');
     const inSheet = sheetItems(fixture.nativeElement).find((i) => i.label === 'x.weird');
-    expect(inSidebar?.icon).toBe('lucideCircle');
-    expect(inSheet?.icon).toBe('lucideCircle');
+    expect(inSidebar?.icon).toBe('lucide-circle');
+    expect(inSheet?.icon).toBe('lucide-circle');
   });
 
   it('a plugin contribution with an unknown action.kind never renders — fails closed, not blank', async () => {

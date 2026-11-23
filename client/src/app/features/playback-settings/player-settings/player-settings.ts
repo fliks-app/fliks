@@ -1,7 +1,8 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideTrash2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import {
   PlayerSettings,
   PlayerSettingsService,
@@ -24,13 +25,14 @@ import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe
     FormsModule,
     TranslatePipe,
     LocalizeLanguagePipe,
-    LucideTrash2,
     ToggleFieldComponent,
-    SelectFieldComponent,
+    SelectFieldComponent, LucideDynamicIcon,
   ],
   templateUrl: './player-settings.html',
 })
 export class PlayerSettingsPageComponent {
+  protected readonly icons = icons;
+
   private readonly ps = inject(PlayerSettingsService);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly confirmation = inject(ConfirmationService);

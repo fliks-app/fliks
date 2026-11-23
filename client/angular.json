@@ -132,7 +132,7 @@
                 "fonts": true
               },
               "budgets": [
-                { "type": "initial", "maximumWarning": "1.5MB", "maximumError": "2.05MB" },
+                { "type": "initial", "maximumWarning": "1.5MB", "maximumError": "2MB" },
                 { "type": "bundle", "name": "player", "maximumWarning": "170kB", "maximumError": "210kB" },
                 { "type": "anyScript", "maximumWarning": "900kB", "maximumError": "1MB" }
               ]
@@ -147,7 +147,7 @@
                 "fonts": true
               },
               "budgets": [
-                { "type": "initial", "maximumWarning": "1.5MB", "maximumError": "2.05MB" },
+                { "type": "initial", "maximumWarning": "1.5MB", "maximumError": "2MB" },
                 { "type": "bundle", "name": "player", "maximumWarning": "170kB", "maximumError": "210kB" },
                 { "type": "anyScript", "maximumWarning": "900kB", "maximumError": "1MB" }
               ]

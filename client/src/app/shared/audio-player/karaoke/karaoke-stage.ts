@@ -1,7 +1,8 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, input, linkedSignal, output, signal, untracked, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideMic, LucideMinus, LucidePlus, LucideSlidersHorizontal, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import type { StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
@@ -43,10 +44,12 @@ function readMix(): SavedMix | null {
 /** The karaoke view: lyrics with word fill, the reference melody as a pitch lane, live scores, the mix bar and the settings. */
 @Component({
   selector: 'app-karaoke-stage',
-  imports: [NgTemplateOutlet, TranslatePipe, TvSectionDirective, LyricsViewComponent, LucideMic, LucideMinus, LucidePlus, LucideSlidersHorizontal, LucideX],
+  imports: [NgTemplateOutlet, TranslatePipe, TvSectionDirective, LyricsViewComponent, LucideDynamicIcon],
   templateUrl: './karaoke-stage.html',
 })
 export class KaraokeStageComponent {
+  protected readonly icons = icons;
+
   protected readonly karaoke = inject(KaraokeService);
   private readonly local = inject(AudioPlayerService);
   private readonly device = inject(DeviceService);

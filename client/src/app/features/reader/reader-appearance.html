@@ -3,7 +3,7 @@
   <div class="flex items-center">
     @if (has('text')) {
       <button type="button" class="btn btn-ghost btn-sm h-11 min-h-11 gap-1" (click)="reset()">
-        <svg lucideRotateCcw class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.RotateCcw" class="h-4 w-4"></svg>
         {{ 'reader.reset' | translate }}
       </button>
     }
@@ -13,7 +13,7 @@
       [attr.aria-label]="'common.close' | translate"
       (click)="closed.emit()"
     >
-      <svg lucideX class="h-5 w-5"></svg>
+      <svg [lucideIcon]="icons.X" class="h-5 w-5"></svg>
     </button>
   </div>
 </header>
@@ -82,7 +82,7 @@
           [attr.aria-label]="'reader.smaller' | translate"
           (click)="step(-range.step)"
         >
-          <svg lucideMinus class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Minus" class="h-4 w-4"></svg>
         </button>
         <input
           type="range"
@@ -101,7 +101,7 @@
           [attr.aria-label]="'reader.larger' | translate"
           (click)="step(range.step)"
         >
-          <svg lucidePlus class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>
         </button>
       </div>
     </div>
@@ -213,7 +213,7 @@
       (click)="more.set(!more())"
     >
       {{ (more() ? 'reader.fewer_settings' : 'reader.more_settings') | translate }}
-      <svg lucideChevronDown class="h-4 w-4 transition-transform" [class.rotate-180]="more()"></svg>
+      <svg [lucideIcon]="icons.ChevronDown" class="h-4 w-4 transition-transform" [class.rotate-180]="more()"></svg>
     </button>
   }
 </div>

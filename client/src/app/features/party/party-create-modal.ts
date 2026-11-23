@@ -1,7 +1,8 @@
 import { Component, ElementRef, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucidePlus, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { MediaService } from '../../core/services/api/media.service';
 import { itemIn, MAX_PROGRAMME } from '../../core/services/party/party-item';
 import type { PartySwitches } from '../../core/services/api/party-api.service';
@@ -39,10 +40,12 @@ export function toLocalInput(d: Date): string {
 /** "Watch together" dialog, mounted once in the layout and opened through `PartyService.createRequest`. */
 @Component({
   selector: 'app-party-create-modal',
-  imports: [ModalComponent, FormsModule, TranslatePipe, LucidePlus, LucideX, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent, PartyHostSwitchesComponent, MediaPickerComponent, PartyCoverPickerComponent],
+  imports: [ModalComponent, FormsModule, TranslatePipe, ModalHeaderComponent, ModalFooterComponent, PartyInviteePickerComponent, PartyHostSwitchesComponent, MediaPickerComponent, PartyCoverPickerComponent, LucideDynamicIcon],
   templateUrl: './party-create-modal.html',
 })
 export class PartyCreateModalComponent {
+  protected readonly icons = icons;
+
   private readonly party = inject(PartyService);
   private readonly media = inject(MediaService);
   private readonly dialog = viewChild<string, ElementRef<HTMLDialogElement>>('dialog', { read: ElementRef });

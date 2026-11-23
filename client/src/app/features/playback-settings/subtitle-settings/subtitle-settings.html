@@ -50,7 +50,7 @@
     />
 
     <button class="btn btn-ghost btn-sm text-error gap-2 self-start" (click)="clearSubtitleSelections()">
-      <svg lucideTrash2 class="h-4 w-4"></svg>
+      <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
       {{ 'playback_settings.sub_clear_saved' | translate }}
     </button>
 

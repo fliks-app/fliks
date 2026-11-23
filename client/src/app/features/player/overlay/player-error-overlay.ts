@@ -1,6 +1,7 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCircleAlert } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { ServerVersionService } from '../../../core/services/server-version.service';
 import { problemsSupported } from '../../../core/services/api/problems.service';
 import type { PlaybackError } from '../../../core/services/playback-engine/playback-error';
@@ -8,10 +9,12 @@ import type { PlaybackError } from '../../../core/services/playback-engine/playb
 /** The failure panel for any playback surface: on-demand and live alike. */
 @Component({
   selector: 'app-player-error-overlay',
-  imports: [TranslatePipe, LucideCircleAlert],
+  imports: [TranslatePipe, LucideDynamicIcon],
   templateUrl: './player-error-overlay.html',
 })
 export class PlayerErrorOverlayComponent {
+  protected readonly icons = icons;
+
   readonly error = input<PlaybackError | null>(null);
   /** Pre-formatted dump; the copy button is hidden when it is empty. */
   readonly diagnostics = input('');

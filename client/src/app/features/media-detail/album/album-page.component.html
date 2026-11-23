@@ -30,13 +30,13 @@
       @if (playable().length) {
         <button type="button" class="btn btn-primary" autofocus (click)="togglePlay()" data-testid="play">
           @if (albumPlaying()) {
-            <svg lucidePause class="size-4" fill="currentColor"></svg>{{ 'audio_player.pause' | translate }}
+            <svg [lucideIcon]="icons.Pause" class="size-4" fill="currentColor"></svg>{{ 'audio_player.pause' | translate }}
           } @else {
-            <svg lucidePlay class="size-4" fill="currentColor"></svg>{{ 'music.play' | translate }}
+            <svg [lucideIcon]="icons.Play" class="size-4" fill="currentColor"></svg>{{ 'music.play' | translate }}
           }
         </button>
         <button type="button" class="btn btn-outline" [class.text-primary]="player.shuffle()" [attr.aria-pressed]="player.shuffle()" (click)="player.setShuffle(!player.shuffle())" data-testid="shuffle">
-          <svg lucideShuffle class="size-4"></svg>{{ 'music.shuffle' | translate }}
+          <svg [lucideIcon]="icons.Shuffle" class="size-4"></svg>{{ 'music.shuffle' | translate }}
         </button>
         <app-music-download-button [tracks]="albumSource" [itemIds]="playableIds()" [showLabel]="true" buttonClass="btn btn-outline" iconClass="size-4" />
       }
@@ -46,10 +46,10 @@
       <div class="flex w-full flex-col gap-1">
       <div class="flex w-full items-center gap-1">
         <button type="button" class="flex size-11 shrink-0 cursor-pointer items-center justify-center" [class.text-error]="like.focusedLiked()" [attr.aria-label]="'likes.like' | translate" [attr.aria-pressed]="like.focusedLiked()" (click)="like.toggle()" data-testid="like">
-          <svg lucideHeart class="size-6" [attr.fill]="like.focusedLiked() ? 'currentColor' : 'none'"></svg>
+          <svg [lucideIcon]="icons.Heart" class="size-6" [attr.fill]="like.focusedLiked() ? 'currentColor' : 'none'"></svg>
         </button>
         <button type="button" class="flex size-11 shrink-0 cursor-pointer items-center justify-center" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addAlbumToPlaylist()" data-testid="add-playlist">
-          <svg lucideListPlus class="size-6"></svg>
+          <svg [lucideIcon]="icons.ListPlus" class="size-6"></svg>
         </button>
         @if (playable().length) {
           <app-music-download-button [tracks]="albumSource" [itemIds]="playableIds()" buttonClass="flex size-11 shrink-0 cursor-pointer items-center justify-center" iconClass="size-6" />
@@ -58,13 +58,13 @@
         <span class="flex-1"></span>
         @if (playable().length) {
           <button type="button" class="flex size-11 shrink-0 cursor-pointer items-center justify-center" [class.text-primary]="player.shuffle()" [attr.aria-label]="'music.shuffle' | translate" [attr.aria-pressed]="player.shuffle()" (click)="player.setShuffle(!player.shuffle())" data-testid="shuffle">
-            <svg lucideShuffle class="size-6"></svg>
+            <svg [lucideIcon]="icons.Shuffle" class="size-6"></svg>
           </button>
           <button type="button" class="btn btn-primary btn-circle size-14" [attr.aria-label]="(albumPlaying() ? 'audio_player.pause' : 'music.play') | translate" (click)="togglePlay()" data-testid="play">
             @if (albumPlaying()) {
-              <svg lucidePause class="size-6" fill="currentColor"></svg>
+              <svg [lucideIcon]="icons.Pause" class="size-6" fill="currentColor"></svg>
             } @else {
-              <svg lucidePlay class="size-6" fill="currentColor"></svg>
+              <svg [lucideIcon]="icons.Play" class="size-6" fill="currentColor"></svg>
             }
           </button>
         }
@@ -81,7 +81,7 @@
 <ng-template #addAll let-compact="compact">
   @if ((canAdd() || canRequest()) && hasUnwanted()) {
     <button type="button" [class]="compact ? 'flex size-11 shrink-0 cursor-pointer items-center justify-center' : 'btn btn-outline'" [disabled]="!unwantedCount()" [attr.aria-label]="(canAdd() ? 'music.add_all' : 'music.request_album') | translate" (click)="canAdd() ? wantAll() : requestAlbum()" data-testid="want-all">
-      <svg lucidePlus [class]="compact ? 'size-6' : 'size-4'"></svg>
+      <svg [lucideIcon]="icons.Plus" [class]="compact ? 'size-6' : 'size-4'"></svg>
       @if (!compact) {
         {{ (canAdd() ? 'music.add_all' : 'music.request_album') | translate }}
       }
@@ -154,26 +154,26 @@
             }
           }
           @case ('wanted') {
-            <svg lucideClock class="size-5 text-base-content/60" role="img" [attr.aria-label]="(canAdd() ? 'music.status_searching' : 'music.status_requested') | translate" data-testid="track-wanted"></svg>
+            <svg [lucideIcon]="icons.Clock" class="size-5 text-base-content/60" role="img" [attr.aria-label]="(canAdd() ? 'music.status_searching' : 'music.status_requested') | translate" data-testid="track-wanted"></svg>
           }
           @case ('failed') {
-            <svg lucideCircleAlert class="size-5 text-error" role="img" [attr.aria-label]="'music.status_failed' | translate" data-testid="track-failed"></svg>
+            <svg [lucideIcon]="icons.CircleAlert" class="size-5 text-error" role="img" [attr.aria-label]="'music.status_failed' | translate" data-testid="track-failed"></svg>
           }
           @default {
             @if ((canAdd() || canRequest()) && t.recordingId) {
               <button type="button" class="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-base-300 focus-visible:outline-2" (click)="addTrack(t)" [attr.aria-label]="(canAdd() ? 'music.add_track' : 'music.request_track') | translate" data-testid="track-add">
-                <svg lucidePlus class="size-5"></svg>
+                <svg [lucideIcon]="icons.Plus" class="size-5"></svg>
               </button>
             }
           }
         }
       </span>
       <button type="button" class="hidden size-10 shrink-0 cursor-pointer items-center justify-center md:flex" [class.text-error]="t.favourite" [attr.aria-label]="(t.favourite ? 'music.unfavourite' : 'music.favourite') | translate" [attr.aria-pressed]="t.favourite" (click)="toggleFavourite(t)" data-testid="heart">
-        <svg lucideHeart class="size-5" [attr.fill]="t.favourite ? 'currentColor' : 'none'"></svg>
+        <svg [lucideIcon]="icons.Heart" class="size-5" [attr.fill]="t.favourite ? 'currentColor' : 'none'"></svg>
       </button>
       <span class="hidden w-12 shrink-0 text-right text-sm tabular-nums text-base-content/60 md:block">{{ formatTime(t.durationSeconds) }}</span>
       <button #more type="button" class="flex size-10 shrink-0 cursor-pointer items-center justify-center" [attr.aria-label]="'common.more' | translate" (click)="openTrackMenu(t, more)" data-testid="track-menu">
-        <svg lucideEllipsisVertical class="size-5"></svg>
+        <svg [lucideIcon]="icons.EllipsisVertical" class="size-5"></svg>
       </button>
     </li>
   </ng-template>

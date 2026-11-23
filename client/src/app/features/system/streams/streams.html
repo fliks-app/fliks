@@ -225,9 +225,9 @@
               "
             >
               @if (isPaused(s.sessionId)) {
-                <svg lucidePlay class="h-4 w-4"></svg>
+                <svg [lucideIcon]="icons.Play" class="h-4 w-4"></svg>
               } @else {
-                <svg lucidePause class="h-4 w-4"></svg>
+                <svg [lucideIcon]="icons.Pause" class="h-4 w-4"></svg>
               }
             </button>
             <button
@@ -235,14 +235,14 @@
               (click)="openMessage(s)"
               [title]="'system.stream_message_btn' | translate"
             >
-              <svg lucideMessageSquare class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.MessageSquare" class="h-4 w-4"></svg>
             </button>
             <button
               class="btn btn-ghost btn-sm btn-square"
               (click)="confirmStop(s)"
               [title]="'system.stream_stop' | translate"
             >
-              <svg lucideSquare class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.Square" class="h-4 w-4"></svg>
             </button>
           </div>
         }

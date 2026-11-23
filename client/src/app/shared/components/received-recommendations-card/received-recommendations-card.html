@@ -38,14 +38,14 @@
                       class="btn btn-ghost btn-sm btn-square"
                       [attr.aria-label]="'media_card.actions' | translate"
                     >
-                      <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+                      <svg [lucideIcon]="icons.EllipsisVertical" class="h-5 w-5"></svg>
                     </button>
                     <button type="button" class="dropdown-item" (click)="toggleLike(item); $event.stopPropagation()">
-                      <svg lucideHeart class="h-4 w-4 text-error" [attr.fill]="item.liked ? 'currentColor' : 'none'"></svg>
+                      <svg [lucideIcon]="icons.Heart" class="h-4 w-4 text-error" [attr.fill]="item.liked ? 'currentColor' : 'none'"></svg>
                       <span class="flex-1">{{ (item.liked ? 'likes.unlike' : 'likes.like') | translate }}</span>
                     </button>
                     <button type="button" class="dropdown-item" (click)="addToPlaylist(item)">
-                      <svg lucideListPlus class="h-4 w-4"></svg>
+                      <svg [lucideIcon]="icons.ListPlus" class="h-4 w-4"></svg>
                       <span class="flex-1">{{ 'playlists.add_to_playlist_title' | translate }}</span>
                     </button>
                   </app-dropdown-menu>
@@ -57,7 +57,7 @@
                       (click)="dismiss(item)"
                       [attr.aria-label]="'recommend.dismiss' | translate"
                     >
-                      <svg lucideX class="h-5 w-5"></svg>
+                      <svg [lucideIcon]="icons.X" class="h-5 w-5"></svg>
                     </button>
                   </span>
                 </div>

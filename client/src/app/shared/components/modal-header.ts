@@ -1,12 +1,13 @@
 import { Component, ElementRef, afterNextRender, booleanAttribute, inject, input, output } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../icons';
 
 /** Standard dialog header: the close button submits the enclosing native <dialog>; a CSS-shown modal (no showModal()) must close on `(closed)`.
  *  The default variant bleeds out of `.modal-box` padding; `flush` is for a `p-0` box laid out as a flex column. */
 @Component({
   selector: 'app-modal-header',
-  imports: [TranslatePipe, LucideX],
+  imports: [TranslatePipe, LucideDynamicIcon],
   templateUrl: './modal-header.html',
   host: {
     class:
@@ -15,6 +16,8 @@ import { LucideX } from '@lucide/angular';
   },
 })
 export class ModalHeaderComponent {
+  protected readonly icons = icons;
+
   readonly title = input('');
   readonly flush = input(false, { transform: booleanAttribute });
   readonly closed = output<void>();

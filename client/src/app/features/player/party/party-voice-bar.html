@@ -11,7 +11,7 @@
             [attr.aria-pressed]="!voice.muted()"
             (click)="voice.toggleMute()"
           >
-            @if (voice.muted()) { <svg lucideMicOff class="h-4 w-4"></svg> } @else { <svg lucideMic class="h-4 w-4"></svg> }
+            @if (voice.muted()) { <svg [lucideIcon]="icons.MicOff" class="h-4 w-4"></svg> } @else { <svg [lucideIcon]="icons.Mic" class="h-4 w-4"></svg> }
           </button>
         }
         <!-- Join and leave share one button so the focus stays on it across the switch. -->
@@ -27,19 +27,19 @@
           @if (voice.joined()) {
             {{ 'party.voice_leave' | translate }}
           } @else {
-            <svg lucideMic class="h-4 w-4"></svg><span [class]="variant() === 'controls' ? 'hidden @min-[18rem]:inline' : ''">{{ 'party.voice_join' | translate }}</span>
+            <svg [lucideIcon]="icons.Mic" class="h-4 w-4"></svg><span [class]="variant() === 'controls' ? 'hidden @min-[18rem]:inline' : ''">{{ 'party.voice_join' | translate }}</span>
           }
         </button>
         @if (variant() === 'full') {
           <span class="ml-auto flex items-center gap-1 text-sm opacity-70" [attr.aria-label]="'party.voice_count' | translatePlural: inVoice()">
-            <svg lucideUser class="h-4 w-4"></svg>{{ inVoice() }}
+            <svg [lucideIcon]="icons.User" class="h-4 w-4"></svg>{{ inVoice() }}
           </span>
         }
       </div>
     }
     @if (voice.joined() && voice.audioBlocked()) {
       <button type="button" class="btn btn-sm btn-warning gap-1" (click)="voice.enableAudio()">
-        <svg lucideVolume2 class="h-4 w-4"></svg>{{ 'party.voice_enable_sound' | translate }}
+        <svg [lucideIcon]="icons.Volume2" class="h-4 w-4"></svg>{{ 'party.voice_enable_sound' | translate }}
       </button>
     }
     @if (variant() !== 'controls') {

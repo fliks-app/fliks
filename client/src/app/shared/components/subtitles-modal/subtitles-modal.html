@@ -32,7 +32,7 @@
               "
               (click)="openImport()"
             >
-              <svg lucideUpload class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
+              <svg [lucideIcon]="icons.Upload" class="h-4 w-4 shrink-0" aria-hidden="true"></svg>
               {{ 'media_detail.subtitles_import' | translate }}
             </button>
           }
@@ -157,10 +157,10 @@
             (click)="openSubActions(sub, actionsTrigger)"
           >
             @if (compact) {
-              <svg lucideEllipsisVertical class="h-4 w-4"></svg>
+              <svg [lucideIcon]="icons.EllipsisVertical" class="h-4 w-4"></svg>
             } @else {
               {{ 'media_detail.subtitle_actions' | translate }}
-              <svg lucideChevronDown class="h-3 w-3"></svg>
+              <svg [lucideIcon]="icons.ChevronDown" class="h-3 w-3"></svg>
             }
           </button>
         }

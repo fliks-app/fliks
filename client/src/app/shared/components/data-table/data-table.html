@@ -239,7 +239,7 @@
                   [attr.aria-label]="'data_table.more' | translate"
                   (click)="toggleRowMenu(row)"
                 >
-                  <svg lucideEllipsisVertical class="h-5 w-5"></svg>
+                  <svg [lucideIcon]="icons.EllipsisVertical" class="h-5 w-5"></svg>
                 </button>
                 <ng-container
                   *ngTemplateOutlet="
@@ -394,7 +394,7 @@
                           [attr.aria-label]="'common.actions' | translate"
                           (click)="toggleRowMenu(row)"
                         >
-                          <svg lucideEllipsisVertical class="h-4 w-4"></svg>
+                          <svg [lucideIcon]="icons.EllipsisVertical" class="h-4 w-4"></svg>
                         </button>
                         <ng-container
                           *ngTemplateOutlet="
@@ -432,7 +432,7 @@
     @if (sheetSubmenu(menu); as sub) {
       <div class="panel-slide-fwd">
         <button type="button" class="dropdown-item mb-1" (click)="closeSubmenu()">
-          <svg lucideArrowLeft class="h-4 w-4 shrink-0 opacity-60"></svg>
+          <svg [lucideIcon]="icons.ArrowLeft" class="h-4 w-4 shrink-0 opacity-60"></svg>
           <span class="flex-1 truncate text-left font-medium">{{
             sub.action.labelKey | translate
           }}</span>
@@ -453,7 +453,7 @@
             (click)="toggleSubmenu(item, subTrigger)"
           >
             <span class="flex-1 truncate text-left">{{ item.action.labelKey | translate }}</span>
-            <svg lucideChevronRight class="h-4 w-4 shrink-0 opacity-60"></svg>
+            <svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4 shrink-0 opacity-60"></svg>
           </button>
           @if (!menuSheet()) {
             <app-popover-menu

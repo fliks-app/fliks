@@ -7,7 +7,8 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideSend } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import {
   SocialApiService,
   SocialUser,
@@ -21,10 +22,12 @@ import { ModalComponent } from '../modal';
  *  Recipients are limited to connectable members (`/social/connectable`). */
 @Component({
   selector: 'app-recommend-modal',
-  imports: [ModalComponent, FormsModule, TranslatePipe, LucideSend, ModalHeaderComponent],
+  imports: [ModalComponent, FormsModule, TranslatePipe, ModalHeaderComponent, LucideDynamicIcon],
   templateUrl: './recommend-modal.component.html',
 })
 export class RecommendModalComponent {
+  protected readonly icons = icons;
+
   private readonly social = inject(SocialApiService);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);

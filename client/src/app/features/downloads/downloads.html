@@ -33,7 +33,7 @@
             </p>
             @if (task.status === 'failed') {
               <div class="flex items-center gap-1 mt-1 text-error text-sm">
-                <svg lucideAlertCircle class="h-4 w-4"></svg>
+                <svg [lucideIcon]="icons.AlertCircle" class="h-4 w-4"></svg>
                 {{ 'downloads.failed' | translate }}
               </div>
             } @else if (task.status === 'ready') {
@@ -44,15 +44,15 @@
             <div class="flex items-center gap-1 shrink-0">
               @if (task.status === 'ready') {
                 <button class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'player.play' | translate" (click)="playOffline(task)">
-                  <svg lucidePlay class="h-4 w-4"></svg>
+                  <svg [lucideIcon]="icons.Play" class="h-4 w-4"></svg>
                 </button>
               } @else if (task.status === 'paused') {
                 <button class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'downloads.resume' | translate" (click)="resumeItem(task)">
-                  <svg lucidePlay class="h-4 w-4"></svg>
+                  <svg [lucideIcon]="icons.Play" class="h-4 w-4"></svg>
                 </button>
               } @else if (isPausable(task)) {
                 <button class="btn btn-ghost btn-sm btn-square" [attr.aria-label]="'downloads.pause' | translate" (click)="pauseItem(task)">
-                  <svg lucidePause class="h-4 w-4"></svg>
+                  <svg [lucideIcon]="icons.Pause" class="h-4 w-4"></svg>
                 </button>
               }
               @if (task.status === 'failed') {
@@ -66,12 +66,12 @@
                   @if (retrying().has(task.id)) {
                     <span class="loading loading-spinner loading-xs"></span>
                   } @else {
-                    <svg lucideRotateCcw class="h-4 w-4"></svg>
+                    <svg [lucideIcon]="icons.RotateCcw" class="h-4 w-4"></svg>
                   }
                 </button>
               }
               <button class="btn btn-ghost btn-sm btn-square text-error" [attr.aria-label]="'common.delete' | translate" (click)="deleteItem(task)">
-                <svg lucideTrash2 class="h-4 w-4"></svg>
+                <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
               </button>
             </div>
           }
@@ -106,12 +106,12 @@
     }
     @if (pausable().length > 0) {
       <button type="button" class="btn btn-sm ms-auto" (click)="pauseAll()">
-        <svg lucidePause class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.Pause" class="h-4 w-4"></svg>
         {{ 'downloads.pause_all' | translate }}
       </button>
     } @else if (paused().length > 0) {
       <button type="button" class="btn btn-sm ms-auto" (click)="resumeAll()">
-        <svg lucidePlay class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.Play" class="h-4 w-4"></svg>
         {{ 'downloads.resume_all' | translate }}
       </button>
     }
@@ -124,7 +124,7 @@
         [attr.aria-pressed]="selectMode()"
         (click)="toggleSelectMode()"
       >
-        <svg lucideListChecks class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.ListChecks" class="h-4 w-4"></svg>
         {{ 'downloads.select' | translate }}
       </button>
     }
@@ -132,7 +132,7 @@
 
   @if (items().length === 0) {
     <div class="text-center py-12 text-base-content/60">
-      <svg lucideDownload class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
+      <svg [lucideIcon]="icons.Download" class="h-12 w-12 mx-auto mb-3 opacity-30"></svg>
       <p class="text-lg">{{ 'downloads.empty' | translate }}</p>
       <p class="text-sm mt-2">{{ 'downloads.empty_hint' | translate }}</p>
     </div>
@@ -173,10 +173,10 @@
                   [title]="'downloads.delete_all' | translate"
                   (click)="$event.stopPropagation(); deleteGroup(album.tasks, album.title)"
                 >
-                  <svg lucideTrash2 class="h-4 w-4"></svg>
+                  <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
                 </button>
               }
-              <svg lucideChevronRight [class]="albumOpen ? 'h-4 w-4 shrink-0 transition-transform duration-200 rotate-90' : 'h-4 w-4 shrink-0 transition-transform duration-200'"></svg>
+              <svg [lucideIcon]="icons.ChevronRight" [class]="albumOpen ? 'h-4 w-4 shrink-0 transition-transform duration-200 rotate-90' : 'h-4 w-4 shrink-0 transition-transform duration-200'"></svg>
             </div>
             <app-collapse [open]="albumOpen">
               <div class="flex flex-col gap-2 px-3 pb-1.5">
@@ -216,10 +216,10 @@
                   [title]="'downloads.delete_all' | translate"
                   (click)="$event.stopPropagation(); deleteGroup(show.tasks, show.title)"
                 >
-                  <svg lucideTrash2 class="h-4 w-4"></svg>
+                  <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
                 </button>
               }
-              <svg lucideChevronRight [class]="showOpen ? 'h-4 w-4 shrink-0 transition-transform duration-200 rotate-90' : 'h-4 w-4 shrink-0 transition-transform duration-200'"></svg>
+              <svg [lucideIcon]="icons.ChevronRight" [class]="showOpen ? 'h-4 w-4 shrink-0 transition-transform duration-200 rotate-90' : 'h-4 w-4 shrink-0 transition-transform duration-200'"></svg>
             </div>
             <app-collapse [open]="showOpen">
             <div class="flex flex-col gap-2 px-3 pb-1.5">
@@ -230,7 +230,7 @@
                 <div>
                   <div class="flex items-center gap-2 py-2 cursor-pointer" role="button" tabindex="0" [attr.aria-expanded]="seasonOpen"
                        (click)="toggleOpen(seasonKey)" (keydown.enter)="toggleOpen(seasonKey)">
-                    <svg lucideChevronRight [class]="seasonOpen ? 'h-3 w-3 shrink-0 transition-transform duration-200 rotate-90' : 'h-3 w-3 shrink-0 transition-transform duration-200'"></svg>
+                    <svg [lucideIcon]="icons.ChevronRight" [class]="seasonOpen ? 'h-3 w-3 shrink-0 transition-transform duration-200 rotate-90' : 'h-3 w-3 shrink-0 transition-transform duration-200'"></svg>
                     <span class="flex-1 min-w-0 text-sm font-medium">
                       @if (season.seasonNumber === null) {
                         {{ 'downloads.other_episodes' | translate }}
@@ -248,7 +248,7 @@
                         [title]="'downloads.delete_all' | translate"
                         (click)="$event.stopPropagation(); deleteGroup(season.tasks, seasonName(show.title, season.seasonNumber))"
                       >
-                        <svg lucideTrash2 class="h-3.5 w-3.5"></svg>
+                        <svg [lucideIcon]="icons.Trash2" class="h-3.5 w-3.5"></svg>
                       </button>
                     }
                   </div>
@@ -271,18 +271,18 @@
     @if (selectMode() && selectedIds().size > 0) {
       <div class="sticky bottom-[var(--chrome-bottom-total,0px)] z-20 bg-base-200 border border-base-300 p-2 flex items-center gap-1 shadow-lg rounded-lg">
         <button type="button" class="btn btn-sm btn-ghost btn-circle" [attr.aria-label]="'library.bulk_cancel' | translate" (click)="toggleSelectMode()">
-          <svg lucideX class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.X" class="h-4 w-4"></svg>
         </button>
         <span class="font-semibold text-sm whitespace-nowrap">{{ (selectedIds().size === 1 ? 'bulk.selected_one' : 'bulk.selected_other') | translate: { count: selectedIds().size } }}</span>
         <span class="flex-1"></span>
         @if (selectedFailed().length > 0) {
           <button class="btn btn-sm" [attr.aria-label]="'downloads.retry' | translate" (click)="retrySelected()">
-            <svg lucideRotateCcw class="h-4 w-4"></svg>
+            <svg [lucideIcon]="icons.RotateCcw" class="h-4 w-4"></svg>
             <span class="hidden sm:inline">{{ 'downloads.retry' | translate }}</span>
           </button>
         }
         <button class="btn btn-sm btn-error" [attr.aria-label]="'downloads.delete' | translate" (click)="deleteSelected()">
-          <svg lucideTrash2 class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Trash2" class="h-4 w-4"></svg>
           <span class="hidden sm:inline">{{ 'downloads.delete' | translate }}</span>
         </button>
       </div>

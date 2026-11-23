@@ -1,7 +1,8 @@
 import { Component, Signal, computed, inject, input, output, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { RouterLink } from '@angular/router';
-import { LucidePlus } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../icons';
 import { AirPlayService } from '../../core/services/airplay.service';
 import { CastService } from '../../core/services/cast.service';
 import { CastPlaybackTarget } from '../../core/services/cast-playback-target';
@@ -40,13 +41,15 @@ export interface PickerRow {
   selector: 'app-remote-picker-list',
   imports: [
     TranslatePipe,
-    LucidePlus, DeviceIconComponent,
-    RouterLink,
+    DeviceIconComponent,
+    RouterLink, LucideDynamicIcon,
   ],
   styles: [':host { display: block; }'],
   templateUrl: './remote-picker-list.html',
 })
 export class RemotePickerListComponent {
+  protected readonly icons = icons;
+
   /** Emit the pick instead of acting, so a host with a running session moves that playback itself; leaving a device is never delegated. */
   readonly delegate = input(false);
   readonly picked = output<PickerRow>();

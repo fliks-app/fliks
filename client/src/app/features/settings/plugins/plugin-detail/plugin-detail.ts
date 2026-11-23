@@ -2,7 +2,8 @@ import { Component, OnInit, computed, inject, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
-import { LucideChevronLeft } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { PluginInspectReport } from '../../../../core/services/api/plugins-api.service';
 import { ErrorBadgeComponent } from '../../../../shared/components/error-badge';
@@ -18,15 +19,16 @@ import { PluginsState, pluginPosterName } from '../plugins-state';
   selector: 'app-plugin-detail',
   imports: [
     RouterLink,
-    LucideChevronLeft,
     TranslatePipe,
     ErrorBadgeComponent,
     PluginMetricsPanelComponent,
-    PluginInstallConsentComponent,
+    PluginInstallConsentComponent, LucideDynamicIcon,
   ],
   templateUrl: './plugin-detail.html',
 })
 export class PluginDetailComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly translate = inject(TranslateService);
   protected readonly state = inject(PluginsState);
   protected readonly posterName = pluginPosterName;

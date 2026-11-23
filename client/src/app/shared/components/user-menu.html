@@ -12,7 +12,7 @@
         size="w-7 h-7 md:w-9 md:h-9 text-sm border border-primary/40"
       />
     } @else {
-      <svg lucideUser class="h-5 w-5 md:h-6 md:w-6"></svg>
+      <svg [lucideIcon]="icons.User" class="h-5 w-5 md:h-6 md:w-6"></svg>
     }
   </button>
   @if (auth.user(); as user) {
@@ -29,17 +29,17 @@
     </div>
   }
   <a routerLink="/account" class="dropdown-item text-white">
-    <svg lucideUser class="h-5 w-5 shrink-0 opacity-80"></svg>
+    <svg [lucideIcon]="icons.User" class="h-5 w-5 shrink-0 opacity-80"></svg>
     <span class="flex-1">{{ 'nav.account_settings' | translate }}</span>
   </a>
   <a routerLink="/app-settings" class="dropdown-item text-white">
-    <svg lucideSettings class="h-5 w-5 shrink-0 opacity-80"></svg>
+    <svg [lucideIcon]="icons.Settings" class="h-5 w-5 shrink-0 opacity-80"></svg>
     <span class="flex-1">{{ 'nav.app_settings' | translate }}</span>
   </a>
   <!-- Its route already refuses a TV, so the entry only led to a dead end. -->
   @if (auth.canAccessSettings() && !tv.isTv()) {
     <a routerLink="/admin" class="dropdown-item text-white">
-      <svg lucideShield class="h-5 w-5 shrink-0 opacity-80"></svg>
+      <svg [lucideIcon]="icons.Shield" class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'nav.administration' | translate }}</span>
       @if (systemAttention() > 0) {
         <span class="badge badge-xs badge-error" [attr.aria-label]="'nav.system_attention' | translate"></span>
@@ -47,21 +47,21 @@
     </a>
   }
   <a routerLink="/pending-requests" class="dropdown-item text-white">
-    <svg lucideMonitorSmartphone class="h-5 w-5 shrink-0 opacity-80"></svg>
+    <svg [lucideIcon]="icons.MonitorSmartphone" class="h-5 w-5 shrink-0 opacity-80"></svg>
     <span class="flex-1">{{ 'pending_requests.menu_entry' | translate }}</span>
   </a>
   <button type="button" (click)="switchUser()" class="dropdown-item text-white">
-    <svg lucideRepeat class="h-5 w-5 shrink-0 opacity-80"></svg>
+    <svg [lucideIcon]="icons.Repeat" class="h-5 w-5 shrink-0 opacity-80"></svg>
     <span class="flex-1">{{ 'nav.switch_user' | translate }}</span>
   </button>
   @if (canChangeServer) {
     <button type="button" (click)="changeServer()" class="dropdown-item text-white">
-      <svg lucideServer class="h-5 w-5 shrink-0 opacity-80"></svg>
+      <svg [lucideIcon]="icons.Server" class="h-5 w-5 shrink-0 opacity-80"></svg>
       <span class="flex-1">{{ 'nav.change_server' | translate }}</span>
     </button>
   }
   <button type="button" (click)="logout()" class="dropdown-item text-error">
-    <svg lucideLogOut class="h-5 w-5 shrink-0"></svg>
+    <svg [lucideIcon]="icons.LogOut" class="h-5 w-5 shrink-0"></svg>
     <span class="flex-1">{{ 'nav.logout' | translate }}</span>
   </button>
 </app-dropdown-menu>

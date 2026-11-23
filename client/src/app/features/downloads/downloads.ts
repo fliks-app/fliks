@@ -9,17 +9,8 @@ import { DownloadManagerService } from '../../core/services/download-manager.ser
 import { isPausable, isTransferring } from '../../core/services/download-status';
 import { DownloadNotificationService } from '../../core/services/download-notification.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
-import {
-  LucideDownload,
-  LucideTrash2,
-  LucidePlay,
-  LucideAlertCircle,
-  LucideRotateCcw,
-  LucideListChecks,
-  LucideChevronRight,
-  LucidePause,
-  LucideX,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { RouterLink } from '@angular/router';
 import { CollapseComponent } from '../../shared/components/collapse/collapse';
 import { ToastService } from '../../core/services/toast.service';
@@ -45,21 +36,14 @@ const openGroupKeys = signal<ReadonlySet<string>>(new Set());
     TranslatePluralPipe,
     AutoDownloadRuleComponent,
     ResolveUrlPipe,
-    LucideDownload,
-    LucideTrash2,
-    LucidePlay,
-    LucideAlertCircle,
-    LucideRotateCcw,
-    LucideListChecks,
-    LucideChevronRight,
-    LucidePause,
-    LucideX,
     SeasonLabelPipe,
-    CollapseComponent,
+    CollapseComponent, LucideDynamicIcon,
   ],
   templateUrl: './downloads.html',
 })
 export class DownloadsComponent {
+  protected readonly icons = icons;
+
   private readonly dlManager = inject(DownloadManagerService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly translate = inject(TranslateService);
@@ -90,7 +74,6 @@ export class DownloadsComponent {
 
   protected readonly formatBytes = formatBytes;
   protected readonly entryKey = entryKey;
-
 
   readonly items = this.dlManager.tasks;
 

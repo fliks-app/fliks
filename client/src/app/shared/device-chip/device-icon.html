@@ -1,8 +1,8 @@
 @switch (icon()) {
-  @case ('cast') { <svg lucideCast [class]="iconClass()"></svg> }
-  @case ('airplay') { <svg lucideAirplay [class]="iconClass()"></svg> }
-  @case ('tv') { <svg lucideTv [class]="iconClass()"></svg> }
-  @case ('tablet') { <svg lucideTablet [class]="iconClass()"></svg> }
-  @case ('phone') { <svg lucideSmartphone [class]="iconClass()"></svg> }
-  @default { <svg lucideMonitor [class]="iconClass()"></svg> }
+  @case ('cast') { <svg [lucideIcon]="icons.Cast" [class]="iconClass()"></svg> }
+  @case ('airplay') { <svg [lucideIcon]="icons.Airplay" [class]="iconClass()"></svg> }
+  @case ('tv') { <svg [lucideIcon]="icons.Tv" [class]="iconClass()"></svg> }
+  @case ('tablet') { <svg [lucideIcon]="icons.Tablet" [class]="iconClass()"></svg> }
+  @case ('phone') { <svg [lucideIcon]="icons.Smartphone" [class]="iconClass()"></svg> }
+  @default { <svg [lucideIcon]="icons.Monitor" [class]="iconClass()"></svg> }
 }

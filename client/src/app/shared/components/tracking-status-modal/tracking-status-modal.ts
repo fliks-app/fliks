@@ -8,7 +8,8 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideArrowRight, LucideCheck, LucideCircleAlert, LucideEyeOff } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import {
   MediaService,
   TrackingEpisode,
@@ -33,15 +34,12 @@ export type TrackingScope =
     ModalComponent,
     NgTemplateOutlet,
     TranslatePipe,
-    ModalHeaderComponent,
-    LucideArrowRight,
-    LucideCheck,
-    LucideCircleAlert,
-    LucideEyeOff,
-  ],
+    ModalHeaderComponent, LucideDynamicIcon],
   templateUrl: './tracking-status-modal.html',
 })
 export class TrackingStatusModalComponent {
+  protected readonly icons = icons;
+
   protected readonly singleTitleLabelKeys: Record<MediaType, string | null> = {
     movie: 'tracking.this_movie',
     series: null,

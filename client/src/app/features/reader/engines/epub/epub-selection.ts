@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideCopy, LucideSearch, LucideShare2, LucideStickyNote } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import type { Locator } from '@readium/shared';
 import { ToastService } from '../../../../core/services/toast.service';
 import { ANNOTATION_COLOURS, type AnnotationColour } from '../../annotations-api.service';
@@ -35,11 +36,13 @@ const CONTEXT_CHARS = 40;
 /** The toolbar over selected text: highlight in a colour, add a note, copy, search, share. */
 @Component({
   selector: 'app-epub-selection',
-  imports: [TranslatePipe, LucideCopy, LucideSearch, LucideShare2, LucideStickyNote],
+  imports: [TranslatePipe, LucideDynamicIcon],
   templateUrl: './epub-selection.html',
   host: { class: 'contents' },
 })
 export class EpubSelectionComponent {
+  protected readonly icons = icons;
+
   private readonly book = inject(EpubBook);
   private readonly notes = inject(EpubNotes);
   private readonly search = inject(EpubSearch);

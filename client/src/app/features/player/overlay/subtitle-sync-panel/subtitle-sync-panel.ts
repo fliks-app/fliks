@@ -15,7 +15,8 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { LucideCheck, LucideChevronLeft, LucideChevronRight, LucideRotateCcw, LucideWandSparkles } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DeviceService } from '../../../../core/services/device.service';
 import { ConfirmationService } from '../../../../core/services/confirmation.service';
@@ -59,11 +60,13 @@ import { ModalComponent } from '../../../../shared/components/modal';
 /** Side panel to preview a subtitle track against the playing video and shift its timing. */
 @Component({
   selector: 'app-subtitle-sync-panel',
-  imports: [ModalComponent, CueTextDirective, FormsModule, LucideCheck, LucideChevronLeft, LucideChevronRight, LucideRotateCcw, LucideWandSparkles, TranslatePipe, TvSelectDirective, SyncReferenceSelectComponent],
+  imports: [ModalComponent, CueTextDirective, FormsModule, TranslatePipe, TvSelectDirective, SyncReferenceSelectComponent, LucideDynamicIcon],
   templateUrl: './subtitle-sync-panel.html',
   styleUrl: './subtitle-sync-panel.scss',
 })
 export class SubtitleSyncPanelComponent {
+  protected readonly icons = icons;
+
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);

@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, input, output, signal } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideChevronDown } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../../shared/icons';
 import {
   CatalogueRow,
   CatalogVersionEntry,
@@ -14,10 +15,12 @@ import { SelectedOptionDirective } from '../../../../shared/directives/selected-
 /** What every cached catalog offers, merged across sources. */
 @Component({
   selector: 'app-plugin-catalogue',
-  imports: [TranslatePipe, DropdownToggleDirective, LucideChevronDown, SelectedOptionDirective],
+  imports: [TranslatePipe, DropdownToggleDirective, SelectedOptionDirective, LucideDynamicIcon],
   templateUrl: './plugin-catalogue.html',
 })
 export class PluginCatalogueComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(PluginsApiService);
   private readonly translate = inject(TranslateService);
 

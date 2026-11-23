@@ -54,7 +54,8 @@ import {
 } from '../../core/services/download-progress.service';
 import { RequestStatusBadgeComponent } from './request-status-badge/request-status-badge.component';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
-import { LucideCheck, LucideEllipsisVertical, LucidePencil, LucideTrash2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { KIND_REGISTRY, MEDIA_KINDS, kindOf } from '../../core/media-kinds';
 import { allowanceLine } from '../../core/utils/request-allowance';
@@ -81,15 +82,12 @@ const REQUEST_CHANGED_DEBOUNCE_MS = 300;
     RequestEditModalComponent,
     DropdownMenuComponent,
     RequestStatusBadgeComponent,
-    DownloadDetailModalComponent,
-    LucideCheck,
-    LucideEllipsisVertical,
-    LucidePencil,
-    LucideTrash2,
-  ],
+    DownloadDetailModalComponent, LucideDynamicIcon],
   templateUrl: './requests.html',
 })
 export class RequestsComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   protected readonly kinds = KIND_REGISTRY;
   protected readonly isTrackRequest = isTrackRequest;
   protected readonly awaitsSearch = awaitsSearch;
@@ -457,7 +455,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
     return requestAddLink(row);
   }
-
 
   qualityProfileDisplay(id: number | null): string {
     if (id == null) return '-';

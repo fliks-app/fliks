@@ -29,7 +29,7 @@
     >
       @if (selectedIds().size === 0) {
         <label class="input input-sm input-bordered flex items-center gap-2 w-full sm:w-64">
-          <svg lucideSearch class="h-4 w-4 opacity-60"></svg>
+          <svg [lucideIcon]="icons.Search" class="h-4 w-4 opacity-60"></svg>
           <!-- The `.input` wrapper is what shows focus; the field's own ring would stack a
                second and third circle inside it. -->
           <input
@@ -196,7 +196,7 @@
                           @if (rowActionBusy() === rowActionKey(row, action)) {
                             <span class="loading loading-spinner loading-xs"></span>
                           } @else {
-                            <svg lucideRotateCcw class="h-4 w-4"></svg>
+                            <svg [lucideIcon]="icons.RotateCcw" class="h-4 w-4"></svg>
                           }
                         </button>
                       }
@@ -219,7 +219,7 @@
                       (click)="moveRow(row, -1)"
                       [attr.aria-label]="'provider_list.move_up' | translate"
                     >
-                      <svg lucideArrowUp class="h-4 w-4"></svg>
+                      <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
                     </button>
                     <button
                       type="button"
@@ -228,7 +228,7 @@
                       (click)="moveRow(row, 1)"
                       [attr.aria-label]="'provider_list.move_down' | translate"
                     >
-                      <svg lucideArrowDown class="h-4 w-4"></svg>
+                      <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
                     </button>
                   }
                   @if (rowExtraActions(); as tpl) {

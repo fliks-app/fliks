@@ -19,9 +19,9 @@
       (click)="micClick($event)"
     >
       @if (voice.muted()) {
-        <svg lucideMicOff class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.MicOff" class="h-5 w-5"></svg>
       } @else {
-        <svg lucideMic class="h-5 w-5"></svg>
+        <svg [lucideIcon]="icons.Mic" class="h-5 w-5"></svg>
       }
     </button>
   }

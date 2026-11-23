@@ -1,7 +1,8 @@
 import { Component, TemplateRef, computed, effect, inject, input, output, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucidePause, LucidePlay } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../icons';
 import { FullPlayerState } from '../../core/services/playback/full-player-state';
 import { DeviceService } from '../../core/services/device.service';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -14,11 +15,13 @@ import type { MediaFamily } from '../../core/media-kinds';
  */
 @Component({
   selector: 'app-player-bar',
-  imports: [NgTemplateOutlet, TranslatePipe, LucidePause, LucidePlay, TvRowDirective],
+  imports: [NgTemplateOutlet, TranslatePipe, TvRowDirective, LucideDynamicIcon],
   styles: [':host { display: contents; }'],
   templateUrl: './player-bar.html',
 })
 export class PlayerBarComponent {
+  protected readonly icons = icons;
+
   private readonly fullPlayer = inject(FullPlayerState);
   private readonly navbar = inject(NavbarService);
   /** On TV the bar sits in the navbar, one ↑ from the page. */

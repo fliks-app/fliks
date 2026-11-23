@@ -55,7 +55,7 @@
                     @if (triggerBusy() === s.name) {
                       <span class="loading loading-spinner loading-xs"></span>
                     } @else {
-                      <svg lucideCirclePlay class="h-4 w-4"></svg>
+                      <svg [lucideIcon]="icons.CirclePlay" class="h-4 w-4"></svg>
                     }
                   </button>
                 }

@@ -1,18 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import {
-  LucideArrowLeft,
-  LucideBookmark,
-  LucideHeadphones,
-  LucideListTree,
-  LucideMaximize,
-  LucideMinimize,
-  LucideNotebookPen,
-  LucideSearch,
-  LucideType,
-  LucideZoomIn,
-  LucideZoomOut,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
 import { ReaderSession } from '../reader-session';
@@ -23,23 +12,13 @@ import { ReaderSession } from '../reader-session';
   imports: [
     TranslatePipe,
     ResolveUrlPipe,
-    CachedSrcDirective,
-    LucideArrowLeft,
-    LucideBookmark,
-    LucideHeadphones,
-    LucideListTree,
-    LucideMaximize,
-    LucideMinimize,
-    LucideNotebookPen,
-    LucideSearch,
-    LucideType,
-    LucideZoomIn,
-    LucideZoomOut,
-  ],
+    CachedSrcDirective, LucideDynamicIcon],
   templateUrl: './reader-top-bar.html',
   host: { class: 'contents' },
 })
 export class ReaderTopBarComponent {
+  protected readonly icons = icons;
+
   protected readonly s = inject(ReaderSession);
   protected readonly f = this.s.features;
   protected readonly zoom = computed(() => (this.f().zoom ? this.s.engine()?.zoom : undefined));

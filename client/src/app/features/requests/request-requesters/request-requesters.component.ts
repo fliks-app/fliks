@@ -1,6 +1,7 @@
 import { Component, ElementRef, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideUsers } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { translatePlural } from '../../../core/pipes/translate-plural.pipe';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { FliksRequestDetail, RequestsService } from '../../../core/services/api/requests.service';
@@ -11,11 +12,13 @@ import { ModalComponent } from '../../../shared/components/modal';
 /** Manager-only line "Requested by Ana and 1 other"; a tap lists the requester and the watchers with their dates. */
 @Component({
   selector: 'app-request-requesters',
-  imports: [ModalComponent, TranslatePipe, LocaleDatePipe, ModalHeaderComponent, UserAvatarComponent, LucideUsers],
+  imports: [ModalComponent, TranslatePipe, LocaleDatePipe, ModalHeaderComponent, UserAvatarComponent, LucideDynamicIcon],
   templateUrl: './request-requesters.component.html',
   host: { class: 'block' },
 })
 export class RequestRequestersComponent {
+  protected readonly icons = icons;
+
   private readonly requests = inject(RequestsService);
   private readonly translate = inject(TranslateService);
 

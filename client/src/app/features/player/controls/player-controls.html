@@ -16,7 +16,7 @@
     <div class="flex items-center gap-1 min-w-0">
       <button type="button" class="btn btn-ghost btn-circle btn-md text-white" [attr.aria-label]="'player.back' | translate" (click)="back.emit()">
         <!-- lucide:chevron-left -->
-        <svg lucideChevronLeft [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+        <svg [lucideIcon]="icons.ChevronLeft" [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
       </button>
       <!-- Clearlogo only — no title fallback. When the media has no logo (or its
            image 404s) the slot stays empty rather than reverting to title text. -->
@@ -42,31 +42,31 @@
         <button type="button" class="btn btn-ghost btn-md btn-circle text-white" [attr.aria-label]="'player.volume' | translate" (click)="toggleMute.emit()">
           @if (muted() || volume() === 0) {
             <!-- lucide:volume-x -->
-            <svg lucideVolumeX class="h-6 w-6"></svg>
+            <svg [lucideIcon]="icons.VolumeX" class="h-6 w-6"></svg>
           } @else {
             <!-- lucide:volume-2 -->
-            <svg lucideVolume2 class="h-6 w-6"></svg>
+            <svg [lucideIcon]="icons.Volume2" class="h-6 w-6"></svg>
           }
         </button>
       }
       @if (local() && canLockOrientation()) {
         <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="(orientationLocked() ? 'player.orientation_unlock' : 'player.orientation_lock') | translate" [attr.aria-pressed]="orientationLocked()" (click)="toggleOrientationLock.emit()">
           @if (orientationLocked()) {
-            <svg lucideLock [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+            <svg [lucideIcon]="icons.Lock" [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
           } @else {
-            <svg lucideLockOpen [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+            <svg [lucideIcon]="icons.LockOpen" [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
           }
         </button>
       }
       <!-- lucide:picture-in-picture-2 — hidden on TV (no PiP on Android TV) and when permission is revoked -->
       @if (local() && !isTv() && pipAvailable()) {
         <button type="button" class="btn btn-ghost btn-circle text-white btn-md" [attr.aria-label]="'player.pip' | translate" (click)="togglePip.emit()">
-          <svg lucidePictureInPicture2 [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+          <svg [lucideIcon]="icons.PictureInPicture2" [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
         </button>
       }
       @if (partyActive()) {
         <button type="button" class="btn btn-ghost btn-circle btn-md relative" [class.text-info]="partyOpen()" [class.text-white]="!partyOpen()" [attr.aria-label]="'party.panel_toggle' | translate" [attr.aria-pressed]="partyOpen()" (click)="toggleParty.emit()">
-          <svg lucideUsers [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+          <svg [lucideIcon]="icons.Users" [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
           @if (partyUnread() > 0 && !partyOpen()) {
             <span class="badge badge-primary badge-sm absolute top-1 right-1 min-w-4 px-1">{{ partyUnread() > 9 ? '9+' : partyUnread() }}</span>
           }
@@ -83,7 +83,7 @@
               @if (castConnecting()) {
                 <span class="loading loading-spinner loading-md"></span>
               } @else {
-                <svg lucideCast [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+                <svg [lucideIcon]="icons.Cast" [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
               }
             </button>
           }
@@ -127,7 +127,7 @@
       @if (canControlPlayback()) {
         <!-- lucide:rotate-ccw -->
         <button type="button" class="p-6 -m-3 text-white/90 active:scale-90 transition-transform pointer-events-auto" [class.pointer-events-none]="!visible()" [attr.aria-label]="'player.seek_back' | translate" (click)="seek.emit(playhead()() - 10); $event.stopPropagation()">
-          <svg lucideRotateCcw class="h-7 w-7" [strokeWidth]="1.5"></svg>
+          <svg [lucideIcon]="icons.RotateCcw" class="h-7 w-7" [strokeWidth]="1.5"></svg>
         </button>
         <!-- lucide:play / lucide:pause -->
         <button type="button" class="p-6 -m-2 text-white active:scale-90 transition-transform pointer-events-auto" [class.pointer-events-none]="!visible()" [class.invisible]="spinner()" [attr.aria-label]="(paused() ? 'player.play' : 'player.pause') | translate" [attr.aria-pressed]="!paused()" (click)="togglePlay.emit(); $event.stopPropagation()">
@@ -139,7 +139,7 @@
         </button>
         <!-- lucide:rotate-cw -->
         <button type="button" class="p-6 -m-3 text-white/90 active:scale-90 transition-transform pointer-events-auto" [class.pointer-events-none]="!visible()" [attr.aria-label]="'player.seek_forward' | translate" (click)="seek.emit(playhead()() + 10); $event.stopPropagation()">
-          <svg lucideRotateCw class="h-7 w-7" [strokeWidth]="1.5"></svg>
+          <svg [lucideIcon]="icons.RotateCw" class="h-7 w-7" [strokeWidth]="1.5"></svg>
         </button>
       }
     </div>
@@ -170,24 +170,24 @@
         <div class="flex items-center lg:gap-1 shrink-0" (click)="$event.stopPropagation()">
           @if (hasNext() && canControlPlayback()) {
             <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="nextLabelKey() | translate" (click)="next.emit()">
-              <svg lucideSkipForward class="h-5 w-5"></svg>
+              <svg [lucideIcon]="icons.SkipForward" class="h-5 w-5"></svg>
             </button>
           }
           @if (availableSubtitles().length > 0) {
             <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.subtitles' | translate" (click)="openSheet('subtitles')">
-              <svg lucideCaptions class="h-5 w-5"></svg>
+              <svg [lucideIcon]="icons.Captions" class="h-5 w-5"></svg>
             </button>
           }
           @if (availableAudioTracks().length > 1) {
             <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.audio' | translate" (click)="openSheet('audio')">
-              <svg lucideHeadphones class="h-5 w-5"></svg>
+              <svg [lucideIcon]="icons.Headphones" class="h-5 w-5"></svg>
             </button>
           }
           @if (local() && speedOptions().length > 1 && !partyActive()) {
             <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.speed' | translate" (click)="openSheet('speed')">{{ playbackRate() }}x</button>
           }
           <button type="button" class="btn btn-ghost btn-circle text-white/80" [attr.aria-label]="'player.settings' | translate" (click)="openSheet('settings')">
-            <svg lucideSettings class="h-5 w-5"></svg>
+            <svg [lucideIcon]="icons.Settings" class="h-5 w-5"></svg>
           </button>
           <ng-container *ngTemplateOutlet="fullscreenBtn; context: { $implicit: 'md' }"></ng-container>
         </div>
@@ -229,7 +229,7 @@
         <div class="flex items-center gap-1.5">
           <!-- lucide:rotate-ccw -->
           <button type="button" class="btn btn-ghost btn-md btn-circle text-white" [attr.aria-label]="'player.seek_back' | translate" (click)="seek.emit(playhead()() - 10)">
-            <svg lucideRotateCcw class="h-6 w-6"></svg>
+            <svg [lucideIcon]="icons.RotateCcw" class="h-6 w-6"></svg>
           </button>
           <!-- lucide:play / lucide:pause -->
           <button #playPauseBtn data-default-focus type="button" class="btn btn-ghost btn-md btn-circle text-white" [attr.aria-label]="(paused() ? 'player.play' : 'player.pause') | translate" [attr.aria-pressed]="!paused()" (click)="togglePlay.emit()">
@@ -241,7 +241,7 @@
           </button>
           <!-- lucide:rotate-cw -->
           <button type="button" class="btn btn-ghost btn-md btn-circle text-white" [attr.aria-label]="'player.seek_forward' | translate" (click)="seek.emit(playhead()() + 10)">
-            <svg lucideRotateCw class="h-6 w-6"></svg>
+            <svg [lucideIcon]="icons.RotateCw" class="h-6 w-6"></svg>
           </button>
         </div>
       }
@@ -251,14 +251,14 @@
         <!-- Next item -->
         @if (hasNext() && canControlPlayback()) {
           <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="nextLabelKey() | translate" (click)="next.emit()">
-            <svg lucideSkipForward class="h-6 w-6"></svg>
+            <svg [lucideIcon]="icons.SkipForward" class="h-6 w-6"></svg>
           </button>
         }
         <!-- Subtitles dropdown -->
         @if (availableSubtitles().length > 0) {
         <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'subtitles'">
           <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.subtitles' | translate" (click)="toggleDropdown('subtitles', $event)">
-            <svg lucideCaptions class="h-6 w-6"></svg>
+            <svg [lucideIcon]="icons.Captions" class="h-6 w-6"></svg>
           </button>
           <div class="dropdown-content bg-neutral/95 rounded-2xl shadow-2xl py-4 px-2 min-w-64 mb-2">
             <ng-container [ngTemplateOutlet]="subtitlesMenu"></ng-container>
@@ -269,7 +269,7 @@
         @if (availableAudioTracks().length > 1) {
           <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'audio'">
             <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.audio' | translate" (click)="toggleDropdown('audio', $event)">
-              <svg lucideHeadphones class="h-6 w-6"></svg>
+              <svg [lucideIcon]="icons.Headphones" class="h-6 w-6"></svg>
             </button>
             <div class="dropdown-content bg-neutral/95 rounded-2xl shadow-2xl py-4 px-2 min-w-64 mb-2">
               <ng-container [ngTemplateOutlet]="audioMenu"></ng-container>
@@ -288,7 +288,7 @@
         <!-- Settings dropdown -->
         <div class="dropdown dropdown-top dropdown-end" [class.dropdown-open]="openDropdown() === 'settings'">
           <button type="button" class="btn btn-ghost btn-md btn-circle text-white/80" [attr.aria-label]="'player.settings' | translate" (click)="toggleDropdown('settings', $event)">
-            <svg lucideSettings class="h-6 w-6"></svg>
+            <svg [lucideIcon]="icons.Settings" class="h-6 w-6"></svg>
           </button>
           <div class="dropdown-content bg-neutral/95 rounded-2xl shadow-2xl min-w-64 max-h-[50vh] overflow-hidden mb-2">
             <ng-container [ngTemplateOutlet]="settingsMenu"></ng-container>
@@ -332,7 +332,7 @@
       [style.animation-play-state]="(visible() || cueFocused()) ? 'paused' : 'running'"
     ></span>
     <span class="relative flex items-center gap-2">
-      <svg lucideSkipForward class="h-4 w-4"></svg>
+      <svg [lucideIcon]="icons.SkipForward" class="h-4 w-4"></svg>
       {{ skipCueLabel() | translate }} ({{ cueCountdown() }})
     </span>
   </button>
@@ -349,7 +349,7 @@
     (click)="skipPreRoll.emit()"
   >
     <span class="relative flex items-center gap-2">
-      <svg lucideSkipForward class="h-4 w-4"></svg>
+      <svg [lucideIcon]="icons.SkipForward" class="h-4 w-4"></svg>
       {{ 'player.skip_pre_roll' | translate }}
     </span>
   </button>
@@ -373,7 +373,7 @@
       [style.animation-play-state]="(visible() || cueFocused()) ? 'paused' : 'running'"
     ></span>
     <span class="relative flex items-center gap-2">
-      <svg lucideSkipForward class="h-4 w-4"></svg>
+      <svg [lucideIcon]="icons.SkipForward" class="h-4 w-4"></svg>
       {{ nextLabelKey() | translate }} ({{ cueCountdown() }})
     </span>
   </button>
@@ -414,47 +414,47 @@
           <span class="flex-1 text-left">{{ 'player.quality' | translate }}</span>
           <span class="flex items-center gap-1 text-white/40 text-sm">
             {{ activeQualityLabel() }}
-            @if (activeQualityIsEco()) { <svg lucideLeaf class="h-3.5 w-3.5 shrink-0"></svg> }
+            @if (activeQualityIsEco()) { <svg [lucideIcon]="icons.Leaf" class="h-3.5 w-3.5 shrink-0"></svg> }
           </span>
-          <svg lucideChevronRight class="h-4 w-4 text-white/30 shrink-0"></svg>
+          <svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4 text-white/30 shrink-0"></svg>
         </button>
       }
       @if (queueItems().length > 1) {
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="openSettingsPanel('queue')">
           <span class="flex-1 text-left">{{ 'player.queue' | translate }}</span>
           <span class="text-white/40 text-sm">{{ queueIndex() + 1 }} / {{ queueItems().length }}</span>
-          <svg lucideChevronRight class="h-4 w-4 text-white/30 shrink-0"></svg>
+          <svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4 text-white/30 shrink-0"></svg>
         </button>
       }
       @if (local()) {
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="toggleFillScreen.emit()">
           <span class="flex-1 text-left">{{ 'player.fill_screen' | translate }}</span>
-          @if (fillScreen()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+          @if (fillScreen()) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
         </button>
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="toggleStats.emit(); closeSheet()">
           <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
-          @if (statsVisible()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+          @if (statsVisible()) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
         </button>
       }
       @if (partyCanStart()) {
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="startParty.emit(); closeSheet()">
-          <svg lucideUsers class="h-5 w-5 text-white/40 shrink-0"></svg>
+          <svg [lucideIcon]="icons.Users" class="h-5 w-5 text-white/40 shrink-0"></svg>
           <span class="flex-1 text-left">{{ 'party.watch_together' | translate }}</span>
         </button>
       }
       @if (partyActive()) {
         @if (partyCanInvite()) {
           <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="inviteParty.emit(); closeSheet()">
-            <svg lucideUserPlus class="h-5 w-5 text-white/40 shrink-0"></svg>
+            <svg [lucideIcon]="icons.UserPlus" class="h-5 w-5 text-white/40 shrink-0"></svg>
             <span class="flex-1 text-left">{{ 'party.invite' | translate }}</span>
           </button>
         }
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="leaveParty.emit(); closeSheet()">
-          <svg lucideLogOut class="h-5 w-5 text-white/40 shrink-0"></svg>
+          <svg [lucideIcon]="icons.LogOut" class="h-5 w-5 text-white/40 shrink-0"></svg>
           <span class="flex-1 text-left">{{ (partyIsHost() ? 'party.end' : 'party.leave') | translate }}</span>
         </button>
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="openReactionSettings.emit(); closeSheet()">
-          <svg lucideSmilePlus class="h-5 w-5 text-white/40 shrink-0"></svg>
+          <svg [lucideIcon]="icons.SmilePlus" class="h-5 w-5 text-white/40 shrink-0"></svg>
           <span class="flex-1 text-left">
             {{ 'party.reaction_settings' | translate }}
             @if (partyReactionsOff()) { <span class="block text-sm text-white/50">{{ 'party.reactions_off_notice' | translate }}</span> }
@@ -463,12 +463,12 @@
       }
       <div class="divider my-1 before:bg-white/10 after:bg-white/10"></div>
       <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="openMedia.emit(); closeSheet()">
-        <svg lucideExternalLink class="h-5 w-5 text-white/40 shrink-0"></svg>
+        <svg [lucideIcon]="icons.ExternalLink" class="h-5 w-5 text-white/40 shrink-0"></svg>
         <span class="flex-1 text-left">{{ 'player.open_media' | translate }}</span>
       </button>
     } @else if (settingsPanel() === 'quality') {
       <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10 mb-1" (click)="openSettingsPanel('main')">
-        <svg lucideArrowLeft class="h-4 w-4 text-white/50 shrink-0"></svg>
+        <svg [lucideIcon]="icons.ArrowLeft" class="h-4 w-4 text-white/50 shrink-0"></svg>
         <span class="font-medium">{{ 'player.quality' | translate }}</span>
       </button>
       <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
@@ -480,12 +480,12 @@
               <span class="block text-white/50 text-sm">{{ 'player.low_bandwidth' | translate }}</span>
             }
           </span>
-          @if (activeQualityId() === q.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+          @if (activeQualityId() === q.id) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
         </button>
       }
     } @else if (settingsPanel() === 'queue') {
       <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10 mb-1" (click)="openSettingsPanel('main')">
-        <svg lucideArrowLeft class="h-4 w-4 text-white/50 shrink-0"></svg>
+        <svg [lucideIcon]="icons.ArrowLeft" class="h-4 w-4 text-white/50 shrink-0"></svg>
         <span class="font-medium">{{ 'player.queue' | translate }}</span>
       </button>
       <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
@@ -497,7 +497,7 @@
             <span class="block truncate">{{ q.episodeTitle || q.title }}</span>
             @if (q.episodeTitle) { <span class="block truncate text-white/50 text-sm">{{ q.title }}</span> }
           </span>
-          @if (queueIndex() === i) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+          @if (queueIndex() === i) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
         </button>
       }
     }
@@ -516,9 +516,9 @@
             <span class="flex-1 text-left">{{ 'player.quality' | translate }}</span>
             <span class="flex items-center gap-1 text-white/50 text-sm">
               {{ activeQualityLabel() }}
-              @if (activeQualityIsEco()) { <svg lucideLeaf class="h-3.5 w-3.5 shrink-0"></svg> }
+              @if (activeQualityIsEco()) { <svg [lucideIcon]="icons.Leaf" class="h-3.5 w-3.5 shrink-0"></svg> }
             </span>
-            <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
+            <svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4 text-white/40 shrink-0"></svg>
           </button>
         }
         <!-- Queue row → opens sub-panel -->
@@ -526,40 +526,40 @@
           <button data-panel-row="queue" class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openSettingsPanel('queue')">
             <span class="flex-1 text-left">{{ 'player.queue' | translate }}</span>
             <span class="text-white/50 text-sm">{{ queueIndex() + 1 }} / {{ queueItems().length }}</span>
-            <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
+            <svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4 text-white/40 shrink-0"></svg>
           </button>
         }
         @if (local()) {
           <!-- Fill screen -->
           <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleFillScreen.emit()">
             <span class="flex-1 text-left">{{ 'player.fill_screen' | translate }}</span>
-            @if (fillScreen()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+            @if (fillScreen()) { <svg [lucideIcon]="icons.Check" class="h-4 w-4 text-white shrink-0"></svg> }
           </button>
           <!-- Stats -->
           <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleStats.emit(); closeDropdown($event)">
             <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
-            @if (statsVisible()) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+            @if (statsVisible()) { <svg [lucideIcon]="icons.Check" class="h-4 w-4 text-white shrink-0"></svg> }
           </button>
         }
         @if (partyCanStart()) {
           <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="startParty.emit(); closeDropdown($event)">
-            <svg lucideUsers class="h-4 w-4 text-white/40 shrink-0"></svg>
+            <svg [lucideIcon]="icons.Users" class="h-4 w-4 text-white/40 shrink-0"></svg>
             <span class="flex-1 text-left">{{ 'party.watch_together' | translate }}</span>
           </button>
         }
         @if (partyActive()) {
           @if (partyCanInvite()) {
             <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="inviteParty.emit(); closeDropdown($event)">
-              <svg lucideUserPlus class="h-4 w-4 text-white/40 shrink-0"></svg>
+              <svg [lucideIcon]="icons.UserPlus" class="h-4 w-4 text-white/40 shrink-0"></svg>
               <span class="flex-1 text-left">{{ 'party.invite' | translate }}</span>
             </button>
           }
           <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="leaveParty.emit(); closeDropdown($event)">
-            <svg lucideLogOut class="h-4 w-4 text-white/40 shrink-0"></svg>
+            <svg [lucideIcon]="icons.LogOut" class="h-4 w-4 text-white/40 shrink-0"></svg>
             <span class="flex-1 text-left">{{ (partyIsHost() ? 'party.end' : 'party.leave') | translate }}</span>
           </button>
           <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openReactionSettings.emit(); closeDropdown($event)">
-            <svg lucideSmilePlus class="h-4 w-4 text-white/40 shrink-0"></svg>
+            <svg [lucideIcon]="icons.SmilePlus" class="h-4 w-4 text-white/40 shrink-0"></svg>
             <span class="flex-1 text-left">
             {{ 'party.reaction_settings' | translate }}
             @if (partyReactionsOff()) { <span class="block text-sm text-white/50">{{ 'party.reactions_off_notice' | translate }}</span> }
@@ -569,7 +569,7 @@
         <div class="divider my-1 before:bg-white/10 after:bg-white/10"></div>
         <!-- Open media page -->
         <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="openMedia.emit(); closeDropdown($event)">
-          <svg lucideExternalLink class="h-4 w-4 text-white/40 shrink-0"></svg>
+          <svg [lucideIcon]="icons.ExternalLink" class="h-4 w-4 text-white/40 shrink-0"></svg>
           <span class="flex-1 text-left">{{ 'player.open_media' | translate }}</span>
         </button>
       </div>
@@ -577,7 +577,7 @@
       <div class="py-2 px-1">
         <!-- Back header -->
         <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 mb-1" (click)="openSettingsPanel('main')">
-          <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>
+          <svg [lucideIcon]="icons.ArrowLeft" class="h-4 w-4 text-white/60 shrink-0"></svg>
           <span class="font-medium">{{ 'player.quality' | translate }}</span>
         </button>
         <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
@@ -594,7 +594,7 @@
                 <span class="block text-white/50 text-sm">{{ 'player.low_bandwidth' | translate }}</span>
               }
             </span>
-            @if (activeQualityId() === q.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+            @if (activeQualityId() === q.id) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
           </button>
         }
       </div>
@@ -602,7 +602,7 @@
       <div class="py-2 px-1">
         <!-- Back header -->
         <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10 mb-1" (click)="openSettingsPanel('main')">
-          <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>
+          <svg [lucideIcon]="icons.ArrowLeft" class="h-4 w-4 text-white/60 shrink-0"></svg>
           <span class="font-medium">{{ 'player.queue' | translate }}</span>
         </button>
         <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
@@ -618,7 +618,7 @@
                 <span class="block truncate">{{ q.episodeTitle || q.title }}</span>
                 @if (q.episodeTitle) { <span class="block truncate text-white/50 text-sm">{{ q.title }}</span> }
               </span>
-              @if (queueIndex() === i) { <svg lucideCheck class="h-4 w-4 text-white shrink-0"></svg> }
+              @if (queueIndex() === i) { <svg [lucideIcon]="icons.Check" class="h-4 w-4 text-white shrink-0"></svg> }
             </button>
           }
         </div>
@@ -641,7 +641,7 @@
           [attr.aria-label]="'player.appearance' | translate"
           (click)="openSubtitlesPanel('appearance')"
         >
-          <svg lucideSettings class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.Settings" class="h-4 w-4"></svg>
         </button>
       }
     </div>
@@ -653,9 +653,9 @@
       [appSelectedOption]="!activeSubtitleId()"
       (click)="selectSubtitle.emit(null); closeSheet()"
     >
-      <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
+      <svg [lucideIcon]="icons.Captions" class="h-5 w-5 text-white/50 shrink-0"></svg>
       <span class="flex-1 text-left">{{ 'player.off' | translate }}</span>
-      @if (!activeSubtitleId()) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+      @if (!activeSubtitleId()) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
     </button>
     @for (sub of sortedSubtitles(); track sub.id) {
       <button
@@ -664,18 +664,18 @@
         [appSelectedOption]="activeSubtitleId() === sub.id"
         (click)="selectSubtitle.emit(sub.id); closeSheet()"
       >
-        <svg lucideCaptions class="h-5 w-5 text-white/50 shrink-0"></svg>
+        <svg [lucideIcon]="icons.Captions" class="h-5 w-5 text-white/50 shrink-0"></svg>
         <span class="flex-1 text-left">
           <span class="block">{{ sub.menuHead || sub.label }}@if (sub.isImage) { <span class="text-warning/70 text-sm ml-1">{{ 'player.burned' | translate }}</span> }</span>
           @if (sub.menuSub) { <span class="block text-sm text-white/60">{{ sub.menuSub }}</span> }
         </span>
-        @if (activeSubtitleId() === sub.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+        @if (activeSubtitleId() === sub.id) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
       </button>
     }
     </div>
   } @else if (subtitlesPanel() === 'appearance') {
     <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 mb-1" (click)="openSubtitlesPanel('tracks')">
-      <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>
+      <svg [lucideIcon]="icons.ArrowLeft" class="h-4 w-4 text-white/60 shrink-0"></svg>
       <span class="font-medium">{{ 'player.appearance' | translate }}</span>
     </button>
     <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
@@ -690,12 +690,12 @@
         @if (currentOption(row); as current) {
           <span class="text-white/50 text-sm">{{ current.labelKey ? (current.labelKey | translate) : current.label }}</span>
         }
-        <svg lucideChevronRight class="h-4 w-4 text-white/40 shrink-0"></svg>
+        <svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4 text-white/40 shrink-0"></svg>
       </button>
     }
   } @else if (activeAppearanceRow(); as row) {
     <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10 mb-1" (click)="openSubtitlesPanel('appearance')">
-      <svg lucideArrowLeft class="h-4 w-4 text-white/60 shrink-0"></svg>
+      <svg [lucideIcon]="icons.ArrowLeft" class="h-4 w-4 text-white/60 shrink-0"></svg>
       <span class="font-medium">{{ row.labelKey | translate }}</span>
     </button>
     <div class="divider my-0 before:bg-white/10 after:bg-white/10"></div>
@@ -703,7 +703,7 @@
     @for (opt of row.options; track opt.value) {
       <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white hover:bg-white/10 active:bg-white/10" [attr.aria-current]="currentOption(row) === opt ? 'true' : null" (click)="setAppearance(row, opt.value)">
         <span class="flex-1 text-left">{{ opt.labelKey ? (opt.labelKey | translate) : opt.label }}</span>
-        @if (currentOption(row) === opt) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+        @if (currentOption(row) === opt) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
       </button>
     }
   }
@@ -721,13 +721,13 @@
       [appSelectedOption]="activeAudioTrackId() === track.id"
       (click)="selectAudioTrack.emit(track.id); closeSheet()"
     >
-      <svg lucideHeadphones class="h-5 w-5 text-white/50 shrink-0"></svg>
+      <svg [lucideIcon]="icons.Headphones" class="h-5 w-5 text-white/50 shrink-0"></svg>
       <span class="flex-1 text-left">
         <span class="block">{{ track.menuHead || track.label }}</span>
         @if (track.menuSub) { <span class="block text-sm text-white/60">{{ track.menuSub }}</span> }
         @if (track.supported === false) { <span class="block text-sm text-white/60">{{ 'player.audio_unsupported' | translate }}</span> }
       </span>
-      @if (activeAudioTrackId() === track.id) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+      @if (activeAudioTrackId() === track.id) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
     </button>
   }
   </div>
@@ -745,7 +745,7 @@
       (click)="speedChange.emit(r); closeSheet()"
     >
       <span class="flex-1 text-left">{{ r }}x</span>
-      @if (playbackRate() === r) { <svg lucideCheck class="h-5 w-5 text-white shrink-0"></svg> }
+      @if (playbackRate() === r) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
     </button>
   }
   </div>
@@ -764,9 +764,9 @@
       (click)="toggleFullscreen.emit()"
     >
       @if (fullscreen()) {
-        <svg lucideMinimize [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+        <svg [lucideIcon]="icons.Minimize" [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
       } @else {
-        <svg lucideMaximize [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
+        <svg [lucideIcon]="icons.Maximize" [class]="isMobileTouch() ? 'h-5 w-5' : 'h-6 w-6'"></svg>
       }
     </button>
   }

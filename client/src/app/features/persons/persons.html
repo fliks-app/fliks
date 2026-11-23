@@ -5,7 +5,7 @@
     <!-- Search + filter -->
     <div class="flex gap-2 items-center">
       <div class="relative flex-1">
-        <svg lucideSearch class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40 pointer-events-none z-10"></svg>
+        <svg [lucideIcon]="icons.Search" class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40 pointer-events-none z-10"></svg>
         <input
           type="text"
           [placeholder]="'common.search' | translate"

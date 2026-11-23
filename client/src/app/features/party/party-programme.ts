@@ -3,7 +3,8 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDragPlaceholder, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { DropListSettleDirective } from '../../shared/directives/drop-list-settle.directive';
-import { LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { PartyApiService, type PartyDto, type PartyItem } from '../../core/services/api/party-api.service';
 import { MediaService, type Media } from '../../core/services/api/media.service';
 import { isTrack, itemIn, sameItem as sameRow, type ItemRef } from '../../core/services/party/party-item';
@@ -36,10 +37,12 @@ const rowKey = (i: ItemRef) => `${i.mediaId}:${i.episodeId ?? ''}:${i.itemId ?? 
 /** The party's ordered programme: everyone sees it, the host reorders, removes and appends. */
 @Component({
   selector: 'app-party-programme',
-  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, PartyMusicPickerComponent, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragHandle, CdkDragPlaceholder, LucideChevronDown, LucideChevronUp, LucideGripVertical, LucidePlus, LucideTrash2, LucideUndo2],
+  imports: [TranslatePipe, ResolveUrlPipe, TvRowDirective, MediaPickerComponent, PartyMusicPickerComponent, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragHandle, CdkDragPlaceholder, LucideDynamicIcon],
   templateUrl: './party-programme.html',
 })
 export class PartyProgrammeComponent {
+  protected readonly icons = icons;
+
   private readonly api = inject(PartyApiService);
   private readonly mediaService = inject(MediaService);
   private readonly sse = inject(SseService);

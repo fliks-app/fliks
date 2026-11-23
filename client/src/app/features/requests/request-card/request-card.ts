@@ -8,7 +8,8 @@ import {
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
-import { LucideTrash2 } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
 import { RequestPosterComponent } from '../request-poster';
 import { RequestWantsComponent } from '../request-wants/request-wants';
@@ -30,9 +31,7 @@ import { KIND_REGISTRY, kindOf } from '../../../core/media-kinds';
     TranslatePluralPipe,
     RequestPosterComponent,
     RequestWantsComponent,
-    RequestStatusBadgeComponent,
-    LucideTrash2,
-  ],
+    RequestStatusBadgeComponent, LucideDynamicIcon],
   // The host is the scroller's flex item and the single focusable unit (tabindex/role/focus ring); inner controls sit at tabindex=-1
   // so D-pad moves card to card. Column flex makes the inner card fill the row height.
   host: {
@@ -47,6 +46,8 @@ import { KIND_REGISTRY, kindOf } from '../../../core/media-kinds';
   templateUrl: './request-card.html',
 })
 export class RequestCardComponent {
+  protected readonly icons = icons;
+
   private readonly router = inject(Router);
 
   protected readonly kinds = KIND_REGISTRY;

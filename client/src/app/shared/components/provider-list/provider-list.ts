@@ -14,7 +14,8 @@ import { HttpClient, HttpContext } from '@angular/common/http';
 import { NgTemplateOutlet } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { LucideArrowUp, LucideArrowDown, LucideRotateCcw, LucideSearch } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SKIP_ERROR_TOAST } from '../../../core/interceptors/error.interceptor';
 import { ToastService } from '../../../core/services/toast.service';
@@ -67,15 +68,12 @@ export function resolveRowActionRoute(route: string, id: number | string): strin
     SelectFieldComponent,
     SchemaFormComponent,
     DataTableComponent,
-    EnabledSwitchComponent,
-    LucideArrowUp,
-    LucideArrowDown,
-    LucideRotateCcw,
-    LucideSearch,
-  ],
+    EnabledSwitchComponent, LucideDynamicIcon],
   templateUrl: './provider-list.html',
 })
 export class ProviderListComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);

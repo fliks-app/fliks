@@ -8,7 +8,8 @@ import {
   CdkDropList,
   moveItemInArray,
 } from '@angular/cdk/drag-drop';
-import { LucideArrowDown, LucideArrowUp, LucideGripVertical } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { PluginUiRegistryService } from '../../../core/plugin-ui/plugin-ui-registry.service';
 import { TvService } from '../../../core/services/tv.service';
 import { DropListSettleDirective } from '../../../shared/directives/drop-list-settle.directive';
@@ -70,14 +71,12 @@ export function listJson(text: string, split: RegExp): string {
     DropListSettleDirective,
     CdkDrag,
     CdkDragHandle,
-    CdkDragPlaceholder,
-    LucideGripVertical,
-    LucideArrowUp,
-    LucideArrowDown,
-  ],
+    CdkDragPlaceholder, LucideDynamicIcon],
   templateUrl: './lyrics-settings.html',
 })
 export class LyricsSettingsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly api = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);

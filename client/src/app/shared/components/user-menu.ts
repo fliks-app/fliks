@@ -7,27 +7,19 @@ import { ServerConfigService } from '../../core/services/server-config.service';
 import { TvService } from '../../core/services/tv.service';
 import { DropdownMenuComponent } from './dropdown-menu';
 import { UserAvatarComponent } from './user-avatar/user-avatar';
-import {
-  LucideUser,
-  LucideSettings,
-  LucideShield,
-  LucideRepeat,
-  LucideLogOut,
-  LucideServer,
-  LucideMonitorSmartphone,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../icons';
 
 @Component({
   selector: 'app-user-menu',
   imports: [
     RouterLink, TranslatePipe,
-    DropdownMenuComponent, UserAvatarComponent,
-    LucideUser, LucideSettings, LucideShield, LucideRepeat, LucideLogOut,
-    LucideServer, LucideMonitorSmartphone,
-  ],
+    DropdownMenuComponent, UserAvatarComponent, LucideDynamicIcon],
   templateUrl: './user-menu.html',
 })
 export class UserMenuComponent {
+  protected readonly icons = icons;
+
   readonly auth = inject(AuthService);
   readonly tv = inject(TvService);
   protected readonly systemAttention = inject(CountsApiService).systemAttention;

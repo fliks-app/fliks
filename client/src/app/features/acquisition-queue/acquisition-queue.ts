@@ -1,6 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { map } from 'rxjs';
 import { SseService } from '../../core/services/sse.service';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -23,10 +24,12 @@ import {
 /** The core-owned queue and history of every download provider (`route.data.view`). */
 @Component({
   selector: 'app-acquisition-queue',
-  imports: [TranslatePipe, DataTableComponent, LucideX],
+  imports: [TranslatePipe, DataTableComponent, LucideDynamicIcon],
   templateUrl: './acquisition-queue.html',
 })
 export class AcquisitionQueueComponent {
+  protected readonly icons = icons;
+
   private readonly router = inject(Router);
 
   private readonly route = inject(ActivatedRoute);

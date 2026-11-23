@@ -30,7 +30,8 @@ import { PartyPersonRowComponent } from '../player/party/party-person-row';
 import { PartyChatComponent } from '../player/party/party-chat';
 import { PartyVoiceBarComponent } from '../player/party/party-voice-bar';
 import { VoiceService } from '../../core/services/party/voice.service';
-import { LucideCalendarPlus, LucideCheck, LucideCrown, LucideDices, LucideEllipsisVertical, LucidePlay, LucideSettings, LucideShare2, LucideUserMinus, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { BackgroundService } from '../../core/services/background.service';
 import { DeviceService } from '../../core/services/device.service';
@@ -59,11 +60,13 @@ const isNoConnection = (e: unknown) => e instanceof HttpErrorResponse && (e.erro
   imports: [
     NgTemplateOutlet, RouterLink, SynopsisComponent, TranslatePipe, TranslatePluralPipe, TvSectionDirective, TvRowDirective, DefaultFocusDirective, PartyHostDialogComponent, PartyInviteComponent, PartyProposalsComponent, PartyProgrammeComponent, PartyCoverComponent, PartyPersonRowComponent, PartyChatComponent, PartyVoiceBarComponent,
     MobileFanartHeroComponent, UserAvatarComponent,
-    LucideCalendarPlus, LucideCheck, LucideCrown, LucideDices, LucideEllipsisVertical, LucidePlay, LucideSettings, LucideShare2, LucideUserMinus, LucideX, DropdownMenuComponent,
+    DropdownMenuComponent, LucideDynamicIcon,
   ],
   templateUrl: './party-page.html',
 })
 export class PartyPageComponent implements OnInit, OnDestroy {
+  protected readonly icons = icons;
+
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly api = inject(PartyApiService);

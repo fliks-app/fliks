@@ -15,7 +15,8 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe, translatePlural } from '../../../core/pipes/translate-plural.pipe';
-import { LucideDownload } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { firstValueFrom } from 'rxjs';
 import { ImportDiskComponent } from '../../import-disk/import-disk';
 import { ImportUserMappingComponent, type UnmappedUser, unmappedKey } from './user-mapping/user-mapping';
@@ -119,13 +120,14 @@ const ARR_SETTINGS: Record<Provider, { url: string; apiKey: string }> = {
     FormsModule,
     NgTemplateOutlet,
     TranslatePipe, TranslatePluralPipe,
-    LucideDownload,
     ImportDiskComponent,
-    ImportUserMappingComponent,
+    ImportUserMappingComponent, LucideDynamicIcon,
   ],
   templateUrl: './data-imports.html',
 })
 export class DataImportsSettingsComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
   private readonly settingsApi = inject(SettingsApiService);

@@ -10,7 +10,8 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { LucideCirclePlay } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { ToastService } from '../../../core/services/toast.service';
@@ -30,10 +31,12 @@ interface SchedulerInfo {
 
 @Component({
   selector: 'app-schedulers',
-  imports: [LucideCirclePlay, TranslatePipe, LocaleDatePipe],
+  imports: [TranslatePipe, LocaleDatePipe, LucideDynamicIcon],
   templateUrl: './schedulers.html',
 })
 export class SchedulersComponent implements OnInit {
+  protected readonly icons = icons;
+
   private readonly http = inject(HttpClient);
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);

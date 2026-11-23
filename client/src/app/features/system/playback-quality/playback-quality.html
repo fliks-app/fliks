@@ -331,27 +331,27 @@
                 @case ('event') {
                   <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
                     @if (step.event.type === 'stall') {
-                      <svg lucideTriangleAlert class="h-4 w-4" [class]="causeTextClass(step.event)"></svg>
+                      <svg [lucideIcon]="icons.TriangleAlert" class="h-4 w-4" [class]="causeTextClass(step.event)"></svg>
                     } @else if (step.event.type === 'error') {
-                      <svg lucideCircleX class="h-4 w-4 text-error"></svg>
+                      <svg [lucideIcon]="icons.CircleX" class="h-4 w-4 text-error"></svg>
                     } @else {
                       @switch (changeIcon(step.event.type, step.event.data?.reason)) {
-                      @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4 text-base-content/50"></svg> }
-                      @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4 text-base-content/50"></svg> }
-                      @case ('audio') { <svg lucideAudioLines class="h-4 w-4 text-base-content/50"></svg> }
-                      @case ('subtitles') { <svg lucideCaptions class="h-4 w-4 text-base-content/50"></svg> }
-                      @case ('reload') { <svg lucideRefreshCw class="h-4 w-4 text-base-content/50"></svg> }
-                      @case ('fallback') { <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg> }
-                      @case ('cast') { <svg lucideCast class="h-4 w-4 text-base-content/50"></svg> }
-                      @case ('start') { <svg lucidePlay class="h-4 w-4 text-base-content/50"></svg> }
-                      @default { <svg lucideArrowRightLeft class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('quality') { <svg [lucideIcon]="icons.ArrowUpDown" class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('recovery') { <svg [lucideIcon]="icons.RotateCcw" class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('audio') { <svg [lucideIcon]="icons.AudioLines" class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('subtitles') { <svg [lucideIcon]="icons.Captions" class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('reload') { <svg [lucideIcon]="icons.RefreshCw" class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('fallback') { <svg [lucideIcon]="icons.TriangleAlert" class="h-4 w-4 text-warning"></svg> }
+                      @case ('cast') { <svg [lucideIcon]="icons.Cast" class="h-4 w-4 text-base-content/50"></svg> }
+                      @case ('start') { <svg [lucideIcon]="icons.Play" class="h-4 w-4 text-base-content/50"></svg> }
+                      @default { <svg [lucideIcon]="icons.ArrowRightLeft" class="h-4 w-4 text-base-content/50"></svg> }
                     }
                     }
                   </span>
                 }
                 @case ('end') {
                   <span class="flex h-5 w-5 items-center justify-center rounded-full bg-base-100">
-                    <svg lucideCircleStop class="h-4 w-4 text-base-content/50"></svg>
+                    <svg [lucideIcon]="icons.CircleStop" class="h-4 w-4 text-base-content/50"></svg>
                   </span>
                 }
               }
@@ -366,14 +366,14 @@
                       @if (step.incoming; as incoming) {
                         <span class="inline-flex shrink-0" aria-hidden="true">
                           @switch (transitionIcon(incoming)) {
-                            @case ('quality') { <svg lucideArrowUpDown class="h-4 w-4"></svg> }
-                            @case ('recovery') { <svg lucideRotateCcw class="h-4 w-4"></svg> }
-                            @case ('audio') { <svg lucideAudioLines class="h-4 w-4"></svg> }
-                            @case ('subtitles') { <svg lucideCaptions class="h-4 w-4"></svg> }
-                            @case ('reload') { <svg lucideRefreshCw class="h-4 w-4"></svg> }
-                            @case ('fallback') { <svg lucideTriangleAlert class="h-4 w-4 text-warning"></svg> }
-                            @case ('cast') { <svg lucideCast class="h-4 w-4"></svg> }
-                            @default { <svg lucideArrowRightLeft class="h-4 w-4"></svg> }
+                            @case ('quality') { <svg [lucideIcon]="icons.ArrowUpDown" class="h-4 w-4"></svg> }
+                            @case ('recovery') { <svg [lucideIcon]="icons.RotateCcw" class="h-4 w-4"></svg> }
+                            @case ('audio') { <svg [lucideIcon]="icons.AudioLines" class="h-4 w-4"></svg> }
+                            @case ('subtitles') { <svg [lucideIcon]="icons.Captions" class="h-4 w-4"></svg> }
+                            @case ('reload') { <svg [lucideIcon]="icons.RefreshCw" class="h-4 w-4"></svg> }
+                            @case ('fallback') { <svg [lucideIcon]="icons.TriangleAlert" class="h-4 w-4 text-warning"></svg> }
+                            @case ('cast') { <svg [lucideIcon]="icons.Cast" class="h-4 w-4"></svg> }
+                            @default { <svg [lucideIcon]="icons.ArrowRightLeft" class="h-4 w-4"></svg> }
                           }
                         </span>
                       }

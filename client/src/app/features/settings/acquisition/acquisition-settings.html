@@ -33,7 +33,7 @@
                       class="cursor-grab text-base-content/60 hover:text-base-content/70"
                       [attr.aria-label]="'settings.acquisition.drag' | translate"
                     >
-                      <svg lucideGripVertical class="h-4 w-4"></svg>
+                      <svg [lucideIcon]="icons.GripVertical" class="h-4 w-4"></svg>
                     </button>
                   }
                   <span class="w-5 text-sm text-base-content/60">{{ i + 1 }}</span>
@@ -48,7 +48,7 @@
                     (click)="reorder(i, i - 1)"
                     [attr.aria-label]="'settings.acquisition.move_up' | translate"
                   >
-                    <svg lucideArrowUp class="h-4 w-4"></svg>
+                    <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
                   </button>
                   <button
                     type="button"
@@ -57,7 +57,7 @@
                     (click)="reorder(i, i + 1)"
                     [attr.aria-label]="'settings.acquisition.move_down' | translate"
                   >
-                    <svg lucideArrowDown class="h-4 w-4"></svg>
+                    <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
                   </button>
                 </div>
               } @empty {

@@ -11,7 +11,7 @@
 </div>
 @if (person().voice; as voice) {
   <span [class.opacity-50]="voice.muted">
-    @if (voice.muted) { <svg lucideMicOff class="h-4 w-4"></svg> } @else { <svg lucideMic class="h-4 w-4"></svg> }
+    @if (voice.muted) { <svg [lucideIcon]="icons.MicOff" class="h-4 w-4"></svg> } @else { <svg [lucideIcon]="icons.Mic" class="h-4 w-4"></svg> }
   </span>
 }
 @if (person().source === 'link') {

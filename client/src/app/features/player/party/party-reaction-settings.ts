@@ -4,7 +4,8 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Component, ElementRef, afterNextRender, computed, inject, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideSearch, LucideTrash2, LucideX } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../../shared/icons';
 import { EmojiDataService } from '../../../core/services/party/emoji-data.service';
 import { MAX_BAR } from '../../../core/services/party/reaction-bar';
 import { PartyService } from '../../../core/services/party/party.service';
@@ -29,10 +30,12 @@ interface Section {
 /** Reaction settings, opened from the player's settings menu; lives in the player so it shows in fullscreen. */
 @Component({
   selector: 'app-party-reaction-settings',
-  imports: [ModalComponent, FormsModule, NgTemplateOutlet, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragPlaceholder, TranslatePipe, LucideSearch, LucideX, ModalHeaderComponent, TvSectionDirective, TvGridDirective, KeyboardReorderDirective, LucideTrash2, ToggleFieldComponent],
+  imports: [ModalComponent, FormsModule, NgTemplateOutlet, CdkDropList, DropListSettleDirective, CdkDrag, CdkDragPlaceholder, TranslatePipe, ModalHeaderComponent, TvSectionDirective, TvGridDirective, KeyboardReorderDirective, ToggleFieldComponent, LucideDynamicIcon],
   templateUrl: './party-reaction-settings.html',
 })
 export class PartyReactionSettingsComponent {
+  protected readonly icons = icons;
+
   protected readonly reactions = inject(ReactionsService);
   protected readonly party = inject(PartyService);
   protected readonly data = inject(EmojiDataService);

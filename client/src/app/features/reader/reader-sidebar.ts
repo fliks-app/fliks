@@ -14,16 +14,8 @@ import {
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { TranslatePipe } from '@ngx-translate/core';
-import {
-  LucideBookOpen,
-  LucideBookmark,
-  LucideCheck,
-  LucideDownload,
-  LucidePencil,
-  LucideSearch,
-  LucideTrash2,
-  LucideX,
-} from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 import {
   ANNOTATION_COLOURS,
   type Annotation,
@@ -49,20 +41,13 @@ export interface TocEntry {
   selector: 'app-reader-sidebar',
   imports: [
     DatePipe,
-    TranslatePipe,
-    LucideBookOpen,
-    LucideBookmark,
-    LucideCheck,
-    LucideDownload,
-    LucidePencil,
-    LucideSearch,
-    LucideTrash2,
-    LucideX,
-  ],
+    TranslatePipe, LucideDynamicIcon],
   templateUrl: './reader-sidebar.html',
   styleUrl: './reader-panel.css',
 })
 export class ReaderSidebarComponent implements OnDestroy {
+  protected readonly icons = icons;
+
   readonly tab = model.required<SidebarTab>();
   readonly toc = input.required<TocEntry[]>();
   readonly currentRow = input.required<number>();

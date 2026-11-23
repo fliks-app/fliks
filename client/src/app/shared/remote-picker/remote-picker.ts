@@ -1,6 +1,7 @@
 import { Component, inject, input, viewChild } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCast } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../icons';
 import { DropdownMenuComponent } from '../components/dropdown-menu';
 import { AirPlayService } from '../../core/services/airplay.service';
 import { CastService } from '../../core/services/cast.service';
@@ -9,10 +10,12 @@ import { RemotePickerListComponent } from './remote-picker-list';
 /** "Play on another device" top-bar trigger: `app-dropdown-menu` around `app-remote-picker-list`. */
 @Component({
   selector: 'app-remote-picker',
-  imports: [TranslatePipe, DropdownMenuComponent, RemotePickerListComponent, LucideCast],
+  imports: [TranslatePipe, DropdownMenuComponent, RemotePickerListComponent, LucideDynamicIcon],
   templateUrl: './remote-picker.html',
 })
 export class RemotePickerComponent {
+  protected readonly icons = icons;
+
   protected readonly castService = inject(CastService);
   protected readonly airPlay = inject(AirPlayService);
   /** The controlled device's name: the trigger then reads as a chip. */

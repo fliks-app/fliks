@@ -13,16 +13,16 @@
       } @else {
       @switch (toast.type) {
         @case ('success') {
-          <svg lucideCircleCheck class="h-5 w-5 shrink-0"></svg>
+          <svg [lucideIcon]="icons.CircleCheck" class="h-5 w-5 shrink-0"></svg>
         }
         @case ('error') {
-          <svg lucideCircleX class="h-5 w-5 shrink-0"></svg>
+          <svg [lucideIcon]="icons.CircleX" class="h-5 w-5 shrink-0"></svg>
         }
         @case ('warning') {
-          <svg lucideTriangleAlert class="h-5 w-5 shrink-0"></svg>
+          <svg [lucideIcon]="icons.TriangleAlert" class="h-5 w-5 shrink-0"></svg>
         }
         @case ('info') {
-          <svg lucideInfo class="h-5 w-5 shrink-0"></svg>
+          <svg [lucideIcon]="icons.Info" class="h-5 w-5 shrink-0"></svg>
         }
       }
       }
@@ -48,7 +48,7 @@
         (click)="toastService.close(toast.id)"
         [attr.aria-label]="'common.close_notification' | translate"
       >
-        <svg lucideX class="h-4 w-4"></svg>
+        <svg [lucideIcon]="icons.X" class="h-4 w-4"></svg>
       </button>
       }
     </div>

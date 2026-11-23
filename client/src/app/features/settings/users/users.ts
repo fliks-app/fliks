@@ -9,7 +9,6 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { RouterLink } from '@angular/router';
-import { LucideX } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   UsersApiService,

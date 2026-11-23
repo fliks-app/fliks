@@ -13,10 +13,10 @@
     >
       <div class="flex-none flex">
         <button type="button" class="btn btn-square btn-ghost" [attr.aria-label]="'common.back' | translate" (click)="goBack()">
-          <svg lucideChevronLeft class="h-5 w-5"></svg>
+          <svg [lucideIcon]="icons.ChevronLeft" class="h-5 w-5"></svg>
         </button>
         <label [for]="drawerId()" tabindex="0" role="button" class="btn btn-square btn-ghost">
-          <svg lucideMenu class="h-5 w-5"></svg>
+          <svg [lucideIcon]="icons.Menu" class="h-5 w-5"></svg>
         </label>
       </div>
       <div class="flex-1">
@@ -47,7 +47,7 @@
     >
       <div class="p-4 border-b border-base-200">
         <a routerLink="/" class="flex items-center gap-2 px-2 py-1 rounded-lg text-base-content/60 hover:text-base-content text-sm mb-2 mt-4">
-          <svg lucideChevronLeft class="h-4 w-4"></svg>
+          <svg [lucideIcon]="icons.ChevronLeft" class="h-4 w-4"></svg>
           {{ backLabel() }}
         </a>
         <h2 class="text-xl font-bold flex items-center gap-2">

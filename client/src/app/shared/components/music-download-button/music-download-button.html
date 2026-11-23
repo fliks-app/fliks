@@ -5,9 +5,9 @@
     } @else if (busy()) {
       <span class="radial-progress text-primary" style="--value: 0; --size: 1.25rem; --thickness: 2px" role="progressbar" aria-valuenow="0"></span>
     } @else if (state() === 'all') {
-      <svg lucideCircleArrowDown [class]="iconClass()" class="text-primary"></svg>
+      <svg [lucideIcon]="icons.CircleArrowDown" [class]="iconClass()" class="text-primary"></svg>
     } @else {
-      <svg lucideDownload [class]="iconClass()"></svg>
+      <svg [lucideIcon]="icons.Download" [class]="iconClass()"></svg>
     }
     @if (showLabel()) {
       {{ label() | translate }}
