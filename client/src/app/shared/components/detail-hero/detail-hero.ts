@@ -9,7 +9,7 @@ import { BrowserDeviceProfileService } from '../../../core/services/browser-devi
 import { OptimizeModalService } from '../../../core/services/optimize-modal.service';
 import { ReportProblemService } from '../../../core/services/report-problem.service';
 import { MediaAdminService } from '../../../core/services/media-admin.service';
-import type { Media } from '../../../core/services/api/media.service';
+import type { Media, SeriesMonitoring } from '../../../core/services/api/media.service';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
 import { PartyService } from '../../../core/services/party/party.service';
 import { buildSeriesQueueItems } from '../../utils/media-play.util';
@@ -203,6 +203,10 @@ export class DetailHeroComponent {
   readonly resumeMediaFileId = input<number | undefined>(undefined);
   readonly status = input<string | null>(null);
   readonly monitored = input(true);
+  /** Series only; `undefined` (older server, or a kind without seasons) falls back on `monitored`. */
+  readonly monitoring = input<SeriesMonitoring | undefined>(undefined);
+  /** Series only; `null` or `undefined` hides the new-seasons row. */
+  readonly followNewSeasons = input<boolean | null | undefined>(undefined);
   readonly libraryName = input<string | null>(null);
   readonly qualityProfileName = input<string | null>(null);
   readonly languageProfileName = input<string | null>(null);
@@ -670,7 +674,9 @@ export class DetailHeroComponent {
   protected readonly chips = computed<HeroChip[]>(() => {
     const desktop = this.desktopLayout();
     const chips: HeroChip[] = [];
-    if (desktop && !this.monitored()) {
+    if (desktop && this.monitoring() === 'partial') {
+      chips.push({ label: 'media_detail.monitored_partial', cls: 'hidden lg:inline-flex badge badge-warning badge-outline' });
+    } else if (desktop && !this.monitored()) {
       chips.push({ label: 'media_detail.unmonitored', cls: 'hidden lg:inline-flex badge badge-ghost' });
     }
     if (this.libraryName()) chips.push({ label: this.libraryName()!, cls: 'badge badge-primary badge-outline' });
@@ -722,6 +728,8 @@ export class DetailHeroComponent {
     'core.watch_together': () => this.partyApi.canCreate(),
     'core.download': () => !this.download() || this.download()?.status === 'ready',
     'core.download_series': () => !this.episodeId() && this.files().length > 0,
+    'core.stop_monitoring': () => this.monitoring() === 'partial' && !this.episodeId(),
+    'core.follow_new_seasons': () => this.followNewSeasons() != null && !this.episodeId(),
     'core.auto_download_group': () => this.autoDownload.enabled && !this.episodeId(),
     'core.request_media': () => {
       const needsFile = !kindOf(this.mediaType()).hasSeasons || !!this.episodeId();
@@ -797,6 +805,7 @@ export class DetailHeroComponent {
       return this.watched() ? 'media_detail.mark_series_unwatched' : 'media_detail.mark_series_watched';
     }
     if (item.actionId === 'media.toggle-monitored') {
+      if (this.monitoring() === 'partial') return 'media_detail.monitor_all_seasons';
       return this.monitored() ? 'media_detail.unmonitor' : 'media_detail.monitor';
     }
     if (item.actionId === 'media.toggle-watched') {
@@ -815,8 +824,9 @@ export class DetailHeroComponent {
   displayIcon(item: ResolvedMediaAction): string {
     const keep = this.autoKeepOf(item);
     if (keep !== null) return keep === (this.autoDownload.seriesKeep(this.mediaId()) ?? 0) ? 'check' : item.icon;
+    if (item.actionId === 'media.toggle-follow-new-seasons') return this.followNewSeasons() ? 'check' : item.icon;
     if (item.actionId === 'media.toggle-monitored') {
-      return this.monitored() ? 'eye-off' : 'eye';
+      return this.monitored() && this.monitoring() !== 'partial' ? 'eye-off' : 'eye';
     }
     if (item.actionId === 'media.toggle-watched') {
       return this.watched() ? 'eye-off' : 'eye';
@@ -864,7 +874,7 @@ export class DetailHeroComponent {
 
   /** Disabled state, per actionId - the ids not listed are never disabled. */
   isItemDisabled(item: ResolvedMediaAction): boolean {
-    if (item.actionId === 'media.toggle-monitored') return this.monitoredLoading();
+    if (['media.toggle-monitored', 'media.stop-monitoring', 'media.toggle-follow-new-seasons'].includes(item.actionId ?? '')) return this.monitoredLoading();
     if (item.actionId === 'media.delete') return this.deleteLoading();
     return this.actionsMenu.isDisabled(item.actionId);
   }

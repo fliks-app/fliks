@@ -236,12 +236,11 @@ pub async fn video_edition(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<
     .await
 }
 
-/// The group of season `number`, inserted when missing (`true` then); a concurrent insert of the same season wins.
-pub(crate) async fn ensure_group(
+/// The group of season `number`, inserted when missing (`true` then) monitored by the media's policy; a concurrent insert of the same season wins.
+pub async fn ensure_group(
     c: &mut PgConnection,
     media: i32,
     number: i32,
-    monitored: bool,
 ) -> sqlx::Result<(i32, bool)> {
     let find = sqlx::query_scalar!(
         r#"SELECT id FROM item_groups WHERE "mediaId" = $1 AND "number" = $2"#,
@@ -254,11 +253,11 @@ pub(crate) async fn ensure_group(
         return Ok((id, false));
     }
     let made = sqlx::query!(
-        r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, $2, $3)
+        r#"INSERT INTO item_groups ("mediaId", "number", monitored)
+           SELECT id, $2, $2 > 0 AND "monitorNewSeasons" FROM media WHERE id = $1
            ON CONFLICT ("mediaId", "number") DO NOTHING"#,
         media,
-        number,
-        monitored
+        number
     )
     .execute(&mut *c)
     .await?

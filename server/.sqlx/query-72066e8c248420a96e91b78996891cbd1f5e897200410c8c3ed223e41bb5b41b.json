@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET monitored = $1 WHERE id = ANY($2) AND NOT (id = ANY($3))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Int4Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "72066e8c248420a96e91b78996891cbd1f5e897200410c8c3ed223e41bb5b41b"
+}

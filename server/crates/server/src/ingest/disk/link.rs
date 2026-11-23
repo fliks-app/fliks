@@ -95,7 +95,7 @@ async fn relink_moved(
                     }
                 },
                 Some(n) => {
-                    let (ep, c) = ensure_season_and_episode(&st.db, media.id, n).await?;
+                    let (ep, c) = ensure_season_and_episode(st, media.id, n).await?;
                     episode_id = Some(ep);
                     *slot |= c;
                 }
@@ -556,6 +556,7 @@ pub(super) async fn find_or_import(
             user: Some(a.user.id),
             links: vec![],
             seasons: None,
+            follow_new_seasons: None,
             wants: wants.as_deref(),
             prio: d.priority,
         };

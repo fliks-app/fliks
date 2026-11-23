@@ -44,7 +44,7 @@ const STATUSES: [&str; 6] = [
     "continuing",
     "deleted",
 ];
-const MEDIA_FIELDS: [&str; 19] = [
+const MEDIA_FIELDS: [&str; 20] = [
     "title",
     "originalTitle",
     "year",
@@ -64,6 +64,7 @@ const MEDIA_FIELDS: [&str; 19] = [
     "qualityProfileId",
     "languageProfileId",
     "preferredProvider",
+    "monitorNewSeasons",
 ];
 
 /// One `media` column value read from the body.
@@ -306,6 +307,7 @@ pub async fn update(
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     let monitored = b.bool("monitored")?.flatten();
+    let follow = b.bool("monitorNewSeasons")?;
     let kind = cols
         .iter()
         .find_map(|(k, c)| match (k, c) {
@@ -333,9 +335,22 @@ pub async fn update(
         .await?;
         crate::party::end_playing_items(&st, &movie_items).await?;
     }
+    if follow.is_some() && !kind.has_seasons() {
+        return Err(AppError::bad_request(vec![
+            "monitorNewSeasons only applies to a series".to_owned(),
+        ]));
+    }
     let mut tx = st.db.begin().await?;
     if kind != media.media_type {
         drop_details(&mut tx, id).await?;
+        if kind.has_seasons() {
+            sqlx::query!(
+                r#"UPDATE media SET "monitorNewSeasons" = monitored WHERE id = $1"#,
+                id
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
     }
     if !cols.is_empty() {
         let by_hand = changed_fields(&mut tx, id, &cols).await?;
@@ -376,6 +391,15 @@ pub async fn update(
         sqlx::query!(r#"UPDATE media SET "updatedAt" = now() WHERE id = $1"#, id)
             .execute(&mut *tx)
             .await?;
+    }
+    if let Some(f) = follow.flatten() {
+        sqlx::query!(
+            r#"UPDATE media SET "monitorNewSeasons" = $2 WHERE id = $1 AND "monitorNewSeasons" IS DISTINCT FROM $2"#,
+            id,
+            f
+        )
+        .execute(&mut *tx)
+        .await?;
     }
     let change = match monitored {
         Some(m) => Some(apply_media_monitored(&mut tx, &[id], m).await?),

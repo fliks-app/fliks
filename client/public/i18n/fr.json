@@ -1486,7 +1486,10 @@
       "other": "Écartée"
     },
     "downloads_title": "Téléchargements",
-    "downloads_see_all": "Tout voir"
+    "downloads_see_all": "Tout voir",
+    "monitored_partial": "Partiellement surveillée",
+    "monitor_all_seasons": "Surveiller toutes les saisons",
+    "follow_new_seasons": "Suivre les nouvelles saisons"
   },
   "requests": {
     "approve_album": "Approuver l'album entier",
@@ -4320,7 +4323,8 @@
     "remove_from_list": "Retirer de cette liste",
     "actions": "Actions",
     "chip_missing": "Manquant",
-    "chip_wanted": "Souhaité"
+    "chip_wanted": "Souhaité",
+    "monitored_partial": "Partiellement surveillé"
   },
   "cast": {
     "error": {
@@ -6290,5 +6294,8 @@
     "go_to": "Afficher le titre {{n}}",
     "play_episode": "Lecture {{code}}",
     "resume_episode": "Reprendre {{code}}"
+  },
+  "add_dialog": {
+    "follow_new_seasons": "Suivre les nouvelles saisons"
   }
 }

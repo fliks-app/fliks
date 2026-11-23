@@ -348,10 +348,11 @@ export class MediaDetailSeasonsComponent {
     );
   }
 
-  /** Dimming marks the exception. With the series unmonitored every episode is, so dimming all
+  /** Dimming marks the exception. With the season unmonitored every episode is, so dimming all
    *  of them says nothing and just makes the list harder to read. */
   episodeDimmed(ep: Episode): boolean {
-    return this.media().monitored && !ep.monitored;
+    const season = this.media().seasons?.find((s) => s.episodes.some((e) => e.id === ep.id));
+    return !!season?.monitored && !ep.monitored;
   }
 
   episodeGrayscale(ep: Episode): boolean {

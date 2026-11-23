@@ -128,6 +128,8 @@
     [resumeMediaFileId]="episodeView.nextPlayMediaFileId()"
     [status]="m.status"
     [monitored]="m.monitored"
+    [monitoring]="m.monitoring"
+    [followNewSeasons]="m.monitorNewSeasons"
     [libraryName]="m.library?.name ?? null"
     [leavingLabel]="m.deleteAt ? leavingLabel(m.deleteAt) : null"
     [scopedLeaving]="scopedLeaving(m.seasons ?? [])"

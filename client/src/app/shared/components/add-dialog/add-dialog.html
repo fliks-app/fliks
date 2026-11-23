@@ -34,6 +34,18 @@
       (seasonToggled)="toggleSeason($event)"
       (allToggled)="toggleAllSeasons()"
     />
+    @if (mode() === 'import' && kind() === 'series') {
+      <label class="mt-3 flex cursor-pointer items-center gap-3 text-base">
+        <input
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary checked:bg-primary checked:border-primary checked:text-white"
+          data-testid="follow-new-seasons"
+          [checked]="followNewSeasons()"
+          (change)="toggleFollowNewSeasons()"
+        />
+        <span>{{ 'add_dialog.follow_new_seasons' | translate }}</span>
+      </label>
+    }
   }
 
   @if (kind() === 'book') {

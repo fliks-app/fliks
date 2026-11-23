@@ -1,6 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AuthService } from '../../../core/services/auth.service';
 import type { Media } from '../../../core/services/api/media.service';
 import type { HandedEpisode } from '../media-detail-host';
 import { BASE_MOVIE, fakeHost, videoSpecProviders } from '../video-work-test-setup';
@@ -107,6 +108,40 @@ describe('SeriesWorkComponent', () => {
       fixture.componentRef.setInput('media', { ...withFile, files: [] });
       fixture.detectChanges();
       expect(c.selectedFileId()).toBeNull();
+    });
+  });
+
+  describe('season toggle', () => {
+    it('takes the series flags from the response, never from its own seasons', async () => {
+      const series = {
+        ...SERIES,
+        monitored: true,
+        monitoring: 'all',
+        seasons: [{ id: 9, seasonNumber: 1, monitored: true, episodes: [{ id: 42, episodeNumber: 3, monitored: true }] }],
+      } as unknown as Media;
+      const updateSeasonMonitored = vi.fn(async () => ({
+        id: 9,
+        monitored: false,
+        media: { monitored: false, monitoring: 'none', monitorNewSeasons: false },
+      }));
+      const host = fakeHost();
+      TestBed.configureTestingModule({
+        providers: [
+          ...videoSpecProviders(host, { media: { updateSeasonMonitored } }),
+          { provide: AuthService, useValue: { hasPermission: () => true } },
+        ],
+      });
+      TestBed.overrideComponent(SeriesWorkComponent, { set: { template: '', imports: [] } });
+      const fixture = TestBed.createComponent(SeriesWorkComponent);
+      fixture.componentRef.setInput('media', series);
+      fixture.detectChanges();
+      host.media.set(series);
+
+      await (fixture.componentInstance as unknown as { toggleSeasonMonitored(s: unknown): Promise<void> }).toggleSeasonMonitored(series.seasons![0]);
+
+      expect(updateSeasonMonitored).toHaveBeenCalledWith(9, false);
+      expect(host.media()).toMatchObject({ monitored: false, monitoring: 'none', monitorNewSeasons: false });
+      expect(host.media()!.seasons![0].episodes[0].monitored).toBe(false);
     });
   });
 });

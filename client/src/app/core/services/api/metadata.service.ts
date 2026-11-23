@@ -420,6 +420,8 @@ export class MetadataService {
     /** Series only: seasons to monitor. Omitted monitors every season but the
      *  specials. */
     monitoredSeasons?: number[];
+    /** Series only: whether a season announced later starts monitored. */
+    monitorNewSeasons?: boolean;
   }) {
     return firstValueFrom(this.http.post<Media>('/api/media/import', opts));
   }

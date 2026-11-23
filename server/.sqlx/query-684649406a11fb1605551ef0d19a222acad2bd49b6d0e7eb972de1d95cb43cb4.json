@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET \"monitorNewSeasons\" = true WHERE id = $1 AND NOT \"monitorNewSeasons\"",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "684649406a11fb1605551ef0d19a222acad2bd49b6d0e7eb972de1d95cb43cb4"
+}

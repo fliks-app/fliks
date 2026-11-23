@@ -24,7 +24,7 @@ const TMDB_FIELDS: [&str; 6] = [
     "libraryId",
     "folderId",
 ];
-const MEDIA_FIELDS: [&str; 8] = [
+const MEDIA_FIELDS: [&str; 9] = [
     "type",
     "externalId",
     "provider",
@@ -33,6 +33,7 @@ const MEDIA_FIELDS: [&str; 8] = [
     "libraryId",
     "folderId",
     "monitoredSeasons",
+    "monitorNewSeasons",
 ];
 struct Common {
     media_type: MediaKind,
@@ -87,6 +88,7 @@ pub async fn import_tmdb(
             user: Some(a.user.id),
             links: vec![],
             seasons: None,
+            follow_new_seasons: None,
             wants: None,
             prio: Priority::Interactive,
         },
@@ -149,6 +151,7 @@ pub async fn import_media(
             ]));
         }
     };
+    let follow = b.bool("monitorNewSeasons")?.flatten();
     let external = match plugin {
         Some(p) => {
             let id = known.normalize(p, &external).ok_or_else(|| {
@@ -191,6 +194,7 @@ pub async fn import_media(
             user: Some(a.user.id),
             links: vec![],
             seasons,
+            follow_new_seasons: follow,
             wants: None,
             prio: Priority::Interactive,
         },

@@ -37,6 +37,8 @@ pub async fn items_view(
     'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
     'overview', media.overview, 'status', media.status::text,
     'monitored', media.monitored, 'preferredProvider', media."preferredProvider", 'folderName', media."folderName",
+    'monitoring', CASE WHEN media.type = 'series' THEN series_monitoring(media.id, media."monitorNewSeasons") END,
+    'monitorNewSeasons', CASE WHEN media.type = 'series' THEN media."monitorNewSeasons" END,
     'posterUrl', media."posterUrl", 'fanartUrl', media."fanartUrl", 'logoUrl', media."logoUrl")
   || jsonb_build_object(
     'additionalFanartUrls', to_jsonb(media."additionalFanartUrls"),

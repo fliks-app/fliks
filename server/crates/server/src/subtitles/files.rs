@@ -84,7 +84,7 @@ pub async fn media_batch(
     limit: i64,
 ) -> sqlx::Result<Vec<MediaCtx>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{} WHERE m.monitored = true AND m.id > $1 ORDER BY m.id ASC LIMIT $2",
+        "{} WHERE m.id > $1 AND EXISTS (SELECT 1 FROM media_files mf WHERE mf.\"mediaId\" = m.id) ORDER BY m.id ASC LIMIT $2",
         media_sql("df.path")
     )))
     .bind(after)

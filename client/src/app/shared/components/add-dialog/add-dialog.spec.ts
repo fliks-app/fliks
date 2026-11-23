@@ -145,6 +145,21 @@ describe('AddDialogComponent', () => {
     expect((calls['import']![0] as { monitoredSeasons: number[] }).monitoredSeasons).toEqual([1]);
   });
 
+  it('presets follow-new-seasons on when the latest season is picked, off when it is unticked, and sends the choice', async () => {
+    const { cmp, calls } = setup([lib(1, ['series'])]);
+    await cmp.add({ ...movie, kind: 'series' });
+    await new Promise((r) => setTimeout(r));
+    const c = cmp as unknown as { followNewSeasons(): boolean; toggleSeason(n: number): void; toggleFollowNewSeasons(): void; submit(): Promise<void> };
+    expect(c.followNewSeasons()).toBe(true);
+    c.toggleSeason(1);
+    c.toggleSeason(0);
+    expect(c.followNewSeasons()).toBe(false);
+    c.toggleFollowNewSeasons();
+    expect(c.followNewSeasons()).toBe(true);
+    await c.submit();
+    expect((calls['import']![0] as { monitorNewSeasons: boolean }).monitorNewSeasons).toBe(true);
+  });
+
   it('asks the question when no library takes the kind and cannot submit', async () => {
     const { cmp, show } = setup([lib(1, ['book'])]);
     await cmp.add(movie);

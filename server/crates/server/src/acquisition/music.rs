@@ -209,6 +209,7 @@ pub async fn want_recording(
                     user: None,
                     links: vec![],
                     seasons: None,
+                    follow_new_seasons: None,
                     wants: None,
                     prio: Priority::Background,
                 };

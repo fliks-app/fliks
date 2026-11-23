@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO items (\"groupId\", \"mediaId\", \"editionId\", \"number\", \"endNumber\", monitored)\n                   SELECT v.s, $4, $5, v.n, v.e, g.monitored\n                   FROM UNNEST($1::int[], $2::int[], $3::int[]) AS v(s, n, e)\n                   JOIN item_groups g ON g.id = v.s\n                   ON CONFLICT (\"groupId\", \"number\") DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4Array",
+        "Int4Array",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c48fd8af6335339695e655f6e77b256779c4a2b6678e7f56e76ec80fcfd6b3cc"
+}

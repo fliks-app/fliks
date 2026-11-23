@@ -1486,7 +1486,10 @@
       "other": "Übergangen"
     },
     "downloads_title": "Downloads",
-    "downloads_see_all": "Alle anzeigen"
+    "downloads_see_all": "Alle anzeigen",
+    "monitored_partial": "Teilweise überwacht",
+    "monitor_all_seasons": "Alle Staffeln überwachen",
+    "follow_new_seasons": "Neue Staffeln verfolgen"
   },
   "requests": {
     "title": "Anfragen",
@@ -4320,7 +4323,8 @@
     "remove_from_list": "Aus dieser Liste entfernen",
     "actions": "Aktionen",
     "chip_missing": "Fehlt",
-    "chip_wanted": "Gewünscht"
+    "chip_wanted": "Gewünscht",
+    "monitored_partial": "Teilweise überwacht"
   },
   "cast": {
     "error": {
@@ -6290,5 +6294,8 @@
     "go_to": "Titel {{n}} anzeigen",
     "play_episode": "{{code}} abspielen",
     "resume_episode": "{{code}} fortsetzen"
+  },
+  "add_dialog": {
+    "follow_new_seasons": "Neue Staffeln verfolgen"
   }
 }

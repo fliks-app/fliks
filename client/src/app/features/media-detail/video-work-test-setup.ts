@@ -58,6 +58,8 @@ export function fakeHost(overrides: Partial<MediaDetailHost> = {}): MediaDetailH
     openIdentify: vi.fn(),
     deleteMedia: vi.fn(async () => {}),
     toggleMonitored: vi.fn(async () => {}),
+    setMonitored: vi.fn(async () => {}),
+    setFollowNewSeasons: vi.fn(async () => {}),
     refreshMetadata: vi.fn(async () => {}),
     ...overrides,
   };

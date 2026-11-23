@@ -90,6 +90,13 @@ export interface MediaProvider {
   unofficial?: boolean;
 }
 
+export type SeriesMonitoring = 'none' | 'partial' | 'all';
+
+/** The series flags a season write answers with, so the page never derives them. */
+export interface SeasonWriteResult extends Season {
+  media?: Pick<Media, 'monitored' | 'monitoring' | 'monitorNewSeasons'>;
+}
+
 export interface Media {
   id: number;
   title: string;
@@ -100,6 +107,10 @@ export interface Media {
   overview: string;
   status: string;
   monitored: boolean;
+  /** Series only, derived from the seasons; absent from an older server, then `monitored` decides. */
+  monitoring?: SeriesMonitoring;
+  /** Series only: whether a new season starts monitored; absent or null hides the switch. */
+  monitorNewSeasons?: boolean | null;
   path?: string | null;
   /** On-disk folder name under the library root; empty for a movie file that sits directly at the root. */
   folderName?: string;
@@ -563,6 +574,10 @@ export class MediaService {
     return firstValueFrom(this.http.put<Media>(`/api/media/${id}`, { monitored }));
   }
 
+  setMonitorNewSeasons(id: number, monitorNewSeasons: boolean) {
+    return firstValueFrom(this.http.put<Media>(`/api/media/${id}`, { monitorNewSeasons }));
+  }
+
   getCalendar(start: string, end: string, monitoredOnly = false, requestedByMe = false, opts: CacheRead = {}) {
     const params: Record<string, string> = { start, end };
     if (monitoredOnly) params['monitoredOnly'] = 'true';
@@ -582,7 +597,7 @@ export class MediaService {
     patch: { monitored?: boolean; preferredProvider?: string | null },
   ) {
     return firstValueFrom(
-      this.http.patch<Season>(`/api/media/seasons/${seasonId}`, patch),
+      this.http.patch<SeasonWriteResult>(`/api/media/seasons/${seasonId}`, patch),
     );
   }
 
