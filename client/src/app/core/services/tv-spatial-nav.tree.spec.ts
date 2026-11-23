@@ -6,7 +6,7 @@ type Nav = {
   registerContainer(el: HTMLElement, o: { orientation: 'vertical' | 'horizontal'; isWrapping?: boolean }): void;
   findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null;
   onKey(e: KeyboardEvent): void;
-  leaveRail(): boolean;
+  railBack(topLevel: boolean): boolean;
   scrollToFocus(el: HTMLElement, style: CSSStyleDeclaration): void;
   performMove(dir: 'left' | 'right' | 'up' | 'down', crossZones: boolean): void;
   findNeighborInTree(active: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null;
@@ -217,17 +217,30 @@ describe('TvSpatialNavService tree', () => {
     expect(nav.findNeighborInTree(play, 'right')).toBe(d2);
   });
 
-  it('hands focus back to the page item it came from when Back leaves the rail', () => {
+  it('hands focus back to the page item it came from when Back leaves the rail on a deeper page', () => {
     const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
     const { library, second } = railAndPage(nav);
-    expect(nav.leaveRail()).toBe(false);
+    expect(nav.railBack(false)).toBe(false);
     second.focus();
     library.focus();
     second.scrollIntoView = () => undefined;
-    expect(nav.leaveRail()).toBe(true);
+    expect(nav.railBack(false)).toBe(true);
     expect(document.activeElement).toBe(second);
-    // Focus already on the page: Back goes on to the rest of the chain.
-    expect(nav.leaveRail()).toBe(false);
+    // Focus already on the page: Back goes on to history.
+    expect(nav.railBack(false)).toBe(false);
+    expect(document.activeElement).toBe(second);
+  });
+
+  it('opens the rail on its current entry with Back on a top-level page, then lets the next Back exit', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const { library, second } = railAndPage(nav);
+    second.focus();
+    library.scrollIntoView = () => undefined;
+    expect(nav.railBack(true)).toBe(true);
+    expect(document.activeElement).toBe(library);
+    // Rail open on a top-level page: Back goes on to the exit path.
+    expect(nav.railBack(true)).toBe(false);
+    expect(document.activeElement).toBe(library);
   });
 
   it('never enters the rail with Up or Down at the edges of the page', () => {

@@ -273,8 +273,8 @@ export class App implements OnInit, OnDestroy {
     if (this.dismissStack.dismissTop()) {
       return;
     }
-    // Focus in the open rail goes back to the page first, wherever it was.
-    if (this.tv.isTv() && this.tvSpatialNav.leaveRail()) return;
+    // A top-level page opens the rail before exiting; deeper, the open rail hands focus back to the page.
+    if (this.tv.isTv() && this.tvSpatialNav.railBack(!this.navbar.canGoBack())) return;
     // On /watch defer to the player's back handler, which replaces the URL with the detail page instead of history.back().
     if (this.router.url.startsWith('/watch')) {
       window.dispatchEvent(new CustomEvent('app:playerBack'));
