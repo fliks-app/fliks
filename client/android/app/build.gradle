@@ -125,8 +125,8 @@ try {
     def servicesJSON = file('google-services.json')
     if (servicesJSON.text) {
         apply plugin: 'com.google.gms.google-services'
-        // The debug app id has no Firebase client: its build skips FCM instead of failing.
-        googleServices { missingGoogleServicesStrategy = 'WARN' }
+        // The debug app id has no Firebase client: debug builds skip FCM instead of failing.
+        tasks.configureEach { if (it.name ==~ /process\w*DebugGoogleServices/) it.enabled = false }
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
