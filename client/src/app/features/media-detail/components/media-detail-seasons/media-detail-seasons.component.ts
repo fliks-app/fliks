@@ -51,6 +51,8 @@ import { DeviceService } from '../../../../core/services/device.service';
 import { DisplaySettingsService } from '../../../../core/services/display-settings.service';
 import { LocaleDatePipe } from '../../../../core/pipes/locale-date.pipe';
 import { SeasonLabelPipe } from '../../../../core/pipes/season-label.pipe';
+import { ResolveUrlPipe } from '../../../../core/pipes/resolve-url.pipe';
+import { CachedSrcDirective } from '../../../../shared/directives/cached-src.directive';
 import { MediaActionsController } from '../../../../shared/utils/media-actions-controller';
 
 const LS_EPISODE_VIEW = 'fliks.mediaDetail.episodeView';
@@ -68,7 +70,7 @@ function readEpisodeViewFromStorage(): EpisodeView {
 
 @Component({
   selector: 'app-media-detail-seasons',
-  imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, DetailSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideDynamicIcon],
+  imports: [TranslatePipe, UpperCasePipe, SeasonLabelPipe, NgTemplateOutlet, RouterLink, LocaleDatePipe, HorizontalScrollerComponent, DetailSectionComponent, MediaCardComponent, DropdownMenuComponent, DropdownOptionComponent, TvRowDirective, SynopsisComponent, LucideDynamicIcon, ResolveUrlPipe, CachedSrcDirective],
   templateUrl: './media-detail-seasons.component.html',
 })
 export class MediaDetailSeasonsComponent {
