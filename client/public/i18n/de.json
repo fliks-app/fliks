@@ -2908,6 +2908,23 @@
         "import_started": "Seerr-Import gestartet",
         "import_completed": "{{users}}, {{imported}}, aktualisiert: {{updated}}, übersprungen: {{skipped}}",
         "import_failed": "Seerr-Import fehlgeschlagen: {{error}}"
+      },
+      "unmapped_notice_one": "{{count}} Quellbenutzer konnte nicht zugeordnet werden: Ein Konto trägt bereits seinen Namen.",
+      "unmapped_notice_other": "{{count}} Quellbenutzer konnten nicht zugeordnet werden: Ein Konto trägt bereits ihren Namen.",
+      "unmapped_review": "Benutzer zuordnen",
+      "user_mapping": {
+        "title": "Importierte Benutzer zuordnen",
+        "description": "Diese Benutzer haben denselben Namen wie ein bestehendes Konto. Wähle das passende Konto aus oder lege ein neues an.",
+        "provider_seerr": "Seerr",
+        "provider_emby": "Emby",
+        "account_label": "Fliks-Konto",
+        "pick": "Konto auswählen",
+        "create": "Neues Konto anlegen",
+        "new_username": "Neuer Benutzername",
+        "map": "Zuordnen",
+        "mapped": "{{name}} ist zugeordnet",
+        "error": "Dieser Benutzer konnte nicht zugeordnet werden",
+        "empty": "Alle Benutzer sind zugeordnet."
       }
     },
     "libraries": {

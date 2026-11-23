@@ -142,6 +142,11 @@ export class UsersApiService {
     return firstValueFrom(this.http.post<UserRow>('/api/users', body));
   }
 
+  /** Binds an import's external user (`seerr`, `emby:<server id>`) to a Fliks account. */
+  mapImported(body: { provider: string; externalId: string; userId: number }) {
+    return firstValueFrom(this.http.post<{ ok: boolean }>('/api/imports/user-mappings', body));
+  }
+
   get(id: number) {
     return firstValueFrom(this.http.get<UserRow>(`/api/users/${id}`));
   }

@@ -18,6 +18,7 @@ import { TranslatePluralPipe, translatePlural } from '../../../core/pipes/transl
 import { LucideDownload } from '@lucide/angular';
 import { firstValueFrom } from 'rxjs';
 import { ImportDiskComponent } from '../../import-disk/import-disk';
+import { ImportUserMappingComponent, type UnmappedUser, unmappedKey } from './user-mapping/user-mapping';
 import { SeerrApiService } from '../../../core/services/api/seerr-api.service';
 import { SettingsApiService, settingsSecretsSet } from '../../../core/services/api/settings-api.service';
 import { LibrariesApiService, Library } from '../../../core/services/api/libraries-api.service';
@@ -120,6 +121,7 @@ const ARR_SETTINGS: Record<Provider, { url: string; apiKey: string }> = {
     TranslatePipe, TranslatePluralPipe,
     LucideDownload,
     ImportDiskComponent,
+    ImportUserMappingComponent,
   ],
   templateUrl: './data-imports.html',
 })
@@ -157,6 +159,35 @@ export class DataImportsSettingsComponent implements OnInit {
     message: string;
   } | null>(null);
   readonly seerrLastSummary = signal<SeerrSummary | null>(null);
+
+  // ---- Source users no account could take over (Seerr and Emby imports) ----
+  /** Per import source (`seerr`, `emby:<server id>`): the listed users and the total the run counted. */
+  private readonly unmappedBySource = signal<Record<string, { users: UnmappedUser[]; count: number }>>({});
+  readonly unmappedUsers = computed(() => Object.values(this.unmappedBySource()).flatMap((g) => g.users));
+  readonly unmappedCount = computed(() => Object.values(this.unmappedBySource()).reduce((n, g) => n + g.count, 0));
+  readonly userMappingShown = signal(false);
+
+  private noteUnmapped(source: string, event: Record<string, unknown>): void {
+    const users = (event['unmapped'] as UnmappedUser[] | undefined) ?? [];
+    const count = Number(event['unmappedCount'] ?? users.length);
+    this.unmappedBySource.update((all) => ({ ...all, [source]: { users, count } }));
+  }
+
+  onUserMapped(user: UnmappedUser): void {
+    const key = unmappedKey(user);
+    this.unmappedBySource.update((all) =>
+      Object.fromEntries(
+        Object.entries(all).map(([source, g]) => {
+          const users = g.users.filter((u) => unmappedKey(u) !== key);
+          return [source, { users, count: g.count - (g.users.length - users.length) }];
+        }),
+      ),
+    );
+  }
+
+  unmappedNotice(): string {
+    return translatePlural(this.translate, 'settings.data_imports.unmapped_notice', this.unmappedCount());
+  }
 
   seerrSummaryText(s: SeerrSummary): string {
     return this.translate.instant('settings.data_imports.seerr.import_completed', {
@@ -223,6 +254,7 @@ export class DataImportsSettingsComponent implements OnInit {
         const users = Number(event['users'] ?? 0);
         const created = Number(event['usersCreated'] ?? 0);
         const imported = Number(event['imported'] ?? 0);
+        this.noteUnmapped(`emby:${event['serverId']}`, event);
         this.toast.success(
           this.translate.instant('settings.data_imports.emby.import_completed', {
             users: translatePlural(this.translate, 'settings.data_imports.users_created', users, { created }),
@@ -250,6 +282,7 @@ export class DataImportsSettingsComponent implements OnInit {
           skipped: Number(event['skipped'] ?? 0),
         };
         this.seerrLastSummary.set(summary);
+        this.noteUnmapped('seerr', event);
         this.toast.success(this.seerrSummaryText(summary));
       } else if (event.type === 'seerr.import.failed') {
         this.seerrImporting.set(false);
