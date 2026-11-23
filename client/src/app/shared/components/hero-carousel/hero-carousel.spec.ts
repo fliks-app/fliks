@@ -27,7 +27,7 @@ class Host {
   height: 'full' | 'compact' = 'full';
 }
 
-function setup(height: 'full' | 'compact' = 'full') {
+function setup(height: 'full' | 'compact' = 'full', tv = true) {
   const attached$ = new Subject<string>();
   const detached$ = new Subject<string>();
   const background = { set: vi.fn(), suspend: vi.fn() };
@@ -45,7 +45,7 @@ function setup(height: 'full' | 'compact' = 'full') {
       { provide: BackgroundService, useValue: background },
       { provide: NavbarService, useValue: navbar },
       { provide: MediaStartService, useValue: start },
-      { provide: DeviceService, useValue: { isTv: () => true, reducedEffects: () => true } },
+      { provide: DeviceService, useValue: { isTv: () => tv, reducedEffects: () => tv } },
     ],
   });
   const fixture = TestBed.createComponent(Host);
@@ -110,17 +110,27 @@ describe('HeroCarouselComponent', () => {
     expect(title(el)).toBe('T1');
   });
 
-  it('hands the chrome back and stops when the route detaches, and claims it again on attach', () => {
-    const { detached$, attached$, el, background, navbar } = setup();
+  it('hands the chrome back and stops when the route detaches, and claims it again on attach (mobile hero)', () => {
+    const { detached$, attached$, el, background, navbar } = setup('full', false);
     expect(navbar.enterHeroPage).toHaveBeenCalled();
     detached$.next('k');
     expect(navbar.leaveHeroPage).toHaveBeenCalled();
     expect(background.suspend).toHaveBeenCalled();
     vi.advanceTimersByTime(20000);
     expect(title(el)).toBe('T1');
+    navbar.enterHeroPage.mockClear();
+    attached$.next('k');
+    expect(navbar.enterHeroPage).toHaveBeenCalled();
+  });
+
+  it('releases the backdrop on detach on desktop, which never takes the hero navbar', () => {
+    const { detached$, attached$, background, navbar } = setup();
+    detached$.next('k');
+    expect(background.suspend).toHaveBeenCalled();
     background.set.mockClear();
     attached$.next('k');
     expect(background.set).toHaveBeenCalledWith(expect.anything(), '/f1.jpg');
+    expect(navbar.enterHeroPage).not.toHaveBeenCalled();
   });
 
   it('leaves the host chrome alone when compact', () => {

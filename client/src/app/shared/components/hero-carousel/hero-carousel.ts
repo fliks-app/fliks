@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
+import { AnimationCallbackEvent, Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import type { Media } from '../../../core/services/api/media.service';
@@ -104,8 +104,8 @@ export class HeroCarouselComponent {
     const m = this.current();
     if (!m || this.parked()) return;
     if (this.desktop()) this.background.set(this, m.fanartUrl ?? null);
-    // Only the full-bleed hero takes over the navbar; a compact strip leaves the page's own chrome.
-    if (this.height() !== 'full') return;
+    // Only the full-bleed mobile hero takes over the navbar; desktop keeps the page's chrome (no back button on home).
+    if (this.height() !== 'full' || this.desktop()) return;
     this.entered = true;
     this.navbar.enterHeroPage('');
   }
@@ -123,6 +123,14 @@ export class HeroCarouselComponent {
     if (next === this.index()) return;
     this.changed.set(true);
     this.index.set(next);
+  }
+
+  /** The leaving slide is inert so focus cannot land on a button that is about to go; it is removed when its keyframes end. */
+  protected leave(e: AnimationCallbackEvent): void {
+    e.target.setAttribute('inert', '');
+    e.target.classList.add('hc-out');
+    void getComputedStyle(e.target).animationName;
+    void Promise.allSettled(e.target.getAnimations().map((a) => a.finished)).then(() => e.animationComplete());
   }
 
   protected onVisibility(): void {

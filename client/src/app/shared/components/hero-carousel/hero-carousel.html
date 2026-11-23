@@ -18,7 +18,7 @@
         <div
           class="hc-slide [grid-area:1/1] flex flex-col justify-end max-w-3xl"
           [style.--hc-delay]="changed() ? null : '0ms'"
-          animate.leave="hc-out"
+          (animate.leave)="leave($event)"
           aria-live="off"
         >
           <div class="hc-item" style="--i: 0">

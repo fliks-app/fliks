@@ -253,13 +253,12 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private readonly heroVisible = computed(() => this.visibleSections().some((s) => s.type === 'hero-carousel'));
 
-  /** The most frequent TV action is resuming: land on Continue watching when it shows, else on the carousel, else on the first library. */
+  /** Resuming comes first and is declared whenever its zone shows: the target is read once on arrival, before any row has loaded.
+   *  Without it the wait ends on the first focusable, the carousel's button. */
   protected readonly defaultFocus = computed(() =>
-    this.continueWatching().length && this.visibleSections().some((s) => s.type === 'continue-watching')
+    this.visibleSections().some((s) => s.type === 'continue-watching')
       ? "[data-home-focus^='cw:']"
-      : this.heroVisible() && this.featured().length
-        ? "[data-home-focus='hero:primary']"
-        : "a[data-home-focus^='library:']",
+      : "[data-home-focus='hero:primary']",
   );
 
   qualityProfileDisplay(id: number | null): string {
