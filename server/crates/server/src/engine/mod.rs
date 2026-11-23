@@ -14,7 +14,8 @@ pub(crate) mod testkit;
 pub use calls::{ConnectionTest, EngineError, SessionFilter};
 pub(crate) use client::enc;
 pub use config::{
-    LIVETV_KEYS, lifetime, livetv as livetv_config, load_streaming, validate_streaming_setting,
+    LIVETV_KEYS, import_env, lifetime, livetv as livetv_config, load_streaming,
+    validate_streaming_setting,
 };
 pub use events::Feed;
 pub use jobs::Progress;
@@ -178,6 +179,7 @@ impl Engine {
     /// Boot: reads the saved engine settings, runs the handshake (never longer than the hello retries,
     /// whatever its outcome), then keeps polling and following the events in the background.
     pub async fn start(&self, db: PgPool, port: u16) {
+        import_env(&db).await;
         self.start_with(Some(db), port).await;
     }
 

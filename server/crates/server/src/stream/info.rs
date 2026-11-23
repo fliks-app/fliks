@@ -332,25 +332,24 @@ async fn run(
     if let Some(items) = defers_open(early_pre_roll.as_ref(), position) {
         return Ok(json!({"deferred": true, "preRoll": items}));
     }
+    let mut burn_in_dropped = None;
     let burn_in = match q.burn_in_subtitle_id.filter(|n| *n != 0) {
         None => None,
         Some(sub) => {
-            let unavailable = || {
-                AppError::with_message(
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    "errors.subtitle_unavailable",
-                )
+            let resolved = match i32::try_from(sub) {
+                Ok(id) => burn_in::resolve(st, id, &file).await,
+                Err(_) => Err(AppError::not_found(format!("Subtitle #{sub} not found"))),
             };
-            let id = i32::try_from(sub).map_err(|_| unavailable())?;
-            let resolved = burn_in::resolve(st, id, &file).await.map_err(|e| {
-                tracing::warn!("Burn-in resolve failed for subtitle #{id}: {e:?}");
-                if e.status() == StatusCode::NOT_FOUND {
-                    unavailable()
-                } else {
-                    e
+            match resolved {
+                Ok(r) => Some(r),
+                // Clients that predate `burnInDropped` must still start the title.
+                Err(e) if e.status() == StatusCode::NOT_FOUND => {
+                    tracing::warn!("Burn-in dropped for subtitle #{sub}: {e:?}");
+                    burn_in_dropped = Some(sub);
+                    None
                 }
-            })?;
-            Some(resolved)
+                Err(e) => return Err(e),
+            }
         }
     };
     let mut info = file.info.take();
@@ -499,6 +498,9 @@ async fn run(
         o.insert("mediaFileId".into(), file.id.into());
         o.insert("version".into(), it.version.into());
         o.insert("durationSeconds".into(), it.duration.into());
+    }
+    if let (Some(sub), Some(o)) = (burn_in_dropped, out.as_object_mut()) {
+        o.insert("burnInDropped".into(), sub.into());
     }
     Ok(out)
 }

@@ -1286,6 +1286,21 @@ async fn a_key_change_without_the_engine_feature_is_unavailable(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn an_unresolvable_burn_in_pick_is_dropped_and_reported(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let (status, body) = info(&c, "?burnInSubtitleId=999").await;
+    assert_eq!(status, 201, "{body}");
+    assert_eq!(body["burnInDropped"], 999);
+    let req = &c.fake.seen("POST", "/v1/sessions")[0].body;
+    assert!(req.get("burnIn").is_none());
+    assert!(
+        req["decide"]["selection"]
+            .get("burnInSubtitleId")
+            .is_none_or(Value::is_null)
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn an_audio_item_opens_one_session_over_all_its_parts(pool: PgPool) {
     let c = ctx(pool, true).await;
     let b = audiobook(&c).await;

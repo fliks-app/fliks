@@ -40,7 +40,7 @@ async fn quality_map(db: &PgPool) -> Result<QualityMap, sqlx::Error> {
     Ok(QualityMap { names, ranks })
 }
 
-fn letter_filter(raw: &str) -> Option<String> {
+pub(crate) fn letter_filter(raw: &str) -> Option<String> {
     let up = raw.to_uppercase();
     let mut cs = up.chars();
     match (cs.next(), cs.next()) {
@@ -189,9 +189,6 @@ fn push_scope(
     if p.requested_by_me {
         qb.push(" AND media.\"addedById\" = ").push_bind(uid);
     }
-    if let Some(q) = p.q.as_deref().filter(|q| !q.is_empty()) {
-        push_search(qb, q);
-    }
     if let Some(map) = cutoff {
         push_cutoff(qb, map);
     }
@@ -258,7 +255,16 @@ fn push_book_filters(qb: &mut QueryBuilder<Postgres>, p: &Search, ids: &[i32], u
     }
 }
 
-/// Titles are indexed unstemmed and the overview stemmed, so a word is tried in both configs.
+/// `q` as `f_unaccent` writes it. Every tsquery builder takes this, never the raw text: folding a built
+/// query expands some characters into tsquery syntax (`½` into `1/2`).
+pub(crate) async fn fold(db: &PgPool, q: &str) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar("SELECT f_unaccent($1)")
+        .bind(q)
+        .fetch_one(db)
+        .await
+}
+
+/// `q` is already folded. Titles are indexed unstemmed and the overview stemmed, so a word is tried in both configs.
 fn push_tsquery(qb: &mut QueryBuilder<Postgres>, q: &str) {
     let tsq = prefix_tsquery(q);
     qb.push("(");
@@ -267,17 +273,18 @@ fn push_tsquery(qb: &mut QueryBuilder<Postgres>, q: &str) {
             qb.push(" || ");
         }
         if tsq.is_empty() {
-            qb.push(format!("plainto_tsquery('{config}', f_unaccent("))
+            qb.push(format!("plainto_tsquery('{config}', "))
                 .push_bind(q.to_owned());
         } else {
-            qb.push(format!("to_tsquery('{config}', f_unaccent("))
+            qb.push(format!("to_tsquery('{config}', "))
                 .push_bind(tsq.clone());
         }
-        qb.push("))");
+        qb.push(")");
     }
     qb.push(")");
 }
 
+/// The `q` clause, `q` already folded.
 fn push_search(qb: &mut QueryBuilder<Postgres>, q: &str) {
     qb.push(" AND (media.\"searchVector\" @@ ");
     push_tsquery(qb, q);
@@ -399,10 +406,17 @@ async fn select_ids(
         None
     };
     let paging = p.paging().ok().flatten();
+    let query = match p.q.as_deref().filter(|q| !q.is_empty()) {
+        Some(q) => Some(fold(db, q).await?),
+        None => None,
+    };
+    let query = query.as_deref();
 
     let mut qb = QueryBuilder::new("SELECT media.id");
     push_scope(&mut qb, p, ids, kinds, uid, map.as_ref(), today);
-    let query = p.q.as_deref().filter(|q| !q.is_empty());
+    if let Some(q) = query {
+        push_search(&mut qb, q);
+    }
     match (query, p.sort_by.is_some()) {
         (Some(q), false) => {
             qb.push(" ORDER BY ts_rank(media.\"searchVector\", ");
@@ -433,6 +447,9 @@ async fn select_ids(
     } else {
         let mut qb = QueryBuilder::new("SELECT COUNT(*)");
         push_scope(&mut qb, p, ids, kinds, uid, map.as_ref(), today);
+        if let Some(q) = query {
+            push_search(&mut qb, q);
+        }
         Some(qb.build_query_scalar().fetch_one(db).await?)
     };
 

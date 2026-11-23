@@ -5,6 +5,7 @@ use sqlx::PgConnection;
 use std::{
     io,
     path::{Component, Path, PathBuf},
+    time::Duration,
 };
 
 /// Strips bidi marks and zero-width characters, then trims like JS `trim()` (Rust also trims U+0085).
@@ -91,13 +92,26 @@ fn probe_blocking(path: String) -> Option<Probe> {
     })
 }
 
-/// Free space for the user (`f_bavail`), writability and emptiness of `path`, off the async runtime.
-pub async fn probe(path: &str) -> Option<Probe> {
-    let path = path.to_owned();
-    tokio::task::spawn_blocking(move || probe_blocking(path))
+/// A dead hard-mounted share blocks the syscalls in uninterruptible sleep: past this it counts as unreachable.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Runs `f` off the runtime; `None` when it fails or outlasts `limit` (the stuck thread is left to finish).
+async fn bounded<T: Send + 'static>(
+    limit: Duration,
+    f: impl FnOnce() -> Option<T> + Send + 'static,
+) -> Option<T> {
+    tokio::time::timeout(limit, tokio::task::spawn_blocking(f))
         .await
+        .ok()?
         .ok()
         .flatten()
+}
+
+/// Free space for the user (`f_bavail`), writability and emptiness of `path`, off the async runtime.
+/// `None` when the path is unreadable or does not answer within [`PROBE_TIMEOUT`].
+pub async fn probe(path: &str) -> Option<Probe> {
+    let path = path.to_owned();
+    bounded(PROBE_TIMEOUT, move || probe_blocking(path)).await
 }
 
 /// Disk space of `path`, off the async runtime.
@@ -340,6 +354,19 @@ async fn save(c: &mut PgConnection, id: i32, path: &str) -> Result<(), AppError>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_probe_that_never_returns_gives_up_after_the_limit() {
+        let (hold, wait) = std::sync::mpsc::channel::<()>();
+        let r = bounded(Duration::from_millis(50), move || {
+            let _ = wait.recv();
+            Some(1)
+        })
+        .await;
+        assert_eq!(r, None);
+        drop(hold);
+        assert_eq!(bounded(Duration::from_secs(5), || Some(2)).await, Some(2));
+    }
 
     #[test]
     fn sanitize_strips_marks_and_js_whitespace() {

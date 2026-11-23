@@ -2,7 +2,10 @@ use crate::{
     http::{AppError, auth::Authed},
     images::{ImageStore, paths::Target},
     libraries::{accessible_library_ids, paths_visible},
-    media::{books, hydrate},
+    media::{
+        books, hydrate,
+        list::{fold, letter_filter},
+    },
     metadata::{
         Credits, Metadata, PersonDetails, Upstream,
         books::{ANCHOR, author_works, routes::hit as book_hit},
@@ -74,44 +77,48 @@ FROM persons p LEFT JOIN person_ids x ON x."personId" = p.id WHERE p.id = $1"#,
     .await
 }
 
-/// Rules 2-7: the first 50 persons by name for a blank `q`, else prefix terms ANDed, best rank first, 50 at most;
-/// only persons credited in a library of `acl`.
-pub async fn search(db: &PgPool, q: &str, acl: &[i32]) -> Result<Vec<Value>, sqlx::Error> {
-    if q.is_empty() {
-        return sqlx::query_scalar!(
-            r#"SELECT jsonb_build_object('id', p.id, 'createdAt', iso_ms(p."createdAt"), 'updatedAt', iso_ms(p."updatedAt"),
-    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
-    'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
-    'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
-    'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt")) AS "json!: Value"
-FROM persons p LEFT JOIN person_ids x ON x."personId" = p.id
-WHERE EXISTS (SELECT 1 FROM media_credits mc JOIN media m ON m.id = mc."mediaId"
-               WHERE mc."personId" = p.id AND m."libraryId" = ANY($1))
-   OR EXISTS (SELECT 1 FROM item_credits ic JOIN items i ON i.id = ic."itemId" JOIN media m ON m.id = i."mediaId"
-               WHERE ic."personId" = p.id AND m."libraryId" = ANY($1))
-ORDER BY p.name ASC, p.id ASC LIMIT 50"#,
-            acl
-        )
-        .fetch_all(db)
-        .await;
-    }
-    let Some(tsq) = tsquery(q) else {
-        return Ok(vec![]);
+/// Rules 2-7: the persons credited in a library of `acl`, by name for a blank `q`, else best rank first;
+/// `(limit, offset)` pages them, `letter` keeps one initial (`#` for any other) and `department` one department.
+pub async fn search(
+    db: &PgPool,
+    q: &str,
+    acl: &[i32],
+    (limit, offset): (i64, i64),
+    letter: Option<&str>,
+    department: Option<&str>,
+) -> Result<Vec<Value>, sqlx::Error> {
+    let tsq = if q.is_empty() {
+        None
+    } else {
+        match tsquery(&fold(db, q).await?) {
+            Some(t) => Some(t),
+            None => return Ok(vec![]),
+        }
     };
+    let letter = letter.and_then(letter_filter);
     sqlx::query_scalar!(
         r#"SELECT jsonb_build_object('id', p.id, 'createdAt', iso_ms(p."createdAt"), 'updatedAt', iso_ms(p."updatedAt"),
     'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p."avatarUrl", 'biography', p.biography,
     'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p."placeOfBirth",
     'knownForDepartment', p."knownForDepartment", 'departments', p.departments,
     'metadataRefreshedAt', iso_ms(p."metadataRefreshedAt")) AS "json!: Value"
-FROM persons p LEFT JOIN person_ids x ON x."personId" = p.id WHERE p."searchVector" @@ to_tsquery('simple', f_unaccent($1))
+FROM persons p LEFT JOIN person_ids x ON x."personId" = p.id
+WHERE ($1::text IS NULL OR p."searchVector" @@ to_tsquery('simple', $1))
   AND (EXISTS (SELECT 1 FROM media_credits mc JOIN media m ON m.id = mc."mediaId"
                 WHERE mc."personId" = p.id AND m."libraryId" = ANY($2))
     OR EXISTS (SELECT 1 FROM item_credits ic JOIN items i ON i.id = ic."itemId" JOIN media m ON m.id = i."mediaId"
                 WHERE ic."personId" = p.id AND m."libraryId" = ANY($2)))
-ORDER BY ts_rank(p."searchVector", to_tsquery('simple', f_unaccent($1))) DESC, p.name ASC, p.id ASC LIMIT 50"#,
+  AND ($3::text IS NULL OR ($3 = '#' AND p.name !~ '^[A-Za-z]') OR ($3 <> '#' AND UPPER(LEFT(p.name, 1)) = $3))
+  AND ($4::text IS NULL OR p.departments @> jsonb_build_array($4::text))
+ORDER BY CASE WHEN $1::text IS NULL THEN 0 ELSE ts_rank(p."searchVector", to_tsquery('simple', $1)) END DESC,
+  p.name ASC, p.id ASC
+LIMIT $5 OFFSET $6"#,
         tsq,
-        acl
+        acl,
+        letter,
+        department,
+        limit,
+        offset
     )
     .fetch_all(db)
     .await
@@ -506,7 +513,7 @@ WHERE m.type = 'book' AND m."libraryId" = ANY($1) AND mc.role = $3
   AND (($3 = 'author' AND mc."editionId" IS NULL)
     OR ($3 = 'narrator' AND EXISTS (SELECT 1 FROM editions e
           WHERE e.id = mc."editionId" AND COALESCE(e."libraryId", m."libraryId") = ANY($2))))
-  AND ($4::text IS NULL OR p."searchVector" @@ to_tsquery('simple', f_unaccent($4)))
+  AND ($4::text IS NULL OR p."searchVector" @@ to_tsquery('simple', $4))
 GROUP BY p.id
 ORDER BY CASE WHEN $5 THEN -COUNT(DISTINCT m.id) ELSE 0 END, COALESCE(p."sortName", p.name), p.id
 LIMIT $6 OFFSET $7"#,
@@ -615,7 +622,7 @@ SELECT jsonb_build_object('id', p.id, 'name', p.name, 'sortName', p."sortName", 
   'workCount', count(DISTINCT rel.mid)::int, 'albumCount', count(DISTINCT rel.mid)::int,
   'trackCount', count(DISTINCT rel.iid)::int)
 FROM rel JOIN persons p ON p.id = rel.pid
-WHERE ($4::text IS NULL OR p."searchVector" @@ to_tsquery('simple', f_unaccent($4)))
+WHERE ($4::text IS NULL OR p."searchVector" @@ to_tsquery('simple', $4))
 GROUP BY p.id
 ORDER BY CASE WHEN $5 THEN -count(DISTINCT rel.mid) ELSE 0 END, COALESCE(p."sortName", p.name), p.id
 LIMIT $6 OFFSET $7"#,

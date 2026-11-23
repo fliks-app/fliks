@@ -170,13 +170,13 @@ pub async fn search(
         .and_then(|(_, v)| v.parse::<i64>().ok())
         .map_or(50, |l| l.clamp(1, MAX_LIMIT));
     let acl = accessible_library_ids(&st.db, &a).await?;
-    let tsq = fliks_domain::persons::tsquery(text);
+    let tsq = fliks_domain::persons::tsquery(&crate::media::list::fold(&st.db, text).await?);
     if !text.is_empty() && tsq.is_none() {
         return Ok(Json(Value::Array(vec![])));
     }
     let sql = format!(
-        "{SELECT} AND ($2::text IS NULL OR w.\"searchVector\" @@ to_tsquery('simple', f_unaccent($2))) \
-         ORDER BY CASE WHEN $2::text IS NULL THEN 0 ELSE -ts_rank(w.\"searchVector\", to_tsquery('simple', f_unaccent($2))) END, w.title, w.id LIMIT $3"
+        "{SELECT} AND ($2::text IS NULL OR w.\"searchVector\" @@ to_tsquery('simple', $2)) \
+         ORDER BY CASE WHEN $2::text IS NULL THEN 0 ELSE -ts_rank(w.\"searchVector\", to_tsquery('simple', $2)) END, w.title, w.id LIMIT $3"
     );
     let rows: Vec<Value> = sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
         .bind(&acl)

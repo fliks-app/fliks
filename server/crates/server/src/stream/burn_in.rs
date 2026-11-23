@@ -37,7 +37,7 @@ fn not_found(msg: &str) -> AppError {
     AppError::not_found(msg.to_owned())
 }
 
-/// `resolve` then `buildFilter`; a 404 means the subtitle is gone (playback-info answers 422).
+/// `resolve` then `buildFilter`; a 404 means the subtitle is gone (playback-info drops the burn-in and reports it).
 pub async fn resolve(
     st: &AppState,
     subtitle_id: i32,

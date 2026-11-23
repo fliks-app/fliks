@@ -130,9 +130,7 @@ pub async fn error_count(db: &sqlx::PgPool) -> sqlx::Result<i64> {
         .await
 }
 
-/// Evaluates every check, stores the open ones and notifies each error that opened or closed.
-pub async fn run(st: &AppState) -> sqlx::Result<()> {
-    let _one = RUN.lock().await;
+async fn evaluate(st: &AppState) -> sqlx::Result<()> {
     let now = gather(st).await?;
     for t in db::reconcile(&st.db, &now).await? {
         announce(st, t);
@@ -141,8 +139,17 @@ pub async fn run(st: &AppState) -> sqlx::Result<()> {
     Ok(())
 }
 
+/// Evaluates every check, stores the open ones and notifies each error that opened or closed.
+/// Waits for a run in progress; each probe is bounded, so the wait is too.
+pub async fn run(st: &AppState) -> sqlx::Result<()> {
+    let _one = RUN.lock().await;
+    evaluate(st).await
+}
+
+/// A tick skips when a run is in progress instead of queuing behind it.
 async fn tick(st: AppState) {
-    if let Err(e) = run(&st).await {
+    let Ok(_one) = RUN.try_lock() else { return };
+    if let Err(e) = evaluate(&st).await {
         tracing::warn!("health checks failed: {e}");
     }
 }

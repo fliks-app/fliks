@@ -23,6 +23,7 @@ import { BooksApiService } from '../../core/services/api/books-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { InfiniteScrollList } from '../../shared/utils/infinite-scroll-list';
+import { PagedList } from '../music/paged-list';
 import { LucideSearch } from '@lucide/angular';
 import { TranslatePluralPipe } from '../../core/pipes/translate-plural.pipe';
 import { PersonAvatarCardComponent } from '../../shared/components/person-avatar-card/person-avatar-card';
@@ -30,6 +31,7 @@ import { RowSkeletonComponent } from '../../shared/components/row-skeleton/row-s
 import { EmptyStateComponent } from '../../shared/components/empty-state/empty-state';
 
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const PAGE = 50;
 
 @Component({
   selector: 'app-persons',
@@ -67,6 +69,8 @@ export class PersonsComponent implements OnInit, OnDestroy {
   readonly loading = signal(false);
   readonly searchQuery = signal('');
   readonly filterRole = signal('');
+  /** The initial the cast and crew list is narrowed to, '' for all. */
+  readonly letter = signal('');
   readonly alphabet = ALPHABET;
   /** `?role=author|narrator` lists the book people of the library instead of the cast and crew. */
   readonly bookRole = (['author', 'narrator'] as const).find(
@@ -74,7 +78,17 @@ export class PersonsComponent implements OnInit, OnDestroy {
   );
   readonly workCounts = new Map<number, number>();
 
-  private allResults: Person[] = [];
+  /** The cast and crew pages; the server applies `letter` and the role before cutting a page. */
+  readonly paged = new PagedList<Person>(
+    (page) =>
+      this.personsApi.search(this.searchQuery(), undefined, {
+        page,
+        limit: PAGE,
+        letter: this.letter() || undefined,
+        department: this.filterRole() || undefined,
+      }),
+    PAGE,
+  );
 
   private readonly storageKey = 'fliks.filters.persons';
 
@@ -110,8 +124,23 @@ export class PersonsComponent implements OnInit, OnDestroy {
     window.removeEventListener('resize', this.onResize);
   }
 
+  /** Book people are all loaded, so a letter scrolls; cast and crew are paged, so a letter filters. */
   scrollToLetter(letter: string) {
-    this.list.scrollToLetter(letter, (p) => p.name);
+    if (this.bookRole) return this.list.scrollToLetter(letter, (p) => p.name);
+    this.letter.set(this.letter() === letter ? '' : letter);
+    void this.load();
+  }
+
+  letterEnabled(letter: string): boolean {
+    return !this.bookRole || this.list.availableLetters().has(letter);
+  }
+
+  letterActive(letter: string): boolean {
+    return (this.bookRole ? this.list.activeLetter() : this.letter()) === letter;
+  }
+
+  loadMore() {
+    void this.paged.loadMore().then(() => this.list.setItems(this.paged.rows(), (p) => p.name));
   }
 
   onSearch(query: string) {
@@ -122,7 +151,7 @@ export class PersonsComponent implements OnInit, OnDestroy {
 
   onFilterRole(role: string) {
     this.filterRole.set(role);
-    this.applyFilter();
+    void this.load();
   }
 
   private syncQueryParams() {
@@ -148,12 +177,17 @@ export class PersonsComponent implements OnInit, OnDestroy {
   }
 
   private async load(silent = false) {
+    // A refresh would drop the pages already loaded.
+    if (silent && !this.bookRole && this.paged.rows().length > PAGE) return;
     if (!silent) this.loading.set(true);
     try {
-      const results = this.bookRole ? await this.loadBookPeople(this.bookRole) : await this.personsApi.search(this.searchQuery());
-      const sorted = [...results].sort((a, b) => a.name.localeCompare(b.name));
-      this.allResults = sorted;
-      this.applyFilter();
+      if (this.bookRole) {
+        const results = await this.loadBookPeople(this.bookRole);
+        this.list.setItems([...results].sort((a, b) => a.name.localeCompare(b.name)), (p) => p.name);
+      } else {
+        await this.paged.load();
+        this.list.setItems(this.paged.rows(), (p) => p.name);
+      }
     } finally {
       if (!silent) this.loading.set(false);
     }
@@ -168,13 +202,5 @@ export class PersonsComponent implements OnInit, OnDestroy {
       id: i.id, tmdbId: null, name: i.name, avatarUrl: i.avatarUrl, biography: null, birthday: null,
       deathday: null, placeOfBirth: null, knownForDepartment: null, departments: [], metadataRefreshedAt: null,
     }));
-  }
-
-  private applyFilter() {
-    const role = this.filterRole();
-    const filtered = role
-      ? this.allResults.filter((p) => p.departments?.includes(role))
-      : this.allResults;
-    this.list.setItems(filtered, (p) => p.name);
   }
 }

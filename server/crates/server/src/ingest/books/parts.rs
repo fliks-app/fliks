@@ -50,7 +50,7 @@ pub async fn write_versions(
     if stale.is_empty() {
         return Ok(());
     }
-    let moved = shifts(c, &old, &new, &stale).await?;
+    let (moved, states) = shifts(c, item, &old, &new, &stale).await?;
     let files: Vec<i32> = stale.iter().map(|p| p.0).collect();
     let vs: Vec<i32> = stale.iter().map(|p| p.1).collect();
     let ps: Vec<i32> = stale.iter().map(|p| p.2).collect();
@@ -72,19 +72,23 @@ pub async fn write_versions(
     )
     .execute(&mut *c)
     .await?;
-    follow(c, item, &moved).await
+    follow(c, item, &moved, &states).await
 }
 
-/// `(file, from, to, shift)` of each file that was a part and moved: its old and new version, and
-/// how far its start moved on the version's timeline.
-type Moved = Vec<(i32, i32, i32, f64)>;
+/// `(file, from, to)` of each file that was a part and moved: its old and new version.
+type Moved = Vec<(i32, i32, i32)>;
+
+/// `(state, file, position)`: a saved place re-homed to the part its position falls in, with the
+/// position counted from the start of that part's new version.
+type States = Vec<(i32, i32, f64)>;
 
 async fn shifts(
     c: &mut PgConnection,
+    item: i32,
     old: &[(i32, i32, i32)],
     new: &[(i32, i32, i32)],
     stale: &[(i32, i32, i32)],
-) -> sqlx::Result<Moved> {
+) -> sqlx::Result<(Moved, States)> {
     let ids: Vec<i32> = old.iter().map(|p| p.0).collect();
     let durations: HashMap<i32, f64> = sqlx::query_as::<_, (i32, Option<f64>)>(
         r#"SELECT id, ("streamInfo"->>'durationSeconds')::float8 FROM media_files WHERE id = ANY($1)"#,
@@ -110,32 +114,62 @@ async fn shifts(
         out
     };
     let (before, after) = (offsets(old), offsets(new));
-    Ok(stale
+    let moved = stale
         .iter()
-        .filter_map(|n| {
-            let o = old.iter().find(|o| o.0 == n.0)?;
-            Some((n.0, o.1, n.1, after[&n.0] - before[&n.0]))
+        .filter_map(|n| Some((n.0, old.iter().find(|o| o.0 == n.0)?.1, n.1)))
+        .collect();
+    let saved = sqlx::query_as::<_, (i32, i32, f64)>(
+        r#"SELECT id, "mediaFileId", "positionSeconds" FROM playback_states
+           WHERE "itemId" = $1 AND "mediaFileId" = ANY($2)"#,
+    )
+    .bind(item)
+    .bind(&ids)
+    .fetch_all(&mut *c)
+    .await?;
+    let stale_files: HashSet<i32> = stale.iter().map(|p| p.0).collect();
+    let states = saved
+        .into_iter()
+        .filter_map(|(id, file, at)| {
+            let version = old.iter().find(|o| o.0 == file)?.1;
+            let mut parts: Vec<_> = old.iter().filter(|o| o.1 == version).collect();
+            parts.sort_by_key(|p| p.2);
+            let part = parts
+                .iter()
+                .rev()
+                .find(|p| before[&p.0] <= at)
+                .unwrap_or(&parts[0])
+                .0;
+            stale_files
+                .contains(&part)
+                .then(|| (id, part, at + after[&part] - before[&part]))
         })
-        .collect())
+        .collect();
+    Ok((moved, states))
 }
 
-/// Carries each saved position to the file's new place, and lets a version that no longer holds a
+/// Carries each saved position to the part it falls in, and lets a version that no longer holds a
 /// file resolve to the one that took it.
-async fn follow(c: &mut PgConnection, item: i32, moved: &Moved) -> sqlx::Result<()> {
+async fn follow(
+    c: &mut PgConnection,
+    item: i32,
+    moved: &Moved,
+    states: &States,
+) -> sqlx::Result<()> {
     if moved.is_empty() {
         return Ok(());
     }
-    let files: Vec<i32> = moved.iter().map(|m| m.0).collect();
-    let by: Vec<f64> = moved.iter().map(|m| m.3).collect();
+    let ids: Vec<i32> = states.iter().map(|s| s.0).collect();
+    let files: Vec<i32> = states.iter().map(|s| s.1).collect();
+    let at: Vec<f64> = states.iter().map(|s| s.2).collect();
     // Naming `"mediaFileId"` makes the `playback_states_version` trigger move the saved version.
     sqlx::query(
-        r#"UPDATE playback_states ps SET "positionSeconds" = ps."positionSeconds" + v.s, "mediaFileId" = ps."mediaFileId"
-           FROM UNNEST($2::int[], $3::float8[]) AS v(f, s)
-           WHERE ps."itemId" = $1 AND ps."mediaFileId" = v.f"#,
+        r#"UPDATE playback_states ps SET "positionSeconds" = v.p, "mediaFileId" = v.f
+           FROM UNNEST($1::int[], $2::int[], $3::float8[]) AS v(id, f, p)
+           WHERE ps.id = v.id"#,
     )
-    .bind(item)
+    .bind(&ids)
     .bind(&files)
-    .bind(&by)
+    .bind(&at)
     .execute(&mut *c)
     .await?;
     let from: Vec<i32> = moved.iter().map(|m| m.1).collect();
