@@ -11,6 +11,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { DeviceService } from '../../core/services/device.service';
 import { LiveTvAvailabilityService } from '../../core/services/live-tv-availability.service';
 import { NavbarService } from '../../core/services/navbar.service';
+import { BackgroundService } from '../../core/services/background.service';
 import { NetworkService } from '../../core/services/network.service';
 import { ServerVersionService } from '../../core/services/server-version.service';
 import { TvService } from '../../core/services/tv.service';
@@ -41,6 +42,7 @@ interface Setup {
   registry?: Partial<Record<SlotId, UiContribution[]>>;
   pinned?: boolean;
   url?: string;
+  backdrop?: string;
 }
 
 async function setup(o: Setup = {}): Promise<{ fixture: ComponentFixture<NavRailComponent>; el: HTMLElement }> {
@@ -55,6 +57,7 @@ async function setup(o: Setup = {}): Promise<{ fixture: ComponentFixture<NavRail
       { provide: DeviceService, useValue: { isTouch: () => false } },
       { provide: LiveTvAvailabilityService, useValue: { available: () => true } },
       { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: BackgroundService, useValue: { url: () => o.backdrop ?? null } },
       { provide: NetworkService, useValue: { isOnline: () => true } },
       { provide: PluginUiRegistryService, useValue: { contributionsFor: (slot: SlotId) => o.registry?.[slot] ?? [] } },
       {
@@ -96,6 +99,15 @@ function entries(el: HTMLElement) {
 }
 
 describe('NavRailComponent', () => {
+  it('is translucent over a backdrop and solid without one', async () => {
+    const over = await setup({ backdrop: '/art.jpg' });
+    const rail = over.el.querySelector('.nav-rail')!;
+    expect(rail.classList.contains('app-sidebar-veil')).toBe(true);
+    expect(rail.classList.contains('bg-base-100')).toBe(false);
+    TestBed.resetTestingModule();
+    expect((await setup()).el.querySelector('.nav-rail')!.classList.contains('bg-base-100')).toBe(true);
+  });
+
   it('lists the first three libraries between the core items, then "Plus"', async () => {
     const { el } = await setup({ isAdmin: true });
     expect(entries(el)).toEqual([

@@ -1,5 +1,8 @@
 <div #root
-     class="nav-rail bg-base-100"
+     class="nav-rail"
+     [class.bg-base-100]="!background.url()"
+     [class.app-sidebar-veil]="!!background.url()"
+     [class.backdrop-blur-sm]="!!background.url()"
      appTvSection
      data-tv-nav
      [class.rail-open]="open()"

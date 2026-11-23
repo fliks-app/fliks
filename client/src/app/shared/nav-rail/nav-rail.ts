@@ -8,6 +8,7 @@ import { LucideDynamicIcon } from '@lucide/angular';
 import { libraryColorVar, libraryIcon, libraryUrl } from '../../core/constants/library-appearance';
 import { NavContributionsService, type ResolvedNavItem } from '../../core/plugin-ui/nav-contributions.service';
 import type { LibrarySummary } from '../../core/services/api/libraries-api.service';
+import { BackgroundService } from '../../core/services/background.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { NetworkService } from '../../core/services/network.service';
 import { TvService } from '../../core/services/tv.service';
@@ -45,6 +46,7 @@ export class NavRailComponent {
   readonly overlaying = output<boolean>();
 
   protected readonly icons = icons;
+  protected readonly background = inject(BackgroundService);
   protected readonly navbar = inject(NavbarService);
   protected readonly network = inject(NetworkService);
   protected readonly tv = inject(TvService);

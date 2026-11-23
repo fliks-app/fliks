@@ -140,10 +140,19 @@ html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
   position: relative;
 }
 
-/* The veil the fanart is read through, named so an element captured apart
+/* The two veils the fanart is read through, named so an element captured apart
    from the page can rebuild the same stack over its own copy of the picture. */
 :root {
+  --sidebar-veil: rgba(29, 35, 42, 0.4);
   --bg-veil: rgba(29, 35, 42, 0.95);
+}
+
+/* Frosted sidebar veil without Tailwind's color-mix; stronger on TV so menu text doesn't bleed into the fanart. */
+.app-sidebar-veil {
+  background-color: var(--sidebar-veil);
+}
+body.tv .app-sidebar-veil {
+  background-color: rgba(29, 35, 42, 0.55);
 }
 
 /* Light tint on non-TV; fully transparent on TV so the fanart reads cleanly at 10-foot distance. */
@@ -154,6 +163,7 @@ body.tv .app-navbar-veil {
   background-color: transparent;
 }
 /* Reduced effects drop the backdrop blur, so the fill alone keeps the menu text readable. */
+body.reduced-effects .app-sidebar-veil,
 body.reduced-effects:not(.tv) .app-navbar-veil {
   background-color: rgba(29, 35, 42, 0.9);
 }
