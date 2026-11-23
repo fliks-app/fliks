@@ -634,12 +634,15 @@ export class TvSpatialNavService {
     return page ? this.digDown(page.el) : null;
   }
 
-  /** Back from inside the rail: hands focus to the page as Right would. False when focus is not in the rail. */
-  leaveRail(): boolean {
+  /** Back and the rail: a top-level page opens it on its current entry, a deeper one leaves it for the page as Right would.
+   *  False when Back goes on: the rail already holds focus on a top-level page, or neither applies. */
+  railBack(topLevel: boolean): boolean {
     const rail = this.rail();
     const active = document.activeElement as HTMLElement | null;
-    if (!rail || !active || !rail.el.contains(active)) return false;
-    const target = this.pageReturn(rail);
+    if (!rail) return false;
+    const inRail = !!active && rail.el.contains(active);
+    if (topLevel === inRail) return false;
+    const target = topLevel ? this.railEntry(rail) : this.pageReturn(rail);
     if (!target) return false;
     target.focus({ preventScroll: true });
     this.scrollToFocus(target, getComputedStyle(target));
