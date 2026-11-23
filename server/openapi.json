@@ -5227,6 +5227,18 @@
         }
       }
     },
+    "/api/remote/ack": {
+      "post": {
+        "tags": [
+          "remote"
+        ],
+        "summary": "A target with no session answers a command (`remote.md` rule 21e); only the owner's own devices.",
+        "operationId": "ack",
+        "responses": {
+          "204": {}
+        }
+      }
+    },
     "/api/remote/commands": {
       "get": {
         "tags": [

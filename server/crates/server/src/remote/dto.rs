@@ -12,6 +12,9 @@ use serde::{Deserialize, Deserializer};
 /// Most names a polled target declares in `actions`.
 const ACTIONS_MAX: usize = 32;
 
+/// Longest reason a target gives for refusing a command (`lastCmdRefused`, `refused`).
+pub const REFUSAL_MAX: usize = 64;
+
 /// Most items a queue carries (`remote.md` rule 35).
 pub const QUEUE_MAX: usize = 500;
 
@@ -56,6 +59,33 @@ impl Register {
                     .as_ref()
                     .filter(|a| a.len() > ACTIONS_MAX || a.iter().any(|a| a.len() > 16))
                     .map(|_| "actions must be a short list of short names".to_owned()),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
+        )
+    }
+}
+
+/// The answer of a target with no playback session to a command it received.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct Ack {
+    pub target_id: String,
+    pub cmd_id: String,
+    /// Why the command was not applied; absent when it was.
+    pub refused: Option<String>,
+}
+
+impl Ack {
+    pub fn validate(&self) -> Result<(), AppError> {
+        fail(
+            [
+                too_long("targetId", &self.target_id, 160),
+                too_long("cmdId", &self.cmd_id, 64),
+                self.refused
+                    .as_deref()
+                    .and_then(|r| too_long("refused", r, REFUSAL_MAX)),
             ]
             .into_iter()
             .flatten()
