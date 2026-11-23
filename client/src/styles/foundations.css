@@ -118,6 +118,27 @@ html.tv-webos .table-zebra tbody tr.row-hover:where(:nth-child(2n)):hover {
 /* Hard-coded rgba: Chromium 85 lacks `color-mix` and the downlevel `bg-base-100/N` fallback drops alpha; `#1d232a` is daisyUI dark `--color-base-100`. */
 .app-bg-veil {
   background-color: var(--bg-veil);
+  transition: opacity 400ms ease-out;
+}
+.app-bg-veil-off {
+  opacity: 0;
+}
+/* Hero claim: rgba stops only (no color-mix), the fade rows set per variant by `data-hero`. */
+.app-bg-hero-veil {
+  --hero-fade-from: 35%;
+  --hero-fade-to: 72%;
+  opacity: 0;
+  transition: opacity 400ms ease-out;
+  background:
+    linear-gradient(to bottom, rgba(29, 35, 42, 0) var(--hero-fade-from), rgba(29, 35, 42, 0.95) var(--hero-fade-to)),
+    linear-gradient(to right, rgba(29, 35, 42, 0.92) 0%, rgba(29, 35, 42, 0.8) 40%, rgba(29, 35, 42, 0.35) 65%, rgba(29, 35, 42, 0.08) 90%, rgba(29, 35, 42, 0) 100%);
+}
+.app-bg-hero-veil[data-hero='compact'] {
+  --hero-fade-from: 12%;
+  --hero-fade-to: 45%;
+}
+.app-bg-hero-veil-on {
+  opacity: 1;
 }
 
 /* Home library pill. The tint and border are an overlay dimmed by `opacity`

@@ -105,7 +105,7 @@ export class HeroCarouselComponent {
   private claimChrome(): void {
     const m = this.current();
     if (!m || this.parked()) return;
-    if (this.desktop()) this.background.set(this, m.fanartUrl ?? null);
+    if (this.desktop()) this.background.set(this, m.fanartUrl ?? null, { hero: this.height() });
     // Only the full-bleed mobile hero takes over the navbar; desktop keeps the page's chrome (no back button on home).
     if (this.height() !== 'full' || this.desktop()) return;
     this.entered = true;

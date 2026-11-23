@@ -70,11 +70,11 @@ describe('HeroCarouselComponent', () => {
   it('claims the backdrop and advances on the timer, claiming each slide', () => {
     const { fixture, el, background } = setup();
     expect(title(el)).toBe('T1');
-    expect(background.set).toHaveBeenLastCalledWith(expect.anything(), '/f1.jpg');
+    expect(background.set).toHaveBeenLastCalledWith(expect.anything(), '/f1.jpg', { hero: 'full' });
     vi.advanceTimersByTime(7000);
     fixture.detectChanges();
     expect(title(el)).toBe('T2');
-    expect(background.set).toHaveBeenLastCalledWith(expect.anything(), '/f2.jpg');
+    expect(background.set).toHaveBeenLastCalledWith(expect.anything(), '/f2.jpg', { hero: 'full' });
   });
 
   it('holds while a mouse hovers or the keyboard focuses, not after a tap', () => {
@@ -129,7 +129,7 @@ describe('HeroCarouselComponent', () => {
     expect(background.suspend).toHaveBeenCalled();
     background.set.mockClear();
     attached$.next('k');
-    expect(background.set).toHaveBeenCalledWith(expect.anything(), '/f1.jpg');
+    expect(background.set).toHaveBeenCalledWith(expect.anything(), '/f1.jpg', { hero: 'full' });
     expect(navbar.enterHeroPage).not.toHaveBeenCalled();
   });
 

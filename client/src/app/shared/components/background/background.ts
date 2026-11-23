@@ -1,4 +1,4 @@
-import { Component, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { DeviceService } from '../../../core/services/device.service';
 import { BackgroundService } from '../../../core/services/background.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
@@ -19,7 +19,10 @@ interface Layer {
   templateUrl: './background.html',
 })
 export class BackgroundComponent {
-  private readonly bg = inject(BackgroundService);
+  protected readonly bg = inject(BackgroundService);
+  /** A hero claim lets the picture through only near the top of the page; scrolled past a fifth of the viewport, the ambient veil takes over again. */
+  protected readonly heroShown = computed(() => !!this.bg.hero() && !this.scrolled());
+  private readonly scrolled = signal(false);
 
   /** Reduced effects swap images without the crossfade and draw the cover fallback unblurred. */
   readonly reduced = inject(DeviceService).reducedEffects();
@@ -33,6 +36,13 @@ export class BackgroundComponent {
   private pending: number | null = null;
 
   constructor() {
+    effect((onCleanup) => {
+      if (!this.bg.hero()) return;
+      const read = () => this.scrolled.set(window.scrollY > window.innerHeight * 0.2);
+      read();
+      window.addEventListener('scroll', read, { passive: true });
+      onCleanup(() => window.removeEventListener('scroll', read));
+    });
     let last: Layer = { url: null, blur: false };
     effect(() => {
       const next = { url: this.bg.url(), blur: this.bg.blur() };
