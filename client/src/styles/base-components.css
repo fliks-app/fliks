@@ -16,6 +16,18 @@
 .scroll-ring-safe {
   @apply px-1 -mx-1 py-1 scroll-py-1;
 }
+/* Chromium < 91 (TV WebViews) leaves the end padding out of the scroll range; an empty box would not count, hence the 1px height. */
+.scroll-ring-safe.overflow-x-auto.flex::after {
+  content: "";
+  flex: none;
+  padding-left: inherit;
+  height: 1px;
+}
+
+/* Tailwind's `scrollbar-none` sets only `scrollbar-width`, which Chromium ignores before 121 (TV WebViews). */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
 
 /* A page's own heading: announced but undrawn on narrow screens, where the chrome shows the name. */
 .page-title {
