@@ -382,7 +382,7 @@
   <!-- Docked, the rail is the permanent column (the overlay grows over the page); below md and on phones it is the drawer's content. -->
   <div class="drawer-side z-40" [class.hidden]="navbar.railMode() === 'none'" [class.!overflow-visible]="navbar.railDocked()">
     <label for="sidebar" aria-hidden="true" class="drawer-overlay"></label>
-    <aside class="relative h-full min-h-screen" [class]="navbar.railMode() === 'collapsed' ? 'w-[var(--rail-w)]' : 'w-64'">
+    <aside class="relative h-full min-h-screen" [class]="navbar.railDocked() ? '' : 'w-64'" [style.width]="navbar.railDocked() ? navbar.railWidth() : null">
       @if (navbar.railMode() !== 'none') {
         <app-nav-rail
           [mode]="navbar.railMode() === 'collapsed' ? 'collapsed' : 'expanded'"

@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackgroundService } from '../../../core/services/background.service';
 import { DeviceService } from '../../../core/services/device.service';
+import { NavbarService } from '../../../core/services/navbar.service';
 import { BackgroundComponent } from './background';
 
 describe('BackgroundComponent', () => {
@@ -18,6 +19,7 @@ describe('BackgroundComponent', () => {
         provideZonelessChangeDetection(),
         { provide: BackgroundService, useValue: { url, blur, hero } },
         { provide: DeviceService, useValue: { isTv: () => false, reducedEffects: () => false } },
+        { provide: NavbarService, useValue: { railWidth: signal('0px') } },
       ],
     });
     const fixture = TestBed.createComponent(BackgroundComponent);
@@ -70,6 +72,7 @@ function hero$() {
       provideZonelessChangeDetection(),
       { provide: BackgroundService, useValue: { url: signal('/f.jpg'), blur: signal(false), hero } },
       { provide: DeviceService, useValue: { isTv: () => false, reducedEffects: () => true } },
+      { provide: NavbarService, useValue: { railWidth: signal('0px') } },
     ],
   });
   return { fixture: TestBed.createComponent(BackgroundComponent), hero };

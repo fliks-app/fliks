@@ -1,6 +1,7 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { DeviceService } from '../../../core/services/device.service';
 import { BackgroundService } from '../../../core/services/background.service';
+import { NavbarService } from '../../../core/services/navbar.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../directives/cached-src.directive';
 import { backdropFollowsTransition } from '../../utils/view-transition';
@@ -25,6 +26,7 @@ interface Layer {
 })
 export class BackgroundComponent {
   protected readonly bg = inject(BackgroundService);
+  private readonly railWidth = inject(NavbarService).railWidth;
   /** 0 at the top of the page, 1 once scrolled two fifths of the viewport. */
   private readonly scroll = signal(0);
   /** How much of the hero look is applied, 0 to 1. It rises over the length of the image crossfade, so the light veil only reveals the picture as it fades in, and drops at once: a navigation resets the scroll to the top, which would draw the hero look for the frames a falling tween takes. */
@@ -41,9 +43,12 @@ export class BackgroundComponent {
     const v = AMBIENT * Math.min(1, 2 * p);
     // Each side stop is solved so the stacked layers let through a linear mix of the hero and ambient amounts: a scroll never brightens then darkens.
     const side = (a: number) => rgba(Math.min(1, Math.max(0, 1 - ((1 - p) * (1 - a) + (1 - AMBIENT) * p) / (1 - v))));
+    // (1 - t³)² reaches the rim with a zero slope: linear stops draw the ellipse's outline as a visible line.
+    const fade = [0, 0.2, 0.4, 0.55, 0.7, 0.8, 0.9, 1].map((t) => `${side((1 - t ** 3) ** 2)} ${Math.round(t * 100)}%`).join(', ');
     return (
       `linear-gradient(to bottom, ${rgba(v)} 25%, ${rgba(AMBIENT)} 60%), ` +
-      `linear-gradient(to right, ${side(1)} 0%, ${side(0.85)} 28%, ${side(0)} 62%, ${side(0)} 100%)`
+      // From the rail's edge (the backdrop runs under it), centred on the text block.
+      `radial-gradient(ellipse 62% 85% at ${this.railWidth()} 60%, ${fade})`
     );
   });
 
