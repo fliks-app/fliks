@@ -1,3 +1,5 @@
+import { keyboardModality } from '../services/focusable.constants';
+
 /** The element whose focus is snapping its row this task: spatial nav then leaves the page scroll to the snap. */
 let snapping: Element | null = null;
 
@@ -10,13 +12,8 @@ export function snapRowOnFocus(
 ): void {
   const from = event.relatedTarget as Node | null;
   if (from && host.contains(from)) return;
-  // Skip on click (pulling the page mid-click is unwanted); Chromium 76 (Tizen) throws on the selector, but those builds are D-pad only.
-  try {
-    const target = event.target as HTMLElement | null;
-    if (target && !target.matches(':focus-visible')) return;
-  } catch {
-    // No :focus-visible support: fall through and snap.
-  }
+  // Skip on click: pulling the page mid-click is unwanted.
+  if (!keyboardModality()) return;
   if (snapTarget(host, topOffset) === null) return;
   snapping = event.target as Element | null;
   queueMicrotask(() => {
@@ -39,8 +36,15 @@ function snapTarget(host: HTMLElement, topOffset: number): number | null {
   const currentTop = scrollEl.scrollTop ?? 0;
   // Already fully visible: the user is walking between visible rows.
   if (rect.top >= topOffset && rect.bottom <= window.innerHeight) return null;
+  // A row that fits on the first screen goes back to the very top, hero included, not to a partial scroll.
+  if (fitsAtPageTop(rect, currentTop)) return currentTop === 0 ? null : 0;
   const targetTop = Math.max(0, currentTop + rect.top - topOffset);
   return Math.abs(targetTop - currentTop) < 4 ? null : targetTop;
+}
+
+/** Whether a box (viewport `rect`, page scrolled by `scrollTop`) is fully on screen with the page at the top. */
+export function fitsAtPageTop(rect: DOMRect, scrollTop: number): boolean {
+  return rect.bottom + scrollTop <= window.innerHeight;
 }
 
 function scrollPageTo(top: number): void {
@@ -52,7 +56,5 @@ function scrollPageTo(top: number): void {
   }
 }
 
-/** Row top gap: TV clears the floating top-right dock, pointer UIs just breathe. */
-export function rowTopOffset(isTv: boolean): number {
-  return isTv ? 96 : 24;
-}
+/** Row top gap: nothing is fixed at the top of a rail platform, so rows just breathe. */
+export const ROW_TOP_OFFSET = 24;

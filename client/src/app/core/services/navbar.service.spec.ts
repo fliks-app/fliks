@@ -18,28 +18,79 @@ describe('NavbarService', () => {
     delete (window.history as unknown as { length?: number }).length;
   });
 
-  /** Never a docked sidebar on a TV: the main layout there is a 10-foot browse
-   *  surface, a permanent column steals from it, and focus would have one more
-   *  region to escape on every screen. */
-  it('never docks the sidebar on a TV, whatever the pin preference says', () => {
-    TestBed.configureTestingModule({
-      providers: [
-        provideRouter([{ path: '**', component: PageStub }]),
-        {
-          provide: DeviceService,
-          useValue: {
-            isTv: () => true,
-            isTablet: () => false,
-            isDesktop: () => false,
-          } as unknown as DeviceService,
-        },
-      ],
+  /** `railMode` per form factor and width: the one value the layout, the player bar and the page clearances read. */
+  describe('railMode', () => {
+    const realMatchMedia = window.matchMedia;
+    afterEach(() => {
+      window.matchMedia = realMatchMedia;
+      localStorage.removeItem('fliks.sidebarPinned');
     });
-    const navbar = TestBed.inject(NavbarService);
 
-    expect(navbar.sidebarPinned()).toBe(true);
-    expect(navbar.effectiveSidebarPinned()).toBe(false);
-    expect(navbar.sidebarDocked()).toBe(false);
+    const make = (form: 'tv' | 'phone' | 'tablet' | 'desktop', width: number, pinned = true) => {
+      window.matchMedia = ((q: string) => {
+        const min = Number(/min-width:\s*(\d+)px/.exec(q)?.[1] ?? 0);
+        return { matches: width >= min, addEventListener: () => {}, removeEventListener: () => {} } as unknown as MediaQueryList;
+      }) as typeof window.matchMedia;
+      if (pinned) localStorage.removeItem('fliks.sidebarPinned');
+      else localStorage.setItem('fliks.sidebarPinned', 'false');
+      TestBed.configureTestingModule({
+        providers: [
+          provideRouter([{ path: '**', component: PageStub }]),
+          {
+            provide: DeviceService,
+            useValue: {
+              isTv: () => form === 'tv',
+              isPhone: () => form === 'phone',
+              isTablet: () => form === 'tablet',
+              isDesktop: () => form === 'desktop',
+            } as unknown as DeviceService,
+          },
+        ],
+      });
+      return TestBed.inject(NavbarService);
+    };
+
+    it('is collapsed on a TV, whatever the pin preference says', () => {
+      expect(make('tv', 1920, true).railMode()).toBe('collapsed');
+    });
+
+    it('keeps a desktop expanded at lg and up whatever the pin says, and a tablet until unpinned', () => {
+      expect(make('desktop', 1280).railMode()).toBe('expanded');
+      TestBed.resetTestingModule();
+      expect(make('desktop', 1280, false).railMode()).toBe('expanded');
+      TestBed.resetTestingModule();
+      expect(make('tablet', 1280).railMode()).toBe('expanded');
+      TestBed.resetTestingModule();
+      expect(make('tablet', 1280, false).railMode()).toBe('collapsed');
+    });
+
+    it('offers the pin on a tablet only', () => {
+      expect(make('tablet', 1280).canPin()).toBe(true);
+      TestBed.resetTestingModule();
+      expect(make('desktop', 1280).canPin()).toBe(false);
+      TestBed.resetTestingModule();
+      expect(make('tv', 1920).canPin()).toBe(false);
+    });
+
+    it('stays collapsed between md and lg even when pinned', () => {
+      expect(make('desktop', 900).railMode()).toBe('collapsed');
+    });
+
+    it('is a drawer below md and on a phone', () => {
+      expect(make('tablet', 600).railMode()).toBe('drawer');
+      TestBed.resetTestingModule();
+      expect(make('phone', 1000).railMode()).toBe('drawer');
+    });
+
+    it('shows the mobile navbar only where the rail is not docked', () => {
+      const docked = make('desktop', 1280);
+      expect(docked.railDocked()).toBe(true);
+      expect(docked.mobileNavbarVisible()).toBe(false);
+      TestBed.resetTestingModule();
+      const drawer = make('desktop', 600);
+      expect(drawer.railDocked()).toBe(false);
+      expect(drawer.mobileNavbarVisible()).toBe(true);
+    });
   });
 
   it('clears the mobile navbar with a hero padding only off a TV and on a hero page', () => {
@@ -48,7 +99,7 @@ describe('NavbarService', () => {
       TestBed.configureTestingModule({
         providers: [
           provideRouter([{ path: '**', component: PageStub }]),
-          { provide: DeviceService, useValue: { isTv: () => isTv, isTablet: () => false, isDesktop: () => false } as unknown as DeviceService },
+          { provide: DeviceService, useValue: { isTv: () => isTv, isPhone: () => false, isTablet: () => false, isDesktop: () => false } as unknown as DeviceService },
         ],
       });
       const navbar = TestBed.inject(NavbarService);
@@ -85,6 +136,60 @@ describe('NavbarService', () => {
     await TestBed.inject(Router).navigateByUrl('/');
 
     expect(navbar.canGoBack()).toBe(false);
+  });
+
+  it('lets only the owner of the hero chrome hand it back', () => {
+    TestBed.configureTestingModule({ providers: [provideRouter([])] });
+    const navbar = TestBed.inject(NavbarService);
+    const leaving = {};
+    const arriving = {};
+    navbar.enterHeroPage(leaving, { brand: true });
+    navbar.enterHeroPage(arriving, { title: 'T' });
+    navbar.leaveHeroPage(leaving);
+    expect(navbar.isHeroPage()).toBe(true);
+    expect([navbar.heroTitle(), navbar.heroBrand()]).toEqual(['T', false]);
+    navbar.leaveHeroPage(arriving);
+    expect(navbar.isHeroPage()).toBe(false);
+    expect(document.body.classList.contains('hero-page')).toBe(false);
+  });
+
+  it('keeps the page title through a hero claim and gives a returning path its own back', async () => {
+    TestBed.configureTestingModule({ providers: [provideRouter([{ path: 'a', component: PageStub }, { path: 'b', component: PageStub }])] });
+    const navbar = TestBed.inject(NavbarService);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/a');
+    navbar.setPageTitle('A', { name: 'film' });
+    navbar.enterHeroPage({}, {});
+    expect([navbar.pageTitle(), navbar.pageIcon()]).toEqual(['A', { name: 'film' }]);
+    await router.navigateByUrl('/b');
+    expect(navbar.pageTitle()).toBe('');
+    await router.navigateByUrl('/a?view=genres');
+    expect([navbar.pageTitle(), navbar.pageIcon()]).toEqual(['A', { name: 'film' }]);
+  });
+
+  it('keeps the phone bar clear only while the claimed page picture is under it', () => {
+    let fire!: (hit: boolean) => void;
+    const observed: Element[] = [];
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(cb: (e: { isIntersecting: boolean; target: Element }[]) => void) { fire = (hit) => cb([{ isIntersecting: hit, target: observed[0] }]); }
+      observe(el: Element) { observed.push(el); }
+      disconnect() {}
+    });
+    TestBed.configureTestingModule({ providers: [provideRouter([])] });
+    const navbar = TestBed.inject(NavbarService);
+    const host = document.createElement('div');
+    host.innerHTML = '<div data-hero-picture></div>';
+    document.body.append(host);
+    const page = {};
+    navbar.enterHeroPage(page, { host });
+    expect(observed[0]).toBe(host.firstElementChild);
+    fire(false);
+    expect(navbar.heroUnderBar()).toBe(false);
+    fire(true);
+    expect(navbar.heroUnderBar()).toBe(true);
+    navbar.leaveHeroPage(page);
+    host.remove();
+    vi.unstubAllGlobals();
   });
 
   /** The artwork reveal replays whenever a cached subtree is re-inserted, so a

@@ -16,10 +16,9 @@ import { NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { LucideDynamicIcon } from '@lucide/angular';
 import { icons } from '../icons';
 import { TvRowDirective } from '../directives/tv-row.directive';
-import { TvService } from '../../core/services/tv.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { NavbarService } from '../../core/services/navbar.service';
-import { rowTopOffset, snapRowOnFocus } from '../../core/utils/focus-snap.util';
+import { ROW_TOP_OFFSET, snapRowOnFocus } from '../../core/utils/focus-snap.util';
 import { RAIL_RESTORED_ATTR } from '../utils/center-rail';
 
 @Component({
@@ -32,7 +31,6 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   protected readonly icons = icons;
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly tv = inject(TvService);
   private readonly reuse = inject(CachingReuseStrategy);
   private readonly navbar = inject(NavbarService);
   private readonly router = inject(Router);
@@ -75,7 +73,7 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
 
   @HostListener('focusin', ['$event'])
   protected onFocusIn(event: FocusEvent): void {
-    snapRowOnFocus(event, this.host.nativeElement, rowTopOffset(this.tv.isTv()));
+    snapRowOnFocus(event, this.host.nativeElement, ROW_TOP_OFFSET);
   }
 
   ngAfterViewInit() {

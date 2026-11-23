@@ -1,0 +1,139 @@
+/* Text swap, variant "Sobre": the outgoing text leaves left, the incoming one starts when it is gone.
+   Only transform and filter, never individual translate/scale, so webOS (no CSS downlevel) keeps it.
+   Swap a variant by editing the two keyframes and the durations below. */
+
+.hc-out {
+  animation: hc-out 320ms cubic-bezier(0.55, 0, 1, 0.45) both;
+}
+.hc-slide .hc-item {
+  animation: hc-in 560ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--hc-delay, 320ms) + var(--i) * 60ms) both;
+}
+
+@keyframes hc-out {
+  to { opacity: 0; transform: translateX(-24px); filter: blur(8px); }
+}
+@keyframes hc-in {
+  from { opacity: 0; transform: translateX(40px); filter: blur(10px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+
+/* TV and low-memory devices: no filter until the Q80B is measured. */
+:host-context(body.reduced-effects) .hc-out { animation-name: hc-out-flat; }
+:host-context(body.reduced-effects) .hc-slide .hc-item { animation-name: hc-in-flat; }
+@keyframes hc-out-flat {
+  to { opacity: 0; transform: translateX(-24px); }
+}
+@keyframes hc-in-flat {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hc-out { animation-name: hc-fade-out; }
+  .hc-slide .hc-item { animation-name: hc-fade-in; }
+  @keyframes hc-fade-out { to { opacity: 0; } }
+  @keyframes hc-fade-in { from { opacity: 0; } to { opacity: 1; } }
+}
+
+/* Shared frame: slides stack in one grid cell while one leaves and the next arrives. */
+.hc-frame { position: relative; }
+.hc-body, .hc-dots, .hc-label { position: relative; z-index: 1; }
+.hc-stack { display: grid; }
+/* A slide arriving from the right must not widen the page for the length of its swap; the margin keeps focus rings. */
+.hc-body { overflow-x: clip; overflow-clip-margin: 1rem; }
+.hc-slide { grid-area: 1 / 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; }
+.hc-logo { object-fit: contain; }
+.hc-title { font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; }
+.hc-overview { color: var(--color-base-content); opacity: 0.9; line-height: 1.625; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hc-actions { display: flex; align-items: center; gap: 0.5rem; }
+.hc-label:empty { display: none; }
+.hc-dots { display: flex; align-items: center; gap: 0.5rem; }
+.hc-dot { display: grid; place-items: center; }
+/* The dot is drawn inside its button, so a touch screen can give the button a finger-sized area around it. */
+.hc-dot::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.3;
+  transition: opacity 200ms, width 200ms;
+}
+.hc-dot-on::before { opacity: 1; width: 1.5rem; }
+@media (pointer: coarse) {
+  :host-context(body:not(.tv)) .hc-dots { gap: 0; }
+  /* As close as on desktop (8px between dots); the height carries the finger area. */
+  :host-context(body:not(.tv)) .hc-dot { min-width: 1rem; height: 2.5rem; }
+}
+
+/* The space under the carousel is its own: 20px under the phone dots, less the part of their touch row (below) under them. */
+:host(.hc-phone) { margin-bottom: 1.25rem; }
+:host(.hc-desktop) { margin-bottom: 2rem; }
+@media (pointer: coarse) { :host(.hc-phone) { margin-bottom: 0.25rem; } }
+
+/* Phone: the text sits centred on the bottom fade of the full-width picture, the dots under it. A scrim from the page
+   colour holds white text on a white frame; it spans the picture's bleed past the frame. */
+:host(.hc-phone) .hc-frame::after {
+  content: '';
+  position: absolute;
+  left: -1rem;
+  right: -1rem;
+  bottom: 0;
+  height: 100%;
+  pointer-events: none;
+  /* A light tint over the whole picture does most of the work, so the fade into the page stays short and unnoticed. */
+  background:
+    linear-gradient(to top, var(--color-base-100) 3%, color-mix(in oklab, var(--color-base-100) 45%, transparent) 20%, transparent 42%),
+    rgb(0 0 0 / 0.22);
+}
+:host(.hc-phone) .hc-body { position: absolute; left: 0; right: 0; bottom: 2.5rem; padding: 0 1rem; }
+:host(.hc-phone) .hc-slide { align-items: center; text-align: center; }
+:host(.hc-phone) .hc-logo { max-height: 4.5rem; max-width: 60%; filter: var(--hero-icon-shadow); }
+:host(.hc-phone) .hc-title { font-size: 1.875rem; text-shadow: var(--hero-text-shadow); }
+:host(.hc-phone) .hc-overview, :host(.hc-phone) .hc-add { display: none; }
+:host(.hc-phone) .hc-actions { margin-top: 0.75rem; justify-content: center; }
+:host(.hc-phone) .btn { height: 2.5rem; min-height: 2.5rem; padding-inline: 1.1rem; font-size: 0.9rem; }
+:host(.hc-phone) .hc-icon { width: 1.25rem; height: 1.25rem; }
+:host(.hc-phone) .hc-dots { position: absolute; left: 0; right: 0; bottom: 0; justify-content: center; }
+:host(.hc-phone) .hc-label { position: absolute; top: 1rem; left: 1rem; }
+
+/* Desktop and TV, in the title page's sizes. A fixed height from the viewport, so a slide's logo or overview
+   never moves the rows below; the text sits a fixed gap above the dots and a taller slide only reaches higher. */
+:host(.hc-desktop) { --hc-inset: 1.5rem; --hc-dots-gap: 3.5rem; }
+/* Under a phone's top bar (a hero page, whose main keeps only 1rem on top) the frame grows by the bar, so the text clears it. */
+:host-context(body.hero-page) { --hc-bar: calc(var(--chrome-top, 0px) - 1rem); }
+:host(.hc-desktop) .hc-frame {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: calc(12vh + 24.75rem + var(--hc-bar, 0px));
+  padding: var(--hc-bar, 0px) 0 2.5rem var(--hc-inset);
+}
+:host(.hc-desktop) .hc-slide { max-width: 42rem; }
+:host(.hc-desktop) .hc-logo { max-height: 5rem; max-width: 20rem; }
+:host(.hc-desktop) .hc-title { font-size: 1.5rem; }
+:host(.hc-desktop) .hc-overview { margin-top: 1rem; }
+:host(.hc-desktop) .hc-actions { margin-top: 1.5rem; }
+:host(.hc-desktop) .btn { gap: 0.25rem; }
+:host(.hc-desktop) .hc-icon { width: 1rem; height: 1rem; }
+:host(.hc-desktop) .hc-dots { margin-top: var(--hc-dots-gap); }
+/* As wide as the dots only: a full-width row would share the actions' column and spatial nav would not step Right into it. */
+:host(.hc-desktop) .hc-dots { align-self: flex-start; }
+/* The page's name on the picture (a library page), top left. */
+:host(.hc-desktop) .hc-label { position: absolute; top: 1.5rem; left: var(--hc-inset); filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.8)); }
+/* The title page's gap between its poster and text, so the block breathes from the rail. */
+@media (min-width: 64rem) {
+  :host(.hc-desktop) { --hc-inset: 2.5rem; }
+  :host(.hc-desktop) .hc-logo { max-height: 6rem; max-width: 24rem; }
+  :host(.hc-desktop) .hc-title { font-size: 2.25rem; }
+}
+@media (min-height: 64rem) {
+  :host(.hc-desktop) { --hc-dots-gap: 4.5rem; }
+  :host(.hc-desktop) .hc-frame { height: calc(12vh + 25.75rem + var(--hc-bar, 0px)); }
+}
+/* A short viewport trims the overview and the logo rather than push the first row down. */
+@media (max-height: 56rem) {
+  :host(.hc-desktop) .hc-frame { height: calc(12vh + 22rem + var(--hc-bar, 0px)); }
+  :host(.hc-desktop) .hc-overview { -webkit-line-clamp: 2; }
+  :host(.hc-desktop) .hc-logo { max-height: 5rem; }
+}

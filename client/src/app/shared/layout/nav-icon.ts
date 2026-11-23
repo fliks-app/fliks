@@ -2,7 +2,7 @@ import { Component, input } from '@angular/core';
 import { LucideDynamicIcon } from '@lucide/angular';
 import { icons } from '../icons';
 
-/** Renders a nav contribution's icon by name; a plugin can name any string, so unknown names fall back to a generic circle. */
+/** Renders a nav or settings contribution's icon by name; a plugin can name any string, so unknown names fall back to a generic circle. */
 @Component({
   selector: 'app-nav-icon',
   imports: [LucideDynamicIcon],

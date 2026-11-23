@@ -5,6 +5,7 @@ import type { Episode, Media, Season } from '../../core/services/api/media.servi
 import type { LikesApiService } from '../../core/services/api/likes-api.service';
 import type { StreamingApiService } from '../../core/services/api/streaming-api.service';
 import { EpisodeViewController } from './episode-view-controller';
+import { nextUp } from '../../shared/utils/media-play.util';
 import { LikeController } from '../../shared/utils/like-controller';
 import { WatchedController } from './watched-controller';
 
@@ -111,5 +112,11 @@ describe('EpisodeViewController.nextPlayEpisode', () => {
     expect(setup([10]).nextPlayEpisodeId()).toBe(11);
     expect(setup([10, 11, 20]).nextPlayEpisodeId()).toBe(10);
     expect(setup([10]).resumeEpisodeLabel()).toBe('S01:E02 - E2');
+  });
+
+  it('picks the very episode the shared start path picks', () => {
+    for (const [watched, resume] of [[[10], { episodeId: 20, mediaFileId: 5 }], [[10], null], [[10, 11, 20], null], [[], null]] as const) {
+      expect(setup([...watched], resume).nextPlayEpisode()).toEqual(nextUp(media, resume as never, new Set(watched)));
+    }
   });
 });

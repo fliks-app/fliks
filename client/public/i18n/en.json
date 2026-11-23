@@ -333,14 +333,12 @@
   "account_settings": {
     "title": "Account settings",
     "nav": {
+      "general": "General",
       "password": "Password",
-      "recommendations": "Recommendations",
       "privacy": "Privacy",
-      "continue": "Continue across devices",
       "spoilers": "Spoilers",
       "devices": "Devices",
-      "email_devices": "E-mail devices",
-      "whats_new": "What's new"
+      "email_devices": "E-mail devices"
     },
     "recommendations": {
       "reset_title": "Reset dismissed recommendations",
@@ -633,16 +631,16 @@
   "nav": {
     "user_menu": "User menu",
     "home": "Home",
-    "my_profile": "My profile",
     "statistics": "Statistics",
     "requests": "Requests",
     "calendar": "Calendar",
     "system": "System",
     "settings": "Settings",
     "open_menu": "Open menu",
-    "close_menu": "Close menu",
-    "pin_sidebar": "Pin sidebar",
-    "unpin_sidebar": "Unpin sidebar",
+    "rail_label": "Main navigation",
+    "pin_rail": "Keep the navigation open",
+    "unpin_rail": "Collapse the navigation",
+    "edit_library_order": "Arrange libraries",
     "logout": "Log out",
     "switch_user": "Switch user",
     "administration": "Administration",
@@ -4421,8 +4419,7 @@
     "scope_all": "All types",
     "scope_chosen": "Chosen types",
     "resume_only": "resume only",
-    "settings_note": "Live TV and watch parties are not covered. Audiobooks follow the Book type: they are streamed, so they can be controlled.",
-    "saved": "Settings saved"
+    "settings_note": "Live TV and watch parties are not covered. Audiobooks follow the Book type: they are streamed, so they can be controlled."
   },
   "language": {
     "en": "English",
@@ -4478,6 +4475,7 @@
     "sections_title": "Home sections",
     "sections_hint": "Choose which sections to show and their order. Drag to reorder, or use the arrows.",
     "section": {
+      "hero_carousel": "Featured carousel",
       "watch_parties": "Watch parties",
       "libraries": "Libraries",
       "continue_watching": "Continue watching",
@@ -6283,5 +6281,13 @@
         "other": "Anything else about this file"
       }
     }
+  },
+  "hero_carousel": {
+    "label": "Featured titles",
+    "play": "Play",
+    "details": "Details",
+    "go_to": "Show title {{n}}",
+    "play_episode": "Play {{code}}",
+    "resume_episode": "Resume {{code}}"
   }
 }

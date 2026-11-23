@@ -5,6 +5,7 @@ import { TvService } from './tv.service';
 /** Stable identity of a home zone. Built-ins are fixed; per-library
  *  "recently added" zones are keyed by their library id. */
 export type HomeSectionKey =
+  | 'hero-carousel'
   | 'watch-parties'
   | 'received-recommendations'
   | 'libraries'
@@ -18,6 +19,7 @@ export type HomeSectionKey =
   | `library-recent:${number}`;
 
 export type HomeSectionType =
+  | 'hero-carousel'
   | 'watch-parties'
   | 'received-recommendations'
   | 'libraries'
@@ -56,6 +58,7 @@ const STORAGE_KEY = 'home.settings';
 const LIBRARY_RECENT_PREFIX = 'library-recent:';
 
 const BUILTIN_ORDER: HomeSectionKey[] = [
+  'hero-carousel',
   'watch-parties',
   'received-recommendations',
   'libraries',
@@ -67,8 +70,11 @@ const BUILTIN_ORDER: HomeSectionKey[] = [
   'coming-soon',
 ];
 
+/** Shown only once a layout asks for it: the rail carries the libraries. */
+const HIDDEN_BY_DEFAULT: ReadonlySet<HomeSectionKey> = new Set<HomeSectionKey>(['libraries']);
+
 const DEFAULTS: HomeSettings = {
-  order: BUILTIN_ORDER.map((key) => ({ key, visible: true })),
+  order: BUILTIN_ORDER.map((key) => ({ key, visible: !HIDDEN_BY_DEFAULT.has(key) })),
   recentlyAddedMode: 'file',
 };
 
@@ -143,7 +149,7 @@ export class HomeSettingsService {
 
     // Saved layouts predating this zone get it on top (new users get it first via DEFAULTS), so it skips the generic append.
     const otherBuiltins = DEFAULTS.order.filter(
-      (p) => p.key !== 'received-recommendations' && p.key !== 'watch-parties',
+      (p) => p.key !== 'received-recommendations' && p.key !== 'watch-parties' && p.key !== 'hero-carousel',
     );
     let merged = mergeOrdered(this.settings().order, otherBuiltins, available, (p) => p.key);
     if (!merged.some((p) => p.key === 'received-recommendations')) {
@@ -152,6 +158,10 @@ export class HomeSettingsService {
     // Same for watch parties, which sit above everything.
     if (!merged.some((p) => p.key === 'watch-parties')) {
       merged = [{ key: 'watch-parties', visible: true }, ...merged];
+    }
+    // The carousel is pinned first, saved layout or not.
+    if (!merged.some((p) => p.key === 'hero-carousel')) {
+      merged = [{ key: 'hero-carousel', visible: true }, ...merged];
     }
     // Permission-gated: defaults visible just above "recently-added" unless a saved order (handled above) wins.
     if (available.has('requests-recent') && !merged.some((p) => p.key === 'requests-recent')) {

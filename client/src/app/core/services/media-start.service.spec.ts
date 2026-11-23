@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AudioPlayerService } from './audio-player/audio-player.service';
 import { BooksApiService } from './api/books-api.service';
 import { MediaService } from './api/media.service';
+import { StreamingApiService } from './api/streaming-api.service';
 import { MediaStartService } from './media-start.service';
 import { MusicDownloadsService } from './music-downloads.service';
 import { PlayableMediaService } from './playable-media.service';
@@ -17,7 +18,7 @@ const book = (editions: unknown[], progress: unknown = null, series: unknown[] =
 });
 const issue = (o: Record<string, unknown>) => ({ itemId: 1, mediaFileId: 1, kind: 'issue', finished: false, progression: null, ...o });
 
-function setup(full?: unknown, tracks: unknown[] = []) {
+function setup(full?: unknown, tracks: unknown[] = [], resume: unknown = null, watched: number[] = []) {
   const router = { navigate: vi.fn().mockResolvedValue(true) };
   const playable = { play: vi.fn().mockResolvedValue(undefined), resume: vi.fn().mockResolvedValue(undefined), playFromPlaylist: vi.fn().mockResolvedValue(true) };
   const audio = { play: vi.fn().mockResolvedValue(undefined), playTracks: vi.fn().mockResolvedValue(undefined) };
@@ -32,6 +33,7 @@ function setup(full?: unknown, tracks: unknown[] = []) {
       { provide: AudioPlayerService, useValue: audio },
       { provide: PlaybackQueueService, useValue: queue },
       { provide: MediaService, useValue: media },
+      { provide: StreamingApiService, useValue: { getMediaResumeInfo: vi.fn().mockResolvedValue(resume), getWatchedEpisodeIds: vi.fn().mockResolvedValue(watched) } },
       { provide: BooksApiService, useValue: books },
       { provide: MusicDownloadsService, useValue: music },
     ],
@@ -44,6 +46,24 @@ describe('MediaStartService', () => {
     const h = setup();
     await h.svc.start({ id: 3, type: 'movie', files: [{ id: 9 }] } as any);
     expect(h.playable.play).toHaveBeenCalledWith(expect.objectContaining({ fileId: 9, mediaId: 3 }), false);
+  });
+
+  it('starts a series at the episode to resume, else the next unwatched one', async () => {
+    const series = { id: 7, type: 'series', files: [{ id: 100, episodeId: 10 }, { id: 110, episodeId: 11 }], seasons: [{ id: 1, seasonNumber: 1, episodes: [{ id: 10, episodeNumber: 1, hasFile: true }, { id: 11, episodeNumber: 2, hasFile: true }] }] };
+    const next = setup(series, [], null, [10]);
+    await next.svc.start({ id: 7, type: 'series' } as any);
+    expect(next.playable.play).toHaveBeenCalledWith(expect.objectContaining({ fileId: 110, episodeId: 11, mediaId: 7 }), false);
+    TestBed.resetTestingModule();
+    const resume = setup(series, [], { episodeId: 10, mediaFileId: 100 }, [10]);
+    await resume.svc.start({ id: 7, type: 'series' } as any);
+    expect(resume.playable.play).toHaveBeenCalledWith(expect.objectContaining({ fileId: 100, episodeId: 10 }), false);
+  });
+
+  it('opens the detail page of a series with nothing on disk', async () => {
+    const h = setup({ id: 7, type: 'series', files: [], seasons: [] });
+    await h.svc.start({ id: 7, type: 'series' } as any);
+    expect(h.router.navigate).toHaveBeenCalledWith(['/series', '7']);
+    expect(h.playable.play).not.toHaveBeenCalled();
   });
 
   it('opens the detail page of a video with no file', async () => {

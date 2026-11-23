@@ -1,11 +1,11 @@
-use super::{db, recommend, watched};
+use super::{db, featured::featured as pick_featured, recommend, watched};
 use crate::{
     http::{
         AppError,
         auth::Authed,
         validate::{PathParams, ValidJson},
     },
-    libraries::accessible_library_ids,
+    libraries::{accessible_library_ids, paths_visible},
     state::AppState,
 };
 use axum::{
@@ -15,7 +15,10 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{delete, get, post},
 };
-use fliks_domain::js::parse_int;
+use fliks_domain::{
+    acl::{Action, Subject},
+    js::parse_int,
+};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -23,6 +26,7 @@ type Q = Query<Vec<(String, String)>>;
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/home/featured", get(featured))
         .route("/api/playback/recommendations", get(recommendations))
         .route(
             "/api/playback/recommendations/{mediaId}/dismiss",
@@ -152,6 +156,27 @@ pub async fn recommendations(
     let libs = scope(accessible_library_ids(&st.db, &a).await?, &q);
     let items =
         recommend::recommendations(&st.db, a.user.id, &libs, &a.kinds, limit_param(&q)).await?;
+    Ok(Json(items).into_response())
+}
+
+#[utoipa::path(get, path = "/api/home/featured", responses((status = 200)))]
+pub async fn featured(
+    State(st): State<AppState>,
+    a: Authed,
+    Query(q): Q,
+) -> Result<Response, AppError> {
+    a.require(Action::Read, Subject::Media)?;
+    let libs = scope(accessible_library_ids(&st.db, &a).await?, &q);
+    let limit = limit_param(&q).unwrap_or(4);
+    let items = pick_featured(
+        &st.db,
+        a.user.id,
+        &libs,
+        &a.kinds,
+        limit,
+        paths_visible(&a.perms),
+    )
+    .await?;
     Ok(Json(items).into_response())
 }
 

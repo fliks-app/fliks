@@ -2,6 +2,7 @@
 //! (`docs/spec/playback-state.md`); the heartbeat is `beat`, the QoE events route is another piece.
 mod beat;
 mod db;
+mod featured;
 mod recommend;
 mod routes;
 #[cfg(test)]

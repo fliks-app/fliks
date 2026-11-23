@@ -76,7 +76,6 @@ export class ProfileComponent {
     this.navbar.showBackButton.set(true);
     this.destroyRef.onDestroy(() => {
       this.navbar.showBackButton.set(false);
-      this.navbar.clearPageTitle();
     });
   }
 

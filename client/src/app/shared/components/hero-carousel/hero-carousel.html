@@ -1,0 +1,67 @@
+<!-- One spatial-nav row for the actions and the dots: Right from the last action reaches the dots, Down leaves for the first row. -->
+<!-- Desktop layout: the frame is where the page backdrop shows the picture; a phone marks its own picture. -->
+<section appTvRow class="hc-frame" [attr.data-hero-picture]="desktop() ? '' : null" aria-roledescription="carousel" [attr.aria-label]="'hero_carousel.label' | translate">
+  @if (!desktop()) {
+    <app-mobile-fanart-hero class="block" [fanartUrl]="current()?.fanartUrl" />
+  }
+  <div class="hc-label"><ng-content select="[heroLabel]" /></div>
+  @if (current(); as m) {
+    <div class="hc-body">
+      <div class="hc-stack">
+        @for (s of [m]; track s.id) {
+          <div class="hc-slide" [style.--hc-delay]="changed() ? null : '0ms'" (animate.leave)="leave($event)" aria-live="off">
+            <div class="hc-item" style="--i: 0">
+              @if (s.logoUrl) {
+                <img class="hc-logo" [src]="s.logoUrl | resolveUrl: 'medium'" [alt]="s.title" />
+              } @else {
+                <h2 class="hc-title">{{ s.title }}</h2>
+              }
+            </div>
+            <div class="hc-item" style="--i: 1">
+              <app-hero-meta-row [rating]="desktop() ? s.rating || null : null" [parts]="parts()" [chips]="chips()" [desktop]="desktop()" [centered]="!desktop()" [onPicture]="!desktop()" />
+            </div>
+            @if (s.overview) {
+              <p class="hc-item hc-overview" style="--i: 2">{{ s.overview }}</p>
+            }
+            <div class="hc-item" style="--i: 3">
+              <div class="hc-actions">
+                @if (primary(); as p) {
+                  <!-- One element whatever it does: a series swaps Details for Play once its episode is known, and focus must stay on it. -->
+                  <button type="button" class="btn btn-light" (click)="primaryAction(s)">
+                    @if (p.play) {
+                      <svg [lucideIcon]="icons.Play" class="hc-icon" fill="currentColor"></svg>{{ p.labelKey | translate: { code: p.code } }}
+                    } @else {
+                      <svg [lucideIcon]="icons.Info" class="hc-icon"></svg>{{ p.labelKey | translate }}
+                    }
+                  </button>
+                  @if (p.play) {
+                    <a [routerLink]="detailLink()" [state]="{ media: s }" class="btn btn-glass" (click)="stampDetail()">{{ 'hero_carousel.details' | translate }}</a>
+                  }
+                }
+                <button type="button" class="btn btn-glass btn-square hc-add" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addToPlaylist(s)">
+                  <svg [lucideIcon]="icons.ListPlus" class="hc-icon"></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+    @if (items().length > 1) {
+      <!-- Its own row inside the carousel's: entering it lands on the dot of the slide shown (aria-current). -->
+      <div appTvRow class="hc-dots">
+        @for (_ of items(); track $index) {
+          <button
+            type="button"
+            class="hc-dot"
+            [class.hc-dot-on]="$index === index()"
+            [attr.aria-current]="$index === index() ? 'true' : null"
+            [attr.aria-label]="'hero_carousel.go_to' | translate: { n: $index + 1 }"
+            (click)="go($index)"
+            (focus)="go($index)"
+          ></button>
+        }
+      </div>
+    }
+  }
+</section>

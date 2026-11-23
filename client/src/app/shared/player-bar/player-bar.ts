@@ -24,8 +24,10 @@ export class PlayerBarComponent {
 
   private readonly fullPlayer = inject(FullPlayerState);
   private readonly navbar = inject(NavbarService);
-  /** On TV the bar sits in the navbar, one ↑ from the page. */
-  protected readonly docked = inject(DeviceService).isTv();
+  /** Docked in the rail footer wherever the rail is a column; floats over the page otherwise. */
+  protected readonly docked = computed(() => this.navbar.railDocked());
+  /** The D-pad has one stop per bar, no toggle or actions. */
+  protected readonly dpad = inject(DeviceService).isTv();
   private readonly bar = viewChild.required<TemplateRef<unknown>>('bar');
 
   /** The full player the bar opens: that player morphs out of it and stands in for it until it closes. */
@@ -50,11 +52,11 @@ export class PlayerBarComponent {
   protected readonly visible = computed(() => !this.opens() || this.fullPlayer.presented() !== this.opens());
 
   constructor() {
-    if (!this.docked) return;
     effect((onCleanup) => {
+      if (!this.docked()) return;
       const bar = this.bar();
-      this.navbar.tvBars.update((bars) => [...bars, bar]);
-      onCleanup(() => this.navbar.tvBars.update((bars) => bars.filter((b) => b !== bar)));
+      this.navbar.dockedBars.update((bars) => [...bars, bar]);
+      onCleanup(() => this.navbar.dockedBars.update((bars) => bars.filter((b) => b !== bar)));
     });
   }
 }

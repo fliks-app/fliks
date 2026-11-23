@@ -30,7 +30,7 @@ export class OidcCompleteComponent implements OnInit {
         : await this.auth.oidcReturned({ code, state });
 
     if (res.ok) {
-      await this.router.navigate([res.pending.link ? '/account' : this.auth.takeSignInReturn()], { replaceUrl: true });
+      await this.router.navigate([res.pending.link ? '/account/password' : this.auth.takeSignInReturn()], { replaceUrl: true });
       return;
     }
     // Back from the app to the provider's page and on to a spent state: the sign-in already worked.
@@ -40,7 +40,7 @@ export class OidcCompleteComponent implements OnInit {
     }
     if (res.pending?.link) {
       this.toast.error(oidcErrorText(this.translate, res.kind));
-      await this.router.navigate(['/account'], { replaceUrl: true });
+      await this.router.navigate(['/account/password'], { replaceUrl: true });
       return;
     }
     await this.router.navigate(['/login'], {

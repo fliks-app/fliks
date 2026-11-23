@@ -12,6 +12,7 @@ import {
 import { formatTime, calcDragTime, calcHoverPercent, snapToKeyframe, SpriteMetadata } from '../../../core/utils/player.utils';
 import { muteRangesOf, type EdlRange } from '../../../core/utils/edl-policy';
 import { TvService } from '../../../core/services/tv.service';
+import { keyboardModality } from '../../../core/services/focusable.constants';
 
 /** How long the bar waits for a seek to land before following the
  *  playhead again, whatever the player decided to do with it. */
@@ -175,9 +176,9 @@ export class SeekbarComponent {
     this.arm();
   }
 
-  /** A pointer focus stays at rest. TV first: Tizen's Chromium 76 throws on `:focus-visible`. */
-  onFocus(e: FocusEvent): void {
-    if (this.tv.isTv() || (e.target as HTMLElement).matches(':focus-visible')) this.arm();
+  /** A pointer focus stays at rest. */
+  onFocus(): void {
+    if (keyboardModality()) this.arm();
   }
 
   /** Every press restarts the pause, so a run of arrows keeps the bar armed. */

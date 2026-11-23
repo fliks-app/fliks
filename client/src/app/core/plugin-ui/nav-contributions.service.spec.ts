@@ -67,9 +67,9 @@ describe('NavContributionsService', () => {
       },
     });
     const ids = svc.mainItems().map((i) => i.id);
-    // Both plugin items tie core's "My profile" (weight 300) — id order wins,
-    // and stays the same regardless of which plugin installed first.
-    expect(ids).toEqual(['core.home', 'core.search', 'a-plugin', 'core.my_profile', 'z-plugin', 'core.live_tv', 'core.playlists', 'core.downloads', 'core.history']);
+    // Both plugin items tie (weight 300): id order wins, and stays the same
+    // regardless of which plugin installed first.
+    expect(ids).toEqual(['core.home', 'core.search', 'a-plugin', 'z-plugin', 'core.live_tv', 'core.playlists', 'core.downloads', 'core.history']);
   });
 
   it('drops a contribution with an unknown action.kind — fails closed, never a broken item', () => {
@@ -84,16 +84,6 @@ describe('NavContributionsService', () => {
       registry: { 'nav.main': [contribution('unknown-action', 150, { action: { kind: 'action', actionId: 'nothing.like.this' } })] },
     });
     expect(svc.mainItems().map((i) => i.id)).not.toContain('unknown-action');
-  });
-
-  it('resolves core.my_profile to the current user id', () => {
-    const svc = createService({ userId: 42 });
-    expect(svc.mainItems().find((i) => i.id === 'core.my_profile')?.route).toBe('/profile/42');
-  });
-
-  it('drops core.my_profile when there is no user id to build the route from', () => {
-    const svc = createService({ userId: null });
-    expect(svc.mainItems().map((i) => i.id)).not.toContain('core.my_profile');
   });
 
   it('hides an item whose `when` fails, and it never appears at all', () => {
@@ -112,11 +102,10 @@ describe('NavContributionsService', () => {
     expect(svc.mainItems().map((i) => i.id)).toContain('admin-only');
   });
 
-  it('hides core.my_profile and core.downloads on TV', () => {
-    const svc = createService({ isTv: true });
-    const ids = svc.mainItems().map((i) => i.id);
-    expect(ids).not.toContain('core.my_profile');
-    expect(ids).not.toContain('core.downloads');
+  it('hides core.downloads and the acquisition entries on TV', () => {
+    const svc = createService({ isTv: true, isAdmin: true });
+    expect(svc.mainItems().map((i) => i.id)).not.toContain('core.downloads');
+    expect(svc.acquisitionItems()).toEqual([]);
   });
 
   it('passes an unrecognised icon through unchanged — the render layer decides the fallback glyph', () => {
@@ -135,7 +124,7 @@ describe('NavContributionsService', () => {
 
   it('splits nav.main around the library block at weight 1000', () => {
     const svc = createService();
-    expect(svc.mainItemsBeforeLibraries().map((i) => i.id)).toEqual(['core.home', 'core.search', 'core.my_profile', 'core.live_tv']);
+    expect(svc.mainItemsBeforeLibraries().map((i) => i.id)).toEqual(['core.home', 'core.search', 'core.live_tv']);
     expect(svc.mainItemsAfterLibraries().map((i) => i.id)).toEqual(['core.playlists', 'core.downloads', 'core.history']);
   });
 

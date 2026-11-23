@@ -55,8 +55,12 @@ import {
   classUntilDone,
   clearStalePosterStamps,
   betweenPosterPages,
+  DASHBOARD_CLASS,
+  dashboardTrip,
   enteringPosterPage,
   hasPosterStamp,
+  heroTitleStamped,
+  HERO_TRIP_CLASS,
   leafRoutePath,
   leavingPosterPage,
   markViewTransition,
@@ -111,7 +115,7 @@ export const appConfig: ApplicationConfig = {
     { provide: LOCALE_ID, useFactory: resolveInitialLocale },
     provideRouter(
       routes,
-      withInMemoryScrolling({ scrollPositionRestoration: 'top' }),
+      withInMemoryScrolling({ scrollPositionRestoration: 'disabled' }),
       // A route reads its own params only; an ancestor's are not inherited.
       withRouterConfig({ paramsInheritanceStrategy: 'emptyOnly' }),
       // Poster→hero morph. On TV the root snapshot costs ~400 ms on a Tizen 9
@@ -170,6 +174,13 @@ export const appConfig: ApplicationConfig = {
                 }
                 // A stamp outlives its navigation so the back morph can pair it.
                 clearStalePosterStamps(from, to);
+                const dashboard = dashboardTrip(from, to);
+                if (dashboard) {
+                  releaseStackedPop(from, to);
+                  classUntilDone(transition, DASHBOARD_CLASS[dashboard]);
+                  markViewTransition(transition);
+                  return;
+                }
                 // Leaving the player re-enables the root pair: the closing player must shrink over the page behind it.
                 if (closingPlayer) classUntilDone(transition, PLAYER_CLOSE_CLASS);
                 // Morph is tuned per direction. For a card opening its poster-page sibling the stack slides that pair, else the morph;
@@ -181,6 +192,7 @@ export const appConfig: ApplicationConfig = {
                     POSTER_OUT_CLASS) ||
                   ((enteringPosterPage(from, to) || sibling) && POSTER_IN_CLASS);
                 if (posterTrip) classUntilDone(transition, posterTrip);
+                if (posterTrip && heroTitleStamped()) classUntilDone(transition, HERO_TRIP_CLASS);
                 // Going the other way the hero is the half the stamped card
                 // pairs with, so only the trip in may take its name away.
                 if (sibling && !goingBack()) muteHeroUntilDone(transition);

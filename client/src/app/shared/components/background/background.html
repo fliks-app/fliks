@@ -2,7 +2,7 @@
 <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none hidden md:block">
   @for (layer of layers(); track $index) {
     <img
-      [cachedSrc]="layer.url | resolveUrl:(layer.blur ? 'thumb' : 'medium')"
+      [cachedSrc]="layer.url | resolveUrl:(layer.blur ? 'thumb' : layer.hero ? 'full' : 'medium')"
       alt=""
       loading="lazy"
       decoding="async"
@@ -16,5 +16,5 @@
   }
   <!-- Permanent veil: a no-op over the solid base-100 and constant while an image fades. A custom class, not `bg-base-100/N`:
          Tailwind v4 emits `color-mix()`, which Chromium 85 (Tizen TV) drops, leaving the veil 100% opaque. -->
-  <div class="absolute inset-0 z-30 app-bg-veil"></div>
+  <div class="absolute inset-0 z-30 app-bg-veil" [style.background]="heroVeil()"></div>
 </div>

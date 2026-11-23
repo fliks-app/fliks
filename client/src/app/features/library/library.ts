@@ -10,6 +10,8 @@ import {
   Component,
   signal,
   computed,
+  effect,
+  untracked,
   inject,
   Injector,
   OnInit,
@@ -34,7 +36,8 @@ import {
   ReceivedRecommendation,
 } from '../../core/services/api/social-api.service';
 import { LikesApiService, LikedItem } from '../../core/services/api/likes-api.service';
-import { StreamingApiService } from '../../core/services/api/streaming-api.service';
+import { StreamingApiService, featuredSupported } from '../../core/services/api/streaming-api.service';
+import { ServerVersionService } from '../../core/services/server-version.service';
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { ProfilesService, QualityProfile } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
@@ -48,8 +51,12 @@ import type {
 } from '../../core/services/api/streaming-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
+import { HeroCarouselComponent } from '../../shared/components/hero-carousel/hero-carousel';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { NavbarService } from '../../core/services/navbar.service';
+import type { CacheRead } from '../../core/interceptors/cache.interceptor';
+import { LucideIconComponent } from '../../shared/components/lucide-icon';
+import { libraryColorVar, libraryIcon } from '../../core/constants/library-appearance';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { InfiniteScrollList, VirtualGrid } from '../../shared/utils/infinite-scroll-list';
 import { LucideDynamicIcon } from '@lucide/angular';
@@ -147,12 +154,14 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
 @Component({
   selector: 'app-library',
   imports: [
+    LucideIconComponent,
     EmptyStateComponent,
     MediaLinkPipe,
     TranslatePluralPipe,
     MediaCardComponent,
     DefaultFocusDirective,
     TvRowDirective,
+    HeroCarouselComponent,
     DropdownMenuComponent,
     TvSelectDirective,
     HorizontalScrollerComponent,
@@ -183,6 +192,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   protected readonly canFilterMonitoring = computed(() => this.auth.hasPermission('requests.manage') || this.auth.hasPermission('media.edit'));
   private readonly booksApi = inject(BooksApiService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly serverVersion = inject(ServerVersionService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private readonly mediaStart = inject(MediaStartService);
   private readonly socialApi = inject(SocialApiService);
@@ -205,11 +215,13 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Cached per library name: revalidate the grid on return and restore its
    *  saved offset. */
   protected readonly detached = keepRouteFresh({
-    refresh: () => this.refreshCurrentView(),
+    refresh: () => {
+      this.refreshCurrentView();
+      void this.loadFeatured({ force: true });
+    },
     scrollKey: () => this.scrollMemoryKey(),
     onAttach: () => {
-      const lib = this.library();
-      if (lib) this.navbar.setPageTitle(lib.name);
+      this.claimHeroChrome();
       this.bindLetterScroll();
       if (!this.navbar.navigatedBack()) this.enterAtTop();
       else {
@@ -220,6 +232,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       }
     },
     onDetach: () => {
+      this.navbar.leaveHeroPage(this);
       // The window keeps scrolling for the pages that follow, and a detached
       // page listening to it recomputes its letter off their offset.
       this.unbindLetterScroll();
@@ -232,6 +245,58 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   /** Resolved library (null while loading or if not found). */
   readonly library = signal<LibrarySummary | null>(null);
+  protected readonly libraryIcon = libraryIcon;
+  protected readonly libraryColor = (lib: LibrarySummary) => libraryColorVar(lib.color);
+  /** The carousel above the tabs, the same on every view. */
+  protected readonly featured = signal<Media[]>([]);
+  /** The library the picks answered for. Until then, the library itself included, the carousel keeps its place from the
+   *  first frame, so the tabs never move down; an empty answer gives the place back once. */
+  private readonly featuredOf = signal<number | undefined>(undefined);
+  protected readonly showCarousel = computed(() => {
+    if (!featuredSupported(this.serverVersion)) return false;
+    const id = this.library()?.id;
+    return this.featured().length > 0 || id === undefined || this.featuredOf() !== id;
+  });
+  /** Arrival lands on the carousel's first button, as on home; without a carousel, on the first card. */
+  protected readonly defaultFocus = computed(() =>
+    this.showCarousel() ? "[data-library-focus='hero']" : "[data-library-focus^='media:']",
+  );
+  private readonly featuredEffect = effect(() => {
+    this.library()?.id;
+    untracked(() => {
+      this.featured.set([]);
+      this.featuredOf.set(undefined);
+      // Same path as home: what the cache holds now, then the network.
+      void this.loadFeatured({ known: true }).then(() => this.loadFeatured({ force: true }));
+    });
+  });
+
+  /** Wherever the top bar shows, the carousel picture runs under it: the page is a hero page. */
+  private readonly heroHost: Element = inject(ElementRef).nativeElement;
+  private readonly heroChrome = effect(() => {
+    if (this.detached()) return;
+    this.claimHeroChrome();
+  });
+
+  private claimHeroChrome(): void {
+    if (this.showCarousel() && this.navbar.mobileNavbarVisible()) this.navbar.enterHeroPage(this, { host: this.heroHost });
+    else this.navbar.leaveHeroPage(this);
+  }
+
+  private readonly barName = effect(() => {
+    if (this.detached()) return;
+    const lib = this.library();
+    this.navbar.setPageTitle(this.libraryName(), lib ? { name: this.libraryIcon(lib), color: this.libraryColor(lib) } : null);
+  });
+
+  private async loadFeatured(opts: CacheRead): Promise<void> {
+    const id = this.library()?.id;
+    if (!id) return;
+    const list = await this.streamingApi.getFeatured({ ...opts, libraryId: id }).catch(() => null);
+    if (!list || this.library()?.id !== id) return;
+    this.featured.set(list.map((f) => f.media));
+    this.featuredOf.set(id);
+  }
   readonly mixedLibrary = computed(() => (this.library()?.mediaTypes.length ?? 0) > 1);
   readonly hasMusic = computed(() => !!this.library()?.mediaTypes.includes('album'));
   readonly hasBooks = computed(() => !!this.library()?.mediaTypes.includes('book'));
@@ -484,6 +549,14 @@ export class LibraryComponent implements OnInit, OnDestroy {
     this.list.activeLetter.set(this.list.letterAt(0));
     this.scrollOwnTo(0);
   }
+  @ViewChild('viewTabs') private viewTabs?: ElementRef<HTMLElement>;
+  /** A new view starts at its top: the tabs stay put, or come up under the top bar when the user was below them. */
+  private scrollToViewStart(): void {
+    const tabs = this.viewTabs?.nativeElement;
+    if (!tabs) return this.scrollOwnTo(0);
+    const over = tabs.getBoundingClientRect().top - parseFloat(getComputedStyle(tabs).scrollMarginTop);
+    if (over < 0) this.scrollOwnTo(window.scrollY + over);
+  }
   /** Instant: TV scrolls the document smoothly for the D-pad. */
   private scrollOwnTo(top: number): void {
     window.scrollTo({ top, left: 0, behavior: 'instant' });
@@ -578,7 +651,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
         return;
       }
 
-      this.navbar.setPageTitle(lib.name);
       this.listsGen++;
       this.seriesList.set([]);
       this.authorsList.set([]);
@@ -661,7 +733,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       const lib = this.library();
       if (lib) {
         // `silent` only suppresses the spinner, so the swap still needs the reset.
-        this.scrollOwnTo(0);
+        this.scrollToViewStart();
         void this.load(lib.id, true);
         void this.loadLikes();
         if (this.viewMode() === 'genres') void this.loadGenres();
@@ -685,12 +757,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.navbar.leaveHeroPage(this);
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     const scrollKey = this.scrollMemoryKey();
     if (scrollKey) this.scrollMemory.deactivateIf(scrollKey);
     this.unbindLetterScroll();
-    this.navbar.clearPageTitle();
     this.paramSub?.unsubscribe();
     clearTimeout(this.searchTimer);
     this.loadCtl?.abort();
@@ -760,7 +832,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
   setViewMode(mode: LibraryViewMode) {
     if (this.viewMode() === mode) return;
     this.viewMode.set(mode);
-    this.scrollOwnTo(0);
+    this.scrollToViewStart();
     // Tab switches stay on one history entry so back returns to the previous page, not through every tab.
     this.syncQueryParams(false);
     if (mode === 'series') {
@@ -1040,7 +1112,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.loading.set(true);
       // The scroller keeps its offset across a content swap, which a filter
       // that returns a screenful would leave parked in blank space.
-      this.scrollOwnTo(0);
+      this.scrollToViewStart();
     }
     const monitored = this.filterMonitored();
     const fs = this.filterStatus();

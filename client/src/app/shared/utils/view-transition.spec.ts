@@ -3,6 +3,7 @@ import {
   classUntilDone,
   clearPosterStamps,
   clearStalePosterStamps,
+  dashboardTrip,
   enteringPosterPage,
   leavingPosterPage,
   markViewTransition,
@@ -182,6 +183,22 @@ describe('view-transition poster stamps', () => {
 
       expect(card.style.viewTransitionName).toBe('');
     });
+  });
+});
+
+describe('dashboardTrip', () => {
+  const top = (p: string) => ({ routeConfig: null, firstChild: { routeConfig: { path: p }, firstChild: null } });
+
+  it('animates entering, leaving and switching dashboards, not moving inside one', () => {
+    expect(dashboardTrip(top(''), top('admin'))).toBe('in');
+    expect(dashboardTrip(top('account'), top('app-settings'))).toBe('in');
+    expect(dashboardTrip(top('app-settings'), top(''))).toBe('out');
+    expect(dashboardTrip(top('admin'), top('admin'))).toBeNull();
+  });
+
+  it('leaves the pages outside the main layout alone', () => {
+    expect(dashboardTrip(top('watch/:mediaFileId'), top('admin'))).toBeNull();
+    expect(dashboardTrip(top('account'), top('login'))).toBeNull();
   });
 });
 

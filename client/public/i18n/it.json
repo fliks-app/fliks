@@ -333,14 +333,12 @@
   "account_settings": {
     "title": "Impostazioni dell'account",
     "nav": {
+      "general": "Generale",
       "password": "Password",
-      "recommendations": "Consigli",
       "privacy": "Privacy",
-      "continue": "Continua tra i dispositivi",
       "spoilers": "Spoiler",
       "devices": "Dispositivi",
-      "email_devices": "Dispositivi e-mail",
-      "whats_new": "Novità"
+      "email_devices": "Dispositivi e-mail"
     },
     "recommendations": {
       "reset_title": "Reimposta i consigli nascosti",
@@ -633,16 +631,16 @@
   "nav": {
     "user_menu": "Menu utente",
     "home": "Home",
-    "my_profile": "Il mio profilo",
     "statistics": "Statistiche",
     "requests": "Richieste",
     "calendar": "Calendario",
     "system": "Sistema",
     "settings": "Impostazioni",
     "open_menu": "Apri il menu",
-    "close_menu": "Chiudi il menu",
-    "pin_sidebar": "Fissa la barra laterale",
-    "unpin_sidebar": "Sblocca la barra laterale",
+    "rail_label": "Navigazione principale",
+    "pin_rail": "Mantieni aperta la navigazione",
+    "unpin_rail": "Comprimi la navigazione",
+    "edit_library_order": "Ordina le raccolte",
     "logout": "Esci",
     "switch_user": "Cambia utente",
     "administration": "Amministrazione",
@@ -4421,8 +4419,7 @@
     "scope_all": "Tutti i tipi",
     "scope_chosen": "Tipi scelti",
     "resume_only": "solo ripresa",
-    "settings_note": "La TV in diretta e le watch party non sono incluse. Gli audiolibri seguono il tipo Libro: sono in streaming, quindi controllabili.",
-    "saved": "Impostazione salvata"
+    "settings_note": "La TV in diretta e le watch party non sono incluse. Gli audiolibri seguono il tipo Libro: sono in streaming, quindi controllabili."
   },
   "language": {
     "en": "Inglese",
@@ -4478,6 +4475,7 @@
     "sections_title": "Sezioni della home",
     "sections_hint": "Scegli le sezioni da mostrare e il loro ordine. Trascina per riordinare, oppure usa le frecce.",
     "section": {
+      "hero_carousel": "Carosello in evidenza",
       "watch_parties": "Sessioni",
       "libraries": "Librerie",
       "continue_watching": "Riprendi la riproduzione",
@@ -6283,5 +6281,13 @@
         "other": "Qualsiasi altro problema con questo file"
       }
     }
+  },
+  "hero_carousel": {
+    "label": "Titoli in evidenza",
+    "play": "Riproduci",
+    "details": "Dettagli",
+    "go_to": "Mostra il titolo {{n}}",
+    "play_episode": "Riproduci {{code}}",
+    "resume_episode": "Riprendi {{code}}"
   }
 }

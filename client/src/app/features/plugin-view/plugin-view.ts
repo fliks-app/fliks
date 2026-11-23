@@ -1,4 +1,4 @@
-import { Component, OnDestroy, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
@@ -130,7 +130,7 @@ const PLUGIN_PROVIDER_LABELS: ProviderListLabels = {
   providers: [RowReleasePicker],
   templateUrl: './plugin-view.html',
 })
-export class PluginViewComponent implements OnDestroy {
+export class PluginViewComponent {
   protected readonly icons = icons;
 
   private readonly route = inject(ActivatedRoute);
@@ -161,10 +161,6 @@ export class PluginViewComponent implements OnDestroy {
     const key = this.page()?.labelKey;
     this.navbar.setPageTitle(key ? this.translate.instant(key) : '');
   });
-
-  ngOnDestroy(): void {
-    this.navbar.clearPageTitle();
-  }
 
   readonly reason = computed<UnavailableReason | null>(() => {
     if (!this.registry.hasPlugin(this.pluginId())) return 'unknown_plugin';

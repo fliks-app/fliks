@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Media } from '../../core/services/api/media.service';
-import { buildSeriesQueueItems, episodeLabel, resolveNextEpisodeItem } from './media-play.util';
+import { buildSeriesQueueItems, episodeCode, episodeLabel, nextUp, resolveNextEpisodeItem } from './media-play.util';
 
 /** S2 declared before S1, one special, and E2 with no file. */
 const series = {
@@ -53,5 +53,39 @@ describe('episodeLabel', () => {
     expect(episodeLabel(m, 10)).toBe('S1:E2 - Pilot');
     expect(episodeLabel(m, 11)).toBe('S1:E3');
     expect(episodeLabel(m, 99)).toBeNull();
+  });
+});
+
+describe('nextUp', () => {
+  const ep = (id: number, episodeNumber: number, hasFile = true) => ({ id, episodeNumber, hasFile, title: `E${episodeNumber}` });
+  const m = (seasons: unknown[], fileEpisodes: number[]) =>
+    ({ id: 7, type: 'series', seasons, files: fileEpisodes.map((id) => ({ id: id * 10, episodeId: id })) }) as unknown as Media;
+  const media = m(
+    [
+      { id: 2, seasonNumber: 2, episodes: [ep(20, 1)] },
+      { id: 1, seasonNumber: 1, episodes: [ep(11, 2), ep(10, 1)] },
+      { id: 0, seasonNumber: 0, episodes: [ep(99, 1)] },
+    ],
+    [10, 11, 20, 99],
+  );
+  const id = (n: ReturnType<typeof nextUp>) => n?.episode.id;
+
+  it('resumes the episode in progress with its file', () => {
+    const n = nextUp(media, { episodeId: 20, mediaFileId: 5 } as never, new Set([10]));
+    expect([id(n), n?.file.id]).toEqual([20, 5]);
+    expect(episodeCode(n!)).toBe('S02E01');
+  });
+
+  it('else takes the first unwatched episode with a file, in season and episode order, skipping specials', () => {
+    expect(id(nextUp(media, null, new Set([10])))).toBe(11);
+  });
+
+  it('else starts again from the first episode when everything is watched', () => {
+    expect(id(nextUp(media, null, new Set([10, 11, 20])))).toBe(10);
+  });
+
+  it('is null with no episode on disk, and for a movie', () => {
+    expect(nextUp(m([{ id: 1, seasonNumber: 1, episodes: [ep(10, 1, false)] }], []), null, new Set())).toBeNull();
+    expect(nextUp({ id: 1, type: 'movie' } as Media, null, new Set())).toBeNull();
   });
 });

@@ -102,7 +102,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: NowPlayingMetadataService, useValue: { track: () => signal(over.trackMeta ?? null) } },
       { provide: SessionSyncService, useValue: sync },
       { provide: RemotePlaybackTarget, useValue: target },
-      { provide: DeviceService, useValue: { isTv: () => !!over.tv, reducedEffects: () => false } },
+      { provide: DeviceService, useValue: { isTv: () => !!over.tv, isPhone: () => false, reducedEffects: () => false } },
       { provide: AudioPlayerService, useValue: audio },
       { provide: RemoteAudioOutput, useValue: audioView },
       { provide: PlaybackDevice, useValue: { icon: signal('tv') } },
@@ -251,11 +251,11 @@ describe('CastOverlayComponent', () => {
       expect(setup({ local: true, live: false, account: accountSession({ state: 'parked', playing: false }) }).strip).toBeNull();
     });
 
-    it('docks in the TV navbar instead of the page, and is hidden for the owner', () => {
+    it('docks in the rail instead of the page, and is hidden for the owner', () => {
       const tv = setup({ local: true, tv: true, account: accountSession() });
       TestBed.tick();
       expect(tv.el.querySelector('button')).toBeNull();
-      expect(TestBed.inject(NavbarService).tvBars()).toHaveLength(1);
+      expect(TestBed.inject(NavbarService).dockedBars()).toHaveLength(1);
       TestBed.resetTestingModule();
       expect(setup({ local: true }).el.querySelector('button')).toBeNull();
     });

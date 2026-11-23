@@ -1,0 +1,144 @@
+<div #root
+     class="nav-rail"
+     [class.bg-base-100]="!background.url()"
+     [class.app-sidebar-veil]="!!background.url()"
+     [class.backdrop-blur-sm]="!!background.url()"
+     appTvSection
+     data-tv-nav
+     [class.rail-open]="open()"
+     [class.rail-collapsed]="mode() === 'collapsed'"
+     (focusin)="onFocusIn($event)"
+     (focusout)="onFocusOut($event, root)"
+     (pointerenter)="onPointer($event, true)"
+     (pointerleave)="onPointer($event, false)">
+  <div class="rail-scroll scrollbar-none">
+  <div class="rail-head">
+    <div class="rail-item pointer-events-none">
+      <span class="rail-icon relative">
+        <img src="fliks-icon.svg" alt="" class="h-8 w-8" />
+        @if (!network.isOnline()) {
+          <span class="badge badge-xs badge-warning absolute -right-1 -top-1" [attr.title]="'downloads.offline' | translate"></span>
+        }
+      </span>
+      <span class="rail-label text-xl font-bold">{{ 'app.name' | translate }}</span>
+    </div>
+    @if (navbar.canPin()) {
+        <button
+          type="button"
+          class="rail-reveal btn btn-ghost btn-sm btn-square hidden lg:inline-flex"
+          [class.text-primary]="navbar.sidebarPinned()"
+          [attr.aria-pressed]="navbar.sidebarPinned()"
+          [attr.aria-label]="(navbar.sidebarPinned() ? 'nav.unpin_rail' : 'nav.pin_rail') | translate"
+          (click)="navbar.toggleSidebarPinned()"
+        >
+          <svg [lucideIcon]="icons.Pin" class="h-4 w-4"></svg>
+        </button>
+    }
+  </div>
+
+  <nav class="rail-list" [attr.aria-label]="'nav.rail_label' | translate">
+    <ul class="flex flex-col gap-0.5">
+      @for (item of before(); track item.id) {
+        <li><ng-container [ngTemplateOutlet]="entry" [ngTemplateOutletContext]="{ $implicit: item }" /></li>
+      }
+
+      <!-- Held until the list lands: inserted under painted items, it would push them down. -->
+      @if (librariesLoaded()) {
+        @if (libraries().length) {
+          <li role="separator" class="rail-sep"></li>
+          <li role="presentation" class="rail-title">{{ 'nav.section_library' | translate }}</li>
+        }
+        @for (lib of shown(); track lib.id) {
+          <li>
+            <a [routerLink]="libraryUrl(lib)" routerLinkActive="rail-item-active" ariaCurrentWhenActive="page"
+               [state]="{ rootEntry: true }" class="rail-item">
+              <span class="rail-icon"><app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" [style.color]="libraryColor(lib)" /></span>
+              <span class="rail-label">{{ lib.name }}</span>
+              @if (libraryCounts()[lib.id]) {
+                <span class="rail-badge badge badge-sm badge-ghost">{{ libraryCounts()[lib.id] }}</span>
+              }
+            </a>
+          </li>
+        }
+        @if (more()) {
+          <li>
+            <button #plus type="button" class="rail-item w-full" [class.rail-item-active]="plusCurrent()"
+                    [attr.aria-current]="plusCurrent() ? 'page' : null" aria-haspopup="menu"
+                    [attr.aria-expanded]="plusOpen()" (click)="plusOpen.set(!plusOpen())">
+              <span class="rail-icon"><svg [lucideIcon]="icons.Ellipsis" class="h-5 w-5"></svg></span>
+              <span class="rail-label">{{ 'nav.more' | translate }}</span>
+              <span class="rail-badge text-base-content/60"><svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4"></svg></span>
+            </button>
+            <app-popover-menu [open]="plusOpen()" [anchor]="plus" placement="right-start" [heading]="'home.libraries' | translate" (closed)="plusOpen.set(false)">
+              <ul class="menu w-full p-2 gap-0.5">
+                @for (lib of libraries(); track lib.id) {
+                  <li>
+                    <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" [state]="{ rootEntry: true }" (click)="plusOpen.set(false)" class="justify-between">
+                      <span class="flex items-center gap-2">
+                        <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" [style.color]="libraryColor(lib)" />
+                        {{ lib.name }}
+                      </span>
+                      @if (libraryCounts()[lib.id]) {
+                        <span class="badge badge-sm badge-ghost">{{ libraryCounts()[lib.id] }}</span>
+                      }
+                    </a>
+                  </li>
+                }
+                <li>
+                  <a routerLink="/app-settings/display" (click)="plusOpen.set(false)" class="text-base-content/70">
+                    {{ 'nav.edit_library_order' | translate }}
+                  </a>
+                </li>
+              </ul>
+            </app-popover-menu>
+          </li>
+        }
+        @if (after().length) {
+          <li role="separator" class="rail-sep"></li>
+        }
+        @for (item of after(); track item.id) {
+          <li><ng-container [ngTemplateOutlet]="entry" [ngTemplateOutletContext]="{ $implicit: item }" /></li>
+        }
+        @if (acquisition().length) {
+          <li role="separator" class="rail-sep"></li>
+          <li role="presentation" class="rail-title">{{ 'nav.section_downloads' | translate }}</li>
+          @for (item of acquisition(); track item.id) {
+            <li><ng-container [ngTemplateOutlet]="entry" [ngTemplateOutletContext]="{ $implicit: item }" /></li>
+          }
+        }
+      }
+    </ul>
+  </nav>
+
+  <div class="rail-foot">
+    <div role="separator" class="rail-sep"></div>
+    @for (bar of navbar.dockedBars(); track bar) {
+      <ng-container [ngTemplateOutlet]="bar" />
+    }
+    <div appTvRow class="rail-user-row">
+      <app-user-menu class="rail-user" placement="top-start" [row]="true" />
+      <a routerLink="/app-settings" [state]="{ rootEntry: true }" routerLinkActive="rail-item-active" ariaCurrentWhenActive="page"
+         class="rail-item rail-icon-btn rail-reveal" [attr.aria-label]="'nav.app_settings' | translate">
+        <svg [lucideIcon]="icons.Settings" class="h-5 w-5"></svg>
+      </a>
+    </div>
+  </div>
+  </div>
+</div>
+
+<ng-template #entry let-item>
+  <a [routerLink]="item.route" routerLinkActive="rail-item-active" ariaCurrentWhenActive="page"
+     [routerLinkActiveOptions]="{ exact: item.exact }" [state]="{ rootEntry: true }" class="rail-item"
+    >
+    <span class="rail-icon relative">
+      <app-nav-icon [name]="item.icon" class="h-5 w-5" />
+      @if (item.badgeKey && badgeCountFor(item) > 0) {
+        <span class="rail-dot badge badge-xs" [class]="item.badgeClass"></span>
+      }
+    </span>
+    <span class="rail-label">{{ item.labelKey | translate }}</span>
+    @if (item.badgeKey && badgeCountFor(item) > 0) {
+      <span class="rail-badge badge badge-sm" [class]="item.badgeClass">{{ badgeCountFor(item) }}</span>
+    }
+  </a>
+</ng-template>

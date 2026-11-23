@@ -1,5 +1,5 @@
 import { Injectable, Injector, afterNextRender, inject } from '@angular/core';
-import { NavigationStart, Router, Scroll } from '@angular/router';
+import { NavigationEnd, NavigationSkipped, NavigationStart, Router, Scroll } from '@angular/router';
 import { NavbarService } from './navbar.service';
 import { PageScrollerService } from './page-scroller.service';
 
@@ -21,9 +21,21 @@ export class ScrollMemoryService {
   /** False between NavigationStart and the router's own scroll. */
   private routerScrolled = true;
   private queued: (() => void)[] = [];
+  private settledUrl = '';
+  /** The navigation only changed the query on the same path: a page's tabs, filters or month, which keep the offset. */
+  private inPage = false;
 
   constructor() {
+    // The router scrolls nothing (`scrollPositionRestoration: 'disabled'`): every navigation's offset is decided here.
+    history.scrollRestoration = 'manual';
     this.router.events.subscribe((event) => {
+      if (event instanceof NavigationEnd) {
+        const [path, query = ''] = event.urlAfterRedirects.split('#')[0].split('?');
+        const [prevPath, prevQuery = ''] = this.settledUrl.split('#')[0].split('?');
+        this.inPage = path === prevPath && query !== prevQuery;
+        this.settledUrl = event.urlAfterRedirects;
+      }
+      if (event instanceof NavigationSkipped) this.inPage = false;
       // Save scroll position BEFORE navigation starts (scroll is still intact)
       if (event instanceof NavigationStart) {
         if (this.currentKey) this.positions.set(this.currentKey, this.pageScroller.offset());
@@ -33,9 +45,14 @@ export class ScrollMemoryService {
         this.routerScrolled = true;
         const due = this.queued;
         this.queued = [];
-        // A microtask, so it lands after the router's own subscriber within the same task and nothing in between paints.
+        // A microtask, so nothing in between paints.
         if (due.length) queueMicrotask(() => due.forEach((fn) => fn()));
+        // A call may say otherwise: `scroll: 'after-transition'` resets an in-page change, `'manual'` keeps any.
+        const keep = event.scrollBehavior ? event.scrollBehavior === 'manual' : this.inPage;
+        if (keep) return;
+        // A return with a queued restore goes straight to it; one without starts at the top until its page restores.
         if (!this.navbar.navigatedBack()) queueMicrotask(() => this.enterAtTop());
+        else if (!due.length && this.pageScroller.offset() > 0) this.pageScroller.scrollTo(0);
       }
     });
   }

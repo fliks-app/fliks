@@ -333,14 +333,12 @@
   "account_settings": {
     "title": "Paramètres du compte",
     "nav": {
+      "general": "Général",
       "password": "Mot de passe",
-      "recommendations": "Recommandations",
       "privacy": "Confidentialité",
-      "continue": "Reprise automatique entre appareils",
       "spoilers": "Divulgâchage",
       "devices": "Appareils",
-      "email_devices": "Appareils e-mail",
-      "whats_new": "Nouveautés"
+      "email_devices": "Appareils e-mail"
     },
     "recommendations": {
       "reset_title": "Réinitialiser les recommandations masquées",
@@ -633,16 +631,16 @@
   "nav": {
     "user_menu": "Menu utilisateur",
     "home": "Accueil",
-    "my_profile": "Mon profil",
     "statistics": "Statistiques",
     "requests": "Demandes",
     "calendar": "Calendrier",
     "system": "Système",
     "settings": "Paramètres",
     "open_menu": "Ouvrir le menu",
-    "close_menu": "Fermer le menu",
-    "pin_sidebar": "Épingler la barre latérale",
-    "unpin_sidebar": "Détacher la barre latérale",
+    "rail_label": "Navigation principale",
+    "pin_rail": "Garder la navigation ouverte",
+    "unpin_rail": "Replier la navigation",
+    "edit_library_order": "Organiser les bibliothèques",
     "logout": "Se déconnecter",
     "switch_user": "Changer d'utilisateur",
     "administration": "Administration",
@@ -4421,8 +4419,7 @@
     "scope_all": "Tous les types",
     "scope_chosen": "Types choisis",
     "resume_only": "reprise seule",
-    "settings_note": "La télévision en direct et les watch parties ne sont pas concernées. Les livres audio suivent le type Livre : ils sont diffusés, donc pilotables.",
-    "saved": "Réglage enregistré"
+    "settings_note": "La télévision en direct et les watch parties ne sont pas concernées. Les livres audio suivent le type Livre : ils sont diffusés, donc pilotables."
   },
   "language": {
     "en": "Anglais",
@@ -4478,6 +4475,7 @@
     "sections_title": "Zones de l'accueil",
     "sections_hint": "Choisissez les zones à afficher et leur ordre. Glissez pour réordonner, ou utilisez les flèches.",
     "section": {
+      "hero_carousel": "Carrousel à la une",
       "watch_parties": "Séances",
       "libraries": "Bibliothèques",
       "continue_watching": "Reprendre la lecture",
@@ -6283,5 +6281,13 @@
         "other": "Tout autre souci avec ce fichier"
       }
     }
+  },
+  "hero_carousel": {
+    "label": "Titres à la une",
+    "play": "Lecture",
+    "details": "Détails",
+    "go_to": "Afficher le titre {{n}}",
+    "play_episode": "Lecture {{code}}",
+    "resume_episode": "Reprendre {{code}}"
   }
 }

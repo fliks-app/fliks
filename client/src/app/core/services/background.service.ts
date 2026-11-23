@@ -5,6 +5,7 @@ import { DisplaySettingsService } from './display-settings.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { fanartPool } from '../../shared/utils/media-artwork.util';
 
+
 /** How long an ambient image stays before a navigation may replace it. */
 const AMBIENT_TTL = 5 * 60 * 1000;
 
@@ -19,7 +20,7 @@ export class BackgroundService {
   private readonly displaySettings = inject(DisplaySettingsService);
   private readonly streamingApi = inject(StreamingApiService);
 
-  private readonly claim = signal<{ owner: object; url: string; blur: boolean } | null>(null);
+  private readonly claim = signal<{ owner: object; url: string; blur: boolean; hero: boolean } | null>(null);
   private readonly ambient = signal<string | null>(null);
   private ambientAt = 0;
   private rolling = false;
@@ -40,9 +41,13 @@ export class BackgroundService {
   /** The backdrop is a cover standing in for fanart: drawn blurred. */
   readonly blur = computed(() => !!this.claim()?.blur && this.url() === this.claim()?.url);
 
+  /** The claim is a hero: the picture is read through a light veil near the top of the page instead of the ambient one. */
+  readonly hero = computed(() => this.url() === this.claim()?.url && !!this.claim()?.hero);
+
   /** Declare the media page's fanart; `null` means not known yet, and holds. */
-  set(owner: object, url: string | null, opts?: { blur?: boolean }): void {
-    if (url) this.claim.set({ owner, url, blur: !!opts?.blur });
+  set(owner: object, url: string | null, opts?: { blur?: boolean; hero?: boolean }): void {
+    if (!url) return;
+    this.claim.set({ owner, url, blur: !!opts?.blur, hero: !!opts?.hero });
   }
 
   release(owner: object): void {

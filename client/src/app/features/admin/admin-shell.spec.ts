@@ -5,6 +5,7 @@ import { Router, provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { AdminShellComponent } from './admin-shell';
+import { BackgroundService } from '../../core/services/background.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DeviceService } from '../../core/services/device.service';
 import { TvService } from '../../core/services/tv.service';
@@ -89,11 +90,11 @@ const entry = (pluginId: string, contributions: UiContribution[], extra: Partial
 });
 
 function readSidebar(fixture: ComponentFixture<AdminShellComponent>) {
-  const menu: Element = fixture.nativeElement.querySelector('ul.menu');
+  const menu: Element = fixture.nativeElement.querySelector('nav.rail-list ul');
   const sections: { label: string; links: { label: string; href: string }[] }[] = [];
   let current: { label: string; links: { label: string; href: string }[] } | null = null;
   for (const li of Array.from(menu.children)) {
-    if (li.classList.contains('menu-title')) {
+    if (li.classList.contains('rail-title')) {
       current = { label: (li.textContent ?? '').replace(/\s+/g, ' ').trim(), links: [] };
       sections.push(current);
     } else if (current) {
@@ -119,6 +120,7 @@ function createFixture(opts: { isAdmin?: boolean; permissions?: string[]; entrie
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of(opts.translations ?? {}) } },
       }),
       { provide: Title, useValue: { setTitle: () => {} } },
+      { provide: BackgroundService, useValue: { url: () => null } },
       {
         provide: AuthService,
         useValue: {

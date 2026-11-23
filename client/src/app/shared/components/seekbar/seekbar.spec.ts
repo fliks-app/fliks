@@ -95,7 +95,9 @@ describe('SeekbarComponent keyboard preview', () => {
 
   it('a keyboard focus arms the bar with the playhead time alone', () => {
     bar.rest();
-    bar.onFocus({ target: { matches: () => true } } as unknown as FocusEvent);
+    document.documentElement.classList.add('keyboard-modality');
+    bar.onFocus();
+    document.documentElement.classList.remove('keyboard-modality');
     expect(bar.armed()).toBe(true);
     expect(bar.scrubbing()).toBe(false);
     expect(bar.previewTime()).toBe(100);
@@ -103,7 +105,7 @@ describe('SeekbarComponent keyboard preview', () => {
 
   it('a pointer focus leaves the bar at rest, and a blur puts it back', () => {
     bar.rest();
-    bar.onFocus({ target: { matches: () => false } } as unknown as FocusEvent);
+    bar.onFocus();
     expect(bar.armed()).toBe(false);
     bar.focus();
     bar.rest();

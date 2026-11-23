@@ -9,11 +9,16 @@ export const TABBABLE_SELECTOR =
 
 /** Where focus lands when an overlay opens: the current-selection option, else the first tabbable.
  *  `aria-disabled` (from `SelectedOptionDirective`) keeps the current value in the focus order. */
-/** Whether focus returns to the overlay's opener: only keyboard/D-pad (on touch it marks a control the user left, and iOS `<select>` reopens the picker). */
-export function wantsFocusRestore(): boolean {
+/** Whether the user is on keyboard or D-pad: the app's `:focus-visible`, which TV engines below Chromium 86 can't match. */
+export function keyboardModality(): boolean {
   if (typeof document === 'undefined') return false;
   const c = document.documentElement.classList;
   return c.contains('keyboard-modality') || c.contains('tv-host');
+}
+
+/** Whether focus returns to the overlay's opener: only keyboard/D-pad (on touch it marks a control the user left, and iOS `<select>` reopens the picker). */
+export function wantsFocusRestore(): boolean {
+  return keyboardModality();
 }
 
 /** Settle focus after an overlay closes: keyboard/D-pad refocus the opener, touch blurs it (the backdrop deliberately doesn't blur). */

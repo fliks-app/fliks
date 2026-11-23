@@ -4,6 +4,8 @@ import { NavigationEnd, NavigationStart, Router, Scroll } from '@angular/router'
 import { Capacitor } from '@capacitor/core';
 import { DeviceService } from './device.service';
 
+export type RailMode = 'none' | 'drawer' | 'collapsed' | 'expanded';
+
 /** Lets child pages communicate with the navbar (e.g. hero pages setting a title). */
 @Injectable({ providedIn: 'root' })
 export class NavbarService {
@@ -14,32 +16,40 @@ export class NavbarService {
   readonly heroLogoUrl = signal<string | null>(null);
   /** Opens the page's actions menu from the mobile navbar, in place of the user menu; null when the page has none. */
   readonly heroMenu = signal<((anchor: HTMLElement) => void) | null>(null);
-  /** Now-playing bars the TV navbar renders in place of the bottom of the screen, which the D-pad reaches last. */
-  readonly tvBars = signal<readonly TemplateRef<unknown>[]>([]);
+  /** Now-playing bars the rail renders in its footer in place of the bottom of the screen, which the D-pad reaches last. */
+  readonly dockedBars = signal<readonly TemplateRef<unknown>[]>([]);
   /** Whether the current page has a hero fanart. */
   readonly isHeroPage = signal(false);
   /** Non-hero pages can opt into the layout's desktop back button by setting
    *  this, without taking on the hero styling. */
   readonly showBackButton = signal(false);
-  /** Resolved title for non-hero routes (set from route data or by components). */
+  /** The bar's centre text, hero page or not (set from route data or by the page), with an optional icon. */
   readonly pageTitle = signal('');
+  readonly pageIcon = signal<{ name: string; color?: string } | null>(null);
+  private readonly titles = new Map<string, { title: string; icon: { name: string; color?: string } | null }>();
   /** Whether the window is scrolled near the top (updated by LayoutComponent). */
-  readonly scrollAtTop = signal(true);
   /** True when at least one in-app navigation has happened since entering — used to gate back buttons. */
   readonly canGoBack = signal(false);
-  /** Whether the sidebar stays pinned at lg on form factors that default to a drawer (tablet); persisted, on by default. Desktop always pins, phones never. */
+  /** Whether a tablet's rail stays expanded at lg+ (a desktop's always does); persisted, on by default. */
   readonly sidebarPinned = signal(
     localStorage.getItem('fliks.sidebarPinned') !== 'false',
   );
-  /** Effective pin state: off on narrow screens and always off on TV (10-foot surface); the stored preference is kept. */
-  readonly effectiveSidebarPinned = computed(
-    () => this.sidebarPinned() && this.isLargeScreen() && !this.device.isTv(),
-  );
 
-  /** Whether the layout shows the sidebar as a permanent column; keeps the form-factor list in one place. */
-  readonly sidebarDocked = computed(
-    () => this.device.isDesktop() || this.effectiveSidebarPinned(),
-  );
+  /** How the left rail shows: `none` (phone dock), `drawer` (hamburger, below md and on phones without the dock),
+   *  `collapsed` (icons; TV, md to lg) or `expanded` (lg+ when pinned). */
+  readonly railMode = computed<RailMode>(() => {
+    if (this.phoneDock()) return 'none';
+    if (this.device.isTv()) return 'collapsed';
+    if (this.device.isPhone() || !this.isMediumScreen()) return 'drawer';
+    if (!this.isLargeScreen()) return 'collapsed';
+    return this.device.isDesktop() || this.sidebarPinned() ? 'expanded' : 'collapsed';
+  });
+
+  /** Only a tablet's rail can be unpinned; a desktop's stays open. */
+  readonly canPin = computed(() => this.railDocked() && this.device.isTablet());
+
+  /** The rail is a permanent column (collapsed or expanded) rather than a drawer or absent. */
+  readonly railDocked = computed(() => this.railMode() === 'collapsed' || this.railMode() === 'expanded');
 
   /** Native phone bottom dock; landscape is too short for it, so the topbar hamburger takes over there. */
   readonly phoneDock = computed(
@@ -59,6 +69,8 @@ export class NavbarService {
   /** Capacitor native platform — exposed so templates can branch on it. */
   readonly isNativePlatform = Capacitor.isNativePlatform();
   private get isNative() { return this.isNativePlatform; }
+  /** True while the viewport matches Tailwind's `md` breakpoint (≥768px). */
+  private readonly isMediumScreen = signal(false);
   /** True while the viewport matches Tailwind's `lg` breakpoint (≥1024px). */
   private readonly isLargeScreen = signal(false);
   private readonly isLandscape = signal(false);
@@ -69,6 +81,9 @@ export class NavbarService {
       const mq = window.matchMedia('(min-width: 1024px)');
       this.isLargeScreen.set(mq.matches);
       mq.addEventListener('change', (e) => this.isLargeScreen.set(e.matches));
+      const md = window.matchMedia('(min-width: 768px)');
+      this.isMediumScreen.set(md.matches);
+      md.addEventListener('change', (e) => this.isMediumScreen.set(e.matches));
       const landscape = window.matchMedia('(orientation: landscape)');
       this.isLandscape.set(landscape.matches);
       landscape.addEventListener('change', (e) => this.isLandscape.set(e.matches));
@@ -91,6 +106,12 @@ export class NavbarService {
         document.documentElement.classList.remove('nav-scroll-instant');
       }
       // Browser back/forward: mirror the pop on our stack so goBack() doesn't walk forward into the page just left.
+      // A new page names itself while it activates; one restored from the route cache gets back the name it had.
+      if (e instanceof NavigationStart && this.pathOf(e.url) !== this.pathOf(this.router.url)) {
+        this.titles.set(this.pathOf(this.router.url), { title: this.pageTitle(), icon: this.pageIcon() });
+        const kept = this.titles.get(this.pathOf(e.url));
+        this.setPageTitle(kept?.title ?? '', kept?.icon ?? null);
+      }
       if (e instanceof NavigationStart && e.navigationTrigger === 'popstate') {
         // Only a popstate landing on the top of our stack is a back-pop; a stray one (Android IME history entry) would swallow the next push.
         if (this.history[this.history.length - 1] === e.url) {
@@ -195,14 +216,8 @@ export class NavbarService {
     }
   }
 
-  /** True when the top mobile navbar is rendered; hidden on tablet when the sidebar is pinned, so back-button pages must mirror that. */
-  readonly mobileNavbarVisible = computed(() => {
-    // Mirror the layout's navbar visibility: hidden at lg+ on desktop, and on tablet only when the sidebar is pinned.
-    if (this.isLargeScreen() && this.device.isDesktop()) return false;
-    // One test now that the pin itself rules out a TV: naming the form factors
-    // twice let the two drift apart.
-    return !this.effectiveSidebarPinned();
-  });
+  /** True when the top mobile navbar is rendered: wherever the rail is not a permanent column. */
+  readonly mobileNavbarVisible = computed(() => !this.railDocked());
 
   /** Top padding that clears the mobile navbar for a desktop-layout hero; null when no navbar overlaps it. */
   readonly heroPaddingTop = computed(() =>
@@ -211,31 +226,76 @@ export class NavbarService {
       : null,
   );
 
-  /** Mobile navbar center: hero title on fanart pages, otherwise static/dynamic page title. */
-  readonly mobileNavTitle = computed(() =>
-    this.isHeroPage() ? this.heroTitle() : this.pageTitle(),
-  );
+  /** The page's name: a hero's title, else the page title. */
+  readonly mobileNavTitle = computed(() => (this.isHeroPage() && this.heroTitle()) || this.pageTitle());
 
-  /** True while the transparent hero-page navbar is shown (visible + hero page + scrolled at top). */
+  /** The hero page's picture still reaches below the phone bar. */
+  readonly heroUnderBar = signal(true);
+  /** The phone bar has no background while the hero picture is under it. */
   readonly navbarTransparent = computed(
-    () => this.mobileNavbarVisible() && this.scrollAtTop() && this.isHeroPage(),
+    () => this.mobileNavbarVisible() && this.isHeroPage() && this.heroUnderBar(),
   );
 
-  /** Mark the current page as having a hero fanart (enables transparent navbar + white icons). */
-  enterHeroPage(title: string, logoUrl: string | null = null) {
+  /** The page that holds the hero chrome: only it can hand it back, so a leaving page never clears its successor's claim. */
+  private heroOwner: object | null = null;
+  /** The hero's centre is the brand logo (home), not a title's clearlogo. */
+  readonly heroBrand = signal(false);
+
+  private heroHost: Element | null = null;
+  private heroWatch: { io?: IntersectionObserver; mo?: MutationObserver } = {};
+
+  /** Claim the hero chrome for `owner` (transparent navbar, white icons); the centre shows the hero's logo or brand, else the page title.
+   *  `host` is the page element holding its `[data-hero-picture]`: the bar stays clear while that picture is under it. */
+  enterHeroPage(owner: object, centre: { title?: string; logoUrl?: string | null; brand?: boolean; host?: Element } = {}) {
+    this.heroOwner = owner;
+    if (centre.host !== this.heroHost) this.watchHero(centre.host ?? null);
     document.body.classList.add('hero-page');
     this.isHeroPage.set(true);
-    this.pageTitle.set('');
-    this.heroTitle.set(title);
-    this.heroLogoUrl.set(logoUrl);
+    this.heroTitle.set(centre.title ?? '');
+    this.heroLogoUrl.set(centre.logoUrl ?? null);
+    this.heroBrand.set(!!centre.brand);
   }
 
-  leaveHeroPage() {
+  leaveHeroPage(owner: object) {
+    if (this.heroOwner !== owner) return;
+    this.heroOwner = null;
+    this.watchHero(null);
     document.body.classList.remove('hero-page');
     this.isHeroPage.set(false);
     this.heroTitle.set('');
     this.heroLogoUrl.set(null);
+    this.heroBrand.set(false);
     this.heroMenu.set(null);
+  }
+
+  /** One observer on the claimed page's picture, offset by the bar's height; it waits for the picture when the page draws it late. */
+  private watchHero(host: Element | null): void {
+    this.heroWatch.io?.disconnect();
+    this.heroWatch.mo?.disconnect();
+    this.heroWatch = {};
+    this.heroHost = host;
+    this.heroUnderBar.set(true);
+    if (!host || typeof IntersectionObserver === 'undefined') return;
+    const observe = (picture: Element) => {
+      const bar = document.querySelector<HTMLElement>('nav.navbar')?.offsetHeight ?? 0;
+      const io = new IntersectionObserver(([e]) => {
+        // The page drew a new picture (another episode): follow that one.
+        if (!e.target.isConnected) return this.watchHero(host);
+        this.heroUnderBar.set(e.isIntersecting);
+      }, { rootMargin: `-${bar}px 0px 0px 0px` });
+      io.observe(picture);
+      this.heroWatch.io = io;
+    };
+    const found = host.querySelector('[data-hero-picture]');
+    if (found) return observe(found);
+    const mo = new MutationObserver(() => {
+      const picture = host.querySelector('[data-hero-picture]');
+      if (!picture) return;
+      mo.disconnect();
+      observe(picture);
+    });
+    mo.observe(host, { childList: true, subtree: true });
+    this.heroWatch.mo = mo;
   }
 
   toggleSidebarPinned() {
@@ -244,13 +304,9 @@ export class NavbarService {
     localStorage.setItem('fliks.sidebarPinned', String(next));
   }
 
-  /** Sets the in-layout page title (ignored while on a hero page). */
-  setPageTitle(title: string) {
-    if (this.isHeroPage()) return;
+  setPageTitle(title: string, icon: { name: string; color?: string } | null = null) {
     this.pageTitle.set(title);
+    this.pageIcon.set(icon);
   }
 
-  clearPageTitle() {
-    this.pageTitle.set('');
-  }
 }

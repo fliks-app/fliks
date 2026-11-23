@@ -1,9 +1,8 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ServerVersionService } from '../../core/services/server-version.service';
 import { TestBed } from '@angular/core/testing';
-import { Router } from '@angular/router';
-import { Subject } from 'rxjs';
 import { SettingsSectionsService } from './settings-sections.service';
+import { activeNavItem } from '../../shared/components/settings-drawer/settings-drawer';
 import { AuthService } from '../../core/services/auth.service';
 import { DeviceService } from '../../core/services/device.service';
 import { TvService } from '../../core/services/tv.service';
@@ -30,7 +29,7 @@ const entry = (pluginId: string, contributions: UiContribution[], extra: Partial
 /** Every permission a core settings entry gates on today. */
 const ALL_PERMISSIONS = ['users.manage', 'roles.manage', 'media.read'];
 
-function createService(opts: { isAdmin?: boolean; permissions?: string[]; entries?: PluginUiEntry[]; url?: string } = {}) {
+function createService(opts: { isAdmin?: boolean; permissions?: string[]; entries?: PluginUiEntry[] } = {}) {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
@@ -47,8 +46,6 @@ function createService(opts: { isAdmin?: boolean; permissions?: string[]; entrie
       { provide: DeviceService, useValue: { isTouch: () => false } },
       { provide: ServerVersionService, useValue: { supports: () => true } },
       { provide: PluginUiRegistryService, useValue: { pluginEntries: () => opts.entries ?? [] } },
-      // Only the current URL matters here; the service never navigates.
-      { provide: Router, useValue: { events: new Subject(), url: opts.url ?? '/admin/settings' } },
     ],
   });
   return TestBed.inject(SettingsSectionsService);
@@ -128,39 +125,32 @@ describe('SettingsSectionsService', () => {
   });
 });
 
-describe('SettingsSectionsService: which entry the sidebar lights', () => {
+describe('activeNavItem over the admin sections: which entry the sidebar lights', () => {
+  const lit = (url: string, entries: PluginUiEntry[] = []) =>
+    activeNavItem(createService({ isAdmin: true, entries }).sections(), url)?.id ?? null;
   const pages = [
     contribution('general', 100),
     contribution('indexers', 110),
   ];
 
   it('lights the Plugins page on its own route', () => {
-    const service = createService({ isAdmin: true, url: '/admin/settings/plugins' });
-    expect(service.activeItemId()).toBe('core.plugins');
+    expect(lit('/admin/settings/plugins')).toBe('core.plugins');
   });
 
   it("VERDICT: a plugin's own page lights that page, not the Plugins entry it sits under", () => {
     // The plugin page URL continues `/admin/settings/plugins`, so prefix matching lit both.
-    const service = createService({
-      isAdmin: true,
-      entries: [entry('x', pages)],
-      url: '/admin/settings/plugins/x/indexers',
-    });
-    expect(service.activeItemId()).toBe('indexers');
+    expect(lit('/admin/settings/plugins/x/indexers', [entry('x', pages)])).toBe('indexers');
   });
 
   it('still lights a core entry from a deeper URL that no other entry claims', () => {
-    const service = createService({ isAdmin: true, url: '/admin/settings/libraries/42' });
-    expect(service.activeItemId()).toBe('core.libraries');
+    expect(lit('/admin/settings/libraries/42')).toBe('core.libraries');
   });
 
   it('lights nothing on a URL no entry claims, rather than the closest prefix', () => {
-    const service = createService({ isAdmin: true, url: '/admin/settings/pluginsomething' });
-    expect(service.activeItemId()).toBeNull();
+    expect(lit('/admin/settings/pluginsomething')).toBeNull();
   });
 
   it('ignores a query string and a fragment', () => {
-    const service = createService({ isAdmin: true, url: '/admin/settings/libraries?tab=2#top' });
-    expect(service.activeItemId()).toBe('core.libraries');
+    expect(lit('/admin/settings/libraries?tab=2#top')).toBe('core.libraries');
   });
 });

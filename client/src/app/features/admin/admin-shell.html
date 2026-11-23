@@ -1,38 +1,16 @@
-<app-settings-drawer
-  [title]="'admin.title' | translate"
-  [backLabel]="'admin.back_to_app' | translate"
-  drawerId="admin-sidebar"
->
-  <svg drawerIcon [lucideIcon]="icons.Shield" class="h-5 w-5"></svg>
-
-  <ng-container drawerMenu>
-    <li class="sticky top-0 z-10 bg-base-100 pb-2">
-      <input
-        #filterInput
-        type="search"
-        class="input input-bordered input-sm w-full"
-        [placeholder]="'admin.filter_placeholder' | translate"
-        [attr.aria-label]="'admin.filter_placeholder' | translate"
-        [value]="filter()"
-        (input)="filter.set(filterInput.value)"
-        (keydown.enter)="openFirst()"
-        (keydown.escape)="filter.set(''); filterInput.blur()"
-      />
-    </li>
-    @for (section of sections(); track section.id; let i = $index) {
-      <li class="menu-title text-sm uppercase tracking-wider" [class.mt-2]="i === 0" [class.mt-4]="i !== 0">{{ section.label | translate }}</li>
-      @for (item of section.items; track item.id) {
-        <li>
-          <a [routerLink]="item.route" [class.menu-active]="activeItemId() === item.id">
-            @if (item.icon) {
-              <app-settings-icon [name]="item.icon" class="h-4 w-4" />
-            }
-            {{ item.labelKey | translate }}
-          </a>
-        </li>
-      }
-    }
-  </ng-container>
+<app-settings-drawer [title]="'admin.title' | translate" [icon]="icons.Shield" [sections]="sections()">
+  <input
+    drawerFilter
+    #filterInput
+    type="search"
+    class="input input-bordered input-sm w-full flex-none"
+    [placeholder]="'admin.filter_placeholder' | translate"
+    [attr.aria-label]="'admin.filter_placeholder' | translate"
+    [value]="filter()"
+    (input)="filter.set(filterInput.value)"
+    (keydown.enter)="openFirst()"
+    (keydown.escape)="filter.set(''); filterInput.blur()"
+  />
 </app-settings-drawer>
 
 <!-- Admin routes sit outside the main layout, which holds the other instance. -->

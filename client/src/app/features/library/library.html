@@ -1,17 +1,32 @@
 <div
-  appDefaultFocus="[data-library-focus^='media:']"
+  [appDefaultFocus]="defaultFocus()"
   [focusKey]="'library-' + (library()?.id ?? '')"
   focusIdAttr="data-library-focus"
-  class="library-shell flex flex-col gap-4"
+  class="library-shell"
 >
-  <!-- Library title — hidden when the mobile topbar already shows it
-       (avoids the duplicated heading on small screens). -->
-  @if (!navbar.mobileNavbarVisible()) {
+  <!-- The page's name sits on the carousel when there is one; the mobile top bar shows it otherwise. -->
+  @if (showCarousel()) {
+    <app-hero-carousel data-library-focus="hero" [items]="featured()">
+      @if (!navbar.mobileNavbarVisible()) {
+        <h1 heroLabel class="flex items-center gap-2 text-2xl font-bold">
+          @if (library(); as lib) {
+            <app-lucide-icon [name]="libraryIcon(lib)" class="h-6 w-6 shrink-0" [style.color]="libraryColor(lib)" />
+          }
+          {{ libraryName() }}
+        </h1>
+      }
+    </app-hero-carousel>
+  }
+
+  <!-- The carousel sets the space under it; the page's own blocks keep their gap.
+       At least a screen tall, so a shorter view never clamps the scroll and drags the tabs down. -->
+  <div class="flex flex-col gap-4 min-h-[calc(100dvh-var(--chrome-top,0px)-var(--chrome-bottom-total,0px))]">
+  @if (!showCarousel() && !navbar.mobileNavbarVisible()) {
     <h1 class="text-2xl font-bold">{{ libraryName() }}</h1>
   }
 
   <!-- View tabs: a spatial-nav row so `↑` from below lands on them instead of bridging to the fixed topbar. -->
-  <nav appTvRow role="tablist" class="flex items-center gap-1 overflow-x-auto py-2 -my-2 px-2 -mx-2">
+  <nav #viewTabs appTvRow role="tablist" class="flex items-center gap-1 overflow-x-auto py-2 -my-2 px-2 -mx-2 scroll-mt-[var(--chrome-top,0px)]">
     @for (t of tabs(); track t.mode) {
       <button
         type="button"
@@ -31,11 +46,11 @@
   <app-import-progress-banner />
 
   @if (viewMode() === 'all') {
-    <!-- Toolbar: carries the grid's right padding so the filter aligns with the cards and search clears the alphabet column. -->
+    <!-- Toolbar: from md it carries the grid's right padding so the filter aligns with the cards; a phone gives the search row the full width. -->
     <div
       class="flex flex-wrap items-center gap-2 tv:pr-4"
-      [class.pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
-      [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'"
+      [class.md:pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
+      [class.md:pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'"
     >
       <span class="text-sm text-base-content/70 mr-1">
         {{ (list.total() <= 1 ? 'common.item_count_one' : 'common.item_count_other') | translate:{ count: list.total() } }}
@@ -94,7 +109,7 @@
       </div>
 
       <!-- Filter and search share a wrapper so they wrap together on narrow viewports. -->
-      <div class="flex items-center gap-2 ml-auto flex-1 min-w-40 max-w-md">
+      <div class="flex items-center gap-2 ml-auto flex-1 min-w-40 md:max-w-md">
         <!-- A form so the virtual keyboard's Enter key submits and dismisses it. -->
         <form class="relative flex-1" (ngSubmit)="dismissKeyboard(searchInput)">
           <span class="absolute left-3 top-0 bottom-0 flex items-center pointer-events-none z-10">
@@ -312,28 +327,6 @@
       </div>
     </div>
 
-    <!-- Alphabet sidebar: only for sort=title ASC. `fixed`, not sticky, which un-sticks when the grid is shorter than the viewport. -->
-    @if (sortBy() === 'title' && sortOrder() === 'ASC') {
-      <!-- Centred by a full-height click-through flex strip: a percentage translate resolves against the element's own unsettled height. -->
-      <nav data-alpha-index class="library-alphabet fixed inset-y-0 right-4 z-20 flex flex-col items-center justify-center gap-0 select-none pointer-events-none">
-        @for (letter of alphabet; track letter) {
-          <button
-            type="button"
-            class="text-sm font-medium w-5 h-5 flex items-center justify-center rounded transition-colors pointer-events-auto"
-            [class.bg-primary]="list.activeLetter() === letter"
-            [class.text-primary-content]="list.activeLetter() === letter"
-            [class.text-base-content/60]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
-            [class.text-base-content/15]="!list.availableLetters().has(letter)"
-            [class.hover:bg-primary/20]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
-            [disabled]="loading() || !list.availableLetters().has(letter)"
-            (click)="scrollToLetter(letter)"
-          >
-            {{ letter }}
-          </button>
-        }
-      </nav>
-    }
-
     @if (loading()) {
       <!-- Same grid as the real one below, so the cards land where the
            placeholders sat instead of replacing a centred spinner. -->
@@ -423,16 +416,36 @@
           [minBufferPx]="rowHeight() * 2"
           [maxBufferPx]="rowHeight() * 4"
           class="flex-1 min-w-0 library-viewport">
-          <!-- Right padding clears the alphabet column (`right-4` + `w-4`): under 2rem cards slide under the letters. -->
           <div *cdkVirtualFor="let row of gridRows(); trackBy: trackRow"
                #cardRow
-               [class.pr-8]="sortBy() === 'title' && sortOrder() === 'ASC'"
-               [class.pr-2]="sortBy() !== 'title' || sortOrder() !== 'ASC'"
-               class="grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8 tv:pr-4"
+               class="pr-2 grid content-start grid-cols-3 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 3xl:grid-cols-10 4xl:grid-cols-14 5xl:grid-cols-18 tv:grid-cols-6 gap-1.5 sm:gap-4 tv:gap-8 tv:pr-4"
                [style.height.px]="rowHeight()">
             <ng-container [ngTemplateOutlet]="rowCells" [ngTemplateOutletContext]="{ $implicit: row }" />
           </div>
         </cdk-virtual-scroll-viewport>
+        <!-- Alphabet beside the grid (sort=title ASC only), so it never rises above the first cards; sticky, it follows the scroll
+             centred in the screen. The column keeps the letters' own height, so a grid shorter than the screen still holds them. -->
+        @if (sortBy() === 'title' && sortOrder() === 'ASC') {
+          <aside class="flex-none w-5 min-h-[33.75rem]">
+            <nav data-alpha-index class="sticky top-[var(--chrome-top,0px)] h-[calc(100vh-var(--chrome-top,0px)-var(--chrome-bottom-total,0px))] max-h-full flex flex-col items-center justify-center select-none">
+              @for (letter of alphabet; track letter) {
+                <button
+                  type="button"
+                  class="text-sm font-medium w-5 h-5 flex items-center justify-center rounded transition-colors"
+                  [class.bg-primary]="list.activeLetter() === letter"
+                  [class.text-primary-content]="list.activeLetter() === letter"
+                  [class.text-base-content/60]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
+                  [class.text-base-content/15]="!list.availableLetters().has(letter)"
+                  [class.hover:bg-primary/20]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
+                  [disabled]="loading() || !list.availableLetters().has(letter)"
+                  (click)="scrollToLetter(letter)"
+                >
+                  {{ letter }}
+                </button>
+              }
+            </nav>
+          </aside>
+        }
       </div>
 
     }
@@ -772,4 +785,5 @@
       </div>
     }
   }
+  </div>
 </div>

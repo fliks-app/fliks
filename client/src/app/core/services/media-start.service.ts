@@ -7,6 +7,9 @@ import { asBookMedia, readable, type BookMedia } from './api/book-media';
 import { BooksApiService } from './api/books-api.service';
 import type { BookDetail, BookEdition, BookFormatFamily } from './api/books.models';
 import { Media, MediaService } from './api/media.service';
+import { StreamingApiService } from './api/streaming-api.service';
+import { kindOf } from '../media-kinds';
+import { nextUp, type NextUp } from '../../shared/utils/media-play.util';
 import { MusicDownloadsService } from './music-downloads.service';
 import type { ContinueWatchingItem } from './api/streaming-api.service';
 import type { QueueItem } from './playback-queue.service';
@@ -49,6 +52,7 @@ export class MediaStartService {
   private readonly mediaService = inject(MediaService);
   private readonly booksApi = inject(BooksApiService);
   private readonly playable = inject(PlayableMediaService);
+  private readonly streamingApi = inject(StreamingApiService);
   private readonly audio = inject(AudioPlayerService);
   private readonly queue = inject(PlaybackQueueService);
   private readonly musicTracks = inject(MusicDownloadsService);
@@ -90,6 +94,7 @@ export class MediaStartService {
     if (media.type === 'book') return this.startBook(media, url);
     if (media.type === 'comic') return this.startComic(media, url);
     if (media.type === 'album') return this.startAlbum(media, url);
+    if (kindOf(media.type).hasSeasons) return this.startSeries(media, opts);
     const full = media.files?.length ? (media as Media) : await this.mediaService.getOne(media.id);
     const file = full.files?.[0];
     if (!file) return void this.openDetail(full);
@@ -101,6 +106,37 @@ export class MediaStartService {
         media: full === media ? undefined : full,
         backdropUrl: opts.backdropUrl ?? full.fanartUrl ?? full.posterUrl ?? null,
         streamInfo: (file as any).streamInfo,
+      },
+      false,
+    );
+  }
+
+  /** The episode a series' Play launches (see {@link nextUp}), with the loaded series; `next` is null when no episode is on disk. */
+  async nextUpOf(media: StartTarget): Promise<{ media: Media; next: NextUp | null; resuming: boolean }> {
+    const [full, resume, watched] = await Promise.all([
+      this.mediaService.getOne(media.id),
+      this.streamingApi.getMediaResumeInfo(media.id).catch(() => null),
+      this.streamingApi.getWatchedEpisodeIds(media.id).catch(() => [] as number[]),
+    ]);
+    const next = nextUp(full, resume, new Set(watched));
+    return { media: full, next, resuming: !!next && next.episode.id === resume?.episodeId };
+  }
+
+  private async startSeries(media: StartTarget, opts: { backdropUrl?: string | null }): Promise<void> {
+    const { media: full, next } = await this.nextUpOf(media);
+    if (!next) return void this.openDetail(full);
+    await this.playNext(full, next, opts);
+  }
+
+  /** Plays an episode a caller already resolved with {@link nextUpOf}, so what it labelled is what plays. */
+  playNext(series: Media, next: NextUp, opts: { backdropUrl?: string | null } = {}): Promise<void> {
+    return this.playable.play(
+      {
+        fileId: next.file.id,
+        mediaId: series.id,
+        episodeId: next.episode.id,
+        media: series,
+        backdropUrl: opts.backdropUrl ?? next.episode.stillUrl ?? series.fanartUrl ?? series.posterUrl ?? null,
       },
       false,
     );

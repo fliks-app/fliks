@@ -158,7 +158,7 @@
     } @else {
       <div
         class="flex gap-6 lg:gap-10 relative z-20"
-        [style.padding-top]="!navbar.isHeroPage() || navbar.effectiveSidebarPinned() || tv.isTv() ? null : navbar.mobileNavbarVisible() ? 'calc(env(safe-area-inset-top, 0px) + 3rem)' : null"
+        [style.padding-top]="navbar.heroPaddingTop()"
       >
         <div class="shrink-0 rounded-xl overflow-hidden w-[140px] lg:w-[200px] xl:w-[220px] 2xl:w-[280px]">
           <app-party-cover class="aspect-2/3 rounded-xl overflow-hidden" [cover]="h.cover" [head]="h.item" [viewTransitionName]="posterName" />

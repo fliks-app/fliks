@@ -339,6 +339,9 @@ pub struct Recent {
     pub mode: String,
     pub exclude_watched: bool,
     pub requested_by_me: bool,
+    pub fanart_only: bool,
+    pub exclude_dismissed: bool,
+    pub exclude: Vec<i32>,
 }
 
 impl Recent {
@@ -362,6 +365,9 @@ impl Recent {
             mode: mode.unwrap_or_else(|| "file".into()),
             exclude_watched: r.flag("excludeWatched") == Some(true),
             requested_by_me: r.flag("requestedByMe") == Some(true),
+            fanart_only: false,
+            exclude_dismissed: false,
+            exclude: vec![],
         };
         let rounded = limit.round();
         if rounded < 0.0 {

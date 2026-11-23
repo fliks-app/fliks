@@ -27,9 +27,8 @@ export interface ResolvedNavItem {
 /** Items pinned to the native-phone dock's limited primary row — excluded
  *  from the overflow "more" sheet so they aren't shown twice. */
 export const DOCK_PINNED_IDS: readonly string[] = ['core.home', 'core.requests'];
-/** Never shown on the native-phone dock or its sheet: Search is its own FAB,
- *  My profile is reachable from the always-visible user menu instead. */
-export const MOBILE_HIDDEN_IDS: readonly string[] = ['core.search', 'core.my_profile'];
+/** Never shown on the native-phone dock or its sheet: Search is its own FAB. */
+export const MOBILE_HIDDEN_IDS: readonly string[] = ['core.search'];
 
 function sortByWeightThenId(list: readonly UiContribution[]): UiContribution[] {
   return [...list].sort((a, b) => a.weight - b.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -92,13 +91,6 @@ export class NavContributionsService {
    *  (an unknown `action.kind`, or a core action id this client can't serve). */
   private resolveRoute(c: UiContribution): string | null {
     if (c.action.kind === 'route') return c.action.path;
-    if (c.action.kind === 'action') {
-      if (c.action.actionId === 'nav.my-profile') {
-        const id = this.auth.user()?.id;
-        return id != null ? `/profile/${id}` : null;
-      }
-      return null;
-    }
     return null;
   }
 }

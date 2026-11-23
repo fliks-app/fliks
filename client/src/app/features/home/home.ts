@@ -1,4 +1,4 @@
-import { Component, afterNextRender, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild } from '@angular/core';
+import { Component, afterNextRender, inject, signal, computed, effect, OnInit, OnDestroy, Injector, viewChild, ElementRef } from '@angular/core';
 import { RecentlyPlayedRowComponent } from '../music/recently-played-row.component';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -8,7 +8,8 @@ import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MediaService, Media, CalendarEntry } from '../../core/services/api/media.service';
-import { StreamingApiService, ContinueWatchingItem, RecommendationItem } from '../../core/services/api/streaming-api.service';
+import { StreamingApiService, ContinueWatchingItem, RecommendationItem, featuredSupported } from '../../core/services/api/streaming-api.service';
+import { ServerVersionService } from '../../core/services/server-version.service';
 import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { PlaylistsApiService, Playlist } from '../../core/services/api/playlists-api.service';
@@ -37,6 +38,7 @@ import { DisplaySettingsService } from '../../core/services/display-settings.ser
 import { HomeSettingsService, HomeSectionType, ResolvedHomeSection } from '../../core/services/home-settings.service';
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { CardAction } from '../../core/services/card-actions.service';
+import { HeroCarouselComponent } from '../../shared/components/hero-carousel/hero-carousel';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
@@ -67,6 +69,7 @@ import type { MediaType } from '../../core/enums/media-type.enum';
   imports: [
     RecentlyPlayedRowComponent,
     MediaLinkPipe,
+    HeroCarouselComponent,
     RouterLink, TranslatePipe, DefaultFocusDirective,
     LocaleDatePipe,
     MediaCardComponent,
@@ -86,8 +89,11 @@ import type { MediaType } from '../../core/enums/media-type.enum';
   templateUrl: './home.html',
 })
 export class HomeComponent implements OnInit, OnDestroy {
+  /** Holds the page's hero picture, which keeps the phone bar clear while it is under it. */
+  private readonly heroHost: Element = inject(ElementRef).nativeElement;
   private readonly mediaService = inject(MediaService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly serverVersion = inject(ServerVersionService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
   private readonly confirmation = inject(ConfirmationService);
   private readonly router = inject(Router);
@@ -126,6 +132,9 @@ export class HomeComponent implements OnInit, OnDestroy {
     // repaint nothing.
     refreshOnResume: () => void this.loadAllSections({ force: true }),
     scrollKey: HomeComponent.SCROLL_KEY,
+    // In step with the route swap: a frame without the hero chrome would move the page under the bar.
+    onAttach: () => this.claimHeroChrome(),
+    onDetach: () => this.navbar.leaveHeroPage(this),
   });
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   readonly decline = new RequestDeclineFlow(() => this.declineModal());
@@ -174,7 +183,14 @@ export class HomeComponent implements OnInit, OnDestroy {
     return p.playlist ? `${when} · ${this.translate.instant('party.playlist_label', { name: p.playlist.name })}` : when;
   }
   protected readonly leavingLabel = (m: Media) => leavingLabel(this.translate, m.deleteAt!);
-  readonly recommendations = signal<RecommendationItem[]>([]);
+  private readonly recommendationsRaw = signal<RecommendationItem[]>([]);
+  /** The carousel's picks; its own ids leave the recommendations row so the two never repeat. */
+  protected readonly featured = signal<Media[]>([]);
+  private readonly featuredLoaded = signal(false);
+  readonly recommendations = computed(() => {
+    const shown = new Set(this.heroVisible() ? this.featured().map((m) => m.id) : []);
+    return this.recommendationsRaw().filter((r) => !shown.has(r.media.id));
+  });
   /** Accessible playlists ordered by last modification, for the "playlists" zone. */
   readonly playlists = signal<Playlist[]>([]);
   /** The viewer's liked content, for the "likes" zone. */
@@ -243,12 +259,32 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.sections().filter((s) => s.visible),
   );
 
-  /** The most frequent TV action is resuming: land on Continue watching when it shows, else on the first library. */
-  protected readonly defaultFocus = computed(() =>
-    this.continueWatching().length && this.visibleSections().some((s) => s.type === 'continue-watching')
-      ? "[data-home-focus^='cw:']"
-      : "a[data-home-focus^='library:']",
+  private readonly heroVisible = computed(
+    () => featuredSupported(this.serverVersion) && this.visibleSections().some((s) => s.type === 'hero-carousel'),
   );
+
+  /** The carousel holds its place until its picks answer; an empty answer gives the place back. */
+  protected readonly showHero = computed(() => this.heroVisible() && (!this.featuredLoaded() || this.featured().length > 0));
+  /** Wherever the top bar shows, the carousel picture runs under it, so home is a hero page from its first frame. */
+  private readonly heroUnderBar = computed(() => this.showHero() && this.navbar.mobileNavbarVisible());
+  private readonly heroChrome = effect(() => {
+    if (this.routeFresh()) return;
+    this.claimHeroChrome();
+  });
+
+  /** The carousel's first button, else resuming, else the page's first focusable. */
+  protected readonly defaultFocus = computed(() =>
+    this.showHero()
+      ? "[data-home-focus='hero']"
+      : this.visibleSections().some((s) => s.type === 'continue-watching') && this.continueWatching().length > 0
+        ? "[data-home-focus^='cw:']"
+        : '',
+  );
+
+  private claimHeroChrome(): void {
+    if (this.heroUnderBar()) this.navbar.enterHeroPage(this, { host: this.heroHost, brand: true });
+    else this.navbar.leaveHeroPage(this);
+  }
 
   qualityProfileDisplay(id: number | null): string {
     if (id == null) return '-';
@@ -487,6 +523,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.navbar.leaveHeroPage(this);
     this.scrollMemory.deactivateIf(HomeComponent.SCROLL_KEY);
     this.playbackStopped.unsubscribe();
   }
@@ -509,17 +546,23 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.loadRecentRequests(opts);
       this.loadParties();
       globalRows = this.loadGlobalRows(opts);
-      const [libs, cw, recs] = await Promise.all([
+      const [libs, cw, recs, featured] = await Promise.all([
         this.librariesApi.listMine(opts).catch(() => null),
         this.streamingApi.getContinueWatching(undefined, opts).catch(() => null),
-        this.streamingApi.getRecommendations(opts).catch(() => null),
+        // The server default is 15: ask for the carousel's 4 on top so the row keeps its length.
+        this.streamingApi.getRecommendations({ ...opts, limit: 19 }).catch(() => null),
+        this.streamingApi.getFeatured(opts).catch(() => null),
       ]);
       if (libs) {
         this.libraries.set(libs);
         this.librariesLoaded.set(true);
       }
       if (cw) this.continueWatchingRaw.set(cw);
-      if (recs) this.recommendations.set(recs);
+      if (recs) this.recommendationsRaw.set(recs);
+      if (featured) {
+        this.featured.set(featured.map((f) => f.media));
+        this.featuredLoaded.set(true);
+      }
     } catch { /* ignore */ }
     // The per-library rows read which libraries are visible, so they wait for the list.
     await Promise.all([globalRows, this.loadLibraryRows(opts)]);
@@ -660,14 +703,14 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** Removes the card optimistically; a failed request restores the list via a fresh fetch. */
   async dismissRecommendation(rec: RecommendationItem) {
     const id = rec.media.id;
-    this.recommendations.update((list) => list.filter((r) => r.media.id !== id));
+    this.recommendationsRaw.update((list) => list.filter((r) => r.media.id !== id));
     try {
       await this.streamingApi.dismissRecommendation(id);
     } catch {
       // Restore the row by refetching — the global error toast already fired.
       this.streamingApi
         .getRecommendations()
-        .then((list) => this.recommendations.set(list))
+        .then((list) => this.recommendationsRaw.set(list))
         .catch(() => {});
     }
   }
@@ -704,7 +747,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         if (!fileId) return;
         await this.streamingApi.toggleWatched(id, fileId);
       }
-      this.recommendations.update((list) => list.filter((r) => r.media.id !== id));
+      this.recommendationsRaw.update((list) => list.filter((r) => r.media.id !== id));
     } catch {
       /* global error toast */
     }

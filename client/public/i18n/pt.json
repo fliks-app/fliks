@@ -333,14 +333,12 @@
   "account_settings": {
     "title": "Definições da conta",
     "nav": {
+      "general": "Geral",
       "password": "Palavra-passe",
-      "recommendations": "Recomendações",
       "privacy": "Privacidade",
-      "continue": "Continuar entre dispositivos",
       "spoilers": "Spoilers",
       "devices": "Dispositivos",
-      "email_devices": "Dispositivos de e-mail",
-      "whats_new": "Novidades"
+      "email_devices": "Dispositivos de e-mail"
     },
     "recommendations": {
       "reset_title": "Repor as recomendações ocultadas",
@@ -633,16 +631,16 @@
   "nav": {
     "user_menu": "Menu do utilizador",
     "home": "Início",
-    "my_profile": "O meu perfil",
     "statistics": "Estatísticas",
     "requests": "Pedidos",
     "calendar": "Calendário",
     "system": "Sistema",
     "settings": "Definições",
     "open_menu": "Abrir o menu",
-    "close_menu": "Fechar o menu",
-    "pin_sidebar": "Fixar a barra lateral",
-    "unpin_sidebar": "Desafixar a barra lateral",
+    "rail_label": "Navegação principal",
+    "pin_rail": "Manter a navegação aberta",
+    "unpin_rail": "Recolher a navegação",
+    "edit_library_order": "Ordenar as bibliotecas",
     "logout": "Terminar sessão",
     "switch_user": "Mudar de utilizador",
     "administration": "Administração",
@@ -4421,8 +4419,7 @@
     "scope_all": "Todos os tipos",
     "scope_chosen": "Tipos escolhidos",
     "resume_only": "apenas retomar",
-    "settings_note": "A televisão em direto e as watch parties não estão incluídas. Os audiolivros seguem o tipo Livro: são transmitidos, por isso podem ser controlados.",
-    "saved": "Definição guardada"
+    "settings_note": "A televisão em direto e as watch parties não estão incluídas. Os audiolivros seguem o tipo Livro: são transmitidos, por isso podem ser controlados."
   },
   "language": {
     "en": "Inglês",
@@ -4478,6 +4475,7 @@
     "sections_title": "Zonas do início",
     "sections_hint": "Escolha as zonas a apresentar e a sua ordem. Arraste para reordenar, ou utilize as setas.",
     "section": {
+      "hero_carousel": "Carrossel em destaque",
       "watch_parties": "Sessões",
       "libraries": "Bibliotecas",
       "continue_watching": "Retomar a reprodução",
@@ -6283,5 +6281,13 @@
         "other": "Qualquer outra coisa sobre este ficheiro"
       }
     }
+  },
+  "hero_carousel": {
+    "label": "Títulos em destaque",
+    "play": "Reproduzir",
+    "details": "Detalhes",
+    "go_to": "Mostrar o título {{n}}",
+    "play_episode": "Reproduzir {{code}}",
+    "resume_episode": "Retomar {{code}}"
   }
 }

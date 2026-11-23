@@ -7,6 +7,7 @@
 @import "./styles/foundations.css";
 @import "./styles/tv.css";
 @import "./styles/base-components.css";
+@import "./styles/nav-rail.css";
 @import "./styles/overlays.css";
 @import "./styles/transitions.css";
 @import "./styles/changelog.css";

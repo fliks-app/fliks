@@ -15,7 +15,8 @@ type AlbumRow = Media & { album?: AlbumListInfo };
   selector: 'app-recently-played-row',
   imports: [TranslatePipe, MediaLinkPipe, HorizontalScrollerComponent, MediaCardComponent],
   templateUrl: './recently-played-row.component.html',
-  host: { class: 'block' },
+  // No box of its own: empty, it must not take a gap in the home column.
+  host: { class: 'contents' },
 })
 export class RecentlyPlayedRowComponent {
   protected readonly albums = signal<AlbumRow[]>([]);

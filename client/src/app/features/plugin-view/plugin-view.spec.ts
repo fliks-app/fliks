@@ -73,7 +73,7 @@ function createComponent(
       // The real one subscribes to router events; this suite stubs Router.
       {
         provide: NavbarService,
-        useValue: { setPageTitle: () => undefined, clearPageTitle: () => undefined },
+        useValue: { setPageTitle: () => undefined },
       },
     ],
   });

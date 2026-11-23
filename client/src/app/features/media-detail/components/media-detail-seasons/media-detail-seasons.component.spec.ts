@@ -121,11 +121,10 @@ async function createFixture(opts: FixtureOpts = {}): Promise<ComponentFixture<M
   return fixture;
 }
 
-/** The season-actions dropdown is the first `app-dropdown-menu` in the template —
- *  the second one is the season-tab selector, whose options render with the same
- *  `.dropdown-item` class and would otherwise pollute a page-wide query. */
+/** The season-actions dropdown is the last `app-dropdown-menu` in the template; the first is the season-tab selector,
+ *  whose options render with the same `.dropdown-item` class and would otherwise pollute a page-wide query. */
 function seasonDropdownItems(root: HTMLElement): HTMLButtonElement[] {
-  const menu = root.querySelectorAll('app-dropdown-menu')[0];
+  const menu = Array.from(root.querySelectorAll('app-dropdown-menu')).at(-1);
   if (!menu) return [];
   return Array.from(menu.querySelectorAll('.dropdown-item')) as HTMLButtonElement[];
 }

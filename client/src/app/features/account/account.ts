@@ -90,7 +90,7 @@ export class AccountComponent implements OnInit {
       this.toast.info(message, 8000, {
         label: this.translate.instant('account.sign_in_again'),
         run: () => {
-          this.auth.returnAfterSignIn('/account');
+          this.auth.returnAfterSignIn('/account/password');
           void this.auth.logout();
         },
       });
