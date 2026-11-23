@@ -1,7 +1,7 @@
 // Streaming / buffering / reconnect mpv options shared by every backend so the
 // buffering + resume behaviour can't drift per platform. Single source of truth:
 //   • Windows subprocess (mpv-player.ts) maps each to a `--name=value` CLI arg.
-//   • Linux compositor (index.ts) + macOS in-process player (mac-mpv-player.ts)
+//   • the in-process libmpv player (libmpv-addon-player.ts, Linux and macOS)
 //     apply each via the addon's `setProperty` right after start (all are
 //     runtime-mutable and read at the next open, so this matches a pre-init
 //     set_option_string exactly).

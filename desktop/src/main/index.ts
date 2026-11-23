@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, Menu, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -6,18 +6,20 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { registerAppSchemePrivileged, registerAppProtocol, fromAppPage, APP_URL, APP_SCHEME } from './protocol';
 import { installCorsBypass } from './cors';
-import { appendLog, echoRendererConsole, redactQuery } from './log-file';
+import { appendLog, echoRendererConsole, redactQuery, redactUrls } from './log-file';
 import { setupUpdater } from './updater';
 import { localFilePath, registerDownloadIpc } from './download';
 import { registerCastIpc } from './cast';
 import { oidcCancel, oidcListen, oidcWait, type OidcPage, type OidcPages } from './oidc-loopback';
 import { IPC, MENU_IPC, type DesktopEvent, type DesktopMediaMetadata } from '../shared/contract';
-import { LinuxCompositorPlayer, type CompositorAddon } from './mpv/linux-compositor-player';
-import { forwardPlayerEvents } from './window/forward-events';
+import { LinuxCompositor, type CompositorAddon } from './mpv/linux-compositor';
+import { LibmpvAddonPlayer } from './mpv/libmpv-addon-player';
+import { PlayerHost } from './window/player-host';
 import { linuxFullscreen } from './mpv/linux-fullscreen';
 import { registerPlayerIpc } from './ipc';
 import type { NowPlayingAddon } from './now-playing';
-import type { PlayerBackend } from './mpv/player-backend';
+import { handle, handle1, none, one, str, num, nullable, obj } from './ipc-handle';
+import { readCapped } from './notify/image';
 import { toElectronKey } from './keymap';
 import { watchRendererCrash } from './renderer-recovery';
 import { Notifier } from './notify';
@@ -72,8 +74,17 @@ app.on('web-contents-created', (_e, contents) => {
 });
 registerAppSchemePrivileged();
 
-process.on('uncaughtException', (e) => console.error('[main:uncaughtException]', e?.stack ?? e));
-process.on('unhandledRejection', (e) => console.error('[main:unhandledRejection]', e));
+// A packaged build has no console: these failures are only visible in the log file.
+const logFailure = (what: string, e: unknown): void => {
+  const line = redactUrls(`[main] ${what}: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
+  console.error(line);
+  appendLog(line);
+};
+process.on('uncaughtException', (e) => logFailure('uncaughtException', e));
+process.on('unhandledRejection', (e) => logFailure('unhandledRejection', e));
+
+// Packaged builds log failures only: mpv's default level writes every segment URL.
+if (app.isPackaged) process.env.FLIKS_MPV_LOGLEVEL = 'warn';
 
 // A self-hosted Fliks server commonly has a self-signed or private-CA certificate the OS doesn't
 // trust: the server the page reports is pinned on first use, after the user agrees.
@@ -91,6 +102,7 @@ app.on('certificate-error', (event, _wc, url, error, cert, callback) => {
     });
 });
 
+const ARTWORK_TIMEOUT_MS = 10_000;
 const WIDTH = 1280;
 const HEIGHT = 800;
 
@@ -222,6 +234,15 @@ function send(ev: DesktopEvent): void {
   if (uiWin && !uiWin.isDestroyed()) uiWin.webContents.send(IPC.event, ev);
 }
 
+function parseMediaMetadata(v: unknown): DesktopMediaMetadata {
+  const o = obj(v);
+  return {
+    title: str(o.title, 1000),
+    ...(o.artist != null ? { artist: str(o.artist, 1000) } : {}),
+    ...(o.artworkUrl != null ? { artworkUrl: str(o.artworkUrl, 4096) } : {}),
+  };
+}
+
 function rendererUrl(haveApp: boolean): string {
   return haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>';
 }
@@ -232,8 +253,7 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
   const { PlayerSession } = await import('./window/player-session');
   const { registerPlayerIpc } = await import('./ipc');
   const session = new PlayerSession();
-  // Register the IPC handlers BEFORE start() loads the renderer + emits 'ready',
-  // so the renderer can't invoke an unregistered channel.
+  // Registered before start() loads the renderer, so it can't invoke an unregistered channel.
   registerPlayerIpc(session, ipcHooks);
   session.hideOnClose = () => notifier?.hideOnClose() ?? false;
   session.onFullscreenChange = refreshMenu;
@@ -258,7 +278,7 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
     },
   });
   try {
-    const { loadMacAddon } = await import('./mpv/mac-mpv-player');
+    const { loadMacAddon } = await import('./mpv/mac-addon');
     const { loadSmtcAddon } = await import('./smtc-win');
     const addon = process.platform === 'darwin' ? loadMacAddon() : loadSmtcAddon(session.windowHandle);
     if ('raise' in addon) {
@@ -268,14 +288,14 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
         raise();
       };
     }
-    session.onStop = await startNowPlaying(session.player, session.uiContents, addon);
+    session.host.onStop = await startNowPlaying(session.host, session.uiContents, addon);
   } catch (e) {
-    console.error('[now-playing] unavailable', e);
+    logFailure('now-playing unavailable', e);
   }
 }
 
 /** Feeds the OS media session (MPRIS, macOS Now Playing, Windows SMTC) from the player and the page's metadata, and routes its remote commands to the page as media keys. Returns what withdraws the session. */
-async function startNowPlaying(player: PlayerBackend, uiContents: Electron.WebContents, addon: NowPlayingAddon): Promise<() => void> {
+async function startNowPlaying(player: PlayerHost, uiContents: Electron.WebContents, addon: NowPlayingAddon): Promise<() => void> {
   const { NowPlaying, mediaSessionSetter } = await import('./now-playing');
   const nowPlaying = new NowPlaying(addon);
   let playing = false;
@@ -297,10 +317,9 @@ async function startNowPlaying(player: PlayerBackend, uiContents: Electron.WebCo
   // The OS fetches artwork without the page's session: the bytes come from here.
   const publish = mediaSessionSetter(nowPlaying, async (url) => {
     try {
-      const res = await uiContents.session.fetch(url);
-      return res.ok ? Buffer.from(await res.arrayBuffer()) : undefined;
+      return await readCapped(await uiContents.session.fetch(url, { signal: AbortSignal.timeout(ARTWORK_TIMEOUT_MS) }));
     } catch (e) {
-      console.error('[now-playing] artwork', e);
+      logFailure('now-playing artwork', e);
     }
   });
   setOsMediaSession = publish;
@@ -346,7 +365,6 @@ async function startUiOnly(haveApp: boolean): Promise<void> {
     },
   });
   await uiWin.loadURL(rendererUrl(haveApp));
-  send({ type: 'ready' });
 }
 
 app.whenReady().then(async () => {
@@ -354,13 +372,17 @@ app.whenReady().then(async () => {
   // macOS needs the menu for Cmd+C/V/A/Z/Q; Windows and Linux have none.
   if (process.platform === 'darwin') refreshMenu();
   else Menu.setApplicationMenu(null);
-  ipcMain.handle(MENU_IPC.setLabels, (_e, labels: unknown) => {
+  handle(MENU_IPC.setLabels, one, (labels) => {
     if (process.platform === 'darwin') setMenuLabels(labels);
   });
-  ipcMain.handle(IPC.setServerUrl, async (e, url: unknown) => {
-    if (!fromAppPage(e)) throw new Error('not the app page');
-    trustServer(url, await httpsUpgrade(url));
-  });
+  handle1(
+    IPC.setServerUrl,
+    (v, e) => {
+      if (!fromAppPage(e)) throw new Error('not the app page');
+      return str(v, 2048);
+    },
+    async (url) => trustServer(url, await httpsUpgrade(url)),
+  );
 
   // macOS ignores a BrowserWindow's `icon`; the dock icon comes from the app
   // bundle when packaged, but a dev `electron .` run shows Electron's default.
@@ -375,26 +397,32 @@ app.whenReady().then(async () => {
 
   // Available on every platform path (embed / compositor / ui-only) so the
   // renderer can label this device with its real OS + version.
-  ipcMain.handle(IPC.getSystemInfo, () => ({
+  handle(IPC.getSystemInfo, none, () => ({
     systemName: systemName(),
     deviceName: deviceName(),
   }));
 
-  ipcMain.handle(IPC.oidcListen, (_e, pages: OidcPages) => {
-    const valid = (p: OidcPage) => typeof p?.title === 'string' && typeof p?.message === 'string';
-    if (!valid(pages?.done) || !valid(pages?.failed)) throw new Error('invalid pages');
-    return oidcListen(pages);
-  });
-  ipcMain.handle(IPC.oidcWait, async (_e, id: number, state: string) => {
+  const oidcPage = (v: unknown): OidcPage => {
+    const o = obj(v);
+    return { title: str(o.title, 500), message: str(o.message, 2000) };
+  };
+  handle(
+    IPC.oidcListen,
+    (a): [OidcPages] => {
+      const o = obj(a[0]);
+      return [{ done: oidcPage(o.done), failed: oidcPage(o.failed) }];
+    },
+    (pages) => oidcListen(pages),
+  );
+  handle(IPC.oidcWait, (a) => [num(a[0]), str(a[1], 512)] as [number, string], async (id, state) => {
     const query = await oidcWait(id, state);
     if (query) raiseWindow?.();
     return query;
   });
-  ipcMain.handle(IPC.oidcCancel, (_e, id: number) => oidcCancel(id));
+  handle1(IPC.oidcCancel, num, (id) => oidcCancel(id));
 
   // The renderer's file name is ignored: the OS runs whatever extension it is given.
-  ipcMain.handle(IPC.openCalendarEvent, async (_e, ics: unknown) => {
-    if (typeof ics !== 'string' || ics.length > 1_000_000) throw new Error('invalid calendar event');
+  handle1(IPC.openCalendarEvent, (v) => str(v, 1_000_000), async (ics) => {
     const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'fliks-cal-'));
     const file = path.join(dir, 'event.ics');
     try {
@@ -407,9 +435,9 @@ app.whenReady().then(async () => {
     }
   });
 
-  ipcMain.handle(IPC.setMediaSession, (_e, meta: DesktopMediaMetadata | null) => setOsMediaSession?.(meta));
+  handle1(IPC.setMediaSession, nullable(parseMediaMetadata), (meta) => setOsMediaSession?.(meta));
 
-  ipcMain.handle(IPC.getPlayerCapabilities, async () => {
+  handle(IPC.getPlayerCapabilities, none, async () => {
     const { getPlayerCapabilities } = await import('./window/backends/capabilities');
     return getPlayerCapabilities();
   });
@@ -434,11 +462,11 @@ app.whenReady().then(async () => {
 
   // Both use PlayerSession, which picks the platform's window model and player.
   if (process.platform === 'win32' || process.platform === 'darwin') {
-    await startEmbedSession(haveApp).catch((e) => console.error('[main] embed session failed', e));
+    await startEmbedSession(haveApp).catch((e) => logFailure('embed session failed', e));
     return;
   }
   if (process.platform !== 'linux') {
-    await startUiOnly(haveApp).catch((e) => console.error('[main] ui-only failed', e));
+    await startUiOnly(haveApp).catch((e) => logFailure('ui-only failed', e));
     return;
   }
 
@@ -507,37 +535,41 @@ app.whenReady().then(async () => {
   echoRendererConsole(uiWin.webContents);
 
   raiseWindow = () => addon.raise();
-  const player = new LinuxCompositorPlayer(addon, {
+  const compositor = new LinuxCompositor(addon, {
     width: WIDTH,
     height: HEIGHT,
     title: 'Fliks',
     icon: compositorIcon(),
   });
-  forwardPlayerEvents(player, send);
-  player.onWindowActive = (active) => notifier?.setActive(active);
-  const fullscreen = linuxFullscreen(player, send);
-  player.onCloseRequest = () => notifier?.requestClose() ?? app.quit();
-  await player.start();
+  const host = new PlayerHost({
+    create: async () => new LibmpvAddonPlayer(addon, compositor),
+    emit: send,
+    respawn: false,
+  });
+  compositor.onWindowActive = (active) => notifier?.setActive(active);
+  const fullscreen = linuxFullscreen(compositor, send);
+  compositor.onCloseRequest = () => notifier?.requestClose() ?? app.quit();
+  host.start();
+  await host.whenReady();
   await notifier?.attach({
     show: () => addon.raise(),
-    hide: () => addon.hide(),
+    hide: () => {
+      addon.hide();
+      host.windowHidden();
+    },
     sendToPage: (channel, payload) => {
       if (uiWin && !uiWin.isDestroyed()) uiWin.webContents.send(channel, payload);
     },
   });
-  let stopOsMediaSession = () => {};
   try {
     const { Mpris } = await import('./mpris');
-    stopOsMediaSession = await startNowPlaying(player, uiWin.webContents, new Mpris());
+    host.onStop = await startNowPlaying(host, uiWin.webContents, new Mpris());
   } catch (e) {
-    console.error('[mpris] unavailable', e);
+    logFailure('mpris unavailable', e);
   }
   watchRendererCrash(uiWin.webContents, {
     appUrl: rendererUrl(haveApp),
-    stopPlayback: async () => {
-      stopOsMediaSession();
-      await player.stop();
-    },
+    stopPlayback: () => host.stop(),
     log: appendLog,
   });
 
@@ -606,17 +638,18 @@ app.whenReady().then(async () => {
   });
 
   registerPlayerIpc({
-    player,
+    player: () => host.whenReady(),
+    stop: () => host.stop(),
     setFullscreen: fullscreen.set,
     isFullscreen: fullscreen.get,
     setCursorVisible: (visible) => addon.setCursorVisible(visible),
-    onStop: stopOsMediaSession,
   }, ipcHooks);
 
   uiWin.loadURL(haveApp ? APP_URL : 'data:text/html,<body style="background:%231d232a"></body>');
-  uiWin.webContents.once('did-finish-load', () => send({ type: 'ready' }));
 
+  // The player stops first, then the addon takes the window down.
   app.on('before-quit', () => {
+    void host.destroy();
     try {
       addon.stop();
     } catch {

@@ -1,5 +1,7 @@
 import { isQuitting } from '../quitting.ts';
-import { app, ipcMain, Menu, nativeImage, net, Notification, Tray } from 'electron';
+import { app, Menu, nativeImage, net, Notification, Tray } from 'electron';
+import { handle, none } from '../ipc-handle.ts';
+import { appendLog } from '../log-file.ts';
 import { NOTIFY_IPC } from '../../shared/contract.ts';
 import type { DesktopNotification, DesktopNotificationAction, DesktopNotifyLabels, DesktopNotifyPrefs } from '../../shared/contract.ts';
 import { setStartAtLogin, startedAtLogin } from './autostart.ts';
@@ -68,14 +70,14 @@ export class Notifier {
     this.hasTrayHost = hasTrayHost;
     app.on('activate', () => this.show());
     app.on('second-instance', () => this.show());
-    ipcMain.handle(NOTIFY_IPC.show, (_e, n: unknown) => this.notify(parseNotification(n)));
-    ipcMain.handle(NOTIFY_IPC.setBadge, (_e, count: unknown) => this.setBadge(parseBadge(count)));
-    ipcMain.handle(NOTIFY_IPC.getPrefs, () => this.prefs);
-    ipcMain.handle(NOTIFY_IPC.setPrefs, (_e, patch: unknown) => this.setPrefs(parsePrefsPatch(patch)));
-    ipcMain.handle(NOTIFY_IPC.setLabels, (_e, l: unknown) => this.setLabels(parseLabels(l)));
-    ipcMain.handle(NOTIFY_IPC.windowActive, () => this.active);
-    ipcMain.handle(NOTIFY_IPC.getStatus, () => notifyStatus());
-    ipcMain.handle(NOTIFY_IPC.openSettings, () => openNotifySettings());
+    handle(NOTIFY_IPC.show, (a): [DesktopNotification] => [parseNotification(a[0])], (n) => this.notify(n));
+    handle(NOTIFY_IPC.setBadge, (a): [number] => [parseBadge(a[0])], (count) => this.setBadge(count));
+    handle(NOTIFY_IPC.getPrefs, none, () => this.prefs);
+    handle(NOTIFY_IPC.setPrefs, (a): [Partial<DesktopNotifyPrefs>] => [parsePrefsPatch(a[0])], (patch) => this.setPrefs(patch));
+    handle(NOTIFY_IPC.setLabels, (a): [DesktopNotifyLabels] => [parseLabels(a[0])], (l) => this.setLabels(l));
+    handle(NOTIFY_IPC.windowActive, none, () => this.active);
+    handle(NOTIFY_IPC.getStatus, none, () => notifyStatus());
+    handle(NOTIFY_IPC.openSettings, none, () => openNotifySettings());
   }
 
   /** Closing the window hides it instead of quitting, but only with a tray to come back from. */
@@ -114,7 +116,10 @@ export class Notifier {
 
   private persistLogin(on: boolean): void {
     const actual = setStartAtLogin(on);
-    if (actual !== on) console.error('[notify] start at login did not stick');
+    if (actual !== on) {
+      console.error('[notify] start at login did not stick');
+      appendLog('[notify] start at login did not stick');
+    }
     if (actual !== this.prefs.startAtLogin) this.save({ startAtLogin: actual });
   }
 

@@ -42,8 +42,10 @@ void InitLiveFullscreen(Napi::Env env, Napi::Object exports);  // live_fullscree
 
 #include <dlfcn.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
@@ -138,6 +140,10 @@ using EventTSFN = Napi::TypedThreadSafeFunction<void, std::string, CallJs>;
 EventTSFN g_tsfn;
 std::atomic<bool> g_tsfnReady{false};
 
+// Backing-pixel size of the window's screen: the render ring is sized to it so a resize never reallocates.
+std::atomic<int> g_screenBackingW{0};
+std::atomic<int> g_screenBackingH{0};
+
 struct State {
   mpv_handle* mpv = nullptr;
   mpv_render_context* mpvGl = nullptr;  // render-thread-confined: created, used, freed there
@@ -178,6 +184,41 @@ void OnMpvUpdate(void*) {
 
 void Emit(const std::string& json) {
   if (g_tsfnReady.load()) g_tsfn.BlockingCall(new std::string(json));
+}
+
+// Quoted JSON string; bytes >= 0x80 pass through as UTF-8.
+std::string JsonString(const std::string& in) {
+  std::string out = "\"";
+  for (unsigned char ch : in) {
+    switch (ch) {
+      case '"': out += "\\\""; break;
+      case '\\': out += "\\\\"; break;
+      case '\n': out += "\\n"; break;
+      case '\r': out += "\\r"; break;
+      case '\t': out += "\\t"; break;
+      default:
+        if (ch < 0x20) {
+          char u[8];
+          snprintf(u, sizeof(u), "\\u%04x", ch);
+          out += u;
+        } else {
+          out += static_cast<char>(ch);
+        }
+    }
+  }
+  return out + "\"";
+}
+
+// Warn and worse, filtered here: the requested mpv level stays verbose for stderr.
+void EmitLog(const mpv_event_log_message* m) {
+  if (!m->level || !m->prefix || !m->text) return;
+  if (std::strcmp(m->level, "fatal") && std::strcmp(m->level, "error") && std::strcmp(m->level, "warn")) return;
+  std::string text = m->text;
+  const char* ws = " \t\r\n";
+  const size_t b = text.find_first_not_of(ws);
+  text = b == std::string::npos ? "" : text.substr(b, text.find_last_not_of(ws) - b + 1);
+  Emit("{\"type\":\"log\",\"level\":" + JsonString(m->level) + ",\"prefix\":" + JsonString(m->prefix) +
+       ",\"text\":" + JsonString(text) + "}");
 }
 
 // Nudge the render thread to redraw even without a fresh mpv frame (resize,
@@ -354,12 +395,12 @@ void RenderThreadMain(State* s) {
       const int w = static_cast<int>(drawable.texture.width);
       const int h = static_cast<int>(drawable.texture.height);
 
-      if (w != ringW || h != ringH) {
+      if (w > ringW || h > ringH) {
         glFinish();
+        ringW = std::max(w, g_screenBackingW.load());
+        ringH = std::max(h, g_screenBackingH.load());
         for (auto& slot : g_ring) releaseSlot(slot);
-        for (auto& slot : g_ring) buildSlot(slot, w, h);
-        ringW = w;
-        ringH = h;
+        for (auto& slot : g_ring) buildSlot(slot, ringW, ringH);
       }
 
       SurfaceSlot& slot = g_ring[frameIndex++ & 1];
@@ -446,8 +487,17 @@ struct HdrMeta {
 };
 HdrMeta g_lastHdrMeta;  // main-thread only; reused when re-evaluating for a display change
 
+void UpdateScreenBacking() {
+  NSScreen* screen = g_view.window.screen ?: [NSScreen mainScreen];
+  if (!screen) return;
+  const CGFloat scale = screen.backingScaleFactor;
+  g_screenBackingW.store(static_cast<int>(std::ceil(screen.frame.size.width * scale)));
+  g_screenBackingH.store(static_cast<int>(std::ceil(screen.frame.size.height * scale)));
+}
+
 void UpdateLayerGeometry() {
   if (!g_layer || !g_view) return;
+  UpdateScreenBacking();
   NSWindow* win = g_view.window;
   CGFloat scale = win ? win.backingScaleFactor : 2.0;
   [CATransaction begin];
@@ -769,7 +819,10 @@ void EventThreadMain(State* s) {
         }
         case MPV_EVENT_LOG_MESSAGE: {
           auto* m = static_cast<mpv_event_log_message*>(ev->data);
-          if (m) fprintf(stderr, "[mpv] %s: %s", m->prefix, m->text);
+          if (m) {
+            fprintf(stderr, "[mpv] %s: %s", m->prefix, m->text);
+            EmitLog(m);
+          }
           break;
         }
         case MPV_EVENT_PLAYBACK_RESTART:
@@ -789,7 +842,7 @@ void EventThreadMain(State* s) {
           if (e && e->reason == MPV_END_FILE_REASON_EOF)
             Emit("{\"type\":\"stateChanged\",\"state\":\"ended\"}");
           else if (e && e->reason == MPV_END_FILE_REASON_ERROR)
-            Emit("{\"type\":\"error\",\"message\":\"end-file error\"}");
+            Emit("{\"type\":\"error\",\"message\":" + JsonString(M::error_string(e->error)) + "}");
           break;
         }
         case MPV_EVENT_COMMAND_REPLY:
@@ -923,6 +976,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
       CGSizeMake(g_view.bounds.size.width * scale, g_view.bounds.size.height * scale);
   g_layer.drawableSize = drawableSize;
   [g_view.layer addSublayer:g_layer];
+  UpdateScreenBacking();
 
   // Keep the layer glued to the view across resize + display (scale) changes.
   g_view.postsFrameChangedNotifications = YES;

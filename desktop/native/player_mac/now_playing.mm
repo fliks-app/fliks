@@ -4,12 +4,22 @@
 #import <MediaPlayer/MediaPlayer.h>
 #include <napi.h>
 
+#include <vector>
+
 namespace {
 
 Napi::ThreadSafeFunction g_commandFn;
 bool g_commandFnReady = false;
 MPMediaItemArtwork* g_artwork = nil;
 bool g_commandsOn = false;
+bool g_infoSet = false;  // the addon wrote nowPlayingInfo last
+
+struct Registered {
+  MPRemoteCommand* cmd;
+  id token;
+  BOOL wasEnabled;
+};
+std::vector<Registered> g_targets;
 
 void EmitCommand(NSString* name, double position) {
   if (!g_commandFnReady) return;
@@ -17,6 +27,12 @@ void EmitCommand(NSString* name, double position) {
   g_commandFn.NonBlockingCall([s, position](Napi::Env env, Napi::Function fn) {
     fn.Call({Napi::String::New(env, s), Napi::Number::New(env, position)});
   });
+}
+
+void Register(MPRemoteCommand* cmd, MPRemoteCommandHandlerStatus (^handler)(MPRemoteCommandEvent*)) {
+  const BOOL was = cmd.enabled;
+  cmd.enabled = YES;
+  g_targets.push_back({cmd, [cmd addTargetWithHandler:handler], was});
 }
 
 void EnableCommands() {
@@ -31,31 +47,23 @@ void EnableCommands() {
   };
   g_commandsOn = true;
   for (NSString* name in cmds) {
-    MPRemoteCommand* cmd = cmds[name];
-    cmd.enabled = YES;
-    [cmd addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent*) {
+    Register(cmds[name], ^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent*) {
       EmitCommand(name, 0);
       return MPRemoteCommandHandlerStatusSuccess;
-    }];
+    });
   }
-  c.changePlaybackPositionCommand.enabled = YES;
-  [c.changePlaybackPositionCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent* e) {
+  Register(c.changePlaybackPositionCommand, ^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent* e) {
     EmitCommand(@"seek", ((MPChangePlaybackPositionCommandEvent*)e).positionTime);
     return MPRemoteCommandHandlerStatusSuccess;
-  }];
-  c.seekForwardCommand.enabled = NO;
-  c.seekBackwardCommand.enabled = NO;
-  c.skipForwardCommand.enabled = NO;
-  c.skipBackwardCommand.enabled = NO;
+  });
 }
 
 void DisableCommands() {
-  MPRemoteCommandCenter* c = [MPRemoteCommandCenter sharedCommandCenter];
-  for (MPRemoteCommand* cmd in @[c.playCommand, c.pauseCommand, c.togglePlayPauseCommand, c.stopCommand,
-                                 c.nextTrackCommand, c.previousTrackCommand, c.changePlaybackPositionCommand]) {
-    cmd.enabled = NO;
-    [cmd removeTarget:nil];
+  for (const Registered& r : g_targets) {
+    [r.cmd removeTarget:r.token];
+    r.cmd.enabled = r.wasEnabled;
   }
+  g_targets.clear();
   g_commandsOn = false;
 }
 
@@ -92,15 +100,19 @@ Napi::Value SetNowPlaying(const Napi::CallbackInfo& info) {
   d[MPNowPlayingInfoPropertyMediaType] = @(MPNowPlayingInfoMediaTypeVideo);
   MPNowPlayingInfoCenter* center = [MPNowPlayingInfoCenter defaultCenter];
   center.nowPlayingInfo = d;
+  g_infoSet = true;
   center.playbackState = playing ? MPNowPlayingPlaybackStatePlaying : MPNowPlayingPlaybackStatePaused;
   return info.Env().Undefined();
 }
 
 Napi::Value ClearNowPlaying(const Napi::CallbackInfo& info) {
   g_artwork = nil;
-  MPNowPlayingInfoCenter* center = [MPNowPlayingInfoCenter defaultCenter];
-  center.nowPlayingInfo = nil;
-  center.playbackState = MPNowPlayingPlaybackStateStopped;
+  if (g_infoSet) {
+    MPNowPlayingInfoCenter* center = [MPNowPlayingInfoCenter defaultCenter];
+    center.nowPlayingInfo = nil;
+    center.playbackState = MPNowPlayingPlaybackStateStopped;
+    g_infoSet = false;
+  }
   if (g_commandsOn) DisableCommands();
   return info.Env().Undefined();
 }

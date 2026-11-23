@@ -36,7 +36,7 @@ async function mpvLists(): Promise<MpvLists | undefined> {
     if (process.platform === 'win32') return await listsFromBinary(resolveBundledMpv() ?? 'mpv');
     const addon =
       process.platform === 'darwin'
-        ? (await import('../../mpv/mac-mpv-player')).loadMacAddon()
+        ? (await import('../../mpv/mac-addon')).loadMacAddon()
         : linuxAddon;
     const raw = addon?.probeLists();
     const lists = raw && parseMpvLists(raw['decoder-list'], raw['demuxer-lavf-list']);

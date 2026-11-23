@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import electronUpdater from 'electron-updater';
@@ -8,6 +8,8 @@ import {
   type DesktopUpdateInfo,
   type DesktopUpdateStatus,
 } from '../shared/contract';
+import { handle, none } from './ipc-handle';
+import { appendLog, redactUrls } from './log-file';
 
 const { autoUpdater } = electronUpdater;
 
@@ -166,20 +168,20 @@ export function setupUpdater(): void {
   velopack = velopackUpdater(broadcast);
   const installable = canSelfInstall();
 
-  ipcMain.handle(UPDATE_IPC.getCapability, () => capability());
-  ipcMain.handle(UPDATE_IPC.openReleases, () => shell.openExternal(RELEASES_URL));
+  handle(UPDATE_IPC.getCapability, none, () => capability());
+  handle(UPDATE_IPC.openReleases, none, () => shell.openExternal(RELEASES_URL));
 
   // Opted out, a snap (snapd refreshes it) or a Mac App Store build: register no-op channels (so renderer calls
   // resolve) and never contact GitHub. The check reports "up to date", so no update button shows.
   if (updateCheckDisabled() || process.env.SNAP || process.mas) {
-    ipcMain.handle(UPDATE_IPC.check, () => broadcast({ state: 'not-available' }));
-    ipcMain.handle(UPDATE_IPC.install, () => shell.openExternal(RELEASES_URL));
+    handle(UPDATE_IPC.check, none, () => broadcast({ state: 'not-available' }));
+    handle(UPDATE_IPC.install, none, () => shell.openExternal(RELEASES_URL));
     return;
   }
 
   if (velopack) {
-    ipcMain.handle(UPDATE_IPC.check, velopack.check);
-    ipcMain.handle(UPDATE_IPC.install, velopack.install);
+    handle(UPDATE_IPC.check, none, velopack.check);
+    handle(UPDATE_IPC.install, none, velopack.install);
   } else if (installable) {
     autoUpdater.logger = fileUpdaterLogger();
     autoUpdater.autoDownload = false;
@@ -210,20 +212,20 @@ export function setupUpdater(): void {
       broadcast({ state: 'error', message: e?.message ?? String(e) }),
     );
 
-    ipcMain.handle(UPDATE_IPC.check, () =>
+    handle(UPDATE_IPC.check, none, () =>
       autoUpdater.checkForUpdates().catch((e) => {
         broadcast({ state: 'error', message: (e as Error)?.message ?? String(e) });
       }),
     );
-    ipcMain.handle(UPDATE_IPC.install, () =>
+    handle(UPDATE_IPC.install, none, () =>
       autoUpdater.downloadUpdate().catch((e) => {
         broadcast({ state: 'error', message: (e as Error)?.message ?? String(e) });
       }),
     );
   } else {
     // Dev runs: detect-only via the public GitHub release, install = open page.
-    ipcMain.handle(UPDATE_IPC.check, () => githubFallbackCheck(broadcast));
-    ipcMain.handle(UPDATE_IPC.install, () => shell.openExternal(RELEASES_URL));
+    handle(UPDATE_IPC.check, none, () => githubFallbackCheck(broadcast));
+    handle(UPDATE_IPC.install, none, () => shell.openExternal(RELEASES_URL));
   }
 
   // Kick an initial check shortly after launch, then on a long interval.
@@ -233,9 +235,10 @@ export function setupUpdater(): void {
       : installable
         ? () => autoUpdater.checkForUpdates()
         : () => githubFallbackCheck(broadcast);
-    Promise.resolve(fn()).catch((e) =>
-      console.warn('[updater] check failed', (e as Error)?.message ?? e),
-    );
+    Promise.resolve(fn()).catch((e) => {
+      console.warn('[updater] check failed', (e as Error)?.message ?? e);
+      appendLog(redactUrls(`[updater] check failed: ${(e as Error)?.message ?? e}`));
+    });
   };
   setTimeout(check, INITIAL_CHECK_DELAY_MS);
   setInterval(check, PERIODIC_CHECK_MS);

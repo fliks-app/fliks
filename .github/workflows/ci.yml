@@ -78,7 +78,7 @@ jobs:
           hit() { grep -qE "$1" <<< "$files" && echo true || echo false; }
           {
             echo "server=$(hit '^(server/|engine\.lock$)')"
-            echo "client=$(hit '^(client/|server/fixtures/)')"
+            echo "client=$(hit '^(client/|server/fixtures/|desktop/src/shared/)')"
             echo "desktop=$(hit '^desktop/')"
             echo "tvos=$(hit '^(appletv/|server/parity/scenarios/|client/public/i18n/)')"
             echo "macos=$(hit '^(macos/|scripts/embedded-postgres\.conf$)')"

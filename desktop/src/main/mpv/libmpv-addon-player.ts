@@ -1,9 +1,9 @@
-import { app } from 'electron';
 import type { PlayerBackend, PlayerBackendEvents } from './player-backend';
 import type {
   DesktopAudioTrack,
   DesktopLoadOptions,
   DesktopMuteRange,
+  DesktopPlayerState,
   DesktopPositionInfo,
   DesktopQoe,
   DesktopSubtitleStyle,
@@ -14,125 +14,124 @@ import { muteFilterCommands } from './edl-filter';
 import { FirstFrameGate } from './first-frame-gate';
 import { mpvLoadRequest, type MpvLoadRequest } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
-import { parseTracks } from './tracks';
+import { mapTrackList, parseTracks, type MpvTrack } from './tracks';
 import { QoeReader } from './qoe';
+import { MpvErrorLog } from './error-log';
 import { isPrematureEof } from './eof-guard';
 import { TypedEmitter } from './typed-emitter';
 
-/** The native compositor addon: one SDL window drawing the mpv video under the UI bitmap. */
-export type CompositorAddon = {
-  start(o: { width: number; height: number; title: string; icon?: string }): void;
+/** What the macOS and Linux libmpv addons share: mpv in-process, JSON events out, properties and commands in. */
+export interface LibmpvAddon {
   onEvent(cb: (json: string) => void): void;
-  onInput(cb: (json: string) => void): void;
-  /** Dirty-rect upload: `rect` holds the pixels of (x, y, w, h) inside a frameW x frameH bitmap. */
-  uploadUi(rect: Buffer, frameW: number, frameH: number, x: number, y: number, w: number, h: number): void;
   load(o: MpvLoadRequest): void;
   command(args: string[]): void;
   getProperty(name: string): string | null;
   setProperty(name: string, value: string): void;
-  setFullscreen(enabled: boolean): void;
-  /** Whether SDL's window is full screen right now (the state its enter/leave events report). */
-  isFullscreen(): boolean;
-  /** Asks the window manager to bring the window to the front (best effort on Wayland). */
-  raise(): void;
-  hide(): void;
-  setCursorVisible(visible: boolean): void;
-  setCursorShape(shape: number): void;
-  /** The decoder and demuxer lists of a throwaway mpv. */
-  probeLists(): { 'decoder-list'?: string; 'demuxer-lavf-list'?: string };
   stop(): void;
+}
+
+/** The window model of a platform: how its addon starts and what ends the session. */
+export interface LibmpvPlatform {
+  /** Starts the addon, once the event callback is registered. */
+  start(): void;
+  /** Ends the session. */
+  destroy(): void;
+  /** An addon event of the platform's own (window focus, full screen, close). */
+  onEvent?(raw: { type?: string; active?: boolean }): void;
+}
+
+type AddonEvent = {
+  type?: string;
+  active?: boolean;
+  state?: DesktopPlayerState;
+  position?: number;
+  duration?: number;
+  buffered?: number;
+  message?: string;
+  tracks?: MpvTrack[];
+  level?: string;
+  prefix?: string;
+  text?: string;
 };
 
-/** libmpv inside the Linux compositor addon, as a `PlayerBackend`. `destroy()` stops playback only:
- *  the compositor window is the app's window and outlives it. */
-export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {
+/** libmpv inside a native addon, as a `PlayerBackend`; one class for macOS and Linux. */
+export class LibmpvAddonPlayer extends TypedEmitter<PlayerBackendEvents> implements PlayerBackend {
   private readonly qoe = new QoeReader();
   private readonly firstFrameGate = new FirstFrameGate();
+  private readonly errorLog = new MpvErrorLog();
+  private sawFirstFrame = false;
   private muteRanges: DesktopMuteRange[] = [];
   private muteFilterCount = 0;
-  /** The window gained or lost focus, or was hidden. */
-  onWindowActive?: (active: boolean) => void;
-  /** SDL entered or left full screen, whoever asked for it. */
-  onFullscreenChange?: (fullscreen: boolean) => void;
-  /** The close button was pressed: quit by default. */
-  onCloseRequest: () => void = () => app.quit();
+  /** Last position pushed by the addon's event thread, so reads never block the main thread on mpv's core lock. */
+  private last: DesktopPositionInfo = { position: 0, duration: 0, buffered: 0 };
+  /** The last position seen with a known duration: mpv drops both properties by the time EOF is reported. */
+  private lastAt = { position: 0, duration: 0 };
 
   constructor(
-    private readonly addon: CompositorAddon,
-    private readonly window: { width: number; height: number; title: string; icon?: string },
+    private readonly addon: LibmpvAddon,
+    private readonly platform: LibmpvPlatform,
   ) {
     super();
   }
 
-  setFullscreen(enabled: boolean): void {
-    this.addon.setFullscreen(enabled);
-  }
-
-  isFullscreen(): boolean {
-    return this.addon.isFullscreen();
-  }
-
   async start(): Promise<this> {
     this.addon.onEvent((json) => this.onAddonEvent(json));
-    this.addon.start(this.window);
+    this.platform.start();
     for (const [name, value] of mpvStreamOptions()) this.addon.setProperty(name, value);
     return this;
   }
 
-  /** Last position pushed by the addon's event thread; `lastAt` keeps the last one with a known
-   *  duration, since mpv drops both properties by the time EOF is reported. */
-  private last: DesktopPositionInfo = { position: 0, duration: 0, buffered: 0 };
-  private lastAt = { position: 0, duration: 0 };
-
   private onAddonEvent(json: string): void {
-    let raw: { active?: boolean; type?: string; state?: string; message?: string; position?: number; duration?: number; buffered?: number };
+    let raw: AddonEvent;
     try {
       raw = JSON.parse(json);
     } catch {
       return;
     }
     switch (raw.type) {
-      case 'timeUpdate': {
+      case 'timeUpdate':
         this.last = { position: raw.position ?? 0, duration: raw.duration ?? 0, buffered: raw.buffered ?? 0 };
         if (this.last.duration > 0) this.lastAt = { position: this.last.position, duration: this.last.duration };
         this.emit('timeUpdate', this.last);
         break;
-      }
-      case 'stateChanged': {
-        const state = raw.state as PlayerBackendEvents['stateChanged'][0]['state'];
-        if (state === 'ended' && isPrematureEof(this.lastAt.duration, this.lastAt.position)) {
-          this.emit('error', { code: -1, message: 'playback stopped before end of stream' });
+      case 'stateChanged':
+        if (!raw.state) break;
+        if (raw.state === 'ended' && isPrematureEof(this.lastAt.duration, this.lastAt.position)) {
+          this.emit('error', this.errorLog.payload('playback stopped before end of stream'));
           break;
         }
-        this.emit('stateChanged', { state });
+        this.emit('stateChanged', { state: raw.state });
         break;
-      }
       case 'tracksChanged':
-        this.emit('tracksChanged', parseTracks(this.addon.getProperty('track-list')));
+        // The committed list rides on the event: a property read here could see a transient track state.
+        this.emit('tracksChanged', mapTrackList(raw.tracks ?? []));
         break;
       case 'firstFrame':
+        // Every seek restarts playback: only the first one of a load is the frame.
         this.firstFrameGate.release();
-        this.emit('firstFrame');
+        this.errorLog.reset();
+        if (!this.sawFirstFrame) {
+          this.sawFirstFrame = true;
+          this.emit('firstFrame');
+        }
+        break;
+      case 'log':
+        this.errorLog.record(raw.level ?? '', raw.prefix, raw.text);
+        this.emit('log', `[${raw.level}] ${raw.prefix ? `${raw.prefix}: ` : ''}${raw.text ?? ''}\n`);
         break;
       case 'error':
         this.firstFrameGate.release();
-        this.emit('error', { code: -1, message: raw.message ?? 'error' });
+        this.emit('error', this.errorLog.payload(raw.message ?? 'error'));
         break;
-      case 'focus':
-        this.onWindowActive?.(raw.active === true);
-        break;
-      case 'fullscreen':
-        this.onFullscreenChange?.(raw.active === true);
-        break;
-      // The compositor owns the only visible window; the offscreen BrowserWindow never fires window-all-closed.
-      case 'closed':
-        this.onCloseRequest();
-        break;
+      default:
+        this.platform.onEvent?.(raw);
     }
   }
 
   async load(opts: DesktopLoadOptions): Promise<void> {
     this.qoe.reset();
+    this.sawFirstFrame = false;
+    this.errorLog.reset();
     this.last = { position: 0, duration: 0, buffered: 0 };
     this.lastAt = { position: 0, duration: 0 };
     // Global property: always written, or the previous file's rectangle would crop the next one.
@@ -152,11 +151,18 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
   }
 
   async seek(position: number): Promise<void> {
+    // In place; a far seek in a multi-audio transcode reloads one level up.
     this.addon.command(['seek', String(position), 'absolute']);
   }
 
   async stop(): Promise<void> {
     this.firstFrameGate.release();
+    this.sawFirstFrame = false;
+    this.last = { position: 0, duration: 0, buffered: 0 };
+    this.lastAt = { position: 0, duration: 0 };
+    const { commands } = muteFilterCommands([], this.muteFilterCount);
+    this.muteFilterCount = 0;
+    for (const cmd of commands) this.addon.command(cmd);
     this.addon.command(['stop']);
   }
 
@@ -183,12 +189,12 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
     for (const cmd of commands) this.addon.command(cmd);
   }
 
-  async getPosition(): Promise<DesktopPositionInfo> {
-    return this.last;
-  }
-
   getQoe(): Promise<DesktopQoe | null> {
     return this.qoe.read((n) => this.addon.getProperty(n));
+  }
+
+  async getPosition(): Promise<DesktopPositionInfo> {
+    return this.last;
   }
 
   async getAudioTracks(): Promise<DesktopAudioTrack[]> {
@@ -214,7 +220,6 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
   }
 
   async setSubtitleStyle(style: DesktopSubtitleStyle): Promise<void> {
-    if (!style) return;
     for (const [name, value] of mpvSubtitleProps(style)) this.addon.setProperty(name, value);
   }
 
@@ -224,7 +229,7 @@ export class LinuxCompositorPlayer extends TypedEmitter<PlayerBackendEvents> imp
 
   async destroy(): Promise<void> {
     this.muteRanges = [];
-    this.applyMuteRanges();
-    await this.stop();
+    this.firstFrameGate.release();
+    this.platform.destroy();
   }
 }

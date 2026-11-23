@@ -20,7 +20,7 @@ export const fromMacAuthorization = (s: string): DesktopNotifyStatus => (s === '
 
 async function platformAddon(): Promise<StatusAddon | null> {
   if (process.platform === 'win32') return (await import('../smtc-win')).winAddon();
-  if (process.platform === 'darwin') return (await import('../mpv/mac-mpv-player')).loadMacAddon();
+  if (process.platform === 'darwin') return (await import('../mpv/mac-addon')).loadMacAddon();
   return null;
 }
 

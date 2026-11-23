@@ -20,6 +20,7 @@ macos
 plan
 scripts
 !scripts/precompress-client.mjs
+!desktop/src/shared/contract.ts
 store
 tools
 windows

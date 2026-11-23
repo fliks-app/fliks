@@ -1713,6 +1713,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const { engine } = await this.createSurface(op, 'desktop');
     if (engine instanceof DesktopEngine) this.fullscreen.set(engine.fullscreen);
     engine.on('fullscreenChanged', (e) => this.fullscreen.set(e.fullscreen));
+    // The page stays `visible` in a hidden window (background throttling is off), so the shell says so.
+    engine.on('windowHidden', () => this.bankAndPause());
     this.wireNativePlayerEngine(engine);
   }
 
@@ -3579,10 +3581,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Home, input switch and standby hide the app without unloading it: bank the position and pause; the engine
    *  releases and reacquires its own decoder. */
   private onTvVisibility = () => {
-    if (document.visibilityState !== 'hidden') return;
+    if (document.visibilityState === 'hidden') this.bankAndPause();
+  };
+
+  private bankAndPause(): void {
     void this.savePosition(true);
     void this.pausePlayback();
-  };
+  }
 
   private onPlayerBackEvent = () => {
     // Desktop: Escape leaves the native (SDL) compositor fullscreen first, before closing controls or exiting.

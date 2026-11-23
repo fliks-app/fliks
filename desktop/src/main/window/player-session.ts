@@ -3,11 +3,11 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { MpvPlayer } from '../mpv/mpv-player';
-import { MacMpvPlayer, loadMacAddon } from '../mpv/mac-mpv-player';
+import { loadMacAddon } from '../mpv/mac-addon';
+import { LibmpvAddonPlayer } from '../mpv/libmpv-addon-player';
 import type { PlayerBackend } from '../mpv/player-backend';
 import { createEmbedBackend } from './backends';
-import { setPlaybackKeepAwake } from '../power';
-import { forwardPlayerEvents } from './forward-events';
+import { PlayerHost } from './player-host';
 import { appendLog, echoRendererConsole } from '../log-file';
 import { watchRendererCrash } from '../renderer-recovery';
 import { IPC, type DesktopEvent } from '../../shared/contract';
@@ -79,12 +79,17 @@ interface Overlays {
 export class PlayerSession {
   private frameWin!: BrowserWindow;
   private overlays: Overlays | null = null;
-  private mpv: PlayerBackend | null = null;
-  /** Set by destroy(); createPlayer() can await the (slow, Windows gpu-next)
-   *  probe for several seconds, during which the window may already have closed. */
   private destroyed = false;
-  /** Playback stopped: by the renderer (stop IPC) or by a renderer crash. */
-  onStop?: () => void;
+  /** The player: started with the session, so the page can load while the backend comes up. */
+  readonly host = new PlayerHost({
+    create: () => this.createPlayer(),
+    emit: (e) => this.emit(e),
+    // A video gap (decoder re-init on a seek) then reads as loading, not a brand flash.
+    onFirstFrame: () => {
+      if (this.overlays && !this.frameWin.isDestroyed()) this.frameWin.setBackgroundColor('#000000');
+    },
+    respawn: process.platform === 'win32',
+  });
   /** Background mode: closing the window hides it instead of ending the session. */
   hideOnClose: () => boolean = () => false;
   /** The window is visible and focused (any of the session's windows). */
@@ -133,11 +138,7 @@ export class PlayerSession {
     echoRendererConsole(ui.webContents);
     watchRendererCrash(ui.webContents, {
       appUrl: rendererUrl,
-      stopPlayback: async () => {
-        setPlaybackKeepAwake(false);
-        this.onStop?.();
-        await this.mpv?.stop();
-      },
+      stopPlayback: () => this.host.stop(),
       log: appendLog,
     });
     ui.webContents.on('unresponsive', () => console.error('[ui] unresponsive'));
@@ -179,20 +180,8 @@ export class PlayerSession {
       this.frameWin.close();
     });
 
+    this.host.start();
     await ui.loadURL(rendererUrl);
-
-    const mpv = await this.createPlayer();
-    if (this.destroyed) {
-      await mpv.destroy().catch(() => {});
-      return;
-    }
-    this.mpv = mpv;
-    // A video gap (decoder re-init on a seek) then reads as loading, not a brand flash.
-    forwardPlayerEvents(this.mpv, (e) => this.emit(e), this.overlays ? () => {
-      if (!this.frameWin.isDestroyed()) this.frameWin.setBackgroundColor('#000000');
-    } : undefined);
-    await this.mpv.start();
-    this.emit({ type: 'ready' });
   }
 
   private async createOverlays(preloadPath: string): Promise<Overlays> {
@@ -251,15 +240,15 @@ export class PlayerSession {
     return { video, ui };
   }
 
-  /**
-   * Pick the playback backend for the current OS:
-   *   • macOS — in-process libmpv rendered into a CAMetalLayer inside the framed
-   *     window (mpv's subprocess ignores --wid there).
-   *   • Windows — an mpv subprocess embedded into the video overlay via the
-   *     platform EmbedBackend's args.
-   */
+  /** macOS: in-process libmpv rendered into a CAMetalLayer inside the framed window (mpv's subprocess
+   *  ignores --wid there). Windows: an mpv subprocess embedded into the video overlay. */
   private async createPlayer(): Promise<PlayerBackend> {
-    if (!this.overlays) return new MacMpvPlayer(this.frameWin);
+    if (!this.overlays) {
+      const addon = loadMacAddon();
+      // getNativeWindowHandle() is a pointer-sized NSView*; the addon parses it from a decimal string.
+      const wid = this.frameWin.getNativeWindowHandle().readBigUInt64LE(0).toString();
+      return new LibmpvAddonPlayer(addon, { start: () => addon.start({ wid }), destroy: () => addon.stop() });
+    }
     const mpvPath = resolveBundledMpv() ?? 'mpv';
     const backend = createEmbedBackend();
     const { args, env } = await backend.resolve(this.overlays.video, mpvPath);
@@ -272,10 +261,12 @@ export class PlayerSession {
     }
   }
 
-  /** The mpv player; throws if accessed before start() completes. */
-  get player(): PlayerBackend {
-    if (!this.mpv) throw new Error('player not started');
-    return this.mpv;
+  player(): Promise<PlayerBackend> {
+    return this.host.whenReady();
+  }
+
+  stop(): Promise<void> {
+    return this.host.stop();
   }
 
   /** The framed window's native handle, which the OS media controls bind to. */
@@ -293,6 +284,7 @@ export class PlayerSession {
 
   hide(): void {
     for (const w of [...this.windows].reverse()) if (!w.isDestroyed()) w.hide();
+    this.host.windowHidden();
     this.onActive?.(false);
   }
 
@@ -341,15 +333,8 @@ export class PlayerSession {
   async destroy(): Promise<void> {
     if (this.destroyed) return;
     this.destroyed = true;
-    setPlaybackKeepAwake(false);
-    this.onStop?.();
     // The windows go even when the player's teardown throws, or quit would hang on them.
-    try {
-      await this.mpv?.destroy();
-    } catch (e) {
-      console.error('[player] teardown failed', e);
-    }
-    this.mpv = null;
+    await this.host.destroy();
     for (const w of [...this.windows].reverse()) if (!w.isDestroyed()) w.destroy();
   }
 }

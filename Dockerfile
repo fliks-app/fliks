@@ -11,6 +11,8 @@ WORKDIR /app
 COPY client/package.json client/package-lock.json ./
 RUN npm ci
 COPY client/ .
+# The client imports the shell's IPC types (tsconfig path `@fliks/desktop-contract`, `../desktop` from /app).
+COPY desktop/src/shared/contract.ts /desktop/src/shared/contract.ts
 # The build copies it into the served client folder next to the npm licenses (`../` from /app).
 COPY THIRD-PARTY-NOTICES.md /
 RUN npm run build

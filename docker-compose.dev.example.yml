@@ -113,6 +113,7 @@ services:
       - /src/client/.angular:mode=1777
     volumes:
       - ./client:/src/client
+      - ./desktop/src/shared:/src/desktop/src/shared:ro
 
   postgres:
     image: postgres:18.3-alpine
