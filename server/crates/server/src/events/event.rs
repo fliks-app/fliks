@@ -259,6 +259,8 @@ pub struct PluginRef {
 /// Everything a client can receive on `/api/system/events` except `ping` and `plugin.*` (see `RawEvent`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all_fields = "camelCase")]
+// `RemoteState` is the one wide frame: the wire payload, built once per beat and sent whole.
+#[allow(clippy::large_enum_variant)]
 pub enum SseEvent {
     #[serde(rename = "sse.connected")]
     SseConnected { connection_id: String },
