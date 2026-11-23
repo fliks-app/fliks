@@ -5,6 +5,7 @@
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "ng": "ng",
+    "postinstall": "node scripts/patch-daisyui.mjs",
     "cast-app-id": "node scripts/cast-app-id.mjs",
     "start": "npm run cast-app-id && ng serve",
     "start:docker": "npm run cast-app-id && ng serve --configuration docker --host 0.0.0.0 --port 4500 --poll 2000",
