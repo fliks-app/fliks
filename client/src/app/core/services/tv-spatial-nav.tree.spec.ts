@@ -4,6 +4,7 @@ import { TvSpatialNavService } from './tv-spatial-nav.service';
 
 type Nav = {
   registerContainer(el: HTMLElement, o: { orientation: 'vertical' | 'horizontal' }): void;
+  findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null;
   findNeighborInTree(active: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null;
 };
 
@@ -90,5 +91,49 @@ describe('TvSpatialNavService tree', () => {
     const { first } = railAndPage(nav);
     expect(nav.findNeighborInTree(first, 'up')).toBeNull();
     expect(nav.findNeighborInTree(first, 'down')).toBeNull();
+  });
+
+  const at = (el: HTMLElement, left: number, top: number): void => {
+    el.getBoundingClientRect = () => ({ left, top, width: 100, height: 40, right: left + 100, bottom: top + 40, x: left, y: top, toJSON: () => ({}) });
+  };
+
+  it('returns to the card the user left with Right from the rail', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const { library, second } = railAndPage(nav);
+    second.focus();
+    library.focus();
+    expect(nav.findNeighbor('right')).toBe(second);
+  });
+
+  it('ends Up and Down at the rail edges instead of leaving it', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const { home, library } = railAndPage(nav);
+    library.focus();
+    expect(nav.findNeighbor('down')).toBeNull();
+    home.focus();
+    expect(nav.findNeighbor('up')).toBeNull();
+  });
+
+  it('enters the rail on its current entry from a page with no container', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const { library } = railAndPage(nav);
+    const loose = document.querySelector('main')!.appendChild(document.createElement('button'));
+    Object.defineProperty(loose, 'offsetParent', { get: () => document.body });
+    at(loose, 500, 200);
+    loose.focus();
+    expect(nav.findNeighbor('left')).toBe(library);
+  });
+
+  it('keeps Left on a neighbour in the same container instead of bridging to the rail', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const { page } = railAndPage(nav);
+    const a = page.appendChild(document.createElement('button'));
+    const b = page.appendChild(document.createElement('button'));
+    for (const el of [a, b]) Object.defineProperty(el, 'offsetParent', { get: () => document.body });
+    at(a, 500, 300);
+    at(b, 650, 300);
+    b.focus();
+    expect(nav.findNeighborInTree(b, 'left')).toBeNull();
+    expect(nav.findNeighbor('left')).toBe(a);
   });
 });

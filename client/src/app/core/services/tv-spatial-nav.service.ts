@@ -50,6 +50,8 @@ export class TvSpatialNavService {
   /** The focused element, its parent and spot, to hand the focus on when a click swaps or disables it. */
   private lastFocus: { el: HTMLElement; parent: HTMLElement | null; overlay: HTMLElement | null; rect: DOMRect } | null = null;
   private focusLostAt = 0;
+  /** The last element focused outside the rail and overlays: where Right from the rail returns. */
+  private lastPageFocus: HTMLElement | null = null;
 
   constructor() {
     // Handler is a no-op for non-arrow keys, so binding on touch-only devices is harmless.
@@ -72,8 +74,10 @@ export class TvSpatialNavService {
     }
     // Track the deepest focused element per container for last-active-child memory.
     const focusInHandler = (e: FocusEvent) => {
-      this.updateActiveChild(e.target as HTMLElement | null);
+      const target = e.target as HTMLElement | null;
+      this.updateActiveChild(target);
       this.rememberFocus();
+      if (target && !target.closest('[data-tv-nav], [data-tv-modal], dialog')) this.lastPageFocus = target;
     };
     document.addEventListener('focusin', focusInHandler);
     this.destroyRef.onDestroy(() => document.removeEventListener('focusin', focusInHandler));
@@ -404,7 +408,28 @@ export class TvSpatialNavService {
     ];
   }
 
+  /** The rail is a column of its own: steps between it and the page go through its entry and the page memory only. */
   private findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
+    const active = document.activeElement as HTMLElement | null;
+    const next = this.findNeighborIn(dir);
+    const rail = this.rail();
+    if (!rail || !active) return next;
+    if (rail.el.contains(active)) {
+      // Up and down end at the rail's own edges instead of drifting into the page.
+      return next && (dir === 'up' || dir === 'down') && !rail.el.contains(next) ? null : next;
+    }
+    return next && rail.el.contains(next) ? this.railEntry(rail) : next;
+  }
+
+  private rail(): ContainerNode | null {
+    return Array.from(this.containers.values()).find((c) => c.el.hasAttribute('data-tv-nav') && isRendered(c.el)) ?? null;
+  }
+
+  private railEntry(rail: ContainerNode): HTMLElement | null {
+    return rail.el.querySelector<HTMLElement>('[aria-current="page"]') ?? this.digDown(rail.el);
+  }
+
+  private findNeighborIn(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
     const active = document.activeElement as HTMLElement | null;
     // Modal trap beats tree-aware nav: walking the tree would bridge out to the page behind the dropdown/sheet.
     // Prefer the modal containing focus, else the first open one.
@@ -561,7 +586,7 @@ export class TvSpatialNavService {
       cur = this.findParentContainer(cur.el);
     }
     // Left and right cross between the rail and the page, which the rect fallback would match at random.
-    if (topMost && (dir === 'left' || dir === 'right')) return this.bridgeRail(topMost, dir);
+    if (topMost && (dir === 'left' || dir === 'right')) return this.bridgeRail(topMost, dir, active);
     // Bridge to a peer top-level container so an isolated container's edge doesn't fall through to a far-away rect match.
     if (topMost) {
       const peer = this.findPeerContainer(topMost, dir);
@@ -572,20 +597,22 @@ export class TvSpatialNavService {
     return null;
   }
 
-  /** The rail: Left from a page container's edge enters it on the current entry, Right from it digs into the page. */
-  private bridgeRail(from: ContainerNode, dir: 'left' | 'right'): HTMLElement | null {
-    const rail = Array.from(this.containers.values()).find((c) => c.el.hasAttribute('data-tv-nav') && isRendered(c.el));
+  /** The rail: Left from a page container's edge enters it on the current entry, Right from it returns to the page. */
+  private bridgeRail(from: ContainerNode, dir: 'left' | 'right', active: HTMLElement): HTMLElement | null {
+    const rail = this.rail();
     if (!rail) return null;
     if (from === rail) {
       if (dir !== 'right') return null;
-      const pages = Array.from(this.containers.values()).filter(
+      const last = this.lastPageFocus;
+      if (last?.isConnected && isFocusCandidate(last)) return last;
+      const page = Array.from(this.containers.values()).find(
         (c) => c !== rail && !this.findParentContainer(c.el) && c.el.closest('main') && isRendered(c.el),
       );
-      const page = pages.find((c) => c.activeChild?.isConnected) ?? pages[0];
       return page ? this.digDown(page.el) : null;
     }
-    if (dir !== 'left') return null;
-    return rail.el.querySelector<HTMLElement>('[aria-current="page"]') ?? this.digDown(rail.el);
+    // Only from the leftmost focusable: a neighbour in the same container wins.
+    if (dir !== 'left' || nearestInDirection(this.focusablesIn(from.el), active, 'left')) return null;
+    return this.railEntry(rail);
   }
 
   /** Closest top-level container, vertical only: overlapping regions on one band make left/right ambiguous (rect fallback). */

@@ -18,7 +18,7 @@
       </span>
       <span class="rail-label text-xl font-bold">{{ 'app.name' | translate }}</span>
     </div>
-    @if (navbar.railDocked() && !tv.isTv()) {
+    @if (navbar.canPin()) {
         <button
           type="button"
           class="rail-reveal btn btn-ghost btn-sm btn-square hidden lg:inline-flex"

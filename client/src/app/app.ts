@@ -322,7 +322,6 @@ export class App implements OnInit, OnDestroy {
     if (!nav || nav.contains(document.activeElement)) return false;
     const tab = nav.querySelector<HTMLElement>('[aria-current="page"]') ?? nav.querySelector<HTMLElement>('a[href]');
     if (!tab) return false;
-    window.scrollTo({ top: 0 });
     tab.focus({ preventScroll: true });
     return true;
   }

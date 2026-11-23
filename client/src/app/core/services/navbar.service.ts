@@ -43,6 +43,9 @@ export class NavbarService {
     return this.sidebarPinned() && this.isLargeScreen() ? 'expanded' : 'collapsed';
   });
 
+  /** The pin only means something where the rail is a column and a pointer can reach it. */
+  readonly canPin = computed(() => this.railDocked() && !this.device.isTv());
+
   /** The rail is a permanent column (collapsed or expanded) rather than a drawer or absent. */
   readonly railDocked = computed(() => this.railMode() === 'collapsed' || this.railMode() === 'expanded');
 

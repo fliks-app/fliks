@@ -62,6 +62,7 @@ async function setup(o: Setup = {}): Promise<{ fixture: ComponentFixture<NavRail
         useValue: {
           railMode: () => (o.tv ? 'collapsed' : (o.mode ?? 'collapsed')),
           railDocked: () => true,
+          canPin: () => !o.tv,
           dockedBars: () => [],
           sidebarPinned: signal(!!o.pinned),
           toggleSidebarPinned: () => {},
