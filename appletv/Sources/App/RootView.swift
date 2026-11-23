@@ -187,7 +187,9 @@ struct RootView: View {
                     .onExitCommand(perform: railFocus == nil ? { railFocus = "home" } : nil)
                     // Backdrop as a background (not a ZStack sibling) so a loading/
                     // changing image can never resize the shell.
-                    .background { BackdropView(backdrop: backdrop).ignoresSafeArea() }
+                    .backgroundPreferenceValue(HeroScrollKey.self) {
+                        BackdropView(backdrop: backdrop, heroScroll: $0).ignoresSafeArea()
+                    }
                     .navigationDestination(for: Route.self) { route in
                         Group {
                         switch route {
