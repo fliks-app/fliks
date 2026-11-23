@@ -4,7 +4,7 @@
       <h1 class="page-title">{{ 'calendar.title' | translate }}</h1>
       <p class="text-sm text-base-content/60 capitalize">{{ currentDate() | localeDate:{ month: 'long', year: 'numeric' } }}</p>
     </div>
-    <a routerLink="/wanted" class="btn btn-ghost btn-sm" data-testid="calendar-wanted">{{ 'wanted.title' | translate }}</a>
+    <a routerLink="/acquisition/wanted" class="btn btn-ghost btn-sm" data-testid="calendar-wanted">{{ 'wanted.title' | translate }}</a>
   </div>
 
   <div class="flex flex-wrap items-center gap-2 p-1">

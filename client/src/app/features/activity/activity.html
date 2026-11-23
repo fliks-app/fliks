@@ -1,0 +1,21 @@
+<div class="flex flex-col gap-4">
+  <h1 class="page-title">{{ 'acquisition_queue.page_title' | translate }}</h1>
+
+  <div role="tablist" class="tabs tabs-bordered" data-testid="activity-tabs">
+    @if (hasQueue) {
+      <a role="tab" class="tab" routerLink="queue" queryParamsHandling="preserve" routerLinkActive="tab-active" ariaCurrentWhenActive="page">
+        {{ 'acquisition_queue.tab_queue' | translate }}
+      </a>
+    }
+    <a role="tab" class="tab" routerLink="wanted" routerLinkActive="tab-active" ariaCurrentWhenActive="page">
+      {{ 'wanted.title' | translate }}
+    </a>
+    @if (hasQueue) {
+      <a role="tab" class="tab" routerLink="history" queryParamsHandling="preserve" routerLinkActive="tab-active" ariaCurrentWhenActive="page">
+        {{ 'acquisition_queue.tab_history' | translate }}
+      </a>
+    }
+  </div>
+
+  <router-outlet />
+</div>

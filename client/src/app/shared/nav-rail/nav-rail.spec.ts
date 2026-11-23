@@ -122,10 +122,8 @@ describe('NavRailComponent', () => {
       { label: 'downloads.title', href: '/downloads', current: null },
       { label: 'nav.history', href: '/history', current: null },
       { label: 'nav.requests', href: '/requests', current: null },
-      { label: 'acquisition_queue.queue_title', href: '/acquisition/queue', current: null },
-      { label: 'acquisition_queue.history_title', href: '/acquisition/history', current: null },
+      { label: 'acquisition_queue.page_title', href: '/acquisition', current: null },
       { label: 'nav.calendar', href: '/calendar', current: null },
-      { label: 'wanted.title', href: '/wanted', current: null },
     ]);
   });
 

@@ -6040,9 +6040,10 @@
     "settings": "Definições do karaoke"
   },
   "acquisition_queue": {
-    "queue_title": "Fila",
+    "page_title": "Atividade",
+    "tab_queue": "Fila",
     "queue_subtitle": "Transferências em curso, de todos os fornecedores de download.",
-    "history_title": "Histórico da fila",
+    "tab_history": "Histórico",
     "history_subtitle": "Transferências concluídas, falhadas e removidas.",
     "state_queued": "Na fila",
     "state_active": "A transferir",

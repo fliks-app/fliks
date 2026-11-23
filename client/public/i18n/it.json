@@ -6040,9 +6040,10 @@
     "settings": "Impostazioni karaoke"
   },
   "acquisition_queue": {
-    "queue_title": "Coda",
+    "page_title": "Attività",
+    "tab_queue": "Coda",
     "queue_subtitle": "Trasferimenti in corso, di tutti i fornitori di download.",
-    "history_title": "Cronologia della coda",
+    "tab_history": "Cronologia",
     "history_subtitle": "Trasferimenti completati, falliti e rimossi.",
     "state_queued": "In coda",
     "state_active": "Download in corso",

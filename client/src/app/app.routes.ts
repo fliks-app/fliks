@@ -1,3 +1,4 @@
+import { inject } from '@angular/core';
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { setupGuard } from './core/guards/setup.guard';
@@ -8,6 +9,7 @@ import { noTvGuard } from './core/guards/no-tv.guard';
 import { desktopGuard } from './core/guards/desktop.guard';
 import { pluginViewGuard } from './core/guards/plugin-view.guard';
 import { permissionGuard } from './core/guards/permission.guard';
+import { SERVER_SINCE, ServerVersionService } from './core/services/server-version.service';
 import { ProfileContextService } from './features/profile/profile-context.service';
 import { loadPlayer } from './features/player/load-player';
 
@@ -340,12 +342,7 @@ export const routes: Routes = [
           import('./features/calendar/calendar').then((m) => m.CalendarComponent),
         data: { titleKey: 'calendar.title' },
       },
-      {
-        path: 'wanted',
-        loadComponent: () =>
-          import('./features/wanted/wanted').then((m) => m.WantedComponent),
-        data: { titleKey: 'wanted.title' },
-      },
+      { path: 'wanted', redirectTo: 'acquisition/wanted', pathMatch: 'full' },
       {
         path: 'live-tv',
         canActivate: [permissionGuard('livetv.read', '/')],
@@ -370,22 +367,31 @@ export const routes: Routes = [
         data: { titleKey: 'pending_requests.title' },
       },
       {
-        path: 'acquisition/queue',
+        path: 'acquisition',
         canActivate: [permissionGuard('media.grab')],
-        loadComponent: () =>
-          import('./features/acquisition-queue/acquisition-queue').then(
-            (m) => m.AcquisitionQueueComponent,
-          ),
-        data: { titleKey: 'acquisition_queue.queue_title', view: 'queue' },
-      },
-      {
-        path: 'acquisition/history',
-        canActivate: [permissionGuard('media.grab')],
-        loadComponent: () =>
-          import('./features/acquisition-queue/acquisition-queue').then(
-            (m) => m.AcquisitionQueueComponent,
-          ),
-        data: { titleKey: 'acquisition_queue.history_title', view: 'history' },
+        loadComponent: () => import('./features/activity/activity').then((m) => m.ActivityComponent),
+        children: [
+          {
+            path: '',
+            pathMatch: 'full',
+            redirectTo: () => (inject(ServerVersionService).supports(SERVER_SINCE.acquisitionQueue) ? 'queue' : 'wanted'),
+          },
+          {
+            path: 'queue',
+            loadComponent: () => import('./features/acquisition-queue/acquisition-queue').then((m) => m.AcquisitionQueueComponent),
+            data: { titleKey: 'acquisition_queue.page_title', view: 'queue' },
+          },
+          {
+            path: 'wanted',
+            loadComponent: () => import('./features/wanted/wanted').then((m) => m.WantedComponent),
+            data: { titleKey: 'acquisition_queue.page_title' },
+          },
+          {
+            path: 'history',
+            loadComponent: () => import('./features/acquisition-queue/acquisition-queue').then((m) => m.AcquisitionQueueComponent),
+            data: { titleKey: 'acquisition_queue.page_title', view: 'history' },
+          },
+        ],
       },
       {
         path: 'plugins/:pluginId/:view',

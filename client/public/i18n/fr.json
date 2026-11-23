@@ -6040,9 +6040,10 @@
     }
   },
   "acquisition_queue": {
-    "queue_title": "File d’attente",
+    "page_title": "Activité",
+    "tab_queue": "File d’attente",
     "queue_subtitle": "Transferts en cours, tous fournisseurs de téléchargement confondus.",
-    "history_title": "Historique de la file",
+    "tab_history": "Historique",
     "history_subtitle": "Transferts terminés, échoués et retirés.",
     "state_queued": "En file d’attente",
     "state_active": "Téléchargement",
