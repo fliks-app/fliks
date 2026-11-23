@@ -229,11 +229,6 @@ html.native-player-active app-live-player {
 html.native-player-active app-background {
   visibility: hidden !important;
 }
-/* Pages with hero fanart — content extends behind status bar */
-body.native.hero-page {
-  padding-top: 0 !important;
-}
-
 /* Landscape: fanart edge-to-edge into side safe areas (browser + native); body/main padding keeps content safe */
 @media (orientation: landscape) {
   body.hero-page .hero-fanart-bleed {
@@ -242,9 +237,23 @@ body.native.hero-page {
   }
 }
 
+/* Icons over a hero picture, whichever bar carries them (phone navbar, desktop chrome bar). */
+:root {
+  --hero-icon-shadow: drop-shadow(0 1px 2px rgb(0 0 0 / 0.55));
+  --hero-text-shadow: 0 1px 2px rgb(0 0 0 / 0.55);
+}
 /* Mobile navbar: legibility of white icons on fanart (toolbar only — reset inside user menu panel) */
 .nav-hero-icons svg {
-  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.28)) drop-shadow(0 0 2px rgb(0 0 0 / 0.12));
+  filter: var(--hero-icon-shadow);
+}
+/* A clear phone bar over a picture: a soft shade from the screen top keeps the system status icons and the bar readable. */
+.nav-hero-icons::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 35% 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0.35), rgb(0 0 0 / 0));
 }
 .nav-hero-icons .dropdown-content svg {
   filter: none;
@@ -460,5 +469,36 @@ body.native.hero-page {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Hero actions (carousel): a light filled button and a translucent one; daisyUI derives their states from these two variables.
+   `--glass` is the base-content colour as rgb channels: plain rgb, since TV engines have no color-mix. */
+:root {
+  --glass: 236 243 249;
+}
+@utility btn-light {
+  --btn-color: var(--color-base-content);
+  --btn-fg: var(--color-base-100);
+  &:hover,
+  &:focus-visible {
+    --btn-bg: rgb(var(--glass) / 0.82);
+  }
+  &:active {
+    --btn-bg: rgb(var(--glass) / 0.7);
+  }
+}
+/* Translucent over pictures: hover and press lighten instead of daisyUI's darken. Plain rgba: no color-mix on TV engines. */
+@utility btn-glass {
+  --btn-color: rgb(var(--glass) / 0.14);
+  --btn-fg: var(--color-base-content);
+  /* A soft dark halo, so the translucent button still reads on a bright frame. */
+  --btn-shadow: 0 2px 14px rgb(0 0 0 / 0.35);
+  &:hover,
+  &:focus-visible {
+    --btn-bg: rgb(var(--glass) / 0.24);
+  }
+  &:active {
+    --btn-bg: rgb(var(--glass) / 0.3);
   }
 }

@@ -29,6 +29,7 @@ export class PersonAvatarCardComponent {
     if (!name) return;
     if ('startViewTransition' in document) stampPosterNamed(this.avatar().nativeElement, name);
     else clearPosterStamps();
-    armPageSlide();
   }
+
+  protected readonly armSlide = armPageSlide;
 }

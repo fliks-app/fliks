@@ -15,9 +15,7 @@ body.tv {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
   width: var(--rail-w);
-  padding: calc(env(safe-area-inset-top, 0px) / 2 + 0.75rem) 0.75rem 0.75rem;
   transition: width 0.2s ease-out, box-shadow 0.2s ease-out, background-color 0.2s ease-out;
 }
 .nav-rail.rail-open {
@@ -63,11 +61,21 @@ body.tv .nav-rail.rail-collapsed:not(.rail-open) .rail-icon {
   align-items: center;
   justify-content: space-between;
 }
-.rail-list {
+/* Header, entries and footer scroll as one; the padding leaves the rings room on every side. */
+.rail-scroll {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.25rem;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  padding: calc(env(safe-area-inset-top, 0px) / 2 + 0.75rem) 0.75rem 0.75rem;
+  scroll-padding-block: 0.75rem;
+}
+/* The footer sits at the bottom while everything fits, after the last entry once it does not. */
+.rail-foot {
+  margin-top: auto;
 }
 .rail-sep {
   height: 1px;

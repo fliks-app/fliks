@@ -192,7 +192,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly canGoBack = this.navbar.canGoBack;
 
   readonly isNative = Capacitor.isNativePlatform();
-  private readonly topSentinel = viewChild<ElementRef<HTMLElement>>('topSentinel');
   readonly bottomMenuOpen = signal(false);
   readonly keyboardOpen = signal(false);
   private readonly keyboardClass = effect(() =>
@@ -208,7 +207,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   onHeroLogoError(): void {
     this.failedHeroLogoUrl.set(this.navbar.heroLogoUrl());
   }
-  readonly isHomeRoute = signal(this.router.url === '/' || this.router.url.startsWith('/?'));
   /** The downloads page is where an unreachable server sends you, so it doesn't repeat the warning. */
   readonly isDownloadsRoute = signal(this.router.url.split('?')[0] === '/downloads');
 
@@ -255,8 +253,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly restorePending = signal(false);
   private restoreFallback: ReturnType<typeof setTimeout> | undefined;
   private scrollRaf: number | null = null;
-  private topSentinelObserver?: IntersectionObserver;
-  /** TV never hides the navbar, so skip the scroll handler: reading the offset forces a layout; the sentinel below reports `scrollAtTop` without it. */
+  /** TV never hides the navbar, so skip the scroll handler: reading the offset forces a layout. */
   private readonly onScroll = () => {
     if (this.device.isTv() || this.scrollRaf !== null) return;
     this.scrollRaf = requestAnimationFrame(() => {
@@ -267,7 +264,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readScroll(): void {
     if (this.restorePending()) return;
     const y = this.pageScroller.offset();
-    this.navbar.scrollAtTop.set(y < 20);
     // The bar is a D-pad target: sliding it out from under the focus ring
     // would strand the cursor, so a focus inside it anchors the bar.
     const focusInBar = !!document.activeElement?.closest('nav.navbar');
@@ -275,17 +271,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.navbarHidden.set(!focusInBar && y > this.lastScrollY && y > LayoutComponent.NAVBAR_LEAVES_AT);
     this.lastScrollY = y;
   }
-
-  private readonly topSentinelObserverEffect = effect(() => {
-    const el = this.topSentinel()?.nativeElement;
-    this.topSentinelObserver?.disconnect();
-    if (!el || typeof IntersectionObserver === 'undefined') return;
-    this.topSentinelObserver = new IntersectionObserver(
-      ([entry]) => this.navbar.scrollAtTop.set(entry.isIntersecting),
-      { root: null },
-    );
-    this.topSentinelObserver.observe(el);
-  });
 
   /** Accessible libraries for the sidebar (raw, as fetched). */
   readonly libraries = signal<LibrarySummary[]>([]);
@@ -427,7 +412,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
           this.beginScrollRestore();
           this.replayPageEnter();
           this.bottomMenuOpen.set(false);
-          this.isHomeRoute.set(e.urlAfterRedirects === '/' || e.urlAfterRedirects.startsWith('/?'));
           this.isLibraryRoute.set(e.urlAfterRedirects.startsWith('/libraries/'));
           this.librarySheetOpen.set(false);
           this.isDownloadsRoute.set(e.urlAfterRedirects.split('?')[0] === '/downloads');
@@ -441,7 +425,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private beginScrollRestore(): void {
     this.restorePending.set(true);
     this.navbarHidden.set(false);
-    this.navbar.scrollAtTop.set(true);
     clearTimeout(this.restoreFallback);
     // The router owes us a Scroll event; don't stay deaf to scrolling if it
     // never comes (in-memory scrolling turned off, a skipped navigation).
@@ -459,7 +442,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
         // Adopt the restored offset instead of reading it: against a zero baseline it reads as a scroll down and hides the navbar.
         const y = this.pageScroller.offset();
         this.lastScrollY = y;
-        this.navbar.scrollAtTop.set(y < 20);
       }),
     );
   }
@@ -487,7 +469,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     if (this.scrollRaf !== null) cancelAnimationFrame(this.scrollRaf);
-    this.topSentinelObserver?.disconnect();
     if (this.isNative) {
       Keyboard.removeAllListeners();
     }

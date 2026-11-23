@@ -5,8 +5,6 @@ import { DisplaySettingsService } from './display-settings.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { fanartPool } from '../../shared/utils/media-artwork.util';
 
-/** How far the light hero veil reaches down the viewport: the full carousel, or the compact strip of a library page. */
-export type HeroVeil = 'full' | 'compact';
 
 /** How long an ambient image stays before a navigation may replace it. */
 const AMBIENT_TTL = 5 * 60 * 1000;
@@ -22,12 +20,10 @@ export class BackgroundService {
   private readonly displaySettings = inject(DisplaySettingsService);
   private readonly streamingApi = inject(StreamingApiService);
 
-  private readonly claim = signal<{ owner: object; url: string; blur: boolean; hero: HeroVeil | null } | null>(null);
+  private readonly claim = signal<{ owner: object; url: string; blur: boolean; hero: boolean } | null>(null);
   private readonly ambient = signal<string | null>(null);
   private ambientAt = 0;
   private rolling = false;
-  /** Bumped by every claim, so a consumer can tell a claim made after some moment from one made before it. */
-  readonly claims = signal(0);
 
   private readonly currentPath = computed(() => {
     const nav = this.router.lastSuccessfulNavigation();
@@ -46,13 +42,12 @@ export class BackgroundService {
   readonly blur = computed(() => !!this.claim()?.blur && this.url() === this.claim()?.url);
 
   /** The claim is a hero: the picture is read through a light veil near the top of the page instead of the ambient one. */
-  readonly hero = computed(() => (this.url() === this.claim()?.url ? (this.claim()?.hero ?? null) : null));
+  readonly hero = computed(() => this.url() === this.claim()?.url && !!this.claim()?.hero);
 
   /** Declare the media page's fanart; `null` means not known yet, and holds. */
-  set(owner: object, url: string | null, opts?: { blur?: boolean; hero?: HeroVeil }): void {
+  set(owner: object, url: string | null, opts?: { blur?: boolean; hero?: boolean }): void {
     if (!url) return;
-    this.claim.set({ owner, url, blur: !!opts?.blur, hero: opts?.hero ?? null });
-    this.claims.update((n) => n + 1);
+    this.claim.set({ owner, url, blur: !!opts?.blur, hero: !!opts?.hero });
   }
 
   release(owner: object): void {

@@ -1,3 +1,8 @@
+<div appTvSection [appDefaultFocus]="defaultFocus()" focusKey="home" focusIdAttr="data-home-focus">
+<!-- Present from the first frame while the zone is on, so nothing under it moves when the picks arrive. -->
+@if (showHero()) {
+  <app-hero-carousel data-home-focus="hero" [items]="featured()" />
+}
 @if (auth.canAccessSettings()) {
   <app-setup-checklist [padding]="true" />
 }
@@ -45,8 +50,7 @@
     </div>
   }
 
-<div appTvSection [appDefaultFocus]="defaultFocus()" focusKey="home" focusIdAttr="data-home-focus"
-     class="flex flex-col gap-8" [class.stagger-children]="coldStart()">
+<div class="flex flex-col gap-8" [class.stagger-children]="coldStart()">
 
   @if (!loadingFirstPass() && noLibraries()) {
     <app-empty-state icon="library" [title]="'home.empty.title' | translate"
@@ -59,12 +63,6 @@
 
   @for (section of visibleSections(); track section.key) {
     @switch (section.type) {
-
-      @case ('hero-carousel') {
-        @if (featured().length) {
-          <app-hero-carousel [items]="featured()" />
-        }
-      }
 
       <!-- Watch parties -->
       @case ('watch-parties') {
@@ -358,3 +356,4 @@
 />
 
 <app-download-detail-modal #detailModal [progress]="detailProgress()" />
+</div>

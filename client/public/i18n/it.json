@@ -333,14 +333,12 @@
   "account_settings": {
     "title": "Impostazioni dell'account",
     "nav": {
+      "general": "Generale",
       "password": "Password",
-      "recommendations": "Consigli",
       "privacy": "Privacy",
-      "continue": "Continua tra i dispositivi",
       "spoilers": "Spoiler",
       "devices": "Dispositivi",
-      "email_devices": "Dispositivi e-mail",
-      "whats_new": "Novità"
+      "email_devices": "Dispositivi e-mail"
     },
     "recommendations": {
       "reset_title": "Reimposta i consigli nascosti",
@@ -4421,8 +4419,7 @@
     "scope_all": "Tutti i tipi",
     "scope_chosen": "Tipi scelti",
     "resume_only": "solo ripresa",
-    "settings_note": "La TV in diretta e le watch party non sono incluse. Gli audiolibri seguono il tipo Libro: sono in streaming, quindi controllabili.",
-    "saved": "Impostazione salvata"
+    "settings_note": "La TV in diretta e le watch party non sono incluse. Gli audiolibri seguono il tipo Libro: sono in streaming, quindi controllabili."
   },
   "language": {
     "en": "Inglese",

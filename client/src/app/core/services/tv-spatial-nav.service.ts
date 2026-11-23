@@ -11,7 +11,7 @@ import {
   isRendered,
   wantsFocusRestore,
 } from './focusable.constants';
-import { rowSnapPending } from '../utils/focus-snap.util';
+import { fitsAtPageTop, rowSnapPending } from '../utils/focus-snap.util';
 
 /** Spatial navigation for D-pad and keyboard arrows: container tree (`[appTvSection]`/`[appTvRow]`) first,
  *  rect fallback outside any container. Keys are caught in capture phase to pre-empt native consumers. */
@@ -316,8 +316,9 @@ export class TvSpatialNavService {
     // below the last card. Held keys stay put; up/down only; not in a modal.
     // The rail is not the page: its ends stop the step instead of scrolling the content behind it.
     if (crossZones && !this.openModals().length && !active?.closest('[data-tv-nav]') && (dir === 'down' || dir === 'up')) {
-      const top = dir === 'down' ? PAGE_SCROLL_AMOUNT_PX : -PAGE_SCROLL_AMOUNT_PX;
-      window.scrollBy({ top, behavior: 'smooth' });
+      // Nothing focusable above: all that is left to show is the top of the page.
+      if (dir === 'up') window.scrollTo({ top: 0, behavior: 'smooth' });
+      else window.scrollBy({ top: PAGE_SCROLL_AMOUNT_PX, behavior: 'smooth' });
     }
   }
 
@@ -333,7 +334,10 @@ export class TvSpatialNavService {
     const row = el.closest<HTMLElement>('[data-scroller]');
     if (scrollers.length) el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
     else if (!rowSnapPending(el)) {
-      if (row) this.revealInPage(el, style);
+      // An element of the first screen brings the page back to the very top instead of a partial `nearest` scroll.
+      if (fitsAtPageTop(el.getBoundingClientRect(), window.scrollY)) {
+        if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (row) this.revealInPage(el, style);
       else el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
     }
     this.scrollEdgeToFocus(el, scrollers);
@@ -437,7 +441,9 @@ export class TvSpatialNavService {
       // Up and down end at the rail's own edges instead of drifting into the page.
       return next && (dir === 'up' || dir === 'down') && !rail.el.contains(next) ? null : next;
     }
-    return next && rail.el.contains(next) ? this.railEntry(rail) : next;
+    if (!next || !rail.el.contains(next)) return next;
+    // The rail is entered with Left only: Up or Down at a page's edge stays put.
+    return dir === 'left' ? this.railEntry(rail) : null;
   }
 
   private rail(): ContainerNode | null {
@@ -618,19 +624,33 @@ export class TvSpatialNavService {
     return null;
   }
 
+  /** Where focus goes back to from the rail: the last page focus, else the page's first container. */
+  private pageReturn(rail: ContainerNode): HTMLElement | null {
+    const last = this.lastPageFocus;
+    if (last?.isConnected && isFocusCandidate(last)) return last;
+    const page = Array.from(this.containers.values()).find(
+      (c) => c !== rail && !this.findParentContainer(c.el) && c.el.closest('main') && isRendered(c.el),
+    );
+    return page ? this.digDown(page.el) : null;
+  }
+
+  /** Back from inside the rail: hands focus to the page as Right would. False when focus is not in the rail. */
+  leaveRail(): boolean {
+    const rail = this.rail();
+    const active = document.activeElement as HTMLElement | null;
+    if (!rail || !active || !rail.el.contains(active)) return false;
+    const target = this.pageReturn(rail);
+    if (!target) return false;
+    target.focus({ preventScroll: true });
+    this.scrollToFocus(target, getComputedStyle(target));
+    return true;
+  }
+
   /** The rail: Left from a page container's edge enters it on the current entry, Right from it returns to the page. */
   private bridgeRail(from: ContainerNode, dir: 'left' | 'right', active: HTMLElement): HTMLElement | null {
     const rail = this.rail();
     if (!rail) return null;
-    if (from === rail) {
-      if (dir !== 'right') return null;
-      const last = this.lastPageFocus;
-      if (last?.isConnected && isFocusCandidate(last)) return last;
-      const page = Array.from(this.containers.values()).find(
-        (c) => c !== rail && !this.findParentContainer(c.el) && c.el.closest('main') && isRendered(c.el),
-      );
-      return page ? this.digDown(page.el) : null;
-    }
+    if (from === rail) return dir === 'right' ? this.pageReturn(rail) : null;
     // Only from the leftmost focusable of its band: a neighbour on the same line wins.
     if (dir !== 'left') return null;
     const band = active.getBoundingClientRect();
@@ -678,10 +698,19 @@ export class TvSpatialNavService {
     return best;
   }
 
-  /** Resolve a child to a leaf: remembered activeChild, `autofocus` descendant, then first child; `preferFirst` skips the first two. */
+  /** Resolve a child to a leaf: the child marked `aria-current` (the active dot, the page shown), else remembered activeChild,
+   *  `autofocus` descendant, then first child; `preferFirst` skips memory and autofocus, never the current child. */
   private digDown(el: HTMLElement, preferFirst = false, alignCx?: number): HTMLElement | null {
     const c = this.containers.get(el);
     if (!c) return el; // it's a leaf focusable
+    const current = this.getNavigableChildren(c).find((ch) => {
+      const v = ch.getAttribute('aria-current');
+      return !!v && v !== 'false';
+    });
+    if (current) {
+      const dug = this.digDown(current, preferFirst, alignCx);
+      if (dug) return dug;
+    }
     if (!preferFirst && c.activeChild && c.el.contains(c.activeChild) && isFocusCandidate(c.activeChild)) {
       return c.activeChild;
     }

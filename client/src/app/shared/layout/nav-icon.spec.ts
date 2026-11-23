@@ -1,19 +1,19 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { SettingsIconComponent } from './settings-icon';
+import { NavIconComponent } from './nav-icon';
 
 /** The rendered SVG children, not the attribute: an unimported directive still leaves its
  *  attribute in the template's markup, so only the drawn paths prove the icon resolved. */
 function renderIcon(name: string): string {
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
-  const fixture = TestBed.createComponent(SettingsIconComponent);
+  const fixture = TestBed.createComponent(NavIconComponent);
   fixture.componentRef.setInput('name', name);
   fixture.detectChanges();
   return (fixture.nativeElement as HTMLElement).querySelector('svg')!.innerHTML;
 }
 
-describe('SettingsIconComponent', () => {
+describe('NavIconComponent', () => {
   const declaredByRealPlugins = ['webhook', 'download', 'search', 'server', 'history', 'settings'];
 
   for (const name of declaredByRealPlugins) {

@@ -1,22 +1,32 @@
-import { Component, computed, inject } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { Component } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
-import { LucideDynamicIcon } from '@lucide/angular';
+import { SettingsDrawerComponent, type SettingsNavItem } from '../../shared/components/settings-drawer/settings-drawer';
 import { icons } from '../../shared/icons';
-import { SERVER_SINCE, ServerVersionService } from '../../core/services/server-version.service';
+
+const item = (id: string, icon: SettingsNavItem['icon'], route = id): SettingsNavItem => ({
+  id,
+  route: `/account/${route}`,
+  labelKey: `account_settings.nav.${id}`,
+  icon,
+});
 
 @Component({
   selector: 'app-account-shell',
-  imports: [
-    RouterLink, RouterLinkActive, TranslatePipe,
-    SettingsDrawerComponent, LucideDynamicIcon],
+  imports: [TranslatePipe, SettingsDrawerComponent],
   templateUrl: './account-shell.html',
 })
 export class AccountShellComponent {
   protected readonly icons = icons;
 
-  private readonly versions = inject(ServerVersionService);
-  readonly whatsNew = computed(() => this.versions.supports(SERVER_SINCE.whatsNew));
-  readonly continueSync = computed(() => this.versions.supports(SERVER_SINCE.sessionSync));
+  protected readonly sections = [{
+    id: 'account',
+    items: [
+      item('general', icons.SlidersHorizontal),
+      item('password', icons.Lock),
+      item('privacy', icons.Users),
+      item('spoilers', icons.EyeOff),
+      item('devices', icons.TabletSmartphone),
+      item('email_devices', icons.Mail, 'email-devices'),
+    ],
+  }];
 }

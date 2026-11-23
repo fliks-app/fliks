@@ -355,6 +355,7 @@
                     [routerLink]="episodeRoute(ep)"
                     [state]="stillCard.navState()"
                     (pointerdown)="stillCard.onAnchorPointerdown()"
+                    (click)="stillCard.onAnchorClick()"
                     class="flex-1 text-base sm:text-lg font-medium hover:underline line-clamp-2"
                   >{{ episodeTitle(ep) }}</a>
                 </div>

@@ -7,9 +7,6 @@
      [style.--chrome-bottom-total]="chromeBottomTotal()">
   <input #sidebarToggle id="sidebar" type="checkbox" class="drawer-toggle" tabindex="-1" aria-hidden="true" />
   <div class="drawer-content flex flex-col relative">
-    <!-- Watched by an IntersectionObserver to derive `scrollAtTop` without ever
-         reading the scroll position. Absolute, so it adds no layout height. -->
-    <div #topSentinel aria-hidden="true" class="absolute top-0 left-0 h-5 w-px pointer-events-none"></div>
     @if (!navbar.railDocked()) {
     <nav
       appTvRow
@@ -45,8 +42,8 @@
         }
       </div>
       <div class="flex-1 min-w-0">
-        @if (isHomeRoute()) {
-          <!-- Home is a hero page too, with no clearlogo of its own: the Fliks logo stays, shaded to read over the art. -->
+        @if (navbar.heroBrand()) {
+          <!-- A hero claim with the brand as its centre (home): the Fliks logo, shaded to read over the art. -->
           <img src="fliks-logo-ondark.svg" [alt]="'app.name' | translate" class="h-7 w-auto pl-2 object-contain object-left [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
         } @else if (showHeroLogo()) {
           <!-- Hero clearlogo — kept whether the navbar is transparent (at top)
@@ -56,12 +53,15 @@
             [alt]="navbar.heroTitle()"
             (error)="onHeroLogoError()"
             class="h-7 w-auto max-w-[50vw] object-contain object-left pl-1 [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
+        } @else if (navbar.pageTitle()) {
+          <span class="flex min-w-0 items-center gap-2 pl-2 text-lg font-bold" [style.filter]="navbar.isHeroPage() ? 'drop-shadow(0 1px 2px rgb(0 0 0 / 0.45))' : null" [attr.title]="navbar.pageTitle()">
+            @if (navbar.pageIcon(); as icon) {
+              <app-lucide-icon [name]="icon.name" class="h-5 w-5 shrink-0" [style.color]="icon.color ?? null" />
+            }
+            <span class="truncate">{{ navbar.pageTitle() }}</span>
+          </span>
         } @else if (navbar.isHeroPage()) {
-          <!-- Hero page without a clearlogo: render nothing, so it doesn't fall through to the title fallbacks below. -->
-        } @else if (navbar.mobileNavTitle()) {
-          <span class="block min-w-0 pl-2 text-lg font-bold truncate" [attr.title]="navbar.mobileNavTitle()">{{
-            navbar.mobileNavTitle()
-          }}</span>
+          <!-- Hero page without a clearlogo or a title: render nothing, so it doesn't fall through to the brand link. -->
         } @else {
           <a class="btn btn-ghost text-xl" routerLink="/">{{ 'app.name' | translate }}</a>
           @if (!networkService.isOnline()) {

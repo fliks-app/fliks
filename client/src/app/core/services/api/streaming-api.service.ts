@@ -275,6 +275,9 @@ export interface ContinueWatchingItem {
   episodeLabel: string | null;
 }
 
+/** The server picks the hero carousel's titles; an older one has no carousel at all. */
+export const featuredSupported = (version: Pick<ServerVersionService, 'supports'>) => version.supports(SERVER_SINCE.featured);
+
 @Injectable({ providedIn: 'root' })
 export class StreamingApiService {
   private readonly http = inject(HttpClient);
@@ -760,8 +763,9 @@ export class StreamingApiService {
     );
   }
 
-  /** The hero carousel picks: available recommendations, then the newest unwatched additions. */
-  getFeatured(opts: CacheRead & { libraryId?: number; limit?: number } = {}) {
+  /** The hero carousel picks: available recommendations, then the newest unwatched additions. None from an older server. */
+  async getFeatured(opts: CacheRead & { libraryId?: number; limit?: number } = {}): Promise<FeaturedItem[]> {
+    if (!(await this.serverVersion.supportsWhenKnown(SERVER_SINCE.featured))) return [];
     const params: Record<string, string> = {};
     if (opts.libraryId) params['libraryId'] = String(opts.libraryId);
     if (opts.limit) params['limit'] = String(opts.limit);

@@ -2,7 +2,7 @@
 <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none hidden md:block">
   @for (layer of layers(); track $index) {
     <img
-      [cachedSrc]="layer.url | resolveUrl:(layer.blur ? 'thumb' : 'medium')"
+      [cachedSrc]="layer.url | resolveUrl:(layer.blur ? 'thumb' : layer.hero ? 'full' : 'medium')"
       alt=""
       loading="lazy"
       decoding="async"

@@ -333,14 +333,12 @@
   "account_settings": {
     "title": "Ajustes de la cuenta",
     "nav": {
+      "general": "General",
       "password": "Contraseña",
-      "recommendations": "Recomendaciones",
       "privacy": "Privacidad",
-      "continue": "Continuar entre dispositivos",
       "spoilers": "Spoilers",
       "devices": "Dispositivos",
-      "email_devices": "Dispositivos de correo",
-      "whats_new": "Novedades"
+      "email_devices": "Dispositivos de correo"
     },
     "recommendations": {
       "reset_title": "Restablecer las recomendaciones ocultas",
@@ -4421,8 +4419,7 @@
     "scope_all": "Todos los tipos",
     "scope_chosen": "Tipos elegidos",
     "resume_only": "solo reanudar",
-    "settings_note": "La televisión en directo y las watch parties no están incluidas. Los audiolibros siguen el tipo Libro: se transmiten, así que se pueden controlar.",
-    "saved": "Ajuste guardado"
+    "settings_note": "La televisión en directo y las watch parties no están incluidas. Los audiolibros siguen el tipo Libro: se transmiten, así que se pueden controlar."
   },
   "language": {
     "en": "Inglés",

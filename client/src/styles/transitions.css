@@ -7,7 +7,8 @@
 /* Only the two poster-morph halves join the flip below; the class (not `*`) keeps the card's badges and progress bar on their own animations. */
 app-media-card img,
 app-detail-hero img,
-app-tmdb-preview img {
+app-tmdb-preview img,
+app-hero-carousel app-mobile-fanart-hero img {
   view-transition-class: poster;
 }
 
@@ -347,4 +348,70 @@ html.vt-relayout::view-transition-old(.relayout),
 html.vt-relayout::view-transition-new(.relayout) {
   inline-size: auto;
   block-size: auto;
+}
+
+/* Carousel slide and the title page it opens, both ways: the title flies between them, the new page fades in over the old one. */
+html.vt-hero-trip app-hero-base h1 {
+  view-transition-name: vt-hero-title;
+}
+html.vt-hero-trip::view-transition-group(vt-hero-title) {
+  z-index: 2;
+  animation-duration: 350ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+/* Scaled by height, so a logo or a title keeps its proportions instead of the other box's width. */
+html.vt-hero-trip::view-transition-old(vt-hero-title),
+html.vt-hero-trip::view-transition-new(vt-hero-title) {
+  inline-size: auto;
+  block-size: 100%;
+}
+
+/* Settings dashboards swap the whole chrome: fade through, the dashboard coming in from the right, the app from the left.
+   Two unrelated chromes overlaid read as a double exposure, so the old one is gone before the new one arrives. */
+html:is(.vt-dash-in, .vt-dash-out) * {
+  view-transition-name: none !important;
+}
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(3rem);
+  }
+}
+@keyframes vt-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-3rem);
+  }
+}
+html:is(.vt-dash-in, .vt-dash-out, .vt-hero-trip)::view-transition-new(root) {
+  mix-blend-mode: normal;
+}
+html:is(.vt-dash-in, .vt-dash-out)::view-transition-old(root) {
+  animation: vt-fade-out 90ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+html.vt-dash-in::view-transition-new(root) {
+  animation: vt-from-right 260ms cubic-bezier(0.2, 0, 0, 1) 70ms both;
+}
+html.vt-dash-out::view-transition-new(root) {
+  animation: vt-from-left 260ms cubic-bezier(0.2, 0, 0, 1) 70ms both;
+}
+/* The title page shares the backdrop: it fades in over the old page, which stays opaque so the picture never dips. */
+html.vt-hero-trip::view-transition-new(root) {
+  animation: vt-fade-in 300ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.vt-dash-in::view-transition-new(root),
+  html.vt-dash-out::view-transition-new(root) {
+    animation-name: vt-fade-in;
+  }
 }

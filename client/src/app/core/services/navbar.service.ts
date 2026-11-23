@@ -23,10 +23,11 @@ export class NavbarService {
   /** Non-hero pages can opt into the layout's desktop back button by setting
    *  this, without taking on the hero styling. */
   readonly showBackButton = signal(false);
-  /** Resolved title for non-hero routes (set from route data or by components). */
+  /** The bar's centre text, hero page or not (set from route data or by the page), with an optional icon. */
   readonly pageTitle = signal('');
+  readonly pageIcon = signal<{ name: string; color?: string } | null>(null);
+  private readonly titles = new Map<string, { title: string; icon: { name: string; color?: string } | null }>();
   /** Whether the window is scrolled near the top (updated by LayoutComponent). */
-  readonly scrollAtTop = signal(true);
   /** True when at least one in-app navigation has happened since entering — used to gate back buttons. */
   readonly canGoBack = signal(false);
   /** Whether a tablet's rail stays expanded at lg+ (a desktop's always does); persisted, on by default. */
@@ -105,6 +106,12 @@ export class NavbarService {
         document.documentElement.classList.remove('nav-scroll-instant');
       }
       // Browser back/forward: mirror the pop on our stack so goBack() doesn't walk forward into the page just left.
+      // A new page names itself while it activates; one restored from the route cache gets back the name it had.
+      if (e instanceof NavigationStart && this.pathOf(e.url) !== this.pathOf(this.router.url)) {
+        this.titles.set(this.pathOf(this.router.url), { title: this.pageTitle(), icon: this.pageIcon() });
+        const kept = this.titles.get(this.pathOf(e.url));
+        this.setPageTitle(kept?.title ?? '', kept?.icon ?? null);
+      }
       if (e instanceof NavigationStart && e.navigationTrigger === 'popstate') {
         // Only a popstate landing on the top of our stack is a back-pop; a stray one (Android IME history entry) would swallow the next push.
         if (this.history[this.history.length - 1] === e.url) {
@@ -219,31 +226,76 @@ export class NavbarService {
       : null,
   );
 
-  /** Mobile navbar center: hero title on fanart pages, otherwise static/dynamic page title. */
-  readonly mobileNavTitle = computed(() =>
-    this.isHeroPage() ? this.heroTitle() : this.pageTitle(),
-  );
+  /** The page's name: a hero's title, else the page title. */
+  readonly mobileNavTitle = computed(() => (this.isHeroPage() && this.heroTitle()) || this.pageTitle());
 
-  /** True while the transparent hero-page navbar is shown (visible + hero page + scrolled at top). */
+  /** The hero page's picture still reaches below the phone bar. */
+  readonly heroUnderBar = signal(true);
+  /** The phone bar has no background while the hero picture is under it. */
   readonly navbarTransparent = computed(
-    () => this.mobileNavbarVisible() && this.scrollAtTop() && this.isHeroPage(),
+    () => this.mobileNavbarVisible() && this.isHeroPage() && this.heroUnderBar(),
   );
 
-  /** Mark the current page as having a hero fanart (enables transparent navbar + white icons). */
-  enterHeroPage(title: string, logoUrl: string | null = null) {
+  /** The page that holds the hero chrome: only it can hand it back, so a leaving page never clears its successor's claim. */
+  private heroOwner: object | null = null;
+  /** The hero's centre is the brand logo (home), not a title's clearlogo. */
+  readonly heroBrand = signal(false);
+
+  private heroHost: Element | null = null;
+  private heroWatch: { io?: IntersectionObserver; mo?: MutationObserver } = {};
+
+  /** Claim the hero chrome for `owner` (transparent navbar, white icons); the centre shows the hero's logo or brand, else the page title.
+   *  `host` is the page element holding its `[data-hero-picture]`: the bar stays clear while that picture is under it. */
+  enterHeroPage(owner: object, centre: { title?: string; logoUrl?: string | null; brand?: boolean; host?: Element } = {}) {
+    this.heroOwner = owner;
+    if (centre.host !== this.heroHost) this.watchHero(centre.host ?? null);
     document.body.classList.add('hero-page');
     this.isHeroPage.set(true);
-    this.pageTitle.set('');
-    this.heroTitle.set(title);
-    this.heroLogoUrl.set(logoUrl);
+    this.heroTitle.set(centre.title ?? '');
+    this.heroLogoUrl.set(centre.logoUrl ?? null);
+    this.heroBrand.set(!!centre.brand);
   }
 
-  leaveHeroPage() {
+  leaveHeroPage(owner: object) {
+    if (this.heroOwner !== owner) return;
+    this.heroOwner = null;
+    this.watchHero(null);
     document.body.classList.remove('hero-page');
     this.isHeroPage.set(false);
     this.heroTitle.set('');
     this.heroLogoUrl.set(null);
+    this.heroBrand.set(false);
     this.heroMenu.set(null);
+  }
+
+  /** One observer on the claimed page's picture, offset by the bar's height; it waits for the picture when the page draws it late. */
+  private watchHero(host: Element | null): void {
+    this.heroWatch.io?.disconnect();
+    this.heroWatch.mo?.disconnect();
+    this.heroWatch = {};
+    this.heroHost = host;
+    this.heroUnderBar.set(true);
+    if (!host || typeof IntersectionObserver === 'undefined') return;
+    const observe = (picture: Element) => {
+      const bar = document.querySelector<HTMLElement>('nav.navbar')?.offsetHeight ?? 0;
+      const io = new IntersectionObserver(([e]) => {
+        // The page drew a new picture (another episode): follow that one.
+        if (!e.target.isConnected) return this.watchHero(host);
+        this.heroUnderBar.set(e.isIntersecting);
+      }, { rootMargin: `-${bar}px 0px 0px 0px` });
+      io.observe(picture);
+      this.heroWatch.io = io;
+    };
+    const found = host.querySelector('[data-hero-picture]');
+    if (found) return observe(found);
+    const mo = new MutationObserver(() => {
+      const picture = host.querySelector('[data-hero-picture]');
+      if (!picture) return;
+      mo.disconnect();
+      observe(picture);
+    });
+    mo.observe(host, { childList: true, subtree: true });
+    this.heroWatch.mo = mo;
   }
 
   toggleSidebarPinned() {
@@ -252,13 +304,9 @@ export class NavbarService {
     localStorage.setItem('fliks.sidebarPinned', String(next));
   }
 
-  /** Sets the in-layout page title (ignored while on a hero page). */
-  setPageTitle(title: string) {
-    if (this.isHeroPage()) return;
+  setPageTitle(title: string, icon: { name: string; color?: string } | null = null) {
     this.pageTitle.set(title);
+    this.pageIcon.set(icon);
   }
 
-  clearPageTitle() {
-    this.pageTitle.set('');
-  }
 }

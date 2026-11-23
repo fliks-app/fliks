@@ -125,13 +125,18 @@ export class MediaStartService {
   private async startSeries(media: StartTarget, opts: { backdropUrl?: string | null }): Promise<void> {
     const { media: full, next } = await this.nextUpOf(media);
     if (!next) return void this.openDetail(full);
-    await this.playable.play(
+    await this.playNext(full, next, opts);
+  }
+
+  /** Plays an episode a caller already resolved with {@link nextUpOf}, so what it labelled is what plays. */
+  playNext(series: Media, next: NextUp, opts: { backdropUrl?: string | null } = {}): Promise<void> {
+    return this.playable.play(
       {
         fileId: next.file.id,
-        mediaId: full.id,
+        mediaId: series.id,
         episodeId: next.episode.id,
-        media: full,
-        backdropUrl: opts.backdropUrl ?? next.episode.stillUrl ?? full.fanartUrl ?? full.posterUrl ?? null,
+        media: series,
+        backdropUrl: opts.backdropUrl ?? next.episode.stillUrl ?? series.fanartUrl ?? series.posterUrl ?? null,
       },
       false,
     );

@@ -20,6 +20,7 @@ import { BooksApiService } from '../../core/services/api/books-api.service';
 import { bookListInfoFixture, collectionSummaryFixture, personListItemFixture } from '../../testing/books.fixtures';
 import { BackgroundService } from '../../core/services/background.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
+import { ServerVersionService } from '../../core/services/server-version.service';
 import { NavbarService } from '../../core/services/navbar.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
@@ -98,6 +99,9 @@ function fakeViewport() {
   };
 }
 
+/** Whether the mocked server is recent enough to pick the carousel's titles. */
+const serverHasFeatured = signal(true);
+
 function createHarness(remembered?: number) {
   const navigatedBack = signal(false);
   const attached$ = new Subject<string>();
@@ -137,7 +141,8 @@ function createHarness(remembered?: number) {
         provide: NavbarService,
         useValue: {
           setPageTitle: vi.fn(),
-          clearPageTitle: vi.fn(),
+          enterHeroPage: vi.fn(),
+          leaveHeroPage: vi.fn(),
           mobileNavbarVisible: signal(true),
           navigatedBack,
         },
@@ -150,6 +155,7 @@ function createHarness(remembered?: number) {
       },
       { provide: AppResumeService, useValue: { resume$: EMPTY } },
       { provide: MediaStartService, useValue: { resume: vi.fn() } },
+      { provide: ServerVersionService, useValue: { supports: () => serverHasFeatured() } },
     ],
   });
 
@@ -554,17 +560,43 @@ describe('LibraryComponent: featured carousel', () => {
     vi.restoreAllMocks();
   });
 
-  it('loads the featured titles of the library and shows them on all and suggestions only', async () => {
+  it('loads the featured titles of the library and keeps them on every view', async () => {
     const { component } = createHarness();
     const featured = { id: 5, title: 'F' } as unknown as Media;
     vi.mocked(TestBed.inject(StreamingApiService).getFeatured).mockResolvedValue([{ media: featured, reason: 'recent', becauseTitle: null }]);
     component.library.set({ id: 3, name: 'Movies', mediaTypes: ['movie'] } as never);
     await TestBed.inject(ApplicationRef).whenStable();
     await new Promise((r) => setTimeout(r));
-    expect(TestBed.inject(StreamingApiService).getFeatured).toHaveBeenCalledWith({ libraryId: 3 });
+    expect(TestBed.inject(StreamingApiService).getFeatured).toHaveBeenCalledWith({ known: true, libraryId: 3 });
+    expect(TestBed.inject(StreamingApiService).getFeatured).toHaveBeenCalledWith({ force: true, libraryId: 3 });
     component.viewMode.set('all');
     expect(component['showCarousel']()).toBe(true);
     component.viewMode.set('genres');
+    expect(component['showCarousel']()).toBe(true);
+  });
+
+  it('keeps the carousel slot until the library picks answer, and gives it back when there are none', async () => {
+    const { component } = createHarness();
+    let answer!: (v: unknown) => void;
+    vi.mocked(TestBed.inject(StreamingApiService).getFeatured).mockReturnValue(new Promise((r) => (answer = r)) as never);
+    component.library.set({ id: 3, name: 'Movies', mediaTypes: ['movie'] } as never);
+    await TestBed.inject(ApplicationRef).whenStable();
+    expect(component['showCarousel']()).toBe(true);
+    answer([]);
+    await new Promise((r) => setTimeout(r));
     expect(component['showCarousel']()).toBe(false);
+  });
+  it('has no carousel slot nor hero claim on a server older than the carousel', async () => {
+    serverHasFeatured.set(false);
+    try {
+      const { component } = createHarness();
+      expect(component['showCarousel']()).toBe(false);
+      component.library.set({ id: 3, name: 'Movies', mediaTypes: ['movie'] } as never);
+      await TestBed.inject(ApplicationRef).whenStable();
+      expect(component['showCarousel']()).toBe(false);
+      expect(TestBed.inject(NavbarService).enterHeroPage).not.toHaveBeenCalled();
+    } finally {
+      serverHasFeatured.set(true);
+    }
   });
 });

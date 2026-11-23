@@ -6,6 +6,8 @@ type Nav = {
   registerContainer(el: HTMLElement, o: { orientation: 'vertical' | 'horizontal'; isWrapping?: boolean }): void;
   findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null;
   onKey(e: KeyboardEvent): void;
+  leaveRail(): boolean;
+  scrollToFocus(el: HTMLElement, style: CSSStyleDeclaration): void;
   performMove(dir: 'left' | 'right' | 'up' | 'down', crossZones: boolean): void;
   findNeighborInTree(active: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null;
 };
@@ -194,5 +196,75 @@ describe('TvSpatialNavService tree', () => {
     expect(nav.findNeighbor('left')).toBe(a);
     // Right from the last child still loops.
     expect(nav.findNeighbor('right')).toBe(a);
+  });
+
+  it('enters a row on its aria-current child, whatever it remembered (the active carousel dot)', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const carousel = document.body.appendChild(box(document.createElement('div'), 0, 200));
+    nav.registerContainer(carousel, { orientation: 'horizontal' });
+    const play = carousel.appendChild(document.createElement('button'));
+    const dots = carousel.appendChild(box(document.createElement('div'), 150, 20));
+    nav.registerContainer(dots, { orientation: 'horizontal' });
+    const [d0, d1, d2] = [0, 1, 2].map(() => dots.appendChild(document.createElement('button')));
+    for (const el of [play, d0, d1, d2]) Object.defineProperty(el, 'offsetParent', { get: () => document.body });
+    // The dots sit under the actions on the left; the last action is to their right, as in the carousel.
+    at(play, 300, 100);
+    dots.getBoundingClientRect = () => ({ left: 0, top: 150, width: 60, height: 20, right: 60, bottom: 170, x: 0, y: 150, toJSON: () => ({}) });
+    [d0, d1, d2].forEach((d, i) => at(d, 20 * i, 150));
+    d0.focus();
+    d2.setAttribute('aria-current', 'true');
+    play.focus();
+    expect(nav.findNeighborInTree(play, 'right')).toBe(d2);
+  });
+
+  it('hands focus back to the page item it came from when Back leaves the rail', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const { library, second } = railAndPage(nav);
+    expect(nav.leaveRail()).toBe(false);
+    second.focus();
+    library.focus();
+    second.scrollIntoView = () => undefined;
+    expect(nav.leaveRail()).toBe(true);
+    expect(document.activeElement).toBe(second);
+    // Focus already on the page: Back goes on to the rest of the chain.
+    expect(nav.leaveRail()).toBe(false);
+  });
+
+  it('never enters the rail with Up or Down at the edges of the page', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const { home, library, first } = railAndPage(nav);
+    // Rail entries above and below the page's only row: the nearest candidates in both directions.
+    at(home, 0, -100);
+    at(library, 0, 300);
+    first.focus();
+    expect(nav.findNeighbor('up')).toBeNull();
+    expect(nav.findNeighbor('down')).toBeNull();
+  });
+
+  describe('back to the top of the page', () => {
+    afterEach(() => {
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+      vi.restoreAllMocks();
+    });
+
+    it('scrolls the page to the very top when Up finds nothing above', () => {
+      const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+      const lone = document.body.appendChild(box(document.createElement('button'), 0, 40));
+      lone.focus();
+      nav.performMove('up', true);
+      expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+    });
+
+    it('brings a first-screen element back to scroll 0 rather than a partial reveal', () => {
+      const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: 300 });
+      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+      const el = document.body.appendChild(box(document.createElement('button'), -200, 40));
+      el.scrollIntoView = vi.fn();
+      nav.scrollToFocus(el, getComputedStyle(el));
+      expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+      expect(el.scrollIntoView).not.toHaveBeenCalled();
+    });
   });
 });

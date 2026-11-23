@@ -6,12 +6,44 @@ import { KIND_REGISTRY, MEDIA_KINDS } from '../../core/media-kinds';
 export const CARD_OVERLAY_NAME = 'media-card-overlay';
 /** Marks what this module stamped: a hero's own style-bound name is unchanged so Angular won't rewrite it, and clearing by inline style would lose it in the route cache. */
 const STAMPED = 'data-poster-stamped';
+/** Held by reference: on the way back the stamped title sits in a page the route cache has detached. */
+let heroTitle: HTMLElement | null = null;
 
 export function clearPosterStamps(): void {
   document.querySelectorAll<HTMLElement>(`[${STAMPED}]`).forEach((el) => {
     el.style.viewTransitionName = '';
     el.removeAttribute(STAMPED);
   });
+  clearHeroTitle();
+}
+
+export function clearHeroTitle(): void {
+  heroTitle?.style.removeProperty('view-transition-name');
+  heroTitle?.removeAttribute(STAMPED);
+  heroTitle = null;
+}
+
+/** A carousel title pairs with the title of the page it opens, both ways; call after the poster stamp, which clears it. */
+export function stampHeroTitle(el: HTMLElement): void {
+  el.style.viewTransitionName = 'vt-hero-title';
+  el.setAttribute(STAMPED, '');
+  heroTitle = el;
+}
+
+export function heroTitleStamped(): boolean {
+  return !!heroTitle?.hasAttribute(STAMPED);
+}
+
+/** Set by the router hook for a carousel slide opening its title page, or returning to it. */
+export const HERO_TRIP_CLASS = 'vt-hero-trip';
+
+/** Set for a trip into or out of a settings dashboard. */
+export const DASHBOARD_CLASS = { in: 'vt-dash-in', out: 'vt-dash-out' } as const;
+
+/** Trips whose page fade carries the backdrop change (transitions.css), so the backdrop must be final when the new page is captured. */
+export function backdropFollowsTransition(): boolean {
+  const cls = document.documentElement.classList;
+  return [HERO_TRIP_CLASS, DASHBOARD_CLASS.in, DASHBOARD_CLASS.out].some((c) => cls.contains(c));
 }
 
 /** Whether a card armed a morph for the navigation being started. */
@@ -120,6 +152,18 @@ export function leavingPosterPage(from: RouteNode, to: RouteNode): boolean {
     !POSTER_ROUTES.has(leafRoutePath(to)) &&
     leafRoutePath(to) !== WATCH_PATH
   );
+}
+
+/** Settings dashboards, top-level routes with their own chrome, and '' the main layout they open from. */
+const DASHBOARDS = new Set(['account', 'app-settings', 'admin']);
+
+/** Opening a dashboard swaps the whole chrome; a trip inside one keeps its sidebar still and gets nothing. */
+export function dashboardTrip(from: RouteNode, to: RouteNode): 'in' | 'out' | null {
+  const a = from.firstChild?.routeConfig?.path;
+  const b = to.firstChild?.routeConfig?.path;
+  if (a === b || a === undefined || b === undefined) return null;
+  if (!(DASHBOARDS.has(a) || a === '') || !(DASHBOARDS.has(b) || b === '')) return null;
+  return DASHBOARDS.has(b) ? 'in' : 'out';
 }
 
 /** Drops a leftover stamp when neither side has a poster, else the lone img animates on its own out of its rounded figure. */

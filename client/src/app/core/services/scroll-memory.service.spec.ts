@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { NavigationStart, Router, Scroll } from '@angular/router';
+import { NavigationEnd, NavigationStart, Router, Scroll } from '@angular/router';
 import { Subject } from 'rxjs';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ScrollMemoryService } from './scroll-memory.service';
@@ -130,7 +130,7 @@ describe('ScrollMemoryService', () => {
     expect(offset).toBe(900);
   });
 
-  it('leaves a return alone — its own restore owns the offset', async () => {
+  it('starts a return with nothing queued at the top, without holding it against its own late restore', async () => {
     const s = service();
     wentBack = true;
     s.activate('library-films');
@@ -138,9 +138,42 @@ describe('ScrollMemoryService', () => {
     events.next(new NavigationStart(1, '/libraries/Films'));
     offset = 1422;
     events.next(new Scroll({} as never, null, null));
+    s.restoreSticky('library-films');
+    await nextFrame();
+    await nextFrame();
+
+    expect(writes).toEqual([0, 4160]);
+    expect(offset).toBe(4160);
+  });
+
+  it('keeps the offset when only the query changes on the same path, unless the call asks for the top', async () => {
+    service();
+    events.next(new NavigationEnd(1, '/libraries/Films', '/libraries/Films'));
+    offset = 640;
+    events.next(new NavigationStart(2, '/libraries/Films?view=genres'));
+    const tab = new NavigationEnd(2, '/libraries/Films?view=genres', '/libraries/Films?view=genres');
+    events.next(tab);
+    events.next(new Scroll(tab, null, null));
+    await nextFrame();
+    expect(offset).toBe(640);
+
+    events.next(new NavigationStart(3, '/libraries/Films?view=likes'));
+    const reset = new NavigationEnd(3, '/libraries/Films?view=likes', '/libraries/Films?view=likes');
+    events.next(reset);
+    events.next(new Scroll(reset, null, null, 'after-transition'));
+    await nextFrame();
+    expect(offset).toBe(0);
+  });
+
+  it('leaves a navigation that asks for no scroll alone', async () => {
+    service();
+    offset = 640;
+    events.next(new NavigationStart(1, '/movies/1'));
+    events.next(new Scroll({} as never, null, null, 'manual'));
     await nextFrame();
     await nextFrame();
 
     expect(writes).not.toContain(0);
+    expect(offset).toBe(640);
   });
 });

@@ -11,6 +11,7 @@
      (focusout)="onFocusOut($event, root)"
      (pointerenter)="onPointer($event, true)"
      (pointerleave)="onPointer($event, false)">
+  <div class="rail-scroll scrollbar-none">
   <div class="rail-head">
     <div class="rail-item pointer-events-none">
       <span class="rail-icon relative">
@@ -35,7 +36,7 @@
     }
   </div>
 
-  <nav class="rail-list scroll-ring-safe scrollbar-none" [attr.aria-label]="'nav.rail_label' | translate">
+  <nav class="rail-list" [attr.aria-label]="'nav.rail_label' | translate">
     <ul class="flex flex-col gap-0.5">
       @for (item of before(); track item.id) {
         <li><ng-container [ngTemplateOutlet]="entry" [ngTemplateOutletContext]="{ $implicit: item }" /></li>
@@ -121,6 +122,7 @@
         <svg [lucideIcon]="icons.Settings" class="h-5 w-5"></svg>
       </a>
     </div>
+  </div>
   </div>
 </div>
 

@@ -408,18 +408,11 @@ export const routes: Routes = [
       import('./features/account/account-shell').then((m) => m.AccountShellComponent),
     canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'password' },
+      { path: '', pathMatch: 'full', redirectTo: 'general' },
       {
         path: 'password',
         loadComponent: () =>
           import('./features/account/account').then((m) => m.AccountComponent),
-      },
-      {
-        path: 'recommendations',
-        loadComponent: () =>
-          import('./features/account/recommendations').then(
-            (m) => m.AccountRecommendationsComponent,
-          ),
       },
       {
         path: 'privacy',
@@ -436,17 +429,10 @@ export const routes: Routes = [
           ),
       },
       {
-        path: 'whats-new',
+        path: 'general',
         loadComponent: () =>
-          import('./features/account/whats-new').then(
-            (m) => m.AccountWhatsNewComponent,
-          ),
-      },
-      {
-        path: 'continue',
-        loadComponent: () =>
-          import('./features/account/continue').then(
-            (m) => m.AccountContinueComponent,
+          import('./features/account/general').then(
+            (m) => m.AccountGeneralComponent,
           ),
       },
       {

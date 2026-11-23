@@ -377,12 +377,15 @@ export class MediaCardComponent {
     } else {
       clearPosterStamps();
     }
-    this.markNavigationIntent();
   }
 
-  /** A link outside the card opening the same page owes the same stamp and stack intent. */
+  /** A link outside the card opening the same page owes the same stamp. */
   onAnchorPointerdown() {
     this.flagPosterForTransition();
+  }
+
+  /** The stack intent belongs to the click that navigates: a scroll that merely started on the card must not arm it. */
+  onAnchorClick() {
     this.markNavigationIntent();
   }
 

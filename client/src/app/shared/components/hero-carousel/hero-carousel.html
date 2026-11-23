@@ -1,102 +1,67 @@
-@if (current(); as m) {
-  <section
-    class="relative"
-    [class.hero-carousel-compact]="height() === 'compact'"
-    [class.hc-desktop]="desktop()"
-    aria-roledescription="carousel"
-    [attr.aria-label]="'hero_carousel.label' | translate"
-  >
-    @if (!desktop()) {
-      <app-mobile-fanart-hero class="block" [fanartUrl]="m.fanartUrl" [tall]="height() === 'full'" />
-      <!-- Shade under the status bar and the transparent navbar. -->
-      <div class="hc-top-shade pointer-events-none absolute inset-x-0 top-0 h-28" aria-hidden="true"></div>
-    }
-    <div class="grid relative z-20" [class.hc-mobile-stage]="!desktop()" [class.hero-carousel-stage]="desktop()">
-      @for (s of [m]; track s.id) {
-        <div
-          class="hc-slide [grid-area:1/1] flex flex-col"
-          [class.justify-end]="!desktop()"
-          [class.items-center]="!desktop()"
-          [class.text-center]="!desktop()"
-          [style.--hc-delay]="changed() ? null : '0ms'"
-          (animate.leave)="leave($event)"
-          aria-live="off"
-        >
-          <div class="hc-item hc-logo" style="--i: 0">
-            @if (s.logoUrl) {
-              <img [src]="s.logoUrl | resolveUrl: 'medium'" [alt]="s.title" class="object-contain" />
-            } @else {
-              <h2 class="hc-title font-bold tracking-tight">{{ s.title }}</h2>
-            }
-          </div>
-          <div class="hc-item hc-meta-wrap" style="--i: 1">
-            @if (desktop()) {
-              @if (facts(); as f) {
-                <div class="hc-meta">
-                  <b>{{ f.kindKey | translate }}</b>
-                  @if (f.year) { <span>{{ f.year }}</span> }
-                  @if (f.runtime) { <span>{{ f.runtime }}</span> }
-                  @if (f.rating) { <span>★ {{ f.rating }}</span> }
-                  @if (f.genres) { <span>{{ f.genres }}</span> }
-                </div>
-              }
-            } @else {
-              <app-hero-meta-row [rating]="null" [parts]="metaParts()" [desktop]="false" [centered]="true" />
-            }
-          </div>
-          @if (s.overview && desktop()) {
-            <p class="hc-item hc-overview" style="--i: 2">{{ s.overview }}</p>
-          }
-          <div class="hc-item" style="--i: 3">
-            <div appTvRow class="hc-actions flex items-center" [class.justify-center]="!desktop()" [class.mt-3]="!desktop()">
-              @if (primary(); as p) {
-                @if (p.play) {
-                  <button type="button" data-home-focus="hero:primary" class="btn hc-btn" [class.btn-primary]="!desktop()" [class.hc-btn-solid]="desktop()" [class.hc-btn-compact]="!desktop()" (click)="play(s)">
-                    <svg [lucideIcon]="icons.Play" class="hc-icon" fill="currentColor"></svg>{{ p.labelKey | translate: { code: p.code } }}
-                  </button>
-                  <a [routerLink]="detailLink()" class="btn hc-btn" [class.btn-ghost]="!desktop()" [class.hc-btn-glass]="desktop()" [class.hc-btn-compact]="!desktop()">
-                    @if (desktop()) { <svg [lucideIcon]="icons.Info" class="hc-icon"></svg> }{{ 'hero_carousel.details' | translate }}
-                  </a>
-                } @else {
-                  <a [routerLink]="detailLink()" data-home-focus="hero:primary" class="btn hc-btn" [class.btn-primary]="!desktop()" [class.hc-btn-solid]="desktop()" [class.hc-btn-compact]="!desktop()">
-                    <svg [lucideIcon]="icons.Info" class="hc-icon"></svg>{{ p.labelKey | translate }}
-                  </a>
-                }
-                @if (desktop()) {
-                  <button type="button" class="btn hc-btn hc-btn-glass hc-btn-square" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addToPlaylist(s)">
-                    <svg [lucideIcon]="icons.Plus" class="hc-icon"></svg>
-                  </button>
-                }
+<!-- One spatial-nav row for the actions and the dots: Right from the last action reaches the dots, Down leaves for the first row. -->
+<!-- Desktop layout: the frame is where the page backdrop shows the picture; a phone marks its own picture. -->
+<section appTvRow class="hc-frame" [attr.data-hero-picture]="desktop() ? '' : null" aria-roledescription="carousel" [attr.aria-label]="'hero_carousel.label' | translate">
+  @if (!desktop()) {
+    <app-mobile-fanart-hero class="block" [fanartUrl]="current()?.fanartUrl" />
+  }
+  <div class="hc-label"><ng-content select="[heroLabel]" /></div>
+  @if (current(); as m) {
+    <div class="hc-body">
+      <div class="hc-stack">
+        @for (s of [m]; track s.id) {
+          <div class="hc-slide" [style.--hc-delay]="changed() ? null : '0ms'" (animate.leave)="leave($event)" aria-live="off">
+            <div class="hc-item" style="--i: 0">
+              @if (s.logoUrl) {
+                <img class="hc-logo" [src]="s.logoUrl | resolveUrl: 'medium'" [alt]="s.title" />
+              } @else {
+                <h2 class="hc-title">{{ s.title }}</h2>
               }
             </div>
+            <div class="hc-item" style="--i: 1">
+              <app-hero-meta-row [rating]="desktop() ? s.rating || null : null" [parts]="parts()" [chips]="chips()" [desktop]="desktop()" [centered]="!desktop()" [onPicture]="!desktop()" />
+            </div>
+            @if (s.overview) {
+              <p class="hc-item hc-overview" style="--i: 2">{{ s.overview }}</p>
+            }
+            <div class="hc-item" style="--i: 3">
+              <div class="hc-actions">
+                @if (primary(); as p) {
+                  <!-- One element whatever it does: a series swaps Details for Play once its episode is known, and focus must stay on it. -->
+                  <button type="button" class="btn btn-light" (click)="primaryAction(s)">
+                    @if (p.play) {
+                      <svg [lucideIcon]="icons.Play" class="hc-icon" fill="currentColor"></svg>{{ p.labelKey | translate: { code: p.code } }}
+                    } @else {
+                      <svg [lucideIcon]="icons.Info" class="hc-icon"></svg>{{ p.labelKey | translate }}
+                    }
+                  </button>
+                  @if (p.play) {
+                    <a [routerLink]="detailLink()" [state]="{ media: s }" class="btn btn-glass" (click)="stampDetail()">{{ 'hero_carousel.details' | translate }}</a>
+                  }
+                }
+                <button type="button" class="btn btn-glass btn-square hc-add" [attr.aria-label]="'playlists.add_to_playlist' | translate" (click)="addToPlaylist(s)">
+                  <svg [lucideIcon]="icons.ListPlus" class="hc-icon"></svg>
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      }
-    </div>
-    @if (!desktop()) {
-      <div class="hc-mobile-dots absolute inset-x-0 bottom-3 z-20 flex justify-center">
-        <ng-container *ngTemplateOutlet="dotsTpl" />
+        }
       </div>
-    } @else {
-      <ng-container *ngTemplateOutlet="dotsTpl" />
-    }
-  </section>
-}
-
-<ng-template #dotsTpl>
-  @if (items().length > 1) {
-    <div appTvRow class="z-20 flex items-center gap-2" [class.relative]="!desktop()" [class.hc-desktop-dots]="desktop()">
-      @for (_ of items(); track $index) {
-        <button
-          type="button"
-          class="hc-dot"
-          [class.hc-dot-on]="$index === index()"
-          [attr.aria-current]="$index === index() ? 'true' : null"
-          [attr.aria-label]="'hero_carousel.go_to' | translate: { n: $index + 1 }"
-          (click)="go($index)"
-          (focus)="go($index)"
-        ></button>
-      }
     </div>
+    @if (items().length > 1) {
+      <!-- Its own row inside the carousel's: entering it lands on the dot of the slide shown (aria-current). -->
+      <div appTvRow class="hc-dots">
+        @for (_ of items(); track $index) {
+          <button
+            type="button"
+            class="hc-dot"
+            [class.hc-dot-on]="$index === index()"
+            [attr.aria-current]="$index === index() ? 'true' : null"
+            [attr.aria-label]="'hero_carousel.go_to' | translate: { n: $index + 1 }"
+            (click)="go($index)"
+            (focus)="go($index)"
+          ></button>
+        }
+      </div>
+    }
   }
-</ng-template>
+</section>

@@ -179,7 +179,9 @@ describe('NavRailComponent', () => {
     const { fixture, el } = await setup({ tv: true });
     const root = el.querySelector('.nav-rail')!;
     expect(root.classList.contains('rail-open')).toBe(false);
+    document.documentElement.classList.add('tv-host');
     (el.querySelector('.rail-list a') as HTMLElement).dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    document.documentElement.classList.remove('tv-host');
     fixture.detectChanges();
     expect(root.classList.contains('rail-open')).toBe(true);
     (el.querySelector('.rail-list a') as HTMLElement).dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: document.body }));

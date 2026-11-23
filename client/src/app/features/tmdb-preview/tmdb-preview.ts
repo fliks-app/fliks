@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, Type, forwardRef, inject } from '@angular/core';
+import { Component, OnDestroy, OnInit, Type, forwardRef, inject, ElementRef } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { BackgroundService } from '../../core/services/background.service';
@@ -16,6 +16,8 @@ import { PREVIEW_HOST, type PreviewHost, type PreviewSeed } from './preview-host
   providers: [{ provide: PREVIEW_HOST, useExisting: forwardRef(() => TmdbPreviewComponent) }],
 })
 export class TmdbPreviewComponent implements PreviewHost, OnInit, OnDestroy {
+  /** Holds the page's hero picture, which keeps the phone bar clear while it is under it. */
+  private readonly heroHost: Element = inject(ElementRef).nativeElement;
   private readonly route = inject(ActivatedRoute);
   private readonly navbar = inject(NavbarService);
   private readonly backgroundService = inject(BackgroundService);
@@ -38,16 +40,16 @@ export class TmdbPreviewComponent implements PreviewHost, OnInit, OnDestroy {
 
   ngOnInit() {
     // Hero chrome from the first frame, so the skeleton sits where the page will.
-    this.navbar.enterHeroPage(this.seed?.title ?? '');
+    this.navbar.enterHeroPage(this, { host: this.heroHost, title: this.seed?.title ?? '' });
   }
 
   ngOnDestroy() {
     this.backgroundService.release(this);
-    this.navbar.leaveHeroPage();
+    this.navbar.leaveHeroPage(this);
   }
 
   setTitle(title: string, logoUrl?: string | null) {
-    this.navbar.enterHeroPage(title, logoUrl);
+    this.navbar.enterHeroPage(this, { host: this.heroHost, title, logoUrl });
   }
 
   setBackground(url: string | null, opts?: { blur?: boolean }) {

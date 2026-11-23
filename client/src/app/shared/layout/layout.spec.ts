@@ -72,6 +72,7 @@ interface Fixture {
   pairingEvents?: Subject<SseEvent>;
   /** Marks the active page as a hero (fanart) page. */
   isHeroPage?: boolean;
+  heroBrand?: boolean;
   away?: boolean;
   /** An audio item is loaded in the root audio player. */
   audio?: boolean;
@@ -181,6 +182,9 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           dockedBars: () => [],
           heroTitle: () => '',
           isHeroPage: () => !!f.isHeroPage,
+          heroBrand: () => !!f.heroBrand,
+          pageTitle: () => '',
+          pageIcon: () => null,
           showBackButton: () => false,
           mobileNavTitle: () => '',
           mobileNavbarVisible: () => !f.railMode || f.railMode === 'drawer' || f.railMode === 'none',
@@ -189,7 +193,6 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           sidebarPinned: () => false,
           phoneDock: () => f.isNative && !!f.device.isPhone,
           toggleSidebarPinned: () => {},
-          scrollAtTop: { set: () => {} },
           setPageTitle: () => {},
           resetNavHistory: () => {},
           goBack: () => {},
@@ -367,8 +370,8 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     expect(dockItems(root)).toEqual([]);
   });
 
-  it('shows the Fliks logo in the navbar of the home route even when home is a hero page', async () => {
-    const fixture = await createFixture({ ...ADMIN_WITH_LIBRARIES, isHeroPage: true });
+  it('shows the Fliks logo in the navbar when the hero claim asks for the brand (home)', async () => {
+    const fixture = await createFixture({ ...ADMIN_WITH_LIBRARIES, isHeroPage: true, heroBrand: true });
     expect(fixture.nativeElement.querySelector('nav.navbar img[src="fliks-logo-ondark.svg"]')).not.toBeNull();
   });
 

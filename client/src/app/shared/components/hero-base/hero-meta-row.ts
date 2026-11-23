@@ -22,5 +22,7 @@ export class HeroMetaRowComponent {
   /** Desktop spacing; the mobile row sits tighter. */
   readonly desktop = input(true);
   readonly centered = input(false);
+  /** Over a picture: full-contrast text with the hero text shadow. */
+  readonly onPicture = input(false);
   readonly visible = computed(() => !!(this.rating() || this.parts().length || this.chips().length));
 }

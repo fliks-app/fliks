@@ -1,34 +1,74 @@
 <div class="max-w-2xl flex flex-col gap-4">
-  <app-toggle-field
-    [value]="enabled()"
-    (valueChange)="setEnabled($event)"
-    [label]="'session.settings_title' | translate"
-    [hint]="'session.settings_hint' | translate"
-  />
+  <h1 class="text-xl font-bold">{{ 'account_settings.nav.general' | translate }}</h1>
 
-  @if (enabled()) {
-    <div class="join" role="group" [attr.aria-label]="'session.settings_title' | translate">
-      <button type="button" class="btn btn-sm join-item" [class.btn-active]="scopeAll()" [attr.aria-pressed]="scopeAll()" (click)="setScope(true)">
-        {{ 'session.scope_all' | translate }}
-      </button>
-      <button type="button" class="btn btn-sm join-item" [class.btn-active]="!scopeAll()" [attr.aria-pressed]="!scopeAll()" (click)="setScope(false)">
-        {{ 'session.scope_chosen' | translate }}
-      </button>
-    </div>
-
-    @if (!scopeAll()) {
-      <div class="flex flex-wrap gap-2 p-1">
-        @for (k of kinds; track k) {
-          <button type="button" class="btn btn-sm" [class.btn-primary]="isChosen(k)" [attr.aria-pressed]="isChosen(k)" (click)="toggleKind(k)">
-            {{ label(k) }}
-            @if (resumeOnly(k)) {
-              <span class="text-sm opacity-70">{{ 'session.resume_only' | translate }}</span>
-            }
-          </button>
-        }
-      </div>
-    }
-
-    <p class="text-sm text-base-content/60">{{ 'session.settings_note' | translate }}</p>
+  @if (showWhatsNew()) {
+    <app-toggle-field
+      [value]="whatsNew()"
+      (valueChange)="setWhatsNew($event)"
+      [label]="'whats_new.enable' | translate"
+      [hint]="'whats_new.enable_hint' | translate"
+    />
   }
+
+  @if (showSessionSync()) {
+    @if (showWhatsNew()) {
+      <div class="divider my-0"></div>
+    }
+    <app-toggle-field
+      [value]="enabled()"
+      (valueChange)="setEnabled($event)"
+      [label]="'session.settings_title' | translate"
+      [hint]="'session.settings_hint' | translate"
+    />
+
+    @if (enabled()) {
+      <div class="join" role="group" [attr.aria-label]="'session.settings_title' | translate">
+        <button type="button" class="btn btn-sm join-item" [class.btn-active]="scopeAll()" [attr.aria-pressed]="scopeAll()" (click)="setScope(true)">
+          {{ 'session.scope_all' | translate }}
+        </button>
+        <button type="button" class="btn btn-sm join-item" [class.btn-active]="!scopeAll()" [attr.aria-pressed]="!scopeAll()" (click)="setScope(false)">
+          {{ 'session.scope_chosen' | translate }}
+        </button>
+      </div>
+
+      @if (!scopeAll()) {
+        <div class="flex flex-wrap gap-2 p-1">
+          @for (k of kinds; track k) {
+            <button type="button" class="btn btn-sm" [class.btn-primary]="isChosen(k)" [attr.aria-pressed]="isChosen(k)" (click)="toggleKind(k)">
+              {{ label(k) }}
+              @if (resumeOnly(k)) {
+                <span class="text-sm opacity-70">{{ 'session.resume_only' | translate }}</span>
+              }
+            </button>
+          }
+        </div>
+      }
+
+      <p class="text-sm text-base-content/60">{{ 'session.settings_note' | translate }}</p>
+    }
+  }
+
+  <div class="divider my-0"></div>
+  <div class="flex flex-wrap items-center gap-4">
+    <div class="flex-1 min-w-0 flex flex-col gap-0.5">
+      <span class="font-medium">{{ 'account_settings.recommendations.reset_title' | translate }}</span>
+      <span class="text-sm text-base-content/60">{{ 'account_settings.recommendations.description' | translate }}</span>
+      <span class="text-sm text-base-content/60">
+        {{ 'account_settings.recommendations.dismissed_count' | translate }}
+        @if (dismissed() === null) {
+          <span class="loading loading-spinner loading-xs"></span>
+        } @else {
+          <span class="badge badge-sm badge-neutral">{{ dismissed() }}</span>
+        }
+      </span>
+    </div>
+    <button type="button" class="btn btn-sm" (click)="resetDismissed()" [disabled]="resetting() || !(dismissed() ?? 0)">
+      @if (resetting()) {
+        <span class="loading loading-spinner loading-xs"></span>
+      } @else {
+        <svg [lucideIcon]="icons.RotateCcw" class="h-4 w-4"></svg>
+      }
+      {{ 'account_settings.recommendations.reset' | translate }}
+    </button>
+  </div>
 </div>

@@ -19,6 +19,7 @@ import { UserMenuComponent } from '../components/user-menu';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvSectionDirective } from '../directives/tv-section.directive';
 import { NavIconComponent } from '../layout/nav-icon';
+import { keyboardModality } from '../../core/services/focusable.constants';
 
 /** Libraries listed in the rail before "Plus" takes the rest. */
 const RAIL_LIBRARIES = 3;
@@ -99,7 +100,7 @@ export class NavRailComponent {
 
   /** Focus opens the rail when it came from the keyboard or D-pad: a mouse click leaves focus behind on a link. */
   protected onFocusIn(e: FocusEvent): void {
-    if (this.tv.isTv() || (e.target as HTMLElement).matches(':focus-visible')) this.focused.set(true);
+    if (keyboardModality()) this.focused.set(true);
   }
 
   protected onFocusOut(e: FocusEvent, host: HTMLElement): void {

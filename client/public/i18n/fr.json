@@ -333,14 +333,12 @@
   "account_settings": {
     "title": "Paramètres du compte",
     "nav": {
+      "general": "Général",
       "password": "Mot de passe",
-      "recommendations": "Recommandations",
       "privacy": "Confidentialité",
-      "continue": "Reprise automatique entre appareils",
       "spoilers": "Divulgâchage",
       "devices": "Appareils",
-      "email_devices": "Appareils e-mail",
-      "whats_new": "Nouveautés"
+      "email_devices": "Appareils e-mail"
     },
     "recommendations": {
       "reset_title": "Réinitialiser les recommandations masquées",
@@ -4421,8 +4419,7 @@
     "scope_all": "Tous les types",
     "scope_chosen": "Types choisis",
     "resume_only": "reprise seule",
-    "settings_note": "La télévision en direct et les watch parties ne sont pas concernées. Les livres audio suivent le type Livre : ils sont diffusés, donc pilotables.",
-    "saved": "Réglage enregistré"
+    "settings_note": "La télévision en direct et les watch parties ne sont pas concernées. Les livres audio suivent le type Livre : ils sont diffusés, donc pilotables."
   },
   "language": {
     "en": "Anglais",

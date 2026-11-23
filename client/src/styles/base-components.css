@@ -142,6 +142,15 @@ app-layout main {
 body.hero-page app-layout main {
   padding-top: 1rem;
 }
+/* Bars over a picture have no shade: icons carry the hero shadow, text its text-shadow twin. The desktop bar always
+   sits on the backdrop (invisible over a dark one); the phone navbar only while it is clear over a hero. */
+.chrome-bar svg {
+  filter: var(--hero-icon-shadow);
+}
+.chrome-bar,
+.nav-hero-icons {
+  text-shadow: var(--hero-text-shadow);
+}
 /* The keyboard covers the bottom navbar: its reserved space would hold a field off the keyboard's edge. */
 html.keyboard-open app-layout main {
   padding-bottom: 0;
@@ -512,6 +521,16 @@ html.tv-host .toggle-primary[aria-checked='true'] {
 }
 .modal-sheet-handle {
   display: none;
+}
+
+/* Wide screens: a box opened before it ever had a style (first open of a deferred modal) starts from daisyUI's closed state. */
+@media (min-width: 640px) {
+  @starting-style {
+    .modal[open] > .modal-box {
+      translate: 0 2%;
+      scale: 0.98;
+    }
+  }
 }
 
 /* On a phone it is a bottom sheet. Unlayered CSS outranks daisyUI's, so its open rule is restated.

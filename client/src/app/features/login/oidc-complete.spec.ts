@@ -43,7 +43,7 @@ describe('OidcCompleteComponent', () => {
 
   it('goes back to the account page after a link', async () => {
     const { navigate } = await run('code=abc&state=xyz', { ok: true, pending: { link: true } });
-    expect(navigate).toHaveBeenCalledWith(['/account'], { replaceUrl: true });
+    expect(navigate).toHaveBeenCalledWith(['/account/password'], { replaceUrl: true });
   });
 
   it('sends an error back to the login page with its kind and no auto-launch', async () => {

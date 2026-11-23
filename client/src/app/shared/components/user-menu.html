@@ -39,10 +39,13 @@
     <svg [lucideIcon]="icons.User" class="h-5 w-5 shrink-0 opacity-80"></svg>
     <span class="flex-1">{{ 'nav.account_settings' | translate }}</span>
   </a>
-  <a routerLink="/app-settings" class="dropdown-item text-white">
-    <svg [lucideIcon]="icons.Settings" class="h-5 w-5 shrink-0 opacity-80"></svg>
-    <span class="flex-1">{{ 'nav.app_settings' | translate }}</span>
-  </a>
+  <!-- The rail shows its own settings button beside the menu. -->
+  @if (!row()) {
+    <a routerLink="/app-settings" class="dropdown-item text-white">
+      <svg [lucideIcon]="icons.Settings" class="h-5 w-5 shrink-0 opacity-80"></svg>
+      <span class="flex-1">{{ 'nav.app_settings' | translate }}</span>
+    </a>
+  }
   <!-- Its route already refuses a TV, so the entry only led to a dead end. -->
   @if (auth.canAccessSettings() && !tv.isTv()) {
     <a routerLink="/admin" class="dropdown-item text-white">

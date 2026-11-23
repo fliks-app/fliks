@@ -333,14 +333,12 @@
   "account_settings": {
     "title": "Account settings",
     "nav": {
+      "general": "General",
       "password": "Password",
-      "recommendations": "Recommendations",
       "privacy": "Privacy",
-      "continue": "Continue across devices",
       "spoilers": "Spoilers",
       "devices": "Devices",
-      "email_devices": "E-mail devices",
-      "whats_new": "What's new"
+      "email_devices": "E-mail devices"
     },
     "recommendations": {
       "reset_title": "Reset dismissed recommendations",
@@ -4421,8 +4419,7 @@
     "scope_all": "All types",
     "scope_chosen": "Chosen types",
     "resume_only": "resume only",
-    "settings_note": "Live TV and watch parties are not covered. Audiobooks follow the Book type: they are streamed, so they can be controlled.",
-    "saved": "Settings saved"
+    "settings_note": "Live TV and watch parties are not covered. Audiobooks follow the Book type: they are streamed, so they can be controlled."
   },
   "language": {
     "en": "English",

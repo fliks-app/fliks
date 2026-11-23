@@ -7,6 +7,7 @@ import { ServerConfigService } from '../server-config.service';
 import { CastService } from '../cast.service';
 import { BrowserDeviceProfileService } from '../browser-device-profile.service';
 import { SseService } from '../sse.service';
+import { ServerVersionService, serverSupports } from '../server-version.service';
 
 function pi(playMethod: PlaybackInfoResponse['playMethod'], playUrl: string) {
   return { playMethod, playUrl } as Pick<PlaybackInfoResponse, 'playMethod' | 'playUrl'>;
@@ -243,6 +244,39 @@ describe('StreamingApiService item-named calls', () => {
     const removed = service.deletePlaybackState(5, undefined, 77);
     http.expectOne('/api/playback/media/5/state?itemId=77').flush(null);
     await removed;
+  });
+});
+
+describe('StreamingApiService.getFeatured', () => {
+  function setup(version: string) {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: AuthService, useValue: {} },
+        { provide: ServerConfigService, useValue: {} },
+        { provide: CastService, useValue: {} },
+        { provide: BrowserDeviceProfileService, useValue: {} },
+        { provide: SseService, useValue: {} },
+        { provide: ServerVersionService, useValue: { supportsWhenKnown: async (since: string) => serverSupports(version, since) } },
+      ],
+    });
+    return { http: TestBed.inject(HttpTestingController), service: TestBed.inject(StreamingApiService) };
+  }
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('asks a server that has the carousel for its picks', async () => {
+    const { http, service } = setup('7.2.0');
+    const picks = service.getFeatured({ libraryId: 3 });
+    await new Promise((r) => setTimeout(r));
+    http.expectOne('/api/home/featured?libraryId=3').flush([]);
+    expect(await picks).toEqual([]);
+  });
+
+  it('never calls an older server, which has no route for it', async () => {
+    const { http, service } = setup('7.1.0');
+    expect(await service.getFeatured({ libraryId: 3 })).toEqual([]);
+    http.expectNone((r) => r.url.includes('/api/home/featured'));
   });
 });
 

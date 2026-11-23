@@ -1,32 +1,47 @@
-import {
-  Component,
-  signal,
-  effect,
-  input,
-  inject,
-  OnInit,
-  OnDestroy,
-  ElementRef,
-  viewChild,
-} from '@angular/core';
-import {
-  RouterOutlet,
-  RouterLink,
-  Router,
-  NavigationEnd,
-} from '@angular/router';
+import { Component, computed, effect, inject, input, signal, OnInit, OnDestroy } from '@angular/core';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { RouterOutlet, RouterLink, Router, NavigationEnd } from '@angular/router';
 import { Title } from '@angular/platform-browser';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { Location } from '@angular/common';
-import { Subscription, filter } from 'rxjs';
-import { LucideDynamicIcon } from '@lucide/angular';
+import { Subscription, filter, map, of, switchMap } from 'rxjs';
+import { LucideDynamicIcon, type LucideIconData } from '@lucide/angular';
 import { icons } from '../../icons';
 import { TvService } from '../../../core/services/tv.service';
+import { BackgroundService } from '../../../core/services/background.service';
 import { PageScrollerService } from '../../../core/services/page-scroller.service';
+import { NavIconComponent } from '../../layout/nav-icon';
 
+export interface SettingsNavItem {
+  id: string;
+  route: string;
+  labelKey: string;
+  /** A contribution's icon name, or icon data from `icons`. */
+  icon?: string | LucideIconData;
+}
+
+export interface SettingsNavSection {
+  id: string;
+  /** Titled sections get a separator and a heading; translated, falling back to the literal string. */
+  label?: string;
+  items: readonly SettingsNavItem[];
+}
+
+/** The longest route prefixing the path wins, so a nested page lights its own entry rather than its parent's. */
+export function activeNavItem(sections: readonly SettingsNavSection[], url: string): SettingsNavItem | null {
+  const path = url.split(/[?#]/)[0];
+  let best: SettingsNavItem | null = null;
+  for (const item of sections.flatMap((s) => s.items)) {
+    if (path !== item.route && !path.startsWith(`${item.route}/`)) continue;
+    if (!best || item.route.length > best.route.length) best = item;
+  }
+  return best;
+}
+
+/** The layout of the settings areas (account, app, admin): their sections in the nav rail's look, pinned from `lg`. */
 @Component({
   selector: 'app-settings-drawer',
-  imports: [RouterOutlet, RouterLink, TranslatePipe, LucideDynamicIcon],
+  imports: [RouterOutlet, RouterLink, TranslatePipe, LucideDynamicIcon, NavIconComponent],
   templateUrl: './settings-drawer.html',
 })
 export class SettingsDrawerComponent implements OnInit, OnDestroy {
@@ -35,22 +50,33 @@ export class SettingsDrawerComponent implements OnInit, OnDestroy {
   private readonly location = inject(Location);
   private readonly router = inject(Router);
   private readonly titleService = inject(Title);
-  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly translate = inject(TranslateService);
   private readonly pageScroller = inject(PageScrollerService);
-
-  /** Layout name — shown in the header and used as the tab-title suffix. */
-  readonly title = input('');
-  readonly backLabel = input('Retour');
-  readonly drawerId = input('settings-drawer');
-
-  readonly navbarHidden = signal(false);
+  protected readonly background = inject(BackgroundService);
   readonly tv = inject(TvService);
 
-  /** Active sidebar entry label, re-read from the menu on each navigation. */
-  private readonly activePage = signal('');
-  private routerSub?: Subscription;
+  /** Layout name, shown in the header and used as the tab-title suffix. */
+  readonly title = input.required<string>();
+  readonly icon = input.required<LucideIconData>();
+  readonly sections = input.required<readonly SettingsNavSection[]>();
 
-  /** Sets the tab title (`"<page> | <layout>"`); these shells sit outside the LayoutComponent that owns document.title, which would keep the previous page's. */
+  readonly navbarHidden = signal(false);
+
+  private readonly url = toSignal(
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+      map((e) => e.urlAfterRedirects),
+    ),
+    { initialValue: this.router.url },
+  );
+  protected readonly active = computed(() => activeNavItem(this.sections(), this.url()));
+
+  private readonly activePage = toSignal(
+    toObservable(this.active).pipe(switchMap((item) => (item ? this.translate.stream(item.labelKey) : of('')))),
+    { initialValue: '' },
+  );
+
+  /** These shells sit outside the LayoutComponent that owns document.title, which would keep the previous page's. */
   private readonly titleEffect = effect(() => {
     const page = this.activePage();
     const layout = this.title();
@@ -68,43 +94,13 @@ export class SettingsDrawerComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.scrollSub = this.pageScroller.changes().subscribe(this.onScroll);
-
-    this.routerSub = this.router.events
-      .pipe(filter((e) => e instanceof NavigationEnd))
-      .subscribe(() => this.activePage.set(this.readActivePageLabel()));
-    // Initial read — a direct load fires no NavigationEnd after mount.
-    queueMicrotask(() => this.activePage.set(this.readActivePageLabel()));
   }
 
   ngOnDestroy() {
     this.scrollSub?.unsubscribe();
-    this.routerSub?.unsubscribe();
-  }
-
-  /** Deepest sidebar entry whose href prefixes the URL, scoped to the menu and matched by href rather than `.active` to avoid routerLinkActive timing. */
-  private readActivePageLabel(): string {
-    const menu = this.host.nativeElement.querySelector('ul.menu');
-    if (!menu) return '';
-    const url = this.router.url.split(/[?#]/)[0];
-    let best: HTMLAnchorElement | null = null;
-    let bestLen = -1;
-    for (const a of Array.from(
-      menu.querySelectorAll<HTMLAnchorElement>('a[href]'),
-    )) {
-      const href = a.getAttribute('href') ?? '';
-      if (
-        (url === href || url.startsWith(`${href}/`)) &&
-        href.length > bestLen
-      ) {
-        bestLen = href.length;
-        best = a;
-      }
-    }
-    return best ? (best.textContent ?? '').replace(/\s+/g, ' ').trim() : '';
   }
 
   goBack() {
     this.location.back();
   }
-
 }

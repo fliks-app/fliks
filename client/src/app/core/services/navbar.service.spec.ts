@@ -138,6 +138,60 @@ describe('NavbarService', () => {
     expect(navbar.canGoBack()).toBe(false);
   });
 
+  it('lets only the owner of the hero chrome hand it back', () => {
+    TestBed.configureTestingModule({ providers: [provideRouter([])] });
+    const navbar = TestBed.inject(NavbarService);
+    const leaving = {};
+    const arriving = {};
+    navbar.enterHeroPage(leaving, { brand: true });
+    navbar.enterHeroPage(arriving, { title: 'T' });
+    navbar.leaveHeroPage(leaving);
+    expect(navbar.isHeroPage()).toBe(true);
+    expect([navbar.heroTitle(), navbar.heroBrand()]).toEqual(['T', false]);
+    navbar.leaveHeroPage(arriving);
+    expect(navbar.isHeroPage()).toBe(false);
+    expect(document.body.classList.contains('hero-page')).toBe(false);
+  });
+
+  it('keeps the page title through a hero claim and gives a returning path its own back', async () => {
+    TestBed.configureTestingModule({ providers: [provideRouter([{ path: 'a', component: PageStub }, { path: 'b', component: PageStub }])] });
+    const navbar = TestBed.inject(NavbarService);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/a');
+    navbar.setPageTitle('A', { name: 'film' });
+    navbar.enterHeroPage({}, {});
+    expect([navbar.pageTitle(), navbar.pageIcon()]).toEqual(['A', { name: 'film' }]);
+    await router.navigateByUrl('/b');
+    expect(navbar.pageTitle()).toBe('');
+    await router.navigateByUrl('/a?view=genres');
+    expect([navbar.pageTitle(), navbar.pageIcon()]).toEqual(['A', { name: 'film' }]);
+  });
+
+  it('keeps the phone bar clear only while the claimed page picture is under it', () => {
+    let fire!: (hit: boolean) => void;
+    const observed: Element[] = [];
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(cb: (e: { isIntersecting: boolean; target: Element }[]) => void) { fire = (hit) => cb([{ isIntersecting: hit, target: observed[0] }]); }
+      observe(el: Element) { observed.push(el); }
+      disconnect() {}
+    });
+    TestBed.configureTestingModule({ providers: [provideRouter([])] });
+    const navbar = TestBed.inject(NavbarService);
+    const host = document.createElement('div');
+    host.innerHTML = '<div data-hero-picture></div>';
+    document.body.append(host);
+    const page = {};
+    navbar.enterHeroPage(page, { host });
+    expect(observed[0]).toBe(host.firstElementChild);
+    fire(false);
+    expect(navbar.heroUnderBar()).toBe(false);
+    fire(true);
+    expect(navbar.heroUnderBar()).toBe(true);
+    navbar.leaveHeroPage(page);
+    host.remove();
+    vi.unstubAllGlobals();
+  });
+
   /** The artwork reveal replays whenever a cached subtree is re-inserted, so a
    *  page returned to would re-announce art the user was already looking at. */
   it('flags the document on a back navigation and clears it on a forward one', async () => {

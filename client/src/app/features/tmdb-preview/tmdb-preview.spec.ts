@@ -44,7 +44,7 @@ describe('TmdbPreviewComponent shell', () => {
     expect(body.provider()).toBe('tmdb');
     expect(body.externalId()).toBe('5');
     expect(body.seed()?.title).toBe('Seeded');
-    expect(navbar.enterHeroPage).toHaveBeenCalledWith('Seeded');
+    expect(navbar.enterHeroPage).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ title: 'Seeded' }));
   });
 
   it('ignores a seed that belongs to another title', () => {
@@ -60,7 +60,7 @@ describe('TmdbPreviewComponent shell', () => {
     const body = fixture.debugElement.query((d) => d.componentInstance instanceof StubBody).componentInstance as StubBody;
     body.host.setTitle('Loaded', '/logo.png');
     body.host.setBackground('/fanart.jpg', { blur: true });
-    expect(navbar.enterHeroPage).toHaveBeenCalledWith('Loaded', '/logo.png');
+    expect(navbar.enterHeroPage).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ title: 'Loaded', logoUrl: '/logo.png' }));
     expect(background.set).toHaveBeenCalledWith(expect.anything(), '/fanart.jpg', { blur: true });
 
     fixture.destroy();

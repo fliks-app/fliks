@@ -176,7 +176,6 @@ async function createFixture(
           railDocked: () => false,
           sidebarPinned: () => false,
           toggleSidebarPinned: () => {},
-          scrollAtTop: { set: () => {} },
           setPageTitle: () => {},
           resetNavHistory: () => {},
           goBack: () => {},

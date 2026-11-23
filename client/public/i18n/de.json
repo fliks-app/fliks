@@ -333,14 +333,12 @@
   "account_settings": {
     "title": "Kontoeinstellungen",
     "nav": {
+      "general": "Allgemein",
       "password": "Passwort",
-      "recommendations": "Empfehlungen",
       "privacy": "Datenschutz",
-      "continue": "Geräteübergreifend fortsetzen",
       "spoilers": "Spoiler",
       "devices": "Geräte",
-      "email_devices": "E-Mail-Geräte",
-      "whats_new": "Neuigkeiten"
+      "email_devices": "E-Mail-Geräte"
     },
     "recommendations": {
       "reset_title": "Ausgeblendete Empfehlungen zurücksetzen",
@@ -4421,8 +4419,7 @@
     "scope_all": "Alle Typen",
     "scope_chosen": "Ausgewählte Typen",
     "resume_only": "nur Fortsetzen",
-    "settings_note": "Live-TV und Watch-Partys sind nicht betroffen. Hörbücher folgen dem Typ Buch: Sie werden gestreamt und sind daher steuerbar.",
-    "saved": "Einstellung gespeichert"
+    "settings_note": "Live-TV und Watch-Partys sind nicht betroffen. Hörbücher folgen dem Typ Buch: Sie werden gestreamt und sind daher steuerbar."
   },
   "language": {
     "en": "Englisch",

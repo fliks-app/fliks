@@ -1,4 +1,4 @@
-import { DestroyRef, Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { LucideDynamicIcon } from '@lucide/angular';
 import { icons } from '../../shared/icons';
@@ -102,7 +102,6 @@ export class ArtistPageComponent {
       const name = this.data()?.artist.name;
       if (name) this.navbar.setPageTitle(name);
     });
-    inject(DestroyRef).onDestroy(() => this.navbar.clearPageTitle());
   }
 
   protected pick(t: DiscographyTab): void {

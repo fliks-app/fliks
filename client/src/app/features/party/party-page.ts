@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnDestroy, OnInit, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { Component, DestroyRef, OnDestroy, OnInit, computed, effect, inject, signal, untracked, viewChild, ElementRef } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -65,6 +65,8 @@ const isNoConnection = (e: unknown) => e instanceof HttpErrorResponse && (e.erro
   templateUrl: './party-page.html',
 })
 export class PartyPageComponent implements OnInit, OnDestroy {
+  /** Holds the page's hero picture, which keeps the phone bar clear while it is under it. */
+  private readonly heroHost: Element = inject(ElementRef).nativeElement;
   protected readonly icons = icons;
 
   private readonly route = inject(ActivatedRoute);
@@ -213,8 +215,8 @@ export class PartyPageComponent implements OnInit, OnDestroy {
     this.party.closed.pipe(takeUntilDestroyed()).subscribe(() => void this.router.navigateByUrl('/'));
     effect(() => {
       const h = this.gone() ? null : this.head();
-      if (h) this.navbar.enterHeroPage(h.name, this.media()?.logoUrl ?? null);
-      else this.navbar.leaveHeroPage();
+      if (h) this.navbar.enterHeroPage(this, { host: this.heroHost, title: h.name, logoUrl: this.media()?.logoUrl ?? null });
+      else this.navbar.leaveHeroPage(this);
     });
     effect(() => this.background.set(this, this.fanart()));
     // The film can change under the page (the host's pick, a snapshot): its details follow.
@@ -237,7 +239,7 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.navbar.leaveHeroPage();
+    this.navbar.leaveHeroPage(this);
     this.background.release(this);
     if (this.party.lobby() && this.party.party()?.id === this.id) void this.party.leave();
   }

@@ -485,7 +485,7 @@
         @if (!isTv()) {
           <app-dropdown-menu placement="top-start">
             <app-device-chip trigger (click)="refreshDevices()" />
-            <app-remote-picker-list [card]="true" [transferOnly]="true" />
+            <app-remote-picker-list class="max-w-sm" [card]="true" [transferOnly]="true" />
           </app-dropdown-menu>
         }
         <span class="flex-1"></span>

@@ -1,20 +1,15 @@
 import { Component, ElementRef, HostListener, computed, inject, signal, viewChild } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { isTypingTarget } from '../../core/utils/typing-target';
-import { LucideDynamicIcon } from '@lucide/angular';
 import { icons } from '../../shared/icons';
 import { SettingsDrawerComponent } from '../../shared/components/settings-drawer/settings-drawer';
 import { CardActionsPanelComponent } from '../../shared/components/card-actions-panel/card-actions-panel';
-import { SettingsIconComponent } from './settings-icon';
 import { SettingsSectionsService } from './settings-sections.service';
 
 @Component({
   selector: 'app-admin-shell',
-  imports: [
-    CardActionsPanelComponent,
-    RouterLink, TranslatePipe,
-    SettingsDrawerComponent, SettingsIconComponent, LucideDynamicIcon],
+  imports: [CardActionsPanelComponent, TranslatePipe, SettingsDrawerComponent],
   templateUrl: './admin-shell.html',
 })
 export class AdminShellComponent {
@@ -35,7 +30,6 @@ export class AdminShellComponent {
       .map((s) => ({ ...s, items: s.items.filter((i) => this.matches(i, q)) }))
       .filter((s) => s.items.length > 0);
   });
-  readonly activeItemId = this.settings.activeItemId;
 
   private matches(item: { id: string; labelKey: string }, q: string): boolean {
     const wordsKey = `settings.nav_words.${item.id.replace(/^core\./, '')}`;

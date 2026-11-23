@@ -64,6 +64,8 @@ import { ModalComponent } from '../../shared/components/modal';
   ],
 })
 export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost {
+  /** Holds the page's hero picture, which keeps the phone bar clear while it is under it. */
+  private readonly heroHost: Element = inject(ElementRef).nativeElement;
   constructor() {
     this.grabs.attach(
       () => this.media(),
@@ -153,15 +155,15 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
   }
 
   private releaseChrome(): void {
-    this.navbarService.leaveHeroPage();
+    this.navbarService.leaveHeroPage(this);
     this.backgroundService.suspend(this);
   }
 
   private restoreChrome(): void {
     this.backgroundService.set(this, this.fanartUrl, { blur: this.fanartIsCover });
     const m = this.media();
-    if (m) this.navbarService.enterHeroPage(this.navTitle() ?? m.title, m.logoUrl);
-    else this.navbarService.enterHeroPage('');
+    if (m) this.navbarService.enterHeroPage(this, { host: this.heroHost, title: this.navTitle() ?? m.title, logoUrl: m.logoUrl });
+    else this.navbarService.enterHeroPage(this, { host: this.heroHost });
     this.navbarService.heroMenu.set(this.heroMenu);
   }
 
@@ -196,7 +198,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     if (!m || !params || m.id !== Number(params.get('id'))) return;
     // Seeded stub: no season tree yet, so the page has not resolved what its title is.
     if (kindOf(m.type).hasSeasons && !m.seasons) return;
-    this.navbarService.enterHeroPage(title ?? m.title, m.logoUrl);
+    this.navbarService.enterHeroPage(this, { host: this.heroHost, title: title ?? m.title, logoUrl: m.logoUrl });
   });
 
   /** Fanart, never the episode still (TMDB stills cap at ~780×438 and look mushy fullscreen); the blurred cover when there is none. */
@@ -287,7 +289,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
 
   ngOnInit() {
     // Enter hero page immediately (transparent navbar) - title will be set after media loads
-    this.navbarService.enterHeroPage('');
+    this.navbarService.enterHeroPage(this, { host: this.heroHost });
     // Load profiles in parallel with media - neither blocks the other
     void this.loadProfiles();
   }

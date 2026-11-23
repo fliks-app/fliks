@@ -1,6 +1,6 @@
 import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute, provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, provideRouter } from '@angular/router';
 import { Subject } from 'rxjs';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
@@ -21,21 +21,21 @@ const item = (id: number, type: string): Media =>
 
 @Component({
   imports: [HeroCarouselComponent],
-  template: `<app-hero-carousel [items]="items" [height]="height" />`,
+  template: `<app-hero-carousel [items]="items" />`,
 })
 class Host {
   items = [item(1, 'movie'), item(2, 'series'), item(3, 'movie')];
-  height: 'full' | 'compact' = 'full';
 }
 
-function setup(height: 'full' | 'compact' = 'full', tv = true) {
+function setup(tv = true, items?: Media[]) {
   const attached$ = new Subject<string>();
   const detached$ = new Subject<string>();
   const background = { set: vi.fn(), suspend: vi.fn() };
-  const navbar = { enterHeroPage: vi.fn(), leaveHeroPage: vi.fn(), heroPaddingTop: () => null };
+  const navbar = { navigatedBack: () => false };
   const start = {
     start: vi.fn().mockResolvedValue(undefined),
-    nextUpOf: vi.fn().mockResolvedValue({ media: {}, next: { episode: { id: 21, episodeNumber: 7 }, season: { seasonNumber: 2 }, file: { id: 1 } }, resuming: true }),
+    playNext: vi.fn().mockResolvedValue(undefined),
+    nextUpOf: vi.fn().mockResolvedValue({ media: { id: 2 }, next: { episode: { id: 21, episodeNumber: 7 }, season: { seasonNumber: 2 }, file: { id: 1 } }, resuming: true }),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -53,9 +53,9 @@ function setup(height: 'full' | 'compact' = 'full', tv = true) {
     ],
   });
   const fixture = TestBed.createComponent(Host);
-  fixture.componentInstance.height = height;
+  if (items) fixture.componentInstance.items = items;
   fixture.detectChanges();
-  return { attached$, detached$, fixture, el: fixture.nativeElement as HTMLElement, background, navbar, start };
+  return { attached$, detached$, fixture, el: fixture.nativeElement as HTMLElement, background, start };
 }
 
 const mq = (matches: boolean) => ({ matches, addEventListener: () => {}, removeEventListener: () => {} });
@@ -74,11 +74,11 @@ describe('HeroCarouselComponent', () => {
   it('claims the backdrop and advances on the timer, claiming each slide', () => {
     const { fixture, el, background } = setup();
     expect(title(el)).toBe('T1');
-    expect(background.set).toHaveBeenLastCalledWith(expect.anything(), '/f1.jpg', { hero: 'full' });
+    expect(background.set).toHaveBeenLastCalledWith(expect.anything(), '/f1.jpg', { hero: true });
     vi.advanceTimersByTime(7000);
     fixture.detectChanges();
     expect(title(el)).toBe('T2');
-    expect(background.set).toHaveBeenLastCalledWith(expect.anything(), '/f2.jpg', { hero: 'full' });
+    expect(background.set).toHaveBeenLastCalledWith(expect.anything(), '/f2.jpg', { hero: true });
   });
 
   it('holds while a mouse hovers or the keyboard focuses, not after a tap', () => {
@@ -100,8 +100,9 @@ describe('HeroCarouselComponent', () => {
     expect(title(el)).toBe('T2');
     pointer('pointerleave', 'mouse');
     const dot = el.querySelector<HTMLElement>('.hc-dot')!;
-    vi.spyOn(dot, 'matches').mockReturnValue(true);
+    document.documentElement.classList.add('keyboard-modality');
     dot.dispatchEvent(new Event('focusin', { bubbles: true }));
+    document.documentElement.classList.remove('keyboard-modality');
     fixture.detectChanges();
     vi.advanceTimersByTime(20000);
     expect(title(el)).toBe('T2');
@@ -114,33 +115,26 @@ describe('HeroCarouselComponent', () => {
     expect(title(el)).toBe('T1');
   });
 
-  it('hands the chrome back and stops when the route detaches, and claims it again on attach (mobile hero)', () => {
-    const { detached$, attached$, el, background, navbar } = setup('full', false);
-    expect(navbar.enterHeroPage).toHaveBeenCalled();
+  it('stops and hands the backdrop back when the route detaches, and claims it again on attach', () => {
+    const { detached$, attached$, el, background } = setup();
     detached$.next('k');
-    expect(navbar.leaveHeroPage).toHaveBeenCalled();
     expect(background.suspend).toHaveBeenCalled();
     vi.advanceTimersByTime(20000);
     expect(title(el)).toBe('T1');
-    navbar.enterHeroPage.mockClear();
-    attached$.next('k');
-    expect(navbar.enterHeroPage).toHaveBeenCalled();
-  });
-
-  it('releases the backdrop on detach on desktop, which never takes the hero navbar', () => {
-    const { detached$, attached$, background, navbar } = setup();
-    detached$.next('k');
-    expect(background.suspend).toHaveBeenCalled();
     background.set.mockClear();
     attached$.next('k');
-    expect(background.set).toHaveBeenCalledWith(expect.anything(), '/f1.jpg', { hero: 'full' });
-    expect(navbar.enterHeroPage).not.toHaveBeenCalled();
+    expect(background.set).toHaveBeenCalledWith(expect.anything(), '/f1.jpg', { hero: true });
   });
 
-  it('leaves the host chrome alone when compact', () => {
-    const { navbar, background } = setup('compact');
-    expect(navbar.enterHeroPage).not.toHaveBeenCalled();
-    expect(background.set).toHaveBeenCalled();
+  it('leaves the backdrop alone on the phone, which draws its own picture', () => {
+    const { background } = setup(false);
+    expect(background.set).not.toHaveBeenCalled();
+  });
+
+  it('draws its frame before its picks arrive, with no slide in it', () => {
+    const { el } = setup(true, []);
+    expect(el.querySelector('section.hc-frame')).not.toBeNull();
+    expect(el.querySelector('.hc-slide')).toBeNull();
   });
 
   it('shows a dot per item and jumps on click', () => {
@@ -152,9 +146,26 @@ describe('HeroCarouselComponent', () => {
     expect(title(el)).toBe('T3');
   });
 
+  it('keeps the same primary element while a series swaps Details for Play', async () => {
+    const { fixture, el, start } = setup();
+    let resolve!: (v: unknown) => void;
+    start.nextUpOf.mockReturnValue(new Promise((r) => (resolve = r)));
+    el.querySelectorAll<HTMLButtonElement>('.hc-dot')[1].click();
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(10);
+    fixture.detectChanges();
+    const before = el.querySelector('.hc-slide:not(.hc-out) .btn-light');
+    resolve({ media: {}, next: { episode: { id: 21, episodeNumber: 7 }, season: { seasonNumber: 2 }, file: { id: 1 } }, resuming: false });
+    await vi.advanceTimersByTimeAsync(10);
+    fixture.detectChanges();
+    const after = el.querySelector('.hc-slide:not(.hc-out) .btn-light');
+    expect(after).toBe(before);
+    expect(after?.textContent).toContain('hero_carousel.play_episode');
+  });
+
   it('plays a movie, and a series at its next episode with a Details link beside it', async () => {
     const { fixture, el, start } = setup();
-    el.querySelector<HTMLButtonElement>('[data-home-focus="hero:primary"]')!.click();
+    el.querySelector<HTMLButtonElement>('.btn-light')!.click();
     expect(start.start).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
     el.querySelectorAll<HTMLButtonElement>('.hc-dot')[1].click();
     fixture.detectChanges();
@@ -162,29 +173,36 @@ describe('HeroCarouselComponent', () => {
     fixture.detectChanges();
     expect(start.nextUpOf).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }));
     const slide = el.querySelector('.hc-slide:not(.hc-out)')!;
-    const primary = slide.querySelector('[data-home-focus="hero:primary"]')!;
+    const primary = slide.querySelector('.btn-light')!;
     expect(primary.tagName).toBe('BUTTON');
     expect(primary.textContent).toContain('hero_carousel.resume_episode');
-    expect(slide.querySelector('a.hc-btn-glass')?.getAttribute('href')).toBe('/series/2');
+    expect(slide.querySelector('a.btn-glass')?.getAttribute('href')).toBe('/series/2');
+    (primary as HTMLButtonElement).click();
+    expect(start.playNext).toHaveBeenCalledWith({ id: 2 }, expect.objectContaining({ episode: expect.objectContaining({ id: 21 }) }));
+    expect(start.start).toHaveBeenCalledTimes(1);
   });
 
   it('opens the add-to-playlist modal for the slide from the plus button, with the kind badge and facts in the line', () => {
     const { el } = setup();
-    el.querySelector<HTMLButtonElement>('.hc-btn-square')!.click();
+    el.querySelector<HTMLButtonElement>('.btn-square')!.click();
     expect(TestBed.inject(AddToPlaylistService).request()?.target).toEqual({ mediaId: 1 });
-    expect(el.querySelector('.hc-slide:not(.hc-out) .hc-meta')?.textContent).toContain('2020');
-    expect(el.querySelector('.hc-slide:not(.hc-out) .hc-meta b')?.textContent).toContain('requests.type_movie');
+    const meta = el.querySelector('.hc-slide:not(.hc-out) app-hero-meta-row')!;
+    expect(meta.textContent).toContain('2020');
+    expect(meta.querySelector('.badge')?.textContent).toContain('requests.type_movie');
   });
 
-  it('keeps Details as the only button of a series with nothing to play', async () => {
+  it('keeps one primary button that opens the detail page while a series has nothing to play', async () => {
     const { fixture, el, start } = setup();
     start.nextUpOf.mockResolvedValue({ media: {}, next: null, resuming: false });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     el.querySelectorAll<HTMLButtonElement>('.hc-dot')[1].click();
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(10);
     fixture.detectChanges();
-    const primary = el.querySelector('.hc-slide:not(.hc-out) [data-home-focus="hero:primary"]')!;
-    expect(primary.tagName).toBe('A');
-    expect(primary.getAttribute('href')).toBe('/series/2');
+    const primary = el.querySelector<HTMLButtonElement>('.hc-slide:not(.hc-out) .btn-light')!;
+    expect(primary.tagName).toBe('BUTTON');
+    primary.click();
+    expect(navigate).toHaveBeenCalledWith(['/series', '2'], { state: { media: expect.objectContaining({ id: 2 }) } });
   });
+
 });
