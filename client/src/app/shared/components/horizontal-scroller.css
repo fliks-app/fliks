@@ -1,11 +1,3 @@
-.scrollbar-none {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-
 /* Large edge scroll affordances: fade in on row hover, scroll one viewport-width on click. Pointer-only (they obstruct swiping; TV rows use spatial nav). */
 .scroll-edge {
   position: absolute;
