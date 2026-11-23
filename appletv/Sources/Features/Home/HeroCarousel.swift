@@ -129,15 +129,16 @@ struct HeroCarousel: View {
         return trp(target?.resume == true ? "hero_carousel.resume_episode" : "hero_carousel.play_episode", ["code": code])
     }
 
-    /// Entering the dots lands on the slide shown; focusing a dot shows its slide.
+    /// Entering the dots lands on the slide shown; focusing a dot shows its slide. The current dot is three
+    /// wide as on the web; the gap leaves the focus ring clear of the next dot.
     private var dots: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 18) {
             ForEach(items.indices, id: \.self) { i in
                 Button { go(i) } label: {
                     Capsule()
                         .fill(.white.opacity(i == index ? 1 : 0.4))
-                        .frame(width: i == index ? 40 : 14, height: 14)
-                        .padding(10)
+                        .frame(width: i == index ? 42 : 14, height: 14)
+                        .padding(.vertical, 10)
                 }
                 .buttonStyle(DotStyle(focused: focus == .dot(i)))
                 .focused($focus, equals: .dot(i))
@@ -171,8 +172,8 @@ private struct DotStyle: ButtonStyle {
     let focused: Bool
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .overlay(Capsule().strokeBorder(.white, lineWidth: focused ? 3 : 0).padding(4))
-            .scaleEffect(focused ? 1.15 : 1)
+            // Drawn past the dot's own width, so the ring needs no space between the dots.
+            .overlay(Capsule().strokeBorder(.white, lineWidth: focused ? 3 : 0).padding(.horizontal, -5).padding(.vertical, 5))
             .animation(.easeOut(duration: 0.15), value: focused)
     }
 }
