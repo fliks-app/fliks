@@ -1,4 +1,7 @@
 import type { UiContribution } from '@fliks/plugin-ui';
+import { SERVER_SINCE } from '../../../core/services/server-version.service';
+
+const since = (key: keyof typeof SERVER_SINCE) => `server:${SERVER_SINCE[key]}` as const;
 
 /** Core's own `media.actions` as contributions, merged with plugin ones by weight/id. Gates `when` can't express
  *  (an OR, non-permission facts) stay in `detail-hero.ts`; label/icon toggles live in `displayLabelKey`/`displayIcon`. */
@@ -313,6 +316,15 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     icon: 'pencil',
     when: ['hasPermission:media.edit', '!isTv', 'surface:detail'],
     action: { kind: 'action', actionId: 'media.edit' },
+  },
+  {
+    id: 'core.report_problem',
+    slot: 'media.actions',
+    weight: 1300,
+    labelKey: 'problems.report.action',
+    icon: 'clipboard-list',
+    when: [since('problems'), 'hasFiles'],
+    action: { kind: 'action', actionId: 'media.report-problem' },
   },
   {
     id: 'core.request_deletion',

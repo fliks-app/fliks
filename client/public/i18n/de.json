@@ -1497,6 +1497,12 @@
     "filter_kind_all": "Alle Typen",
     "kind_add": "Hinzufügen",
     "kind_delete": "Löschung",
+    "kind_problems": "Probleme",
+    "problem_filter_active": "Offen",
+    "problem_filter_resolved": "Behoben",
+    "problem_filter_closed": "Geschlossen",
+    "problem_filter_all": "Alle",
+    "problems_empty": "Keine Probleme gemeldet",
     "col_title": "Titel",
     "col_type": "Typ",
     "col_status": "Status",
@@ -6190,6 +6196,87 @@
     "health_fixed": {
       "title": "Systemproblem behoben",
       "body": "{{message}}"
+    }
+  },
+  "problems": {
+    "card": {
+      "system": "System",
+      "scope_title": "Ganzer Titel",
+      "scope_season": "Staffel {{n}}",
+      "auto_resolved": "Automatisch behoben",
+      "closed_by": "Geschlossen von {{name}}",
+      "thread": "Verlauf ({{count}})",
+      "comment_placeholder": "Kommentar schreiben",
+      "comment_send": "Senden",
+      "delete_comment": "Löschen",
+      "search_releases": "Releases suchen",
+      "search_subtitles": "Untertitel suchen",
+      "mark_fixed": "Als behoben markieren",
+      "close": "Schließen",
+      "withdraw": "Zurückziehen",
+      "reopen": "Wieder öffnen",
+      "reopen_note_placeholder": "Was stimmt noch nicht?",
+      "reopen_send": "Meldung wieder öffnen",
+      "reopen_already_open": "Eine gleiche Meldung ist bereits offen.",
+      "reopen_cap": "Du hast zu viele offene Meldungen.",
+      "reopen_window": "Diese Meldung kann nicht mehr geöffnet werden.",
+      "reopen_failed": "Die Meldung konnte nicht wieder geöffnet werden.",
+      "qoe_title": "Wiedergabesitzung",
+      "qoe_stalls": "{{count}} Aussetzer",
+      "qoe_errors": "{{count}} Fehler"
+    },
+    "resolve": {
+      "title_fix": "Als behoben markieren",
+      "title_close": "Meldung schließen",
+      "reply_placeholder": "Antwort an den Melder (optional)",
+      "reason_placeholder": "Warum wird sie geschlossen?",
+      "submit_fix": "Als behoben markieren",
+      "submit_close": "Schließen",
+      "chip_new_file": "Eine neue Datei wurde importiert",
+      "chip_subtitles_replaced": "Die Untertitel wurden ersetzt",
+      "chip_cannot_reproduce": "Läuft hier einwandfrei, bitte erneut versuchen",
+      "chip_not_a_defect": "So ist die Datei nun mal",
+      "chip_duplicate": "Bereits gemeldet"
+    },
+    "status": {
+      "open": "Offen",
+      "acknowledged": "Gesehen",
+      "resolved": "Behoben",
+      "closed": "Geschlossen"
+    },
+    "kind": {
+      "video": "Bild",
+      "audio": "Ton",
+      "subtitles": "Untertitel",
+      "playback": "Startet nicht",
+      "other": "Sonstiges"
+    },
+    "report": {
+      "action": "Problem melden",
+      "title": "Problem melden",
+      "kind_label": "Art des Problems",
+      "send": "Senden",
+      "sent": "Danke, deine Meldung wurde gesendet.",
+      "sent_hint": "Du wirst benachrichtigt, wenn es behoben oder beantwortet wurde.",
+      "my_reports": "Meine Meldungen",
+      "season": "Staffel {{n}}",
+      "season_label": "Staffel",
+      "episode_label": "Folge",
+      "whole_title": "Ganzer Titel",
+      "whole_season": "Ganze Staffel",
+      "file_label": "Datei",
+      "file_any": "Unsicher",
+      "note_placeholder": "Was ist dir aufgefallen? (optional)",
+      "error": "Die Meldung konnte nicht gesendet werden.",
+      "error_problem_already_open": "Du hast dieses Problem bereits gemeldet.",
+      "error_problem_cap": "Du hast zu viele offene Meldungen. Warte, bis einige behoben sind.",
+      "hint": {
+        "video": "Unscharf, falsche Farben, Ruckeln oder Artefakte",
+        "audio": "Kein Ton, nicht synchron oder falsche Sprache",
+        "subtitles": "Fehlen, nicht synchron oder falscher Text",
+        "playback": "Startet nicht, hängt oder bricht ab",
+        "other": "Alles andere zu dieser Datei"
+      }
     }
   }
 }

@@ -15,6 +15,7 @@ import {
 } from '@lucide/angular';
 import { BrowserDeviceProfileService } from '../../../core/services/browser-device-profile.service';
 import { OptimizeModalService } from '../../../core/services/optimize-modal.service';
+import { ReportProblemService } from '../../../core/services/report-problem.service';
 import { MediaAdminService } from '../../../core/services/media-admin.service';
 import type { Media } from '../../../core/services/api/media.service';
 import { PlayableMediaService } from '../../../core/services/playable-media.service';
@@ -154,6 +155,7 @@ export class DetailHeroComponent {
   private readonly router = inject(Router);
   private readonly deviceProfile = inject(BrowserDeviceProfileService);
   private readonly optimizeModal = inject(OptimizeModalService);
+  private readonly reports = inject(ReportProblemService);
   private get playerSettings() {
     return this.injector.get(PlayerSettingsService);
   }
@@ -706,6 +708,17 @@ export class DetailHeroComponent {
     this.recommendations.open(episodeId ? { mediaId: this.mediaId(), episodeId } : { mediaId: this.mediaId() });
   }
 
+  private reportProblem(m: Media): void {
+    const episodeId = this.episodeId();
+    this.reports.open({
+      mediaId: m.id,
+      title: m.title,
+      ...(episodeId ? { itemId: episodeId } : {}),
+      ...(this.episodeLabel() ? { scopeLabel: this.episodeLabel()! } : {}),
+      ...(this.selectedFileId() ? { mediaFileId: this.selectedFileId()! } : {}),
+    });
+  }
+
   private readonly identifiedTitle = computed(() => {
     const given = this.identified();
     if (given != null) return given;
@@ -761,6 +774,7 @@ export class DetailHeroComponent {
         'media.toggle-series-watched': () => this.onToggleWatched(),
         'media.toggle-watched': () => this.onToggleWatched(),
         'media.watch-together': () => this.watchTogether(),
+        ...(m && { 'media.report-problem': () => this.reportProblem(m) }),
       }),
     };
     for (const id of this.exclude()) delete shared[id];

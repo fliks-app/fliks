@@ -47,6 +47,8 @@ import { AudioPlayerComponent } from '../audio-player/audio-player';
 import { PartyCreateModalComponent } from '../../features/party/party-create-modal';
 import { PartyReconnectComponent } from '../../features/party/party-reconnect';
 import { OptimizeModalComponent } from '../components/optimize-modal/optimize-modal';
+import { ReportProblemDialogComponent } from '../components/report-problem-dialog/report-problem-dialog';
+import { ReportProblemService } from '../../core/services/report-problem.service';
 import { IdentifyModalHostComponent } from '../components/identify-modal-host/identify-modal-host';
 import { TrackingModalHostComponent } from '../components/tracking-modal-host/tracking-modal-host';
 import { WhatsNewModalComponent } from '../components/whats-new-modal/whats-new-modal';
@@ -122,6 +124,7 @@ const PAIRING_TTL_MS = 600_000;
     TrackingModalHostComponent,
     IdentifyModalHostComponent,
     OptimizeModalComponent,
+    ReportProblemDialogComponent,
     AppUpdateModalComponent,
     WhatsNewModalComponent,
     UserMenuComponent,
@@ -149,6 +152,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   protected readonly trackingModal = inject(TrackingModalService);
   protected readonly identifyModal = inject(IdentifyModalService);
   protected readonly optimizeModal = inject(OptimizeModalService);
+  protected readonly reportProblem = inject(ReportProblemService);
   protected readonly addToPlaylistSvc = inject(AddToPlaylistService);
   private readonly addToPlaylistModal = viewChild<AddToPlaylistModalComponent>('addToPlaylistModal');
   // Bridge global "add to playlist" requests to the modal in this layout; consumed once so a rebuilt shell (player is outside it) doesn't reopen it.
@@ -544,7 +548,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   private applyCounts(counts: SidebarCounts) {
     this.libraryCounts.set(counts.mediaByLibrary);
-    this.badgeCounts.set({ ...counts.badgeCounts, pendingRequests: counts.pendingRequests });
+    this.badgeCounts.set({ ...counts.badgeCounts, pendingRequests: counts.pendingRequests + (counts.openProblems ?? 0) });
     if (counts.attention !== undefined) this.push.setBadge(counts.attention);
   }
 

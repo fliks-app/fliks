@@ -1502,6 +1502,12 @@
     "filter_kind_all": "Tous les types",
     "kind_add": "Ajout",
     "kind_delete": "Suppression",
+    "kind_problems": "Problèmes",
+    "problem_filter_active": "Ouverts",
+    "problem_filter_resolved": "Corrigés",
+    "problem_filter_closed": "Fermés",
+    "problem_filter_all": "Tous",
+    "problems_empty": "Aucun problème signalé",
     "col_title": "Titre",
     "col_type": "Type",
     "col_status": "Statut",
@@ -6190,6 +6196,87 @@
     "health_fixed": {
       "title": "Problème système résolu",
       "body": "{{message}}"
+    }
+  },
+  "problems": {
+    "card": {
+      "system": "Système",
+      "scope_title": "Titre entier",
+      "scope_season": "Saison {{n}}",
+      "auto_resolved": "Corrigé automatiquement",
+      "closed_by": "Fermé par {{name}}",
+      "thread": "Discussion ({{count}})",
+      "comment_placeholder": "Écrire un commentaire",
+      "comment_send": "Envoyer",
+      "delete_comment": "Supprimer",
+      "search_releases": "Chercher des releases",
+      "search_subtitles": "Chercher des sous-titres",
+      "mark_fixed": "Marquer corrigé",
+      "close": "Fermer",
+      "withdraw": "Retirer",
+      "reopen": "Rouvrir",
+      "reopen_note_placeholder": "Qu’est-ce qui ne va toujours pas ?",
+      "reopen_send": "Rouvrir le signalement",
+      "reopen_already_open": "Un signalement identique est déjà ouvert.",
+      "reopen_cap": "Vous avez trop de signalements ouverts.",
+      "reopen_window": "Ce signalement ne peut plus être rouvert.",
+      "reopen_failed": "Le signalement n’a pas pu être rouvert.",
+      "qoe_title": "Session de lecture",
+      "qoe_stalls": "{{count}} blocages",
+      "qoe_errors": "{{count}} erreurs"
+    },
+    "resolve": {
+      "title_fix": "Marquer comme corrigé",
+      "title_close": "Fermer le signalement",
+      "reply_placeholder": "Réponse à l’auteur (facultatif)",
+      "reason_placeholder": "Pourquoi est-il fermé ?",
+      "submit_fix": "Marquer corrigé",
+      "submit_close": "Fermer",
+      "chip_new_file": "Un nouveau fichier a été importé",
+      "chip_subtitles_replaced": "Les sous-titres ont été remplacés",
+      "chip_cannot_reproduce": "Fonctionne ici, réessayez",
+      "chip_not_a_defect": "Le fichier est ainsi",
+      "chip_duplicate": "Déjà signalé"
+    },
+    "status": {
+      "open": "Ouvert",
+      "acknowledged": "Vu",
+      "resolved": "Corrigé",
+      "closed": "Fermé"
+    },
+    "kind": {
+      "video": "Image",
+      "audio": "Son",
+      "subtitles": "Sous-titres",
+      "playback": "Ne se lance pas",
+      "other": "Autre"
+    },
+    "report": {
+      "action": "Signaler un problème",
+      "title": "Signaler un problème",
+      "kind_label": "Type de problème",
+      "send": "Envoyer",
+      "sent": "Merci, votre signalement a été envoyé.",
+      "sent_hint": "Vous serez prévenu quand il sera corrigé ou qu’une réponse sera donnée.",
+      "my_reports": "Mes signalements",
+      "season": "Saison {{n}}",
+      "season_label": "Saison",
+      "episode_label": "Épisode",
+      "whole_title": "Tout le titre",
+      "whole_season": "Toute la saison",
+      "file_label": "Fichier",
+      "file_any": "Je ne sais pas",
+      "note_placeholder": "Qu’avez-vous remarqué ? (facultatif)",
+      "error": "Le signalement n’a pas pu être envoyé.",
+      "error_problem_already_open": "Vous avez déjà signalé ce problème.",
+      "error_problem_cap": "Vous avez trop de signalements ouverts. Attendez que certains soient corrigés.",
+      "hint": {
+        "video": "Flou, mauvaises couleurs, saccades ou artefacts",
+        "audio": "Pas de son, décalage ou mauvaise langue",
+        "subtitles": "Absents, décalés ou au texte incorrect",
+        "playback": "Ne démarre pas, se fige ou s’arrête",
+        "other": "Tout autre souci avec ce fichier"
+      }
     }
   }
 }

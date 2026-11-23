@@ -1,0 +1,37 @@
+<dialog #dialog appModal boxClass="max-w-md" aria-labelledby="problem-resolve-title">
+  <app-modal-header>
+    <h3 id="problem-resolve-title" class="text-lg font-bold">
+      {{ (mode() === 'resolve' ? 'problems.resolve.title_fix' : 'problems.resolve.title_close') | translate }}
+    </h3>
+  </app-modal-header>
+  <div appTvRow class="flex flex-wrap gap-2 mt-3 scroll-ring-safe">
+    @for (key of chips(); track key) {
+      <button
+        type="button"
+        class="btn btn-sm btn-outline"
+        [class.btn-active]="isPicked(key)"
+        [attr.aria-pressed]="isPicked(key)"
+        (click)="pick(key)"
+      >
+        {{ key | translate }}
+      </button>
+    }
+  </div>
+  <textarea
+    class="textarea textarea-bordered w-full mt-3"
+    rows="3"
+    maxlength="2000"
+    [placeholder]="(mode() === 'resolve' ? 'problems.resolve.reply_placeholder' : 'problems.resolve.reason_placeholder') | translate"
+    [ngModel]="text()"
+    (ngModelChange)="text.set($event)"
+  ></textarea>
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="close()">{{ 'common.cancel' | translate }}</button>
+    <button type="button" class="btn btn-primary" [disabled]="!canSubmit()" (click)="submit()">
+      @if (busy()) {
+        <span class="loading loading-spinner loading-xs"></span>
+      }
+      {{ (mode() === 'resolve' ? 'problems.resolve.submit_fix' : 'problems.resolve.submit_close') | translate }}
+    </button>
+  </app-modal-footer>
+</dialog>

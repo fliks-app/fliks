@@ -1497,6 +1497,12 @@
     "filter_kind_all": "Todos os tipos",
     "kind_add": "Adição",
     "kind_delete": "Eliminação",
+    "kind_problems": "Problemas",
+    "problem_filter_active": "Abertos",
+    "problem_filter_resolved": "Corrigidos",
+    "problem_filter_closed": "Fechados",
+    "problem_filter_all": "Todos",
+    "problems_empty": "Nenhum problema reportado",
     "col_title": "Título",
     "col_type": "Tipo",
     "col_status": "Estado",
@@ -6190,6 +6196,87 @@
     "health_fixed": {
       "title": "Problema do sistema resolvido",
       "body": "{{message}}"
+    }
+  },
+  "problems": {
+    "card": {
+      "system": "Sistema",
+      "scope_title": "Título inteiro",
+      "scope_season": "Temporada {{n}}",
+      "auto_resolved": "Corrigido automaticamente",
+      "closed_by": "Fechado por {{name}}",
+      "thread": "Conversa ({{count}})",
+      "comment_placeholder": "Escreva um comentário",
+      "comment_send": "Enviar",
+      "delete_comment": "Excluir",
+      "search_releases": "Procurar releases",
+      "search_subtitles": "Procurar legendas",
+      "mark_fixed": "Marcar como corrigido",
+      "close": "Fechar",
+      "withdraw": "Retirar",
+      "reopen": "Reabrir",
+      "reopen_note_placeholder": "O que ainda está errado?",
+      "reopen_send": "Reabrir o relatório",
+      "reopen_already_open": "Já existe um relatório igual aberto.",
+      "reopen_cap": "Você tem relatórios abertos demais.",
+      "reopen_window": "Este relatório não pode mais ser reaberto.",
+      "reopen_failed": "Não foi possível reabrir o relatório.",
+      "qoe_title": "Sessão de reprodução",
+      "qoe_stalls": "{{count}} travamentos",
+      "qoe_errors": "{{count}} erros"
+    },
+    "resolve": {
+      "title_fix": "Marcar como corrigido",
+      "title_close": "Fechar o relatório",
+      "reply_placeholder": "Resposta a quem reportou (opcional)",
+      "reason_placeholder": "Por que está sendo fechado?",
+      "submit_fix": "Marcar corrigido",
+      "submit_close": "Fechar",
+      "chip_new_file": "Um novo arquivo foi importado",
+      "chip_subtitles_replaced": "As legendas foram substituídas",
+      "chip_cannot_reproduce": "Funciona aqui, tente de novo",
+      "chip_not_a_defect": "O arquivo é assim",
+      "chip_duplicate": "Já reportado"
+    },
+    "status": {
+      "open": "Aberto",
+      "acknowledged": "Visto",
+      "resolved": "Corrigido",
+      "closed": "Fechado"
+    },
+    "kind": {
+      "video": "Imagem",
+      "audio": "Som",
+      "subtitles": "Legendas",
+      "playback": "Não reproduz",
+      "other": "Outro"
+    },
+    "report": {
+      "action": "Reportar um problema",
+      "title": "Reportar um problema",
+      "kind_label": "Tipo de problema",
+      "send": "Enviar",
+      "sent": "Obrigado, o seu relatório foi enviado.",
+      "sent_hint": "Será avisado quando for corrigido ou respondido.",
+      "my_reports": "Os meus relatórios",
+      "season": "Temporada {{n}}",
+      "season_label": "Temporada",
+      "episode_label": "Episódio",
+      "whole_title": "Título inteiro",
+      "whole_season": "Temporada inteira",
+      "file_label": "Ficheiro",
+      "file_any": "Não sei",
+      "note_placeholder": "O que notou? (opcional)",
+      "error": "Não foi possível enviar o relatório.",
+      "error_problem_already_open": "Já reportou este problema.",
+      "error_problem_cap": "Tem demasiados relatórios abertos. Aguarde que alguns sejam corrigidos.",
+      "hint": {
+        "video": "Desfocado, cores erradas, engasgos ou artefactos",
+        "audio": "Sem som, dessincronizado ou idioma errado",
+        "subtitles": "Em falta, dessincronizadas ou com texto errado",
+        "playback": "Não arranca, bloqueia ou para",
+        "other": "Qualquer outra coisa sobre este ficheiro"
+      }
     }
   }
 }

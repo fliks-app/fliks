@@ -1,0 +1,119 @@
+<article class="card bg-base-100 shadow-md border border-base-200 rounded-box" [attr.data-status]="row().status">
+  <div class="card-body gap-2 p-4">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="badge badge-outline">{{ 'problems.kind.' + row().kind | translate }}</span>
+      <span class="badge" [class.badge-warning]="isActive()" [class.badge-success]="row().status === 'resolved'">
+        {{ 'problems.status.' + row().status | translate }}
+      </span>
+      @if (row().autoResolved) {
+        <span class="badge badge-ghost">{{ 'problems.card.auto_resolved' | translate }}</span>
+      }
+    </div>
+
+    <a class="font-semibold break-words" [routerLink]="mediaLink()">{{ row().media.title }}</a>
+    <p class="text-sm text-base-content/70 break-words">
+      {{ scope() }}
+      @if (row().file; as f) {
+        · {{ f.name }}@if (f.quality) { · {{ f.quality }}} · {{ size(f.size) }}
+      }
+    </p>
+    <p class="text-sm text-base-content/60">
+      {{ row().user?.username ?? ('problems.card.system' | translate) }} · {{ row().createdAt | localeDate: { dateStyle: 'medium' } }}
+    </p>
+    @if (row().status === 'closed' && row().resolvedBy; as by) {
+      <p class="text-sm text-base-content/60">{{ 'problems.card.closed_by' | translate: { name: by.username } }}</p>
+    }
+
+    <div appTvRow class="flex flex-wrap gap-2 scroll-ring-safe">
+      <button type="button" class="btn btn-sm btn-ghost" [attr.aria-expanded]="expanded()" (click)="toggleThread()">
+        {{ 'problems.card.thread' | translate: { count: row().commentCount } }}
+      </button>
+      @if (isManager() && isActive()) {
+        @if (row().kind === 'subtitles') {
+          <a class="btn btn-sm btn-primary" [routerLink]="mediaLink()" [queryParams]="{ action: 'subtitles' }">
+            {{ 'problems.card.search_subtitles' | translate }}
+          </a>
+        } @else {
+          <a class="btn btn-sm btn-primary" [routerLink]="mediaLink()">{{ 'problems.card.search_releases' | translate }}</a>
+        }
+        <button type="button" class="btn btn-sm btn-success" (click)="resolveRequested.emit('resolve')">
+          {{ 'problems.card.mark_fixed' | translate }}
+        </button>
+        <button type="button" class="btn btn-sm btn-ghost" (click)="resolveRequested.emit('close')">
+          {{ 'problems.card.close' | translate }}
+        </button>
+      }
+      @if (canWithdraw()) {
+        <button type="button" class="btn btn-sm btn-ghost" [disabled]="busy()" (click)="withdraw()">
+          {{ 'problems.card.withdraw' | translate }}
+        </button>
+      }
+      @if (canReopen()) {
+        <button type="button" class="btn btn-sm btn-outline" (click)="reopening.set(!reopening())">
+          {{ 'problems.card.reopen' | translate }}
+        </button>
+      }
+    </div>
+
+    @if (reopening()) {
+      <div class="flex flex-col gap-2">
+        <textarea
+          class="textarea textarea-bordered w-full"
+          rows="2"
+          maxlength="2000"
+          [placeholder]="'problems.card.reopen_note_placeholder' | translate"
+          [ngModel]="reopenNote()"
+          (ngModelChange)="reopenNote.set($event)"
+        ></textarea>
+        <button
+          type="button"
+          class="btn btn-sm btn-primary self-end"
+          [disabled]="busy() || (!reopenNote().trim() && !isManager())"
+          (click)="reopen()"
+        >
+          {{ 'problems.card.reopen_send' | translate }}
+        </button>
+      </div>
+    }
+
+    @if (expanded()) {
+      @if (isManager() && qoe(); as q) {
+        <p class="text-sm rounded-box bg-base-200 px-3 py-2">
+          <b>{{ 'problems.card.qoe_title' | translate }}</b>
+          {{ q.deviceLabel }}@if (q.playMethod) { · {{ q.playMethod }}}@if (q.quality) { · {{ q.quality }}}
+          · {{ 'problems.card.qoe_stalls' | translate: { count: q.stallCount ?? 0 } }}
+          · {{ 'problems.card.qoe_errors' | translate: { count: q.errorCount ?? 0 } }}@if (q.verdict) { · {{ q.verdict }}}
+        </p>
+      }
+      <ul class="flex flex-col gap-2">
+        @for (c of detail()?.comments ?? []; track c.id) {
+          <li class="flex items-start justify-between gap-2 text-sm">
+            <span class="break-words min-w-0">
+              <b>{{ c.user?.username ?? ('problems.card.system' | translate) }}</b>
+              <span class="text-base-content/60"> · {{ c.createdAt | localeDate: { dateStyle: 'medium' } }}</span><br />
+              {{ c.message }}
+            </span>
+            @if (canDeleteComment(c.userId)) {
+              <button type="button" class="btn btn-ghost btn-sm shrink-0" [disabled]="busy()" (click)="removeComment(c.id)">
+                {{ 'problems.card.delete_comment' | translate }}
+              </button>
+            }
+          </li>
+        }
+      </ul>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <textarea
+          class="textarea textarea-bordered w-full"
+          rows="2"
+          maxlength="2000"
+          [placeholder]="'problems.card.comment_placeholder' | translate"
+          [ngModel]="draft()"
+          (ngModelChange)="draft.set($event)"
+        ></textarea>
+        <button type="button" class="btn btn-sm btn-primary self-end" [disabled]="busy() || !draft().trim()" (click)="send()">
+          {{ 'problems.card.comment_send' | translate }}
+        </button>
+      </div>
+    }
+  </div>
+</article>

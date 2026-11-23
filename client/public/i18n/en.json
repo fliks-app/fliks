@@ -1502,6 +1502,12 @@
     "filter_kind_all": "All types",
     "kind_add": "Add",
     "kind_delete": "Deletion",
+    "kind_problems": "Problems",
+    "problem_filter_active": "Open",
+    "problem_filter_resolved": "Fixed",
+    "problem_filter_closed": "Closed",
+    "problem_filter_all": "All",
+    "problems_empty": "No problems reported",
     "col_title": "Title",
     "col_type": "Type",
     "col_status": "Status",
@@ -6190,6 +6196,87 @@
     "health_fixed": {
       "title": "System issue resolved",
       "body": "{{message}}"
+    }
+  },
+  "problems": {
+    "card": {
+      "system": "System",
+      "scope_title": "Whole title",
+      "scope_season": "Season {{n}}",
+      "auto_resolved": "Fixed automatically",
+      "closed_by": "Closed by {{name}}",
+      "thread": "Thread ({{count}})",
+      "comment_placeholder": "Write a comment",
+      "comment_send": "Send",
+      "delete_comment": "Delete",
+      "search_releases": "Search releases",
+      "search_subtitles": "Search subtitles",
+      "mark_fixed": "Mark fixed",
+      "close": "Close",
+      "withdraw": "Withdraw",
+      "reopen": "Reopen",
+      "reopen_note_placeholder": "What is still wrong?",
+      "reopen_send": "Reopen the report",
+      "reopen_already_open": "A report like this one is already open.",
+      "reopen_cap": "You have too many open reports.",
+      "reopen_window": "This report can no longer be reopened.",
+      "reopen_failed": "The report could not be reopened.",
+      "qoe_title": "Playback session",
+      "qoe_stalls": "{{count}} stalls",
+      "qoe_errors": "{{count}} errors"
+    },
+    "resolve": {
+      "title_fix": "Mark as fixed",
+      "title_close": "Close the report",
+      "reply_placeholder": "Reply to the reporter (optional)",
+      "reason_placeholder": "Why is it closed?",
+      "submit_fix": "Mark fixed",
+      "submit_close": "Close",
+      "chip_new_file": "A new file was imported",
+      "chip_subtitles_replaced": "The subtitles were replaced",
+      "chip_cannot_reproduce": "Plays fine here, try again",
+      "chip_not_a_defect": "This is how the file is",
+      "chip_duplicate": "Already reported"
+    },
+    "status": {
+      "open": "Open",
+      "acknowledged": "Seen",
+      "resolved": "Fixed",
+      "closed": "Closed"
+    },
+    "kind": {
+      "video": "Picture",
+      "audio": "Sound",
+      "subtitles": "Subtitles",
+      "playback": "Won't play",
+      "other": "Other"
+    },
+    "report": {
+      "action": "Report a problem",
+      "title": "Report a problem",
+      "kind_label": "What kind of problem",
+      "send": "Send",
+      "sent": "Thanks, your report was sent.",
+      "sent_hint": "You will be notified when it is fixed or answered.",
+      "my_reports": "My reports",
+      "season": "Season {{n}}",
+      "season_label": "Season",
+      "episode_label": "Episode",
+      "whole_title": "Whole title",
+      "whole_season": "Whole season",
+      "file_label": "File",
+      "file_any": "Not sure",
+      "note_placeholder": "What did you notice? (optional)",
+      "error": "The report could not be sent.",
+      "error_problem_already_open": "You already reported this problem.",
+      "error_problem_cap": "You have too many open reports. Wait for some to be fixed.",
+      "hint": {
+        "video": "Blurry, wrong colors, stutter or artifacts",
+        "audio": "No sound, out of sync or wrong language",
+        "subtitles": "Missing, out of sync or wrong text",
+        "playback": "It does not start, freezes or stops",
+        "other": "Anything else about this file"
+      }
     }
   }
 }

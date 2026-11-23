@@ -27,6 +27,8 @@ import {
   isTrackRequest,
   requestAddLink,
 } from '../../core/services/api/requests.service';
+import { PROBLEM_STATUS_FILTERS, ProblemStatusFilter } from '../../core/services/api/problems.service';
+import { SERVER_SINCE, ServerVersionService } from '../../core/services/server-version.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import {
   LibrariesApiService,
@@ -41,6 +43,7 @@ import { RequestWantsComponent } from './request-wants/request-wants';
 import { RequestDeclineModalComponent } from './request-decline-modal/request-decline-modal.component';
 import { RequestViewDeclineModalComponent } from './request-view-decline-modal/request-view-decline-modal.component';
 import { RequestEditModalComponent } from './request-edit-modal/request-edit-modal.component';
+import { ProblemsListComponent } from './problems-list/problems-list';
 import { RequestDeclineFlow, RequestEditFlow } from './request-flows';
 import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { SseService, requestActivity } from '../../core/services/sse.service';
@@ -71,6 +74,7 @@ const REQUEST_CHANGED_DEBOUNCE_MS = 300;
     LastSearchComponent,
     RequestPosterComponent,
     RequestWantsComponent,
+    ProblemsListComponent,
     RequestDeclineModalComponent,
     RequestViewDeclineModalComponent,
     RequestEditModalComponent,
@@ -99,11 +103,16 @@ export class RequestsComponent implements OnInit, OnDestroy {
   private readonly scrollMemory = inject(ScrollMemoryService);
   private readonly sse = inject(SseService);
   private readonly downloadProgress = inject(DownloadProgressService);
+  private readonly serverVersion = inject(ServerVersionService);
   readonly auth = inject(AuthService);
   private static readonly SCROLL_KEY = 'requests';
   private static statusOf(q: ParamMap): FliksRequestStatus | null {
     const status = q.get('status') as FliksRequestStatus | null;
     return status && REQUEST_STATUSES.includes(status) ? status : null;
+  }
+  private static problemStatusOf(q: ParamMap): ProblemStatusFilter | '' {
+    const status = q.get('status') as ProblemStatusFilter | null;
+    return status && PROBLEM_STATUS_FILTERS.includes(status) ? status : '';
   }
   /** Cached route: a return keeps the list and its scroll, then refetches the loaded rows. */
   private readonly routeFresh = keepRouteFresh({
@@ -120,6 +129,16 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly statusFilter = toSignal(
     this.route.queryParamMap.pipe(map((q) => RequestsComponent.statusOf(q) ?? '')),
     { initialValue: RequestsComponent.statusOf(this.route.snapshot.queryParamMap) ?? '' },
+  );
+  protected readonly problemsSupported = () => this.serverVersion.supports(SERVER_SINCE.problems);
+  /** `?view=problems`: the list source is the problem reports, and `status` is theirs (`active`, `resolved`, `closed`). */
+  readonly problemsView = toSignal(
+    this.route.queryParamMap.pipe(map((q) => this.problemsSupported() && q.get('view') === 'problems')),
+    { initialValue: this.problemsSupported() && this.route.snapshot.queryParamMap.get('view') === 'problems' },
+  );
+  readonly problemStatus = toSignal(
+    this.route.queryParamMap.pipe(map((q) => RequestsComponent.problemStatusOf(q))),
+    { initialValue: RequestsComponent.problemStatusOf(this.route.snapshot.queryParamMap) },
   );
   private readonly statusParam = this.route.queryParamMap
     .pipe(map(RequestsComponent.statusOf), distinctUntilChanged(), skip(1), takeUntilDestroyed())
@@ -205,7 +224,16 @@ export class RequestsComponent implements OnInit, OnDestroy {
     void this.router.navigate([], { queryParams: { status: value || null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
-  onKindChange(value: string) {
+  async onKindChange(value: string) {
+    const problems = value === 'problems';
+    if (problems || this.problemsView()) {
+      await this.router.navigate([], {
+        queryParams: { view: problems ? 'problems' : null, status: problems ? 'active' : null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+      if (problems) return;
+    }
     this.kindFilter.set(value as RequestKind | '');
     this.reload();
   }
@@ -216,6 +244,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   reload() {
+    if (this.problemsView()) return;
     this.page = 1;
     this.rows.set([]);
     this.fetch(false);
@@ -247,6 +276,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   /** Force-refetches the loaded rows so backend status transitions surface, preserving the loaded page depth. */
   private async refreshStatuses(): Promise<void> {
+    if (this.problemsView()) return;
     const status = this.statusFilter();
     const kind = this.kindFilter();
     const limit = Math.max(25, this.rows().length);

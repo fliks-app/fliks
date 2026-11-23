@@ -1,0 +1,25 @@
+@if (loading() && rows().length === 0) {
+  <app-row-skeleton />
+} @else if (rows().length === 0) {
+  <app-empty-state icon="clapperboard" [title]="'requests.problems_empty' | translate" />
+} @else {
+  <div class="flex flex-col gap-3">
+    @for (row of rows(); track row.id) {
+      <app-problem-card [row]="row" (changed)="refresh()" (resolveRequested)="openResolve(row, $event)" />
+    }
+  </div>
+}
+
+@if (total() > rows().length) {
+  <div class="flex justify-center">
+    <button type="button" class="btn btn-outline btn-sm" [disabled]="loading()" (click)="loadMore()">
+      {{ 'requests.load_more' | translate }}
+    </button>
+  </div>
+}
+
+<app-problem-resolve-dialog
+  [problemId]="resolving()?.id ?? null"
+  [mode]="resolving()?.mode ?? 'resolve'"
+  (done)="refresh()"
+/>

@@ -1,6 +1,7 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LucideCircleAlert } from '@lucide/angular';
+import { SERVER_SINCE, ServerVersionService } from '../../../core/services/server-version.service';
 import type { PlaybackError } from '../../../core/services/playback-engine/playback-error';
 
 /** The failure panel for any playback surface: on-demand and live alike. */
@@ -14,8 +15,13 @@ export class PlayerErrorOverlayComponent {
   /** Pre-formatted dump; the copy button is hidden when it is empty. */
   readonly diagnostics = input('');
   readonly canRetry = input(true);
+  /** The player knows the title and file, so the report can open with them locked; never on live TV. */
+  readonly reportable = input(false);
+  private readonly version = inject(ServerVersionService);
+  protected readonly reportSupported = computed(() => this.version.supports(SERVER_SINCE.problems));
 
   readonly retry = output<void>();
+  readonly report = output<void>();
   readonly back = output<void>();
 
   readonly copied = signal(false);

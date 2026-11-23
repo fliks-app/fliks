@@ -410,6 +410,11 @@
     <app-optimize-modal />
   }
 
+  <!-- Report-a-problem dialog, single instance, opened via ReportProblemService -->
+  @defer (when reportProblem.request(); prefetch on idle) {
+    <app-report-problem-dialog />
+  }
+
   <!-- The gutter is always reserved: a scrollbar appearing as the menu grows would shift the page. -->
   <div class="drawer-side z-40 [scrollbar-gutter:stable]" [class.hidden]="navbar.phoneDock()">
     <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>

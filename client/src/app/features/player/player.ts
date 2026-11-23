@@ -116,6 +116,7 @@ import { LucideAirplay, LucideCast, LucideInfo, LucideVolumeX, LucideX } from '@
 import { AirPlayService } from '../../core/services/airplay.service';
 import { PlayerControlsComponent } from './controls/player-controls';
 import { PlayerErrorOverlayComponent } from './overlay/player-error-overlay';
+import { ReportProblemService } from '../../core/services/report-problem.service';
 import { ControlsVisibilityService } from './controls/controls-visibility';
 import { type ControlsModel, outputModel } from './controls/controls-model';
 import { NO_NOW_PLAYING, NowPlayingMetadataService, describeNowPlaying, mediaSessionText, type NowPlayingMetadata } from '../../core/services/playback/now-playing-metadata.service';
@@ -799,6 +800,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   // Media info
   private mediaFileId = 0;
   private mediaId = 0;
+  private readonly reports = inject(ReportProblemService);
+
+  protected get reportable(): boolean {
+    return !this.isOfflinePlayback && this.mediaId > 0;
+  }
+
+  protected onReport(): void {
+    this.reports.open({
+      mediaId: this.mediaId,
+      title: this.media?.title ?? '',
+      kind: 'playback',
+      locked: true,
+      ...(this.episodeId != null ? { itemId: this.episodeId } : {}),
+      mediaFileId: this.mediaFileId,
+    });
+  }
   private isOfflinePlayback = false;
   /** Offline playback loads no media record; the download carries the type for the back target. */
   private offlineMediaType: MediaType | undefined;

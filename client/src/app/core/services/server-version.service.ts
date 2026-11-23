@@ -33,6 +33,7 @@ export const SERVER_SINCE = {
   sessionSync: '7.0.0',
   push: '7.1.0',
   liveTvGroups: '7.1.1',
+  problems: '7.2.0',
   // Release that carries the engine keyframes-route fix.
   keyframes: '7.1.1',
 } as const;

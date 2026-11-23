@@ -1,0 +1,99 @@
+<dialog #dialog appModal boxClass="max-w-lg">
+  <app-modal-header [title]="'problems.report.title' | translate" (closed)="close()" />
+
+  @if (target(); as t) {
+    @if (sent()) {
+      <div class="flex flex-col gap-3 py-2">
+        <p class="font-semibold">{{ 'problems.report.sent' | translate }}</p>
+        <p class="text-sm text-base-content/70">{{ 'problems.report.sent_hint' | translate }}</p>
+      </div>
+      <app-modal-footer>
+        <div class="flex flex-wrap justify-end gap-2 px-1 py-1">
+          <a routerLink="/requests" [queryParams]="{ view: 'problems' }" class="btn btn-ghost btn-sm" (click)="close()">{{ 'problems.report.my_reports' | translate }}</a>
+          <button type="button" class="btn btn-primary btn-sm" (click)="close()">{{ 'common.close' | translate }}</button>
+        </div>
+      </app-modal-footer>
+    } @else {
+      <div class="flex flex-col gap-4">
+        <p class="text-sm text-base-content/70 truncate">{{ t.title }}@if (scopeLabel()) { <span>, {{ scopeLabel() }}</span> }</p>
+
+        <div class="scroll-ring-safe grid grid-cols-2 sm:grid-cols-5 gap-2" role="radiogroup" [attr.aria-label]="'problems.report.kind_label' | translate">
+          @for (k of kinds; track k) {
+            <button
+              type="button"
+              role="radio"
+              class="btn btn-sm h-auto min-h-12 flex-col gap-1 py-2"
+              [class.btn-primary]="kind() === k"
+              [class.btn-outline]="kind() !== k"
+              [attr.aria-checked]="kind() === k"
+              [disabled]="t.locked && t.kind != null && t.kind !== k"
+              (click)="kind.set(k)"
+            >
+              <span class="text-sm">{{ 'problems.kind.' + k | translate }}</span>
+            </button>
+          }
+        </div>
+        <p class="min-h-5 text-sm text-base-content/60">
+          @if (kind(); as k) { {{ 'problems.report.hint.' + k | translate }} }
+        </p>
+
+        @if (!t.locked && seasons().length) {
+          <div class="grid grid-cols-2 gap-3">
+            <label class="form-control">
+              <span class="label-text text-sm">{{ 'problems.report.season_label' | translate }}</span>
+              <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="season()" (ngModelChange)="pickSeason($event)">
+                <option [ngValue]="null">{{ 'problems.report.whole_title' | translate }}</option>
+                @for (s of seasons(); track s.id) {
+                  <option [ngValue]="s.seasonNumber">{{ 'problems.report.season' | translate: { n: s.seasonNumber } }}</option>
+                }
+              </select>
+            </label>
+            <label class="form-control">
+              <span class="label-text text-sm">{{ 'problems.report.episode_label' | translate }}</span>
+              <select appTvSelect class="select select-bordered select-sm w-full" [disabled]="season() === null" [ngModel]="episodeId()" (ngModelChange)="pickEpisode($event)">
+                <option [ngValue]="null">{{ 'problems.report.whole_season' | translate }}</option>
+                @for (e of episodes(); track e.id) {
+                  <option [ngValue]="e.id">E{{ e.episodeNumber }}</option>
+                }
+              </select>
+            </label>
+          </div>
+        }
+
+        @if (showFile()) {
+          <label class="form-control">
+            <span class="label-text text-sm">{{ 'problems.report.file_label' | translate }}</span>
+            <select appTvSelect class="select select-bordered select-sm w-full" [ngModel]="fileId()" (ngModelChange)="fileId.set($event)">
+              <option [ngValue]="null">{{ 'problems.report.file_any' | translate }}</option>
+              @for (f of files(); track f.id) {
+                <option [ngValue]="f.id">{{ f.quality }}, {{ formatBytes(f.size) }}</option>
+              }
+            </select>
+          </label>
+        }
+
+        <label class="form-control">
+          <textarea
+            class="textarea textarea-bordered w-full"
+            rows="3"
+            [maxlength]="noteMax"
+            [placeholder]="'problems.report.note_placeholder' | translate"
+            [ngModel]="note()"
+            (ngModelChange)="note.set($event)"
+          ></textarea>
+          <span class="label-text-alt self-end text-sm text-base-content/60">{{ note().length }} / {{ noteMax }}</span>
+        </label>
+      </div>
+
+      <app-modal-footer>
+        <div class="flex flex-wrap justify-end gap-2 px-1 py-1">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="close()">{{ 'common.cancel' | translate }}</button>
+          <button type="button" class="btn btn-primary btn-sm" [disabled]="!kind() || busy()" (click)="send()">
+            @if (busy()) { <span class="loading loading-spinner loading-xs"></span> }
+            {{ 'problems.report.send' | translate }}
+          </button>
+        </div>
+      </app-modal-footer>
+    }
+  }
+</dialog>

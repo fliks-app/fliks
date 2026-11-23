@@ -21,6 +21,9 @@
             {{ (copied() ? 'player.copied' : 'player.copy_diagnostics') | translate }}
           </button>
         }
+        @if (reportable() && reportSupported()) {
+          <button class="btn btn-ghost btn-sm" (click)="report.emit()">{{ 'problems.report.action' | translate }}</button>
+        }
         <button class="btn btn-ghost btn-sm" (click)="back.emit()">{{ 'player.back' | translate }}</button>
       </div>
     </div>

@@ -10,6 +10,8 @@ export interface SidebarCounts {
   pendingRequests: number;
   /** Requests waiting for this user's decision plus follow requests waiting for an answer; absent from an older server. */
   attention?: number;
+  /** A manager's open problem reports; absent from an older server. */
+  openProblems?: number;
   /** Open health checks in error, admins only; absent from an older server. */
   systemAttention?: number;
   /** Media count per accessible library id. */
