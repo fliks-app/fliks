@@ -210,6 +210,7 @@ pub(crate) async fn apply_seasons(
     let flag = super::monitored::media_flag(&st.db, media_id).await?;
     let mut tx = st.db.begin().await?;
     crate::media::items::lock_versions(&mut tx, media_id).await?;
+    items::lock_media(&mut tx, media_id).await?;
     if reset {
         clear_season_values(&mut tx, media_id).await?;
     }
@@ -375,6 +376,7 @@ pub(crate) async fn drop_absent(
     let live: Vec<i32> = seasons.iter().map(|s| s.season_number).collect();
     let mut tx = st.db.begin().await?;
     items::lock_versions(&mut tx, id).await?;
+    items::lock_media(&mut tx, id).await?;
     let gone: Vec<i32> = sqlx::query_scalar!(
         r#"SELECT i.id FROM items i JOIN item_groups g ON g.id = i."groupId"
            WHERE g."mediaId" = $1 AND NOT (g."number" = ANY($2))"#,

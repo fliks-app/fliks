@@ -43,7 +43,7 @@ END $$;
 -- Locks the series first (the order every writer follows), then recomputes the cache.
 CREATE FUNCTION sync_series_monitored(ids integer[]) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
-  PERFORM 1 FROM media WHERE id = ANY(ids) AND "type" = 'series' ORDER BY id FOR UPDATE;
+  PERFORM 1 FROM media WHERE id = ANY(ids) AND "type" = 'series' ORDER BY id FOR NO KEY UPDATE;
   UPDATE media SET monitored = series_monitoring(id, "monitorNewSeasons") <> 'none'
    WHERE id = ANY(ids) AND "type" = 'series'
      AND monitored IS DISTINCT FROM (series_monitoring(id, "monitorNewSeasons") <> 'none');

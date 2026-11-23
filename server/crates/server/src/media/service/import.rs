@@ -193,15 +193,13 @@ pub async fn import_title(
         for sd in &found.seasons {
             let n = sd.season_number;
             let (sid, _) = crate::media::items::ensure_group(&mut tx, id, n).await?;
-            if let Some(s) = &scope {
-                sqlx::query!(
-                    "UPDATE item_groups SET monitored = $2 WHERE id = $1 AND monitored IS DISTINCT FROM $2",
-                    sid,
-                    s.contains(&n)
-                )
-                .execute(&mut *tx)
-                .await?;
-            }
+            sqlx::query!(
+                "UPDATE item_groups SET monitored = $2 WHERE id = $1 AND monitored IS DISTINCT FROM $2",
+                sid,
+                scope.as_ref().map_or(n > 0, |s| s.contains(&n))
+            )
+            .execute(&mut *tx)
+            .await?;
             stills.push((
                 sid,
                 refresh::apply_season(&mut tx, sid, sd).await?,

@@ -23,6 +23,15 @@ pub(crate) async fn lock_versions(c: &mut PgConnection, media: i32) -> sqlx::Res
         .map(drop)
 }
 
+/// Takes the media row before any of its seasons: the order of every writer that can flip a series' derived flag.
+pub(crate) async fn lock_media(c: &mut PgConnection, media: i32) -> sqlx::Result<()> {
+    sqlx::query("SELECT 1 FROM media WHERE id = $1 FOR NO KEY UPDATE")
+        .bind(media)
+        .execute(c)
+        .await
+        .map(drop)
+}
+
 /// The version that took the place of `version` of `item` when a merge replaced its files, if it
 /// still exists.
 pub(crate) async fn aliased(

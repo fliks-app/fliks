@@ -955,9 +955,12 @@ pub async fn monitor_scope(
     seasons: Option<&[i64]>,
 ) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
-    let kind = sqlx::query_scalar!("SELECT type FROM media WHERE id = $1 FOR UPDATE", media_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+    let kind = sqlx::query_scalar!(
+        "SELECT type FROM media WHERE id = $1 FOR NO KEY UPDATE",
+        media_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
     if kind.as_deref() != Some("series") {
         sqlx::query!(
             "UPDATE media SET monitored = true WHERE id = $1 AND NOT monitored",
@@ -980,8 +983,11 @@ pub async fn monitor_scope(
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query!(
-        r#"UPDATE item_groups SET monitored = true
-           WHERE "mediaId" = $1 AND NOT monitored AND ($2::boolean AND "number" > 0 OR "number" = ANY($3))"#,
+        r#"WITH flipped AS (
+             UPDATE item_groups SET monitored = true
+             WHERE "mediaId" = $1 AND NOT monitored AND ($2::boolean AND "number" > 0 OR "number" = ANY($3))
+             RETURNING id)
+           UPDATE items SET monitored = true WHERE "groupId" IN (SELECT id FROM flipped)"#,
         media_id,
         scope.is_none(),
         &nums
@@ -1316,7 +1322,7 @@ pub async fn lock_media_holding(
     t: &TitleKey,
 ) -> sqlx::Result<bool> {
     sqlx::query_scalar(
-        r#"SELECT EXISTS (SELECT 1 FROM (SELECT id FROM media WHERE id = $1 FOR UPDATE) m
+        r#"SELECT EXISTS (SELECT 1 FROM (SELECT id FROM media WHERE id = $1 FOR NO KEY UPDATE) m
              JOIN media_external_ids e ON e."mediaId" = m.id
              WHERE e.kind = $2 AND e.provider = $3 AND e.value = $4)"#,
     )

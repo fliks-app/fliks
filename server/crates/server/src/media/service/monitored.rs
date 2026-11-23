@@ -53,7 +53,7 @@ pub async fn apply_media_monitored(
 ) -> Result<MonitoredChange, sqlx::Error> {
     let before = sqlx::query!(
         r#"SELECT m.id, m.type AS "media_type!", m.monitored AS was FROM media m
-           WHERE m.id = ANY($1) ORDER BY m.id FOR UPDATE"#,
+           WHERE m.id = ANY($1) ORDER BY m.id FOR NO KEY UPDATE"#,
         ids
     )
     .fetch_all(&mut *c)
@@ -141,7 +141,7 @@ pub async fn apply_season_monitored(
     .await?;
     let media_before = match media {
         Some(m) => sqlx::query!(
-            r#"SELECT type AS "media_type!", monitored FROM media WHERE id = $1 FOR UPDATE"#,
+            r#"SELECT type AS "media_type!", monitored FROM media WHERE id = $1 FOR NO KEY UPDATE"#,
             m
         )
         .fetch_optional(&mut *c)
@@ -222,17 +222,18 @@ pub async fn set_season_monitored(
     Ok(())
 }
 
-/// The media's `monitored` flag, read around a write that can flip a series' derived value.
-pub async fn media_flag(db: &sqlx::PgPool, id: i32) -> sqlx::Result<bool> {
+/// The media's `monitored` flag, read around a write that can flip a series' derived value; `None` once the media is gone.
+pub async fn media_flag(db: impl sqlx::PgExecutor<'_>, id: i32) -> sqlx::Result<Option<bool>> {
     sqlx::query_scalar!("SELECT monitored FROM media WHERE id = $1", id)
-        .fetch_one(db)
+        .fetch_optional(db)
         .await
 }
 
 /// Emits `media.monitored.changed` when the flag read before a refresh or rescan differs from the current one.
-pub async fn announce_flip(st: &AppState, id: i32, before: bool) -> sqlx::Result<()> {
-    let after = media_flag(&st.db, id).await?;
-    if after != before {
+pub async fn announce_flip(st: &AppState, id: i32, before: Option<bool>) -> sqlx::Result<()> {
+    if let (Some(before), Some(after)) = (before, media_flag(&st.db, id).await?)
+        && after != before
+    {
         st.hub.emit_domain(DomainEvent::MediaMonitoredChanged {
             media_id: i64::from(id),
             monitored: after,

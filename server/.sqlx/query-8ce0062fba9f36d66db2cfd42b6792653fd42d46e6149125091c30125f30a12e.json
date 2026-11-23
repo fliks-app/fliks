@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT type AS \"media_type!\", monitored FROM media WHERE id = $1 FOR UPDATE",
+  "query": "SELECT type AS \"media_type!\", monitored FROM media WHERE id = $1 FOR NO KEY UPDATE",
   "describe": {
     "columns": [
       {
@@ -36,5 +36,5 @@
       false
     ]
   },
-  "hash": "01537b85fe9a2d06ce0423694223f5c845bd435ef21561bed488c5d9ec3324e1"
+  "hash": "8ce0062fba9f36d66db2cfd42b6792653fd42d46e6149125091c30125f30a12e"
 }

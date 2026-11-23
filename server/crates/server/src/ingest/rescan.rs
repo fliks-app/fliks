@@ -1055,7 +1055,7 @@ pub async fn ensure_season_and_episode(
         n.episode_end.map(|e| e as i32),
     );
     let mut c = st.db.acquire().await?;
-    let before = crate::media::service::media_flag(&st.db, media).await?;
+    let before = crate::media::service::media_flag(&mut *c, media).await?;
     let (sid, mut created) = items::ensure_group(&mut c, media, season).await?;
     if created {
         crate::media::service::announce_flip(st, media, before).await?;

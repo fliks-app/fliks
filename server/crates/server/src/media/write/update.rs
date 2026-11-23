@@ -842,6 +842,13 @@ pub async fn patch_season(
         }
     };
     let mut tx = st.db.begin().await?;
+    if let Some(media) =
+        sqlx::query_scalar!(r#"SELECT "mediaId" FROM item_groups WHERE id = $1"#, id)
+            .fetch_optional(&mut *tx)
+            .await?
+    {
+        items::lock_media(&mut tx, media).await?;
+    }
     if let Some(p) = provider {
         sqlx::query!(
             r#"UPDATE item_groups SET "preferredProvider" = $2
