@@ -227,7 +227,7 @@
                   "hasFile": false,
                   "id": 204,
                   "markersScannedAt": null,
-                  "monitored": true,
+                  "monitored": false,
                   "overview": null,
                   "runtime": 47,
                   "seasonId": 205,
