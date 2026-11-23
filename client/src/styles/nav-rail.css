@@ -18,7 +18,7 @@ body.tv {
   gap: 0.5rem;
   width: var(--rail-w);
   padding: calc(env(safe-area-inset-top, 0px) / 2 + 0.75rem) 0.75rem 0.75rem;
-  transition: width 0.2s ease-out, box-shadow 0.2s ease-out;
+  transition: width 0.2s ease-out, box-shadow 0.2s ease-out, background-color 0.2s ease-out;
 }
 .nav-rail.rail-open {
   width: 16rem;
@@ -39,6 +39,16 @@ body.tv {
 }
 .rail-dim > .drawer-content::after {
   opacity: 1;
+}
+
+/* TV at rest: no panel over the page, the icons carry a shadow to stay readable over bright art. */
+body.tv .nav-rail.rail-collapsed:not(.rail-open) {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+body.tv .nav-rail.rail-collapsed:not(.rail-open) .rail-icon {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
 }
 
 .rail-head,
