@@ -48,6 +48,12 @@ const PGS_EN = sub({ id: 'emb-4', isImage: true, subtitleDbId: 12 });
 const SUP_EN = sub({ id: 'ext-13', isImage: true, subtitleDbId: 13 });
 const STREAMINFO_ONLY = sub({ id: 'emb-9', language: 'de' });
 
+/** The cast service loads the heartbeat on its first session: let that registration land before a beat. */
+async function beat(heartbeat: PlaybackHeartbeat): Promise<void> {
+  await new Promise<void>((r) => setTimeout(r));
+  await heartbeat.beat();
+}
+
 function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption | null } = {}) {
   const cast = {
     isConnected: signal(true),
@@ -311,11 +317,12 @@ describe('another sender loads on the receiver', () => {
     const save = streamingApi.updatePlaybackState;
     cast.currentTime = () => 120;
     svc.startCast({ ...base, mediaFileId: 7, mediaId: 3, subtitles: [], activeSubtitleId: null });
+    await new Promise<void>((r) => setTimeout(r));
     cast.receiverMedia.set({ mediaId: 4, mediaFileId: 9 });
     await heartbeat.beat();
     expect(save).not.toHaveBeenCalled();
     cast.receiverMedia.set(ours);
-    await heartbeat.beat();
+    await beat(heartbeat);
     expect(save).toHaveBeenCalledTimes(1);
   });
 });
@@ -333,11 +340,11 @@ describe('another sender takes the receiver while this one plays', () => {
     cast.replaced.set(true);
     cast.playbackError$.next({});
     cast.playbackError$.next({ mediaFileId: 26 });
-    await heartbeat.beat();
+    await beat(heartbeat);
     cast.receiverMedia.set({ mediaId: 6, mediaFileId: 26, sid: 'b' });
     cast.replaced.set(false);
     TestBed.tick();
-    await heartbeat.beat();
+    await beat(heartbeat);
     expect(cast.loadMedia).not.toHaveBeenCalled();
     expect(svc.mediaFileId()).toBe(26);
     const saved = streamingApi.updatePlaybackState.mock.calls as unknown as [number, { mediaFileId: number; castDevice?: string }][];
@@ -357,7 +364,7 @@ describe('a session another user loaded', () => {
     expect(svc.hasMedia()).toBe(true);
     expect(svc.liveSessionId()).toBeNull();
     heartbeat.register(svc.heartbeatSource, 'receiver');
-    await heartbeat.beat();
+    await beat(heartbeat);
     cast.playbackError$.next({});
     svc.clear();
     expect(streamingApi.updatePlaybackState).not.toHaveBeenCalled();
@@ -371,7 +378,7 @@ describe('a session another user loaded', () => {
     cast.currentTime = () => 205;
     cast.receiverMedia.set({ mediaId: 6, mediaFileId: 26, sid: 'b', userId: 1 });
     TestBed.tick();
-    await heartbeat.beat();
+    await beat(heartbeat);
     expect(svc.liveSessionId()).toBe('b');
     expect(streamingApi.updatePlaybackState).toHaveBeenCalledTimes(1);
   });
@@ -390,7 +397,7 @@ describe('cast heartbeat without the player page', () => {
 
   it('hands the native side the heartbeat to repeat while the phone is locked', async () => {
     const { cast, heartbeat } = playing();
-    await heartbeat.beat();
+    await beat(heartbeat);
     expect(cast.saveHeartbeat).toHaveBeenCalledWith({
       url: '/api/playback/media/6/state',
       token: 'st',
@@ -401,7 +408,7 @@ describe('cast heartbeat without the player page', () => {
   it('carries the receiver QoE sample, but not to the native side', async () => {
     const { cast, heartbeat, streamingApi } = playing();
     (cast.receiverQoe as any).set({ sample: { engine: 'cast', stallCount: 0, recoveryReloads: 0, bandwidthBps: 9 }, receivedAt: Date.now(), sid: 'b' });
-    await heartbeat.beat();
+    await beat(heartbeat);
     expect(streamingApi.updatePlaybackState).toHaveBeenCalledWith(6, expect.objectContaining({ qoe: expect.objectContaining({ bandwidthBps: 9 }) }));
     expect(cast.saveHeartbeat.mock.calls[0][0].body.qoe).toBeUndefined();
   });
@@ -411,7 +418,7 @@ describe('cast heartbeat without the player page', () => {
     streamingApi.updatePlaybackState.mockResolvedValueOnce({ sessionLost: true } as never);
     const reload = vi.spyOn(svc, 'reloadCastStream').mockResolvedValue('done');
     const record = vi.spyOn(svc, 'recordRecovery');
-    await heartbeat.beat();
+    await beat(heartbeat);
     await vi.waitFor(() => expect(record).toHaveBeenCalledWith(30, 'session_lost'));
     expect(reload).toHaveBeenCalledTimes(1);
     expect(reload).toHaveBeenCalledWith(30, true);
@@ -421,13 +428,14 @@ describe('cast heartbeat without the player page', () => {
     const { svc, heartbeat, streamingApi } = playing();
     streamingApi.updatePlaybackState.mockResolvedValueOnce({ sessionLost: true, superseded: true } as never);
     const reload = vi.spyOn(svc, 'reloadCastStream').mockResolvedValue('done');
-    await heartbeat.beat();
+    await beat(heartbeat);
     expect(TestBed.inject(SessionSyncService).handleSuperseded).toHaveBeenCalledWith('b');
     expect(reload).not.toHaveBeenCalled();
   });
 
   it('keeps the receiver beating at the final position when the cast clears', async () => {
     const { svc, streamingApi } = playing();
+    await new Promise<void>((r) => setTimeout(r));
     svc.clear();
     await vi.waitFor(() => expect(streamingApi.updatePlaybackState).toHaveBeenCalledTimes(1));
     expect(streamingApi.updatePlaybackState).toHaveBeenCalledWith(6, expect.objectContaining({ positionSeconds: 30, sessionId: 'b' }));

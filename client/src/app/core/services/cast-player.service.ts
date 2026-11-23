@@ -35,7 +35,7 @@ import {
 import { TrackManagerService, launchPickFor, type LaunchTracks, type SubtitleOption } from './track-manager.service';
 import type { Media } from './api/media.service';
 import { NO_NOW_PLAYING, NowPlayingMetadataService } from './playback/now-playing-metadata.service';
-import { PlaybackHeartbeat, type HeartbeatSource } from './playback/playback-heartbeat';
+import type { HeartbeatSource, PlaybackHeartbeat } from './playback/playback-heartbeat';
 import { CastPlaybackTarget } from './cast-playback-target';
 import { NO_TIMELINE, type PlaybackTimeline } from './playback/playback-output';
 import { PlaybackSession } from './playback/playback-session';
@@ -190,7 +190,9 @@ export class CastPlayerService {
     this.unregisterHeartbeat?.();
   });
   private readonly sessionSync = inject(SessionSyncService);
-  private readonly heartbeat = inject(PlaybackHeartbeat);
+  /** Loaded on the first Cast session: the beater and its offline stack stay off the initial bundle. */
+  private heartbeat: PlaybackHeartbeat | null = null;
+  private heartbeatWanted = false;
   private readonly castSettings = inject(CastSettingsService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly qoeReporter = inject(QoeReporter);
@@ -557,7 +559,8 @@ export class CastPlayerService {
       this.disconnectGrace = null;
     }
     const castSid = this.liveSessionId();
-    void this.heartbeat.bank();
+    void this.heartbeat?.bank();
+    this.heartbeatWanted = false;
     this.unregisterHeartbeat?.();
     this.unregisterHeartbeat = null;
     if (castSid) this.qoeReporter.flushKeepalive(castSid);
@@ -952,7 +955,12 @@ export class CastPlayerService {
   }
 
   private registerHeartbeat(): void {
-    this.unregisterHeartbeat ??= this.heartbeat.register(this.heartbeatSource, 'receiver');
+    this.heartbeatWanted = true;
+    void import('./playback/playback-heartbeat').then((m) => {
+      if (this.destroyed) return;
+      this.heartbeat = this.injector.get(m.PlaybackHeartbeat);
+      if (this.heartbeatWanted) this.unregisterHeartbeat ??= this.heartbeat.register(this.heartbeatSource, 'receiver');
+    });
   }
 
   /** Beats for the receiver once the player page is gone: without it the backend GCs the session and the receiver 410s. */
