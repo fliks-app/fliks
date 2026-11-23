@@ -19,6 +19,7 @@ function setup(opts: { query?: Record<string, string>; providers?: { id: number;
     oidcBusy: signal(false),
     ssoProviders: signal(opts.providers ?? []),
     passwordLogin: signal(opts.passwordLogin ?? 'everyone'),
+    userPicker: signal(true),
   };
   const queryParamMap = new Map(Object.entries(opts.query ?? {}));
   const queryParams$ = new BehaviorSubject(convertToParamMap(opts.query ?? {}));

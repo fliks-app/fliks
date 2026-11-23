@@ -96,11 +96,12 @@ export class SelectUserComponent {
   /** Tile the sheet was opened from, so closing hands focus back to it
    *  instead of dropping it on `<body>`. */
   private opener: HTMLElement | null = null;
+  private readonly signInInfo = this.auth.oidcInfo();
 
   constructor() {
     void this.loadUsers();
-    void this.auth.oidcInfo().then(() => {
-      if (!this.auth.resumableSessions().length) {
+    void this.signInInfo.then(() => {
+      if (this.auth.userPicker() && !this.auth.resumableSessions().length) {
         this.auth.oidcAutoLaunch(this.route.snapshot.queryParamMap.get('autoLaunch') === '0');
       }
     });
@@ -141,19 +142,22 @@ export class SelectUserComponent {
     this.unreachable.set(false);
     try {
       this.serverUsers.set(await this.auth.listUsersPublic());
-      // A hidden roster (admin setting) leaves nothing to pick: go straight to typing a username.
-      if (!this.users().length) {
-        const autoLaunch = this.route.snapshot.queryParamMap.get('autoLaunch');
-        void this.router.navigate(['/login'], {
-          replaceUrl: true,
-          queryParams: autoLaunch === '0' ? { autoLaunch: 0 } : undefined,
-        });
-      }
+      await this.signInInfo;
+      // Picker turned off, or a hidden roster with nothing to pick: go straight to typing a username.
+      if (!this.auth.userPicker() || !this.users().length) this.toLogin();
     } catch {
       this.unreachable.set(true);
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private toLogin() {
+    const autoLaunch = this.route.snapshot.queryParamMap.get('autoLaunch');
+    void this.router.navigate(['/login'], {
+      replaceUrl: true,
+      queryParams: autoLaunch === '0' ? { autoLaunch: 0 } : undefined,
+    });
   }
 
   hasSession(user: PublicUserSummary): boolean {

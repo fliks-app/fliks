@@ -12,6 +12,8 @@ export interface OidcInfo {
   providers: OidcProvider[];
   autoLaunch: number | null;
   passwordLogin: 'everyone' | 'admins';
+  /** False when the admin turned the account picker off; absent on older servers. */
+  userPicker?: boolean;
   /** Origin of `public_url`: where the provider's callback returns to. */
   origin: string;
 }

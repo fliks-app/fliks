@@ -178,9 +178,9 @@ async fn check_admin_key(
 
 /// Values the engine would reject with its whole config.
 fn validate(key: &str, value: &str) -> Result<(), AppError> {
-    if key == "users_public_mode" && !["everyone", "lan", "hidden"].contains(&value) {
+    if key == "users_public_mode" && !["everyone", "lan", "hidden", "never"].contains(&value) {
         return Err(AppError::bad_request(vec![
-            "users_public_mode must be one of the following values: everyone, lan, hidden",
+            "users_public_mode must be one of the following values: everyone, lan, hidden, never",
         ]));
     }
     if key == "trusted_proxies" && !value.trim().is_empty() {

@@ -8,13 +8,16 @@ import { AuthService } from '../../core/services/auth.service';
 import { oidcErrorText } from '../../core/services/oidc';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SsoButtonsComponent } from '../../shared/components/sso-buttons';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../shared/icons';
 
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, TranslatePipe, SsoButtonsComponent],
+  imports: [ReactiveFormsModule, TranslatePipe, SsoButtonsComponent, LucideDynamicIcon],
   templateUrl: './login.html',
 })
 export class LoginComponent {
+  protected readonly icons = icons;
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
@@ -26,8 +29,9 @@ export class LoginComponent {
 
   readonly error = signal('');
   readonly loading = signal(false);
-  /** False when the picker would be empty (roster hidden by the admin): it would bounce back here. */
-  readonly canPickUser = signal(true);
+  private readonly hasAccounts = signal(true);
+  /** False when the picker is turned off or would be empty: it would bounce back here. */
+  readonly canPickUser = computed(() => this.auth.userPicker() && this.hasAccounts());
 
   /** `?username=` from the user picker locks the field to the chosen account; else falls back to the active server's last username. */
   private readonly presetUsername = this.route.snapshot.queryParamMap.get('username');
@@ -64,7 +68,7 @@ export class LoginComponent {
     void this.startSso();
     void this.auth
       .listUsersPublic()
-      .then((users) => this.canPickUser.set(users.length > 0 || this.auth.resumableSessions().length > 0))
+      .then((users) => this.hasAccounts.set(users.length > 0 || this.auth.resumableSessions().length > 0))
       .catch(() => undefined);
   }
 
@@ -105,6 +109,10 @@ export class LoginComponent {
   /** Keep the stored server URL and sessions: /setup is a picker, not a reset. */
   changeServer() {
     void this.router.navigate(['/setup']);
+  }
+
+  goToQuickConnect() {
+    void this.router.navigate(['/quick-connect']);
   }
 
   goToSelectUser() {
