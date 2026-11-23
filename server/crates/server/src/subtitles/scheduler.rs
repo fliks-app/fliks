@@ -303,7 +303,7 @@ pub async fn search_missing_for_media(st: &AppState, media_id: i32, file_id: i32
     let Ok(Some(file)) = files::file_by_id(&st.db, file_id).await else {
         return vec![];
     };
-    if file.media_id != Some(media_id) {
+    if file.media_id != media_id {
         return vec![];
     }
     let opts = resolve_opts(st).await;
@@ -328,7 +328,7 @@ pub async fn on_media_file_imported(
     let Ok(Some(file)) = files::file_by_id(&st.db, file_id).await else {
         return;
     };
-    if file.media_id != Some(media_id) {
+    if file.media_id != media_id {
         return;
     }
     let opts = resolve_opts(st).await;
@@ -396,7 +396,7 @@ async fn upgrade_batch(st: &AppState, rows: &[Row], opts: &Opts) -> Result<(), S
         Default::default();
     let mut missing: std::collections::HashMap<i32, bool> = Default::default();
     for r in rows {
-        let (Some(mid), Some(fid)) = (r.media_id, r.media_file_id) else {
+        let (mid, Some(fid)) = (r.media_id, r.media_file_id) else {
             continue;
         };
         if !medias.contains_key(&mid)
@@ -419,7 +419,7 @@ async fn upgrade_batch(st: &AppState, rows: &[Row], opts: &Opts) -> Result<(), S
         }
     }
     for sub in rows {
-        let (Some(mid), Some(fid)) = (sub.media_id, sub.media_file_id) else {
+        let (mid, Some(fid)) = (sub.media_id, sub.media_file_id) else {
             continue;
         };
         let Some((media, items)) = medias.get(&mid) else {

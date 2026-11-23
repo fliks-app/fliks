@@ -73,14 +73,13 @@ fn annotation_missing(id: i32) -> AppError {
     AppError::not_found(format!("Annotation #{id} not found"))
 }
 
-/// Rule 5: a text or comic item whose media and edition sit in readable libraries, else a 404 that reads like a missing one.
+/// Rule 5: a text or comic item whose media sits in a readable library, else a 404 that reads like a missing one.
 async fn readable(st: &AppState, a: &Authed, item: i32) -> Result<(), AppError> {
     let libs = accessible_library_ids(&st.db, a).await?;
     let found = sqlx::query_scalar!(
         r#"SELECT i.id FROM items i
            JOIN media m ON m.id = i."mediaId" AND m."libraryId" = ANY($2)
            JOIN editions e ON e.id = i."editionId" AND e.family IN ('text', 'image')
-             AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
            WHERE i.id = $1"#,
         item,
         &libs

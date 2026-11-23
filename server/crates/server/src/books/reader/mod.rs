@@ -7,7 +7,7 @@ use crate::{
     comics,
     http::{AppError, auth::Authed, validate::PathParams},
     ingest::books::archive::{EntryError, OPF_CAP, read_entry, rootfile},
-    libraries::{accessible_library_ids, readable_file},
+    libraries::accessible_library_ids,
     state::AppState,
     stream::resolve_file,
 };
@@ -52,16 +52,15 @@ async fn epub_path(
     item: i32,
 ) -> Result<(PathBuf, comics::cache::Key), AppError> {
     let acl = accessible_library_ids(&st.db, a).await?;
-    let file: Option<i32> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+    let file: Option<i32> = sqlx::query_scalar(
         r#"SELECT mf.id FROM items i
            JOIN media m ON m.id = i."mediaId" AND m."libraryId" = ANY($2)
            JOIN editions e ON e.id = i."editionId" AND e.family = 'text'
            JOIN item_parts ip ON ip."itemId" = i.id
            JOIN media_files mf ON mf.id = ip."mediaFileId" AND lower(mf."relativePath") LIKE '%.epub'
-           WHERE i.id = $1 AND {}
+           WHERE i.id = $1
            ORDER BY ip.version DESC, ip.position, mf.id LIMIT 1"#,
-        readable_file("$2", "mf.id")
-    )))
+    )
     .bind(item)
     .bind(&acl)
     .fetch_optional(&st.db)

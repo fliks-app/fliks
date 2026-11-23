@@ -114,7 +114,7 @@ pub(crate) async fn import_book(
     .await?;
     search_added(st, id).await;
     let acl = accessible_library_ids(&st.db, a).await?;
-    let mut media = hydrate::detail_for(&st.db, id, paths_visible(&a.perms), Some(&acl))
+    let mut media = hydrate::detail(&st.db, id, paths_visible(&a.perms))
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))?;
     media["book"] = books::detail(&st.db, id, a.user.id, &acl).await?;

@@ -26,11 +26,11 @@ pub(crate) async fn attach_list_info(
         r#"SELECT m.id AS "id!", jsonb_build_object('publisher', cd.publisher, 'startYear', cd."startYear",
   'issueCount', (SELECT count(*) FROM items i JOIN comic_issues ci ON ci."itemId" = i.id
       JOIN editions e ON e.id = i."editionId"
-      WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($3)),
+      WHERE i."mediaId" = m.id AND m."libraryId" = ANY($3)),
   'readCount', (SELECT count(*) FROM items i JOIN comic_issues ci ON ci."itemId" = i.id
       JOIN editions e ON e.id = i."editionId"
       JOIN playback_states ps ON ps."itemId" = i.id AND ps."userId" = $2 AND ps.completed
-      WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($3))) AS "json!: Value"
+      WHERE i."mediaId" = m.id AND m."libraryId" = ANY($3))) AS "json!: Value"
 FROM media m LEFT JOIN comic_details cd ON cd."mediaId" = m.id WHERE m.id = ANY($1)"#,
         &ids,
         uid,
@@ -74,7 +74,7 @@ pub(crate) async fn detail(
     LEFT JOIN playback_states ps ON ps."itemId" = i.id AND ps."userId" = $2
     LEFT JOIN LATERAL (SELECT f.id, substring(f."relativePath" FROM '\.([A-Za-z0-9]+)$') AS ext
         FROM media_files f WHERE f.id = comic_part(i.id, $2)) pf ON true
-    WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($3)), '[]'::jsonb)) AS "json!: Value"
+    WHERE i."mediaId" = m.id AND m."libraryId" = ANY($3)), '[]'::jsonb)) AS "json!: Value"
 FROM media m LEFT JOIN comic_details cd ON cd."mediaId" = m.id WHERE m.id = $1"#,
         id,
         uid,

@@ -22,8 +22,8 @@ async fn ctx(pool: &PgPool) -> (Router, String, String) {
           (10, 'Alpha Run', 2016, 'comic', 1, 'a'), (11, 'Empty Run', 2020, 'comic', 1, 'e'),
           (12, 'Movie', 2000, 'movie', 1, 'm'), (13, 'Done Run', 2018, 'comic', 1, 'd');
         INSERT INTO comic_details ("mediaId", publisher, "startYear", volume) VALUES (10, 'Pub', 2016, 2);
-        INSERT INTO editions (id, "mediaId", family, format, "libraryId") VALUES
-          (1, 10, 'image', 'cbz', NULL), (2, 10, 'image', 'cbz', 2), (3, 13, 'image', 'cbz', NULL);
+        INSERT INTO editions (id, "mediaId", family, format) VALUES
+          (1, 10, 'image', 'cbz'), (2, 10, 'image', 'cbz'), (3, 13, 'image', 'cbz');
         INSERT INTO items (id, "mediaId", "editionId", title, "airDate") VALUES
           (1, 10, 1, 'Start', '2016-03-02'), (2, 10, 1, NULL, NULL), (3, 10, 1, NULL, NULL), (4, 10, 1, NULL, NULL),
           (5, 10, 1, NULL, NULL), (6, 10, 2, NULL, NULL), (7, 13, 3, NULL, NULL);
@@ -120,14 +120,10 @@ async fn detail_lists_main_issues_then_annuals_by_decimal_sort(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn progress_is_the_callers_and_hidden_editions_are_left_out(pool: PgPool) {
+async fn progress_is_the_callers(pool: PgPool) {
     let (app, _, plain) = ctx(&pool).await;
     let v = get(&app, &plain, "/api/media/10").await;
     let issues = v["comic"]["issues"].as_array().unwrap();
-    assert!(
-        issues.iter().all(|i| i["itemId"] != 6),
-        "edition of library 2"
-    );
     let first = issues.iter().find(|i| i["itemId"] == 1).unwrap();
     assert_eq!(
         (&first["progression"], &first["finished"]),
@@ -144,7 +140,7 @@ async fn progress_is_the_callers_and_hidden_editions_are_left_out(pool: PgPool) 
         .iter()
         .find(|m| m["id"] == 10)
         .unwrap();
-    assert_eq!(alpha["comic"]["issueCount"], 5);
+    assert_eq!(alpha["comic"]["issueCount"], 6);
     assert_eq!(alpha["comic"]["readCount"], 0);
 }
 

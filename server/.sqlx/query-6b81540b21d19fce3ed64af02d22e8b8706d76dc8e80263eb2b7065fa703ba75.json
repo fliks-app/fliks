@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT m.id FROM media m JOIN editions e ON e.\"mediaId\" = m.id\n                   WHERE m.type = 'book' AND e.family = 'audio'\n                     AND m.\"libraryId\" = $1 ORDER BY m.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6b81540b21d19fce3ed64af02d22e8b8706d76dc8e80263eb2b7065fa703ba75"
+}

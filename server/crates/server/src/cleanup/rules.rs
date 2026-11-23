@@ -39,7 +39,7 @@ const ONE_GB: f64 = 1_073_741_824.0;
 const FILE_SIZE: &str =
     r#"COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = media.id), 0)"#;
 const LAST_PLAYED: &str = r#"(SELECT MAX(ps."lastPlayedAt") FROM playback_states ps JOIN items it ON it.id = ps."itemId" WHERE it."mediaId" = media.id)"#;
-const REQUESTER: &str = r#"r."mediaId" = media.id AND r.kind = 'add' AND r.status <> 'declined' AND r."userId" IS NOT NULL"#;
+const REQUESTER: &str = r#"r."mediaId" = media.id AND r.kind = 'add' AND r.status <> 'declined'"#;
 
 fn int(c: &Value, k: &str) -> Option<i64> {
     c.get(k).and_then(Value::as_i64)

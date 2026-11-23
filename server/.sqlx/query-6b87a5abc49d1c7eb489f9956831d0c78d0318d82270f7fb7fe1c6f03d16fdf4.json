@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \"libraryId\" FROM library_user_access WHERE \"userId\" = $1 ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "libraryId",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "library_user_access",
+            "name": "libraryId"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6b87a5abc49d1c7eb489f9956831d0c78d0318d82270f7fb7fe1c6f03d16fdf4"
+}

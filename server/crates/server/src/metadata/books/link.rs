@@ -176,7 +176,7 @@ pub async fn attach_with(
         Link::Taken => {
             let work = work.as_deref().unwrap_or_default();
             let holder = external_ids::find(&mut *tx, MediaKind::Book, ANCHOR, work).await?;
-            // An edition with no library follows its work: another library's work must not take it.
+            // An edition lives in its work's library: another library's work must not take it.
             let same_library = match holder {
                 Some(h) => super::absorb::same_library(&mut tx, media, h).await?,
                 None => false,

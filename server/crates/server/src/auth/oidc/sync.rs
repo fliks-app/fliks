@@ -163,7 +163,7 @@ async fn provision(
     let base = username_base(prof.username.as_deref(), prof.email.as_deref(), &prof.sub);
     for n in 1..=100 {
         let name = candidate(&base, n);
-        if db::username_exists(&mut *c, &name).await? {
+        if users::username_taken(&mut *c, &name, None).await? {
             continue;
         }
         let mut sp = sqlx::Acquire::begin(&mut *c).await?;

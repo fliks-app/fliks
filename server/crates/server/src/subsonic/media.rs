@@ -28,7 +28,7 @@ async fn track_file(st: &AppState, c: &Caller, item: i32) -> Result<Option<i32>,
     sqlx::query_scalar(
         r#"SELECT track_file(i.id) FROM items i JOIN editions e ON e.id = i."editionId"
            JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
-           WHERE track_file(i.id) IS NOT NULL AND i.id = $1 AND m."libraryId" = ANY($2) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)"#,
+           WHERE track_file(i.id) IS NOT NULL AND i.id = $1 AND m."libraryId" = ANY($2)"#,
     )
     .bind(item)
     .bind(&c.libraries)

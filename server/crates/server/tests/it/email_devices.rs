@@ -37,7 +37,7 @@ struct Ctx {
     _dir: Dir,
 }
 
-/// Users: 1 admin, 2 `a` and 3 `b` read library 1 only. Files: 1 book, 2 its twin in a hidden edition,
+/// Users: 1 admin, 2 `a` and 3 `b` read library 1 only. Files: 1 book, 2 another book,
 /// 3 a book of library 2, 4 a PDF, 5 an audiobook, 6 a book one byte over 1 MiB.
 async fn ctx(pool: PgPool, tag: &str) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
@@ -66,9 +66,9 @@ async fn ctx(pool: PgPool, tag: &str) -> Ctx {
         INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
           (10, 'Alpha', 'book', 1, 'a'), (11, 'Beta', 'book', 1, 'b'), (12, 'Gamma', 'book', 2, 'c'),
           (13, 'Delta', 'book', 1, 'd'), (14, 'Echo', 'book', 1, 'e'), (15, 'Big', 'book', 1, 'f');
-        INSERT INTO editions (id, "mediaId", family, format, "libraryId") VALUES
-          (1, 10, 'text', 'epub', NULL), (2, 11, 'text', 'epub', 2), (3, 12, 'text', 'epub', NULL),
-          (4, 13, 'text', 'pdf', NULL), (5, 14, 'audio', 'm4b', NULL), (6, 15, 'text', 'epub', NULL);
+        INSERT INTO editions (id, "mediaId", family, format) VALUES
+          (1, 10, 'text', 'epub'), (2, 11, 'text', 'epub'), (3, 12, 'text', 'epub'),
+          (4, 13, 'text', 'pdf'), (5, 14, 'audio', 'm4b'), (6, 15, 'text', 'epub');
         INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (2, 11, 2), (3, 12, 3), (4, 13, 4), (5, 14, 5), (6, 15, 6);
         INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "streamInfo") VALUES
           (1, 10, 1, 'a.epub', 1, 'EPUB', '{{}}'), (2, 11, 1, 'b.epub', 1, 'EPUB', '{{}}'), (3, 12, 2, 'c.epub', 1, 'EPUB', '{{}}'),
@@ -429,7 +429,7 @@ async fn only_readable_files_in_an_accepted_format_under_the_limit_go_out(pool: 
     );
     c.configure(port).await;
     c.set("smtp_max_attachment_mb", "1").await;
-    for file in [2, 3, 999] {
+    for file in [3, 999] {
         assert_eq!(c.send(&c.a, dev, file).await.0, 404, "file {file}");
     }
     let (s, b) = c.send(&c.a, dev, 5).await;

@@ -352,14 +352,15 @@ pub async fn stats(State(st): State<AppState>, a: Authed, id: Id) -> Res<Json<Ve
     let tz = crate::jobs::server_tz();
     let since = window_start(tz, Utc::now());
     let rows: Vec<StatRow> = sqlx::query_as(
-        r#"SELECT DATE(s."queryDate") AS date, COUNT(*) AS queries, AVG(s."responseTimeMs")::int AS avg,
+        r#"SELECT DATE(s."queryDate" AT TIME ZONE $3) AS date, COUNT(*) AS queries, AVG(s."responseTimeMs")::int AS avg,
                   SUM(s."resultCount")::int AS total,
                   SUM(CASE WHEN s."errorMessage" IS NOT NULL THEN 1 ELSE 0 END)::int AS errors
            FROM subtitle_provider_stats s WHERE s."providerId" = $1 AND s."queryDate" >= $2
-           GROUP BY DATE(s."queryDate") ORDER BY date DESC"#,
+           GROUP BY 1 ORDER BY date DESC"#,
     )
     .bind(id)
     .bind(since)
+    .bind(tz.name())
     .fetch_all(&st.db)
     .await?;
     Ok(Json(
@@ -373,7 +374,7 @@ pub async fn stats(State(st): State<AppState>, a: Authed, id: Id) -> Res<Json<Ve
 }
 
 /// `setDate(-30)`: 30 calendar days at the same local time, not 720 hours across a DST change.
-fn window_start(tz: chrono_tz::Tz, now: DateTime<Utc>) -> DateTime<Utc> {
+pub(super) fn window_start(tz: chrono_tz::Tz, now: DateTime<Utc>) -> DateTime<Utc> {
     let local = now.with_timezone(&tz).naive_local() - chrono::Days::new(30);
     tz.from_local_datetime(&local).earliest().map_or_else(
         || now - chrono::Duration::days(30),

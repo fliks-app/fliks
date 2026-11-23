@@ -1,5 +1,5 @@
 //! Accounts created by the Seerr and Emby importers, reached through `user_external_ids` only.
-use super::db::add_library_access;
+use super::db::{add_library_access, username_taken};
 use sqlx::{PgExecutor, PgPool};
 
 pub enum Imported {
@@ -30,13 +30,7 @@ pub async fn imported_user(
         return Ok(Imported::Known(id));
     }
     let mut tx = db.begin().await?;
-    let taken = sqlx::query_scalar!(
-        r#"SELECT EXISTS(SELECT 1 FROM users WHERE lower(username) = lower($1)) AS "taken!""#,
-        username
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-    if taken {
+    if username_taken(&mut tx, username, None).await? {
         let Some(id) = earlier_import(&mut tx, username, media_server_type).await? else {
             return Ok(Imported::NameTaken);
         };

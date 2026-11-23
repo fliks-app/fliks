@@ -10,7 +10,7 @@ use crate::{
         auth::{Authed, FileBoundAuthed},
         validate::PathParams,
     },
-    libraries::{HIDDEN_FILES_FROM, accessible_library_ids},
+    libraries::accessible_library_ids,
     state::AppState,
     stream::resolve_file,
 };
@@ -97,14 +97,14 @@ async fn source(
     item: i32,
 ) -> Result<Source, AppError> {
     let acl = accessible_library_ids(&st.db, auth).await?;
-    let row: Option<(i32, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+    let row: Option<(i32, String)> = sqlx::query_as(
         r#"SELECT mf.id, mf."relativePath" FROM items i
            JOIN media m ON m.id = i."mediaId" AND m."libraryId" = ANY($2)
            JOIN editions e ON e.id = i."editionId" AND (e.family = 'image'
              OR (e.family = 'text' AND lower(e.format) = 'cbz'))
            JOIN media_files mf ON mf.id = comic_part(i.id, $3)
-           WHERE i.id = $1 AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = mf.id)"#
-    )))
+           WHERE i.id = $1"#,
+    )
     .bind(item)
     .bind(&acl)
     .bind(auth.user.id)

@@ -161,7 +161,9 @@ pub async fn dismiss(
     a: Authed,
     PathParams(media): PathParams<i32>,
 ) -> Result<StatusCode, AppError> {
-    db::dismiss(&st.db, a.user.id, media).await?;
+    db::dismiss(&st.db, a.user.id, media)
+        .await
+        .map_err(db::fk)?;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -308,7 +308,7 @@ pub async fn leaving_soon(State(st): State<AppState>, a: Authed) -> Res<Json<Vec
     let ids = accessible_library_ids(&st.db, &a).await?;
     let rows = db::leaving_soon(&st.db, &ids, &a.kinds.names()).await?;
     let page: Vec<i32> = rows.iter().map(|r| r.0).collect();
-    let mut items = hydrate::items_view(&st.db, &page, paths_visible(&a.perms), true, None).await?;
+    let mut items = hydrate::items_view(&st.db, &page, paths_visible(&a.perms), true).await?;
     with_delete_at(&mut items, &rows);
     Ok(Json(items))
 }

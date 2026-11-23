@@ -42,11 +42,10 @@ async fn load(db: &PgPool) -> sqlx::Result<Groups> {
         get(EXEMPT_KEY).await?,
         get(VANISHED_KEY).await?,
     );
-    let grants: Vec<(i32, String)> = sqlx::query_as(
-        r#"SELECT "userId", "groupName" FROM livetv_group_access WHERE "userId" IS NOT NULL"#,
-    )
-    .fetch_all(db)
-    .await?;
+    let grants: Vec<(i32, String)> =
+        sqlx::query_as(r#"SELECT "userId", "groupName" FROM livetv_group_access"#)
+            .fetch_all(db)
+            .await?;
     Ok(Groups {
         restricted: read_group_set(restricted.as_deref()),
         exempt: read_group_set(exempt.as_deref()),
@@ -189,11 +188,10 @@ pub async fn set_restricted_groups(
 pub async fn users(State(st): State<AppState>, a: Authed) -> Result<Json<Vec<Value>>, AppError> {
     admin(&a)?;
     let users = crate::http::auth::load_users(&st.db, None, false).await?;
-    let rows: Vec<(i32, String)> = sqlx::query_as(
-        r#"SELECT "userId", "groupName" FROM livetv_group_access WHERE "userId" IS NOT NULL"#,
-    )
-    .fetch_all(&st.db)
-    .await?;
+    let rows: Vec<(i32, String)> =
+        sqlx::query_as(r#"SELECT "userId", "groupName" FROM livetv_group_access"#)
+            .fetch_all(&st.db)
+            .await?;
     Ok(Json(
         users
             .into_iter()

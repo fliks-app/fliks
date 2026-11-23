@@ -517,10 +517,10 @@ pub async fn close_plugin(st: &AppState, plugin: &str) {
 /// every library.
 async fn audience(st: &AppState) -> Vec<(i32, bool)> {
     sqlx::query_as(
-        r#"SELECT u.id, (u."isAdmin" OR COALESCE(r.permissions LIKE '%"manage:all"%', false))
+        r#"SELECT u.id, (u."isAdmin" OR COALESCE(r.permissions ? 'manage:all', false))
            FROM users u LEFT JOIN roles r ON r.id = u."roleId"
-           WHERE u.enabled AND (u."isAdmin" OR r.permissions LIKE '%"manage:all"%'
-             OR r.permissions LIKE '%"media.grab"%') ORDER BY u.id"#,
+           WHERE u.enabled AND (u."isAdmin" OR r.permissions ? 'manage:all'
+             OR r.permissions ? 'media.grab') ORDER BY u.id"#,
     )
     .fetch_all(&st.db)
     .await

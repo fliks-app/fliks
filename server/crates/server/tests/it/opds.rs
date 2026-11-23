@@ -39,9 +39,8 @@ async fn token(pool: &PgPool, user: i32, kind: Kind) -> String {
     token
 }
 
-/// Library 1 is readable by `plain` (user 2), 2 is not, 3 holds films. Books: 10 Alpha (text edition, plus a
-/// hidden audio edition), 11 Beta (only a hidden edition), 13 Secret (library 2), 14 Gamma (its file is also
-/// linked by the hidden edition).
+/// Library 1 is readable by `plain` (user 2), 2 is not, 3 holds films. Books: 10 Alpha (an EPUB), 11 Beta (no
+/// edition, so no acquisition link), 13 Secret (library 2).
 async fn ctx(pool: PgPool) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
     sqlx::raw_sql(
@@ -57,18 +56,14 @@ async fn ctx(pool: PgPool) -> Ctx {
           (10, 'Alpha', 'A & <b>', 2001, '/api/images/media/10/poster?v=ab', 'book', 1, 'a'),
           (11, 'Beta', NULL, NULL, NULL, 'book', 1, 'b'),
           (13, 'Secret', NULL, NULL, NULL, 'book', 2, 'h'),
-          (14, 'Gamma', NULL, NULL, NULL, 'book', 1, 'g'),
           (15, 'Film', NULL, NULL, NULL, 'movie', 1, 'f');
-        INSERT INTO editions (id, "mediaId", family, format, language, publisher, "libraryId") VALUES
-          (1, 10, 'text', 'epub', 'fr', 'Pub', NULL), (2, 10, 'audio', 'm4b', 'en', NULL, 2),
-          (3, 11, 'audio', 'm4b', 'fr', NULL, 2), (4, 13, 'text', 'epub', NULL, NULL, NULL),
-          (5, 14, 'text', 'epub', NULL, NULL, NULL), (6, 14, 'audio', 'm4b', NULL, NULL, 2);
-        INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (2, 10, 2), (3, 11, 3), (4, 13, 4), (5, 14, 5), (6, 14, 6);
+        INSERT INTO editions (id, "mediaId", family, format, language, publisher) VALUES
+          (1, 10, 'text', 'epub', 'fr', 'Pub'), (4, 13, 'text', 'epub', NULL, NULL);
+        INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (4, 13, 4);
         INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "streamInfo") VALUES
-          (1, 10, 1, 'a.epub', 11, 'EPUB', '{}'), (2, 10, 1, 'a.m4b', 1, 'M4B', '{}'),
-          (3, 11, 1, 'b.m4b', 1, 'M4B', '{}'), (4, 13, 2, 'h.epub', 1, 'EPUB', '{}'), (5, 14, 1, 'g.epub', 1, 'EPUB', '{}');
+          (1, 10, 1, 'a.epub', 11, 'EPUB', '{}'), (4, 13, 2, 'h.epub', 1, 'EPUB', '{}');
         INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES
-          (1, 1, 10, 0, 0), (2, 2, 10, 0, 0), (3, 3, 11, 0, 0), (4, 4, 13, 0, 0), (5, 5, 14, 0, 0), (6, 5, 14, 0, 0);
+          (1, 1, 10, 0, 0), (4, 4, 13, 0, 0);
         INSERT INTO media_credits ("mediaId", "editionId", "personId", role, position) VALUES
           (10, NULL, 1, 'author', 0), (11, NULL, 1, 'author', 0), (13, NULL, 1, 'author', 0), (13, NULL, 2, 'author', 1);
         INSERT INTO collections (id, name) VALUES (1, 'Cycle'), (2, 'Lonely'), (3, 'Trilogy');
@@ -209,13 +204,7 @@ async fn entries_carry_acquisition_links_and_hide_what_is_hidden(pool: PgPool) {
         assert_eq!(r.status, 200, "{uri}");
         assert!(r.body.contains("kind=acquisition"), "{uri}");
         assert!(r.body.contains("urn:fliks:book:10"), "{uri}");
-        for hidden in [
-            "book:11",
-            "book:13",
-            "book:14",
-            "/api/stream/2?",
-            "/api/stream/5?",
-        ] {
+        for hidden in ["book:11", "book:13"] {
             assert!(!r.body.contains(hidden), "{uri} {hidden}");
         }
     }

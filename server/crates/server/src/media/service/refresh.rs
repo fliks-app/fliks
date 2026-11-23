@@ -110,9 +110,9 @@ pub async fn apply_season(
     sd: &SeasonDetails,
 ) -> Result<Vec<(i32, String)>, sqlx::Error> {
     sqlx::query!(
-        r#"UPDATE item_groups SET overview = COALESCE($2, overview), "airDate" = COALESCE($3, "airDate")
+        r#"UPDATE item_groups SET overview = COALESCE($2, overview), "airDate" = COALESCE($3::text::date, "airDate")
            WHERE id = $1 AND (overview IS DISTINCT FROM COALESCE($2, overview)
-             OR "airDate" IS DISTINCT FROM COALESCE($3, "airDate"))"#,
+             OR "airDate" IS DISTINCT FROM COALESCE($3::text::date, "airDate"))"#,
         sid,
         sd.overview.clone().filter(|o| !o.is_empty()),
         day(&sd.air_date)
@@ -167,7 +167,7 @@ pub async fn apply_season(
            SELECT $1, $7, $8, v.n, v.title, v.overview, v.air::date, v.runtime, true
            FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::int[])
              AS v(n, title, overview, air, runtime)
-           WHERE NOT EXISTS (SELECT 1 FROM items e WHERE e."groupId" = $1 AND e."number" = v.n)"#,
+           ON CONFLICT ("groupId", "number") DO NOTHING"#,
         sid,
         &numbers,
         &titles as &[Option<String>],
@@ -180,8 +180,7 @@ pub async fn apply_season(
     .execute(&mut *c)
     .await?;
     let ids: std::collections::HashMap<i32, i32> = sqlx::query!(
-        r#"SELECT min(id) AS "id!", "number" AS "n!" FROM items
-           WHERE "groupId" = $1 AND "number" = ANY($2) GROUP BY "number""#,
+        r#"SELECT id, "number" AS "n!" FROM items WHERE "groupId" = $1 AND "number" = ANY($2)"#,
         sid,
         &numbers
     )
@@ -215,26 +214,7 @@ pub(crate) async fn apply_seasons(
     let mut applied = vec![];
     for sd in seasons {
         let n = sd.season_number;
-        let sid = match sqlx::query_scalar!(
-            r#"SELECT id FROM item_groups WHERE "mediaId" = $1 AND "number" = $2 ORDER BY id LIMIT 1"#,
-            media_id,
-            n
-        )
-        .fetch_optional(&mut *tx)
-        .await?
-        {
-            Some(id) => id,
-            None => {
-                sqlx::query_scalar!(
-                    r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, $2, $3) RETURNING id"#,
-                    media_id,
-                    n,
-                    n > 0
-                )
-                .fetch_one(&mut *tx)
-                .await?
-            }
-        };
+        let (sid, _) = items::ensure_group(&mut tx, media_id, n, n > 0).await?;
         let stills = apply_season(&mut tx, sid, sd).await?;
         let live: HashSet<i32> = sd.episodes.iter().map(|e| e.episode_number).collect();
         if !live.is_empty() {

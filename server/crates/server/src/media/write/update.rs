@@ -681,7 +681,7 @@ pub async fn bulk(
         Some(Some(lib)) => {
             move_target(&st, &a, lib).await?;
             let with_files = sqlx::query_scalar!(
-                r#"SELECT "mediaId" AS "id!" FROM media_files WHERE "mediaId" = ANY($1) ORDER BY "mediaId" LIMIT 1"#,
+                r#"SELECT "mediaId" AS id FROM media_files WHERE "mediaId" = ANY($1) ORDER BY "mediaId" LIMIT 1"#,
                 &ids
             )
             .fetch_optional(&st.db)

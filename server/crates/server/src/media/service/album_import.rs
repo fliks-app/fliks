@@ -120,8 +120,7 @@ pub(crate) async fn import_album(
         }
     }
     search_added(st, media).await;
-    let acl = accessible_library_ids(&st.db, a).await?;
-    let out = hydrate::detail_for(&st.db, media, paths_visible(&a.perms), Some(&acl))
+    let out = hydrate::detail(&st.db, media, paths_visible(&a.perms))
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(media))?;
     Ok((StatusCode::CREATED, Json(out)))

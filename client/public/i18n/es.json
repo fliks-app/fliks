@@ -1830,6 +1830,7 @@
       "conf_volatile": "La carpeta de configuración no es persistente: los secretos se pierden al recrear el contenedor.",
       "data_volatile": "La carpeta de datos no es persistente: los datos se pierden al recrear el contenedor.",
       "job_failed": "La tarea {{job}} falló en su última ejecución.",
+      "accounts_differ_by_case": "Las cuentas {{names}} solo se diferencian en mayúsculas y minúsculas. Ambas siguen iniciando sesión con su contraseña; renombra una.",
       "unknown": "Una comprobación indica un problema."
     }
   },
@@ -4274,6 +4275,7 @@
     "404": "Recurso no encontrado",
     "409": "Conflicto: el recurso ya existe",
     "already_running": "Esto ya se está ejecutando.",
+    "username_taken": "Este nombre de usuario ya está en uso.",
     "ambiguous_item": "Este título contiene varios elementos y no se eligió ninguno.",
     "no_video_stream": "Este archivo no tiene pista de vídeo.",
     "subtitle_unavailable": "Este subtítulo ya no está disponible.",

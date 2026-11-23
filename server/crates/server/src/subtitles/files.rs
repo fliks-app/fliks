@@ -96,7 +96,7 @@ pub async fn media_batch(
 #[derive(Debug, Clone, FromRow)]
 pub struct FileRow {
     pub id: i32,
-    pub media_id: Option<i32>,
+    pub media_id: i32,
     pub episode_id: Option<i32>,
     pub relative_path: String,
     /// The root `relative_path` is relative to.
@@ -129,7 +129,7 @@ pub async fn fresh_dirs(
 ) -> Result<(Dirs, FileRow), AppError> {
     let gone = || AppError::not_found(format!("MediaFile #{file_id} not found"));
     let file = file_by_id(db, file_id).await?.ok_or_else(gone)?;
-    let media = load_media_of(db, file.media_id.ok_or_else(gone)?, Some(file_id))
+    let media = load_media_of(db, file.media_id, Some(file_id))
         .await?
         .ok_or_else(gone)?;
     Ok((media.dirs(no_root)?, file))

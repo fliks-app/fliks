@@ -263,3 +263,220 @@ WHERE EXISTS (
   SELECT 1 FROM commands WHERE status = 'completed' AND name IN ('ImportWatchHistory', 'ImportSeerrRequests')
 )
 ON CONFLICT ("key") DO NOTHING;
+
+-- DATA-HYGIENE: duplicate seasons and episodes (`docs/spec/items.md` rule 6) are merged into the lowest id, then keyed.
+CREATE FUNCTION pg_temp.move_rows(tbl regclass, col text, src integer, dst integer) RETURNS void
+LANGUAGE plpgsql AS $$
+DECLARE r record;
+BEGIN
+  BEGIN
+    EXECUTE format('UPDATE %s SET %I = $1 WHERE %I = $2', tbl, col, col) USING dst, src;
+  EXCEPTION WHEN unique_violation THEN
+    FOR r IN EXECUTE format('SELECT ctid AS row FROM %s WHERE %I = $1', tbl, col) USING src LOOP
+      BEGIN
+        EXECUTE format('UPDATE %s SET %I = $1 WHERE ctid = $2 AND %I = $3', tbl, col, col) USING dst, r.row, src;
+      EXCEPTION WHEN unique_violation THEN NULL;
+      END;
+    END LOOP;
+  END;
+END $$;
+
+DO $$
+DECLARE
+  r record; t record; tbl regclass; silenced regclass[];
+  k integer; d integer; shift integer; groups integer := 0; episodes integer := 0;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM item_groups GROUP BY "mediaId", "number" HAVING count(*) > 1)
+     AND NOT EXISTS (SELECT 1 FROM items WHERE "groupId" IS NOT NULL GROUP BY "groupId", "number" HAVING count(*) > 1) THEN
+    RETURN;
+  END IF;
+
+  SELECT array_agg(DISTINCT tgrelid::regclass) INTO silenced FROM pg_trigger
+   WHERE tgname = 'set_updated_at'
+     AND (tgrelid IN ('items'::regclass, 'item_groups'::regclass, 'acquisition_queue'::regclass)
+          OR tgrelid IN (SELECT conrelid FROM pg_constraint
+                          WHERE contype = 'f' AND confrelid IN ('items'::regclass, 'item_groups'::regclass)));
+  FOREACH tbl IN ARRAY silenced LOOP
+    EXECUTE format('ALTER TABLE %s DISABLE TRIGGER set_updated_at', tbl);
+  END LOOP;
+
+  -- Seasons: the episodes and the rows keyed by the season move to the lowest id.
+  FOR r IN SELECT array_agg(id ORDER BY id) AS ids FROM item_groups GROUP BY "mediaId", "number" HAVING count(*) > 1 LOOP
+    k := r.ids[1];
+    FOREACH d IN ARRAY r.ids[2:] LOOP
+      UPDATE items SET "groupId" = k WHERE "groupId" = d;
+      FOR t IN SELECT DISTINCT c.conrelid::regclass AS tbl, a.attname AS col
+                 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+                WHERE c.contype = 'f' AND c.confrelid = 'item_groups'::regclass AND cardinality(c.conkey) = 1 LOOP
+        PERFORM pg_temp.move_rows(t.tbl, t.col, d, k);
+      END LOOP;
+      DELETE FROM item_groups WHERE id = d;
+      groups := groups + 1;
+    END LOOP;
+  END LOOP;
+
+  -- Episodes: the files become versions of the lowest id, the rows keyed by the item move with it, and the
+  -- furthest progress of a user stays; a row the kept item holds a twin of goes with the deleted one.
+  FOR r IN SELECT array_agg(id ORDER BY id) AS ids FROM items WHERE "groupId" IS NOT NULL
+            GROUP BY "groupId", "number" HAVING count(*) > 1 LOOP
+    k := r.ids[1];
+    FOREACH d IN ARRAY r.ids[2:] LOOP
+      shift := GREATEST(
+        (SELECT COALESCE(max("version") + 1, 0) FROM item_parts WHERE "itemId" = k),
+        (SELECT COALESCE(max(GREATEST("version", "toVersion")) + 1, 0) FROM item_version_aliases WHERE "itemId" = k));
+      DELETE FROM item_parts WHERE "itemId" = d
+        AND "mediaFileId" IN (SELECT "mediaFileId" FROM item_parts WHERE "itemId" = k);
+      UPDATE playback_states SET "version" = "version" + shift WHERE "itemId" = d;
+      UPDATE item_version_aliases SET "version" = "version" + shift, "toVersion" = "toVersion" + shift WHERE "itemId" = d;
+      -- One statement: the chapter key onto `item_parts` is checked at its end.
+      WITH m AS (UPDATE item_markers SET "itemId" = k WHERE "itemId" = d AND "mediaFileId" IS NOT NULL)
+      UPDATE item_parts SET "itemId" = k, "version" = "version" + shift WHERE "itemId" = d;
+
+      UPDATE playback_states s
+         SET "positionSeconds" = x."positionSeconds", "durationSeconds" = x."durationSeconds",
+             "completed" = x."completed", "progression" = x."progression", "locator" = x."locator",
+             "playedAt" = x."playedAt", "hiddenFromContinueWatching" = x."hiddenFromContinueWatching",
+             "mediaFileId" = x."mediaFileId", "version" = x."version",
+             "lastPlayedAt" = GREATEST(s."lastPlayedAt", x."lastPlayedAt")
+        FROM playback_states x
+       WHERE s."itemId" = k AND x."itemId" = d AND x."userId" = s."userId"
+         AND (x."completed", x."positionSeconds", COALESCE(x."progression", 0))
+           > (s."completed", s."positionSeconds", COALESCE(s."progression", 0));
+
+      UPDATE acquisition_queue SET "itemIds" = array_replace("itemIds", d, k) WHERE d = ANY("itemIds");
+      FOR t IN SELECT DISTINCT c.conrelid::regclass AS tbl, a.attname AS col
+                 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+                WHERE c.contype = 'f' AND c.confrelid = 'items'::regclass AND a.attname = 'itemId'
+                  AND c.conrelid <> 'item_parts'::regclass LOOP
+        PERFORM pg_temp.move_rows(t.tbl, t.col, d, k);
+      END LOOP;
+      DELETE FROM items WHERE id = d;
+      episodes := episodes + 1;
+    END LOOP;
+  END LOOP;
+
+  FOREACH tbl IN ARRAY silenced LOOP
+    EXECUTE format('ALTER TABLE %s ENABLE TRIGGER set_updated_at', tbl);
+  END LOOP;
+  RAISE NOTICE 'item_groups: % duplicate season(s) merged into the lowest id', groups;
+  RAISE NOTICE 'items: % duplicate episode(s) merged into the lowest id, their files kept as versions', episodes;
+END $$;
+DROP FUNCTION pg_temp.move_rows(regclass, text, integer, integer);
+
+ALTER TABLE "item_groups" ADD CONSTRAINT "UQ_item_groups_media_number" UNIQUE ("mediaId", "number");
+ALTER TABLE "items" ADD CONSTRAINT "UQ_items_group_number" UNIQUE ("groupId", "number");
+DROP INDEX "IDX_items_group_number";
+
+-- Data hygiene: orphan rows, then foreign keys and NOT NULL, then indexes, then column types.
+DELETE FROM "remote_control_grants" g
+ WHERE NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = g."ownerUserId")
+    OR (g."granteeUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = g."granteeUserId"));
+DELETE FROM "recommendation_dismissals" d
+ WHERE NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = d."userId")
+    OR NOT EXISTS (SELECT 1 FROM "media" m WHERE m."id" = d."mediaId");
+DELETE FROM "pairing_requests" p
+ WHERE p."userId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = p."userId");
+DELETE FROM "oidc_logins" l
+ WHERE l."expectUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = l."expectUserId");
+DELETE FROM "book_merges" b WHERE NOT EXISTS (SELECT 1 FROM "library_folders" f WHERE f."id" = b."folderId");
+
+ALTER TABLE "pairing_requests" DISABLE TRIGGER set_updated_at;
+UPDATE "pairing_requests" p SET "approvedByUserId" = NULL
+ WHERE p."approvedByUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = p."approvedByUserId");
+ALTER TABLE "pairing_requests" ENABLE TRIGGER set_updated_at;
+
+-- Rows whose parent column was never filled are unreachable.
+DELETE FROM "media_files" WHERE "mediaId" IS NULL;
+DELETE FROM "subtitle_files" WHERE "mediaId" IS NULL;
+DELETE FROM "library_user_access" WHERE "libraryId" IS NULL OR "userId" IS NULL;
+DELETE FROM "request_comments" WHERE "requestId" IS NULL OR "userId" IS NULL;
+DELETE FROM "requests" WHERE "userId" IS NULL;
+DELETE FROM "livetv_channel_streams" WHERE "channelId" IS NULL OR "sourceId" IS NULL;
+DELETE FROM "livetv_user_channel_prefs" WHERE "userId" IS NULL OR "channelId" IS NULL;
+DELETE FROM "livetv_group_access" WHERE "userId" IS NULL;
+DELETE FROM "livetv_programs" WHERE "guideSourceId" IS NULL;
+DELETE FROM "livetv_guide_channels" WHERE "guideSourceId" IS NULL;
+
+-- An OCR trash entry kept its subtitle row as the text column had it.
+UPDATE "jobs" SET "result" = jsonb_set("result", '{ocrRows}', COALESCE((
+    SELECT jsonb_agg(CASE WHEN jsonb_typeof(e #> '{row,tags}') = 'string' THEN jsonb_set(e, '{row,tags}', '[]') ELSE e END)
+      FROM jsonb_array_elements("result" -> 'ocrRows') e), '[]'))
+ WHERE CASE WHEN jsonb_typeof("result" -> 'ocrRows') = 'array' THEN EXISTS (
+     SELECT 1 FROM jsonb_array_elements("result" -> 'ocrRows') e WHERE jsonb_typeof(e #> '{row,tags}') = 'string')
+   ELSE false END;
+
+ALTER TABLE "remote_control_grants"
+  ADD CONSTRAINT "FK_remote_control_grants_owner" FOREIGN KEY ("ownerUserId") REFERENCES "users" ("id") ON DELETE CASCADE,
+  ADD CONSTRAINT "FK_remote_control_grants_grantee" FOREIGN KEY ("granteeUserId") REFERENCES "users" ("id") ON DELETE CASCADE;
+ALTER TABLE "recommendation_dismissals"
+  ADD CONSTRAINT "FK_recommendation_dismissals_user" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE,
+  ADD CONSTRAINT "FK_recommendation_dismissals_media" FOREIGN KEY ("mediaId") REFERENCES "media" ("id") ON DELETE CASCADE;
+ALTER TABLE "pairing_requests"
+  ADD CONSTRAINT "FK_pairing_requests_user" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE,
+  ADD CONSTRAINT "FK_pairing_requests_approved_by" FOREIGN KEY ("approvedByUserId") REFERENCES "users" ("id") ON DELETE SET NULL;
+ALTER TABLE "oidc_logins"
+  ADD CONSTRAINT "FK_oidc_logins_expect_user" FOREIGN KEY ("expectUserId") REFERENCES "users" ("id") ON DELETE CASCADE;
+ALTER TABLE "book_merges"
+  ADD CONSTRAINT "FK_book_merges_folder" FOREIGN KEY ("folderId") REFERENCES "library_folders" ("id") ON DELETE CASCADE;
+
+ALTER TABLE "media_files" ALTER COLUMN "mediaId" SET NOT NULL;
+ALTER TABLE "subtitle_files" ALTER COLUMN "mediaId" SET NOT NULL;
+ALTER TABLE "library_user_access" ALTER COLUMN "libraryId" SET NOT NULL, ALTER COLUMN "userId" SET NOT NULL;
+ALTER TABLE "request_comments" ALTER COLUMN "requestId" SET NOT NULL, ALTER COLUMN "userId" SET NOT NULL;
+ALTER TABLE "requests" ALTER COLUMN "userId" SET NOT NULL;
+ALTER TABLE "livetv_channel_streams" ALTER COLUMN "channelId" SET NOT NULL, ALTER COLUMN "sourceId" SET NOT NULL;
+ALTER TABLE "livetv_user_channel_prefs" ALTER COLUMN "userId" SET NOT NULL, ALTER COLUMN "channelId" SET NOT NULL;
+ALTER TABLE "livetv_group_access" ALTER COLUMN "userId" SET NOT NULL;
+ALTER TABLE "livetv_programs" ALTER COLUMN "guideSourceId" SET NOT NULL;
+ALTER TABLE "livetv_guide_channels" ALTER COLUMN "guideSourceId" SET NOT NULL;
+
+-- Column types: the stats are read in the server zone, roles and subtitle tags are JSON arrays, group dates are dates.
+CREATE FUNCTION pg_temp.date_or_null(t text) RETURNS date LANGUAGE plpgsql IMMUTABLE AS $$
+BEGIN RETURN t::date; EXCEPTION WHEN others THEN RETURN NULL; END $$;
+ALTER TABLE "item_groups" DISABLE TRIGGER set_updated_at;
+ALTER TABLE "item_groups" ALTER COLUMN "airDate" TYPE date USING pg_temp.date_or_null("airDate");
+ALTER TABLE "item_groups" ENABLE TRIGGER set_updated_at;
+DROP FUNCTION pg_temp.date_or_null(text);
+
+ALTER TABLE "subtitle_provider_stats" ALTER COLUMN "queryDate" TYPE timestamptz USING "queryDate" AT TIME ZONE 'UTC';
+
+ALTER TABLE "roles" ALTER COLUMN "permissions" DROP DEFAULT;
+ALTER TABLE "roles" ALTER COLUMN "permissions" TYPE jsonb USING "permissions"::jsonb;
+ALTER TABLE "roles" ALTER COLUMN "permissions" SET DEFAULT '[]';
+ALTER TABLE "roles" DISABLE TRIGGER set_updated_at;
+UPDATE "roles" SET "permissions" = '[]'
+ WHERE jsonb_typeof("permissions") <> 'array'
+    OR EXISTS (SELECT 1 FROM jsonb_array_elements("permissions") e WHERE jsonb_typeof(e) <> 'string');
+ALTER TABLE "roles" ENABLE TRIGGER set_updated_at;
+ALTER TABLE "roles" ADD CONSTRAINT "CK_roles_permissions" CHECK (jsonb_typeof("permissions") = 'array');
+
+ALTER TABLE "subtitle_files" DISABLE TRIGGER set_updated_at;
+UPDATE "subtitle_files" SET "tags" = '[]' WHERE "tags" !~ '^\s*\[.*\]\s*$';
+ALTER TABLE "subtitle_files" ENABLE TRIGGER set_updated_at;
+ALTER TABLE "subtitle_files" ALTER COLUMN "tags" DROP DEFAULT;
+ALTER TABLE "subtitle_files" ALTER COLUMN "tags" TYPE jsonb USING "tags"::jsonb;
+ALTER TABLE "subtitle_files" ALTER COLUMN "tags" SET DEFAULT '[]';
+ALTER TABLE "subtitle_files" ADD CONSTRAINT "CK_subtitle_files_tags" CHECK (jsonb_typeof("tags") = 'array');
+
+ALTER TABLE "items" DROP COLUMN "searchVector";
+
+-- The cascades of the new keys and the dedupe lookups of closed queue rows.
+CREATE INDEX "IDX_recommendation_dismissals_mediaId" ON "recommendation_dismissals" ("mediaId");
+CREATE INDEX "IDX_pairing_requests_approvedByUserId" ON "pairing_requests" ("approvedByUserId");
+CREATE INDEX "IDX_oidc_logins_expectUserId" ON "oidc_logins" ("expectUserId");
+CREATE INDEX "IDX_book_merges_folderId" ON "book_merges" ("folderId");
+CREATE INDEX "IDX_acquisition_queue_closed_ref" ON "acquisition_queue" ("pluginId", "ref", "id" DESC) WHERE "finishedAt" IS NOT NULL;
+
+-- A unique index on a subset of the foreign key's columns already bounds each lookup, and the item markers
+-- index repeats the leading column of another.
+DROP INDEX "IDX_movie_details_mediaId_kind";
+DROP INDEX "IDX_series_details_mediaId_kind";
+DROP INDEX "IDX_book_details_media_kind";
+DROP INDEX "IDX_comic_details_media_kind";
+DROP INDEX "IDX_album_details_media_kind";
+DROP INDEX "IDX_track_details_item_media";
+DROP INDEX "IDX_comic_issues_item_media";
+DROP INDEX "IDX_item_markers_item";
+
+-- An edition is readable through its work's library; the column had no writer.
+ALTER TABLE "editions" DROP COLUMN "libraryId";

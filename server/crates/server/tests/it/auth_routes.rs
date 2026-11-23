@@ -212,6 +212,55 @@ async fn register_requires_users_manage(pool: PgPool) {
     )
     .await;
     assert_eq!(s, 409);
+    let (s, _, e) = call(
+        &c,
+        "POST",
+        "/api/auth/register",
+        &[("authorization", &h)],
+        Some(json!({"username": "NEW", "password": "pw"})),
+    )
+    .await;
+    assert_eq!(
+        (s, e["key"].clone()),
+        (409, json!("errors.username_taken")),
+        "a name differing only by case is taken"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn login_folds_case_and_a_colliding_pair_signs_in_by_password(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    user(&pool, "bob", Some("[]"), false, true).await;
+    user(&pool, "Sam", Some("[]"), false, true).await;
+    user(&pool, "sam", Some("[]"), false, true).await;
+    let try_login = async |name: &str, pass: &str| {
+        let (s, _, b) = call(
+            &c,
+            "POST",
+            "/api/auth/login",
+            &[],
+            Some(json!({"username": name, "password": pass})),
+        )
+        .await;
+        (s, b["user"]["username"].clone(), b["message"].clone())
+    };
+    assert_eq!(try_login("BOB", "bob-pass").await.1, json!("bob"));
+    assert_eq!(try_login("Sam", "Sam-pass").await.1, json!("Sam"));
+    assert_eq!(try_login("sam", "sam-pass").await.1, json!("sam"));
+    assert_eq!(
+        try_login("sAM", "Sam-pass").await.1,
+        json!("Sam"),
+        "no exact match: the password picks the account"
+    );
+    assert_eq!(try_login("sAM", "sam-pass").await.1, json!("sam"));
+    let (s, _, m) = try_login("sam", "Sam-pass").await;
+    assert_eq!(
+        (s, m),
+        (401, json!("Invalid credentials")),
+        "exact case wins"
+    );
+    let (s, _, m) = try_login("SAM", "nope").await;
+    assert_eq!((s, m), (401, json!("Invalid credentials")));
 }
 
 #[sqlx::test(migrations = false)]

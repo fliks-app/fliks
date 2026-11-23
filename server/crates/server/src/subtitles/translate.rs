@@ -142,7 +142,8 @@ pub async fn start(
     if running.is_some() {
         return Err(AppError::conflict("errors.already_running"));
     }
-    let (Some(media_id), Some(file_id)) = (source.media_id, source.media_file_id) else {
+    let media_id = source.media_id;
+    let Some(file_id) = source.media_file_id else {
         return Err(AppError::not_found(format!(
             "Subtitle #{subtitle_id} not found"
         )));
@@ -192,7 +193,7 @@ async fn run(
     max: usize,
     remove_hi: bool,
 ) {
-    let media_id = source.media_id.unwrap_or(0);
+    let media_id = source.media_id;
     let media = files::load_media_of(&st.db, media_id, source.media_file_id)
         .await
         .ok()
@@ -313,7 +314,7 @@ async fn try_run(
         },
     };
     // The viewers of the media only, resolved once; events go out in order.
-    let viewers = events::viewers_for_media(st, source.media_id.unwrap_or(0)).await;
+    let viewers = events::viewers_for_media(st, source.media_id).await;
     let on = |done: usize, total: usize| {
         let pct = if total > 0 {
             (done as f64 / total as f64 * 100.0).round() as i32
@@ -326,7 +327,7 @@ async fn try_run(
             &viewers,
             SseEvent::SubtitleTranslationProgress {
                 subtitle_id: placeholder.into(),
-                media_id: source.media_id.unwrap_or(0).into(),
+                media_id: source.media_id.into(),
                 progress: i64::from(pct).into(),
             },
         );

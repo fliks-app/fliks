@@ -118,7 +118,7 @@ pub struct Program {
     #[sqlx(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
     #[sqlx(rename = "guideSourceId")]
-    pub guide_source_id: Option<i32>,
+    pub guide_source_id: i32,
     #[sqlx(rename = "guideChannelId")]
     pub guide_channel_id: String,
     #[serde(with = "iso_ms")]
@@ -248,9 +248,9 @@ pub struct Stream {
     #[sqlx(rename = "lastError")]
     pub last_error: Option<String>,
     #[sqlx(rename = "channelId")]
-    pub channel_id: Option<i32>,
+    pub channel_id: i32,
     #[sqlx(rename = "sourceId")]
-    pub source_id: Option<i32>,
+    pub source_id: i32,
 }
 
 pub const STREAM_COLS: &str = r#"s.id, s."createdAt", s."updatedAt", s."externalId", s.url, s.priority, s."qualityLabel",

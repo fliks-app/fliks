@@ -172,7 +172,16 @@ pub async fn items(
            )
            SELECT pi.id AS "item_id!", pi."itemId" AS "track_item!", (m.type = 'album') AS "is_track!",
                   pi.position AS "position!", pi."addedById" AS added_by_id,
-                  (to_jsonb(m) - 'searchVector' - 'sortCreator' - 'lastFileAddedAt') || jsonb_build_object(
+                  jsonb_build_object(
+                    'id', m.id, 'createdAt', m."createdAt", 'updatedAt', m."updatedAt", 'title', m.title,
+                    'originalTitle', m."originalTitle", 'year', m.year, 'type', m.type, 'overview', m.overview,
+                    'status', m.status, 'monitored', m.monitored, 'preferredProvider', m."preferredProvider",
+                    'folderName', m."folderName", 'posterUrl', m."posterUrl",
+                    'metadataRefreshedAt', m."metadataRefreshedAt", 'fanartUrl', m."fanartUrl",
+                    'rating', m.rating, 'genres', m.genres, 'runtime', m.runtime, 'libraryId', m."libraryId",
+                    'languageProfileId', m."languageProfileId", 'addedById', m."addedById",
+                    'alternativeTitles', m."alternativeTitles", 'additionalFanartUrls', m."additionalFanartUrls",
+                    'logoUrl', m."logoUrl") || jsonb_build_object(
                     'tmdbId', ids.tmdb, 'imdbId', ids.imdb, 'tvdbId', ids.tvdb,
                     'tmdbCollectionId', coll.tmdb_id, 'tmdbCollectionName', coll.name,
                     'releaseDate', dates.release_date, 'inCinemas', dates.cinema_date,
@@ -184,11 +193,27 @@ pub async fn items(
                     'metadataLanguage', l."metadataLanguage", 'metadataRegion', l."metadataRegion",
                     'defaultQualityProfileId', l."defaultQualityProfileId",
                     'defaultLanguageProfileId', l."defaultLanguageProfileId") AS "library!: Jsonb<Value>",
-                  to_jsonb(q) - 'family' AS "quality: Jsonb<Value>",
-                  to_jsonb(lp) AS "language: Jsonb<Value>",
-                  COALESCE(to_jsonb(md) - 'mediaId' - 'kind',
-                    (to_jsonb(sd) - 'mediaId' - 'kind') || jsonb_build_object('budget', NULL, 'revenue', NULL))
-                    AS "metadata: Jsonb<Value>",
+                  CASE WHEN q.id IS NOT NULL THEN jsonb_build_object(
+                    'id', q.id, 'createdAt', q."createdAt", 'updatedAt', q."updatedAt", 'name', q.name,
+                    'cutoff', q.cutoff, 'items', q.items, 'upgradeAllowed', q."upgradeAllowed",
+                    'resolutionUpgradeOnly', q."resolutionUpgradeOnly",
+                    'minCustomFormatScore', q."minCustomFormatScore") END AS "quality: Jsonb<Value>",
+                  CASE WHEN lp.id IS NOT NULL THEN jsonb_build_object(
+                    'id', lp.id, 'createdAt', lp."createdAt", 'updatedAt', lp."updatedAt", 'name', lp.name,
+                    'audioLanguages', lp."audioLanguages", 'subtitleLanguages', lp."subtitleLanguages") END
+                    AS "language: Jsonb<Value>",
+                  CASE WHEN md.id IS NOT NULL THEN jsonb_build_object(
+                    'id', md.id, 'createdAt', md."createdAt", 'updatedAt', md."updatedAt", 'budget', md.budget,
+                    'revenue', md.revenue, 'tagline', md.tagline, 'popularity', md.popularity,
+                    'voteCount', md."voteCount", 'originalLanguage', md."originalLanguage",
+                    'productionCountries', md."productionCountries", 'productionCompanies', md."productionCompanies",
+                    'videos', md.videos, 'keywords', md.keywords)
+                  WHEN sd.id IS NOT NULL THEN jsonb_build_object(
+                    'id', sd.id, 'createdAt', sd."createdAt", 'updatedAt', sd."updatedAt", 'budget', NULL,
+                    'revenue', NULL, 'tagline', sd.tagline, 'popularity', sd.popularity,
+                    'voteCount', sd."voteCount", 'originalLanguage', sd."originalLanguage",
+                    'productionCountries', sd."productionCountries", 'productionCompanies', sd."productionCompanies",
+                    'videos', sd.videos, 'keywords', sd.keywords) END AS "metadata: Jsonb<Value>",
                   CASE WHEN e."groupId" IS NOT NULL THEN jsonb_build_object(
                     'id', e.id, 'createdAt', e."createdAt", 'updatedAt', e."updatedAt",
                     'episodeNumber', e."number", 'endEpisodeNumber', e."endNumber", 'title', e.title,
@@ -306,8 +331,7 @@ async fn resolve(
         let ok = sqlx::query_scalar!(
             r#"SELECT EXISTS (SELECT 1 FROM items i JOIN media m ON m.id = i."mediaId"
                  JOIN editions e ON e.id = i."editionId"
-                 WHERE i.id = $1 AND m."libraryId" = ANY($2)
-                   AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) AS "e!""#,
+                 WHERE i.id = $1 AND m."libraryId" = ANY($2)) AS "e!""#,
             item,
             accessible
         )
@@ -361,10 +385,9 @@ async fn resolve(
                    JOIN track_details td ON td."itemId" = i.id
                    JOIN editions e ON e.id = i."editionId"
                    JOIN media m ON m.id = i."mediaId"
-                   WHERE i."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+                   WHERE i."mediaId" = $1 AND m."libraryId" = ANY($2)
                      AND CASE WHEN EXISTS (SELECT 1 FROM items o JOIN editions oe ON oe.id = o."editionId"
-                                           WHERE o."mediaId" = m.id AND track_file(o.id) IS NOT NULL
-                                             AND COALESCE(oe."libraryId", m."libraryId") = ANY($2))
+                                           WHERE o."mediaId" = m.id AND track_file(o.id) IS NOT NULL)
                               THEN track_file(i.id) IS NOT NULL
                               ELSE true END
                    ORDER BY td."discNumber", td.position, i.id"#,
@@ -378,12 +401,11 @@ async fn resolve(
                    JOIN comic_issues ci ON ci."itemId" = i.id
                    JOIN editions e ON e.id = i."editionId"
                    JOIN media m ON m.id = i."mediaId"
-                   WHERE i."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+                   WHERE i."mediaId" = $1 AND m."libraryId" = ANY($2)
                      AND (EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
                           OR NOT EXISTS (SELECT 1 FROM items o JOIN item_parts op ON op."itemId" = o.id
                                          JOIN editions oe ON oe.id = o."editionId"
-                                         WHERE o."mediaId" = m.id
-                                           AND COALESCE(oe."libraryId", m."libraryId") = ANY($2)))
+                                         WHERE o."mediaId" = m.id))
                    ORDER BY ci.kind <> 'issue', ci."sortNumber", ci.kind, i.id"#,
                 media,
                 accessible

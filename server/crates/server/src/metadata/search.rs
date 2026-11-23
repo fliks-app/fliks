@@ -235,7 +235,7 @@ pub(crate) async fn mark_existing(
                     r#"SELECT min(m.id), x.provider, x.value FROM edition_external_ids x
                        JOIN editions e ON e.id = x."editionId"
                        JOIN media m ON m.id = x."mediaId" AND m.type = 'book'
-                       WHERE m."libraryId" = ANY($1) AND COALESCE(e."libraryId", m."libraryId") = ANY($1)
+                       WHERE m."libraryId" = ANY($1)
                          AND (x.provider, x.value) IN (SELECT * FROM unnest($2::text[], $3::text[]))
                        GROUP BY x.provider, x.value"#,
                 )
@@ -610,7 +610,6 @@ async fn mark_recordings(db: &PgPool, a: &Authed, hits: &mut [Value]) -> Result<
                JOIN items i ON i.id = td."itemId" JOIN editions e ON e.id = i."editionId"
                JOIN media m ON m.id = i."mediaId"
                WHERE td."recordingMbid" = ANY($1::text[]::uuid[]) AND m."libraryId" = ANY($2)
-                 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
                ORDER BY td."recordingMbid",
                         EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id) DESC,
                         track_file(i.id) IS NOT NULL DESC, i.id"#,

@@ -280,13 +280,13 @@ pub async fn load(st: &AppState, media: i32) -> sqlx::Result<Vec<Part>> {
         .collect())
 }
 
-/// The options of the library of an edition, else its media's: `mergeM4b`, and `mergeM4bReplace`
+/// The options of the library of an edition's media: `mergeM4b`, and `mergeM4bReplace`
 /// which is off unless the first is on.
 async fn options(st: &AppState, edition: i32) -> sqlx::Result<(bool, bool)> {
     Ok(sqlx::query!(
         r#"SELECT l."mergeM4b" AS "merge!", (l."mergeM4b" AND l."mergeM4bReplace") AS "replace!"
            FROM editions e JOIN media m ON m.id = e."mediaId"
-             JOIN libraries l ON l.id = COALESCE(e."libraryId", m."libraryId")
+             JOIN libraries l ON l.id = m."libraryId"
            WHERE e.id = $1"#,
         edition
     )
@@ -618,7 +618,7 @@ async fn skipped(st: &AppState, media: i32) -> sqlx::Result<(Vec<String>, Vec<i3
     .await?;
     let on = sqlx::query_scalar!(
         r#"SELECT e.id FROM editions e JOIN media m ON m.id = e."mediaId"
-             JOIN libraries l ON l.id = COALESCE(e."libraryId", m."libraryId")
+             JOIN libraries l ON l.id = m."libraryId"
            WHERE e."mediaId" = $1 AND e.family = 'audio' AND l."mergeM4b""#,
         media
     )
@@ -861,7 +861,7 @@ pub async fn forget_failures(st: &AppState, library: i32) -> sqlx::Result<()> {
     sqlx::query!(
         r#"DELETE FROM book_merges b USING editions e JOIN media m ON m.id = e."mediaId"
            WHERE b."editionId" = e.id AND b.state IN ('failed', 'retry')
-             AND COALESCE(e."libraryId", m."libraryId") = $1"#,
+             AND m."libraryId" = $1"#,
         library
     )
     .execute(&st.db)
@@ -911,7 +911,7 @@ pub fn spawn_library(st: &AppState, library: i32) {
             let ids = sqlx::query_scalar!(
                 r#"SELECT DISTINCT m.id FROM media m JOIN editions e ON e."mediaId" = m.id
                    WHERE m.type = 'book' AND e.family = 'audio'
-                     AND COALESCE(e."libraryId", m."libraryId") = $1 ORDER BY m.id"#,
+                     AND m."libraryId" = $1 ORDER BY m.id"#,
                 library
             )
             .fetch_all(&st.db)
@@ -959,7 +959,7 @@ pub async fn resume_backfills(st: &AppState) {
     let waiting = sqlx::query_scalar!(
         r#"SELECT DISTINCT m.id AS "id!" FROM media m
              JOIN editions e ON e."mediaId" = m.id AND e.family = 'audio'
-             JOIN libraries l ON l.id = COALESCE(e."libraryId", m."libraryId") AND l."mergeM4b"
+             JOIN libraries l ON l.id = m."libraryId" AND l."mergeM4b"
            WHERE m.type = 'book' AND l."mergeM4bBackfill" = 0
              AND NOT EXISTS (SELECT 1 FROM book_merges b WHERE b."editionId" = e.id)
              AND NOT EXISTS (SELECT 1 FROM item_parts p JOIN items i ON i.id = p."itemId"

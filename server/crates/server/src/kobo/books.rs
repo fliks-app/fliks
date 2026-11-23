@@ -6,7 +6,6 @@ use crate::{
         self,
         paths::{Size, Target, Variant},
     },
-    libraries::readable_file,
     state::AppState,
 };
 use axum::{
@@ -42,23 +41,19 @@ const UPDATED: &str = r#"GREATEST(i."updatedAt", m."updatedAt", f."updatedAt", e
 
 /// The EPUB items `$1` (library ids) lets the caller read; `$2` narrows to item ids (NULL: all), `$3` to
 /// those after an id, `$4` to the first n (NULL: all).
-fn from_where() -> String {
-    let readable = readable_file("$1", "mf.id");
-    format!(
-        r#"FROM items i
+fn from_where() -> &'static str {
+    r#"FROM items i
 JOIN editions e ON e.id = i."editionId" AND e.family = 'text'
-JOIN media m ON m.id = i."mediaId" AND m.type = 'book'
+JOIN media m ON m.id = i."mediaId" AND m.type = 'book' AND m."libraryId" = ANY($1)
 JOIN LATERAL (
   SELECT mf.id, mf.size, mf."updatedAt" FROM item_parts ip JOIN media_files mf ON mf.id = ip."mediaFileId"
   WHERE ip."itemId" = i.id
     AND lower(mf."relativePath") LIKE '%.epub'
-    AND {readable}
   ORDER BY ip.version DESC, ip.position, mf.id LIMIT 1) f ON true
 WHERE i."groupId" IS NULL
   AND NOT EXISTS (SELECT 1 FROM items i2 WHERE i2."editionId" = e.id AND i2."groupId" IS NULL AND i2.id < i.id)
   AND ($2::int[] IS NULL OR i.id = ANY($2)) AND i.id > $3
 ORDER BY i.id LIMIT $4"#
-    )
 }
 
 /// A readable book's id and dates: what a sync compares before it reads any metadata.

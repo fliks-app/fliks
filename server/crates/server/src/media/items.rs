@@ -236,6 +236,44 @@ pub async fn video_edition(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<
     .await
 }
 
+/// The group of season `number`, inserted when missing (`true` then); a concurrent insert of the same season wins.
+pub(crate) async fn ensure_group(
+    c: &mut PgConnection,
+    media: i32,
+    number: i32,
+    monitored: bool,
+) -> sqlx::Result<(i32, bool)> {
+    let find = sqlx::query_scalar!(
+        r#"SELECT id FROM item_groups WHERE "mediaId" = $1 AND "number" = $2"#,
+        media,
+        number
+    )
+    .fetch_optional(&mut *c)
+    .await?;
+    if let Some(id) = find {
+        return Ok((id, false));
+    }
+    let made = sqlx::query!(
+        r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, $2, $3)
+           ON CONFLICT ("mediaId", "number") DO NOTHING"#,
+        media,
+        number,
+        monitored
+    )
+    .execute(&mut *c)
+    .await?
+    .rows_affected()
+        > 0;
+    let id = sqlx::query_scalar!(
+        r#"SELECT id FROM item_groups WHERE "mediaId" = $1 AND "number" = $2"#,
+        media,
+        number
+    )
+    .fetch_one(&mut *c)
+    .await?;
+    Ok((id, made))
+}
+
 /// The ungrouped item of a media without seasons; `None` when it has none or several.
 pub async fn sole_item(db: impl PgExecutor<'_>, media: i32) -> sqlx::Result<Option<i32>> {
     sqlx::query_scalar!(r#"SELECT item_of($1, NULL) AS "item""#, media)

@@ -1,8 +1,5 @@
 //! The acquisition entries of a list of books, read through the work, edition and file ACL.
-use crate::{
-    libraries::readable_file,
-    stream::{book_format, extname},
-};
+use crate::stream::{book_format, extname};
 use fliks_domain::{
     media::kind::MediaKind,
     opds::{ACQUISITION, Entry, Link},
@@ -20,8 +17,7 @@ pub async fn read(db: &PgPool, ids: &[i32], acl: &[i32]) -> Result<Vec<Entry>, s
         .iter()
         .map(|f| f.as_str())
         .collect();
-    let readable = readable_file("$2", "f.id");
-    let rows: Vec<Value> = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+    let rows: Vec<Value> = sqlx::query_scalar(
         r#"SELECT jsonb_build_object('id', m.id, 'title', m.title, 'overview', m.overview, 'year', m.year,
   'posterUrl', m."posterUrl", 'updated', iso_ms(m."updatedAt"),
   'authors', COALESCE((SELECT jsonb_agg(p.name ORDER BY c.position, c.id) FROM media_credits c
@@ -33,12 +29,11 @@ pub async fn read(db: &PgPool, ids: &[i32], acl: &[i32]) -> Result<Vec<Entry>, s
         FROM items i JOIN item_parts ip ON ip."itemId" = i.id JOIN media_files f ON f.id = ip."mediaFileId"
         WHERE i."editionId" = e.id AND i."groupId" IS NULL
           AND NOT EXISTS (SELECT 1 FROM items i2 WHERE i2."editionId" = e.id AND i2."groupId" IS NULL AND i2.id < i.id)
-          AND (e.family = 'text' OR ip.version = (SELECT max(ip2.version) FROM item_parts ip2 WHERE ip2."itemId" = i.id))
-          AND {readable}), '[]'::jsonb))
+          AND (e.family = 'text' OR ip.version = (SELECT max(ip2.version) FROM item_parts ip2 WHERE ip2."itemId" = i.id))), '[]'::jsonb))
       ORDER BY array_position($3::text[], e.family), e.id)
-    FROM editions e WHERE e."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($2)), '[]'::jsonb))
-FROM media m WHERE m.id = ANY($1) AND m.type = 'book' AND m."libraryId" = ANY($2)"#
-    )))
+    FROM editions e WHERE e."mediaId" = m.id AND m."libraryId" = ANY($2)), '[]'::jsonb))
+FROM media m WHERE m.id = ANY($1) AND m.type = 'book' AND m."libraryId" = ANY($2)"#,
+    )
     .bind(ids)
     .bind(acl)
     .bind(&families)

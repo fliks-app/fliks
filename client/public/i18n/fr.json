@@ -1830,6 +1830,7 @@
       "conf_volatile": "Le dossier de configuration n'est pas persistant : les secrets sont perdus quand le conteneur est recréé.",
       "data_volatile": "Le dossier de données n'est pas persistant : les données sont perdues quand le conteneur est recréé.",
       "job_failed": "La tâche {{job}} a échoué lors de sa dernière exécution.",
+      "accounts_differ_by_case": "Les comptes {{names}} ne diffèrent que par la casse. Les deux se connectent encore avec leur mot de passe ; renommez-en un.",
       "unknown": "Une vérification signale un problème."
     }
   },
@@ -4274,6 +4275,7 @@
     "404": "Ressource introuvable",
     "409": "Conflit : la ressource existe déjà",
     "already_running": "Cette opération est déjà en cours.",
+    "username_taken": "Ce nom d'utilisateur est déjà pris.",
     "ambiguous_item": "Ce titre contient plusieurs éléments et aucun n'a été choisi.",
     "no_video_stream": "Ce fichier n'a pas de piste vidéo.",
     "subtitle_unavailable": "Ce sous-titre n'est plus disponible.",

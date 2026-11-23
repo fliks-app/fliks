@@ -375,9 +375,10 @@ pub async fn delete_files_on_disk(st: &AppState, media_id: i32, file_id: i32) {
 
 /// Unlinks a row's sidecar unless another row lists the same file; a failure is logged.
 pub async fn unlink_unless_shared(st: &AppState, row: &Row) -> Result<(), AppError> {
-    let (Some(stored), Some(media_id)) = (row.file_path.as_deref(), row.media_id) else {
+    let Some(stored) = row.file_path.as_deref() else {
         return Ok(());
     };
+    let media_id = row.media_id;
     let Some(media) = files::load_media_of(&st.db, media_id, row.media_file_id)
         .await
         .ok()

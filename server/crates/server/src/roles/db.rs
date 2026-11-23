@@ -59,7 +59,7 @@ struct RoleRow {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     name: String,
-    permissions: String,
+    permissions: Json<Vec<String>>,
     is_default: bool,
 }
 
@@ -67,8 +67,8 @@ struct RoleRow {
 async fn load(pool: &PgPool, id: Option<i32>) -> sqlx::Result<Vec<Role>> {
     let rows = sqlx::query_as!(
         RoleRow,
-        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name, permissions,
-                  "isDefault" AS is_default
+        r#"SELECT id, "createdAt" AS created_at, "updatedAt" AS updated_at, name,
+                  permissions AS "permissions: Json<Vec<String>>", "isDefault" AS is_default
            FROM roles WHERE $1::int4 IS NULL OR id = $1 ORDER BY name ASC"#,
         id
     )
@@ -118,7 +118,7 @@ async fn load(pool: &PgPool, id: Option<i32>) -> sqlx::Result<Vec<Role>> {
                 created_at: r.created_at,
                 updated_at: r.updated_at,
                 name: r.name,
-                permissions: serde_json::from_str(&r.permissions).unwrap_or_default(),
+                permissions: r.permissions.0,
                 is_default: r.is_default,
                 default_library_ids: default_libraries.iter().map(|l| l.id).collect(),
                 default_libraries,
@@ -157,7 +157,7 @@ pub async fn insert(
     permissions: &[String],
     is_default: bool,
 ) -> sqlx::Result<i32> {
-    let permissions = serde_json::to_string(permissions).unwrap_or_default();
+    let permissions = Value::from(permissions);
     sqlx::query_scalar!(
         r#"INSERT INTO roles (name, permissions, "isDefault") VALUES ($1, $2, $3) RETURNING id"#,
         name,
@@ -175,7 +175,7 @@ pub async fn update(
     permissions: Option<&[String]>,
     is_default: Option<bool>,
 ) -> sqlx::Result<()> {
-    let permissions = permissions.map(|p| serde_json::to_string(p).unwrap_or_default());
+    let permissions = permissions.map(Value::from);
     sqlx::query!(
         r#"UPDATE roles SET name = COALESCE($2, name), permissions = COALESCE($3, permissions),
                "isDefault" = COALESCE($4, "isDefault"), "updatedAt" = now() WHERE id = $1"#,
@@ -265,7 +265,7 @@ pub async fn seed(pool: &PgPool) -> sqlx::Result<()> {
             ("User", &user[..], true),
             ("Readonly", &readonly[..], false),
         ] {
-            let perms = serde_json::to_string(perms).unwrap_or_default();
+            let perms = Value::from(perms);
             sqlx::query!(
                 r#"INSERT INTO roles (name, permissions, "isDefault") VALUES ($1, $2, $3)"#,
                 name,

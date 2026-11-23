@@ -64,7 +64,7 @@ impl Res {
     }
 }
 
-/// Issues: 1 a three page cbz, 2 its twin in a hidden edition, 3 a pdf, 4 a corrupt archive, 5 a text file named `.png`.
+/// Issues: 1 a three page cbz, 2 a cbz of library 2, 3 a pdf, 4 a corrupt archive, 5 a text file named `.png`.
 async fn ctx(pool: PgPool, tag: &str) -> Ctx {
     // 7z and RAR are read by a child of the server binary, as in production.
     #[cfg(all(target_os = "linux", feature = "libarchive"))]
@@ -110,9 +110,9 @@ async fn ctx(pool: PgPool, tag: &str) -> Ctx {
         INSERT INTO library_folders (id, "libraryId", path) VALUES (1, 1, '{one}'), (2, 2, '{two}');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2);
         INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
-          (10, 'Alpha', 'comic', 1, ''), (11, 'Beta', 'comic', 1, ''), (12, 'Gamma', 'comic', 1, ''), (13, 'Delta', 'comic', 1, '');
-        INSERT INTO editions (id, "mediaId", family, format, "libraryId") VALUES
-          (1, 10, 'image', 'cbz', NULL), (2, 11, 'image', 'cbz', 2), (3, 12, 'image', NULL, NULL), (4, 13, 'image', 'cb7', NULL);
+          (10, 'Alpha', 'comic', 1, ''), (11, 'Beta', 'comic', 2, ''), (12, 'Gamma', 'comic', 1, ''), (13, 'Delta', 'comic', 1, '');
+        INSERT INTO editions (id, "mediaId", family, format) VALUES
+          (1, 10, 'image', 'cbz'), (2, 11, 'image', 'cbz'), (3, 12, 'image', NULL), (4, 13, 'image', 'cb7');
         INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (2, 11, 2), (3, 12, 3), (4, 12, 3), (5, 12, 3), (6, 13, 4);
         INSERT INTO comic_issues ("itemId", "mediaId", kind, "sortNumber", label) VALUES
           (1, 10, 'issue', 1, '1'), (2, 11, 'issue', 1, '1'), (3, 12, 'issue', 1, '1'), (4, 12, 'issue', 2, '2'), (5, 12, 'issue', 3, '3'), (6, 13, 'issue', 1, '1');
@@ -255,7 +255,7 @@ async fn access_follows_the_epub_reader_rules(pool: PgPool) {
             .status,
         200
     );
-    // hidden edition and unknown item read alike
+    // unreadable and unknown items read alike
     assert_eq!(
         c.get(Some(&c.plain), "/api/comics/2/pages", &[])
             .await

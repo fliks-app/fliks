@@ -2167,9 +2167,10 @@ mod book_ingest {
         let c = merging_ctx(pool).await;
         let m = merge_setup(&c, true, 2).await;
         sqlx::query(
-            r#"INSERT INTO media_files ("folderId", "relativePath", size, quality)
-               VALUES (1, 'Orfaline/Orfaline.m4b', 6, 'm4b')"#,
+            r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality)
+               VALUES ($1, 1, 'Orfaline/Orfaline.m4b', 6, 'm4b')"#,
         )
+        .bind(m)
         .execute(&c.st.db)
         .await
         .unwrap();

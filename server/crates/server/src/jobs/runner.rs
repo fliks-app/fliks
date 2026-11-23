@@ -77,6 +77,9 @@ pub fn spawn(st: &AppState) {
             if let Err(e) = crate::email::prune(&db).await {
                 tracing::error!("book_sends prune: {e}");
             }
+            if let Err(e) = crate::subtitles::service::prune_stats(&db).await {
+                tracing::error!("subtitle provider stats prune: {e}");
+            }
             crate::auth::prune_refresh_tokens(&db).await;
             qoe.purge_old().await;
         });

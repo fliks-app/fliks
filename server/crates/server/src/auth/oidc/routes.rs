@@ -233,7 +233,14 @@ pub(crate) async fn start(
         link_user_id: link_user,
         expect_user_id: dto.expect_user_id,
     };
-    db::insert_login(&st.db, &state, &login, Utc::now()).await?;
+    db::insert_login(&st.db, &state, &login, Utc::now())
+        .await
+        .map_err(|e| match &e {
+            sqlx::Error::Database(d) if d.is_foreign_key_violation() => {
+                AppError::bad_request("expectUserId is not a user")
+            }
+            _ => e.into(),
+        })?;
     let mut url = reqwest::Url::parse(&d.authorization_endpoint).map_err(|_| unreachable_idp())?;
     {
         let mut q = url.query_pairs_mut();

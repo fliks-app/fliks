@@ -30,7 +30,7 @@ async fn admins(st: &AppState) -> Vec<i32> {
 pub async fn recipients(st: &AppState, media_id: Option<i32>) -> Vec<i32> {
     if let Some(id) = media_id {
         let ids: Vec<i32> = sqlx::query_scalar(
-            r#"SELECT DISTINCT "userId" FROM requests WHERE "mediaId" = $1 AND "userId" IS NOT NULL ORDER BY 1"#,
+            r#"SELECT DISTINCT "userId" FROM requests WHERE "mediaId" = $1 ORDER BY 1"#,
         )
         .bind(id)
         .fetch_all(&st.db)

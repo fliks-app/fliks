@@ -21,7 +21,7 @@ pub struct ResolvedFile {
     pub ext: String,
     pub content_type: &'static str,
     pub info: Option<MediaInfo>,
-    pub media_id: Option<i32>,
+    pub media_id: i32,
     pub episode_id: Option<i32>,
     /// The first item the file plays; `None` for a file no item plays.
     pub item_id: Option<i32>,

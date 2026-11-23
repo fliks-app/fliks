@@ -1,5 +1,4 @@
 //! `subtitle_files` rows and their JSON (`subtitles.md` rules 4-5).
-use crate::libraries::HIDDEN_FILES_FROM;
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::{FromRow, PgExecutor};
@@ -20,7 +19,7 @@ pub struct Row {
     pub id: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub media_id: Option<i32>,
+    pub media_id: i32,
     pub episode_id: Option<i32>,
     pub media_file_id: Option<i32>,
     pub language: String,
@@ -40,7 +39,7 @@ pub struct Row {
     pub sync_offset: Option<i32>,
     pub error_message: Option<String>,
     pub locked: bool,
-    pub tags: String,
+    pub tags: Value,
     pub translation_provider_id: Option<i32>,
     pub translation_engine: Option<String>,
     pub translation_model: Option<String>,
@@ -50,10 +49,6 @@ pub struct Row {
 impl Row {
     /// `SF`: every column as stored, `filePath` as `relativePath`.
     pub fn json(&self) -> Value {
-        let tags = serde_json::from_str::<Value>(&self.tags)
-            .ok()
-            .filter(Value::is_array)
-            .unwrap_or_else(|| json!([]));
         json!({
             "id": self.id,
             "createdAt": iso(self.created_at),
@@ -78,7 +73,7 @@ impl Row {
             "syncOffset": self.sync_offset,
             "errorMessage": self.error_message,
             "locked": self.locked,
-            "tags": tags,
+            "tags": self.tags,
             "translationProviderId": self.translation_provider_id,
             "translationEngine": self.translation_engine,
             "translationModel": self.translation_model,
@@ -114,7 +109,7 @@ pub struct New {
     pub hash_matched: bool,
     pub synced: bool,
     pub locked: bool,
-    pub tags: Option<String>,
+    pub tags: Option<Value>,
     pub translation_provider_id: Option<i32>,
     pub translation_engine: Option<String>,
     pub translation_model: Option<String>,
@@ -134,7 +129,7 @@ pub async fn insert(db: impl PgExecutor<'_>, n: &New) -> sqlx::Result<Inserted> 
              "sourceStreamIndex", codec, score, "hashMatched", synced, locked, tags,
              "translationProviderId", "translationEngine", "translationModel", "translationProviderName")
            VALUES ($1, $2, $3, $4, $5, $6, $7::text::subtitle_files_providertype_enum, $8, $9,
-             $10::text::subtitle_files_status_enum, $11, $12, $13, $14, $15, $16, $17, COALESCE($18, '[]'),
+             $10::text::subtitle_files_status_enum, $11, $12, $13, $14, $15, $16, $17, COALESCE($18, '[]'::jsonb),
              $19, $20, $21, $22)
            RETURNING id, "createdAt", "updatedAt""#,
     )
@@ -173,11 +168,7 @@ impl New {
     /// `SFnew`: what `repo.save` returns (recorded): every column, the relation stubs, and the
     /// translation provider id only when one is set.
     pub fn saved_json(&self, i: &Inserted) -> Value {
-        let tags = self
-            .tags
-            .as_deref()
-            .and_then(|t| serde_json::from_str(t).ok())
-            .unwrap_or_else(|| json!([]));
+        let tags = self.tags.clone().unwrap_or_else(|| json!([]));
         let mut m = json!({
             "id": i.id,
             "createdAt": iso(i.created_at),
@@ -232,23 +223,6 @@ pub async fn of_media(db: impl PgExecutor<'_>, media_id: i32) -> sqlx::Result<Ve
         r#"SELECT {COLS} FROM subtitle_files WHERE "mediaId" = $1 ORDER BY language ASC, score DESC, id ASC"#
     )))
     .bind(media_id)
-    .fetch_all(db)
-    .await
-}
-
-/// `of_media` without the subtitles of files hidden from `ids` (`books.md` rule 22).
-pub async fn of_media_visible(
-    db: impl PgExecutor<'_>,
-    media_id: i32,
-    ids: &[i32],
-) -> sqlx::Result<Vec<Row>> {
-    sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        r#"SELECT {COLS} FROM subtitle_files s WHERE "mediaId" = $1
-           AND ("mediaFileId" IS NULL OR NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = s."mediaFileId"))
-           ORDER BY language ASC, score DESC, id ASC"#
-    )))
-    .bind(media_id)
-    .bind(ids)
     .fetch_all(db)
     .await
 }

@@ -1830,6 +1830,7 @@
       "conf_volatile": "The config folder is not persistent: secrets are lost when the container is recreated.",
       "data_volatile": "The data folder is not persistent: data is lost when the container is recreated.",
       "job_failed": "The task {{job}} failed on its last run.",
+      "accounts_differ_by_case": "Accounts {{names}} differ only by case. Both still sign in with their own password; rename one.",
       "unknown": "A check reports a problem."
     }
   },
@@ -4274,6 +4275,7 @@
     "404": "Resource not found",
     "409": "Conflict: the resource already exists",
     "already_running": "This is already running.",
+    "username_taken": "This username is already taken.",
     "ambiguous_item": "This title holds several items and none was chosen.",
     "no_video_stream": "This file has no video track.",
     "subtitle_unavailable": "This subtitle is no longer available.",

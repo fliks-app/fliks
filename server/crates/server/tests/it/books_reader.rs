@@ -97,7 +97,7 @@ struct Ctx {
     _dir: Dir,
 }
 
-/// Library 1 is readable by `plain`, library 2 is not. Items: 1 the book, 2 its twin in a hidden edition,
+/// Library 1 is readable by `plain`, library 2 is not. Items: 1 the book, 2 a second book,
 /// 3 a book of library 2, 4 a PDF, 5 a fixed layout book, 6 an oversize book, 7 an audio item.
 async fn ctx(pool: PgPool, tag: &str, big: &[(&str, Vec<u8>)], big_manifest: &str) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
@@ -132,10 +132,10 @@ async fn ctx(pool: PgPool, tag: &str, big: &[(&str, Vec<u8>)], big_manifest: &st
         INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES
           (10, 'Alpha', 'book', 1, 'a'), (11, 'Beta', 'book', 1, 'b'), (12, 'Gamma', 'book', 2, 'c'),
           (13, 'Delta', 'book', 1, 'd'), (14, 'Fixed', 'book', 1, 'e'), (15, 'Big', 'book', 1, 'f');
-        INSERT INTO editions (id, "mediaId", family, format, "libraryId") VALUES
-          (1, 10, 'text', 'epub', NULL), (2, 11, 'text', 'epub', 2), (3, 12, 'text', 'epub', NULL),
-          (4, 13, 'text', 'pdf', NULL), (5, 14, 'text', 'epub', NULL), (6, 15, 'text', 'epub', NULL),
-          (7, 10, 'audio', 'm4b', NULL);
+        INSERT INTO editions (id, "mediaId", family, format) VALUES
+          (1, 10, 'text', 'epub'), (2, 11, 'text', 'epub'), (3, 12, 'text', 'epub'),
+          (4, 13, 'text', 'pdf'), (5, 14, 'text', 'epub'), (6, 15, 'text', 'epub'),
+          (7, 10, 'audio', 'm4b');
         INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (2, 11, 2), (3, 12, 3), (4, 13, 4), (5, 14, 5), (6, 15, 6), (7, 10, 7);
         INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "streamInfo") VALUES
           (1, 10, 1, 'a.epub', 1, 'EPUB', '{{}}'), (2, 11, 1, 'b.epub', 1, 'EPUB', '{{}}'), (3, 12, 2, 'c.epub', 1, 'EPUB', '{{}}'),
@@ -425,14 +425,14 @@ async fn oversize_and_malformed_resources_are_refused(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_hidden_edition_answers_like_a_missing_item(pool: PgPool) {
+async fn an_unreadable_item_answers_like_a_missing_item(pool: PgPool) {
     let c = ctx(pool, "acl", &[], "").await;
     let uris = |item: i32| {
         ["manifest.json", "positions.json", "OEBPS/ch2.xhtml"]
             .map(|p| format!("/api/books/{item}/pub/{p}"))
     };
-    // item 2: its edition sits in library 2; item 3: its media does; 4: no EPUB part; 7: audio; 99: none
-    for item in [2, 3, 4, 7, 99] {
+    // item 3: its media sits in library 2; 4: no EPUB part; 7: audio; 99: none
+    for item in [3, 4, 7, 99] {
         for uri in uris(item) {
             let r = c.get(&c.plain, &uri).await;
             assert_eq!(r.status, 404, "{uri}");
@@ -443,9 +443,7 @@ async fn a_hidden_edition_answers_like_a_missing_item(pool: PgPool) {
             );
         }
     }
-    for item in [2, 3] {
-        assert_eq!(c.get(&c.admin, &uris(item)[0]).await.status, 200);
-    }
+    assert_eq!(c.get(&c.admin, &uris(3)[0]).await.status, 200);
     for uri in uris(1) {
         assert_eq!(c.get(&c.plain, &uri).await.status, 200, "{uri}");
         assert_eq!(c.get(&c.noperm, &uri).await.status, 403, "{uri}");

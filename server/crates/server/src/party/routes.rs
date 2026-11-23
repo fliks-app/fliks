@@ -486,7 +486,7 @@ async fn valid_target(st: &AppState, item: &Item) -> R<Option<i32>> {
     Ok(db::target_item(&st.db, item).await?)
 }
 
-/// The pair names one item the caller can open: one of a hidden edition is a 404.
+/// The pair names one item the caller can open: one outside the caller's libraries is a 404.
 pub(super) async fn check_item(st: &AppState, item: &Item, acl: &[i32]) -> R<i32> {
     let target = valid_target(st, item).await?;
     match target {

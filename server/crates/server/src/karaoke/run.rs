@@ -266,11 +266,11 @@ fn progress(st: &AppState, item: i32, which: &'static str) -> crate::engine::Pro
 async fn viewers(st: &AppState, item: i32) -> Arc<[i32]> {
     let ids = sqlx::query_scalar::<_, i32>(
         r#"SELECT u.id FROM users u LEFT JOIN roles r ON r.id = u."roleId"
-           WHERE u.enabled AND (u."isAdmin" OR r.permissions LIKE '%"manage:all"%'
-             OR (r.permissions LIKE '%"media.read"%' AND EXISTS (
+           WHERE u.enabled AND (u."isAdmin" OR r.permissions ? 'manage:all'
+             OR (r.permissions ? 'media.read' AND EXISTS (
                SELECT 1 FROM items i JOIN media m ON m.id = i."mediaId"
                JOIN editions e ON e.id = i."editionId"
-               JOIN library_user_access a ON a."libraryId" = COALESCE(e."libraryId", m."libraryId")
+               JOIN library_user_access a ON a."libraryId" = m."libraryId"
                WHERE i.id = $1 AND a."userId" = u.id)))
            ORDER BY u.id"#,
     )

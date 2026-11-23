@@ -21,7 +21,7 @@ pub async fn upsert(db: &PgPool, update: bool, s: &Sidecar<'_>) -> sqlx::Result<
     let tags = parse_subtitle_tags(s.relative_path);
     let forced = tags.contains(&"forced");
     let hearing_impaired = hearing_impaired_from_tags(&tags);
-    let tags_json = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".into());
+    let tags_json = serde_json::json!(tags);
     let language = normalize_language_code(Some(s.language));
     let found = sqlx::query_scalar!(
         r#"SELECT id FROM subtitle_files

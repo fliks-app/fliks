@@ -71,7 +71,7 @@ async fn visible_media(st: &AppState, a: &Authed) -> Res<Option<Vec<i32>>> {
 #[derive(FromRow)]
 struct ItemRow {
     id: i32,
-    media_id: Option<i32>,
+    media_id: i32,
     media_title: Option<String>,
     media_type: Option<String>,
     episode_id: Option<i32>,

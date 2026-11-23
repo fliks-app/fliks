@@ -115,16 +115,16 @@ Settings `{apiKey}` (secret). User-Agent `Fliks/1.0`.
 
 Provider rows: `SELECT * FROM subtitle_providers ORDER BY priority ASC, name ASC` (list); `WHERE id = $1` (get); `WHERE enabled = true ORDER BY priority ASC, id ASC` (orchestrator); `INSERT/UPDATE/DELETE` by id (rules 37-39). Column names are the camelCase quoted ones of the baseline migration.
 
-Stats (`GET:id/stats`, parameters `$1` id, `$2` = now minus 30 days (`setDate(getDate()-30)`), server local time):
+Stats (`GET:id/stats`, parameters `$1` id, `$2` = now minus 30 days (`setDate(getDate()-30)`), server local time, `$3` = the server zone name; `queryDate` is a `timestamptz`):
 
 ```sql
-SELECT DATE(s."queryDate") AS date, COUNT(*) AS queries,
+SELECT DATE(s."queryDate" AT TIME ZONE $3) AS date, COUNT(*) AS queries,
        AVG(s."responseTimeMs")::int AS "avgResponseMs",
        SUM(s."resultCount")::int AS "totalResults",
        SUM(CASE WHEN s."errorMessage" IS NOT NULL THEN 1 ELSE 0 END)::int AS errors
 FROM subtitle_provider_stats s
 WHERE s."providerId" = $1 AND s."queryDate" >= $2
-GROUP BY DATE(s."queryDate") ORDER BY date DESC
+GROUP BY 1 ORDER BY date DESC
 ```
 
 Types: `date` is the instant of server-local midnight, serialised as UTC ISO (`2026-10-14T22:00:00.000Z` under UTC+2; `T00:00:00.000Z` only when TZ is UTC; `subtitles.md` rule 53), `queries` is a numeric STRING (pg `bigint` count), the three `::int` columns are numbers (`null` for an all-null group is impossible: `avg`/`sum` of non-null columns). Pin it in parity (`providers-stats`, recorded under TZ=UTC and Europe/Paris). Insert of stats rows: `INSERT INTO subtitle_provider_stats ("providerId","queryType","responseTimeMs","resultCount","errorMessage")`.

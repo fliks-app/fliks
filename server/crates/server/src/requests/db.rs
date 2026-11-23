@@ -20,7 +20,7 @@ fn strs(v: &[&str]) -> Vec<String> {
 #[derive(Debug, Clone)]
 pub struct Req {
     pub id: i32,
-    pub user_id: Option<i32>,
+    pub user_id: i32,
     pub media_type: MediaKind,
     pub kind: String,
     pub provider: Namespace,
@@ -41,7 +41,7 @@ pub struct Req {
 /// `Req` as the database returns it, before `media_type` is decoded.
 struct RawReq {
     id: i32,
-    user_id: Option<i32>,
+    user_id: i32,
     media_type: String,
     kind: String,
     provider: String,
@@ -1145,8 +1145,8 @@ WHERE c."requestId" = $1 ORDER BY c."createdAt" ASC, c.id ASC"#,
 
 pub struct Comment {
     pub id: i32,
-    pub user_id: Option<i32>,
-    pub request_id: Option<i32>,
+    pub user_id: i32,
+    pub request_id: i32,
 }
 
 pub async fn comment_find(db: &PgPool, id: i32) -> sqlx::Result<Option<Comment>> {

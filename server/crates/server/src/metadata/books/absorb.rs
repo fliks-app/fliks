@@ -143,11 +143,10 @@ pub async fn absorb(c: &mut PgConnection, from: i32, into: i32) -> sqlx::Result<
     )
     .execute(&mut *c)
     .await?;
-    // No foreign key: the rows would outlive the media.
     sqlx::query!(
-        r#"WITH d AS (DELETE FROM recommendation_dismissals WHERE "mediaId" = $1 RETURNING "userId")
-           INSERT INTO recommendation_dismissals ("userId", "mediaId") SELECT "userId", $2 FROM d
-           ON CONFLICT DO NOTHING"#,
+        r#"UPDATE recommendation_dismissals x SET "mediaId" = $2 WHERE "mediaId" = $1
+             AND NOT EXISTS (SELECT 1 FROM recommendation_dismissals y
+                              WHERE y."mediaId" = $2 AND y."userId" = x."userId")"#,
         from,
         into
     )
@@ -205,6 +204,7 @@ mod tests {
         "media_issues",
         "media_moves",
         "media_release_dates",
+        "recommendation_dismissals",
         "requests",
         "subtitle_blacklist",
         "subtitle_files",

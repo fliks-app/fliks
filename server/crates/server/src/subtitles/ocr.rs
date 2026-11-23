@@ -39,7 +39,8 @@ pub async fn start(
             "OCR is only supported for embedded image subtitles",
         ));
     };
-    let (Some(media_id), Some(file_id)) = (source.media_id, source.media_file_id) else {
+    let media_id = source.media_id;
+    let Some(file_id) = source.media_file_id else {
         return Err(AppError::not_found(format!(
             "Subtitle #{subtitle_id} not found"
         )));
@@ -90,11 +91,11 @@ pub async fn start(
 }
 
 async fn run(st: &AppState, placeholder: i32, source: &Row, automatic: bool) {
-    let media = files::load_media_of(&st.db, source.media_id.unwrap_or(0), source.media_file_id)
+    let media = files::load_media_of(&st.db, source.media_id, source.media_file_id)
         .await
         .ok()
         .flatten();
-    let media_id = source.media_id.unwrap_or(0);
+    let media_id = source.media_id;
     let auto = automatic.then_some(true);
     match try_run(st, placeholder, source, media.as_ref(), automatic).await {
         Ok(title) => {

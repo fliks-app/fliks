@@ -23,15 +23,14 @@ fn album_visible(libs: &str) -> String {
     format!(
         r#"m.type = 'album' AND m."libraryId" = ANY({libs}) AND EXISTS (
   SELECT 1 FROM items vi JOIN editions ve ON ve.id = vi."editionId"
-  WHERE vi."mediaId" = m.id AND track_file(vi.id) IS NOT NULL
-    AND COALESCE(ve."libraryId", m."libraryId") = ANY({libs}))"#
+  WHERE vi."mediaId" = m.id AND track_file(vi.id) IS NOT NULL)"#
     )
 }
 
-/// A track a caller reads: its album and edition in `libs` (a bound `int[]`) and a file (`i`, `e`, `m` are the aliases).
+/// A track a caller reads: its album in `libs` (a bound `int[]`) and a file (`i`, `e`, `m` are the aliases).
 pub(crate) fn track_visible(libs: &str) -> String {
     format!(
-        r#"m."libraryId" = ANY({libs}) AND COALESCE(e."libraryId", m."libraryId") = ANY({libs})
+        r#"m."libraryId" = ANY({libs})
     AND track_file(i.id) IS NOT NULL"#
     )
 }
@@ -293,7 +292,7 @@ JOIN LATERAL (SELECT count(*)::int AS songs,
     COALESCE(round(sum(COALESCE(td."durationMs" / 1000.0, (f."streamInfo"->>'durationSeconds')::float8, 0))), 0)::int AS duration
   FROM items i JOIN track_details td ON td."itemId" = i.id JOIN editions e ON e.id = i."editionId"
   JOIN LATERAL (SELECT mf."streamInfo" FROM media_files mf WHERE mf.id = track_file(i.id)) f ON true
-  WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) st ON true
+  WHERE i."mediaId" = m.id AND m."libraryId" = ANY($2)) st ON true
 ORDER BY page.n"#
     );
     sqlx::query_as::<_, AlbumRow>(AssertSqlSafe(sql))
@@ -384,7 +383,7 @@ pub async fn genres(db: &PgPool, libs: &[i32]) -> Result<Vec<Genre>, sqlx::Error
 FROM media m
 CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(m.genres) = 'array' THEN m.genres ELSE '[]'::jsonb END) g(name)
 JOIN LATERAL (SELECT count(*) AS songs FROM items i JOIN editions e ON e.id = i."editionId"
-  WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($1)
+  WHERE i."mediaId" = m.id AND m."libraryId" = ANY($1)
     AND track_file(i.id) IS NOT NULL) st ON true
 WHERE {visible} AND g.name <> ''
 GROUP BY lower(g.name) ORDER BY lower(min(g.name))"#

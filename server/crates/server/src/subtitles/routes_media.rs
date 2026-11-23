@@ -85,8 +85,7 @@ pub async fn list(State(st): State<AppState>, a: Authed, id: One) -> Res<Json<Ve
     policy(&a, Action::Read)?;
     let PathParams(id) = id?;
     gate_media(&st, &a, id).await?;
-    let ids = accessible_library_ids(&st.db, &a).await?;
-    let rows = model::of_media_visible(&st.db, id, &ids).await?;
+    let rows = model::of_media(&st.db, id).await?;
     Ok(Json(
         rows.iter()
             .map(|r| {

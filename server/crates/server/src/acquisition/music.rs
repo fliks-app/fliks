@@ -304,8 +304,7 @@ pub async fn playlist_sync(
         r#"SELECT t.i FROM unnest($1::int[]) WITH ORDINALITY AS t(i, n)
             WHERE EXISTS (SELECT 1 FROM items i JOIN media m ON m.id = i."mediaId"
                            LEFT JOIN editions e ON e.id = i."editionId"
-                          WHERE i.id = t.i AND m."libraryId" = ANY($2)
-                            AND COALESCE(e."libraryId", m."libraryId") = ANY($2))
+                          WHERE i.id = t.i AND m."libraryId" = ANY($2))
             ORDER BY t.n"#,
     )
     .bind(&ids)

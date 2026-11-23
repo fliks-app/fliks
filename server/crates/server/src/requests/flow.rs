@@ -75,13 +75,13 @@ pub async fn assert_can_access_request_library(
     st: &AppState,
     a: &Authed,
     library_id: Option<i32>,
-    owner: Option<i32>,
+    owner: i32,
 ) -> Res<()> {
     let Some(library_id) = library_id else {
         return Ok(());
     };
     if is_super(a)
-        || owner == Some(a.user.id)
+        || owner == a.user.id
         || accessible_library_ids(&st.db, a)
             .await?
             .contains(&library_id)
@@ -115,8 +115,8 @@ pub async fn pending_count(
 }
 
 /// Rule 3: a non-manager only reaches their own requests.
-pub fn owner_or_manager(a: &Authed, owner: Option<i32>) -> Res<()> {
-    if can_manage(a) || owner == Some(a.user.id) {
+pub fn owner_or_manager(a: &Authed, owner: i32) -> Res<()> {
+    if can_manage(a) || owner == a.user.id {
         Ok(())
     } else {
         Err(forbidden())
@@ -403,14 +403,14 @@ pub async fn title_state(st: &AppState, a: &Authed, key: &TitleKey) -> Res<Value
     let pairs = db::watch_pairs(&mut conn, &ids).await?;
     let mut people: Vec<i32> = active
         .iter()
-        .filter_map(|r| r.user_id)
+        .map(|r| r.user_id)
         .chain(pairs.iter().map(|p| p.1))
         .collect();
     people.sort_unstable();
     people.dedup();
     state["requesterCount"] = json!(people.len());
     state["watching"] = json!(pairs.iter().any(|p| p.1 == a.user.id));
-    state["requestedByMe"] = json!(active.iter().any(|r| r.user_id == Some(a.user.id)));
+    state["requestedByMe"] = json!(active.iter().any(|r| r.user_id == a.user.id));
     if super::is_work(key.media_type) {
         let wants: Vec<&WantSpec> = active
             .iter()
@@ -730,7 +730,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         && db::active_adds_of(&mut tx, &keys)
             .await?
             .iter()
-            .any(|r| r.user_id == Some(a.user.id) && r.status == "pending");
+            .any(|r| r.user_id == a.user.id && r.status == "pending");
     if !skipped_quota {
         check_quota(&mut tx, a, dto.media_type).await?;
     }
@@ -783,7 +783,7 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         MediaKind::Album => db::active_adds_of(&mut tx, &keys)
             .await?
             .into_iter()
-            .find(|r| r.user_id == Some(a.user.id) && r.status == "pending"),
+            .find(|r| r.user_id == a.user.id && r.status == "pending"),
         _ => None,
     };
     if own.is_none() && skipped_quota {
@@ -1138,7 +1138,7 @@ async fn cancel_own(st: &AppState, row: &db::Req) -> Res<()> {
     let pending = db::find(&mut *tx, row.id)
         .await?
         .is_some_and(|r| r.status == "pending" && r.user_id == row.user_id);
-    let owner = row.user_id.unwrap_or_default();
+    let owner = row.user_id;
     let handed = pending && db::promote_watcher(&mut tx, row.id, owner).await?;
     if !handed && !db::delete(&mut *tx, row.id, true).await? {
         return Err(AppError::forbidden(
@@ -1159,7 +1159,7 @@ pub async fn watch(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
     if row.kind != "add" || !db::IN_FLIGHT.contains(&row.status.as_str()) {
         return Err(AppError::conflict("This request is no longer in flight"));
     }
-    if row.user_id == Some(a.user.id) {
+    if row.user_id == a.user.id {
         return Err(AppError::conflict("You made this request"));
     }
     let dto = CreateRequest {
@@ -1184,7 +1184,7 @@ pub async fn watch(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         .await
         .map_err(|e| lock_err(e, true))?;
     let row = match db::find(&mut *tx, id).await? {
-        Some(r) if db::IN_FLIGHT.contains(&r.status.as_str()) && r.user_id != Some(a.user.id) => r,
+        Some(r) if db::IN_FLIGHT.contains(&r.status.as_str()) && r.user_id != a.user.id => r,
         _ => return Err(AppError::conflict("This request is no longer in flight")),
     };
     db::watch_add(&mut *tx, id, a.user.id).await?;
@@ -1277,7 +1277,7 @@ async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bo
         wants: row.wants.as_ref().map(|w| w.0.clone()),
         recordings: row.recordings.clone(),
     };
-    let media = match ensure_media(st, spec, (row.user_id, by)).await {
+    let media = match ensure_media(st, spec, (Some(row.user_id), by)).await {
         Ok(m) => m,
         Err(e) => match adopted(st, id).await {
             Some(m) => Some(m),
@@ -1313,7 +1313,7 @@ async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bo
     });
     let user = ReqRef {
         id,
-        requester: row.user_id,
+        requester: Some(row.user_id),
         media: media.map(|m| (m, row.media_type)),
     };
     services::notify(
@@ -1394,7 +1394,7 @@ pub async fn decline(st: &AppState, a: &Authed, id: i32, reason: Option<String>)
         crate::notifications::payload!({"title": row.title, "reason": reason.unwrap_or_default()}),
         Some(ReqRef {
             id,
-            requester: row.user_id,
+            requester: Some(row.user_id),
             media: row.media_id.map(|m| (m, row.media_type)),
         }),
     );
@@ -1446,12 +1446,10 @@ pub async fn comment_remove(st: &AppState, a: &Authed, comment_id: i32) -> Res<(
     let c = db::comment_find(&st.db, comment_id)
         .await?
         .ok_or_else(|| AppError::not_found(format!("Comment #{comment_id} not found")))?;
-    if !can_manage(a) && c.user_id != Some(a.user.id) {
+    if !can_manage(a) && c.user_id != a.user.id {
         return Err(forbidden());
     }
-    if let Some(r) = c.request_id
-        && let Some(row) = db::find(&st.db, r).await?
-    {
+    if let Some(row) = db::find(&st.db, c.request_id).await? {
         assert_can_access_request_library(st, a, row.library_id, row.user_id).await?;
     }
     Ok(db::comment_delete(&st.db, c.id).await?)

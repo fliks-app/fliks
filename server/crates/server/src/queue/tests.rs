@@ -248,7 +248,8 @@ async fn moving_or_deleting_a_media_file_cancels_its_pending_job(pool: PgPool) {
     crate::db::migrate(&pool).await.unwrap();
     sqlx::raw_sql(
         r#"INSERT INTO libraries (id, name) VALUES (1, 'L');
-           INSERT INTO library_folders (id, "libraryId", path) VALUES (1, 1, '/m')"#,
+           INSERT INTO library_folders (id, "libraryId", path) VALUES (1, 1, '/m');
+           INSERT INTO media (id, title, type) VALUES (1, 'M', 'movie')"#,
     )
     .execute(&pool)
     .await
@@ -258,7 +259,7 @@ async fn moving_or_deleting_a_media_file_cancels_its_pending_job(pool: PgPool) {
         r#"DELETE FROM media_files WHERE id = $1"#,
     ] {
         let file: i32 = sqlx::query_scalar(
-            r#"INSERT INTO media_files ("folderId", "relativePath", size, quality) VALUES (1, 'a.mkv', 1, 'x') RETURNING id"#,
+            r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality) VALUES (1, 1, 'a.mkv', 1, 'x') RETURNING id"#,
         )
         .fetch_one(&pool).await.unwrap();
         let id = job(&pool, None, "/m/a.mkv").await;

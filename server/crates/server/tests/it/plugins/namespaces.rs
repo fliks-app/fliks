@@ -88,7 +88,8 @@ async fn delete_data_clears_one_plugin_only(db: PgPool) {
         .unwrap();
     sql(
         &db,
-        r#"INSERT INTO media (id, title, type) VALUES (1, 'a', 'movie');
+        r#"INSERT INTO users (id, username) VALUES (1, 'u');
+           INSERT INTO media (id, title, type) VALUES (1, 'a', 'movie');
            INSERT INTO media_external_ids VALUES (1, 'movie', 'org.dx:a', '1'), (1, 'movie', 'org.dy:a', '2'),
              (1, 'movie', 'tmdb', '3');
            INSERT INTO media_field_sources ("mediaId", field, provider, locked) VALUES
@@ -96,10 +97,10 @@ async fn delete_data_clears_one_plugin_only(db: PgPool) {
            INSERT INTO metadata_snapshots (provider, resource, kind, "externalId", body)
              VALUES ('org.dx:a', 'work', 'movie', '1', '{}'), ('org.dy:a', 'work', 'movie', '1', '{}');
            UPDATE media SET "preferredProvider" = 'org.dx:a' WHERE id = 1;
-           INSERT INTO requests ("mediaType", kind, provider, "externalId", title, status, "mediaId") VALUES
-             ('movie', 'add', 'org.dx:a', '1', 'open', 'pending', NULL),
-             ('movie', 'add', 'org.dx:a', '2', 'busy', 'processing', 1),
-             ('movie', 'add', 'org.dx:a', '3', 'done', 'available', 1)"#,
+           INSERT INTO requests ("mediaType", kind, provider, "externalId", title, status, "mediaId", "userId") VALUES
+             ('movie', 'add', 'org.dx:a', '1', 'open', 'pending', NULL, 1),
+             ('movie', 'add', 'org.dx:a', '2', 'busy', 'processing', 1, 1),
+             ('movie', 'add', 'org.dx:a', '3', 'done', 'available', 1, 1)"#,
     )
     .await;
     delete_data(&db, &known, "org.dx").await.unwrap();
@@ -226,9 +227,10 @@ async fn load_declares_every_stored_namespace_with_its_label_and_pattern(db: PgP
 #[sqlx::test(migrations = false)]
 async fn the_shape_checks_refuse_malformed_plugin_namespaces(db: PgPool) {
     fliks_server::db::migrate(&db).await.unwrap();
+    sql(&db, r#"INSERT INTO users (id, username) VALUES (1, 'u')"#).await;
     for bad in [
-        r#"INSERT INTO requests ("mediaType", kind, provider, "externalId", title) VALUES ('book', 'add', 'org.x:A', '1', 't')"#,
-        r#"INSERT INTO requests ("mediaType", kind, provider, "externalId", title) VALUES ('book', 'add', 'org.x:a', '', 't')"#,
+        r#"INSERT INTO requests ("mediaType", kind, provider, "externalId", title, "userId") VALUES ('book', 'add', 'org.x:A', '1', 't', 1)"#,
+        r#"INSERT INTO requests ("mediaType", kind, provider, "externalId", title, "userId") VALUES ('book', 'add', 'org.x:a', '', 't', 1)"#,
     ] {
         assert!(
             sqlx::raw_sql(sqlx::AssertSqlSafe(bad))

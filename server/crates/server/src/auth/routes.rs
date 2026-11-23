@@ -205,22 +205,23 @@ pub(crate) async fn login(
         ));
     }
     let invalid = || AppError::unauthorized("Invalid credentials");
-    let row = sqlx::query!(
-        r#"SELECT id, "passwordHash" AS hash, enabled, "isAdmin" AS is_admin FROM users WHERE username = $1"#,
-        dto.username
-    )
-    .fetch_optional(&st.db)
-    .await?
-    .ok_or_else(invalid)?;
-    let stored = row.hash.ok_or_else(invalid)?;
-    let password = dto.password.clone();
-    let ok = tokio::task::spawn_blocking(move || bcrypt::verify(password, &stored))
-        .await
-        .map_err(|_| internal())?
-        .unwrap_or(false);
-    if !ok {
-        return Err(invalid());
+    let mut verified = vec![];
+    for c in crate::users::login_candidates(&st.db, &dto.username).await? {
+        let Some(stored) = c.hash.clone() else {
+            continue;
+        };
+        let password = dto.password.clone();
+        let ok = tokio::task::spawn_blocking(move || bcrypt::verify(password, &stored))
+            .await
+            .map_err(|_| internal())?
+            .unwrap_or(false);
+        if ok {
+            verified.push(c);
+        }
     }
+    let [row] = verified.as_slice() else {
+        return Err(invalid());
+    };
     st.login_throttle.clear(ip, &dto.username);
     if !row.enabled {
         return Err(AppError::unauthorized("Account disabled"));
@@ -463,14 +464,8 @@ pub(crate) async fn register(
     non_empty(&mut errs, "username", &dto.username);
     non_empty(&mut errs, "password", &dto.password);
     check(errs)?;
-    let taken = || AppError::conflict("Username already taken");
-    let exists = sqlx::query_scalar!(
-        r#"SELECT 1 AS "one!" FROM users WHERE username = $1"#,
-        dto.username
-    )
-    .fetch_optional(&st.db)
-    .await?;
-    if exists.is_some() {
+    let taken = crate::users::taken_error;
+    if crate::users::username_taken(&mut *st.db.acquire().await?, &dto.username, None).await? {
         return Err(taken());
     }
     let password = dto.password;

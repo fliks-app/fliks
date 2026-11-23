@@ -178,7 +178,7 @@ impl Lifecycle {
                     obj(json!({"title": r.title, "mediaType": r.media_type})),
                     Some(crate::push::ReqRef {
                         id: r.id,
-                        requester: r.user_id,
+                        requester: Some(r.user_id),
                         media: Some((media_id, media.media_type)),
                     }),
                 );

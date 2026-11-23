@@ -340,8 +340,8 @@ pub async fn patch(
 /// The media with files in `folder`, ascending.
 async fn media_in(db: &PgPool, folder: i32) -> sqlx::Result<Vec<i32>> {
     sqlx::query_scalar!(
-        r#"SELECT DISTINCT "mediaId" AS "id!" FROM media_files
-        WHERE "folderId" = $1 AND "mediaId" IS NOT NULL ORDER BY 1"#,
+        r#"SELECT DISTINCT "mediaId" AS id FROM media_files
+        WHERE "folderId" = $1 ORDER BY 1"#,
         folder
     )
     .fetch_all(db)
@@ -351,7 +351,7 @@ async fn media_in(db: &PgPool, folder: i32) -> sqlx::Result<Vec<i32>> {
 /// Whether the media of `ids` have files in another folder than `folder`.
 async fn elsewhere(db: &PgPool, folder: i32, ids: &[i32]) -> sqlx::Result<HashSet<i32>> {
     Ok(sqlx::query_scalar!(
-        r#"SELECT DISTINCT "mediaId" AS "id!" FROM media_files
+        r#"SELECT DISTINCT "mediaId" AS id FROM media_files
         WHERE "mediaId" = ANY($1) AND "folderId" <> $2"#,
         ids,
         folder

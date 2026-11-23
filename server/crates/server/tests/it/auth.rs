@@ -53,7 +53,7 @@ async fn user(pool: &PgPool, name: &str, role: Option<&str>, admin: bool, enable
         None => None,
         Some(perms) => Some(
             sqlx::query_scalar(
-                r#"INSERT INTO roles (name, permissions) VALUES ($1, $2) RETURNING id"#,
+                r#"INSERT INTO roles (name, permissions) VALUES ($1, $2::jsonb) RETURNING id"#,
             )
             .bind(format!("role-{name}"))
             .bind(perms)

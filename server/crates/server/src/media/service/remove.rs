@@ -39,7 +39,6 @@ async fn media_dir_in(st: &AppState, m: &MediaRow, lib: &str) -> Result<Option<P
     let mut others: Vec<PathBuf> = sqlx::query!(
         r#"SELECT lf.path AS "lib!", m."folderName" AS "folder!" FROM media m
            JOIN (SELECT "mediaId", "folderId" FROM media_files
-                 WHERE "mediaId" IS NOT NULL
                  UNION SELECT "mediaId", "folderId" FROM media_target_folders) x ON x."mediaId" = m.id
            JOIN library_folders lf ON lf.id = x."folderId"
            WHERE m.id <> $1 AND m."folderName" <> ''"#,

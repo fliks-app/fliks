@@ -765,9 +765,9 @@ async fn a_season_is_deleted_and_unmonitored_but_the_series_stays(pool: PgPool) 
     exec(
         &pool,
         &format!(
-            r#"INSERT INTO requests (kind, "mediaType", provider, "externalId", title, status, "mediaId", seasons)
-            VALUES ('add', 'series', 'tmdb', '1', 'Show', 'available', {0}, '[1,2]'),
-                   ('add', 'series', 'tmdb', '1', 'Show', 'available', {0}, '[2]')"#,
+            r#"INSERT INTO requests (kind, "mediaType", provider, "externalId", title, status, "mediaId", seasons, "userId")
+            VALUES ('add', 'series', 'tmdb', '1', 'Show', 'available', {0}, '[1,2]', (SELECT min(id) FROM users)),
+                   ('add', 'series', 'tmdb', '1', 'Show', 'available', {0}, '[2]', (SELECT min(id) FROM users))"#,
             s.media
         ),
     )

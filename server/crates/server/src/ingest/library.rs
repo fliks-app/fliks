@@ -457,8 +457,7 @@ async fn linked_to_other(db: &sqlx::PgPool, media: i32, src: &Path) -> Result<Op
         )
         .fetch_optional(db)
         .await
-        .map_err(|e| e.to_string())?
-        .flatten();
+        .map_err(|e| e.to_string())?;
         if owner.is_some() {
             return Ok(owner);
         }
@@ -846,7 +845,6 @@ impl Ctx<'_> {
         )
         .fetch_optional(&self.st.db)
         .await
-        .map(Option::flatten)
         .map_err(|e| e.to_string())
     }
 

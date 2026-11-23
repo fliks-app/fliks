@@ -397,7 +397,7 @@ pub async fn admin_list(
     .bind(&ids)
     .fetch_all(&st.db)
     .await?;
-    let source_ids: Vec<i32> = streams.iter().filter_map(|s| s.source_id).collect();
+    let source_ids: Vec<i32> = streams.iter().map(|s| s.source_id).collect();
     let sources: Vec<Source> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {SOURCE_COLS} FROM livetv_sources WHERE id = ANY($1)"
     )))
@@ -410,12 +410,12 @@ pub async fn admin_list(
             let mut v = serde_json::to_value(c).expect("channel");
             v["streams"] = streams
                 .iter()
-                .filter(|s| s.channel_id == Some(c.id))
+                .filter(|s| s.channel_id == c.id)
                 .map(|s| {
                     let mut sv = serde_json::to_value(s).expect("stream");
                     sv["source"] = sources
                         .iter()
-                        .find(|x| Some(x.id) == s.source_id)
+                        .find(|x| x.id == s.source_id)
                         .map_or(Value::Null, |x| serde_json::to_value(x).expect("source"));
                     sv
                 })

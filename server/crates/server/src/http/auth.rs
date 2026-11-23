@@ -91,7 +91,7 @@ pub struct UserRow {
     pub push_muted: Vec<String>,
 }
 
-/// A `roles` row; `permissions` is the JSON text column parsed (an unparsable value is no permission).
+/// A `roles` row.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RoleRow {
@@ -163,7 +163,7 @@ async fn load_rows(
         u."pushMuted" AS "push_muted!",
         u."whatsNewEnabled" AS whats_new_enabled, u."whatsNewSeen" AS whats_new_seen,
         r."id" AS "role_row_id?", r."createdAt" AS "role_created_at?", r."updatedAt" AS "role_updated_at?",
-        r."name" AS "role_name?", r."permissions" AS "role_permissions?", r."isDefault" AS "role_is_default?"
+        r."name" AS "role_name?", r."permissions" AS "role_permissions?: Json<Vec<String>>", r."isDefault" AS "role_is_default?"
     FROM users u LEFT JOIN roles r ON r."id" = u."roleId"
     WHERE ($1::int IS NULL OR u."id" = $1) AND (NOT $2 OR u."enabled")
         AND ($3::int IS NULL OR EXISTS (SELECT 1 FROM sessions s
@@ -183,8 +183,7 @@ async fn load_rows(
                 created_at: r.role_created_at.unwrap_or_default(),
                 updated_at: r.role_updated_at.unwrap_or_default(),
                 name: r.role_name.unwrap_or_default(),
-                permissions: serde_json::from_str(&r.role_permissions.unwrap_or_default())
-                    .unwrap_or_default(),
+                permissions: r.role_permissions.map(|p| p.0).unwrap_or_default(),
                 is_default: r.role_is_default.unwrap_or_default(),
             });
             let user = UserRow {
