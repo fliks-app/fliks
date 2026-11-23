@@ -1,4 +1,5 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { NavigationCancel, NavigationEnd, NavigationError, NavigationStart, Router } from '@angular/router';
 import { DeviceService } from '../../../core/services/device.service';
 import { BackgroundService } from '../../../core/services/background.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
@@ -20,14 +21,23 @@ interface Layer {
 })
 export class BackgroundComponent {
   protected readonly bg = inject(BackgroundService);
-  /** 0 at the top of the page, 1 once scrolled two fifths of the viewport: a hero claim's veil follows it continuously, so no frame is left without a veil. */
-  private readonly progress = signal(0);
+  private readonly router = inject(Router);
+  /** 0 at the top of the page, 1 once scrolled two fifths of the viewport. */
+  private readonly scroll = signal(0);
+  /** A navigation resets the scroll to the top before the leaving page lets go of its claim: held at 1 meanwhile, or the picture would show through a light veil. */
+  private readonly navigating = signal(false);
+  /** How much of the hero look is applied, 0 to 1: it follows the claim over a short tween, so a claim released or swapped never jumps the veil. */
+  private readonly mix = signal(0);
+  private readonly veiled = computed(() => this.mix() > 0);
+  private variant: 'full' | 'compact' = 'full';
+  private tween = 0;
+
   /** The veil of a hero claim as one background, its alphas interpolated from the hero look to the ambient one; null for the ambient CSS veil. */
   protected readonly heroVeil = computed(() => {
-    const hero = this.bg.hero();
-    if (!hero) return null;
-    const p = this.progress();
-    const [from, to] = hero === 'compact' ? [12, 45] : [35, 72];
+    const m = this.mix();
+    if (m === 0) return null;
+    const p = 1 - m * (1 - (this.navigating() ? 1 : this.scroll()));
+    const [from, to] = this.variant === 'compact' ? [12, 45] : [35, 72];
     const rgba = (a: number) => `rgba(29, 35, 42, ${a.toFixed(3)})`;
     // The vertical layer reaches the ambient alpha by half way, so the stacked layers never let more picture through than either end.
     const q = Math.min(1, 2 * p);
@@ -51,12 +61,32 @@ export class BackgroundComponent {
 
   constructor() {
     effect((onCleanup) => {
-      if (!this.bg.hero()) return;
-      const read = () => this.progress.set(Math.min(1, Math.max(0, window.scrollY / (window.innerHeight * 0.4))));
+      const hero = this.bg.hero();
+      if (hero) this.variant = hero;
+      const target = hero ? 1 : 0;
+      const from = untracked(() => this.mix());
+      if (from === target) return;
+      const start = performance.now();
+      const step = (now: number) => {
+        const t = this.reduced ? 1 : Math.min(1, (now - start) / 300);
+        this.mix.set(from + (target - from) * t);
+        if (t < 1) this.tween = requestAnimationFrame(step);
+      };
+      this.tween = requestAnimationFrame(step);
+      onCleanup(() => cancelAnimationFrame(this.tween));
+    });
+    effect((onCleanup) => {
+      if (!this.veiled()) return;
+      const read = () => this.scroll.set(Math.min(1, Math.max(0, window.scrollY / (window.innerHeight * 0.4))));
       read();
       window.addEventListener('scroll', read, { passive: true });
       onCleanup(() => window.removeEventListener('scroll', read));
     });
+    const sub = this.router.events.subscribe((e) => {
+      if (e instanceof NavigationStart) this.navigating.set(true);
+      else if (e instanceof NavigationEnd || e instanceof NavigationCancel || e instanceof NavigationError) this.navigating.set(false);
+    });
+    inject(DestroyRef).onDestroy(() => sub.unsubscribe());
     let last: Layer = { url: null, blur: false };
     effect(() => {
       const next = { url: this.bg.url(), blur: this.bg.blur() };
