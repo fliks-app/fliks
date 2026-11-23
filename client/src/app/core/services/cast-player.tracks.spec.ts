@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { inject, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TranslateService } from '@ngx-translate/core';
 import { Subject } from 'rxjs';
@@ -8,7 +8,12 @@ import { AuthService } from './auth.service';
 import { Media, MediaService } from './api/media.service';
 import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
+import { AutoDownloadService } from './auto-download.service';
+import { CastPlaybackTarget } from './cast-playback-target';
 import { CastService } from './cast.service';
+import { OfflinePlaybackSyncService } from './offline-playback-sync.service';
+import { PlaybackHeartbeat } from './playback/playback-heartbeat';
+import { RemoteService } from './remote.service';
 import { CastSettingsService } from './cast-settings.service';
 import { buildCastAudioOptions, CastPlayerService } from './cast-player.service';
 import { PlaybackSession } from './playback/playback-session';
@@ -16,6 +21,7 @@ import { PlayerSettingsService } from './player-settings.service';
 import { ServerConfigService } from './server-config.service';
 import { SessionSyncService, type SessionPlayer } from './session-sync.service';
 import { SseService } from './sse.service';
+import { heartbeatOutput } from '../../testing/heartbeat-output.stub';
 import { sseStub } from '../../testing/sse.stub';
 import { ToastService } from './toast.service';
 import { TrackManagerService, type SubtitleOption } from './track-manager.service';
@@ -131,10 +137,27 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
       { provide: ToastService, useValue: { error: vi.fn() } },
       { provide: SseService, useValue: sseStub() },
       { provide: SessionSyncService, useValue: { registerPlayer: (p: SessionPlayer) => (players.push(p), () => {}), handleSuperseded: vi.fn() } },
+      { provide: RemoteService, useValue: { lastAppliedCmdId: () => null, lastCmdRefused: () => null } },
+      { provide: OfflinePlaybackSyncService, useValue: { queue: vi.fn(), record: vi.fn() } },
+      { provide: AutoDownloadService, useValue: { onItemCompleted: vi.fn() } },
+      { provide: PlaybackSession, useValue: { kind: () => 'cast', nowPlaying: () => null } },
+      {
+        provide: CastPlaybackTarget,
+        useFactory: () => {
+          const cp = inject(CastPlayerService);
+          return heartbeatOutput({
+            reportsHere: () => !cp.controlOnly() && cast.receiverPlays(cp.mediaFileId()),
+            sessionId: () => cp.liveSessionId() ?? undefined,
+            position: () => cast.currentTime(),
+            duration: () => cast.duration(),
+            uiPaused: () => cast.isPaused(),
+          });
+        },
+      },
     ],
   });
   const svc = TestBed.inject(CastPlayerService);
-  return { svc, cast, trackManager, streamingApi, subtitlesApi, playerSettings, mediaService, players };
+  return { svc, cast, trackManager, streamingApi, subtitlesApi, playerSettings, mediaService, players, heartbeat: TestBed.inject(PlaybackHeartbeat) };
 }
 
 const base = {
@@ -284,15 +307,15 @@ describe('another sender loads on the receiver', () => {
   });
 
   it('saves nothing while the receiver plays another file', async () => {
-    const { svc, cast, streamingApi } = setup();
+    const { svc, cast, streamingApi, heartbeat } = setup();
     const save = streamingApi.updatePlaybackState;
     cast.currentTime = () => 120;
     svc.startCast({ ...base, mediaFileId: 7, mediaId: 3, subtitles: [], activeSubtitleId: null });
     cast.receiverMedia.set({ mediaId: 4, mediaFileId: 9 });
-    await (svc as any).saveCastPosition();
+    await heartbeat.beat();
     expect(save).not.toHaveBeenCalled();
     cast.receiverMedia.set(ours);
-    await (svc as any).saveCastPosition();
+    await heartbeat.beat();
     expect(save).toHaveBeenCalledTimes(1);
   });
 });
@@ -301,7 +324,7 @@ describe('another sender takes the receiver while this one plays', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('issues no LOAD, adopts the new item read-only and saves nothing for the old one', async () => {
-    const { svc, cast, streamingApi } = setup();
+    const { svc, cast, streamingApi, heartbeat } = setup();
     cast.currentTime = () => 205;
     svc.startCast({ ...base, mediaFileId: 69, mediaId: 5, subtitles: [], activeSubtitleId: null });
     cast.receiverMedia.set({ mediaId: 5, mediaFileId: 69, sid: 'a' });
@@ -310,11 +333,11 @@ describe('another sender takes the receiver while this one plays', () => {
     cast.replaced.set(true);
     cast.playbackError$.next({});
     cast.playbackError$.next({ mediaFileId: 26 });
-    await (svc as any).saveCastPosition();
+    await heartbeat.beat();
     cast.receiverMedia.set({ mediaId: 6, mediaFileId: 26, sid: 'b' });
     cast.replaced.set(false);
     TestBed.tick();
-    await (svc as any).saveCastPosition();
+    await heartbeat.beat();
     expect(cast.loadMedia).not.toHaveBeenCalled();
     expect(svc.mediaFileId()).toBe(26);
     const saved = streamingApi.updatePlaybackState.mock.calls as unknown as [number, { mediaFileId: number; castDevice?: string }][];
@@ -327,13 +350,14 @@ describe('a session another user loaded', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('is mirrored as a remote control: no heartbeat, QoE, recovery or session stop', async () => {
-    const { svc, cast, streamingApi } = setup();
+    const { svc, cast, streamingApi, heartbeat } = setup();
     cast.currentTime = () => 205;
     cast.receiverMedia.set({ mediaId: 6, mediaFileId: 26, sid: 'b', userId: 2 });
     TestBed.tick();
     expect(svc.hasMedia()).toBe(true);
     expect(svc.liveSessionId()).toBeNull();
-    await (svc as any).saveCastPosition();
+    heartbeat.register(svc.heartbeatSource, 'receiver');
+    await heartbeat.beat();
     cast.playbackError$.next({});
     svc.clear();
     expect(streamingApi.updatePlaybackState).not.toHaveBeenCalled();
@@ -343,13 +367,70 @@ describe('a session another user loaded', () => {
   });
 
   it('still saves a session this user loaded', async () => {
-    const { svc, cast, streamingApi } = setup();
+    const { svc, cast, streamingApi, heartbeat } = setup();
     cast.currentTime = () => 205;
     cast.receiverMedia.set({ mediaId: 6, mediaFileId: 26, sid: 'b', userId: 1 });
     TestBed.tick();
-    await (svc as any).saveCastPosition();
+    await heartbeat.beat();
     expect(svc.liveSessionId()).toBe('b');
     expect(streamingApi.updatePlaybackState).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('cast heartbeat without the player page', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function playing(over: Record<string, unknown> = {}) {
+    const t = setup();
+    t.cast.currentTime = () => 30;
+    t.cast.receiverMedia.set({ mediaId: 6, mediaFileId: 26, sid: 'b', userId: 1, ...over });
+    TestBed.tick();
+    return t;
+  }
+
+  it('hands the native side the heartbeat to repeat while the phone is locked', async () => {
+    const { cast, heartbeat } = playing();
+    await heartbeat.beat();
+    expect(cast.saveHeartbeat).toHaveBeenCalledWith({
+      url: '/api/playback/media/6/state',
+      token: 'st',
+      body: expect.objectContaining({ positionSeconds: 30, mediaFileId: 26, sessionId: 'b', castDevice: 'Living room' }),
+    });
+  });
+
+  it('carries the receiver QoE sample, but not to the native side', async () => {
+    const { cast, heartbeat, streamingApi } = playing();
+    (cast.receiverQoe as any).set({ sample: { engine: 'cast', stallCount: 0, recoveryReloads: 0, bandwidthBps: 9 }, receivedAt: Date.now(), sid: 'b' });
+    await heartbeat.beat();
+    expect(streamingApi.updatePlaybackState).toHaveBeenCalledWith(6, expect.objectContaining({ qoe: expect.objectContaining({ bandwidthBps: 9 }) }));
+    expect(cast.saveHeartbeat.mock.calls[0][0].body.qoe).toBeUndefined();
+  });
+
+  it('reloads once, then records the recovery, when the backend lost the session', async () => {
+    const { svc, heartbeat, streamingApi } = playing();
+    streamingApi.updatePlaybackState.mockResolvedValueOnce({ sessionLost: true } as never);
+    const reload = vi.spyOn(svc, 'reloadCastStream').mockResolvedValue('done');
+    const record = vi.spyOn(svc, 'recordRecovery');
+    await heartbeat.beat();
+    await vi.waitFor(() => expect(record).toHaveBeenCalledWith(30, 'session_lost'));
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(reload).toHaveBeenCalledWith(30, true);
+  });
+
+  it('stops for a takeover instead of reloading the session another device took', async () => {
+    const { svc, heartbeat, streamingApi } = playing();
+    streamingApi.updatePlaybackState.mockResolvedValueOnce({ sessionLost: true, superseded: true } as never);
+    const reload = vi.spyOn(svc, 'reloadCastStream').mockResolvedValue('done');
+    await heartbeat.beat();
+    expect(TestBed.inject(SessionSyncService).handleSuperseded).toHaveBeenCalledWith('b');
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('keeps the receiver beating at the final position when the cast clears', async () => {
+    const { svc, streamingApi } = playing();
+    svc.clear();
+    await vi.waitFor(() => expect(streamingApi.updatePlaybackState).toHaveBeenCalledTimes(1));
+    expect(streamingApi.updatePlaybackState).toHaveBeenCalledWith(6, expect.objectContaining({ positionSeconds: 30, sessionId: 'b' }));
   });
 });
 

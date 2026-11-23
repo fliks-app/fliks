@@ -22,8 +22,6 @@ export interface QueueHost {
   mediaId(): number;
   mediaFileId(): number;
   episodeId(): number | undefined;
-  /** Read in computeds and effects to re-run them when the media record is replaced. */
-  mediaLoadedTick(): number;
   preRollActive(): boolean;
   hasEngine(): boolean;
   engineDuration(): number | undefined;
@@ -60,7 +58,6 @@ export class QueueController {
     episodeId: number;
     mediaFileId: number;
   } | null>(() => {
-    this.host.mediaLoadedTick();
     const m = this.host.media();
     const currentEpId = this.host.episodeId();
     const next = m && currentEpId ? resolveNextEpisodeItem(m, currentEpId) : null;
@@ -95,9 +92,10 @@ export class QueueController {
   }
 
   trackNotificationLike(): void {
-    this.host.mediaLoadedTick();
+    const mediaId = this.host.mediaId();
+    const episodeId = this.host.episodeId();
     if (!this.device.isAndroidNative() || !this.playerSettings.settings().backgroundAudio) return;
-    untracked(() => void this.notificationLike.track(this.host.mediaId(), this.host.episodeId()));
+    untracked(() => void this.notificationLike.track(mediaId, episodeId));
   }
 
   syncNotificationNav(): void {

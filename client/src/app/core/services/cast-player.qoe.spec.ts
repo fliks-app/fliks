@@ -81,72 +81,13 @@ describe('CastPlayerService.recordReceiverStalls', () => {
 describe('CastPlayerService reporting without the player page', () => {
   const proto = CastPlayerService.prototype as any;
 
-  function saver(response: object) {
-    const qoeReporter = { flush: vi.fn(), record: vi.fn() };
-    const self = {
-      mediaFileId: () => 1,
-      mediaId: () => 2,
-      episodeId: () => undefined,
-      liveSessionId: () => 's',
-      qoeSample: () => null,
-      controlOnly: () => false,
-      cast: { receiverPlays: () => true, currentTime: () => 30, duration: () => 100, isPaused: () => false, deviceName: () => 'Living room', saveHeartbeat: vi.fn() },
-      authService: { accessToken: 'tok', ensureStreamToken: vi.fn(async () => 'st') },
-      serverConfig: { resolveUrl: (p: string) => p },
-      streamingApi: { updatePlaybackState: vi.fn(async () => response) },
-      reloadCastStream: vi.fn(async () => {}),
-      reloading: () => false,
-      recordRecovery: proto.recordRecovery,
-      recoveries: 0,
-      playbackId: 'pb',
-      qoeReporter,
-      sessionSync: { handleSuperseded: vi.fn(async () => {}) },
-    };
-    return { self, qoeReporter };
-  }
-
-  it('flushes the cast session events after each heartbeat', async () => {
-    const { self, qoeReporter } = saver({});
-    await proto.saveCastPosition.call(self);
-    expect(qoeReporter.flush).toHaveBeenCalledWith('s');
-  });
-
-  it('hands the native side the heartbeat to repeat while the phone is locked', async () => {
-    const { self } = saver({});
-    await proto.saveCastPosition.call(self);
-    expect(self.cast.saveHeartbeat).toHaveBeenCalledWith({
-      url: '/api/playback/media/2/state',
-      token: 'st',
-      body: expect.objectContaining({ positionSeconds: 30, mediaFileId: 1, sessionId: 's', castDevice: 'Living room' }),
-    });
-  });
-
-  it('records a session_lost recovery when the heartbeat reloads the stream', async () => {
-    const { self, qoeReporter } = saver({ sessionLost: true });
-    await proto.saveCastPosition.call(self);
-    expect(self.reloadCastStream).toHaveBeenCalledWith(30, true);
-    expect(qoeReporter.record).toHaveBeenCalledWith(
-      's',
-      expect.objectContaining({ type: 'recovery', position: 30, reason: 'session_lost' }),
-      false,
-      'pb',
-    );
-  });
-
-  it('stops for a takeover instead of reloading the session another device took', async () => {
-    const { self } = saver({ sessionLost: true, superseded: true });
-    await proto.saveCastPosition.call(self);
-    expect(self.sessionSync.handleSuperseded).toHaveBeenCalledWith('s');
-    expect(self.reloadCastStream).not.toHaveBeenCalled();
-  });
-
   it('sends the pending events with keepalive before the cast stops', () => {
     const order: string[] = [];
     const self = {
       disconnectGrace: null,
       liveSessionId: () => 's',
-      saveCastPosition: vi.fn(),
-      stopPositionSaving: vi.fn(),
+      heartbeat: { bank: vi.fn() },
+      unregisterHeartbeat: null,
       qoeReporter: { flushKeepalive: vi.fn(() => order.push('keepalive')) },
       streamingApi: { stopSession: vi.fn(() => (order.push('stop'), Promise.resolve())) },
       setLiveSession: vi.fn(),

@@ -126,7 +126,7 @@
     <div class="flex items-center gap-6">
       @if (canControlPlayback()) {
         <!-- lucide:rotate-ccw -->
-        <button type="button" class="p-6 -m-3 text-white/90 active:scale-90 transition-transform pointer-events-auto" [class.pointer-events-none]="!visible()" [attr.aria-label]="'player.seek_back' | translate" (click)="seek.emit(currentTime() - 10); $event.stopPropagation()">
+        <button type="button" class="p-6 -m-3 text-white/90 active:scale-90 transition-transform pointer-events-auto" [class.pointer-events-none]="!visible()" [attr.aria-label]="'player.seek_back' | translate" (click)="seek.emit(playhead()() - 10); $event.stopPropagation()">
           <svg lucideRotateCcw class="h-7 w-7" [strokeWidth]="1.5"></svg>
         </button>
         <!-- lucide:play / lucide:pause -->
@@ -138,7 +138,7 @@
           }
         </button>
         <!-- lucide:rotate-cw -->
-        <button type="button" class="p-6 -m-3 text-white/90 active:scale-90 transition-transform pointer-events-auto" [class.pointer-events-none]="!visible()" [attr.aria-label]="'player.seek_forward' | translate" (click)="seek.emit(currentTime() + 10); $event.stopPropagation()">
+        <button type="button" class="p-6 -m-3 text-white/90 active:scale-90 transition-transform pointer-events-auto" [class.pointer-events-none]="!visible()" [attr.aria-label]="'player.seek_forward' | translate" (click)="seek.emit(playhead()() + 10); $event.stopPropagation()">
           <svg lucideRotateCw class="h-7 w-7" [strokeWidth]="1.5"></svg>
         </button>
       }
@@ -197,9 +197,9 @@
 
   <!-- Progress bar -->
   <app-seekbar
-    [currentTime]="currentTime()"
+    [playhead]="playhead()"
     [duration]="duration()"
-    [bufferedEnd]="bufferedEnd()"
+    [buffered]="buffered()"
       [seekableStart]="seekableStart()"
       [seekableEnd]="seekableEnd()"
     [loading]="spinner()"
@@ -218,8 +218,7 @@
 
   <!-- Duration row -->
   <div class="flex items-center justify-between mt-0.5">
-    <span class="text-white/70 tabular-nums text-base">{{ formatTime(getDisplayTime()) }}</span>
-    <span class="text-white/70 tabular-nums text-base">{{ formatRemaining(getDisplayTime(), duration()) }} / {{ formatTime(duration()) }}</span>
+    <app-time-label [time]="displayTime" [duration]="duration()" />
   </div>
 
   <!-- Desktop: buttons row BELOW duration -->
@@ -229,7 +228,7 @@
       @if (canControlPlayback()) {
         <div class="flex items-center gap-1.5">
           <!-- lucide:rotate-ccw -->
-          <button type="button" class="btn btn-ghost btn-md btn-circle text-white" [attr.aria-label]="'player.seek_back' | translate" (click)="seek.emit(currentTime() - 10)">
+          <button type="button" class="btn btn-ghost btn-md btn-circle text-white" [attr.aria-label]="'player.seek_back' | translate" (click)="seek.emit(playhead()() - 10)">
             <svg lucideRotateCcw class="h-6 w-6"></svg>
           </button>
           <!-- lucide:play / lucide:pause -->
@@ -241,7 +240,7 @@
             }
           </button>
           <!-- lucide:rotate-cw -->
-          <button type="button" class="btn btn-ghost btn-md btn-circle text-white" [attr.aria-label]="'player.seek_forward' | translate" (click)="seek.emit(currentTime() + 10)">
+          <button type="button" class="btn btn-ghost btn-md btn-circle text-white" [attr.aria-label]="'player.seek_forward' | translate" (click)="seek.emit(playhead()() + 10)">
             <svg lucideRotateCw class="h-6 w-6"></svg>
           </button>
         </div>

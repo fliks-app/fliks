@@ -10,6 +10,7 @@ import {
   effect,
   inject,
   input,
+  type Signal,
   output,
   signal,
   viewChild,
@@ -40,9 +41,10 @@ import { PlaybackDevice } from '../../../core/services/playback-device.service';
 import { BottomSheetComponent } from '../../../shared/components/bottom-sheet';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AppSettingsService } from '../../../core/services/app-settings.service';
-import { formatTime, SpriteMetadata } from '../../../core/utils/player.utils';
+import { SpriteMetadata } from '../../../core/utils/player.utils';
 import { focusOverlayEntry, initialOverlayFocus, scrollSelectedIntoView } from '../../../core/services/focusable.constants';
 import { SeekbarComponent } from '../../../shared/components/seekbar/seekbar';
+import { TimeLabelComponent } from './time-label';
 import { PartyReactionDockComponent } from '../party/party-reaction-dock';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
@@ -112,6 +114,8 @@ interface AppearanceRow {
 /** Upward travel that turns a corner touch into the reaction swipe. */
 const SWIPE_MIN_PX = 50;
 
+const NO_TIME = signal(0).asReadonly();
+
 @Component({
   selector: 'app-player-controls',
   imports: [
@@ -147,6 +151,7 @@ const SWIPE_MIN_PX = 50;
     NgTemplateOutlet,
     BottomSheetComponent,
     SeekbarComponent,
+    TimeLabelComponent,
     ResolveUrlPipe,
   ],
   templateUrl: './player-controls.html',
@@ -269,9 +274,10 @@ export class PlayerControlsComponent {
   readonly spinner = input(false);
   /** True once the first frame is on the surface; hides the big mobile play button over the loading spinner. */
   readonly videoStarted = input(true);
-  readonly currentTime = input(0);
+  /** Signals, not values: a tick re-renders the seekbar and the time label, never this template. */
+  readonly playhead = input.required<Signal<number>>();
+  readonly buffered = input<Signal<number>>(NO_TIME);
   readonly duration = input(0);
-  readonly bufferedEnd = input(0);
   /** Forwarded to the seekbar: the span a seek can land in. */
   readonly seekableStart = input(0);
   readonly seekableEnd = input(0);
@@ -614,21 +620,13 @@ export class PlayerControlsComponent {
     return false;
   }
 
-  readonly formatTime = formatTime;
-
-  formatRemaining(current: number, total: number): string {
-    if (!total || !isFinite(total)) return '';
-    return '-' + formatTime(Math.max(0, total - current));
-  }
-
   onVolumeChange(event: Event) {
     const value = +(event.target as HTMLInputElement).value;
     this.volumeChange.emit(value);
   }
 
-  getDisplayTime(): number {
-    return this.seekbar()?.displayTime() ?? this.currentTime();
-  }
+  /** The seekbar's own reading: the scrub position while dragging, else the playhead. */
+  readonly displayTime = computed(() => this.seekbar()?.displayTime() ?? this.playhead()());
 
   /** Toggle a click-driven dropdown. Closes any other open one. */
   toggleDropdown(name: PanelName, event?: Event) {

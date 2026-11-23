@@ -18,11 +18,11 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { StreamingApiService, PlaybackInfoResponse, lostCurrentSession } from '../../core/services/api/streaming-api.service';
+import { StreamingApiService, PlaybackInfoResponse } from '../../core/services/api/streaming-api.service';
 import { MediaService, Media } from '../../core/services/api/media.service';
 import { BrowserDeviceProfileService, DeviceProfile } from '../../core/services/browser-device-profile.service';
 import type { PreRollItem } from '@fliks/plugin-ui';
-import { SseService, RemoteQualityRung } from '../../core/services/sse.service';
+import { SseService } from '../../core/services/sse.service';
 import { RemoteService } from '../../core/services/remote.service';
 import { SessionSyncService } from '../../core/services/session-sync.service';
 import { backTarget } from './back-target';
@@ -34,8 +34,7 @@ import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
 import { CastService } from '../../core/services/cast.service';
 import { OfflineStorageService } from '../../core/services/offline-storage.service';
-import { OfflinePlaybackSyncService, refused } from '../../core/services/offline-playback-sync.service';
-import { AutoDownloadService } from '../../core/services/auto-download.service';
+import { OfflinePlaybackSyncService } from '../../core/services/offline-playback-sync.service';
 import { NetworkService } from '../../core/services/network.service';
 import { DownloadCacheService, type DownloadTask, type OfflineSubtitle } from '../../core/services/download-cache.service';
 import {
@@ -60,7 +59,7 @@ import {
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 
-import type { AudioTrack, PlaybackEngine, QoeSample, VariantTrack } from '../../core/services/playback-engine/playback-engine';
+import type { AudioTrack, PlaybackEngine, VariantTrack } from '../../core/services/playback-engine/playback-engine';
 import { QoeReporter } from '../../core/services/qoe-reporter.service';
 import { PlayerQoe, PlayheadWatch, frozenAfterMs, type ReloadWhy } from './player-qoe';
 import {
@@ -93,16 +92,9 @@ interface AudioOption {
   supported?: boolean;
 }
 
-/** Long enough to fold a start-up burst into one report, short enough that a
- *  controller still sees the change in about a frame's time. */
-const FORCED_SAVE_COALESCE_MS = 300;
 const RELOAD_NEGOTIATE_TIMEOUT_MS = 15_000;
 /** A cold launch may wait on a transcode or a scan; a reload keeps the shorter bound. */
 const LAUNCH_NEGOTIATE_TIMEOUT_MS = 30_000;
-
-const isSubtitleUnavailable = (e: unknown): boolean =>
-  e instanceof HttpErrorResponse && e.status === 422 && e.error?.message === 'errors.subtitle_unavailable';
-
 
 interface PipPlugin {
   isAvailable(): Promise<{ available: boolean }>;
@@ -121,7 +113,8 @@ import { ControlsVisibilityService } from './controls/controls-visibility';
 import { type ControlsModel, outputModel } from './controls/controls-model';
 import { NO_NOW_PLAYING, NowPlayingMetadataService, describeNowPlaying, mediaSessionText, type NowPlayingMetadata } from '../../core/services/playback/now-playing-metadata.service';
 import { CopyFallbackController } from './copy-fallback-controller';
-import { HEARTBEAT_MS, RecoveryController } from './recovery-controller';
+import { RecoveryController } from './recovery-controller';
+import { PlaybackHeartbeat, type HeartbeatSource } from '../../core/services/playback/playback-heartbeat';
 import { WebVideoCropController } from './web-video-crop-controller';
 import { EdlController } from './edl-controller';
 import { KeyframeGrid } from './keyframe-grid';
@@ -278,10 +271,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly router = inject(Router);
   protected readonly sessionSync = inject(SessionSyncService);
   private readonly streamingApi = inject(StreamingApiService);
+  private readonly heartbeat = inject(PlaybackHeartbeat);
   private readonly qoe = new PlayerQoe(inject(QoeReporter));
   private readonly offlineStorage = inject(OfflineStorageService);
   private readonly offlineSync = inject(OfflinePlaybackSyncService);
-  private readonly autoDownload = inject(AutoDownloadService);
   private readonly network = inject(NetworkService);
   private readonly dlCache = inject(DownloadCacheService);
   private readonly mediaService = inject(MediaService);
@@ -372,7 +365,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.isNativeEngine();
   }
 
-  private saveInterval: ReturnType<typeof setInterval> | null = null;
   private appPauseListener: PluginListenerHandle | null = null;
   /** {@link completePostLoadSetup} runs once per mount, from the first load or its copy fallback. */
   private firstLoadSetupDone = false;
@@ -423,6 +415,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         this.frozenSince() > 0 ||
         !this.videoStarted()),
   );
+  /** The playhead the seekbar and time label read: the output's while another device plays, else the engine's. */
+  protected readonly playhead = computed(() => {
+    const o = this.session.isLocal() ? null : this.session.output();
+    return o ? o.position() : this.currentTime();
+  });
   /** Everything the controls read of the playing output: the cast or remote output, else the engine's own signals. */
   protected readonly view = computed<ControlsModel>(() => {
     const o = this.session.isLocal() ? null : this.session.output();
@@ -431,7 +428,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       paused: this.uiPaused(),
       spinner: this.spinnerVisible(),
       videoStarted: this.videoStarted(),
-      currentTime: this.currentTime(),
       duration: this.duration(),
       volume: this.volume(),
       muted: this.muted(),
@@ -542,7 +538,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     mediaId: () => this.mediaId,
     mediaFileId: () => this.mediaFileId,
     episodeId: () => this.episodeId,
-    mediaLoadedTick: () => this.mediaLoadedTick(),
     preRollActive: () => this.preRollActive(),
     hasEngine: () => !!this.engine,
     engineDuration: () => this.engine?.duration,
@@ -665,7 +660,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Audio tracks from streamInfo for the Cast remote */
   readonly castAudioOptions = computed<CastAudioOption[]>(() => {
-    this.mediaLoadedTick(); // recompute once this.media is populated on load
     return buildCastAudioOptions(this.currentFile()?.streamInfo?.audio, this.translate);
   });
 
@@ -798,8 +792,28 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   });
 
   // Media info
-  private mediaFileId = 0;
-  private mediaId = 0;
+  /** The item this route plays, set in one place: what reads its ids or record re-runs when it changes. */
+  private readonly current = signal<{ fileId: number; mediaId: number; episodeId: number | undefined; media: Media | null }>({
+    fileId: 0,
+    mediaId: 0,
+    episodeId: undefined,
+    media: null,
+  });
+  private get mediaFileId(): number {
+    return this.current().fileId;
+  }
+  private get mediaId(): number {
+    return this.current().mediaId;
+  }
+  private get episodeId(): number | undefined {
+    return this.current().episodeId;
+  }
+  private get media(): Media | null {
+    return this.current().media;
+  }
+  private setItem(patch: Partial<ReturnType<typeof this.current>>): void {
+    this.current.update((c) => ({ ...c, ...patch }));
+  }
   private readonly reports = inject(ReportProblemService);
 
   protected get reportable(): boolean {
@@ -819,8 +833,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private isOfflinePlayback = false;
   /** Offline playback loads no media record; the download carries the type for the back target. */
   private offlineMediaType: MediaType | undefined;
-  private episodeId: number | undefined;
-  private media: Media | null = null;
 
   /** The title's original language (TMDB, ISO 639-1) — drives the `original`
    *  audio-selection mode. */
@@ -833,8 +845,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.media?.files?.find((f) => f.id === this.mediaFileId);
   }
 
-  /** Bumped whenever {@link media} is (re)assigned so reactive computeds re-run. */
-  private readonly mediaLoadedTick = signal(0);
   /** The audio the viewer should hear (index into `streamInfo.audio`): every load path configures from it, and
    *  the engine's track is reconciled to it, never the reverse. */
   private activeAudioStreamIndex: number | undefined;
@@ -1208,9 +1218,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (navState?.backdropUrl) this.showBackdrop(navState.backdropUrl);
 
     const qp = this.route.snapshot.queryParams;
-    this.mediaFileId = +this.route.snapshot.params['mediaFileId'];
-    this.mediaId = qp['mediaId'] ? +qp['mediaId'] : 0;
-    this.episodeId = qp['episodeId'] ? +qp['episodeId'] : undefined;
+    this.setItem({
+      fileId: +this.route.snapshot.params['mediaFileId'],
+      mediaId: qp['mediaId'] ? +qp['mediaId'] : 0,
+      episodeId: qp['episodeId'] ? +qp['episodeId'] : undefined,
+    });
     const resumeTime = 't' in qp ? +qp['t'] : undefined;
 
     // A playlist or party launch registers its queue and passes the id; consume it only on a match, any other
@@ -1317,12 +1329,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // No stopSessions here — getOrCreateSession handles stale sessions naturally
       if (mediaPromise) {
         const media = await op.wait(mediaPromise);
-        this.media = media;
+        this.setItem({ media });
         this.resolveAudioTarget();
         await op.wait(this.planSubtitleDelivery());
         requestPlaybackInfo();
 
-        this.mediaLoadedTick.update(v => v + 1);
         this.applyMedia(media);
 
         const file = media.files?.find((f: any) => f.id === this.mediaFileId);
@@ -1500,11 +1511,11 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.edl.clear();
     this.webCrop.destroy();
     this.detachAirPlay();
-    if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
     this.remote.dispose();
     this.detachParty();
     this.detachLocalOutput();
-    this.savePosition();
+    void this.savePosition();
+    this.unregisterHeartbeat();
     this.qoe.setStalled(false, { sessionId: this.activeSessionId(), position: this.engine?.currentTime ?? 0 });
     if (this.session.isLocal()) {
       this.qoe.onTeardown(this.activeSessionId());
@@ -1532,7 +1543,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       video.removeEventListener('seeked', this.onSeeked);
     }
     this.spriteAbort?.abort();
-    if (this.saveInterval) clearInterval(this.saveInterval);
     this.cues.cancelTimers();
     if (this.statsInterval) clearInterval(this.statsInterval);
     if (this.playheadInterval) clearInterval(this.playheadInterval);
@@ -1597,7 +1607,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.preRollMainFileId = mainFileId;
       this.preRollRest = rest;
       this.preRollCurrent.set(item);
-      this.mediaFileId = item.mediaFileId;
+      this.setItem({ fileId: item.mediaFileId });
       this.state.duration.set(info.source?.durationSeconds ?? 0);
       return;
     }
@@ -2234,8 +2244,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     void this.mediaService.getOne(this.mediaId, { silent: true }).then(
       (media) => {
         if (fileId !== this.mediaFileId) return;
-        this.media = media;
-        this.mediaLoadedTick.update((v) => v + 1);
+        this.setItem({ media });
         this.applyMedia(media);
         this.queueCtl.syncSeriesQueue();
       },
@@ -2253,8 +2262,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   ): Promise<boolean> {
     if (!this.engine || mediaFileId === this.mediaFileId) return false;
     // The outgoing item's last beat is up to 10 s old and a switch closes the saves: bank it first.
-    this.lastForcedSaveAt = 0;
-    void this.savePosition(true);
+    void this.heartbeat.bank();
     const switched = await this.loader.run('switch', (op) => this.switchItem(op, mediaFileId, mediaId, episodeId, opts), true);
     return switched !== undefined;
   }
@@ -2288,16 +2296,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // A fresh load needs the outgoing stream stopped: native surfaces freeze otherwise, AVPlay and mpv play on.
       if (this.isNativeEngine()) await op.wait(engine.unload().catch(() => {}));
 
-      this.mediaFileId = mediaFileId;
-      this.episodeId = episodeId;
+      this.setItem({ fileId: mediaFileId, episodeId });
       // Same series → media is unchanged; reload it only if the id differs
       // (a queue can cross media). Refresh the title/logo when it does.
       if (mediaId && mediaId !== this.mediaId) {
-        this.mediaId = mediaId;
-        this.media = await op.wait(this.mediaService.getOne(mediaId, { silent: true }));
+        this.setItem({ mediaId });
+        this.setItem({ media: await op.wait(this.mediaService.getOne(mediaId, { silent: true })) });
       }
-      // Recompute next-item context + refresh the episode label / backdrop.
-      this.mediaLoadedTick.update((v) => v + 1);
       if (this.media) this.applyMedia(this.media);
       this.queueCtl.syncSeriesQueue();
 
@@ -2591,7 +2596,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.preRollRest = [];
       if (this.engine) await this.advancePreRoll();
       else this.preRollCurrent.set(null);
-      this.mediaFileId = this.preRollMainFileId;
+      this.setItem({ fileId: this.preRollMainFileId });
     }
     const localSessionId = this.loader.handOff();
     await this.trackSetup.catch(() => {});
@@ -2675,10 +2680,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** The playback-info call for the current track state (burn-in pick, audio index, rung); every request goes
-   *  through here. `over` swaps a field: another file (no picks sent) or the Cast profile's burn-in/rung. */
+   *  through here. `over` swaps a field: another file (no picks sent) or the profile/rung. */
   private async negotiatePlayback(
     startAt?: number,
-    over: Partial<{ fileId: number; profile: DeviceProfile; burnInId: number | null; quality: string }> = {},
+    over: Partial<{ fileId: number; profile: DeviceProfile; quality: string }> = {},
     opts?: { skipErrorToast?: boolean; replaces?: string; preRollFirst?: boolean; timeoutMs?: number },
   ): Promise<PlaybackInfoResponse> {
     const fileId = over.fileId ?? this.mediaFileId;
@@ -2691,26 +2696,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       quality: this.resolveStartQuality(),
       ...over,
     };
-    try {
-      return await this.streamingApi.getPlaybackInfo(
-        fileId,
-        request.profile,
-        request.burnInId ?? undefined,
-        request.audioStreamIndex,
-        request.quality,
-        startAt,
-        undefined,
-        opts,
-      );
-    } catch (e) {
-      // A stale burn-in pick (after a rescan) is dropped and the stream renegotiated without it.
-      if (onScreen && over.burnInId === undefined && request.burnInId != null && isSubtitleUnavailable(e)) {
-        this.subs.activeBurnInId = null;
-        this.subs.activeSubtitleId.set(null);
-        return this.negotiatePlayback(startAt, { ...over, burnInId: null }, opts);
-      }
-      throw e;
+    const info = await this.streamingApi.getPlaybackInfo(
+      fileId,
+      request.profile,
+      request.burnInId ?? undefined,
+      request.audioStreamIndex,
+      request.quality,
+      startAt,
+      undefined,
+      opts,
+    );
+    // The server opened the session without a burn-in it could not apply (a rescan removed it): the pick goes.
+    if (onScreen && info.burnInDropped != null && info.burnInDropped === request.burnInId) {
+      this.subs.activeBurnInId = null;
+      this.subs.activeSubtitleId.set(null);
     }
+    return info;
   }
 
   private readonly muteRangesByFile = new Map<number, Promise<boolean>>();
@@ -2941,8 +2942,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // Hide controls after autoplay starts
     this.chrome.resetHideTimer();
 
-    // Save position every 10s + immediately on seek
-    this.saveInterval = setInterval(() => this.savePosition(), HEARTBEAT_MS);
     this.recovery.resetStallWatchdog();
     const video = this.videoEl()?.nativeElement;
     if (video) {
@@ -3210,24 +3209,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   });
 
   private async adoptOutputItem(item: { fileId: number; mediaId: number; episodeId?: number }): Promise<void> {
-    this.mediaFileId = item.fileId;
-    this.episodeId = item.episodeId;
+    this.setItem({ fileId: item.fileId, episodeId: item.episodeId });
     this.loader.forget();
     this.itemAdopted = true;
     this.edlEnded = false;
     this.resetTrackState();
     this.followItemInUrl(item);
     if (item.mediaId !== this.mediaId) {
-      this.mediaId = item.mediaId;
+      this.setItem({ mediaId: item.mediaId });
       const media = await this.mediaService.getOne(item.mediaId, { silent: true }).catch((e) => {
         console.warn('[player] media fetch failed for the adopted item', item.mediaId, e);
         return null;
       });
       if (this.destroyed || this.mediaFileId !== item.fileId) return;
       // The previous title's record never stands in for the new one.
-      this.media = media;
+      this.setItem({ media });
     }
-    this.mediaLoadedTick.update((v) => v + 1);
     if (this.media) this.applyMedia(this.media);
     this.queueCtl.followItem(item.mediaId, item.episodeId);
     this.queueCtl.syncSeriesQueue();
@@ -3284,6 +3281,51 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const pos = this.currentTime();
     return dur > 0 && (pos >= dur - 30 || pos >= dur * 0.9);
   }
+
+  /** What the shared heartbeat reports for this page, including its final beat after the output is detached. */
+  private readonly heartbeatSource: HeartbeatSource = {
+    output: () => this.currentOutput(),
+    item: () => ({ mediaId: this.mediaId, fileId: this.mediaFileId, episodeId: this.episodeId }),
+    reportable: () => {
+      if (this.loader.kind() === 'switch' || this.state.error()) return false;
+      // mediaFileId is the pre-roll's while mediaId still names the film: an escaped beat would stamp the film's row with the trailer's position.
+      if (!this.mediaId || this.preRollActive()) {
+        console.warn('[player] heartbeat: no active media or pre-roll in progress, skipping');
+        return false;
+      }
+      return true;
+    },
+    offline: () => this.isOfflinePlayback,
+    reading: ({ position, duration }) => {
+      // The clock reads 0 until the load's seek to the resume point lands, so report where the load is headed; any true reading retires it.
+      if (position > 0) this.pendingStartTime = 0;
+      else if (this.pendingStartTime > 0) position = this.pendingStartTime;
+      return { position, duration: duration || this.engine?.duration || 0 };
+    },
+    extras: (sessionId) => {
+      const extras: ReturnType<HeartbeatSource['extras']> = { castDevice: this.castService.deviceName() ?? undefined };
+      if (!sessionId) return extras;
+      extras.episodeLabel = this.episodeTitle() || null;
+      if (this.engine && !this.state.error()) {
+        extras.qoe = this.qoe.current(sessionId) ?? undefined;
+        if (!this.isOfflinePlayback) this.qualityManager.rememberBandwidth(extras.qoe?.bandwidthBps);
+        void this.qoe.refresh(this.engine, sessionId);
+      }
+      return extras;
+    },
+    background: (beat) => {
+      // The WebView is suspended in PiP and with the screen off: the native side repeats this beat meanwhile.
+      const engine = this.engine;
+      if (!(engine instanceof NativeEngine) || this.isOfflinePlayback) return;
+      return beat.token().then((token) => {
+        if (token) engine.setHeartbeat({ url: beat.url, token, body: beat.body });
+      });
+    },
+    onLostSession: () => this.recovery.recoverFromLostSession('session_lost'),
+    onBeatFailed: () => this.recovery.markResumeDue(),
+  };
+
+  private readonly unregisterHeartbeat = this.heartbeat.register(this.heartbeatSource, 'page');
 
   /** Another device took the account session: stay as its view, else close like a back and hand over what it takes to start again. */
   private readonly unregisterSession = this.sessionSync.registerPlayer({
@@ -3849,17 +3891,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return this.engine?.getVariantTracks?.().find((t) => t.active) ?? null;
   }
 
-  /** Where the load in flight is seeking to; see {@link savePosition}. */
+  /** Where the load in flight is seeking to; see {@link heartbeatSource}. */
   private pendingStartTime = 0;
-
-  /** Wall-clock ms of the last PUT to /state; dedups the saves that fire together on exit. Time-based so a
-   *  paused player still beats every 10 s, which {@link LiveSessionRegistry} needs to keep the session warm. */
-  private lastSaveAt = 0;
-
-  /** `force` bypasses only the 2s throttle: after a remote command, its ack (lastCmdId) arrives in ~1s, not
-   *  10s. */
-  private lastForcedSaveAt = 0;
-  private forcedSaveTrailing: ReturnType<typeof setTimeout> | null = null;
 
   /** Active audio as a streamInfo index, the one space the backend, detail header and clients agree on (a
    *  shaka-* id is engine-local). */
@@ -3870,172 +3903,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     return pos >= 0 ? pos : null;
   }
 
-  /** Native ticks are not throttled in the background, unlike {@link saveInterval}: they keep the
-   *  heartbeat going in PiP and with the screen off. */
-  private heartbeatOnNativeTick = () => {
-    if (Date.now() - this.lastSaveAt >= HEARTBEAT_MS) void this.savePosition();
-  };
+  private heartbeatOnNativeTick = () => this.heartbeat.beatIfDue();
 
-  private async savePosition(force = false) {
-    if (force) {
-      const now = Date.now();
-      if (now - this.lastForcedSaveAt < FORCED_SAVE_COALESCE_MS) {
-        // Coalesce, never drop: a start fires first frame, transport flip and track auto-selection within
-        // milliseconds, and dropping the later ones reported the state from before playback began.
-        if (this.forcedSaveTrailing) clearTimeout(this.forcedSaveTrailing);
-        this.forcedSaveTrailing = setTimeout(() => {
-          this.forcedSaveTrailing = null;
-          void this.savePosition(true);
-        }, FORCED_SAVE_COALESCE_MS);
-        return;
-      }
-      this.lastForcedSaveAt = now;
-    }
-    // mediaFileId is the pre-roll's while mediaId still names the film — an
-    // escaped write here would stamp the film's row with the trailer's position.
-    const out = this.currentOutput();
-    // Another device's output beats for itself.
-    if (!out.reportsHere() || this.loader.kind() === 'switch') return;
-    // An errored player has nothing to report: its beats would only keep a dead session alive.
-    if (this.state.error()) return;
-    if (!this.mediaId || this.preRollActive()) {
-      console.warn('[player] savePosition: no active media or pre-roll in progress, skipping');
-      return;
-    }
-
-    let pos = out.position();
-    const dur = out.duration() || this.engine?.duration || 0;
-
-    // The clock reads 0 until the load's seek to the resume point lands (the first frame can render before), so
-    // report where the load is headed; any true reading retires the substitute.
-    if (pos > 0) this.pendingStartTime = 0;
-    else if (this.pendingStartTime > 0) pos = this.pendingStartTime;
-
-    // Heartbeat even at position 0 (the backend refreshes the LiveSession TTL off this PUT); bail only on a
-    // non-finite reading, never on 0.
-    if (!Number.isFinite(pos)) return;
-
-    const now = Date.now();
-    if (!force && now - this.lastSaveAt < 2_000) return;
-    this.lastSaveAt = now;
-    // Cache hit until 30 min remain; later URLs (sprites, subtitles, reloads) then carry a fresh token.
-    if (!this.isOfflinePlayback) void this.authService.ensureStreamToken(this.mediaFileId);
-
-    const payload: {
-      positionSeconds: number;
-      durationSeconds: number;
-      mediaFileId: number;
-      episodeId?: number;
-      sessionId?: string;
-      state?: 'playing' | 'paused' | 'buffering';
-      quality?: string | null;
-      volume?: number;
-      muted?: boolean;
-      lastCmdId?: string;
-      lastCmdRefused?: string;
-      audioTrackIndex?: number | null;
-      episodeLabel?: string | null;
-      supportsVolume?: boolean;
-      subtitleId?: string | null;
-      qualities?: RemoteQualityRung[] | null;
-      autoplayBlocked?: boolean;
-      hasNext?: boolean;
-      castDevice?: string;
-      qoe?: QoeSample;
-    } = {
-      positionSeconds: pos,
-      durationSeconds: dur || 0,
-      mediaFileId: this.mediaFileId,
-      episodeId: this.episodeId,
-      castDevice: this.castService.deviceName() ?? undefined,
-    };
-
-    const sessionId = this.activeSessionId();
-    if (sessionId) {
-      payload.sessionId = sessionId;
-      payload.state = out.buffering() ? 'buffering' : out.uiPaused() ? 'paused' : 'playing';
-      payload.volume = out.volume();
-      payload.muted = out.muted();
-      const lastCmdId = this.remoteService.lastAppliedCmdId();
-      if (lastCmdId) payload.lastCmdId = lastCmdId;
-      const lastCmdRefused = this.remoteService.lastCmdRefused();
-      if (lastCmdId && lastCmdRefused) payload.lastCmdRefused = lastCmdRefused;
-      payload.quality = out.activeQualityId() ?? null;
-      // A controller cannot rebuild the rungs: they follow the output's own decision.
-      payload.qualities = out.availableQualities().map((q) => ({
-        id: q.id,
-        label: q.label,
-        lowBandwidth: q.lowBandwidth,
-      }));
-      payload.audioTrackIndex = out.audioStreamIndex();
-      payload.episodeLabel = this.episodeTitle() || null;
-      payload.supportsVolume = out.canSetVolume();
-      payload.subtitleId = out.activeSubtitleId();
-      payload.autoplayBlocked = out.autoplayBlocked();
-      payload.hasNext = out.canPlayNext();
-      // While casting, CastPlayerService's own heartbeat carries the receiver's sample; a sample after a
-      // fatal error would read as playback carrying on and clear it from the verdict.
-      if (this.session.isLocal() && this.engine && !this.state.error()) {
-        payload.qoe = this.qoe.current(sessionId) ?? undefined;
-        if (!this.isOfflinePlayback) this.qualityManager.rememberBandwidth(payload.qoe?.bandwidthBps);
-        void this.qoe.refresh(this.engine, sessionId);
-      }
-    }
-
-    // The WebView is suspended in PiP and with the screen off: the native side repeats this beat meanwhile.
-    const heartbeatToken =
-      this.engine instanceof NativeEngine && !this.isOfflinePlayback
-        ? ((await this.authService.ensureStreamToken(this.mediaFileId)) ?? this.authService.accessToken)
-        : null;
-    if (this.engine instanceof NativeEngine && !this.isOfflinePlayback && heartbeatToken) {
-      this.engine.setHeartbeat({
-        url: this.serverConfig.resolveUrl(`/api/playback/media/${this.mediaId}/state`),
-        token: heartbeatToken,
-        body: { ...payload, qoe: undefined },
-      });
-    }
-
-    // The offline queue persists position only; heartbeat fields are pointless once the backend session
-    // expired.
-    const offlinePayload = {
-      mediaId: this.mediaId,
-      mediaFileId: this.mediaFileId,
-      episodeId: this.episodeId,
-      positionSeconds: payload.positionSeconds,
-      durationSeconds: payload.durationSeconds,
-    };
-    if (this.network.isOnline()) {
-      try {
-        const response = await this.streamingApi.updatePlaybackState(
-          this.mediaId,
-          payload,
-        );
-        this.qoe.flush(sessionId);
-        // The backend lost our LiveSession (restart, long idle): re-issue playback-info and reload with the
-        // fresh sid at the current position before the buffer drains.
-        if (lostCurrentSession(response, sessionId, this.activeSessionId())) {
-          void this.recovery.recoverFromLostSession('session_lost');
-        }
-        if (response?.superseded && sessionId) void this.sessionSync.handleSuperseded(sessionId);
-        // Auto-delete-after-watched: the moment the server marks this item
-        // completed, drop its auto-managed download (no-op otherwise).
-        if (response?.state?.completed) {
-          void this.autoDownload.onItemCompleted(this.mediaFileId);
-        }
-        // Keep the device's own resume point current on the happy path: /state is uncacheable, so an offline
-        // replay has only this.
-        this.offlineSync.record(offlinePayload);
-      } catch (e) {
-        if (refused(e)) return;
-        this.offlineSync.queue(offlinePayload);
-        // The beat never landed, so the session's fate is unknown: re-run the resume path once online rather
-        // than wait for a 410 on the next segment.
-        this.recovery.markResumeDue();
-      }
-    } else {
-      this.offlineSync.queue(offlinePayload);
-      this.recovery.markResumeDue();
-    }
+  private savePosition(force = false): Promise<void> {
+    return this.heartbeat.beat(force);
   }
 
   /** Push subtitle appearance to both renderers: CSS variables on .player-container for UITextDisplayer (DOM),

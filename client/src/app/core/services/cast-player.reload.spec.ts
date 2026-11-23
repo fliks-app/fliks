@@ -57,14 +57,8 @@ describe('cast reload single-flight', () => {
 
   it('skips the heartbeat recovery while a reload runs', async () => {
     const reloadCastStream = vi.fn();
-    const self = {
-      mediaFileId: () => 1, mediaId: () => 2, episodeId: () => undefined, liveSessionId: () => 's',
-      qoeSample: () => null, controlOnly: () => false, cast: { receiverPlays: () => true, currentTime: () => 30, duration: () => 100, isPaused: () => false },
-      streamingApi: { updatePlaybackState: vi.fn(async () => ({ sessionLost: true })) },
-      qoeReporter: { flush: vi.fn() }, reloading: signal(true), reloadCastStream,
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (CastPlayerService.prototype as any).saveCastPosition.call(self);
+    const self = { reloading: signal(true), reloadCastStream };
+    await CastPlayerService.prototype.recoverLostSession.call(self as never, 30);
     expect(reloadCastStream).not.toHaveBeenCalled();
   });
 

@@ -8,6 +8,7 @@ import { StreamingApiService } from './api/streaming-api.service';
 import { SubtitlesApiService } from './api/subtitles-api.service';
 import { CastSettingsService } from './cast-settings.service';
 import { NowPlayingMetadataService } from './playback/now-playing-metadata.service';
+import { PlaybackHeartbeat } from './playback/playback-heartbeat';
 import { PlayerSettingsService } from './player-settings.service';
 import { QoeReporter } from './qoe-reporter.service';
 import { ServerConfigService } from './server-config.service';
@@ -58,6 +59,7 @@ async function setup() {
       { provide: QoeReporter, useValue: { record: vi.fn() } },
       { provide: SseService, useValue: sseStub() },
       { provide: SessionSyncService, useValue: { registerPlayer: () => () => {} } },
+      { provide: PlaybackHeartbeat, useValue: { register: () => () => {}, bank: vi.fn() } },
     ],
   });
   const svc = TestBed.inject(CastPlayerService);
