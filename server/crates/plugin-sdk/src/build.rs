@@ -218,12 +218,12 @@ pub fn verify(archive: &[u8], extra_keys: trust::Keys, budget: usize) -> Result<
         ));
     }
     check_world(wasm, i.manifest.get("provider").is_some())?;
+    check_floor(wasm, i.manifest["fliks"].as_str().unwrap_or_default())?;
     Ok(i)
 }
 
-/// Every import is one of the `plugin` world's; the exports are `guest`, plus `metadata-provider` for a provider.
-pub fn check_world(wasm: &[u8], provider: bool) -> Result<(), Error> {
-    use wit_parser::decoding::{DecodedWasm, decode};
+/// The SDK's WIT and its `plugin` world.
+fn sdk_world() -> Result<(wit_parser::Resolve, wit_parser::WorldId), Error> {
     let mut world = wit_parser::Resolve::default();
     let (pkg, _) = world
         .push_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/wit"))
@@ -231,14 +231,92 @@ pub fn check_world(wasm: &[u8], provider: bool) -> Result<(), Error> {
     let w = world
         .select_world(&[pkg], Some("plugin"))
         .map_err(|e| e.to_string())?;
+    Ok((world, w))
+}
+
+fn component_world(wasm: &[u8]) -> Result<(wit_parser::Resolve, wit_parser::WorldId), Error> {
+    use wit_parser::decoding::{DecodedWasm, decode};
+    match decode(wasm).map_err(|e| format!("{e:#}"))? {
+        DecodedWasm::Component(r, cw) => Ok((r, cw)),
+        _ => Err("plugin.wasm is not a component".into()),
+    }
+}
+
+type Release = (u64, u64, u64);
+
+/// `X.Y.Z`, a pre-release counting as its release (as a `fliks` range matches it).
+fn release(v: &str) -> Option<Release> {
+    let mut n = v
+        .trim()
+        .split(['-', '+'])
+        .next()?
+        .split('.')
+        .map(|n| n.parse::<u64>().ok());
+    Some((n.next()??, n.next()??, n.next()??))
+}
+
+/// The `Since fliks X.Y.Z.` doc line of a WIT function (`plugins.md` WIT section).
+fn since(docs: &wit_parser::Docs) -> Option<Release> {
+    docs.contents
+        .as_deref()?
+        .lines()
+        .find_map(|l| release(l.strip_prefix("Since fliks ")?.trim_end_matches('.')))
+}
+
+/// The highest `Since fliks` release among the functions the component imports, and that function.
+fn import_floor(wasm: &[u8]) -> Result<Option<(Release, String)>, Error> {
+    use wit_parser::WorldItem;
+    let (sdk, w) = sdk_world()?;
+    let (r, cw) = component_world(wasm)?;
+    let mut floor: Option<(Release, String)> = None;
+    for (k, item) in &r.worlds[cw].imports {
+        let WorldItem::Interface { id, .. } = item else {
+            continue;
+        };
+        let name = r.name_world_key(k);
+        let Some(known) = sdk.worlds[w].imports.iter().find_map(|(sk, si)| match si {
+            WorldItem::Interface { id, .. } if sdk.name_world_key(sk) == name => {
+                Some(&sdk.interfaces[*id])
+            }
+            _ => None,
+        }) else {
+            continue;
+        };
+        for f in r.interfaces[*id].functions.keys() {
+            let Some(v) = known.functions.get(f).and_then(|kf| since(&kf.docs)) else {
+                continue;
+            };
+            if floor.as_ref().is_none_or(|(m, _)| v > *m) {
+                floor = Some((v, format!("{name}#{f}")));
+            }
+        }
+    }
+    Ok(floor)
+}
+
+/// The manifest's `fliks` range starts at or above the release of every imported host function.
+pub fn check_floor(wasm: &[u8], range: &str) -> Result<(), Error> {
+    let Some(((a, b, c), f)) = import_floor(wasm)? else {
+        return Ok(());
+    };
+    let min = fliks_plugin_manifest::manifest::min_fliks_version(range);
+    if min.as_deref().and_then(release) >= Some((a, b, c)) {
+        return Ok(());
+    }
+    Err(format!(
+        "the fliks range {range:?} starts below {a}.{b}.{c}, the first core that links {f}"
+    ))
+}
+
+/// Every import is one of the `plugin` world's; the exports are `guest`, plus `metadata-provider` for a provider.
+pub fn check_world(wasm: &[u8], provider: bool) -> Result<(), Error> {
+    let (world, w) = sdk_world()?;
     let allowed: BTreeSet<String> = world.worlds[w]
         .imports
         .keys()
         .map(|k| world.name_world_key(k))
         .collect();
-    let DecodedWasm::Component(r, cw) = decode(wasm).map_err(|e| format!("{e:#}"))? else {
-        return Err("plugin.wasm is not a component".into());
-    };
+    let (r, cw) = component_world(wasm)?;
     let foreign: Vec<String> = r.worlds[cw]
         .imports
         .keys()
@@ -337,4 +415,30 @@ pub fn cli(args: &[String]) -> Result<(), Error> {
         _ => return Err(USAGE.into()),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn since_lines_of_the_wit() {
+        let (sdk, w) = sdk_world().unwrap();
+        let at = |iface: &str, f: &str| {
+            let (_, item) = sdk.worlds[w]
+                .imports
+                .iter()
+                .find(|(k, _)| sdk.name_world_key(k) == format!("fliks:plugin/{iface}@3.0.0"))
+                .unwrap();
+            let wit_parser::WorldItem::Interface { id, .. } = item else {
+                panic!("{iface} is not an interface")
+            };
+            since(&sdk.interfaces[*id].functions[f].docs)
+        };
+        assert_eq!(at("notify", "notify-users"), Some((7, 1, 0)));
+        assert_eq!(at("host", "library-ingest"), Some((7, 2, 0)));
+        assert_eq!(at("host", "releases-score"), Some((7, 2, 0)));
+        assert_eq!(at("host", "config-get"), None);
+        assert_eq!(release("7.2.0-rc.1"), Some((7, 2, 0)));
+    }
 }

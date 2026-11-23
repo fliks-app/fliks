@@ -291,6 +291,13 @@ impl Plugins {
             .unwrap_or_default()
     }
 
+    /// A lagged plugin event feed lost `n` events for every plugin that receives them (rule 46).
+    pub fn events_lost(&self, n: u64) {
+        for rt in self.live().iter().filter(|r| r.sh.receives_events()) {
+            rt.drop_events(n);
+        }
+    }
+
     pub async fn lock(&self, id: &str) -> tokio::sync::OwnedMutexGuard<()> {
         self.locks.lock(id.to_owned()).await
     }
@@ -493,9 +500,10 @@ impl Plugins {
 
     /// Process lifetime tasks: domain events, scheduled calls, staging sweep, catalog boot pass.
     pub fn spawn(self: &Arc<Self>, st: &AppState) {
-        let (me, st2, on_lag) = (self.clone(), st.clone(), st.clone());
+        let (me, st2, on_lag, lagged) = (self.clone(), st.clone(), st.clone(), self.clone());
         // Plugin pushes and webhooks are lossy by contract; a lost request for a sweep is not.
-        let on_lag = move || {
+        let on_lag = move |n: u64| {
+            lagged.events_lost(n);
             let st = on_lag.clone();
             tokio::spawn(async move { crate::acquisition::sweep::sweep_all(&st).await });
         };

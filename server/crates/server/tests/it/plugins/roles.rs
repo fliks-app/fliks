@@ -161,6 +161,27 @@ async fn orphan_keeps_the_data_and_a_reprovision_reuses_it() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_orphan_without_a_schema_records_its_signer() {
+    let (id, _) = unique_id();
+    let Some(s) = Scratch::create("orphannodb").await else {
+        return;
+    };
+    db::orphan(&s.pool, &id, Some("release-2026"))
+        .await
+        .unwrap();
+    let k = db::kept(&s.pool, &id).await.unwrap();
+    assert_eq!(
+        k,
+        db::Kept::Signer(Some("release-2026".into())),
+        "data/<id>/ is kept even without a role"
+    );
+    assert!(!db::may_adopt(&k, Some("other")));
+    db::deprovision(&s.pool, &id).await.unwrap();
+    assert_eq!(db::kept(&s.pool, &id).await.unwrap(), db::Kept::Nothing);
+    s.finish().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_template_copy_takes_its_own_names() {
     let (id, leg) = unique_id();
     let Some(a) = Scratch::create("copya").await else {

@@ -60,6 +60,6 @@ pub fn spawn(st: &AppState) {
         "problem auto-resolve",
         st.hub.subscribe_domain(),
         on_event,
-        move || reconcile(&lag),
+        move |_| reconcile(&lag),
     ));
 }

@@ -1269,6 +1269,15 @@ async fn domain_events_reach_only_plugins_holding_events_receive() {
         .push_to_plugins("media.removed", &json!({"n": 1}));
     tokio::time::sleep(Duration::from_millis(500)).await;
     assert_eq!(seen(), before, "no events:receive, no event");
+    let drops = || {
+        h.st.plugins
+            .rt(ID)
+            .unwrap()
+            .event_drops
+            .load(std::sync::atomic::Ordering::SeqCst)
+    };
+    h.st.plugins.events_lost(5);
+    assert_eq!(drops(), 0, "a feed lag is not a drop for a non-receiver");
     sqlx::query(
         r#"UPDATE plugin_registrations SET scopes = array_append(scopes, 'events:receive') WHERE "pluginId" = $1"#,
     )
@@ -1283,6 +1292,13 @@ async fn domain_events_reach_only_plugins_holding_events_receive() {
         seen() > before
     })
     .await;
+    let d = drops();
+    h.st.plugins.events_lost(5);
+    assert_eq!(
+        drops(),
+        d + 5,
+        "the lag's lost events count in eventDropCount"
+    );
     done(s, h).await;
 }
 

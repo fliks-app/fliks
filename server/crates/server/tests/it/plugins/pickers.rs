@@ -121,6 +121,13 @@ async fn a_provider_publishes_sources_and_reads_in_flight() {
         call(&h, "inflight", &[("media", &album.to_string())]).await["ok"],
         json!([])
     );
+    // A media whose sweep claim is held answers `core`.
+    let claim = h.st.plugins.sweeps.claims.lock(album).await;
+    assert_eq!(
+        call(&h, "inflight", &[("media", &album.to_string())]).await["ok"],
+        json!(["core"])
+    );
+    drop(claim);
 
     assert_eq!(h.st.plugins.pickers.sources_of("fliks.fixture").len(), 2);
     h.call(

@@ -419,7 +419,20 @@ fn package_is_deterministic_and_verifies() {
     assert_eq!(name, "fliks.fixture-0.1.0.fkplugin");
     assert_eq!(a, c.package(Some(&key)).unwrap().1, "deterministic");
     let dev = vec![("dev".to_owned(), key.verifying_key().to_bytes())];
-    let i = build::verify(&a, dev, build::MAX_WASM).unwrap();
+    // The template's range is the host tests' core, below the `Since fliks` of what the fixture imports.
+    let err = build::verify(&a, dev.clone(), build::MAX_WASM).unwrap_err();
+    assert!(err.contains("starts below 7.2.0"), "{err}");
+    let mut wasm = std::fs::read(c.wasm_path()).unwrap();
+    assert!(build::check_floor(&wasm, ">=7.1.0 <8.0.0").is_err());
+    let mut t = c.template().unwrap();
+    t["fliks"] = json!(">=7.2.0 <8.0.0");
+    let logo = std::fs::read(std::path::Path::new(DIR).join("logo.svg")).unwrap();
+    let logo = Some(("logo.svg", logo.as_slice()));
+    let pack = |key| {
+        let m = build::manifest(&t, &c.version, &wasm, logo);
+        build::archive(&m, &wasm, logo, key).unwrap()
+    };
+    let i = build::verify(&pack(Some(&key)), dev, build::MAX_WASM).unwrap();
     assert_eq!(
         (i.id.as_str(), i.version.as_str()),
         ("fliks.fixture", "0.1.0")
@@ -429,14 +442,13 @@ fn package_is_deterministic_and_verifies() {
         i.archive.order,
         ["plugin.json", "plugin.json.sig", "plugin.wasm", "logo.svg"]
     );
-    let (_, unsigned) = c.package(None).unwrap();
+    let unsigned = pack(None);
     assert!(build::verify(&unsigned, vec![], build::MAX_WASM).is_ok());
     assert!(
         build::verify(&unsigned, vec![], 1024)
             .unwrap_err()
             .contains("over the 1024 byte budget")
     );
-    let mut wasm = std::fs::read(c.wasm_path()).unwrap();
     wasm.truncate(8);
     assert!(build::check_world(&wasm, false).is_err());
 }

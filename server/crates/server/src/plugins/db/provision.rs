@@ -465,20 +465,20 @@ pub async fn keep_orphaned(core: &PgPool, plugin_id: &str) -> sqlx::Result<()> {
     tx.commit().await
 }
 
-/// Uninstall without `deleteData`: the schema and its rows stay, the role stops logging in.
+/// Uninstall without `deleteData`: the schema and its rows stay, the role stops logging in. The
+/// signer is recorded even without a schema: `data/<id>/` stays too.
 pub async fn orphan(core: &PgPool, plugin_id: &str, signer: Option<&str>) -> sqlx::Result<()> {
     let role = role(&database_oid(core).await?, plugin_id);
     let mut tx = core.begin().await?;
-    if hold_orphaned(&mut tx, plugin_id, &role).await? {
-        sqlx::query(
-            r#"INSERT INTO plugin_kept_data ("pluginId", "signerKeyId") VALUES ($1, $2)
-               ON CONFLICT ("pluginId") DO UPDATE SET "signerKeyId" = EXCLUDED."signerKeyId""#,
-        )
-        .bind(plugin_id)
-        .bind(signer)
-        .execute(&mut *tx)
-        .await?;
-    }
+    hold_orphaned(&mut tx, plugin_id, &role).await?;
+    sqlx::query(
+        r#"INSERT INTO plugin_kept_data ("pluginId", "signerKeyId") VALUES ($1, $2)
+           ON CONFLICT ("pluginId") DO UPDATE SET "signerKeyId" = EXCLUDED."signerKeyId""#,
+    )
+    .bind(plugin_id)
+    .bind(signer)
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await
 }
 

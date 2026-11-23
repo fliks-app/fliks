@@ -24,10 +24,15 @@ impl PluginRt {
         let mut r = self.ring.lock_clean();
         if r.len() == RING {
             r.pop_front();
-            self.event_drops.fetch_add(1, Ordering::SeqCst);
+            self.drop_events(1);
         }
         r.push_back((name.to_owned(), payload.to_owned()));
         self.ring_wake.notify_one();
+    }
+
+    /// `eventDropCount`: ring overflow, or events a lagged plugin event feed lost (rule 46).
+    pub fn drop_events(&self, n: u64) {
+        self.event_drops.fetch_add(n, Ordering::SeqCst);
     }
 
     pub(super) async fn event_loop(self: Arc<Self>, era: u64) {

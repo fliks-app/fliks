@@ -41,7 +41,14 @@ fn shaped_picker(rp: &Value) -> bool {
             })
     })
 }
-const RESERVED_IDS: [&str; 4] = ["ui", "metrics", "sources", "import"];
+/// Concrete routes beside the proxy, and `fliks`: as the longest owner of `plugin.fliks.*` it would
+/// read and pre-set every official plugin's settings that is not installed (rule 24).
+const RESERVED_IDS: [&str; 5] = ["ui", "metrics", "sources", "import", "fliks"];
+
+/// Rule 1: the id grammar minus the reserved ids.
+fn legal_id(id: &str) -> bool {
+    fliks_domain::plugins::legal_plugin_id(id) && !RESERVED_IDS.contains(&id)
+}
 const BASE_KEYS: [&str; 14] = [
     "id",
     "pluginApi",
@@ -555,7 +562,7 @@ pub fn inspect(buf: &[u8], allow_unsigned: bool, keys: &Keys) -> Result<Inspecte
         )
     })?;
     let id = manifest["id"].as_str().unwrap_or_default().to_owned();
-    if !fliks_domain::plugins::legal_plugin_id(&id) || RESERVED_IDS.contains(&id.as_str()) {
+    if !legal_id(&id) {
         return Err(refuse(
             "PLUGIN_BAD_ID",
             format!("id {} is not a legal plugin id", Value::String(id.clone())),
@@ -752,6 +759,16 @@ mod tests {
             "/", "relative", "/a/../b", "//a", "/a/./b", "C:/data", "C:\\",
         ] {
             assert!(!valid_ingest_root(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn reserved_ids() {
+        for bad in ["fliks", "metrics", "ui", "Fliks", "fliks..tmdb", ""] {
+            assert!(!legal_id(bad), "{bad}");
+        }
+        for ok in ["fliks.tab", "fliks.avtest", "fliksx", "acme.fliks"] {
+            assert!(legal_id(ok), "{ok}");
         }
     }
 
