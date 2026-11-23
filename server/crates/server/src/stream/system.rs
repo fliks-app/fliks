@@ -8,7 +8,7 @@ use crate::{
         json::iso_ms,
         validate::{PathParams, ValidJson, from_value},
     },
-    presence::{self, Stream},
+    presence::{self, LiveSession, Stream},
     state::AppState,
 };
 use axum::{
@@ -445,6 +445,21 @@ pub async fn streams(
     Ok(Json(rows))
 }
 
+/// To the connection playing `live`, else every tab of its owner: clients filter on the sid.
+pub(super) fn emit_to_player(st: &AppState, live: &LiveSession, event: SseEvent) {
+    let Some(user) = live.user_id else { return };
+    match live
+        .sse_connection_id
+        .as_deref()
+        .filter(|c| st.hub.has_connection(c))
+    {
+        Some(c) => {
+            st.hub.emit_to_connection(user, c, event);
+        }
+        None => st.hub.emit_to_user(user, event),
+    }
+}
+
 #[derive(Deserialize)]
 struct Command {
     action: PlayerAction,
@@ -474,17 +489,7 @@ pub async fn command(
         action: cmd.action,
         message: cmd.message,
     };
-    match live
-        .sse_connection_id
-        .as_deref()
-        .filter(|c| st.hub.has_connection(c))
-    {
-        Some(c) => {
-            st.hub.emit_to_connection(user, c, event);
-        }
-        // Clients without a bound connection: every tab of the user gets it and filters on the sid.
-        None => st.hub.emit_to_user(user, event),
-    }
+    emit_to_player(&st, &live, event);
     if cmd.action == PlayerAction::Stop {
         if let Some(stopped) = st.presence.stop(&sid) {
             st.qoe.end_session(&stopped.session_id).await;

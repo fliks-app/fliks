@@ -26,6 +26,7 @@ import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { NetworkService } from './network.service';
 import type { RecoveryController } from '../../features/player/recovery-controller';
 import { ServerConfigService } from './server-config.service';
+import { SseService } from './sse.service';
 import { formatAudioParts, formatAudioLabel, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode, type TimeMarker } from '../utils/player.utils';
 import {
   PlayerSettingsService,
@@ -189,6 +190,7 @@ export class CastPlayerService {
   private readonly subtitlesApi = inject(SubtitlesApiService);
   private readonly appSettings = inject(AppSettingsService);
   private readonly authService = inject(AuthService);
+  private readonly sse = inject(SseService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly nowPlaying = inject(NowPlayingMetadataService);
   private readonly playerSettings = inject(PlayerSettingsService);
@@ -612,10 +614,16 @@ export class CastPlayerService {
     effect(() => {
       if (this.hasMedia() && this.cast.isConnected()) void this.controller();
     });
+    // A hardware fallback moved the session's init: the receiver fetched the old one once, so it reloads.
+    this.sse.on('stream.reload').subscribe((e) => this.onStreamReload(e['sessionId']));
     this.cast.receiverError$.subscribe((e) => {
       const sid = this.liveSessionId();
       if (sid) this.qoeReporter.record(sid, { type: 'error', at: Date.now(), position: this.cast.currentTime(), ...e }, true, this.playbackId ?? undefined);
     });
+  }
+
+  private onStreamReload(sessionId: unknown): void {
+    if (sessionId === this.liveSessionId() && this.cast.isConnected()) void this.reloadCastStream();
   }
 
   /** Latest reload wins: an older one aborts after its playback-info; `reloading` mutes the other recoveries. */

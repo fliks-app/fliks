@@ -67,4 +67,19 @@ describe('cast reload single-flight', () => {
     await (CastPlayerService.prototype as any).saveCastPosition.call(self);
     expect(reloadCastStream).not.toHaveBeenCalled();
   });
+
+  it('reloads on a stream.reload of its own session while connected', () => {
+    const reloadCastStream = vi.fn();
+    const call = (sid: unknown, connected: boolean) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (CastPlayerService.prototype as any).onStreamReload.call(
+        { liveSessionId: () => 's', cast: { isConnected: () => connected }, reloadCastStream },
+        sid,
+      );
+    call('other', true);
+    call('s', false);
+    expect(reloadCastStream).not.toHaveBeenCalled();
+    call('s', true);
+    expect(reloadCastStream).toHaveBeenCalledTimes(1);
+  });
 });

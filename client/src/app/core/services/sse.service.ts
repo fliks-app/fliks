@@ -44,7 +44,7 @@ export const SSE_STREAM_TYPES = [
   'acquisition.sources', 'activity.changed', 'command.completed', 'command.started', 'import.complete',
   'media.move.completed', 'metadata.failed', 'metadata.refreshed', 'player.command', 'queue.updated',
   'remote.targets_changed', 'request.changed', 'rescan.completed', 'seerr.import.completed', 'seerr.import.failed',
-  'social.content_recommended', 'social.follow_request', 'stalled.removed', 'subtitle.downloaded',
+  'social.content_recommended', 'social.follow_request', 'stalled.removed', 'stream.reload', 'subtitle.downloaded',
   'subtitle.failed', 'subtitle.list_changed', 'subtitle.synced', 'watch-history.import.completed',
   'watch-history.import.failed',
 ] as const;

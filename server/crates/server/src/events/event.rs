@@ -650,6 +650,10 @@ pub enum SseEvent {
         by_device_name: Option<String>,
         epoch: i64,
     },
+    /// The engine changed what a playing session's playlists point at (a hardware fallback): the
+    /// player reloads at its position.
+    #[serde(rename = "stream.reload")]
+    StreamReload { session_id: String },
     #[serde(rename = "social.followed")]
     SocialFollowed {
         user_id: i64,
@@ -1015,6 +1019,7 @@ mod tests {
             AcquisitionQueue => json!({"type":"acquisition.queue","payload":{"pluginId":"p","rows":[{"id":1}]}}),
             AcquisitionSources => json!({"type":"acquisition.sources","payload":{"pluginId":"p"}}),
             RequestChanged => json!({"type":"request.changed","requestId":1,"status":"approved","kind":"add"}),
+            StreamReload => json!({"type":"stream.reload","sessionId":"s"}),
     }
 
     const FIXTURE: &str = concat!(
