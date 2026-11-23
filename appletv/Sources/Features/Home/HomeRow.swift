@@ -163,7 +163,7 @@ private struct LibrariesRow: View {
     }
 }
 
-private struct LibraryTile: View {
+struct LibraryTile: View {
     let library: Library
     var onSelect: () -> Void
     @FocusState private var focused: Bool

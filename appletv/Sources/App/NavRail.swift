@@ -15,7 +15,6 @@ struct NavRail: View {
     @Environment(AuthService.self) private var auth
     @Environment(LibraryStore.self) private var libraryStore
     @State private var music = MusicPlayer.shared
-    @State private var showAllLibraries = false
     @State private var accountActions = false
 
     private var expanded: Bool { focus.wrappedValue != nil }
@@ -24,7 +23,8 @@ struct NavRail: View {
     private var current: String {
         switch path.first {
         case .search: "search"
-        case let .library(id): "lib:\(id)"
+        case let .library(id): libraries.contains { $0.id == id } ? "lib:\(id)" : "more"
+        case .libraries: "more"
         case .playlists: "playlists"
         case .settings: "settings"
         case .nowPlaying: "nowPlaying"
@@ -32,11 +32,7 @@ struct NavRail: View {
         }
     }
 
-    private var libraries: [Library] {
-        let all = libraryStore.visible
-        let currentPastFirst = all.dropFirst(Self.shownLibraries).contains { "lib:\($0.id)" == current }
-        return showAllLibraries || currentPastFirst ? all : Array(all.prefix(Self.shownLibraries))
-    }
+    private var libraries: [Library] { Array(libraryStore.visible.prefix(Self.shownLibraries)) }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -48,8 +44,8 @@ struct NavRail: View {
                     ForEach(libraries) { lib in
                         row("lib:\(lib.id)", lib.name, lib.symbol) { go([.library(id: lib.id)]) }
                     }
-                    if libraryStore.visible.count > Self.shownLibraries, (libraries.count <= Self.shownLibraries || focus.wrappedValue == "more") {
-                        row("more", tr("nav.more"), "ellipsis") { revealLibraries() }
+                    if libraryStore.visible.count > Self.shownLibraries {
+                        row("more", tr("nav.more"), "ellipsis") { go([.libraries]) }
                     }
                 }
                 row("playlists", tr("sidebar.playlists"), "list.and.film") { go([.playlists]) }
@@ -80,7 +76,6 @@ struct NavRail: View {
         // Entering the rail lands on the page's entry, wherever focus came from.
         .onChange(of: focus.wrappedValue) { old, new in
             if old == nil, let new, new != current { focus.wrappedValue = current }
-            if new == nil { showAllLibraries = false }
         }
         .animation(.easeOut(duration: 0.2), value: expanded)
         .accessibilityLabel(tr("nav.rail_label"))
@@ -90,14 +85,6 @@ struct NavRail: View {
             Button(tr("common.cancel"), role: .cancel) {}
         }
         .task { await libraryStore.load() }
-    }
-
-    // The "more" row stays until focus leaves it, so focus moves on without passing through nil.
-    private func revealLibraries() {
-        showAllLibraries = true
-        if let next = libraryStore.visible.dropFirst(Self.shownLibraries).first {
-            Task { @MainActor in focus.wrappedValue = "lib:\(next.id)" }
-        }
     }
 
     private func go(_ stack: [Route]) {

@@ -191,6 +191,8 @@ struct RootView: View {
                     .navigationDestination(for: Route.self) { route in
                         Group {
                         switch route {
+                        case .libraries:
+                            LibrariesView(onSelect: { path.append(Route.library(id: $0)) })
                         case let .library(id):
                             LibraryView(libraryId: id, onSelectMedia: { path.append(Route.forMedia($0, $1)) },
                                         onSelectArtist: { path.append(Route.artist(id: $0)) },
