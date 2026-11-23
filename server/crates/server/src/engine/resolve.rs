@@ -132,7 +132,16 @@ pub async fn resolve(
         live: bound,
         file,
         device,
+        download_only,
     } = caller;
+    if download_only
+        && !matches!(
+            request.purpose,
+            ResolvePurpose::Stream | ResolvePurpose::Download
+        )
+    {
+        return Ok(Json(deny()));
+    }
     // A device token opens the purposes of its kind only: a live viewer names no file and no owner.
     if device.is_some_and(|k| !k.opens(request.purpose)) {
         return Ok(Json(deny()));
@@ -287,6 +296,8 @@ struct Caller {
     live: Option<String>,
     file: Option<u32>,
     device: Option<device_tokens::Kind>,
+    /// A download token: its file's stream and download purposes only.
+    download_only: bool,
 }
 
 impl Caller {
@@ -306,6 +317,7 @@ impl Caller {
             live,
             file,
             device: None,
+            download_only: false,
         }
     }
 }
@@ -323,9 +335,16 @@ async fn user_for(st: &AppState, req: &ResolveRequest) -> Result<Option<Caller>,
         return subsonic_credential(st, &claims).await;
     };
     let (live, file) = (claims.live, claims.mf);
+    let download_only = claims.scope == Some(crate::auth_token::TokenScope::Download);
+    if download_only && file.is_none() {
+        return Ok(None);
+    }
     Ok(load_session_user(&st.db, claims.sub, sid)
         .await?
-        .map(|(user, role)| Caller::of(user, role, live, file)))
+        .map(|(user, role)| Caller {
+            download_only,
+            ..Caller::of(user, role, live, file)
+        }))
 }
 
 /// A session-less stream token minted for a `subsonic` row (`device-tokens.md` rule 16): valid while the

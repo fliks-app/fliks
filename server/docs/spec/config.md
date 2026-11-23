@@ -73,6 +73,7 @@ Each is a positive integer.
 | `STREAM_LIVE_SESSION_TTL_MS` | `30_000` | `parseInt(raw, 10)`, finite and `> 0` else default |
 | `STREAM_LIVE_SESSION_GC_INTERVAL_MS` | `5_000` | `parseInt(raw, 10)`, finite and `> 0` else default |
 | `STREAM_SESSION_REVIVE_TTL_MS` | `15 * 60 * 1000` | `parseInt(raw, 10)`, finite and `> 0` else default |
+| `STREAM_PINNED_REVIVE_TTL_MS` | `24 * 60 * 60 * 1000` | same; how long a dropped pinned (download) session still revives |
 | `TRANSCODE_CACHE_GC_INTERVAL_MS` | `5 * 60 * 1000` | `parseInt(raw, 10)`, finite and `> 0` else default |
 
 The stream-lifetime cache TTL and max bytes are fixed constants, not env. The per-user session cap is the setting `streaming_max_sessions_per_user` (`engine-glue.md` rule 22).

@@ -60,6 +60,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         auth::users_public,
         auth::cast_info,
         auth::stream_token,
+        auth::download_token,
         auth::pairing_request,
         auth::pairing_status,
         auth::pairing_pending,

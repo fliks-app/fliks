@@ -667,6 +667,65 @@ mod resolve {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_download_token_opens_the_stream_and_download_of_its_file_only(pool: PgPool) {
+        let w = world(pool).await;
+        let jwt = &w.c.st.jwt;
+        let sid = session::new(&w.c.st, w.member.0).await;
+        let token = |file: i32| {
+            jwt.sign_download(w.member.0, "member", sid, file as u32)
+                .unwrap()
+                .token
+        };
+        let ask = |credential: String, media: i32, purpose: &str| {
+            resolve(
+                &w,
+                json!({"mediaId": media, "credential": credential, "purpose": purpose, "streamIndex": 3}),
+            )
+        };
+        for purpose in ["stream", "download"] {
+            assert_eq!(ask(token(w.file), w.file, purpose).await.1["allow"], true);
+            assert_eq!(
+                ask(token(w.file), w.loose, purpose).await.1,
+                denied(),
+                "another file, {purpose}"
+            );
+        }
+        for purpose in ["sprite", "subtitle", "live"] {
+            assert_eq!(
+                ask(token(w.file), w.file, purpose).await.1,
+                denied(),
+                "{purpose}"
+            );
+        }
+        let now = chrono::Utc::now().timestamp();
+        let forged = |claims: serde_json::Value| {
+            jsonwebtoken::encode(
+                &jsonwebtoken::Header::default(),
+                &claims,
+                &jsonwebtoken::EncodingKey::from_secret(SECRET.as_bytes()),
+            )
+            .unwrap()
+        };
+        let claims = |sub: i32, sid: i32, mf: Option<i32>, exp: i64| json!({"sub": sub, "sid": sid, "scope": "download", "mf": mf, "exp": exp});
+        let expired = forged(claims(w.member.0, sid, Some(w.file), now - 1));
+        assert_eq!(ask(expired, w.file, "stream").await.1, denied());
+        let unbound = forged(claims(w.member.0, sid, None, now + 60));
+        assert_eq!(ask(unbound, w.file, "stream").await.1, denied());
+        let foreign = session::new(&w.c.st, w.outsider.0).await;
+        let borrowed = jwt
+            .sign_download(w.member.0, "member", foreign, w.file as u32)
+            .unwrap()
+            .token;
+        assert_eq!(ask(borrowed, w.file, "stream").await.1, denied());
+        sqlx::query(r#"UPDATE sessions SET "revokedAt" = now() WHERE id = $1"#)
+            .bind(sid)
+            .execute(&w.c.pool)
+            .await
+            .unwrap();
+        assert_eq!(ask(token(w.file), w.file, "download").await.1, denied());
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_file_whose_edition_sits_in_a_hidden_library_is_denied(pool: PgPool) {
         let w = world(pool).await;
         let p = &w.c.pool;

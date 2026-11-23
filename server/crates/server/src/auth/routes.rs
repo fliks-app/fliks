@@ -48,6 +48,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/auth/users-public", get(users_public))
         .route("/api/auth/cast-info", post(cast_info))
         .route("/api/auth/stream-token", post(stream_token))
+        .route("/api/auth/download-token", post(download_token))
         .route("/api/auth/pairing/request", post(pairing_request))
         .route("/api/auth/pairing/status", get(pairing_status))
         .route("/api/auth/pairing/pending", get(pairing_pending))
@@ -646,6 +647,28 @@ pub(crate) async fn stream_token(
     Ok((
         StatusCode::CREATED,
         Json(json!({"streamToken": token, "expiresAt": expires_at})),
+    )
+        .into_response())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub(crate) struct DownloadTokenDto {
+    media_file_id: u32,
+}
+
+#[utoipa::path(post, path = "/api/auth/download-token", responses((status = 201)))]
+pub(crate) async fn download_token(
+    State(st): State<AppState>,
+    a: Authed,
+    ValidJson(dto): ValidJson<DownloadTokenDto>,
+) -> Result<Response, AppError> {
+    let signed =
+        st.jwt
+            .sign_download(a.user.id, &a.user.username, a.session()?, dto.media_file_id)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({"downloadToken": signed.token, "expiresAt": signed.exp * 1000})),
     )
         .into_response())
 }
