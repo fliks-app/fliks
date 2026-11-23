@@ -8,7 +8,7 @@
     @if (auth.user(); as user) {
       @if (row()) {
         <span class="rail-icon">
-          <app-user-avatar [username]="user.username" [avatar]="user.avatar" size="w-6 h-6 text-sm border border-primary/40" />
+          <app-user-avatar [username]="user.username" [avatar]="user.avatar" size="w-5 h-5 text-sm border border-primary/40" />
         </span>
         <span class="rail-label">{{ user.username }}</span>
       } @else {

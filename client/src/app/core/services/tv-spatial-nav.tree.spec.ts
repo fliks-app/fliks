@@ -136,4 +136,14 @@ describe('TvSpatialNavService tree', () => {
     expect(nav.findNeighborInTree(b, 'left')).toBeNull();
     expect(nav.findNeighbor('left')).toBe(a);
   });
+
+  it('still enters the rail when the only focusable to the left sits on another line', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const { page, library, first } = railAndPage(nav);
+    const other = page.appendChild(document.createElement('button'));
+    Object.defineProperty(other, 'offsetParent', { get: () => document.body });
+    at(other, 0, 300);
+    first.focus();
+    expect(nav.findNeighborInTree(first, 'left')).toBe(library);
+  });
 });

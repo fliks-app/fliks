@@ -610,8 +610,14 @@ export class TvSpatialNavService {
       );
       return page ? this.digDown(page.el) : null;
     }
-    // Only from the leftmost focusable: a neighbour in the same container wins.
-    if (dir !== 'left' || nearestInDirection(this.focusablesIn(from.el), active, 'left')) return null;
+    // Only from the leftmost focusable of its band: a neighbour on the same line wins.
+    if (dir !== 'left') return null;
+    const band = active.getBoundingClientRect();
+    const inBand = this.focusablesIn(from.el).filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.top < band.bottom && r.bottom > band.top;
+    });
+    if (nearestInDirection(inBand, active, 'left')) return null;
     return this.railEntry(rail);
   }
 
