@@ -220,6 +220,23 @@
         "targetId": "dev-3#native"
       },
       "expect": {
+        "body": {
+          "state": {
+            "completed": false,
+            "durationSeconds": 3600.0,
+            "episodeId": null,
+            "hiddenFromContinueWatching": false,
+            "id": 5,
+            "itemId": 13,
+            "mediaFile": {
+              "id": 1
+            },
+            "mediaFileId": 1,
+            "mediaId": 1,
+            "positionSeconds": 1111.0,
+            "userId": 4
+          }
+        },
         "status": 200
       },
       "method": "PUT",
