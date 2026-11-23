@@ -55,9 +55,12 @@ start() {
   (cd "$dir" && exec setsid "$@" >"$RUN/$name.log" 2>&1 3>&- </dev/null) &
   PIDS+=($!)
 }
-wait_http() { # wait_http <url> [seconds]
-  local i
-  for i in $(seq "${2:-60}"); do curl -s -o /dev/null "$1" && return 0; sleep 1; done
+wait_http() { # wait_http <url> [seconds]: any answer but a refused connection or the boot 503 (boot.rs)
+  local i code
+  for i in $(seq "${2:-60}"); do
+    code=$(curl -s -o /dev/null -w '%{http_code}' "$1") && [ "$code" != 000 ] && [ "$code" != 503 ] && return 0
+    sleep 1
+  done
   return 1
 }
 
