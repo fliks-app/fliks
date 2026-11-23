@@ -32,7 +32,7 @@ function setup(opts: { query?: Record<string, string>; providers?: { id: number;
       }),
       { provide: AuthService, useValue: auth },
       { provide: Router, useValue: { navigate: vi.fn() } },
-      { provide: ServerConfigService, useValue: { lastUsernameForActiveServer: () => null } },
+      { provide: ServerConfigService, useValue: { lastUsernameForActiveServer: () => null, isNative: false, serverUrl: signal('') } },
       { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap }, queryParamMap: queryParams$ } },
     ],
   });

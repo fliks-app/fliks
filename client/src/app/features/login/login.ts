@@ -3,7 +3,6 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { Capacitor } from '@capacitor/core';
 import { AuthService } from '../../core/services/auth.service';
 import { oidcErrorText } from '../../core/services/oidc';
 import { ServerConfigService } from '../../core/services/server-config.service';
@@ -25,7 +24,14 @@ export class LoginComponent {
   private readonly serverConfig = inject(ServerConfigService);
   private readonly route = inject(ActivatedRoute);
 
-  readonly isNative = Capacitor.isNativePlatform();
+  readonly isNative = this.serverConfig.isNative;
+  readonly serverHost = computed(() => {
+    try {
+      return new URL(this.serverConfig.serverUrl()).host;
+    } catch {
+      return '';
+    }
+  });
 
   readonly error = signal('');
   readonly loading = signal(false);
