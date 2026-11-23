@@ -4,10 +4,36 @@
 <section class="space-y-4">
   @if (!hideControls()) {
   <div appTvRow class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+    <app-dropdown-menu placement="bottom-start">
+      <button trigger type="button" class="select select-bordered w-fit shrink-0 text-left text-lg font-bold cursor-pointer transition-colors hover:bg-base-content/10">
+        @if (selSeason) {
+          {{ selSeason.seasonNumber | seasonLabel }}
+        } @else {
+          {{ 'media_detail.season' | translate }}
+        }
+      </button>
+      @for (season of displaySeasons(); track season.id) {
+        <app-dropdown-option
+          [imageUrl]="season.posterUrl ?? m.posterUrl"
+          [head]="season.seasonNumber | seasonLabel"
+          [sub]="(tabEpisodeCount(season) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(season) }"
+          [selected]="season.id === activeSeasonId()"
+          (click)="selectSeason.emit(season.id)"
+        />
+      }
+    </app-dropdown-menu>
+    @if (selSeason && isSeasonTabVisible(selSeason) && !episodesHasFileOnly()) {
+      @if (!selSeason.monitored) {
+        <span class="badge badge-ghost shrink-0">{{ 'media_detail.unmonitored' | translate }}</span>
+      }
+      @if (selSeason.preferredProvider) {
+        <span class="badge badge-primary badge-sm shrink-0">{{ selSeason.preferredProvider | uppercase }}</span>
+      }
+    }
     <!-- Select mode forces the list view, so the switch has nothing to offer then. -->
     @let showViewToggle = canSwitchEpisodeView() && !selectMode();
     @if (showViewToggle) {
-      <div class="order-last join ms-auto" role="group">
+      <div class="join ms-auto" role="group">
         <button
           type="button"
           class="btn btn-sm join-item"
@@ -35,7 +61,7 @@
     @if (canSelect()) {
       <button
         type="button"
-        class="order-last btn btn-sm max-sm:btn-square shrink-0 {{ showViewToggle ? '' : 'ms-auto' }}"
+        class="btn btn-sm max-sm:btn-square shrink-0 {{ showViewToggle ? '' : 'ms-auto' }}"
         [class.btn-active]="selectMode()"
         [attr.aria-pressed]="selectMode()"
         [attr.aria-label]="'downloads.select' | translate"
@@ -48,7 +74,7 @@
     @if (selSeason) {
       <button
         type="button"
-        class="order-last btn btn-ghost btn-circle max-sm:btn-sm shrink-0"
+        class="btn btn-ghost btn-circle max-sm:btn-sm shrink-0"
         [class.ms-auto]="!showViewToggle && !canSelect()"
         (click)="toggleSeasonLike.emit(selSeason.id)"
         [attr.aria-label]="(isSeasonLiked(selSeason.id) ? 'likes.unlike_season' : 'likes.like_season') | translate"
@@ -61,7 +87,7 @@
         ></svg>
       </button>
     }
-    <app-dropdown-menu placement="bottom-end" class="order-last" [class.ms-auto]="!showViewToggle && !canSelect() && !selSeason">
+    <app-dropdown-menu placement="bottom-end" [class.ms-auto]="!showViewToggle && !canSelect() && !selSeason">
       <button trigger type="button" class="btn btn-ghost btn-circle max-sm:btn-sm shrink-0" [attr.aria-label]="'common.more' | translate">
         <svg [lucideIcon]="icons.EllipsisVertical" class="h-5 w-5"></svg>
       </button>
@@ -222,32 +248,6 @@
         }
       }
     </app-dropdown-menu>
-    <app-dropdown-menu placement="bottom-start">
-      <button trigger type="button" class="select select-bordered w-fit shrink-0 text-left text-lg font-bold cursor-pointer transition-colors hover:bg-base-content/10">
-        @if (selSeason) {
-          {{ selSeason.seasonNumber | seasonLabel }}
-        } @else {
-          {{ 'media_detail.season' | translate }}
-        }
-      </button>
-      @for (season of displaySeasons(); track season.id) {
-        <app-dropdown-option
-          [imageUrl]="season.posterUrl ?? m.posterUrl"
-          [head]="season.seasonNumber | seasonLabel"
-          [sub]="(tabEpisodeCount(season) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(season) }"
-          [selected]="season.id === activeSeasonId()"
-          (click)="selectSeason.emit(season.id)"
-        />
-      }
-    </app-dropdown-menu>
-    @if (selSeason && isSeasonTabVisible(selSeason) && !episodesHasFileOnly()) {
-      @if (!selSeason.monitored) {
-        <span class="badge badge-ghost shrink-0">{{ 'media_detail.unmonitored' | translate }}</span>
-      }
-      @if (selSeason.preferredProvider) {
-        <span class="badge badge-primary badge-sm shrink-0">{{ selSeason.preferredProvider | uppercase }}</span>
-      }
-    }
   </div>
   }
 
