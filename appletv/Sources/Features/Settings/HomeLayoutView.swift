@@ -188,9 +188,19 @@ struct VisibilityButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(visible ? tr("home_settings.visible") : tr("home_settings.hidden"),
-               systemImage: visible ? "eye.fill" : "eye.slash", action: action)
-            .buttonStyle(.bordered)
+        // Both states laid out, one shown: the width never changes, so the rows' controls line up.
+        Button(action: action) {
+            ZStack(alignment: .leading) {
+                label(!visible).hidden()
+                label(visible)
+            }
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func label(_ visible: Bool) -> some View {
+        visible ? Label(tr("home_settings.visible"), systemImage: "eye.fill")
+            : Label(tr("home_settings.hidden"), systemImage: "eye.slash")
     }
 }
 
