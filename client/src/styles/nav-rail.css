@@ -131,11 +131,26 @@ body.tv {
   display: inline-flex;
 }
 
-/* The user row's dropdown opens from the row's edge, so it clears the rail instead of overlapping it. */
+/* The user row: name and avatar open the menu upward; settings sits at its right end once the rail is open. */
+.rail-user-row {
+  display: flex;
+  align-items: center;
+}
 .rail-user,
 .rail-user .dropdown {
   display: block;
+  flex: 1 1 0;
+  min-width: 0;
   width: 100%;
+}
+.rail-icon-btn {
+  flex: none;
+  width: 3rem;
+  padding: 0;
+  justify-content: center;
+}
+.nav-rail.rail-open .rail-user-row .rail-reveal {
+  margin-left: 0.25rem;
 }
 
 /* A docked now-playing bar: the cover alone with a progress ring while collapsed, the whole bar once open. */

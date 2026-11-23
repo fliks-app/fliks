@@ -16,7 +16,7 @@ import { DropdownToggleDirective } from '../directives/dropdown-toggle.directive
 import { DeviceService } from '../../core/services/device.service';
 import { TvService } from '../../core/services/tv.service';
 
-type Placement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start' | 'right-end';
+type Placement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start';
 
 /** Form-factor-aware menu: DaisyUI `.dropdown` on desktop, BottomSheetComponent on touch / TV; the `trigger` child is projected first.
  *  Both slots sit in <ng-template> + *ngTemplateOutlet because <ng-content> inside @if blocks doesn't project reliably. */
@@ -76,7 +76,6 @@ export class DropdownMenuComponent {
     const cls: string[] = [];
     if (p.endsWith('end')) cls.push('dropdown-end');
     if (p.startsWith('top')) cls.push('dropdown-top');
-    if (p.startsWith('right')) cls.push('dropdown-right');
     return cls.join(' ');
   });
 

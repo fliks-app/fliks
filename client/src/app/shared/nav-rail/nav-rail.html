@@ -112,11 +112,13 @@
     @for (bar of navbar.dockedBars(); track bar) {
       <ng-container [ngTemplateOutlet]="bar" />
     }
-    <a routerLink="/app-settings" [state]="{ rootEntry: true }" routerLinkActive="rail-item-active" ariaCurrentWhenActive="page" class="rail-item">
-      <span class="rail-icon"><svg [lucideIcon]="icons.Settings" class="h-6 w-6"></svg></span>
-      <span class="rail-label">{{ 'nav.app_settings' | translate }}</span>
-    </a>
-    <app-user-menu class="rail-user" placement="right-end" [row]="true" />
+    <div appTvRow class="rail-user-row">
+      <app-user-menu class="rail-user" placement="top-start" [row]="true" />
+      <a routerLink="/app-settings" [state]="{ rootEntry: true }" routerLinkActive="rail-item-active" ariaCurrentWhenActive="page"
+         class="rail-item rail-icon-btn rail-reveal" [attr.aria-label]="'nav.app_settings' | translate">
+        <svg [lucideIcon]="icons.Settings" class="h-6 w-6"></svg>
+      </a>
+    </div>
   </div>
 </div>
 

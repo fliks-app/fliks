@@ -16,6 +16,7 @@ import { icons } from '../icons';
 import { LucideIconComponent } from '../components/lucide-icon';
 import { PopoverMenuComponent } from '../components/popover-menu';
 import { UserMenuComponent } from '../components/user-menu';
+import { TvRowDirective } from '../directives/tv-row.directive';
 import { TvSectionDirective } from '../directives/tv-section.directive';
 import { NavIconComponent } from '../layout/nav-icon';
 
@@ -29,7 +30,7 @@ const RAIL_LIBRARIES = 3;
   imports: [
     NgTemplateOutlet, RouterLink, RouterLinkActive, TranslatePipe,
     LucideDynamicIcon,
-    LucideIconComponent, NavIconComponent, PopoverMenuComponent, UserMenuComponent, TvSectionDirective,
+    LucideIconComponent, NavIconComponent, PopoverMenuComponent, UserMenuComponent, TvRowDirective, TvSectionDirective,
   ],
   host: { class: 'block h-full' },
   templateUrl: './nav-rail.html',

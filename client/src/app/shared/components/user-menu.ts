@@ -20,8 +20,8 @@ import { icons } from '../icons';
 export class UserMenuComponent {
   protected readonly icons = icons;
 
-  /** Where the dropdown opens; the rail footer opens it beside itself. */
-  readonly placement = input<'bottom-end' | 'right-end'>('bottom-end');
+  /** Where the dropdown opens; the rail footer opens it upward. */
+  readonly placement = input<'bottom-end' | 'top-start'>('bottom-end');
   /** A rail row (avatar in the icon column, the name as its label) in place of the round avatar button. */
   readonly row = input(false);
   readonly auth = inject(AuthService);
