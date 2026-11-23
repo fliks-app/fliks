@@ -617,3 +617,166 @@ async fn history_names_the_played_item_of_a_multi_item_media(pool: PgPool) {
     got.sort();
     assert_eq!(got, [first, second].map(i64::from));
 }
+
+async fn featured_media(
+    c: &Ctx,
+    lib: i32,
+    title: &str,
+    genre: &str,
+    fanart: bool,
+    file: bool,
+) -> i32 {
+    let fanart = if fanart { "'/f.jpg'" } else { "NULL" };
+    let m = c
+        .id(&format!(
+            r#"INSERT INTO media (title, type, genres, "fanartUrl", "libraryId")
+               VALUES ('{title}', 'movie', '["{genre}"]', {fanart}, {lib}) RETURNING id"#
+        ))
+        .await;
+    c.shell(m).await;
+    if file {
+        c.id(&format!(
+            r#"INSERT INTO media_files ("mediaId", "relativePath", size, quality, "folderId")
+               VALUES ({m}, '{title}.mkv', 1, 'x', (SELECT min(id) FROM library_folders)) RETURNING id"#
+        ))
+        .await;
+        c.id(&format!(
+            r#"UPDATE media SET "lastFileAddedAt" = '2026-01-01'::timestamptz + make_interval(days => {m}) WHERE id = {m} RETURNING id"#
+        ))
+        .await;
+    }
+    m
+}
+
+async fn complete(c: &Ctx, media: i32) {
+    let item = c
+        .id(&format!(
+            r#"SELECT id FROM items WHERE "mediaId" = {media}"#
+        ))
+        .await;
+    sqlx::query(
+        r#"INSERT INTO playback_states ("userId", "itemId", completed) VALUES ($1, $2, true)"#,
+    )
+    .bind(c.user)
+    .bind(item)
+    .execute(&c.pool)
+    .await
+    .unwrap();
+}
+
+fn picks(body: &Value) -> Vec<(i64, &str)> {
+    body.as_array()
+        .unwrap()
+        .iter()
+        .map(|i| {
+            (
+                i["media"]["id"].as_i64().unwrap(),
+                i["reason"].as_str().unwrap(),
+            )
+        })
+        .collect()
+}
+
+#[sqlx::test(migrations = false)]
+async fn featured_without_history_falls_back_to_recent(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c.id("SELECT min(id) FROM libraries").await;
+    let old = featured_media(&c, lib, "old", "Drama", true, true).await;
+    let new = featured_media(&c, lib, "new", "Drama", true, true).await;
+    featured_media(&c, lib, "nofanart", "Drama", false, true).await;
+    featured_media(&c, lib, "nofile", "Drama", true, false).await;
+    let dismissed = featured_media(&c, lib, "dismissed", "Drama", true, true).await;
+    sqlx::query(r#"INSERT INTO recommendation_dismissals ("userId", "mediaId") VALUES ($1, $2)"#)
+        .bind(c.user)
+        .bind(dismissed)
+        .execute(&c.pool)
+        .await
+        .unwrap();
+    let watched = featured_media(&c, lib, "watched", "Drama", true, true).await;
+    c.id(&format!(
+        r#"UPDATE media SET genres = NULL WHERE id = {watched} RETURNING id"#
+    ))
+    .await;
+    complete(&c, watched).await;
+    let (s, body) = c.api("GET", "/api/home/featured", None).await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        picks(&body),
+        [(i64::from(new), "recent"), (i64::from(old), "recent")]
+    );
+    assert_eq!(body[0]["becauseTitle"], Value::Null);
+    assert_eq!(body[0]["media"]["fanartUrl"], "/f.jpg");
+}
+
+#[sqlx::test(migrations = false)]
+async fn featured_puts_recommendations_first_without_duplicates(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c.id("SELECT min(id) FROM libraries").await;
+    let seen = featured_media(&c, lib, "seen", "Drama", true, true).await;
+    complete(&c, seen).await;
+    let rec = featured_media(&c, lib, "rec", "Drama", true, true).await;
+    featured_media(&c, lib, "rec-nofanart", "Drama", false, true).await;
+    featured_media(&c, lib, "rec-nofile", "Drama", true, false).await;
+    let other = featured_media(&c, lib, "other", "Comedy", true, true).await;
+    let (s, body) = c.api("GET", "/api/home/featured", None).await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        picks(&body),
+        [
+            (i64::from(rec), "recommended"),
+            (i64::from(other), "recent")
+        ]
+    );
+    assert_eq!(body[0]["becauseTitle"], "seen");
+
+    let (_, body) = c.api("GET", "/api/home/featured?limit=1", None).await;
+    assert_eq!(picks(&body), [(i64::from(rec), "recommended")]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn featured_library_filter_and_access_scope(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c.id("SELECT min(id) FROM libraries").await;
+    let lib2 = c
+        .id(r#"INSERT INTO libraries (name) VALUES ('two') RETURNING id"#)
+        .await;
+    let a = featured_media(&c, lib, "a", "Drama", true, true).await;
+    let b = featured_media(&c, lib2, "b", "Drama", true, true).await;
+    let (_, body) = c.api("GET", "/api/home/featured", None).await;
+    assert_eq!(
+        picks(&body),
+        [(i64::from(b), "recent"), (i64::from(a), "recent")]
+    );
+    let (_, body) = c
+        .api("GET", &format!("/api/home/featured?libraryId={lib}"), None)
+        .await;
+    assert_eq!(picks(&body), [(i64::from(a), "recent")]);
+    let (s, body) = c
+        .api(
+            "GET",
+            &format!("/api/home/featured?libraryId={}", lib2 + 9),
+            None,
+        )
+        .await;
+    assert_eq!((s, body), (200, json!([])));
+
+    let user = c
+        .id(r#"INSERT INTO users (username, "isAdmin") VALUES ('v', false) RETURNING id"#)
+        .await;
+    let st = AppState::new(c.pool.clone(), Config::from_lookup(|_| None), SECRET);
+    let token = session::token(&st, user, "v").await;
+    let (s, _) = c.call("GET", "/api/home/featured", &token, None).await;
+    assert_eq!(s, 403);
+    c.id(&format!(
+        r#"WITH r AS (INSERT INTO roles (name, permissions) VALUES ('R', '["media.read"]') RETURNING id)
+           UPDATE users SET "roleId" = (SELECT id FROM r) WHERE id = {user} RETURNING id"#
+    ))
+    .await;
+    c.id(&format!(
+        r#"INSERT INTO library_user_access ("userId", "libraryId") VALUES ({user}, {lib}) RETURNING id"#
+    ))
+    .await;
+    let (s, body) = c.call("GET", "/api/home/featured", &token, None).await;
+    assert_eq!(s, 200);
+    assert_eq!(picks(&body), [(i64::from(a), "recent")]);
+}

@@ -1007,6 +1007,17 @@
         }
       }
     },
+    "/api/home/featured": {
+      "get": {
+        "tags": [
+          "playback"
+        ],
+        "operationId": "featured",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/images/{kind}/{id}": {
       "get": {
         "tags": [
