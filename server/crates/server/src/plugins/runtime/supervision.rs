@@ -25,8 +25,17 @@ impl PluginRt {
         let db = self.core.last_db.load(Ordering::SeqCst);
         match r {
             Ok(Ok(())) => {
-                self.sup.lock_clean().db_down = false;
-                self.set_state(State::Ready);
+                let missed = {
+                    let mut s = self.sup.lock_clean();
+                    s.db_down = false;
+                    s.misses >= 2
+                };
+                // A hung health loses the core instance and `start` reruns: that is no recovery.
+                self.set_state(if missed {
+                    State::Degraded
+                } else {
+                    State::Ready
+                });
             }
             Ok(Err(e)) if db => {
                 tracing::warn!(

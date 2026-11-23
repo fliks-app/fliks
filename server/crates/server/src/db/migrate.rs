@@ -167,9 +167,7 @@ pub async fn pending_version(pool: &PgPool) -> Result<Option<i64>, MigrateError>
 pub async fn migrate(pool: &PgPool) -> Result<(), MigrateError> {
     adopt_typeorm(pool).await?;
     // A migration rewrites whole tables: slow by design, not worth a slow-statement warning.
-    let opts = (*pool.connect_options())
-        .clone()
-        .log_slow_statements(log::LevelFilter::Off, Duration::ZERO);
+    let opts = migration_options(pool);
     let quiet = PgPoolOptions::new()
         .max_connections(1)
         .connect_with(opts)
@@ -178,6 +176,14 @@ pub async fn migrate(pool: &PgPool) -> Result<(), MigrateError> {
     let result = run_logged(&quiet).await.map_err(newer_database);
     quiet.close().await;
     result
+}
+
+/// The pool's login without its slow-statement log and its `lock_timeout`: a migration waits for its locks.
+fn migration_options(pool: &PgPool) -> sqlx::postgres::PgConnectOptions {
+    (*pool.connect_options())
+        .clone()
+        .options([("lock_timeout", "0")])
+        .log_slow_statements(log::LevelFilter::Off, Duration::ZERO)
 }
 
 async fn run_logged(pool: &PgPool) -> Result<(), MigrateError> {
@@ -207,6 +213,7 @@ async fn run_logged(pool: &PgPool) -> Result<(), MigrateError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::{Connection, PgConnection};
 
     /// Test databases are copies of a migrated template1: these tests start from an empty one.
     async fn empty(admin: &PgPool) -> PgPool {
@@ -316,6 +323,26 @@ mod tests {
         );
 
         dispose(&admin, pool).await;
+        Ok(())
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn migrations_wait_for_their_locks(admin: PgPool) -> sqlx::Result<()> {
+        let capped = PgPoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                admin
+                    .connect_options()
+                    .as_ref()
+                    .clone()
+                    .options([("lock_timeout", "60s")]),
+            )
+            .await?;
+        let mut conn = PgConnection::connect_with(&migration_options(&capped)).await?;
+        let timeout: String = sqlx::query_scalar("SELECT current_setting('lock_timeout')")
+            .fetch_one(&mut conn)
+            .await?;
+        assert_eq!(timeout, "0");
         Ok(())
     }
 

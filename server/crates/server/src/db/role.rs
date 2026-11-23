@@ -59,27 +59,38 @@ const OBJECTS: &str = r"SELECT ord, kind, name, q FROM (
          format('ALTER TEXT SEARCH CONFIGURATION %I.%I OWNER TO %I', n.nspname, c.cfgname, @APP@)
     FROM pg_ts_config c JOIN pg_namespace n ON n.oid = c.cfgnamespace JOIN pg_roles o ON o.oid = c.cfgowner
    WHERE (n.nspname = 'public' OR n.nspname LIKE 'plugin\_%') AND @OWES@
+     AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_ts_config'::regclass
+                       AND d.objid = c.oid AND d.deptype = 'e')
   UNION ALL
   SELECT 5, 'text search', n.nspname || '.' || c.dictname,
          format('ALTER TEXT SEARCH DICTIONARY %I.%I OWNER TO %I', n.nspname, c.dictname, @APP@)
     FROM pg_ts_dict c JOIN pg_namespace n ON n.oid = c.dictnamespace JOIN pg_roles o ON o.oid = c.dictowner
    WHERE (n.nspname = 'public' OR n.nspname LIKE 'plugin\_%') AND @OWES@
+     AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_ts_dict'::regclass
+                       AND d.objid = c.oid AND d.deptype = 'e')
   UNION ALL
   SELECT 6, 'statistics', n.nspname || '.' || c.stxname,
          format('ALTER STATISTICS %I.%I OWNER TO %I', n.nspname, c.stxname, @APP@)
     FROM pg_statistic_ext c JOIN pg_namespace n ON n.oid = c.stxnamespace JOIN pg_roles o ON o.oid = c.stxowner
    WHERE (n.nspname = 'public' OR n.nspname LIKE 'plugin\_%') AND @OWES@
+     AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_statistic_ext'::regclass
+                       AND d.objid = c.oid AND d.deptype = 'e')
   UNION ALL
   SELECT 7, 'collation', n.nspname || '.' || c.collname,
          format('ALTER COLLATION %I.%I OWNER TO %I', n.nspname, c.collname, @APP@)
     FROM pg_collation c JOIN pg_namespace n ON n.oid = c.collnamespace JOIN pg_roles o ON o.oid = c.collowner
    WHERE (n.nspname = 'public' OR n.nspname LIKE 'plugin\_%') AND @OWES@
+     AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_collation'::regclass
+                       AND d.objid = c.oid AND d.deptype = 'e')
 ) x ORDER BY ord, name";
 
 /// The advisory lock functions: core serialises on predictable keys, so plugins must not hold them.
-const ADVISORY_FUNCTIONS: &str = r"SELECT p.oid::regprocedure AS f FROM pg_proc p
-   WHERE p.pronamespace = 'pg_catalog'::regnamespace
-     AND p.proname ~ '^pg_(try_)?advisory_(xact_)?lock(_shared)?$'";
+fn advisory_functions() -> String {
+    format!(
+        "SELECT p.oid::regprocedure AS f FROM pg_proc p WHERE {}",
+        crate::db::ADVISORY_LOCK_FUNCTIONS
+    )
+}
 
 /// Plugin roles of this database, and the 4.x `plugin_<id>` roles a registration may adopt: the ones
 /// whose schema of the same name is here (the role names are cluster-wide, other databases have theirs).
@@ -107,7 +118,7 @@ fn role_sql(app: &str, verifier: &str) -> String {
     );
     format!(
         r"DO $role$
-DECLARE rec record; v int := current_setting('server_version_num')::int;
+DECLARE rec record; v int := {version};
 BEGIN
   IF v < 150000 THEN
     RAISE EXCEPTION 'PostgreSQL 15 or newer is required (this is %)', current_setting('server_version');
@@ -137,7 +148,8 @@ BEGIN
     END IF;
   END LOOP;
 END $role$",
-        advisory = ADVISORY_FUNCTIONS,
+        version = crate::db::SERVER_VERSION_SQL,
+        advisory = advisory_functions(),
         plugin_roles = PLUGIN_ROLES,
     )
 }
@@ -225,7 +237,7 @@ impl Status {
 
 pub async fn status<'c>(e: impl sqlx::PgExecutor<'c>) -> sqlx::Result<Status> {
     let sql = format!(
-        r"SELECT r.rolsuper, current_setting('server_version_num')::int, r.rolcreaterole,
+        r"SELECT r.rolsuper, {version}, r.rolcreaterole,
        has_database_privilege(current_user, current_database(), 'CREATE')
          AND has_database_privilege(current_user, current_database(), 'TEMPORARY'),
        coalesce((SELECT nspowner = r.oid FROM pg_namespace WHERE nspname = 'public'), false),
@@ -234,11 +246,12 @@ pub async fn status<'c>(e: impl sqlx::PgExecutor<'c>) -> sqlx::Result<Status> {
                                 OR EXISTS (SELECT 1 FROM aclexplode(p.proacl) a
                                             WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE')
                                 OR NOT has_function_privilege(current_user, p.oid, 'EXECUTE'))
-                   FROM pg_proc p WHERE p.pronamespace = 'pg_catalog'::regnamespace
-                    AND p.proname ~ '^pg_(try_)?advisory_(xact_)?lock(_shared)?$'), false),
+                   FROM pg_proc p WHERE {advisory}), false),
        (SELECT count(*) FROM ({plugin_roles}) pr
          WHERE NOT pg_has_role(current_user, pr.rolname, 'MEMBER'))
   FROM pg_roles r WHERE r.rolname = current_user",
+        version = crate::db::SERVER_VERSION_SQL,
+        advisory = crate::db::ADVISORY_LOCK_FUNCTIONS,
         objects = objects("current_user::text"),
         plugin_roles = PLUGIN_ROLES,
     );
