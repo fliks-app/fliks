@@ -1,12 +1,16 @@
-import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
+import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
+import { Subject } from 'rxjs';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Media } from '../../../core/services/api/media.service';
 import { BackgroundService } from '../../../core/services/background.service';
 import { DeviceService } from '../../../core/services/device.service';
+import { AppResumeService } from '../../../core/services/app-resume.service';
+import { CachingReuseStrategy } from '../../../core/services/route-reuse.strategy';
+import { ScrollMemoryService } from '../../../core/services/scroll-memory.service';
 import { MediaStartService } from '../../../core/services/media-start.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { HeroCarouselComponent } from './hero-carousel';
@@ -16,14 +20,16 @@ const item = (id: number, type: string): Media =>
 
 @Component({
   imports: [HeroCarouselComponent],
-  template: `<app-hero-carousel [items]="items" [parked]="parked()" />`,
+  template: `<app-hero-carousel [items]="items" [height]="height" />`,
 })
 class Host {
   items = [item(1, 'movie'), item(2, 'series'), item(3, 'movie')];
-  parked = signal(false);
+  height: 'full' | 'compact' = 'full';
 }
 
-function setup() {
+function setup(height: 'full' | 'compact' = 'full') {
+  const attached$ = new Subject<string>();
+  const detached$ = new Subject<string>();
   const background = { set: vi.fn(), suspend: vi.fn() };
   const navbar = { enterHeroPage: vi.fn(), leaveHeroPage: vi.fn(), heroPaddingTop: () => null };
   const start = { start: vi.fn().mockResolvedValue(undefined) };
@@ -32,6 +38,10 @@ function setup() {
       provideZonelessChangeDetection(),
       provideRouter([]),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
+      { provide: CachingReuseStrategy, useValue: { attached$, detached$, keyFor: () => 'k' } },
+      { provide: ActivatedRoute, useValue: { snapshot: {} } },
+      { provide: ScrollMemoryService, useValue: {} },
+      { provide: AppResumeService, useValue: { resume$: new Subject() } },
       { provide: BackgroundService, useValue: background },
       { provide: NavbarService, useValue: navbar },
       { provide: MediaStartService, useValue: start },
@@ -39,8 +49,9 @@ function setup() {
     ],
   });
   const fixture = TestBed.createComponent(Host);
+  fixture.componentInstance.height = height;
   fixture.detectChanges();
-  return { fixture, el: fixture.nativeElement as HTMLElement, background, navbar, start };
+  return { attached$, detached$, fixture, el: fixture.nativeElement as HTMLElement, background, navbar, start };
 }
 
 const mq = (matches: boolean) => ({ matches, addEventListener: () => {}, removeEventListener: () => {} });
@@ -66,18 +77,30 @@ describe('HeroCarouselComponent', () => {
     expect(background.set).toHaveBeenLastCalledWith(expect.anything(), '/f2.jpg');
   });
 
-  it('holds while hovered, focused or hidden', () => {
+  it('holds while a mouse hovers or the keyboard focuses, not after a tap', () => {
     const { fixture, el } = setup();
     const host = el.querySelector('app-hero-carousel')!;
-    host.dispatchEvent(new Event('mouseenter'));
+    const pointer = (type: string, pointerType: string) => {
+      const e = new Event(type);
+      Object.defineProperty(e, 'pointerType', { value: pointerType });
+      host.dispatchEvent(e);
+    };
+    pointer('pointerenter', 'touch');
+    fixture.detectChanges();
+    vi.advanceTimersByTime(7000);
+    fixture.detectChanges();
+    expect(title(el)).toBe('T2');
+    pointer('pointerenter', 'mouse');
     fixture.detectChanges();
     vi.advanceTimersByTime(20000);
-    expect(title(el)).toBe('T1');
-    host.dispatchEvent(new Event('mouseleave'));
-    host.dispatchEvent(new Event('focusin'));
+    expect(title(el)).toBe('T2');
+    pointer('pointerleave', 'mouse');
+    const dot = el.querySelector<HTMLElement>('.hc-dot')!;
+    vi.spyOn(dot, 'matches').mockReturnValue(true);
+    dot.dispatchEvent(new Event('focusin', { bubbles: true }));
     fixture.detectChanges();
     vi.advanceTimersByTime(20000);
-    expect(title(el)).toBe('T1');
+    expect(title(el)).toBe('T2');
   });
 
   it('does not auto-advance under reduced motion', () => {
@@ -87,15 +110,23 @@ describe('HeroCarouselComponent', () => {
     expect(title(el)).toBe('T1');
   });
 
-  it('hands the chrome back and stops while the route is parked', () => {
-    const { fixture, el, background, navbar } = setup();
+  it('hands the chrome back and stops when the route detaches, and claims it again on attach', () => {
+    const { detached$, attached$, el, background, navbar } = setup();
     expect(navbar.enterHeroPage).toHaveBeenCalled();
-    fixture.componentInstance.parked.set(true);
-    fixture.detectChanges();
+    detached$.next('k');
     expect(navbar.leaveHeroPage).toHaveBeenCalled();
     expect(background.suspend).toHaveBeenCalled();
     vi.advanceTimersByTime(20000);
     expect(title(el)).toBe('T1');
+    background.set.mockClear();
+    attached$.next('k');
+    expect(background.set).toHaveBeenCalledWith(expect.anything(), '/f1.jpg');
+  });
+
+  it('leaves the host chrome alone when compact', () => {
+    const { navbar, background } = setup('compact');
+    expect(navbar.enterHeroPage).not.toHaveBeenCalled();
+    expect(background.set).toHaveBeenCalled();
   });
 
   it('shows a dot per item and jumps on click', () => {

@@ -4,6 +4,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import type { Media } from '../../../core/services/api/media.service';
 import { BackgroundService } from '../../../core/services/background.service';
 import { kindOf, mediaDetailLink } from '../../../core/media-kinds';
+import { keepRouteFresh } from '../../../core/services/keep-route-fresh';
 import { MediaStartService } from '../../../core/services/media-start.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
@@ -21,9 +22,9 @@ import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
   styleUrl: './hero-carousel.css',
   host: {
     class: 'block',
-    '(mouseenter)': 'hovered.set(true)',
-    '(mouseleave)': 'hovered.set(false)',
-    '(focusin)': 'focused.set(true)',
+    '(pointerenter)': 'hovered.set($event.pointerType === \'mouse\')',
+    '(pointerleave)': 'hovered.set(false)',
+    '(focusin)': 'focused.set($any($event.target).matches(\':focus-visible\'))',
     '(focusout)': 'focused.set(false)',
     '(touchstart)': 'touchX = $event.touches[0].clientX',
     '(touchend)': 'swipe($event.changedTouches[0].clientX)',
@@ -34,8 +35,6 @@ export class HeroCarouselComponent {
   readonly items = input.required<Media[]>();
   readonly autoAdvanceMs = input(7000);
   readonly height = input<'full' | 'compact'>('full');
-  /** The hosting route is cached and off screen: the timer stops and the global chrome is handed back. */
-  readonly parked = input(false);
 
   private readonly background = inject(BackgroundService);
   private readonly navbar = inject(NavbarService);
@@ -50,6 +49,15 @@ export class HeroCarouselComponent {
   protected readonly hidden = signal(document.hidden);
   protected readonly userPaused = signal(false);
   protected touchX = 0;
+  /** The cached route is off screen: the timer stops and the global chrome is handed back. */
+  private readonly parked = keepRouteFresh({
+    onDetach: () => {
+      clearTimeout(this.timer);
+      this.releaseChrome();
+    },
+    onAttach: () => this.claimChrome(),
+  });
+  private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   protected readonly current = computed(() => {
@@ -79,33 +87,32 @@ export class HeroCarouselComponent {
     effect((onCleanup) => {
       if (!this.running()) return;
       this.index();
-      const t = setTimeout(() => this.go(this.index() + 1), this.autoAdvanceMs());
-      onCleanup(() => clearTimeout(t));
+      this.timer = setTimeout(() => this.go(this.index() + 1), this.autoAdvanceMs());
+      onCleanup(() => clearTimeout(this.timer));
     });
     // Each slide change is a new claim, so the backdrop crossfades.
     effect(() => {
-      const url = this.current()?.fanartUrl;
-      if (this.parked() || !this.desktop()) return;
-      this.background.set(this, url ?? null);
-    });
-    effect(() => {
-      if (this.parked() || !this.current()) return;
-      this.entered = true;
-      this.navbar.enterHeroPage('');
-    });
-    effect(() => {
-      if (!this.parked()) return;
-      this.releaseChrome();
+      this.current();
+      this.claimChrome();
     });
     inject(DestroyRef).onDestroy(() => this.releaseChrome());
   }
 
   private entered = false;
 
+  private claimChrome(): void {
+    const m = this.current();
+    if (!m || this.parked()) return;
+    if (this.desktop()) this.background.set(this, m.fanartUrl ?? null);
+    // Only the full-bleed hero takes over the navbar; a compact strip leaves the page's own chrome.
+    if (this.height() !== 'full') return;
+    this.entered = true;
+    this.navbar.enterHeroPage('');
+  }
+
   private releaseChrome(): void {
-    if (!this.entered) return;
+    if (this.entered) this.navbar.leaveHeroPage();
     this.entered = false;
-    this.navbar.leaveHeroPage();
     this.background.suspend(this);
   }
 

@@ -118,7 +118,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private static readonly SCROLL_KEY = 'home';
   /** Cached route: the stale signals stay on screen while a cache-first pass
    *  repaints and a forced pass brings in what changed elsewhere. */
-  protected readonly routeFresh = keepRouteFresh({
+  private readonly routeFresh = keepRouteFresh({
     refresh: () => {
       const freshSince = Date.now();
       void this.loadAllSections({ known: true });
@@ -233,7 +233,6 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   /** Shape of one skeleton row: how the zone's cards are laid out. */
   private static readonly SHAPES: Partial<Record<HomeSectionType, 'tile' | 'landscape' | 'portrait'>> = {
-    'hero-carousel': 'landscape',
     'watch-parties': 'landscape',
     libraries: 'tile',
     'continue-watching': 'landscape',
@@ -425,7 +424,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** Cards actually rendered by each zone, for the layout snapshot. */
   private sectionCount(s: ResolvedHomeSection): number {
     switch (s.type) {
-      case 'hero-carousel': return this.featured().length ? 1 : 0;
       case 'watch-parties': return this.parties().length;
       case 'libraries': return this.displayLibraries().length;
       case 'continue-watching': return this.continueWatching().length;
@@ -526,7 +524,8 @@ export class HomeComponent implements OnInit, OnDestroy {
       const [libs, cw, recs, featured] = await Promise.all([
         this.librariesApi.listMine(opts).catch(() => null),
         this.streamingApi.getContinueWatching(undefined, opts).catch(() => null),
-        this.streamingApi.getRecommendations(opts).catch(() => null),
+        // The server default is 15: ask for the carousel's 4 on top so the row keeps its length.
+        this.streamingApi.getRecommendations({ ...opts, limit: 19 }).catch(() => null),
         this.streamingApi.getFeatured(opts).catch(() => null),
       ]);
       if (libs) {
