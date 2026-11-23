@@ -44,20 +44,46 @@
                 "itemId": 101,
                 "label": "Paper",
                 "language": "fr",
-                "libraryId": null,
                 "narrators": [],
                 "pageCount": 300,
                 "published": "2002-02-02",
                 "publisher": "Parity Press",
                 "title": null
+              },
+              {
+                "coverUrl": null,
+                "durationSeconds": 3600,
+                "externalIds": [],
+                "family": "audio",
+                "fieldSources": [],
+                "fileIds": [
+                  102
+                ],
+                "format": "m4b",
+                "hasFile": true,
+                "id": 102,
+                "itemId": 102,
+                "label": "Audio",
+                "language": "en",
+                "narrators": [
+                  {
+                    "id": 102,
+                    "name": "Vic Voice",
+                    "sortName": null
+                  }
+                ],
+                "pageCount": null,
+                "published": null,
+                "publisher": null,
+                "title": null
               }
             ],
             "originalLanguage": "en",
             "progress": {
-              "editionId": 101,
-              "itemId": 101,
-              "lastPlayedAt": "2026-01-02T00:00:00.000Z",
-              "progression": 0.3
+              "editionId": 102,
+              "itemId": 102,
+              "lastPlayedAt": "2026-01-05T00:00:00.000Z",
+              "progression": 0.002777777777777778
             },
             "series": [
               {
@@ -94,6 +120,20 @@
               "osdbHash": null,
               "quality": "EPUB",
               "relativePath": "alpha.epub",
+              "size": 1,
+              "streamInfo": {},
+              "updatedAt": "2026-01-01T00:00:00.000Z"
+            },
+            {
+              "createdAt": "2026-01-01T00:00:00.000Z",
+              "episodeId": null,
+              "id": 102,
+              "language": null,
+              "mediaId": 101,
+              "osdbBytesize": null,
+              "osdbHash": null,
+              "quality": "M4B",
+              "relativePath": "alpha.m4b",
               "size": 1,
               "streamInfo": {},
               "updatedAt": "2026-01-01T00:00:00.000Z"

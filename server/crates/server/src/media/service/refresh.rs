@@ -167,6 +167,7 @@ pub async fn apply_season(
            SELECT $1, $7, $8, v.n, v.title, v.overview, v.air::date, v.runtime, true
            FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::int[])
              AS v(n, title, overview, air, runtime)
+           WHERE NOT EXISTS (SELECT 1 FROM items e WHERE e."groupId" = $1 AND e."number" = v.n)
            ON CONFLICT ("groupId", "number") DO NOTHING"#,
         sid,
         &numbers,
