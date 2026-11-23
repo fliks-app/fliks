@@ -29,15 +29,11 @@ struct HomeLayoutView: View {
 
                 section(title: tr("home_settings.sections_title"), hint: tr("home_settings.sections_hint")) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                        HomeZoneRow(
-                            label: label(for: row),
-                            visible: row.visible,
-                            isFirst: index == 0,
-                            isLast: index == rows.count - 1,
-                            onMoveUp: { move(index, by: -1) },
-                            onMoveDown: { move(index, by: 1) },
-                            onToggleVisible: { setVisible(index, $0) }
-                        )
+                        SettingsRow(label: label(for: row), dimmed: !row.visible) {
+                            ReorderControls(isFirst: index == 0, isLast: index == rows.count - 1, visible: row.visible,
+                                            onMoveUp: { move(index, by: -1) }, onMoveDown: { move(index, by: 1) },
+                                            onToggleVisible: { setVisible(index, !row.visible) })
+                        }
                     }
                 }
 
@@ -62,8 +58,8 @@ struct HomeLayoutView: View {
                     }
                 }
 
-                ControlButton(systemImage: "arrow.counterclockwise",
-                              label: tr("home_settings.reset")) { confirmReset = true }
+                Button(tr("home_settings.reset"), systemImage: "arrow.counterclockwise") { confirmReset = true }
+                    .buttonStyle(.bordered)
             }
             .padding(.horizontal, 60)
             .padding(.vertical, 48)
@@ -98,10 +94,8 @@ struct HomeLayoutView: View {
     }
 
     private func modeButton(_ mode: RecentlyAddedMode, _ label: String) -> some View {
-        ControlButton(label: label,
-                      active: homeSettings.settings.recentlyAddedMode == mode) {
-            homeSettings.setMode(mode)
-        }
+        Button(label) { homeSettings.setMode(mode) }
+            .selectableButtonStyle(homeSettings.settings.recentlyAddedMode == mode)
     }
 
     private func rebuild() {
@@ -152,24 +146,6 @@ struct HomeLayoutView: View {
     }
 }
 
-private struct HomeZoneRow: View {
-    let label: String
-    let visible: Bool
-    let isFirst: Bool
-    let isLast: Bool
-    var onMoveUp: () -> Void
-    var onMoveDown: () -> Void
-    var onToggleVisible: (Bool) -> Void
-
-    var body: some View {
-        SettingsRow(label: label, dimmed: !visible) {
-            ControlButton(systemImage: "chevron.up", disabled: isFirst, action: onMoveUp)
-            ControlButton(systemImage: "chevron.down", disabled: isLast, action: onMoveDown)
-            VisibilityButton(visible: visible) { onToggleVisible(!visible) }
-        }
-    }
-}
-
 private struct LibraryRow: View {
     let library: Library
     let visible: Bool
@@ -212,47 +188,25 @@ struct VisibilityButton: View {
     var action: () -> Void
 
     var body: some View {
-        ControlButton(systemImage: visible ? "eye.fill" : "eye.slash",
-                      label: visible ? tr("home_settings.visible") : tr("home_settings.hidden"),
-                      action: action)
+        Button(visible ? tr("home_settings.visible") : tr("home_settings.hidden"),
+               systemImage: visible ? "eye.fill" : "eye.slash", action: action)
+            .buttonStyle(.bordered)
     }
 }
 
-/// Focusable pill that inverts on focus, so the remote always shows where it is.
-struct ControlButton: View {
-    var systemImage: String? = nil
-    var label: String? = nil
-    var disabled = false
-    var active = false
-    var action: () -> Void
-
-    @FocusState private var focused: Bool
-
-    private var foreground: Color {
-        // A move can disable the button under focus: keep its glyph readable on the white pill.
-        if disabled { return focused ? .black.opacity(0.3) : .white.opacity(0.25) }
-        return (focused || active) ? .black : .white
-    }
+/// Move up, move down and show/hide: the controls of a reorderable settings row.
+struct ReorderControls: View {
+    let isFirst: Bool
+    let isLast: Bool
+    let visible: Bool
+    var onMoveUp: () -> Void
+    var onMoveDown: () -> Void
+    var onToggleVisible: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                if let systemImage { Image(systemName: systemImage) }
-                if let label { Text(label).font(.callout) }
-            }
-            .foregroundStyle(foreground)
-            .frame(minWidth: 44)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 20)
-        }
-        .buttonStyle(FlatButtonStyle())
-        .background(Capsule().fill(focused || active ? Color.white : Color.white.opacity(0.16)))
-        // Ring in the brand color, not white: an active control is already
-        // white, so a white ring around a focused one would read as the same.
-        .overlay(Capsule().strokeBorder(Color.fliks("primary"), lineWidth: focused ? 5 : 0))
-        .scaleEffect(focused ? 1.06 : 1)
-        .focused($focused)
-        .disabled(disabled)
-        .animation(.easeOut(duration: 0.12), value: focused)
+        Button(action: onMoveUp) { Image(systemName: "chevron.up") }.buttonStyle(.bordered).disabled(isFirst)
+        Button(action: onMoveDown) { Image(systemName: "chevron.down") }.buttonStyle(.bordered).disabled(isLast)
+        VisibilityButton(visible: visible, action: onToggleVisible)
     }
 }
+

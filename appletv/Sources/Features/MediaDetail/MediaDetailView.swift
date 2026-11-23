@@ -166,9 +166,8 @@ struct MediaDetailView: View {
     }
 
     private func seasonButton(_ season: Season) -> some View {
-        SeasonButton(label: Self.seasonLabel(season), active: activeSeasonId == season.id) {
-            activeSeasonId = season.id
-        }
+        Button(Self.seasonLabel(season)) { activeSeasonId = season.id }
+            .selectableButtonStyle(activeSeasonId == season.id)
     }
 
     static func seasonLabel(_ season: Season) -> String {
@@ -209,33 +208,6 @@ struct MediaDetailView: View {
         if let c = try? await castTask { cast = c }
         if let r = try? await resumeTask { resumeInfo = r }
         if let l = try? await likeTask { liked = l.media }
-    }
-
-    /// Selection has to survive losing focus, so the season keeps its own fill
-    /// instead of relying on the system focus decoration.
-    private struct SeasonButton: View {
-        let label: String
-        let active: Bool
-        var action: () -> Void
-        @FocusState private var focused: Bool
-
-        var body: some View {
-            Button(action: action) {
-                Text(label)
-                    .font(.callout.weight(active ? .semibold : .regular))
-                    .foregroundStyle(active ? Color.black : Color.white)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 26)
-            }
-            .buttonStyle(FlatButtonStyle())
-            .background(RoundedRectangle(cornerRadius: 14)
-                .fill(active ? Color.white : Color.white.opacity(0.16)))
-            .overlay(RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(.white, lineWidth: focused ? 4 : 0))
-            .scaleEffect(focused ? 1.06 : 1)
-            .focused($focused)
-            .animation(.easeOut(duration: 0.15), value: focused)
-        }
     }
 
     private func watchedLabel(_ media: Media) -> String {

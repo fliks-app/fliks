@@ -359,10 +359,10 @@ struct IconAction: View {
     }
 }
 
-/// No system focus decoration — for controls that draw their own.
-struct FlatButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.opacity(configuration.isPressed ? 0.7 : 1)
+extension View {
+    /// The native bordered button; a selected one keeps the app-colour fill once focus moves on.
+    @ViewBuilder func selectableButtonStyle(_ selected: Bool) -> some View {
+        if selected { buttonStyle(.borderedProminent).tint(Color.fliks(nil)) } else { buttonStyle(.bordered) }
     }
 }
 

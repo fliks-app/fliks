@@ -15,9 +15,9 @@ struct LibrariesView: View {
                 HStack {
                     Text(tr("home.libraries")).font(.title2.bold())
                     Spacer()
-                    ControlButton(systemImage: editing ? "checkmark" : "arrow.up.arrow.down",
-                                  label: tr(editing ? "common.ok" : "nav.edit_library_order"),
-                                  active: editing) { editing.toggle() }
+                    Button(tr(editing ? "common.ok" : "nav.edit_library_order"),
+                           systemImage: editing ? "checkmark" : "arrow.up.arrow.down") { editing.toggle() }
+                        .buttonStyle(.bordered)
                 }
                 .focusSection()
                 if editing { editor } else {
@@ -39,9 +39,9 @@ struct LibrariesView: View {
             ForEach(Array(all.enumerated()), id: \.element.id) { index, lib in
                 let visible = !hidden.contains(lib.id)
                 SettingsRow(label: lib.name, icon: lib.symbol, tint: lib.tint, dimmed: !visible) {
-                    ControlButton(systemImage: "chevron.up", disabled: index == 0) { move(all, index, by: -1) }
-                    ControlButton(systemImage: "chevron.down", disabled: index == all.count - 1) { move(all, index, by: 1) }
-                    VisibilityButton(visible: visible) { setVisible(lib.id, !visible) }
+                    ReorderControls(isFirst: index == 0, isLast: index == all.count - 1, visible: visible,
+                                    onMoveUp: { move(all, index, by: -1) }, onMoveDown: { move(all, index, by: 1) },
+                                    onToggleVisible: { setVisible(lib.id, !visible) })
                 }
             }
         }
