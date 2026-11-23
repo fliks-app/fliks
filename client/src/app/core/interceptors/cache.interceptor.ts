@@ -14,6 +14,7 @@ const CACHEABLE_PREFIXES = [
   '/api/media',
   '/api/playback/continue-watching',
   '/api/playback/recommendations',
+  '/api/home/featured',
   '/api/playback/history',
   '/api/playback/watched-ids',
   '/api/libraries/mine',
@@ -32,8 +33,8 @@ const CACHEABLE_PREFIXES = [
 
 /** Rows under these prefixes embed media, watch state or likes, which mutations under the key change. */
 const DERIVED_PREFIXES: Record<string, string[]> = {
-  '/api/media': ['/api/persons', '/api/tracks', '/api/collections', '/api/playlists'],
-  '/api/playback': ['/api/tracks', '/api/collections', '/api/playlists'],
+  '/api/media': ['/api/persons', '/api/tracks', '/api/collections', '/api/playlists', '/api/home'],
+  '/api/playback': ['/api/tracks', '/api/collections', '/api/playlists', '/api/home'],
   '/api/likes': ['/api/tracks'],
 };
 
