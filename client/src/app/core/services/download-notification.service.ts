@@ -53,6 +53,7 @@ export interface DownloadNotificationCopy {
 
 interface DownloadNotificationPlugin {
   startDownload(
+    /** `token` is read by iOS only; Android authenticates through the URL. */
     opts: { id: string; hlsUrl: string; token: string } & Partial<DownloadNotifStrings>,
   ): Promise<void>;
   removeDownload(opts: { id: string }): Promise<void>;

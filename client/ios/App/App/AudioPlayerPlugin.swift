@@ -480,7 +480,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     /// True once session `key` stores a token other than the rejected one: the web layer, asked to
-    /// refresh, persists it. Waits at most 10 s.
+    /// refresh, persists it. After 10 s without it the token is rotated natively.
     @MainActor
     private func refreshed(_ key: String, rejected: String) async -> Bool {
         if let s = session(), s.key == key, s.token != rejected { return true }
@@ -490,7 +490,7 @@ public class AudioPlayerPlugin: CAPPlugin, CAPBridgedPlugin {
             guard let s = session(), s.key == key else { return false }
             if s.token != rejected { return true }
         }
-        return false
+        return await StoredSessions.refresh(key, rejected: rejected) == true
     }
 
     @MainActor

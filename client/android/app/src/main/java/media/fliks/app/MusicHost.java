@@ -39,6 +39,8 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy;
 import androidx.media3.session.LibraryResult;
 import androidx.media3.session.MediaLibraryService;
 import androidx.media3.session.MediaSession;
+import androidx.media3.session.SessionCommand;
+import androidx.media3.session.SessionCommands;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -995,6 +997,30 @@ final class MusicHost {
                 }
             });
             return f;
+        }
+
+        /** Other apps connect with the default commands minus library browse, search and playback start. */
+        @Override
+        public MediaSession.ConnectionResult onConnect(MediaSession s, MediaSession.ControllerInfo c) {
+            if (c.isTrusted() || c.getPackageName().equals(context.getPackageName())
+                    || s.isMediaNotificationController(c) || s.isAutomotiveController(c) || s.isAutoCompanionController(c)) {
+                return MediaLibraryService.MediaLibrarySession.Callback.super.onConnect(s, c);
+            }
+            SessionCommands.Builder commands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon();
+            for (int code : new int[] {
+                    SessionCommand.COMMAND_CODE_LIBRARY_GET_LIBRARY_ROOT, SessionCommand.COMMAND_CODE_LIBRARY_GET_ITEM,
+                    SessionCommand.COMMAND_CODE_LIBRARY_GET_CHILDREN, SessionCommand.COMMAND_CODE_LIBRARY_SEARCH,
+                    SessionCommand.COMMAND_CODE_LIBRARY_GET_SEARCH_RESULT, SessionCommand.COMMAND_CODE_LIBRARY_SUBSCRIBE}) {
+                commands.remove(code);
+            }
+            Player.Commands players = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
+                    .removeAll(Player.COMMAND_PLAY_PAUSE, Player.COMMAND_PREPARE, Player.COMMAND_SET_MEDIA_ITEM,
+                            Player.COMMAND_CHANGE_MEDIA_ITEMS)
+                    .build();
+            return new MediaSession.ConnectionResult.AcceptedResultBuilder(s)
+                    .setAvailableSessionCommands(commands.build())
+                    .setAvailablePlayerCommands(players)
+                    .build();
         }
 
         @Override

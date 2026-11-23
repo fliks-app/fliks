@@ -2,6 +2,7 @@ import { Injectable, Injector, signal, computed, inject, untracked } from '@angu
 import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { sameOriginPath } from '../utils/same-origin';
 import { PushService } from './push.service';
+import { DownloadManagerService } from './download-manager.service';
 import { Router } from '@angular/router';
 import type { MediaType } from '../enums/media-type.enum';
 import { TranslateService } from '@ngx-translate/core';
@@ -665,6 +666,7 @@ export class AuthService {
       // account, a token that never belonged to this one.
       if (raw.id !== userId) {
         noteLogout('resume: /auth/me answered as another user');
+        await this.deleteDownloads();
         await this.sessions.remove(serverUrl, userId);
         this.clearInMemorySession();
         return 'expired';
@@ -677,6 +679,7 @@ export class AuthService {
       const status = err instanceof HttpErrorResponse ? err.status : 0;
       if (status === 401 || status === 403) {
         noteLogout('resume: /auth/me refused', err);
+        await this.deleteDownloads();
         await this.sessions.remove(serverUrl, userId);
         this.clearInMemorySession();
         return 'expired';
@@ -994,6 +997,7 @@ export class AuthService {
   async logout(): Promise<void> {
     // Lazy: PushService reads this service. The server session is still valid here, so its row can be deleted.
     await this.injector.get(PushService).release().catch(() => undefined);
+    await this.deleteDownloads();
     const refresh = this._refreshToken;
     const endSessionUrl = await this.oidcEndSessionUrl();
     try {
@@ -1039,11 +1043,21 @@ export class AuthService {
     this._sessionEpoch.update((n) => n + 1);
   }
 
+  /** A signed-out account's downloads are deleted, files and server sessions included. Lazy: DownloadManagerService reads this service. */
+  private async deleteDownloads(): Promise<void> {
+    try {
+      await this.injector.get(DownloadManagerService).deleteAll();
+    } catch {
+      /* best effort: sign-out goes on */
+    }
+  }
+
   /** Forget the signed-in session locally and send the user back to the picker.
    *  Used by logout and by a terminal credential rejection. */
   private async dropActiveSession(reason: string, err?: unknown, autoLaunch = true): Promise<void> {
     noteLogout(reason, err);
     const active = this.sessions.active();
+    await this.deleteDownloads();
     if (active) await this.sessions.remove(active.serverUrl, active.user.id);
     this.clearInMemorySession();
     await this.serverCache.clearAll();

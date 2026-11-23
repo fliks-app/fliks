@@ -21,6 +21,10 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		5A45E877D61253F627EFBAD2 /* StoredSessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93F07ADB48AD724D32DB8BC0 /* StoredSessions.swift */; };
 		5E38BE1275ECAEDC374D9745 /* PushStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E824DE4C0A219E49AA346A /* PushStore.swift */; };
+		C1C0000000000000000A0001 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1C0000000000000000F0001 /* Keychain.swift */; };
+		C1C0000000000000000A0002 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1C0000000000000000F0001 /* Keychain.swift */; };
+		C1C0000000000000000A0003 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1C0000000000000000F0001 /* Keychain.swift */; };
+		5E5C0000000000000000A001 /* SessionVaultPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5C0000000000000000F001 /* SessionVaultPlugin.swift */; };
 		689E5DECE5EF205C751EA55D /* PushPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ADBE5B03FDE104FA76BA77D /* PushPipeline.swift */; };
 		6CA7EC26B1C17E4E06EF7BCE /* PushCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EEBEAD61E0136F360B56051 /* PushCrypto.swift */; };
 		71341FA2F278CDBBCBA36D97 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B7D38D4C0C960DAD1D945B5A /* Localizable.strings */; };
@@ -172,6 +176,8 @@
 		F1000001AAAA000000000B01 /* AudioPlayerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerPlugin.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000B11 /* CastPluginListeners.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastPluginListeners.swift; sourceTree = "<group>"; };
 		F1000001AAAA000000000C01 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		C1C0000000000000000F0001 /* Keychain.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
+		5E5C0000000000000000F001 /* SessionVaultPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionVaultPlugin.swift; sourceTree = "<group>"; };
 		F1E824DE4C0A219E49AA346A /* PushStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PushStore.swift; sourceTree = "<group>"; };
 		F9A0000100000000000000A1 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		F9B000010000000000000001 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
@@ -221,6 +227,7 @@
 		174464FF3BC08FDCBDDE674C /* Push */ = {
 			isa = PBXGroup;
 			children = (
+				C1C0000000000000000F0001 /* Keychain.swift */,
 				5EEBEAD61E0136F360B56051 /* PushCrypto.swift */,
 				3ADBE5B03FDE104FA76BA77D /* PushPipeline.swift */,
 				FEFBB3FB5003BF8A113A43BF /* PushRelay.swift */,
@@ -307,6 +314,7 @@
 				202EEC1969DA16E6AB79EA32 /* PushNotifications.swift */,
 				E602C63295CCFAA90DB4CE13 /* BundledText.swift */,
 				93F07ADB48AD724D32DB8BC0 /* StoredSessions.swift */,
+				5E5C0000000000000000F001 /* SessionVaultPlugin.swift */,
 				B7D38D4C0C960DAD1D945B5A /* Localizable.strings */,
 			);
 			path = App;
@@ -583,6 +591,7 @@
 				689E5DECE5EF205C751EA55D /* PushPipeline.swift in Sources */,
 				8EC13A645AB0A3781521BCA1 /* PushRelay.swift in Sources */,
 				722AA908B0EFB6D9C5D823FB /* PushStore.swift in Sources */,
+				C1C0000000000000000A0001 /* Keychain.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -626,6 +635,8 @@
 				A46AF8B6F4774791753BFA31 /* PushPipeline.swift in Sources */,
 				9C2BCC01916B819D1E233AEE /* PushRelay.swift in Sources */,
 				5E38BE1275ECAEDC374D9745 /* PushStore.swift in Sources */,
+				C1C0000000000000000A0002 /* Keychain.swift in Sources */,
+				5E5C0000000000000000A001 /* SessionVaultPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -648,6 +659,7 @@
 				B4FAD3CDE59AEC83E483F43E /* PushPipeline.swift in Sources */,
 				EE4237B786C819AED7B10DF6 /* PushRelay.swift in Sources */,
 				AD064E5A97801D880D5616B1 /* PushStore.swift in Sources */,
+				C1C0000000000000000A0003 /* Keychain.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

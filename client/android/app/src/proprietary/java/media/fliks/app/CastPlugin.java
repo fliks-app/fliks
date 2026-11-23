@@ -106,6 +106,7 @@ public class CastPlugin extends Plugin {
                 }
                 sessionPending = false;
                 castSession = null;
+                heartbeat.clear();
                 unlistenReceiver(session);
                 if (live) prefs().edit().clear().apply();
                 live = false;
@@ -987,6 +988,24 @@ public class CastPlugin extends Plugin {
         return castSession.getRemoteMediaClient();
     }
 
+    private final PositionHeartbeat heartbeat = new PositionHeartbeat();
+
+    /** The heartbeat PUT repeated from the poll while the app is stopped (locked phone). */
+    @PluginMethod()
+    public void setHeartbeat(PluginCall call) {
+        String url = call.getString("url");
+        String token = call.getString("token");
+        JSObject body = call.getObject("body");
+        if (url == null || token == null || body == null) {
+            call.reject("url, token and body are required");
+            return;
+        }
+        runOnMainThread(() -> {
+            heartbeat.set(url, token, body);
+            call.resolve();
+        });
+    }
+
     private Handler pollHandler;
     private Runnable pollRunnable;
     /** Last playhead (seconds) seen while the receiver was actively playing —
@@ -1040,6 +1059,9 @@ public class CastPlugin extends Plugin {
                         notifyJSTime(time, duration, paused, buffering, volume, muted, ended, interrupted,
                             info != null ? receiverMediaJson(info) : null);
                         refreshSavedStatus(client);
+                        if (info != null && state != MediaStatus.PLAYER_STATE_IDLE && heartbeat.ownsFile(info.getCustomData())) {
+                            heartbeat.send(time, duration, buffering ? "buffering" : paused ? "paused" : "playing");
+                        }
                     }
                     pollHandler.postDelayed(this, 1000);
                 } catch (Exception e) {

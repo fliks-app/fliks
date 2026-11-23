@@ -146,7 +146,7 @@ final class FliksApi {
                 + android.net.Uri.encode(streamToken(mediaFileId, boundKey));
     }
 
-    private String streamToken(long mediaFileId, String boundKey) throws IOException {
+    String streamToken(long mediaFileId, String boundKey) throws IOException {
         String id = boundKey + "#" + mediaFileId;
         StreamToken known;
         synchronized (streamTokens) {

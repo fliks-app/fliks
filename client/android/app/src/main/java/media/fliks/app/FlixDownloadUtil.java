@@ -1,6 +1,7 @@
 package media.fliks.app;
 
 import android.content.Context;
+import android.net.Uri;
 import android.util.Log;
 
 import androidx.annotation.OptIn;
@@ -9,7 +10,9 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.database.StandaloneDatabaseProvider;
 import androidx.media3.datasource.DataSource;
+import androidx.media3.datasource.DataSpec;
 import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.datasource.ResolvingDataSource;
 import androidx.media3.datasource.cache.CacheDataSource;
 import androidx.media3.datasource.cache.NoOpCacheEvictor;
 import androidx.media3.datasource.cache.SimpleCache;
@@ -22,11 +25,13 @@ import androidx.media3.exoplayer.offline.DownloadRequest;
 import androidx.media3.exoplayer.offline.DownloadService;
 
 import java.io.File;
-import java.util.Collections;
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Singleton utilities for ExoPlayer offline downloads.
@@ -53,11 +58,6 @@ public class FlixDownloadUtil {
     private static DatabaseProvider databaseProvider;
     private static DefaultDownloadIndex downloadIndex;
     private static DownloadManager downloadManager;
-    private static String authToken;
-
-    public static synchronized void setAuthToken(String token) {
-        authToken = token;
-    }
 
     /** Cap concurrent transfers. Applies to a manager that already exists, and
      *  is remembered for one built later. */
@@ -154,7 +154,7 @@ public class FlixDownloadUtil {
                 ctx,
                 getDatabaseProvider(ctx),
                 getCache(ctx),
-                buildHttpDataSourceFactory(),
+                buildHttpDataSourceFactory(ctx),
                 buildDownloadExecutor()
             );
             downloadManager.setMaxParallelDownloads(maxParallelDownloads);
@@ -212,38 +212,56 @@ public class FlixDownloadUtil {
         return downloadManager;
     }
 
-    /** Build DataSource.Factory with auth header for segment fetches. */
-    public static DataSource.Factory buildHttpDataSourceFactory() {
+    /** HTTP source whose `token` query param is swapped for a live file-bound stream token on every request. */
+    public static DataSource.Factory buildHttpDataSourceFactory(Context ctx) {
         DefaultHttpDataSource.Factory factory = new DefaultHttpDataSource.Factory()
             .setConnectTimeoutMs(15_000)
             .setReadTimeoutMs(120_000)  // long timeout for server-side waitForFile
             .setAllowCrossProtocolRedirects(true);
-        if (authToken != null && !authToken.isEmpty()) {
-            factory.setDefaultRequestProperties(
-                Collections.singletonMap("Authorization", "Bearer " + authToken)
-            );
+        Context appContext = ctx.getApplicationContext();
+        return new ResolvingDataSource.Factory(factory, spec -> withFreshToken(appContext, spec));
+    }
+
+    private static final Pattern STREAM_FILE = Pattern.compile("/api/stream/(\\d+)/");
+
+    /** The stream token baked into the URL at queue time outlives its TTL on a paused or queued download. */
+    private static DataSpec withFreshToken(Context ctx, DataSpec spec) throws IOException {
+        Uri uri = spec.uri;
+        if (uri.getQueryParameter("token") == null) return spec;
+        FliksApi api = FliksApi.shared(ctx);
+        String base = api.serverUrl();
+        String key = api.activeKey();
+        String path = uri.getPath();
+        Matcher file = STREAM_FILE.matcher(path == null ? "" : path);
+        if (base == null || key == null || !uri.toString().startsWith(base) || !file.find()) return spec;
+        String token = api.streamToken(Long.parseLong(file.group(1)), key);
+        Uri.Builder rebuilt = uri.buildUpon().clearQuery();
+        for (String name : uri.getQueryParameterNames()) {
+            for (String value : uri.getQueryParameters(name)) {
+                rebuilt.appendQueryParameter(name, "token".equals(name) ? token : value);
+            }
         }
-        return factory;
+        return spec.withUri(rebuilt.build());
     }
 
     /** DataSource.Factory for offline playback — reads from cache, falls back to HTTP. */
     public static CacheDataSource.Factory getCacheDataSourceFactory(Context ctx) {
         return new CacheDataSource.Factory()
             .setCache(getCache(ctx))
-            .setUpstreamDataSourceFactory(buildHttpDataSourceFactory())
+            .setUpstreamDataSourceFactory(buildHttpDataSourceFactory(ctx))
             .setCacheWriteDataSinkFactory(null);  // read-only from cache
     }
 
     /** Start downloading an HLS stream. */
     public static void startDownload(Context ctx, String id, String hlsUrl, String title) {
-        DownloadRequest request = new DownloadRequest.Builder(id, android.net.Uri.parse(hlsUrl))
+        DownloadRequest request = new DownloadRequest.Builder(id, Uri.parse(hlsUrl))
             .setMimeType(MimeTypes.APPLICATION_M3U8)
             .setData(title.getBytes(java.nio.charset.StandardCharsets.UTF_8))
             .build();
         DownloadService.sendAddDownload(
             ctx, FlixDownloadService.class, request, /* foreground= */ true
         );
-        Log.d(TAG, "Download started: id=" + id + " url=" + hlsUrl);
+        Log.d(TAG, "Download started: id=" + id + " url=" + Uri.parse(hlsUrl).buildUpon().clearQuery().build());
     }
 
     /** Remove a download (cancel + delete cached data). */

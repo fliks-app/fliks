@@ -96,14 +96,12 @@ public class DownloadNotificationPlugin extends Plugin {
     public void startDownload(PluginCall call) {
         String id = call.getString("id", "");
         String hlsUrl = call.getString("hlsUrl", "");
-        String token = call.getString("token", "");
 
         if (id.isEmpty() || hlsUrl.isEmpty()) {
             call.reject("id and hlsUrl are required");
             return;
         }
 
-        FlixDownloadUtil.setAuthToken(token);
         FlixDownloadUtil.startDownload(getContext(), id, hlsUrl, call.getString("notifTitle", ""));
         call.resolve();
     }
@@ -115,10 +113,19 @@ public class DownloadNotificationPlugin extends Plugin {
         call.resolve();
     }
 
-    /** Remove a download (cancel + delete cached data). Waits for removal to complete. */
+    /** Remove a download in any state, failed included: its index entry and cached segments go. Waits for removal. */
     @PluginMethod()
     public void removeDownload(PluginCall call) {
         String id = call.getString("id", "");
+        try {
+            // Nothing in the index (already removed): no removal event will come.
+            if (FlixDownloadUtil.getDownloadIndex(getContext()).getDownload(id) == null) {
+                call.resolve();
+                return;
+            }
+        } catch (java.io.IOException e) {
+            Log.w(TAG, "download index read failed: " + e.getMessage());
+        }
         DownloadManager dm = FlixDownloadUtil.getDownloadManager(getContext());
         AtomicBoolean done = new AtomicBoolean(false);
         DownloadManager.Listener listener = new DownloadManager.Listener() {

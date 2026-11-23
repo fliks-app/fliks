@@ -39,16 +39,12 @@ const config: CapacitorConfig = {
       splashImmersive: true,
     },
   },
-  // Page en https://localhost + API en http://<LAN>:3001 → sinon blocage Mixed Content.
   android: {
-    allowMixedContent: true,
     flavor: 'proprietary',
   },
   ios: {
-    allowMixedContent: true,
     // The default ('recommended') makes the iPad WebView claim to be a desktop Mac.
     preferredContentMode: 'mobile',
-    webContentsDebuggingEnabled: true,
     // AppDelegate handles notification taps and presentation; the bridge would take the delegate over.
     handleApplicationNotifications: false,
   },
