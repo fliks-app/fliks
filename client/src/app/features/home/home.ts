@@ -2,6 +2,7 @@ import { Component, afterNextRender, inject, signal, computed, effect, OnInit, O
 import { RecentlyPlayedRowComponent } from '../music/recently-played-row.component';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { debounceTime } from 'rxjs';
 import { leavingLabel } from '../../shared/utils/cleanup.util';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { LocaleDatePipe } from '../../core/pipes/locale-date.pipe';
@@ -20,7 +21,7 @@ import { partyWhen } from '../party/party-time';
 import { coverPosters } from '../party/party-thumb';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
 import { translatePlural } from '../../core/pipes/translate-plural.pipe';
-import { SseService } from '../../core/services/sse.service';
+import { SseService, requestActivity } from '../../core/services/sse.service';
 import {
   DownloadProgressService,
   MediaDownloadProgress,
@@ -302,9 +303,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   });
 
   /** A request changed status: refresh the recent-requests row so its badge follows without a manual reload. */
-  private readonly requestChanged = this.sse
-    .on('request.changed')
-    .pipe(takeUntilDestroyed())
+  private readonly requestChanged = requestActivity(this.sse)
+    .pipe(debounceTime(300), takeUntilDestroyed())
     .subscribe(() => this.loadRecentRequests({ force: true }));
   /** Re-filters on the "only my requests" toggle; skips the first run since ngOnInit already loads. */
   private firstOnlyMyRequestsRun = true;

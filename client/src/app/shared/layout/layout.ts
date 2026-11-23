@@ -1,4 +1,4 @@
-import { fromEvent, startWith } from 'rxjs';
+import { fromEvent, merge, startWith } from 'rxjs';
 import { NgTemplateOutlet } from '@angular/common';
 import {
   Component,
@@ -26,7 +26,7 @@ import { LibrariesApiService, LibrarySummary } from '../../core/services/api/lib
 import { PushService } from '../../core/services/push.service';
 import { CountsApiService, SidebarCounts } from '../../core/services/api/counts-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
-import { SseEvent, SseService } from '../../core/services/sse.service';
+import { SseEvent, SseService, requestActivity } from '../../core/services/sse.service';
 import { ToastService } from '../../core/services/toast.service';
 import { CastService } from '../../core/services/cast.service';
 import { AirPlayService } from '../../core/services/airplay.service';
@@ -382,8 +382,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   /** Refresh counts when relevant SSE events arrive */
   // import.complete / import.failed reach only the requester, so library counts ride the broadcast queue.updated after each import.
-  private readonly sseCounts = this.sse
-    .on('queue.updated', 'stalled.removed', 'request.changed')
+  private readonly sseCounts = merge(this.sse.on('queue.updated', 'stalled.removed'), requestActivity(this.sse))
     .pipe(takeUntilDestroyed(this.destroyRef))
     .subscribe(() => this.debouncedRefreshSidebarCounts());
 

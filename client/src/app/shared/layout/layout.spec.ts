@@ -74,6 +74,7 @@ interface Fixture {
   registry?: Partial<Record<SlotId, UiContribution[]>>;
   /** The SSE frames the component listens to, for a test to push into mid-run. */
   sseEvents?: Subject<SseEvent>;
+  notifications?: Subject<{ cat: string }>;
   pairingEvents?: Subject<SseEvent>;
   /** Marks the active page as a hero (fanart) page. */
   isHeroPage?: boolean;
@@ -152,7 +153,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         provide: SseService,
         useValue: {
           on: (...types: string[]) => (f.sseEvents ?? new Subject<SseEvent>()).pipe(filter((e) => types.includes(e.type))),
-          notifications: new Subject<never>(),
+          notifications: f.notifications ?? new Subject<never>(),
           pairingEvents: f.pairingEvents ?? new Subject<SseEvent>(),
           connectionId: f.connectionId ?? (() => null),
           connect: () => {},
@@ -563,6 +564,26 @@ describe('LayoutComponent dock, libraries sheet', () => {
 describe('LayoutComponent sidebar counts — SSE debounce', () => {
   afterEach(() => {
     nativeState.value = false;
+  });
+
+  it('refreshes on the requests notification of a server without request.changed', async () => {
+    const notifications = new Subject<{ cat: string }>();
+    const get = vi.fn(() => Promise.resolve({ mediaByLibrary: {}, badgeCounts: {}, pendingRequests: 0 }));
+    await createFixture({ ...NON_ADMIN_NO_LIBRARIES, notifications, countsGet: get });
+    get.mockClear();
+
+    vi.useFakeTimers();
+    try {
+      notifications.next({ cat: 'account' });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(get).toHaveBeenCalledTimes(0);
+
+      notifications.next({ cat: 'requests' });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(get).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('collapses a burst of count-bearing SSE events into a single trailing refresh', async () => {

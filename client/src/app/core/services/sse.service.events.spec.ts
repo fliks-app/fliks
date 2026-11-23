@@ -74,8 +74,10 @@ describe('SseService re-dial', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
-  it('leaves the refresh of a resume to the resume itself', () => {
+  it('leaves the refresh of a resume of a healthy stream to the resume itself', () => {
+    vi.stubGlobal('EventSource', { CONNECTING: 0, OPEN: 1, CLOSED: 2 });
     const sse = setup();
+    Object.assign(sse, { eventSource: { readyState: 1, close: () => {} }, lastMessageAt: Date.now() });
     const refresh = vi.spyOn(TestBed.inject(AppResumeService), 'refresh');
     sse.ingest(frame({ type: 'sse.connected', connectionId: 'a' }));
 
@@ -85,6 +87,7 @@ describe('SseService re-dial', () => {
 
     sse.ingest(frame({ type: 'sse.connected', connectionId: 'c' }));
     expect(refresh).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
   });
 });
 

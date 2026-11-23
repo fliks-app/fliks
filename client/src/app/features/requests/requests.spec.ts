@@ -114,6 +114,24 @@ describe('RequestsComponent', () => {
     }
   });
 
+  it('refetches on the requests notification of a server without request.changed', async () => {
+    const { list, sse } = setup();
+    await Promise.resolve();
+    const before = list.mock.calls.length;
+    vi.useFakeTimers();
+    try {
+      sse.notifications.next({ cat: 'account' } as never);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(list.mock.calls.length).toBe(before);
+
+      sse.notifications.next({ cat: 'requests' } as never);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(list.mock.calls.length).toBe(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   describe('approve all', () => {
     const rows = [
       { id: 1, status: 'pending' },
