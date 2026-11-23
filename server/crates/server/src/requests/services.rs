@@ -266,7 +266,8 @@ pub async fn announce(st: &AppState, ids: &[i32]) {
     if ids.is_empty() {
         return;
     }
-    let rows: Vec<(i32, String, String, Option<i32>, Option<i32>)> = sqlx::query_as(
+    type Row = (i32, String, String, Option<i32>, Option<i32>);
+    let rows: Vec<Row> = sqlx::query_as(
         r#"SELECT id, status::text, kind::text, "userId", "libraryId" FROM requests WHERE id = ANY($1)"#,
     )
     .bind(ids)
@@ -275,8 +276,8 @@ pub async fn announce(st: &AppState, ids: &[i32]) {
     .unwrap_or_default();
     let mut managers: std::collections::HashMap<Option<i32>, Vec<i32>> = Default::default();
     for (id, status, kind, user, library) in rows {
-        if !managers.contains_key(&library) {
-            managers.insert(library, crate::push::approvers(st, library).await);
+        if let std::collections::hash_map::Entry::Vacant(e) = managers.entry(library) {
+            e.insert(crate::push::approvers(st, library).await);
         }
         let mut to = crate::push::request_recipients(&st.db, id, user).await;
         to.extend(&managers[&library]);
