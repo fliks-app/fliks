@@ -150,6 +150,7 @@ struct State {
   std::atomic<bool> run{false};
   std::atomic<bool> paused{true};  // drives the event thread's position heartbeat
   std::atomic<bool> coreIdle{false};  // mpv not rendering frames (seek/buffer/idle)
+  std::atomic<bool> idleActive{true};  // no file loaded: core-idle then says nothing about buffering
   std::atomic<bool> dirty{true};  // force a redraw (resize / first paint / color change)
   // Whether the layer actually got a half-float (RGBA16F) backing. EDR/PQ/HLG
   // tagging is meaningless on an 8-bit unorm FBO (can't carry values >1.0), so
@@ -734,6 +735,7 @@ void VerifyColorEnums() {
 // and, unlike paused-for-cache, it also covers an in-place seek's fetch/decode.
 // Clears to "playing" the instant frames flow again (real resume).
 void EmitPlaybackState(State* s) {
+  if (s->idleActive.load()) return;
   if (s->paused.load())
     Emit("{\"type\":\"stateChanged\",\"state\":\"paused\"}");
   else if (s->coreIdle.load())
@@ -813,6 +815,9 @@ void EventThreadMain(State* s) {
             EmitPlaybackState(s);
           } else if (std::strcmp(p->name, "core-idle") == 0 && p->format == MPV_FORMAT_FLAG) {
             s->coreIdle.store(*static_cast<int*>(p->data) != 0);
+            EmitPlaybackState(s);
+          } else if (std::strcmp(p->name, "idle-active") == 0 && p->format == MPV_FORMAT_FLAG) {
+            s->idleActive.store(*static_cast<int*>(p->data) != 0);
             EmitPlaybackState(s);
           }
           break;
@@ -916,6 +921,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
   M::observe_property(g_state.mpv, 3, "pause", MPV_FORMAT_FLAG);
   M::observe_property(g_state.mpv, 4, "track-list", MPV_FORMAT_NONE);
   M::observe_property(g_state.mpv, 5, "core-idle", MPV_FORMAT_FLAG);
+  M::observe_property(g_state.mpv, 6, "idle-active", MPV_FORMAT_FLAG);
   // Drive the content-adaptive colorspace/EDR reconfiguration off the two color
   // leaves we actually classify on, observed as TYPED strings. The aggregate
   // `video-params` belongs to mpv's per-frame TICK group, so observing it with

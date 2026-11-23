@@ -548,7 +548,7 @@ app.whenReady().then(async () => {
   });
   compositor.onWindowActive = (active) => notifier?.setActive(active);
   const fullscreen = linuxFullscreen(compositor, send);
-  compositor.onCloseRequest = () => notifier?.requestClose() ?? app.quit();
+  compositor.onCloseRequest = () => (notifier ? notifier.requestClose() : app.quit());
   host.start();
   await host.whenReady();
   await notifier?.attach({

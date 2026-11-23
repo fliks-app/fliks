@@ -70,6 +70,10 @@ export class PlayerHost extends TypedEmitter<Pick<PlayerBackendEvents, 'stateCha
         await backend.destroy().catch(() => {});
         throw e;
       }
+      if (this.disposed) {
+        await backend.destroy().catch(() => {});
+        throw new Error('player host destroyed');
+      }
       this.backend = backend;
       return backend;
     })();

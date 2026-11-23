@@ -156,6 +156,7 @@ struct GlState {
   double duration = 0;
   std::atomic<bool> paused{false};
   std::atomic<bool> coreIdle{false};  // mpv not rendering frames (seek/buffer/idle)
+  std::atomic<bool> idleActive{true};  // no file loaded: core-idle then says nothing about buffering
   std::atomic<bool> wakePending{false};  // a wake event is queued for the render thread
 };
 
@@ -508,8 +509,6 @@ void RenderThreadMain(GlState* s) {
   while (s->run.load(std::memory_order_acquire)) {
     SDL_Event ev;
     bool haveEvent = SDL_WaitEventTimeout(&ev, kIdleWaitMs);
-    // Cleared before any state is read below, so a producer that sees it set is read by this pass.
-    s->wakePending.store(false);
     const Chrome c = ChromeOf(s->window);
     const float density = SDL_GetWindowPixelDensity(s->window);
     // Window units → pixels of the page, which starts under the title bar.
@@ -621,6 +620,8 @@ void RenderThreadMain(GlState* s) {
       }
       haveEvent = SDL_PollEvent(&ev);
     }
+    // Cleared after the drain, which also consumes wake events, and before any state is read below.
+    s->wakePending.store(false);
     if (s->raiseRequest.exchange(false, std::memory_order_acq_rel)) {
       if (hidden) SDL_ShowWindow(s->window);
       hidden = false;
@@ -798,6 +799,7 @@ void EmitLog(const mpv_event_log_message* m) {
 
 // core-idle (mpv not rendering frames) is what tells buffering from playing while not user-paused.
 void EmitPlaybackState(GlState* s) {
+  if (s->idleActive.load()) return;
   if (s->paused.load())
     Emit("{\"type\":\"stateChanged\",\"state\":\"paused\"}");
   else if (s->coreIdle.load())
@@ -853,6 +855,9 @@ void EventThreadMain(GlState* s) {
             EmitPlaybackState(s);
           } else if (std::strcmp(p->name, "core-idle") == 0 && p->format == MPV_FORMAT_FLAG) {
             s->coreIdle.store(*static_cast<int*>(p->data) != 0);
+            EmitPlaybackState(s);
+          } else if (std::strcmp(p->name, "idle-active") == 0 && p->format == MPV_FORMAT_FLAG) {
+            s->idleActive.store(*static_cast<int*>(p->data) != 0);
             EmitPlaybackState(s);
           }
           break;
@@ -921,6 +926,7 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
     M::observe_property(g_state.mpv, 3, "pause", MPV_FORMAT_FLAG);
     M::observe_property(g_state.mpv, 4, "track-list", MPV_FORMAT_NONE);
     M::observe_property(g_state.mpv, 5, "core-idle", MPV_FORMAT_FLAG);
+    M::observe_property(g_state.mpv, 6, "idle-active", MPV_FORMAT_FLAG);
     // Default to verbose so the ffmpeg HLS demuxer logs every segment URL it
     // opens and the HTTP status it gets back (diagnosing transcode/seg-0
     // failures). Override with FLIKS_MPV_LOGLEVEL (warn / info / v / debug).
