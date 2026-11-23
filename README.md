@@ -176,8 +176,8 @@ full list of what it runs on.
 |---|---|---|---|
 | **Web / PWA** | your browser, at the server URL | any current browser | installable to the home screen |
 | **iOS · iPadOS** | App Store | iOS 16.6 | |
-| **Android** | Play Store | Android 6 (API 23) | phone + tablet |
-| **Android TV** | Play Store | Android 6 | |
+| **Android** | Play Store | Android 7 (API 24) | phone + tablet |
+| **Android TV** | Play Store | Android 7 | |
 | **Samsung TV (Tizen)** | sideload for now | Tizen 6.5 | works fully, not yet on Samsung Apps |
 | **LG TV (webOS)** | LG Content Store | webOS 7.0 | approved, on the store |
 | **Desktop** | release assets, APT or Snap Store on Linux | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
