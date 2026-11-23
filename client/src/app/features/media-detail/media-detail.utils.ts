@@ -93,13 +93,5 @@ export function seasonsVisibleWithDiskFilter(media: Media, onlyOnDisk: boolean):
 
 export type MediaFileRow = NonNullable<Media['files']>[number];
 
-/** Fichiers média explicitement liés à cet épisode (episodeId). */
-export function filesForEpisode(
-  files: Media['files'],
-  episodeId: number,
-): MediaFileRow[] {
-  return (files ?? []).filter(
-    (f) => f.episodeId != null && Number(f.episodeId) === episodeId,
-  );
-}
+export { filesForEpisode } from '../../shared/utils/media-play.util';
 

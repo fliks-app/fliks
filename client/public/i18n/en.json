@@ -6289,6 +6289,8 @@
     "label": "Featured titles",
     "play": "Play",
     "details": "Details",
-    "go_to": "Show title {{n}}"
+    "go_to": "Show title {{n}}",
+    "play_episode": "Play {{code}}",
+    "resume_episode": "Resume {{code}}"
   }
 }

@@ -32,7 +32,10 @@ function setup(height: 'full' | 'compact' = 'full', tv = true) {
   const detached$ = new Subject<string>();
   const background = { set: vi.fn(), suspend: vi.fn() };
   const navbar = { enterHeroPage: vi.fn(), leaveHeroPage: vi.fn(), heroPaddingTop: () => null };
-  const start = { start: vi.fn().mockResolvedValue(undefined) };
+  const start = {
+    start: vi.fn().mockResolvedValue(undefined),
+    nextUpOf: vi.fn().mockResolvedValue({ media: {}, next: { episode: { id: 21, episodeNumber: 7 }, season: { seasonNumber: 2 }, file: { id: 1 } }, resuming: true }),
+  };
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -148,11 +151,28 @@ describe('HeroCarouselComponent', () => {
     expect(title(el)).toBe('T3');
   });
 
-  it('plays a movie and opens a series detail page', () => {
+  it('plays a movie, and a series at its next episode with a Details link beside it', async () => {
     const { fixture, el, start } = setup();
     el.querySelector<HTMLButtonElement>('[data-home-focus="hero:primary"]')!.click();
     expect(start.start).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
     el.querySelectorAll<HTMLButtonElement>('.hc-dot')[1].click();
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(10);
+    fixture.detectChanges();
+    expect(start.nextUpOf).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }));
+    const slide = el.querySelector('.hc-slide:not(.hc-out)')!;
+    const primary = slide.querySelector('[data-home-focus="hero:primary"]')!;
+    expect(primary.tagName).toBe('BUTTON');
+    expect(primary.textContent).toContain('hero_carousel.resume_episode');
+    expect(slide.querySelector('a.btn-ghost')?.getAttribute('href')).toBe('/series/2');
+  });
+
+  it('keeps Details as the only button of a series with nothing to play', async () => {
+    const { fixture, el, start } = setup();
+    start.nextUpOf.mockResolvedValue({ media: {}, next: null, resuming: false });
+    el.querySelectorAll<HTMLButtonElement>('.hc-dot')[1].click();
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(10);
     fixture.detectChanges();
     const primary = el.querySelector('.hc-slide:not(.hc-out) [data-home-focus="hero:primary"]')!;
     expect(primary.tagName).toBe('A');

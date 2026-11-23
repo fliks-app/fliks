@@ -6289,6 +6289,8 @@
     "label": "Titres à la une",
     "play": "Lecture",
     "details": "Détails",
-    "go_to": "Afficher le titre {{n}}"
+    "go_to": "Afficher le titre {{n}}",
+    "play_episode": "Lecture {{code}}",
+    "resume_episode": "Reprendre {{code}}"
   }
 }

@@ -5,7 +5,7 @@ import type { MediaResumeInfo } from '../../core/services/api/streaming-api.serv
 import type { SpoilerService } from '../../core/services/spoiler.service';
 import { episodeBadgeLabel, filesForEpisode, hideShadowedEpisodes } from './media-detail.utils';
 import type { MediaFileRow } from './media-detail.utils';
-import { kindOf } from '../../core/media-kinds';
+import { nextUp, type NextUp } from '../../shared/utils/media-play.util';
 
 export interface EpisodeViewHost {
   media(): Media | null;
@@ -121,64 +121,10 @@ export class EpisodeViewController {
       .sort((a, b) => a.seasonNumber - b.seasonNumber);
   });
 
-  /** Episode the header's Play launches: resume target, else first unwatched with a file, else first with a file.
-   *  Specials (seasonNumber <= 0) are skipped. */
-  readonly nextPlayEpisode = computed<{
-    episode: Episode;
-    season: Season;
-    file: { id: number };
-  } | null>(() => {
+  /** Episode the header's Play launches: see {@link nextUp}. */
+  readonly nextPlayEpisode = computed<NextUp | null>(() => {
     const m = this.host.media();
-    if (!m || !kindOf(m.type).hasSeasons || !m.seasons?.length) return null;
-
-    const seasons = [...m.seasons]
-      .filter((s) => (s.seasonNumber ?? 0) > 0)
-      .sort((a, b) => (a.seasonNumber ?? 0) - (b.seasonNumber ?? 0));
-
-    const resolveFile = (epId: number) => {
-      const files = filesForEpisode(m.files, epId);
-      return files[0] ?? null;
-    };
-
-    // 1. Resume target
-    const info = this.host.resumeInfo();
-    if (info?.episodeId) {
-      for (const s of seasons) {
-        const ep = s.episodes?.find((e) => e.id === info.episodeId);
-        if (ep) {
-          const file = info.mediaFileId ? { id: info.mediaFileId } : resolveFile(ep.id);
-          if (file) return { episode: ep, season: s, file };
-        }
-      }
-    }
-
-    const watched = this.deps.watchedEpisodeIds();
-
-    // 2. First unwatched with file
-    for (const s of seasons) {
-      const eps = [...(s.episodes ?? [])].sort(
-        (a, b) => (a.episodeNumber ?? 0) - (b.episodeNumber ?? 0),
-      );
-      for (const ep of eps) {
-        if (!ep.hasFile || watched.has(ep.id)) continue;
-        const file = resolveFile(ep.id);
-        if (file) return { episode: ep, season: s, file };
-      }
-    }
-
-    // 3. First episode with file (series fully watched)
-    for (const s of seasons) {
-      const eps = [...(s.episodes ?? [])].sort(
-        (a, b) => (a.episodeNumber ?? 0) - (b.episodeNumber ?? 0),
-      );
-      for (const ep of eps) {
-        if (!ep.hasFile) continue;
-        const file = resolveFile(ep.id);
-        if (file) return { episode: ep, season: s, file };
-      }
-    }
-
-    return null;
+    return m ? nextUp(m, this.host.resumeInfo(), this.deps.watchedEpisodeIds()) : null;
   });
 
   /** Resume episode label for series header (e.g. "S01:E03 - Title") */

@@ -1,10 +1,11 @@
-import { AnimationCallbackEvent, Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
+import { AnimationCallbackEvent, Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import type { Media } from '../../../core/services/api/media.service';
 import { BackgroundService } from '../../../core/services/background.service';
 import { kindOf, mediaDetailLink } from '../../../core/media-kinds';
+import { episodeCode, type NextUp } from '../../../shared/utils/media-play.util';
 import { keepRouteFresh } from '../../../core/services/keep-route-fresh';
 import { MediaStartService } from '../../../core/services/media-start.service';
 import { NavbarService } from '../../../core/services/navbar.service';
@@ -79,9 +80,16 @@ export class HeroCarouselComponent {
     const parts = [m.year ? String(m.year) : '', desktop && m.runtime ? `${m.runtime}min` : '', (m.genres ?? []).slice(0, desktop ? 3 : 2).join(', ')];
     return parts.filter(Boolean);
   });
-  protected readonly opensDetail = computed(() => {
+  /** The episode a series slide plays, loaded once per series; null while loading or when none is on disk. */
+  private readonly episodes = signal(new Map<number, { next: NextUp; resuming: boolean } | null>());
+  /** What the primary button of the current slide does: play (an episode of a series, with its label), or open the detail page of a series with nothing to play. */
+  protected readonly primary = computed<{ play: boolean; labelKey: string; code?: string }>(() => {
     const m = this.current();
-    return !m || kindOf(m.type).hasSeasons;
+    if (!m) return { play: false, labelKey: 'hero_carousel.details' };
+    if (!kindOf(m.type).hasSeasons) return { play: true, labelKey: 'hero_carousel.play' };
+    const ep = this.episodes().get(m.id);
+    if (!ep) return { play: false, labelKey: 'hero_carousel.details' };
+    return { play: true, labelKey: ep.resuming ? 'hero_carousel.resume_episode' : 'hero_carousel.play_episode', code: episodeCode(ep.next) };
   });
   protected readonly detailLink = computed(() => {
     const m = this.current();
@@ -89,6 +97,15 @@ export class HeroCarouselComponent {
   });
 
   constructor() {
+    effect(() => {
+      const m = this.current();
+      if (!m || !kindOf(m.type).hasSeasons || untracked(() => this.episodes().has(m.id))) return;
+      void this.start
+        .nextUpOf(m)
+        .then((r) => (r.next ? { next: r.next, resuming: r.resuming } : null))
+        .catch(() => null)
+        .then((v) => this.episodes.update((map) => new Map(map).set(m.id, v)));
+    });
     effect((onCleanup) => {
       if (!this.running()) return;
       this.index();

@@ -6289,6 +6289,8 @@
     "label": "Títulos destacados",
     "play": "Reproducir",
     "details": "Detalles",
-    "go_to": "Mostrar el título {{n}}"
+    "go_to": "Mostrar el título {{n}}",
+    "play_episode": "Reproducir {{code}}",
+    "resume_episode": "Reanudar {{code}}"
   }
 }

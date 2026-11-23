@@ -6289,6 +6289,8 @@
     "label": "Empfohlene Titel",
     "play": "Abspielen",
     "details": "Details",
-    "go_to": "Titel {{n}} anzeigen"
+    "go_to": "Titel {{n}} anzeigen",
+    "play_episode": "{{code}} abspielen",
+    "resume_episode": "{{code}} fortsetzen"
   }
 }
