@@ -1,10 +1,11 @@
 import { TestBed } from '@angular/core/testing';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TvSpatialNavService } from './tv-spatial-nav.service';
 
 type Nav = {
   registerContainer(el: HTMLElement, o: { orientation: 'vertical' | 'horizontal' }): void;
   findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null;
+  performMove(dir: 'left' | 'right' | 'up' | 'down', crossZones: boolean): void;
   findNeighborInTree(active: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null;
 };
 
@@ -145,5 +146,17 @@ describe('TvSpatialNavService tree', () => {
     at(other, 0, 300);
     first.focus();
     expect(nav.findNeighborInTree(first, 'left')).toBe(library);
+  });
+
+  it('never scrolls the page when Up or Down runs out of rail entries', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const { home, library, first } = railAndPage(nav);
+    const scrollBy = vi.spyOn(window, 'scrollBy').mockImplementation(() => undefined);
+    library.focus();
+    nav.performMove('down', true);
+    home.focus();
+    nav.performMove('up', true);
+    expect(scrollBy).not.toHaveBeenCalled();
+    scrollBy.mockRestore();
   });
 });

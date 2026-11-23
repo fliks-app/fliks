@@ -311,7 +311,8 @@ export class TvSpatialNavService {
     }
     // No focusable neighbour: scroll the page so the user can reach info content
     // below the last card. Held keys stay put; up/down only; not in a modal.
-    if (crossZones && !this.openModals().length && (dir === 'down' || dir === 'up')) {
+    // The rail is not the page: its ends stop the step instead of scrolling the content behind it.
+    if (crossZones && !this.openModals().length && !active?.closest('[data-tv-nav]') && (dir === 'down' || dir === 'up')) {
       const top = dir === 'down' ? PAGE_SCROLL_AMOUNT_PX : -PAGE_SCROLL_AMOUNT_PX;
       window.scrollBy({ top, behavior: 'smooth' });
     }
@@ -320,6 +321,11 @@ export class TvSpatialNavService {
   /** One smooth scroll per scroller: the row snap or a page reveal moves the page, the card row and inner
    *  vertical scrollers scroll themselves; two animations on one scroller judder. */
   private scrollToFocus(el: HTMLElement, style: CSSStyleDeclaration): void {
+    // The rail is viewport-bound: moving in it scrolls its own list, never the page.
+    if (el.closest('[data-tv-nav]')) {
+      this.scrollWithinList(el);
+      return;
+    }
     const scrollers = verticalScrollers(el);
     const row = el.closest<HTMLElement>('[data-scroller]');
     if (scrollers.length) el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
@@ -330,6 +336,16 @@ export class TvSpatialNavService {
     this.scrollEdgeToFocus(el, scrollers);
     // Last so it wins: on the TV WebView smooth scrollIntoView leaves a horizontal scroller untouched, stranding focus off-card.
     if (row) this.scrollRowToFocus(el, row);
+  }
+
+  /** Keeps `el` inside its nearest vertical scroller without touching the scrollers above it. */
+  private scrollWithinList(el: HTMLElement): void {
+    const list = verticalScrollers(el)[0];
+    if (!list) return;
+    const r = el.getBoundingClientRect();
+    const b = list.getBoundingClientRect();
+    const delta = r.top < b.top ? r.top - b.top : r.bottom > b.bottom ? r.bottom - b.bottom : 0;
+    if (delta) list.scrollBy({ top: delta, behavior: 'smooth' });
   }
 
   /** The vertical half of `nearest` on the page, for a card whose row scrolls itself sideways. */
