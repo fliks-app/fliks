@@ -1,16 +1,87 @@
 @let m = media();
 @let selSeason = selectedSeason();
 <app-detail-section [heading]="sectionTitle()" persistKey="moreFromSeason">
-<section class="space-y-4">
+@let seasonColumn = !hideControls() && !tv.isTv();
+<section class="lg:flex lg:items-start lg:gap-6">
+  @if (seasonColumn) {
+    <nav #seasonNav class="max-lg:hidden w-56 shrink-0 flex flex-col gap-1 scroll-ring-safe sticky top-4 max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain" [attr.aria-label]="'media_detail.season' | translate">
+      @for (season of displaySeasons(); track season.id) {
+        @let active = season.id === activeSeasonId();
+        <button
+          type="button"
+          class="flex items-center gap-3 rounded-box p-2 text-left cursor-pointer transition-colors hover:bg-base-content/10"
+          [class.bg-base-content/10]="active"
+          [attr.aria-current]="active ? 'true' : null"
+          (click)="selectSeason.emit(season.id)"
+        >
+          @let rowPoster = season.posterUrl ?? m.posterUrl;
+          @if (rowPoster) {
+            <img [src]="rowPoster" alt="" loading="lazy" class="w-9 aspect-[2/3] shrink-0 rounded object-cover" />
+          }
+          <span class="flex min-w-0 flex-1 flex-col gap-1">
+            <span class="flex items-center gap-1.5">
+              <span class="truncate font-semibold" [class.text-base-content/70]="!active">{{ season.seasonNumber | seasonLabel }}</span>
+              @if (!season.monitored) {
+                <svg [lucideIcon]="icons.EyeOff" class="h-3.5 w-3.5 shrink-0 opacity-60" [attr.aria-label]="'media_detail.unmonitored' | translate"></svg>
+              }
+            </span>
+            @if (season.episodes.length > 0) {
+              <progress
+                class="progress progress-primary h-1"
+                [value]="seasonWatchedCount(season)"
+                [max]="season.episodes.length"
+                [attr.aria-label]="seasonWatchedCount(season) + '/' + season.episodes.length"
+              ></progress>
+            }
+          </span>
+        </button>
+      }
+    </nav>
+  }
+  <div class="min-w-0 flex-1 space-y-4">
   @if (!hideControls()) {
-  <div appTvRow class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-    <app-dropdown-menu placement="bottom-start">
-      <button trigger type="button" class="select select-bordered w-fit shrink-0 text-left text-lg font-bold cursor-pointer transition-colors hover:bg-base-content/10">
-        @if (selSeason) {
-          {{ selSeason.seasonNumber | seasonLabel }}
-        } @else {
-          {{ 'media_detail.season' | translate }}
+  <div class="flex flex-col gap-2">
+  <div appTvRow [class]="seasonColumn ? 'lg:hidden' : ''">
+    <app-dropdown-menu placement="bottom-end" class="block [&>.dropdown]:w-full">
+      <button trigger type="button" class="flex w-full items-center gap-3 rounded-box bg-base-content/5 p-2 text-left cursor-pointer transition-colors hover:bg-base-content/10">
+        @let cardPoster = selSeason?.posterUrl ?? m.posterUrl;
+        @if (cardPoster) {
+          <img [src]="cardPoster" alt="" class="w-12 aspect-[2/3] shrink-0 rounded-md object-cover" />
         }
+        <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span class="flex items-center gap-1 text-lg font-bold">
+            @if (selSeason) {
+              {{ selSeason.seasonNumber | seasonLabel }}
+            } @else {
+              {{ 'media_detail.season' | translate }}
+            }
+            <svg [lucideIcon]="icons.ChevronDown" class="h-5 w-5 shrink-0 opacity-70"></svg>
+          </span>
+          @if (selSeason && isSeasonTabVisible(selSeason)) {
+            <span class="truncate text-sm text-base-content/60">
+              @if (selSeason.airDate) {
+                @if (seasonAirDateIsYearOnly(selSeason)) {
+                  {{ selSeason.airDate }}
+                } @else {
+                  {{ selSeason.airDate | localeDate:{ dateStyle: 'long' } }}
+                }
+                <span aria-hidden="true">·</span>
+              }
+              {{ (tabEpisodeCount(selSeason) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(selSeason) } }}
+            </span>
+            @if (selSeason.episodes.length > 0) {
+              <span class="flex items-center gap-2 text-sm text-base-content/60">
+                <progress
+                  class="progress progress-primary h-1 flex-1"
+                  [value]="seasonWatchedCount(selSeason)"
+                  [max]="selSeason.episodes.length"
+                  [attr.aria-label]="'media_detail.season_watched_count' | translate:{ count: seasonWatchedCount(selSeason) }"
+                ></progress>
+                <span class="tabular-nums">{{ seasonWatchedCount(selSeason) }}/{{ selSeason.episodes.length }}</span>
+              </span>
+            }
+          }
+        </span>
       </button>
       @for (season of displaySeasons(); track season.id) {
         <app-dropdown-option
@@ -22,60 +93,72 @@
         />
       }
     </app-dropdown-menu>
+  </div>
+  <div appTvRow class="flex items-center gap-1 sm:gap-2">
+    @if (seasonColumn && selSeason && isSeasonTabVisible(selSeason)) {
+      <div class="hidden lg:flex min-w-0 flex-col">
+        <div class="flex items-center gap-2">
+          <h3 class="truncate text-xl font-bold">{{ selSeason.seasonNumber | seasonLabel }}</h3>
+          @if (!selSeason.monitored && !episodesHasFileOnly()) {
+            <span class="badge badge-ghost shrink-0">{{ 'media_detail.unmonitored' | translate }}</span>
+          }
+        </div>
+        <span class="truncate text-sm text-base-content/60">
+        @if (selSeason.airDate) {
+          @if (seasonAirDateIsYearOnly(selSeason)) {
+            {{ selSeason.airDate }}
+          } @else {
+            {{ selSeason.airDate | localeDate:{ dateStyle: 'long' } }}
+          }
+          <span aria-hidden="true">·</span>
+        }
+        {{ (tabEpisodeCount(selSeason) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(selSeason) } }}
+        @if (seasonWatchedCount(selSeason) > 0) {
+          <span aria-hidden="true">·</span>
+          {{ 'media_detail.season_watched_count' | translate:{ count: seasonWatchedCount(selSeason) } }}
+        }
+        </span>
+      </div>
+    }
     @if (selSeason && isSeasonTabVisible(selSeason) && !episodesHasFileOnly()) {
       @if (!selSeason.monitored) {
-        <span class="badge badge-ghost shrink-0">{{ 'media_detail.unmonitored' | translate }}</span>
+        <span class="badge badge-ghost shrink-0" [class]="seasonColumn ? 'lg:hidden' : ''">{{ 'media_detail.unmonitored' | translate }}</span>
       }
       @if (selSeason.preferredProvider) {
         <span class="badge badge-primary badge-sm shrink-0">{{ selSeason.preferredProvider | uppercase }}</span>
       }
     }
-    <!-- Select mode forces the list view, so the switch has nothing to offer then. -->
-    @let showViewToggle = canSwitchEpisodeView() && !selectMode();
-    @if (showViewToggle) {
-      <div class="join ms-auto" role="group">
-        <button
-          type="button"
-          class="btn btn-sm join-item"
-          [class.btn-active]="episodeView() === 'grid'"
-          [attr.aria-pressed]="episodeView() === 'grid'"
-          [attr.aria-label]="'media_detail.episode_view_grid' | translate"
-          [attr.title]="'media_detail.episode_view_grid' | translate"
-          (click)="setEpisodeView('grid')"
-        >
-          <svg [lucideIcon]="icons.LayoutGrid" class="h-4 w-4"></svg>
-        </button>
-        <button
-          type="button"
-          class="btn btn-sm join-item"
-          [class.btn-active]="episodeView() === 'list'"
-          [attr.aria-pressed]="episodeView() === 'list'"
-          [attr.aria-label]="'media_detail.episode_view_list' | translate"
-          [attr.title]="'media_detail.episode_view_list' | translate"
-          (click)="setEpisodeView('list')"
-        >
-          <svg [lucideIcon]="icons.List" class="h-4 w-4"></svg>
-        </button>
-      </div>
-    }
+    <span class="flex-1"></span>
     @if (canSelect()) {
       <button
         type="button"
-        class="btn btn-sm max-sm:btn-square shrink-0 {{ showViewToggle ? '' : 'ms-auto' }}"
+        class="btn btn-ghost btn-circle max-sm:btn-sm shrink-0"
         [class.btn-active]="selectMode()"
         [attr.aria-pressed]="selectMode()"
         [attr.aria-label]="'downloads.select' | translate"
+        [attr.title]="'downloads.select' | translate"
         (click)="toggleSelectMode()"
       >
-        <svg [lucideIcon]="icons.ListChecks" class="h-4 w-4"></svg>
-        <span class="max-sm:hidden">{{ 'downloads.select' | translate }}</span>
+        <svg [lucideIcon]="icons.ListChecks" class="h-5 w-5"></svg>
+      </button>
+    }
+    <!-- Select mode forces the list view, so the switch has nothing to offer then. -->
+    @if (canSwitchEpisodeView() && !selectMode()) {
+      @let nextView = episodeView() === 'grid' ? 'list' : 'grid';
+      <button
+        type="button"
+        class="btn btn-ghost btn-circle max-sm:btn-sm shrink-0"
+        [attr.aria-label]="'media_detail.episode_view_' + nextView | translate"
+        [attr.title]="'media_detail.episode_view_' + nextView | translate"
+        (click)="setEpisodeView(nextView)"
+      >
+        <svg [lucideIcon]="nextView === 'grid' ? icons.LayoutGrid : icons.List" class="h-5 w-5"></svg>
       </button>
     }
     @if (selSeason) {
       <button
         type="button"
         class="btn btn-ghost btn-circle max-sm:btn-sm shrink-0"
-        [class.ms-auto]="!showViewToggle && !canSelect()"
         (click)="toggleSeasonLike.emit(selSeason.id)"
         [attr.aria-label]="(isSeasonLiked(selSeason.id) ? 'likes.unlike_season' : 'likes.like_season') | translate"
       >
@@ -87,7 +170,7 @@
         ></svg>
       </button>
     }
-    <app-dropdown-menu placement="bottom-end" [class.ms-auto]="!showViewToggle && !canSelect() && !selSeason">
+    <app-dropdown-menu placement="bottom-end">
       <button trigger type="button" class="btn btn-ghost btn-circle max-sm:btn-sm shrink-0" [attr.aria-label]="'common.more' | translate">
         <svg [lucideIcon]="icons.EllipsisVertical" class="h-5 w-5"></svg>
       </button>
@@ -249,6 +332,7 @@
       }
     </app-dropdown-menu>
   </div>
+  </div>
   }
 
   @if (episodesHasFileOnly() && displaySeasons().length === 0) {
@@ -258,38 +342,12 @@
   }
 
   @if (selSeason && isSeasonTabVisible(selSeason)) {
-    <!-- Pulled up out of the section's space-y-4 so it groups with the season
-         picker above rather than reading as a caption of the episode row. -->
-    @if (!hideControls()) {
-      <div class="space-y-2 -mt-2">
-        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/60">
-          @if (selSeason.airDate) {
-            <span>
-              @if (seasonAirDateIsYearOnly(selSeason)) {
-                {{ selSeason.airDate }}
-              } @else {
-                {{ selSeason.airDate | localeDate:{ dateStyle: 'long' } }}
-              }
-            </span>
-            <span aria-hidden="true">·</span>
-          }
-          <span>
-            {{ (tabEpisodeCount(selSeason) <= 1 ? 'media_detail.episode_count_one' : 'media_detail.episode_count_other') | translate:{ count: tabEpisodeCount(selSeason) } }}
-          </span>
-          @if (seasonWatchedCount(selSeason) > 0) {
-            <span aria-hidden="true">·</span>
-            <span>{{ 'media_detail.season_watched_count' | translate:{ count: seasonWatchedCount(selSeason) } }}</span>
-          }
-        </div>
-
-        @if (selSeason.overview) {
-          <app-synopsis
-            [text]="selSeason.overview"
-            [spoiler]="seasonOverviewSpoiler(selSeason)"
-            textClass="text-sm text-base-content/80"
-          />
-        }
-      </div>
+    @if (!hideControls() && selSeason.overview) {
+      <app-synopsis
+        [text]="selSeason.overview"
+        [spoiler]="seasonOverviewSpoiler(selSeason)"
+        textClass="text-sm text-base-content/80"
+      />
     }
     @if (filteredEpisodes().length === 0 && episodesHasFileOnly() && selSeason.episodes.length > 0) {
       <p class="text-sm text-base-content/60 py-8 text-center">
@@ -440,5 +498,6 @@
     }
 
   }
+  </div>
 </section>
 </app-detail-section>
