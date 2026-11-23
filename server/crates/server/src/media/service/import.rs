@@ -89,7 +89,7 @@ pub async fn resolve_target_in(
                 }
                 _ => {
                     return Err(AppError::bad_request(format!(
-                        "Several libraries accept {media_type} — pass libraryId to choose one"
+                        "Several libraries accept {media_type} \u{2014} pass libraryId to choose one"
                     )));
                 }
             }
