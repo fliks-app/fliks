@@ -9,6 +9,7 @@ import { provideRouter } from '@angular/router';
 import { AuthService, type User } from './auth.service';
 import { SessionStoreService } from './session-store.service';
 import { NATIVE_AUDIO } from '../plugins/audio-player.plugin';
+import { DownloadManagerService } from './download-manager.service';
 
 const user = (id: number): User =>
   ({ id, username: `user${id}`, avatar: null, permissions: [] }) as unknown as User;
@@ -34,10 +35,12 @@ describe('AuthService session switching', () => {
   let sessions: SessionStoreService;
   let http: HttpTestingController;
   const stopNative = vi.fn().mockResolvedValue(undefined);
+  const deleteAll = vi.fn().mockResolvedValue(undefined);
 
   beforeEach(async () => {
     localStorage.clear();
     stopNative.mockClear();
+    deleteAll.mockClear();
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
@@ -46,6 +49,7 @@ describe('AuthService session switching', () => {
         // dropActiveSession() sends the user back to the picker.
         provideRouter([{ path: 'select-user', children: [] }]),
         { provide: NATIVE_AUDIO, useValue: { stop: stopNative } },
+        { provide: DownloadManagerService, useValue: { deleteAll } },
       ],
     });
     auth = TestBed.inject(AuthService);
@@ -131,6 +135,7 @@ describe('AuthService session switching', () => {
 
     expect(await rotation).toBe(false);
     expect(sessions.get('', 1)).toBeNull();
+    expect(deleteAll).toHaveBeenCalledTimes(1);
   });
 
   it('adopts the pair another refresher stored instead of dropping on "already rotated"', async () => {

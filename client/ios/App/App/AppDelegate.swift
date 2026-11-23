@@ -20,6 +20,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         // Present download completion banners even while the app is foregrounded
         // (default iOS behaviour suppresses them when the app is active).
         UNUserNotificationCenter.current().delegate = self
+        StoredSessions.launch()
         PushNotifications.start()
 
         // Initialize Google Cast SDK early (required for device discovery)

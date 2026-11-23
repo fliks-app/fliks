@@ -41,6 +41,7 @@ jobs:
       receiver: ${{ steps.diff.outputs.receiver }}
       tvos: ${{ steps.diff.outputs.tvos }}
       macos: ${{ steps.diff.outputs.macos }}
+      ios_push: ${{ steps.diff.outputs.ios_push }}
     steps:
       # Depth 2: a PR checks out its merge commit, whose first parent is the base branch tip.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,7 +65,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          out() { printf 'server=%s\nclient=%s\ndesktop=%s\nlibmpv_mac=%s\nreceiver=%s\ntvos=%s\nmacos=%s\n' "$1" "$1" "$1" "$1" "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
+          out() { printf 'server=%s\nclient=%s\ndesktop=%s\nlibmpv_mac=%s\nreceiver=%s\ntvos=%s\nmacos=%s\nios_push=%s\n' "$1" "$1" "$1" "$1" "$1" "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
           # Release PRs only bump versions (main re-runs everything after the merge); drafts wait for review.
           if [[ "$RELEASE_PR" == true || "$DRAFT" == true ]]; then out false; exit 0; fi
           case "$EVENT" in
@@ -82,6 +83,7 @@ jobs:
             echo "desktop=$(hit '^desktop/')"
             echo "tvos=$(hit '^(appletv/|server/parity/scenarios/|client/public/i18n/)')"
             echo "macos=$(hit '^(macos/|scripts/embedded-postgres\.conf$)')"
+            echo "ios_push=$(hit '^client/ios/App/(FliksPush[^/]*/|FliksNotificationService/|Push/|App/(StoredSessions|SessionVaultPlugin|AppDelegate)\.swift)')"
             echo "receiver=$(hit '^(cast-receiver/|server/public/emoji/)')"
             echo "libmpv_mac=$(hit '^desktop/(scripts/(build-libmpv-mac|verify-libmpv-mac|verify-minos-mac)\.sh|native/(binding\.gyp|player_mac/))')"
           } | tee -a "$GITHUB_OUTPUT"
@@ -636,6 +638,25 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
             build
+        working-directory: client/ios/App
+
+      # The push store, the sessions Keychain store and their launch order. Ad-hoc signed: the entitlements keep
+      # the Keychain usable. Pull requests only, like the tvOS tests.
+      - name: Test iOS push and session store
+        if: github.event_name == 'pull_request' && needs.changes.outputs.ios_push == 'true'
+        run: |
+          udid=$(xcrun simctl list devices available iPhone \
+            | awk '/iPhone/ { match($0, /[0-9A-F-]{36}/); id = substr($0, RSTART, RLENGTH) } END { print id }')
+          test -n "$udid" || { echo "no iPhone simulator available"; exit 1; }
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -destination "id=$udid" \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=YES \
+            CODE_SIGNING_ALLOWED=YES \
+            -only-testing:FliksPushTests \
+            test
         working-directory: client/ios/App
 
   # Unit and server-contract tests on a simulator: ServerContractTests decode the parity scenarios and the i18n files.

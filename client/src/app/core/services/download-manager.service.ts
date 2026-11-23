@@ -646,6 +646,11 @@ export class DownloadManagerService {
     );
   }
 
+  /** Signing out: the account's downloads leave the device with their native entries, bytes and server sessions. */
+  async deleteAll(): Promise<void> {
+    for (const task of this.cache.load()) await this.deleteDownload(task).catch(() => {});
+  }
+
   async deleteDownload(task: DownloadTask) {
     this.deleting.update((s) => new Set(s).add(task.id));
     try {
@@ -910,10 +915,7 @@ export class DownloadManagerService {
   private async recoverBook(t: DownloadTask, onStartup: boolean) {
     if (t.status === 'ready') {
       if (!(await this.books.has(t.book!))) this.cache.remove(t.id);
-    } else if (t.status === 'failed') {
-      await this.dropBookFiles(t);
-      this.cache.remove(t.id);
-    } else if (onStartup && !this.bookRuns.has(t.id)) {
+    } else if (t.status !== 'failed' && onStartup && !this.bookRuns.has(t.id)) {
       // Auto items are re-fetched by the reconciler, manual ones flagged for a retry.
       if (t.auto) {
         await this.deleteDownload(t);
@@ -966,9 +968,6 @@ export class DownloadManagerService {
             this.cache.remove(t.id);
           }
         }
-      } else if (t.status === 'failed') {
-        // Remove stale failed tasks
-        this.cache.remove(t.id);
       } else if (isActive(t.status)) {
         // In-flight at last stop: ask the native daemon first, since only web's Shaka store died with the JS context.
         if (this.isNative && (await this.reconcileNative(t, nativeById))) continue;
@@ -980,6 +979,14 @@ export class DownloadManagerService {
           await this.notif.removeDownload(String(t.id));
           this.updateTaskStatus(t.id, 'failed', 0);
         }
+      }
+    }
+
+    // Native entries no task of any scope references (a row lost to a cleared cache, a crash between the two writes).
+    if (this.isNative && nativeById.size) {
+      const known = this.cache.allIds();
+      for (const id of nativeById.keys()) {
+        if (!known.has(Number(id))) await this.notif.removeDownload(id);
       }
     }
 

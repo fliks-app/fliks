@@ -75,11 +75,7 @@ enum PushStore {
 
     static func wipe() { SecItemDelete(base() as CFDictionary) }
 
-    private static func base(_ account: String? = nil) -> [String: Any] {
-        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
-        if let account { query[kSecAttrAccount as String] = account }
-        return query
-    }
+    private static func base(_ account: String? = nil) -> [String: Any] { Keychain.query(service: service, account: account) }
 
     private static func seenRows() -> [(id: String, stamp: Int64)] {
         var query = base()
@@ -95,21 +91,9 @@ enum PushStore {
         }
     }
 
-    private static func read(_ account: String) -> Data? {
-        var query = base(account)
-        query[kSecReturnData as String] = true
-        var out: CFTypeRef?
-        return SecItemCopyMatching(query as CFDictionary, &out) == errSecSuccess ? out as? Data : nil
-    }
+    private static func read(_ account: String) -> Data? { Keychain.read(service: service, account: account).data }
 
-    private static func write(_ account: String, _ data: Data) {
-        let update = SecItemUpdate(base(account) as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        guard update == errSecItemNotFound else { return }
-        var add = base(account)
-        add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
-    }
+    private static func write(_ account: String, _ data: Data) { Keychain.write(service: service, account: account, data) }
 
-    private static func remove(account: String) { SecItemDelete(base(account) as CFDictionary) }
+    private static func remove(account: String) { Keychain.remove(service: service, account: account) }
 }

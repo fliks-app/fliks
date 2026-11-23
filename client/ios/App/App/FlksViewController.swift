@@ -46,6 +46,7 @@ class FlksViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(CalendarPlugin())
         bridge?.registerPluginInstance(RemoteNotificationPlugin())
         bridge?.registerPluginInstance(PushPlugin())
+        bridge?.registerPluginInstance(SessionVaultPlugin())
     }
 
     func updateStatusBar(hidden: Bool) {

@@ -334,7 +334,9 @@ public class NativePlayerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func configure(_ call: CAPPluginCall) {
-        preferredAudioLanguage = call.getString("preferredAudioLanguage") ?? ""
+        if let language = call.getString("preferredAudioLanguage") {
+            DispatchQueue.main.async { [weak self] in self?.preferredAudioLanguage = language }
+        }
         call.resolve()
     }
 

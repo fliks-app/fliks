@@ -1,4 +1,5 @@
 import CryptoKit
+import UIKit
 import UserNotifications
 import XCTest
 
@@ -244,25 +245,37 @@ final class PushCategoriesTests: XCTestCase {
 }
 
 final class StoredSessionsTests: XCTestCase {
-    private let key = "CapacitorStorage.fliks_sessions"
-    private var saved: Any?
+    private let legacyKey = "CapacitorStorage.fliks_sessions"
+    private var saved: [String: Any?] = [:]
 
     override func setUp() {
-        saved = UserDefaults.standard.object(forKey: key)
-        UserDefaults.standard.set(sessions(access: "old", refresh: "r1"), forKey: key)
+        StoredSessions.service = "media.fliks.app.sessions.tests"
+        PushStore.service = "media.fliks.app.push.tests"
+        for key in [legacyKey, StoredSessions.installedKey] { saved[key] = UserDefaults.standard.object(forKey: key) }
+        UserDefaults.standard.removeObject(forKey: legacyKey)
+        UserDefaults.standard.set(true, forKey: StoredSessions.installedKey)
         UserDefaults.standard.set("https://s.test::1", forKey: "CapacitorStorage.fliks_active_session")
+        StoredSessions.clear()
+        PushStore.wipe()
+        try? StoredSessions.store(sessions(access: "old", refresh: "r1"))
         StubRefresh.reset()
         URLProtocol.registerClass(StubRefresh.self)
     }
 
     override func tearDown() {
         URLProtocol.unregisterClass(StubRefresh.self)
-        UserDefaults.standard.set(saved, forKey: key)
+        StoredSessions.clear()
+        PushStore.wipe()
+        for (key, value) in saved { UserDefaults.standard.set(value, forKey: key) }
         UserDefaults.standard.removeObject(forKey: "CapacitorStorage.fliks_active_session")
     }
 
     private func sessions(access: String, refresh: String) -> String {
         #"[{"serverUrl":"https://s.test","accessToken":"\#(access)","refreshToken":"\#(refresh)","tokenVersion":2,"user":{"id":1}}]"#
+    }
+
+    private func stored() throws -> [[String: Any]] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: Data(try XCTUnwrap(StoredSessions.blob()).utf8)) as? [[String: Any]])
     }
 
     func testNormalisesTheServerOnce() {
@@ -277,11 +290,12 @@ final class StoredSessionsTests: XCTestCase {
         let renewed = await StoredSessions.refresh("https://s.test::1", rejected: "old")
         XCTAssertEqual(renewed, true)
         XCTAssertEqual(StubRefresh.bodies, [#"{"refreshToken":"r1"}"#])
-        let stored = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(try XCTUnwrap(UserDefaults.standard.string(forKey: key)).utf8)) as? [[String: Any]])
-        XCTAssertEqual(stored[0]["accessToken"] as? String, "new")
-        XCTAssertEqual(stored[0]["refreshToken"] as? String, "r2")
-        XCTAssertEqual(stored[0]["refreshExpiresAt"] as? Int, 2_000_000)
-        XCTAssertEqual(stored[0]["tokenVersion"] as? Int, 3)
+        let row = try XCTUnwrap(stored().first)
+        XCTAssertEqual(row["accessToken"] as? String, "new")
+        XCTAssertEqual(row["refreshToken"] as? String, "r2")
+        XCTAssertEqual(row["refreshExpiresAt"] as? Int, 2_000_000)
+        XCTAssertEqual(row["tokenVersion"] as? Int, 3)
+        XCTAssertNil(UserDefaults.standard.string(forKey: legacyKey))
     }
 
     func testAdoptsAPairAnotherContextAlreadyStored() async {
@@ -298,6 +312,113 @@ final class StoredSessionsTests: XCTestCase {
         let unreachable = await StoredSessions.refresh("https://s.test::1", rejected: "old")
         XCTAssertNil(unreachable)
         XCTAssertEqual(StoredSessions.find("https://s.test::1")?.token, "old")
+    }
+
+    func testAFailedWriteAfterTheRotationIsUnreachableNotRefused() async {
+        StubRefresh.status = 200
+        let write = StoredSessions.writeItem
+        defer { StoredSessions.writeItem = write }
+        StoredSessions.writeItem = { _ in errSecInteractionNotAllowed }
+        let result = await StoredSessions.refresh("https://s.test::1", rejected: "old")
+        XCTAssertNil(result)
+        XCTAssertEqual(StoredSessions.find("https://s.test::1")?.token, "old")
+    }
+
+    func testAFailedReadIsAnErrorNeverAnEmptyStore() throws {
+        XCTAssertEqual(try StoredSessions.blob(), sessions(access: "old", refresh: "r1"))
+        StoredSessions.clear()
+        XCTAssertNil(try StoredSessions.blob())
+        let read = StoredSessions.readItem
+        defer { StoredSessions.readItem = read }
+        for status in [errSecInteractionNotAllowed, errSecAuthFailed, errSecDecode] {
+            StoredSessions.readItem = { (status, nil) }
+            XCTAssertThrowsError(try StoredSessions.blob())
+        }
+        XCTAssertNil(StoredSessions.find("https://s.test::1"))
+    }
+
+    func testAFailedStoreThrows() {
+        let write = StoredSessions.writeItem
+        defer { StoredSessions.writeItem = write }
+        StoredSessions.writeItem = { _ in errSecInteractionNotAllowed }
+        XCTAssertThrowsError(try StoredSessions.store("[]"))
+    }
+
+    @MainActor
+    func testAReadBeforeTheFirstUnlockWaitsThenRetries() async throws {
+        let read = StoredSessions.readItem
+        defer { StoredSessions.readItem = read }
+        nonisolated(unsafe) var unlocked = false
+        StoredSessions.readItem = { unlocked ? read() : (errSecInteractionNotAllowed, nil) }
+        let pending = Task { @MainActor in try await StoredSessions.blobWhenUnlocked() }
+        try await Task.sleep(nanoseconds: 200_000_000)
+        unlocked = true
+        NotificationCenter.default.post(name: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil)
+        let value = try await pending.value
+        XCTAssertEqual(value, sessions(access: "old", refresh: "r1"))
+    }
+
+    func testMigratesTheLegacyBlobThenDeletesTheKey() throws {
+        StoredSessions.clear()
+        UserDefaults.standard.set(sessions(access: "legacy", refresh: "r0"), forKey: legacyKey)
+        StoredSessions.migrate()
+        XCTAssertEqual(try stored().first?["accessToken"] as? String, "legacy")
+        XCTAssertNil(UserDefaults.standard.string(forKey: legacyKey))
+    }
+
+    func testAnExistingItemWinsAndTheKeyIsJustDeleted() throws {
+        UserDefaults.standard.set(sessions(access: "legacy", refresh: "r0"), forKey: legacyKey)
+        StoredSessions.migrate()
+        XCTAssertEqual(try stored().first?["accessToken"] as? String, "old")
+        XCTAssertNil(UserDefaults.standard.string(forKey: legacyKey))
+    }
+
+    func testAFailedWriteLeavesTheLegacyBlobForTheNextLaunch() {
+        StoredSessions.clear()
+        UserDefaults.standard.set(sessions(access: "legacy", refresh: "r0"), forKey: legacyKey)
+        let write = StoredSessions.writeItem
+        StoredSessions.writeItem = { _ in errSecInteractionNotAllowed }
+        StoredSessions.migrate()
+        StoredSessions.writeItem = write
+        XCTAssertNotNil(UserDefaults.standard.string(forKey: legacyKey))
+        StoredSessions.migrate()
+        XCTAssertNil(UserDefaults.standard.string(forKey: legacyKey))
+        XCTAssertNotNil(try? StoredSessions.blob())
+    }
+
+    func testAnUnreadableItemLeavesTheLegacyBlob() {
+        UserDefaults.standard.set(sessions(access: "legacy", refresh: "r0"), forKey: legacyKey)
+        let read = StoredSessions.readItem
+        defer { StoredSessions.readItem = read }
+        StoredSessions.readItem = { (errSecInteractionNotAllowed, nil) }
+        StoredSessions.migrate()
+        XCTAssertNotNil(UserDefaults.standard.string(forKey: legacyKey))
+    }
+
+    func testAnUpgradeFromBeforeThePushFlagKeepsTheSessions() throws {
+        UserDefaults.standard.removeObject(forKey: StoredSessions.installedKey)
+        StoredSessions.clear()
+        UserDefaults.standard.set(sessions(access: "legacy", refresh: "r0"), forKey: legacyKey)
+        StoredSessions.launch()
+        XCTAssertEqual(try stored().first?["accessToken"] as? String, "legacy")
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: StoredSessions.installedKey))
+    }
+
+    func testAReinstallStartsSignedOut() throws {
+        UserDefaults.standard.removeObject(forKey: StoredSessions.installedKey)
+        StoredSessions.launch()
+        XCTAssertNil(try StoredSessions.blob())
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: StoredSessions.installedKey))
+    }
+
+    func testNoResetBeforeTheFirstUnlock() throws {
+        UserDefaults.standard.removeObject(forKey: StoredSessions.installedKey)
+        let read = StoredSessions.readItem
+        StoredSessions.readItem = { (errSecInteractionNotAllowed, nil) }
+        StoredSessions.launch()
+        StoredSessions.readItem = read
+        XCTAssertFalse(UserDefaults.standard.bool(forKey: StoredSessions.installedKey))
+        XCTAssertNotNil(try StoredSessions.blob())
     }
 }
 

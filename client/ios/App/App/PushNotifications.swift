@@ -3,8 +3,6 @@ import UserNotifications
 
 /// The app side of a push that is not the plugin's: launch work, the foreground rule, taps and background actions.
 enum PushNotifications {
-    private static let installedKey = "fliks.push.installed"
-
     /// Everything the extension left under the `fliks` key of the content.
     struct Info {
         let server: String
@@ -25,7 +23,6 @@ enum PushNotifications {
     }
 
     static func start() {
-        resetAfterReinstall()
         registerCategories()
         Task {
             let settings = await UNUserNotificationCenter.current().notificationSettings()
@@ -34,15 +31,6 @@ enum PushNotifications {
             }
             for record in PushStore.subscriptions() ?? [] where record.pendingDelete { await deletePending(record) }
         }
-    }
-
-    /// Keychain items outlive an uninstall, the sessions in `UserDefaults` do not: a launch with no flag starts clean.
-    private static func resetAfterReinstall() {
-        guard !UserDefaults.standard.bool(forKey: installedKey) else { return }
-        UserDefaults.standard.set(true, forKey: installedKey)
-        let token = PushStore.token
-        PushStore.wipe()
-        if let token { Task { _ = await PushRelay.delete(PushRelay.defaultURL, token: token, sub: nil) } }
     }
 
     private static func registerCategories() {

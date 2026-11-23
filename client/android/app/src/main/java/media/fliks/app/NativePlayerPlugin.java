@@ -113,6 +113,7 @@ public class NativePlayerPlugin extends Plugin {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private Handler positionHandler;
     private Runnable positionRunnable;
+    private final PositionHeartbeat heartbeat = new PositionHeartbeat();
 
     // ── Lifecycle ──
 
@@ -197,6 +198,8 @@ public class NativePlayerPlugin extends Plugin {
         android.webkit.WebView webView = getBridge().getWebView();
         if (webView != null) webView.setBackgroundColor(Color.BLACK);
         stopPositionUpdates();
+        mainHandler.removeCallbacks(bufferingRecheck);
+        heartbeat.clear();
         muteMessages.clear();
         muteRanges = new double[0][];
         releaseMediaSession();
@@ -299,6 +302,9 @@ public class NativePlayerPlugin extends Plugin {
         mainHandler.post(() -> {
             if (!backgroundAudio) releaseMediaSession();
             cancelMuteMessages();
+            mainHandler.removeCallbacks(bufferingRecheck);
+            lastEmittedState = "";
+            lastNonBufferingAt = 0;
             if (player != null) player.release();
 
             // Clear stale cues: ExoPlayer.release() keeps them and a fresh load starts with text rendering disabled,
@@ -743,6 +749,22 @@ public class NativePlayerPlugin extends Plugin {
                 if (subtitles != null) subtitles.clear();
                 player.seekTo(Math.round(position * 1000));
             }
+            call.resolve();
+        });
+    }
+
+    /** The heartbeat PUT repeated from the position runnable while the app is stopped. */
+    @PluginMethod()
+    public void setHeartbeat(PluginCall call) {
+        String url = call.getString("url");
+        String token = call.getString("token");
+        JSObject body = call.getObject("body");
+        if (url == null || token == null || body == null) {
+            call.reject("url, token and body are required");
+            return;
+        }
+        mainHandler.post(() -> {
+            heartbeat.set(url, token, body);
             call.resolve();
         });
     }
@@ -1218,11 +1240,17 @@ public class NativePlayerPlugin extends Plugin {
     private long lastNonBufferingAt = 0;
     private static final long BUFFERING_GUARD_MS = 300;
 
+    private final Runnable bufferingRecheck = () -> {
+        if (player != null && player.getPlaybackState() == Player.STATE_BUFFERING) emitStateChanged("buffering");
+    };
+
     private void emitStateChanged(String state) {
-        // Hysteresis on BUFFERING: ExoPlayer can oscillate ready/buffering after a seek, so swallow a BUFFERING emit
-        // within 300 ms of a playable state.
+        // Hysteresis on BUFFERING: ExoPlayer can oscillate ready/buffering after a seek, so a BUFFERING within 300 ms
+        // of a playable state is deferred and emitted only if the player is still buffering once the window ends.
         long now = android.os.SystemClock.uptimeMillis();
         if ("buffering".equals(state) && now - lastNonBufferingAt < BUFFERING_GUARD_MS) {
+            mainHandler.removeCallbacks(bufferingRecheck);
+            mainHandler.postDelayed(bufferingRecheck, BUFFERING_GUARD_MS - (now - lastNonBufferingAt));
             return;
         }
         if (!"buffering".equals(state)) lastNonBufferingAt = now;
@@ -1287,6 +1315,12 @@ public class NativePlayerPlugin extends Plugin {
                 // Emit while the player exists, not only while isPlaying(): NativeEngine's firstFrame fallback needs a second event
                 // with a growing position, and isPlaying() is false in STATE_BUFFERING (JS polling was dropped in 9e2269dc).
                 emitPosition();
+                if (player != null) {
+                    String state = player.isPlaying() ? "playing"
+                            : player.getPlaybackState() == Player.STATE_BUFFERING ? "buffering" : "paused";
+                    heartbeat.send(player.getCurrentPosition() / 1000.0,
+                            player.getDuration() != C.TIME_UNSET ? player.getDuration() / 1000.0 : 0, state);
+                }
                 positionHandler.postDelayed(this, 1000);
             }
         };

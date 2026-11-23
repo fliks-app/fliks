@@ -429,14 +429,17 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
     const preferredAudioLanguage = config?.preferredAudioLanguage;
     const defaultBandwidthEstimate = config?.abr?.defaultBandwidthEstimate;
     if (preferredAudioLanguage !== undefined || defaultBandwidthEstimate !== undefined) {
-      // Builds without the method (and iOS) reject: nothing to apply there.
-      NativePlayer.configure({ preferredAudioLanguage, defaultBandwidthEstimate }).catch(() => {});
+      // Absent keys mean "unchanged" natively; '' clears the language. Builds without the method reject.
+      NativePlayer.configure({
+        ...(preferredAudioLanguage !== undefined && { preferredAudioLanguage }),
+        ...(defaultBandwidthEstimate !== undefined && { defaultBandwidthEstimate }),
+      }).catch(() => {});
     }
   }
 
-  /** iOS keeps the heartbeat going natively once the WebView is suspended. */
+  /** The native player keeps the heartbeat going once the WebView is suspended. */
   setHeartbeat(target: { url: string; token: string; body: Record<string, unknown> }): void {
-    if (Capacitor.getPlatform() === 'ios') NativePlayer.setHeartbeat(target).catch(() => {});
+    NativePlayer.setHeartbeat(target).catch(() => {});
   }
 
   // ── Window event bridge ──

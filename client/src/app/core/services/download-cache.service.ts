@@ -161,6 +161,21 @@ export class DownloadCacheService {
     return untracked(this._tasks);
   }
 
+  /** Ids of the tasks of every (server, user) scope, not only the active one. */
+  allIds(): Set<number> {
+    const ids = new Set(this.load().map((t) => t.id));
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key?.startsWith(`${STORAGE_KEY}.`)) continue;
+        for (const t of JSON.parse(localStorage.getItem(key) ?? '[]') as DownloadTask[]) ids.add(t.id);
+      }
+    } catch {
+      // unreadable storage: the active scope only
+    }
+    return ids;
+  }
+
   remove(taskId: number) {
     this.save(this.load().filter((t) => t.id !== taskId));
   }

@@ -195,3 +195,80 @@ describe('DownloadManagerService native start', () => {
     expect(ask).toHaveBeenCalledWith('download');
   });
 });
+
+describe('DownloadManagerService native recovery', () => {
+  const removeDownload = vi.fn(() => Promise.resolve());
+  let cache: DownloadCacheService;
+  let service: DownloadManagerService;
+
+  beforeEach(() => {
+    localStorage.clear();
+    removeDownload.mockClear();
+    vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
+    TestBed.configureTestingModule({
+      providers: [
+        DownloadManagerService,
+        { provide: StreamingApiService, useValue: { stopSession: () => Promise.resolve() } },
+        { provide: SubtitlesApiService, useValue: {} },
+        { provide: MediaService, useValue: {} },
+        {
+          provide: OfflineStorageService,
+          useValue: { delete: () => Promise.resolve(), deleteSmallFile: () => Promise.resolve(), sizeBytes: () => Promise.resolve(1) },
+        },
+        {
+          provide: DownloadNotificationService,
+          useValue: {
+            nativeEvents: new Subject(),
+            removeDownload,
+            setNotificationCopy: vi.fn(),
+            setActivityCopy: vi.fn(),
+            dismissActivity: vi.fn(),
+            getDownloads: () =>
+              Promise.resolve([
+                { id: '1', progress: 0, state: 'failed' },
+                { id: '2', progress: 100, state: 'completed' },
+                { id: '9', progress: 50, state: 'downloading' },
+              ]),
+          },
+        },
+        { provide: AuthService, useValue: { user: signal({ id: 1 }), sessionEpoch: () => 0, isAuthenticated: () => false } },
+        { provide: BrowserDeviceProfileService, useValue: {} },
+        { provide: TranslateService, useValue: { instant: (k: string) => k } },
+        { provide: AppSettingsService, useValue: {} },
+        { provide: ImageCacheService, useValue: {} },
+        { provide: DownloadSettingsService, useValue: {} },
+        { provide: ServerConfigService, useValue: { serverUrl: signal('s') } },
+        { provide: NetworkService, useValue: { isOnline: () => false } },
+        { provide: PushService, useValue: { askInContext: vi.fn() } },
+      ],
+    });
+    cache = TestBed.inject(DownloadCacheService);
+    service = TestBed.inject(DownloadManagerService);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    TestBed.resetTestingModule();
+  });
+
+  const recover = () => (service as unknown as { recover(): Promise<void> }).recover();
+
+  it('keeps a failed row on reconnect and frees only the entries no scope references', async () => {
+    cache.save([task(1, 'failed'), task(2, 'ready', 100)]);
+    localStorage.setItem('fliks.downloads.cache.other::7', JSON.stringify([task(9, 'ready', 100)]));
+    await recover();
+    expect(service.tasks().map((t) => [t.id, t.status])).toEqual([[1, 'failed'], [2, 'ready']]);
+    expect(removeDownload).not.toHaveBeenCalled();
+    localStorage.clear();
+    cache.save([task(2, 'ready', 100)]);
+    await recover();
+    expect(removeDownload.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['1', '9']);
+  });
+
+  it('deleteAll frees every task of the account: native entry and row', async () => {
+    cache.save([task(1, 'failed'), task(2, 'ready', 100)]);
+    await service.deleteAll();
+    expect(service.tasks()).toEqual([]);
+    expect(removeDownload.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['1', '2']);
+  });
+});

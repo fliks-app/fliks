@@ -212,10 +212,11 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         }
 
         // Capture the (already localized) notification copy for this download.
+        var copy: NotifCopy?
         if let title = call.getString("notifTitle"),
            let complete = call.getString("notifComplete"),
            let failed = call.getString("notifFailed") {
-            notifById[id] = NotifCopy(
+            copy = NotifCopy(
                 title: title,
                 progress: call.getString("notifProgress") ?? complete,
                 stale: call.getString("notifStale") ?? complete,
@@ -226,6 +227,7 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            if let copy { self.notifById[id] = copy }
             self.pending.append(PendingDownload(id: id, url: url, assetOptions: assetOptions))
             self.batchTotal += 1
             self.seedActivityCopy(from: id)
@@ -342,7 +344,13 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             call.reject("id is required")
             return
         }
+        DispatchQueue.main.async { [weak self] in
+            self?.remove(id: id)
+            call.resolve()
+        }
+    }
 
+    private func remove(id: String) {
         // Cancel the transfer wherever it currently sits — running, still
         // being created, or waiting its turn.
         let wasTracked = activeTasks[id] != nil
@@ -373,7 +381,6 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
         // Mirror Android's event so the WebView reconciles its list.
         notifyListeners("downloadRemoved", data: ["id": id, "progress": 0, "state": "removed"])
         pumpQueue()
-        call.resolve()
     }
 
     /// Ask the session for its tasks rather than reading `activeTasks`: that map
@@ -457,7 +464,9 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
             call.resolve(["downloaded": false])
             return
         }
-        call.resolve(["downloaded": completedIds.contains(id) && resolvedAssetURL(id: id) != nil])
+        DispatchQueue.main.async { [weak self] in
+            call.resolve(["downloaded": self.map { $0.completedIds.contains(id) && $0.resolvedAssetURL(id: id) != nil } ?? false])
+        }
     }
 
     /// Bytes the download occupies on disk. Zero when it isn't there.
@@ -503,28 +512,35 @@ public class DownloadPlugin: CAPPlugin, CAPBridgedPlugin, AVAssetDownloadDelegat
     /// player can load it directly. Resolved fresh from the relative path on
     /// every call, which is why it survives container-path changes.
     @objc func getOfflineUrl(_ call: CAPPluginCall) {
-        guard let id = call.getString("id"),
-              let url = resolvedAssetURL(id: id) else {
-            call.resolve(["url": NSNull()])
-            return
+        guard let id = call.getString("id") else { return call.resolve(["url": NSNull()]) }
+        DispatchQueue.main.async { [weak self] in
+            let url = self?.resolvedAssetURL(id: id)
+            call.resolve(["url": url.map { $0.absoluteString as Any } ?? NSNull()])
         }
-        call.resolve(["url": url.absoluteString])
     }
 
     @objc func pauseDownload(_ call: CAPPluginCall) {
-        guard let id = call.getString("id"), let task = activeTasks[id] else { return call.resolve() }
-        pausedIds.insert(id)
-        task.suspend()
-        notifyListeners("downloadProgress", data: ["id": id, "progress": Int(progressById[id] ?? 0), "state": "paused"])
-        pumpQueue()
-        call.resolve()
+        guard let id = call.getString("id") else { return call.resolve() }
+        DispatchQueue.main.async { [weak self] in
+            if let self, let task = self.activeTasks[id] {
+                self.pausedIds.insert(id)
+                task.suspend()
+                self.notifyListeners("downloadProgress", data: ["id": id, "progress": Int(self.progressById[id] ?? 0), "state": "paused"])
+                self.pumpQueue()
+            }
+            call.resolve()
+        }
     }
 
     @objc func resumeDownload(_ call: CAPPluginCall) {
-        guard let id = call.getString("id"), pausedIds.remove(id) != nil else { return call.resolve() }
-        activeTasks[id]?.resume()
-        notifyListeners("downloadProgress", data: ["id": id, "progress": Int(progressById[id] ?? 0), "state": "downloading"])
-        call.resolve()
+        guard let id = call.getString("id") else { return call.resolve() }
+        DispatchQueue.main.async { [weak self] in
+            if let self, self.pausedIds.remove(id) != nil {
+                self.activeTasks[id]?.resume()
+                self.notifyListeners("downloadProgress", data: ["id": id, "progress": Int(self.progressById[id] ?? 0), "state": "downloading"])
+            }
+            call.resolve()
+        }
     }
 
     /// Cap concurrent transfers. Raising it starts queued downloads at once;
