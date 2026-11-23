@@ -1,4 +1,3 @@
-import { moveItemInArray } from '@angular/cdk/drag-drop';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { PartyApiService, type PartyReactionCatalog } from '../api/party-api.service';
 import { ServerConfigService } from '../server-config.service';
@@ -74,7 +73,7 @@ export class ReactionsService {
   /** Moves the bar emoji at `from` to `to` (drag and drop in the settings). */
   move(from: number, to: number): void {
     const bar = [...this.bar()];
-    moveItemInArray(bar, from, to);
+    bar.splice(to, 0, ...bar.splice(from, 1));
     this.save(bar);
   }
 
