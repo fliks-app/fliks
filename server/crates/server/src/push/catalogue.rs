@@ -428,9 +428,8 @@ impl Episodes {
     }
 }
 
-/// The in-process subscriber of `media.files.imported` (`push.md` rule 35). Lossy by contract: a lagged
-/// feed loses the import it missed, and no marker says which notification that was.
-/// Subscribes when called, so no event between the call and the first poll is lost.
+/// The in-process subscriber of `media.files.imported` (`push.md` rule 35). Lossy by contract: a lagged feed
+/// loses the import it missed, unmarked. Subscribes when called, so no event before the first poll is lost.
 fn listen(st: AppState) -> impl Future<Output = ()> {
     let rx = st.hub.subscribe_domain();
     let on_event = move |ev: &Arc<DomainEvent>| {

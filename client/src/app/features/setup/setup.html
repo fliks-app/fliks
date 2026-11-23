@@ -12,7 +12,7 @@
 
       @if (knownServers().length > 0) {
         <section class="flex flex-col gap-2 pt-2">
-          <div class="text-xs font-semibold uppercase tracking-wider text-base-content/60">
+          <div class="text-sm font-semibold uppercase tracking-wider text-base-content/60">
             {{ 'server_history.section_title' | translate }}
           </div>
           @for (server of knownServers(); track server.url) {
@@ -30,7 +30,7 @@
                     <span class="badge badge-success badge-xs shrink-0" [attr.aria-label]="'server_history.session_open' | translate"></span>
                   }
                 </div>
-                <div class="text-xs text-base-content/60 truncate">
+                <div class="text-sm text-base-content/60 truncate">
                   @if (server.lastUsername) {
                     {{ server.lastUsername }} · {{ formatRelative(server.lastUsedAt) }}
                   } @else {

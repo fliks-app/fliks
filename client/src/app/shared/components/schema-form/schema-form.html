@@ -29,7 +29,7 @@
           </p>
         } @else if (isSecretStored(field)) {
           @if (isCleared(field)) {
-            <p class="text-warning text-xs">
+            <p class="text-warning text-sm">
               {{ 'common.secret_will_clear' | translate }}
               <button type="button" class="link link-hover font-medium" (click)="setValue(field, '')">
                 {{ 'common.secret_keep' | translate }}
@@ -38,7 +38,7 @@
           } @else {
             <button
               type="button"
-              class="link link-hover text-xs self-start text-base-content/60"
+              class="link link-hover text-sm self-start text-base-content/60"
               [disabled]="disabled()"
               (click)="clearSecret(field)"
             >
@@ -50,7 +50,7 @@
           <p class="text-warning text-sm">{{ 'common.secret_required' | translate }}</p>
         }
         @for (err of fieldErrors(field); track err.key) {
-          <p class="text-error text-xs">{{ err.key | translate: err.params }}</p>
+          <p class="text-error text-sm">{{ err.key | translate: err.params }}</p>
         }
       </div>
     }
@@ -77,7 +77,7 @@
           }
         </app-select-field>
         @for (err of fieldErrors(field); track err.key) {
-          <p class="text-error text-xs">{{ err.key | translate: err.params }}</p>
+          <p class="text-error text-sm">{{ err.key | translate: err.params }}</p>
         }
       </div>
     }
@@ -94,7 +94,7 @@
           <div class="label"><span class="label-text-alt text-base-content/60">{{ field.hint | translate }}</span></div>
         }
         @for (err of fieldErrors(field); track err.key) {
-          <p class="text-error text-xs">{{ err.key | translate: err.params }}</p>
+          <p class="text-error text-sm">{{ err.key | translate: err.params }}</p>
         }
       </div>
     }

@@ -185,9 +185,8 @@ pub fn resolve_engine_token(cfg: &Config) -> String {
     }
 }
 
-/// Written 0600 through a synced temp file hard-linked into place, so the first writer wins and no
-/// reader sees a partial file; `None` when the dir is not usable,
-/// not writable, or the file is refused (a shared `/tmp` entry is never adopted).
+/// Written 0600 through a synced temp file hard-linked into place: the first writer wins, no reader sees a
+/// partial file. `None` when the dir is unusable or the file is refused (a shared `/tmp` entry is never adopted).
 fn persist(dir: &Path, name: &str, fresh: &str, temp: bool) -> Option<String> {
     let file = dir.join(name);
     if dir.exists() && !dir_usable(dir, temp) {

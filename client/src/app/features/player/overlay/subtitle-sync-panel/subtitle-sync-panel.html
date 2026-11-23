@@ -74,9 +74,9 @@
       </div>
     </div>
     @if (editing()) {
-      <p class="pointer-events-none absolute inset-x-0 bottom-2 mx-auto w-fit rounded bg-black/80 px-2 py-1 text-xs">{{ 'player.subtitle_sync.adjusting_hint' | translate }}</p>
+      <p class="pointer-events-none absolute inset-x-0 bottom-2 mx-auto w-fit rounded bg-black/80 px-2 py-1 text-sm">{{ 'player.subtitle_sync.adjusting_hint' | translate }}</p>
     } @else if (!syncing()) {
-      <p class="sync-hint pointer-events-none absolute inset-x-0 bottom-2 mx-auto hidden w-fit rounded bg-black/70 px-2 py-1 text-xs text-white/80">{{ 'player.subtitle_sync.adjust_hint' | translate }}</p>
+      <p class="sync-hint pointer-events-none absolute inset-x-0 bottom-2 mx-auto hidden w-fit rounded bg-black/70 px-2 py-1 text-sm text-white/80">{{ 'player.subtitle_sync.adjust_hint' | translate }}</p>
     }
     <svg lucideChevronRight class="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-white" [style.left.px]="rulerW()" aria-hidden="true"></svg>
     <svg lucideChevronLeft class="pointer-events-none absolute top-1/2 h-5 w-5 -translate-y-1/2 text-white" [style.right.px]="scrollbarW()" aria-hidden="true"></svg>
@@ -91,13 +91,13 @@
   }
 
   @if (!editable()) {
-    <p class="text-xs text-white/60">{{ 'player.subtitle_sync.embedded_hint' | translate }}</p>
+    <p class="text-sm text-white/60">{{ 'player.subtitle_sync.embedded_hint' | translate }}</p>
   }
 
   @if (phone()) {
     <div data-sync-footer class="flex items-center justify-end gap-2">
       @if (syncing()) {
-        <div class="flex flex-1 items-center gap-2 text-xs" role="status">
+        <div class="flex flex-1 items-center gap-2 text-sm" role="status">
           <span class="loading loading-spinner loading-xs"></span>
           <span class="flex-1 truncate">{{ 'player.subtitle_sync.syncing' | translate }}</span>
           <button type="button" class="btn btn-ghost btn-xs" (click)="cancelSync()">{{ 'player.subtitle_sync.cancel_sync' | translate }}</button>

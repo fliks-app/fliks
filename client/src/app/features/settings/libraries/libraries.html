@@ -33,7 +33,7 @@
                   }
                 </div>
                 @for (folder of lib.folders; track folder.id) {
-                  <p class="font-mono text-xs text-base-content/60 mt-1 truncate">
+                  <p class="font-mono text-sm text-base-content/60 mt-1 truncate">
                     {{ folder.path }}
                     @if (folder.disk.accessible) {
                       <span class="font-sans ml-2">{{ formatBytes(folder.disk.freeSpace) }} / {{ formatBytes(folder.disk.totalSpace) }}</span>

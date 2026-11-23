@@ -88,9 +88,8 @@ pub struct Claims {
 /// takes a session token from the URL on all of them.
 const DATA_PLANE_PATH: &str = "/api/stream/";
 
-/// COMPAT, retired with the NAT-TVOS release: released native shells put their full session token in
-/// the URL of these routes until a stream token exists (playback and sidecar URLs, the stop of a
-/// session, Live TV logos, orphan covers).
+/// COMPAT, retired with the NAT-TVOS release: released native shells put their session token in the URL
+/// of these routes until a stream token exists (playback, sidecars, session stop, Live TV logos, covers).
 fn released_shell_route(path: &str) -> bool {
     path.starts_with(DATA_PLANE_PATH)
         || path == "/api/imports/orphans/cover"
@@ -100,9 +99,8 @@ fn released_shell_route(path: &str) -> bool {
 }
 
 impl Claims {
-    /// Whether the token may arrive in the URL of `path`, which ends up in logs: a scoped one always,
-    /// a session token only on a route a released native shell calls that way. The one rule of the
-    /// API extractors; the data plane's routes are all in it.
+    /// Whether the token may arrive in the URL of `path` (it ends up in logs): a scoped one always, a session
+    /// token only on a route a released native shell calls that way. The data plane's routes are all in it.
     pub fn may_travel_in_url(&self, path: &str) -> bool {
         self.scope.is_some() || released_shell_route(path)
     }

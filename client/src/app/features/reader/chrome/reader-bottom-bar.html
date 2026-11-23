@@ -55,7 +55,7 @@
         class="grid auto-cols-fr grid-flow-col gap-1 pt-1 sm:hidden"
         [attr.aria-label]="'reader.actions' | translate"
       >
-        @if (f().contents) {
+        @if (f().contents || f().bookmarks) {
           <button type="button" class="rd-action" (click)="s.openPanel('sidebar', s.browseTab())">
             <svg lucideListTree class="h-5 w-5"></svg>
             <span>{{ 'reader.contents_short' | translate }}</span>

@@ -43,7 +43,7 @@
         <div>
           <p>{{ 'update_settings.check_failed' | translate }}</p>
           @if (update.errorMessage(); as err) {
-            <p class="text-xs opacity-70 mt-0.5 break-words">{{ err }}</p>
+            <p class="text-sm opacity-70 mt-0.5 break-words">{{ err }}</p>
           }
         </div>
       </div>
@@ -90,14 +90,14 @@
 
           @if (downloading()) {
             <progress class="progress progress-primary w-full" [attr.value]="update.progress()" max="100"></progress>
-            <p class="text-xs opacity-70 mt-1 text-center">
+            <p class="text-sm opacity-70 mt-1 text-center">
               @if (update.progress() === null) {
                 {{ 'update.preparing' | translate }}
               } @else {
                 {{ 'update.downloading' | translate: { percent: update.progress() } }}
               }
             </p>
-            <p class="text-xs opacity-70 text-center">{{ 'update.restart_notice' | translate }}</p>
+            <p class="text-sm opacity-70 text-center">{{ 'update.restart_notice' | translate }}</p>
           } @else {
             <div class="flex justify-end">
               @if (installing()) {

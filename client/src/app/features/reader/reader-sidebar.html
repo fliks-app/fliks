@@ -3,7 +3,7 @@
     <h2 class="flex-1 px-1 font-semibold">{{ 'reader.search' | translate }}</h2>
   } @else {
     <div class="rd-seg flex-1" role="tablist">
-      @for (t of tabs; track t) {
+      @for (t of tabs(); track t) {
         <button
           type="button"
           role="tab"

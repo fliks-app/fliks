@@ -104,3 +104,15 @@ describe('DataImportsSettingsComponent: unmapped import users', () => {
     expect(cmp.unmappedUsers().map((u) => u.username)).toEqual(['bob']);
   });
 });
+
+describe('DataImportsSettingsComponent importer errors', () => {
+  it('shows the error count and first messages from a completion event', async () => {
+    const { fixture, cmp } = await createComponent();
+    (cmp as any).noteErrors('seerr', { errors: ['boom', 'bang'], errorCount: 7 });
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent as string;
+    expect(cmp.importErrorCount()).toBe(7);
+    expect(text).toContain('boom');
+    expect(text).toContain('bang');
+  });
+});

@@ -20,9 +20,10 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { OfflineBookStoreService } from '../../../../core/services/offline-book-store.service';
 import { ServerConfigService } from '../../../../core/services/server-config.service';
 import { ToastService } from '../../../../core/services/toast.service';
-import { AnnotationsApiService, type Annotation } from '../../annotations-api.service';
+import { AnnotationsApiService } from '../../annotations-api.service';
 import { pageAtProbe, scrollToPageSlot } from '../../page-scroll';
 import { type OutlineRow, flattenOutline, outlineEntries, outlineRowAt } from '../../pdf-outline';
+import { PageBookmarks } from '../../page-bookmarks';
 import { pageAtProgression, pdfPageOf, pdfProgression } from '../../pdf-position';
 import { ReaderApiService, type ReaderTarget } from '../../reader-api.service';
 import type { ReaderEngine, ReaderNotes, ReaderStatus, ReaderToc, ReaderZoom, ScrubPreview } from '../../reader-engine';
@@ -101,26 +102,17 @@ export class PdfEngineComponent implements ReaderEngine, OnDestroy {
       if (row) this.scrollToPage(row.page);
     },
   };
-  private readonly marks = signal<Annotation[]>([]);
-  private marking = false;
-  /** Bookmarks only: a PDF has no highlights, so the notes panel is off. */
-  readonly notes: ReaderNotes = {
-    list: this.marks,
-    focusId: signal<number | null>(null),
-    bookmarked: computed(() => this.marks().some((a) => a.locator['page'] === this.page())),
-    toggleBookmark: () => this.toggleBookmark(),
-    go: (a) => this.scrollToPage(pdfPageOf(a.locator, this.pages().length)),
-    remove: async (a) => {
-      try {
-        await this.annotations.remove(a.id);
-        this.marks.update((list) => list.filter((m) => m.id !== a.id));
-      } catch {
-        // The error interceptor has already told the reader.
-      }
-    },
-    save: async () => undefined,
-    exportMarkdown: () => undefined,
-  };
+  private readonly bookmarks = new PageBookmarks({
+    api: this.annotations,
+    translate: this.translate,
+    itemId: () => this.target().itemId,
+    page: this.page,
+    pages: () => this.pages().length,
+    title: (page) => this.outline()[outlineRowAt(this.outline(), page)]?.title ?? '',
+    go: (n) => this.scrollToPage(n),
+    destroyed: () => this.destroyed,
+  });
+  readonly notes: ReaderNotes = this.bookmarks.notes;
   protected readonly ratio = signal(1.414);
   protected readonly viewportWidth = signal(0);
   protected readonly pageWidth = computed(() =>
@@ -198,7 +190,7 @@ export class PdfEngineComponent implements ReaderEngine, OnDestroy {
       afterNextRender(() => this.scrollToPage(resumeAt), { injector: this.injector });
       if (doc.numPages === 1) this.reportPage(1);
       void this.loadOutline(doc);
-      void this.loadMarks();
+      void this.bookmarks.load();
     } catch {
       if (this.destroyed) return;
       this.toast.error(this.translate.instant('reader.open_failed'));
@@ -220,40 +212,6 @@ export class PdfEngineComponent implements ReaderEngine, OnDestroy {
     const outline = await doc.getOutline().catch(() => null);
     const rows = await flattenOutline(outline ?? [], pageOf);
     if (!this.destroyed) this.outline.set(rows);
-  }
-
-  private async loadMarks(): Promise<void> {
-    try {
-      const list = await this.annotations.list(this.target().itemId);
-      if (!this.destroyed) this.marks.set(list);
-    } catch {
-      // Offline or refused: the book reads without its marks.
-    }
-  }
-
-  private async toggleBookmark(): Promise<void> {
-    if (this.marking) return;
-    this.marking = true;
-    const page = this.page();
-    try {
-      const here = this.marks().find((a) => a.locator['page'] === page);
-      if (here) {
-        await this.annotations.remove(here.id);
-        this.marks.update((list) => list.filter((a) => a.id !== here.id));
-        return;
-      }
-      const row = this.outline()[outlineRowAt(this.outline(), page)];
-      const created = await this.annotations.create(this.target().itemId, {
-        kind: 'bookmark',
-        locator: { page, title: row?.title ?? '', locations: { progression: pdfProgression(page, this.pages().length) } },
-        excerpt: this.translate.instant('reader.page_n', { n: page }),
-      });
-      this.marks.update((list) => [...list, created]);
-    } catch {
-      // The error interceptor has already told the reader.
-    } finally {
-      this.marking = false;
-    }
   }
 
   /** Observing again reports every slot, so a size change redraws the ones in view. */

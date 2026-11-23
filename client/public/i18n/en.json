@@ -2915,6 +2915,8 @@
         "import_completed": "{{users}}, {{imported}}, updated: {{updated}}, skipped: {{skipped}}",
         "import_failed": "Seerr import failed: {{error}}"
       },
+      "errors_notice_one": "{{count}} error during the import. First messages:",
+      "errors_notice_other": "{{count}} errors during the import. First messages:",
       "unmapped_notice_one": "{{count}} source user could not be matched: an account already holds its name.",
       "unmapped_notice_other": "{{count}} source users could not be matched: an account already holds their name.",
       "unmapped_review": "Map users",

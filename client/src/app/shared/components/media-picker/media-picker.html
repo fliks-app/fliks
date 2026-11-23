@@ -159,7 +159,7 @@
                     <span class="badge badge-success badge-outline badge-sm shrink-0">{{ 'media_info.watched' | translate }}</span>
                   }
                   @if (taken) {
-                    <span class="flex shrink-0 items-center gap-1 text-xs text-primary"><svg lucideCheck class="h-4 w-4"></svg>{{ 'media_picker.taken_' + verb() | translate }}</span>
+                    <span class="flex shrink-0 items-center gap-1 text-sm text-primary"><svg lucideCheck class="h-4 w-4"></svg>{{ 'media_picker.taken_' + verb() | translate }}</span>
                   } @else if (chosen().has(ep.id)) {
                     <svg lucideCheck class="h-4 w-4 shrink-0 text-primary"></svg>
                   }

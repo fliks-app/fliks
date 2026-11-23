@@ -183,6 +183,14 @@ export async function acceptCertificate(
   }
 }
 
+/** Whether `fingerprint` is the pin of a reported server on `hostname`; a verify proc sees no port or scheme, the exact pinned certificate keeps that safe. */
+export function isPinnedCertificate(hostname: string, fingerprint: string): boolean {
+  for (const [origin, pin] of pins) {
+    if (servers.has(origin) && pin.fingerprint === fingerprint && new URL(origin).hostname === hostname.toLowerCase()) return true;
+  }
+  return false;
+}
+
 /** How mpv opens `url`: a pinned server FFmpeg can check gets a CA file holding only its pin, one it cannot opens unverified. */
 export function mpvPinTrust(url: string): MpvPinTrust {
   const origin = originOf(url);

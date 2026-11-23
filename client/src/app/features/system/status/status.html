@@ -119,7 +119,7 @@
                       <span class="text-sm text-base-content/60 tabular-nums whitespace-nowrap">{{ item.current ?? 0 }}/{{ item.total }}</span>
                     }
                     <progress class="progress progress-primary flex-1 min-w-32" [value]="item.current ?? 0" [max]="item.total || 1"></progress>
-                    <span class="text-xs text-base-content/60 tabular-nums w-10 text-right">{{ activityPercent(item) }}%</span>
+                    <span class="text-sm text-base-content/60 tabular-nums w-10 text-right">{{ activityPercent(item) }}%</span>
                   </div>
                 }
               </td>
@@ -159,7 +159,7 @@
                   @if (child.status === 'running') {
                     <div class="flex items-center gap-2">
                       <progress class="progress progress-primary progress-xs flex-1 min-w-32" [value]="child.current ?? 0" [max]="child.total || 1"></progress>
-                      <span class="text-xs tabular-nums w-10 text-right">{{ activityPercent(child) }}%</span>
+                      <span class="text-sm tabular-nums w-10 text-right">{{ activityPercent(child) }}%</span>
                     </div>
                   }
                 </td>

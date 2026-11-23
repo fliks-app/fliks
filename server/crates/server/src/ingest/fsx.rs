@@ -429,9 +429,8 @@ pub fn link_new(src: &Path, dest: &Path) -> io::Result<Option<bool>> {
     }
 }
 
-/// A hard link of `src` at `dest`, else a copy when the filesystem refuses to link; `src` stays. A
-/// replacing link goes through a temp name so readers see the old file or the new one.
-/// `Ok(false)` when a no-replace call found `dest`.
+/// A hard link of `src` at `dest`, else a copy when linking is refused; `src` stays. A replacing link goes
+/// through a temp name so readers see the old or new file. `Ok(false)` when a no-replace call found `dest`.
 pub fn link_file(src: &Path, dest: &Path, replace: bool) -> io::Result<bool> {
     if !replace {
         return match link_new(src, dest)? {

@@ -33,7 +33,7 @@ overlay. mpv runs from a self-contained static **libmpv**, so on Linux HDR is
 
 The page reports its one server; a certificate the OS rejects is pinned there on the user's say-so (`src/main/trusted-servers.ts`).
 mpv opens a pinned server against a CA file holding only that pin, or unverified when FFmpeg cannot check the certificate.
-Downloads and notifications go through the main process `net`, which raises no `certificate-error`: they fail on such a server.
+Downloads and notifications go through the main process `net`, which raises no `certificate-error`: the default session's verify proc accepts the pinned certificate of a reported server by host and fingerprint.
 
 ## Develop
 

@@ -2915,6 +2915,8 @@
         "import_completed": "{{users}}, {{imported}}, actualizadas: {{updated}}, ignoradas: {{skipped}}",
         "import_failed": "Error de la importación de Seerr: {{error}}"
       },
+      "errors_notice_one": "{{count}} error durante la importación. Primeros mensajes:",
+      "errors_notice_other": "{{count}} errores durante la importación. Primeros mensajes:",
       "unmapped_notice_one": "{{count}} usuario de origen no se pudo asociar: una cuenta ya tiene su nombre.",
       "unmapped_notice_other": "{{count}} usuarios de origen no se pudieron asociar: una cuenta ya tiene su nombre.",
       "unmapped_review": "Asociar usuarios",

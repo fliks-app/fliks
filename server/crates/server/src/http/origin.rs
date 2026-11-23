@@ -15,9 +15,8 @@ async fn trusted_proxies(st: &AppState) -> Option<Vec<Cidr>> {
     Some(list.iter().filter_map(|c| Cidr::parse(c)).collect())
 }
 
-/// The client address (`auth.md` rule 63): `X-Forwarded-For` entries then the socket peer, walked
-/// from the right past the trusted proxies to the first hop outside them. The engine's loopback
-/// hop is always trusted, on top of the admin list.
+/// The client address (`auth.md` rule 63): `X-Forwarded-For` entries then the socket peer, walked from the
+/// right past the trusted proxies to the first outside hop. The engine's loopback hop is always trusted.
 pub async fn client_ip(
     st: &AppState,
     headers: &HeaderMap,

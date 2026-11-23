@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, shell } from 'electron';
+import { app, BrowserWindow, Menu, session, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -25,7 +25,7 @@ import { watchRendererCrash } from './renderer-recovery';
 import { Notifier } from './notify';
 import { refreshMenu, setMenuLabels, setMenuFullscreen, setMenuPlayback } from './menu';
 import { pressMediaKey, type MediaKey } from './menu-template';
-import { acceptCertificate, loadTrust, trustServer } from './trusted-servers';
+import { acceptCertificate, isPinnedCertificate, loadTrust, trustServer } from './trusted-servers';
 import { httpsUpgrade } from './server-redirect';
 import { askTrust, pemChain } from './trust-prompt';
 
@@ -369,6 +369,10 @@ async function startUiOnly(haveApp: boolean): Promise<void> {
 
 app.whenReady().then(async () => {
   loadTrust(path.join(app.getPath('userData'), 'trusted-servers.json'));
+  // net requests (downloads, notifications) raise no certificate-error: a pinned certificate passes here.
+  session.defaultSession.setCertificateVerifyProc((req, done) =>
+    done(isPinnedCertificate(req.hostname, req.certificate.fingerprint) ? 0 : -3),
+  );
   // macOS needs the menu for Cmd+C/V/A/Z/Q; Windows and Linux have none.
   if (process.platform === 'darwin') refreshMenu();
   else Menu.setApplicationMenu(null);

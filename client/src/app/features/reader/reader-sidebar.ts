@@ -88,7 +88,9 @@ export class ReaderSidebarComponent implements OnDestroy {
   private readonly injector = inject(Injector);
   private readonly session = inject(ReaderSession, { optional: true });
 
-  protected readonly tabs: SidebarTab[] = ['contents', 'bookmarks', 'notes'];
+  protected readonly tabs = computed<SidebarTab[]>(() =>
+    this.session?.features?.().contents === false ? ['bookmarks', 'notes'] : ['contents', 'bookmarks', 'notes'],
+  );
   protected readonly colours = ANNOTATION_COLOURS;
   protected readonly hex = COLOUR_HEX;
   private readonly store = inject(ReaderSettingsService);

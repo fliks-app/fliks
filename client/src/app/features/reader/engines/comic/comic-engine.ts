@@ -13,7 +13,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import type { ComicPageSize } from '../../../../core/services/api/comics.models';
 import { ComicsApiService } from '../../../../core/services/api/comics-api.service';
 import {
@@ -31,10 +31,12 @@ import {
   type ComicPrefs,
   type Pan,
 } from '../../comic-layout';
+import { AnnotationsApiService } from '../../annotations-api.service';
+import { PageBookmarks } from '../../page-bookmarks';
 import { pageAtProbe, scrollToPageSlot } from '../../page-scroll';
 import { pageAtProgression, pdfPageOf, pdfProgression } from '../../pdf-position';
 import { ReaderApiService, type ReaderTarget } from '../../reader-api.service';
-import type { ReaderEngine, ReaderLayout, ReaderStatus, ReaderZoom, ScrubPreview } from '../../reader-engine';
+import type { ReaderEngine, ReaderLayout, ReaderNotes, ReaderStatus, ReaderZoom, ScrubPreview } from '../../reader-engine';
 import type { ReaderKeyAction } from '../../reader-keys';
 import { ReaderProgressService } from '../../reader-progress.service';
 import { ReaderSession } from '../../reader-session';
@@ -64,6 +66,7 @@ export class ComicEngineComponent implements ReaderEngine, OnDestroy {
   private readonly progress = inject(ReaderProgressService);
   private readonly session = inject(ReaderSession);
   private readonly injector = inject(Injector);
+  private readonly translate = inject(TranslateService);
   private readonly stage = viewChild<ElementRef<HTMLElement>>('stage');
 
   private readonly resizer = new ResizeObserver(() => this.measure());
@@ -102,6 +105,16 @@ export class ComicEngineComponent implements ReaderEngine, OnDestroy {
     canIn: computed(() => (this.webtoon() ? this.webZoom() < WEBTOON_ZOOM.max : this.scale() < ZOOM_MAX)),
     by: (dir) => this.zoomBy(dir),
   };
+  private readonly bookmarks = new PageBookmarks({
+    api: inject(AnnotationsApiService),
+    translate: this.translate,
+    itemId: () => this.target().itemId,
+    page: this.page,
+    pages: () => this.total(),
+    go: (n) => this.goTo(n),
+    destroyed: () => this.destroyed,
+  });
+  readonly notes: ReaderNotes = this.bookmarks.notes;
   readonly layout: ReaderLayout = { prefs: this.prefs, set: (p) => this.setPrefs(p) };
   protected readonly gestures = new ComicGestures({
     scale: this.scale,
@@ -180,6 +193,7 @@ export class ComicEngineComponent implements ReaderEngine, OnDestroy {
     this.page.set(at);
     this.index.set(spreadIndexOf(this.spreads(), at));
     this.ready.set(true);
+    void this.bookmarks.load();
     if (this.webtoon()) afterNextRender(() => this.scrollToPage(at), { injector: this.injector });
     else if (this.total() === 1) this.report(1);
   }

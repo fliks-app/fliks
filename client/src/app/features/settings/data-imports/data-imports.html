@@ -11,6 +11,19 @@
       <span class="loading loading-spinner loading-lg"></span>
     </div>
   } @else {
+    @if (importErrorCount() > 0) {
+      <div role="alert" class="alert alert-error text-sm py-2">
+        <div>
+          <p>{{ importErrorsNotice() }}</p>
+          <ul class="list-disc ps-5">
+            @for (m of importErrorMessages(); track $index) {
+              <li class="break-all">{{ m }}</li>
+            }
+          </ul>
+        </div>
+      </div>
+    }
+
     @if (unmappedCount() > 0) {
       <div role="alert" class="alert alert-warning text-sm py-2">
         <span>{{ unmappedNotice() }}</span>
