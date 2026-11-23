@@ -92,9 +92,10 @@
                   }
                 ],
                 "formats": [
-                  "text"
+                  "text",
+                  "audio"
                 ],
-                "lastFamily": "text",
+                "lastFamily": "audio",
                 "series": {
                   "id": 101,
                   "name": "Parity Cycle",
@@ -116,6 +117,20 @@
                   "osdbHash": null,
                   "quality": "EPUB",
                   "relativePath": "alpha.epub",
+                  "size": 1,
+                  "streamInfo": {},
+                  "updatedAt": "2026-01-01T00:00:00.000Z"
+                },
+                {
+                  "createdAt": "2026-01-01T00:00:00.000Z",
+                  "episodeId": null,
+                  "id": 102,
+                  "language": null,
+                  "mediaId": 101,
+                  "osdbBytesize": null,
+                  "osdbHash": null,
+                  "quality": "M4B",
+                  "relativePath": "alpha.m4b",
                   "size": 1,
                   "streamInfo": {},
                   "updatedAt": "2026-01-01T00:00:00.000Z"
@@ -161,7 +176,7 @@
               "rating": null,
               "releaseDate": "2001-05-01",
               "runtime": null,
-              "sizeOnDisk": 1,
+              "sizeOnDisk": 2,
               "status": "tba",
               "title": "Parity Book Alpha",
               "tmdbCollectionId": null,

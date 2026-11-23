@@ -186,7 +186,7 @@ fn criterion(qb: &mut Qb, c: &Criterion, owner: i32) {
         }
         Criterion::Popularity { min, max } => range(qb, "td.popularity", *min, *max),
         Criterion::Library { ids } => {
-            qb.push(r#"(COALESCE(e."libraryId", m."libraryId") = ANY("#)
+            qb.push(r#"(m."libraryId" = ANY("#)
                 .push_bind(ids)
                 .push("))");
         }
@@ -221,7 +221,7 @@ JOIN LATERAL (SELECT f."streamInfo"->'audio'->0->>'codec' AS codec,
       (f."streamInfo"->>'durationSeconds')::float8 AS dur
     FROM item_parts p JOIN media_files f ON f.id = p."mediaFileId"
     WHERE p."itemId" = i.id ORDER BY p.version DESC, p.position LIMIT 1) pf ON true
-WHERE COALESCE(e."libraryId", m."libraryId") = ANY("#,
+WHERE m."libraryId" = ANY("#,
     );
     qb.push_bind(acl.to_vec()).push(") AND (");
     let join = if rules.match_ == Match::All {

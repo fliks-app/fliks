@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE item_groups SET overview = COALESCE($2, overview), \"airDate\" = COALESCE($3::text::date, \"airDate\")\n           WHERE id = $1 AND (overview IS DISTINCT FROM COALESCE($2, overview)\n             OR \"airDate\" IS DISTINCT FROM COALESCE($3::text::date, \"airDate\"))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "323b8d441f05b9cdb27c2555fae642d78c5c83bf3bda4fee4e6563cf60b907e4"
+}

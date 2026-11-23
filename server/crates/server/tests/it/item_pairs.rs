@@ -1,6 +1,5 @@
 //! Every route that names a media (`items.md` rules 13, 36): a bare pair for a media with several
-//! items is a 409 `errors.ambiguous_item`, an `itemId` of a visible edition works and one of a
-//! hidden edition is a 404, whichever route takes it.
+//! items is a 409 `errors.ambiguous_item` and an `itemId` works, whichever route takes it.
 use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{app, config::Config, state::AppState};
@@ -12,15 +11,15 @@ const SECRET: &str = "0123456789abcdef0123456789abcdef";
 const SOON: &str = "2099-01-01T00:00:00Z";
 
 /// Media 10: an album of 3 tracks (items 20-22, one edition, all with a file). Media 11: a book with 2
-/// editions (items 23, 24; the edition of 24 sits in library 2, which the caller cannot read). Media
+/// editions (items 23, 24). Media
 /// 12: an album of 3 tracks of which only item 25 has a file. File `n` belongs to item `n`.
 const FIXTURE: &str = r#"
-    INSERT INTO libraries (id, name) VALUES (1, 'visible'), (2, 'hidden');
+    INSERT INTO libraries (id, name) VALUES (1, 'visible'), (2, 'other');
     INSERT INTO library_folders ("libraryId", path) VALUES (1, '/m1'), (2, '/m2');
     INSERT INTO media (id, title, type, "libraryId") VALUES
       (10, 'album three', 'album', 1), (11, 'book', 'book', 1), (12, 'album one of three', 'album', 1);
-    INSERT INTO editions (id, "mediaId", family, "libraryId") VALUES
-      (10, 10, 'audio', NULL), (11, 11, 'text', NULL), (12, 11, 'text', 2), (13, 12, 'audio', NULL);
+    INSERT INTO editions (id, "mediaId", family) VALUES
+      (10, 10, 'audio'), (11, 11, 'text'), (12, 11, 'text'), (13, 12, 'audio');
     INSERT INTO items (id, "mediaId", "editionId", title) VALUES
       (20, 10, 10, 't1'), (21, 10, 10, 't2'), (22, 10, 10, 't3'), (23, 11, 11, 'x'), (24, 11, 12, 'y'),
       (25, 12, 13, 'u1'), (26, 12, 13, 'u2'), (27, 12, 13, 'u3');
@@ -146,7 +145,6 @@ struct Expect {
     bare_book: u16,
     bare_partial_album: u16,
     item: u16,
-    hidden: u16,
 }
 
 const AMBIGUOUS: Expect = Expect {
@@ -154,7 +152,6 @@ const AMBIGUOUS: Expect = Expect {
     bare_book: 409,
     bare_partial_album: 409,
     item: 200,
-    hidden: 404,
 };
 
 fn state(media: i32, name: Name) -> String {
@@ -176,7 +173,6 @@ async fn check(what: &str, expect: &Expect, mut run: impl AsyncFnMut(i32, Name) 
         ),
         ("item", 10, Name::Item(20), expect.item),
         ("book edition", 11, Name::Item(23), expect.item),
-        ("hidden edition", 11, Name::Item(24), expect.hidden),
     ];
     for (case, media, name, want) in cases {
         let (s, b) = run(media, name).await;
@@ -196,25 +192,15 @@ async fn check(what: &str, expect: &Expect, mut run: impl AsyncFnMut(i32, Name) 
 #[sqlx::test(migrations = false)]
 async fn playback_state_routes(pool: PgPool) {
     let c = ctx(pool).await;
-    check(
-        "GET state",
-        &Expect {
-            hidden: 200,
-            ..AMBIGUOUS
-        },
-        async |m, n| c.call("GET", &state(m, n), json!({})).await,
-    )
+    check("GET state", &AMBIGUOUS, async |m, n| {
+        c.call("GET", &state(m, n), json!({})).await
+    })
     .await;
-    check(
-        "DELETE state",
-        &Expect {
-            hidden: 200,
-            ..AMBIGUOUS
-        },
-        async |m, n| c.call("DELETE", &state(m, n), json!({})).await,
-    )
+    check("DELETE state", &AMBIGUOUS, async |m, n| {
+        c.call("DELETE", &state(m, n), json!({})).await
+    })
     .await;
-    check("PUT state", &Expect { hidden: 200, ..AMBIGUOUS }, async |m, n| {
+    check("PUT state", &AMBIGUOUS, async |m, n| {
         let body = match n {
             Name::Bare => json!({"mediaFileId": 20, "positionSeconds": 1, "durationSeconds": 10}),
             Name::Item(i) => {
@@ -248,7 +234,6 @@ async fn playlist_add(pool: PgPool) {
         bare_book: 409,
         bare_partial_album: 201,
         item: 201,
-        hidden: 404,
     };
     check("playlist add", &want, async |m, n| {
         let p = c.playlist().await;
@@ -347,7 +332,6 @@ async fn like_and_recommend(pool: PgPool) {
         bare_book: 201,
         bare_partial_album: 201,
         item: 201,
-        hidden: 404,
     };
     check("like", &want, async |m, n| {
         c.call("POST", "/api/likes", pair(m, n)).await

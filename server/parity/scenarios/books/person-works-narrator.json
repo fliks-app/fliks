@@ -24,6 +24,40 @@
                         }
                       ],
                       "formats": [
+                        "text",
+                        "audio"
+                      ],
+                      "lastFamily": "audio",
+                      "series": {
+                        "id": 101,
+                        "name": "Parity Cycle",
+                        "position": 1,
+                        "positionLabel": null
+                      }
+                    },
+                    "id": 101,
+                    "posterUrl": "/api/images/media/101/poster",
+                    "progressPercent": 0,
+                    "title": "Parity Book Alpha",
+                    "type": "book",
+                    "watched": false,
+                    "year": 2001
+                  },
+                  "position": 1,
+                  "positionEnd": null,
+                  "positionLabel": null
+                },
+                {
+                  "media": {
+                    "book": {
+                      "authors": [
+                        {
+                          "id": 101,
+                          "name": "Una Writer",
+                          "sortName": "Writer, Una"
+                        }
+                      ],
+                      "formats": [
                         "audio"
                       ],
                       "lastFamily": null,

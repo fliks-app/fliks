@@ -192,14 +192,7 @@ pub async fn import_title(
         for sd in &found.seasons {
             let n = sd.season_number;
             let monitored = scope.as_ref().map_or(n > 0, |s| s.contains(&n));
-            let sid = sqlx::query_scalar!(
-                r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, $2, $3) RETURNING id"#,
-                id,
-                n,
-                monitored
-            )
-            .fetch_one(&mut *tx)
-            .await?;
+            let (sid, _) = crate::media::items::ensure_group(&mut tx, id, n, monitored).await?;
             stills.push((
                 sid,
                 refresh::apply_season(&mut tx, sid, sd).await?,

@@ -263,7 +263,7 @@ async fn sources(db: &PgPool, g: &Gate) -> Result<Value, sqlx::Error> {
                ORDER BY x.provider, x.value) FILTER (WHERE x.provider IS NOT NULL), '[]'::jsonb) AS "ids!: Value"
            FROM editions e JOIN media m ON m.id = e."mediaId"
            LEFT JOIN edition_external_ids x ON x."editionId" = e.id
-           WHERE e."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+           WHERE e."mediaId" = $1 AND m."libraryId" = ANY($2)
            GROUP BY e.id
            ORDER BY CASE e.family WHEN 'text' THEN 0 ELSE 1 END, e.id"#,
         g.media,
@@ -340,7 +340,7 @@ fn parse(b: &Body, known: &Namespaces) -> Result<(Level, Namespace, String), App
 async fn visible_edition(db: &PgPool, g: &Gate, edition: i32) -> Result<(), AppError> {
     let found = sqlx::query_scalar!(
         r#"SELECT e.id FROM editions e JOIN media m ON m.id = e."mediaId"
-           WHERE e.id = $1 AND e."mediaId" = $2 AND COALESCE(e."libraryId", m."libraryId") = ANY($3)"#,
+           WHERE e.id = $1 AND e."mediaId" = $2 AND m."libraryId" = ANY($3)"#,
         edition,
         g.media,
         &g.acl
@@ -474,7 +474,7 @@ pub(crate) async fn identify_to(
         };
         let first = sqlx::query_scalar!(
             r#"SELECT e.id FROM editions e JOIN media m ON m.id = e."mediaId"
-               WHERE e."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+               WHERE e."mediaId" = $1 AND m."libraryId" = ANY($2)
                ORDER BY e.family <> $3, e.id LIMIT 1"#,
             media,
             acl,

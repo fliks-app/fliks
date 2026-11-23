@@ -103,13 +103,14 @@ struct Ctx {
 }
 
 async fn token(pool: &PgPool, st: &AppState, name: &str, perms: &str, admin: bool) -> String {
-    let role: i32 =
-        sqlx::query_scalar(r#"INSERT INTO roles (name, permissions) VALUES ($1, $2) RETURNING id"#)
-            .bind(format!("r-{name}"))
-            .bind(perms)
-            .fetch_one(pool)
-            .await
-            .unwrap();
+    let role: i32 = sqlx::query_scalar(
+        r#"INSERT INTO roles (name, permissions) VALUES ($1, $2::jsonb) RETURNING id"#,
+    )
+    .bind(format!("r-{name}"))
+    .bind(perms)
+    .fetch_one(pool)
+    .await
+    .unwrap();
     let id: i32 = sqlx::query_scalar(
         r#"INSERT INTO users (username, "roleId", "isAdmin") VALUES ($1, $2, $3) RETURNING id"#,
     )

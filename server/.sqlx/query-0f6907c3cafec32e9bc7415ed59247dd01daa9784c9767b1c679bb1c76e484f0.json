@@ -13,7 +13,7 @@
         "Bool",
         "Text",
         "Varchar",
-        "Text"
+        "Jsonb"
       ]
     },
     "nullable": []

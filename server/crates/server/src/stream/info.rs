@@ -566,7 +566,7 @@ fn register_live(
             client,
             tags,
             position_s: position,
-            media_id: file.media_id,
+            media_id: Some(file.media_id),
             episode_id: file.episode_id,
         },
         now_ms(),
@@ -592,7 +592,7 @@ async fn ask_pre_roll(
         st,
         a,
         file.id,
-        file.media_id,
+        Some(file.media_id),
         file.episode_id.filter(|e| *e != 0),
     )
     .await

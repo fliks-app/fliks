@@ -110,13 +110,12 @@ LEFT JOIN LATERAL (SELECT max(h."playedAt") AS at FROM playback_history h
         .push(
             r#" AND h."itemId" = i.id) lp ON true
 WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
-  AND COALESCE(e."libraryId", m."libraryId") = ANY("#,
+  AND m."libraryId" = ANY("#,
         )
         .push_bind(&acl)
         .push(")");
     if let Some(l) = library {
-        qb.push(r#" AND COALESCE(e."libraryId", m."libraryId") = "#)
-            .push_bind(l);
+        qb.push(r#" AND m."libraryId" = "#).push_bind(l);
     }
     if let Some(t) = text.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
         let like = fliks_domain::media::search::contains_pattern(t);
@@ -198,7 +197,7 @@ pub(crate) async fn assert_track(st: &AppState, a: &Authed, item: i32) -> Result
     let ok: bool = sqlx::query_scalar(
         r#"SELECT EXISTS (SELECT 1 FROM items i JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
              JOIN editions e ON e.id = i."editionId" JOIN track_details td ON td."itemId" = i.id
-             WHERE i.id = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2))"#,
+             WHERE i.id = $1 AND m."libraryId" = ANY($2))"#,
     )
     .bind(item)
     .bind(&acl)
@@ -271,7 +270,7 @@ fn plays(work: &str) -> String {
         r#"FROM item_works iw JOIN items i ON i.id = iw."itemId" JOIN media m ON m.id = i."mediaId"
   JOIN editions e ON e.id = i."editionId"
   WHERE iw."workId" IN (SELECT {work} UNION SELECT id FROM works WHERE "parentWorkId" = {work})
-    AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+    AND m."libraryId" = ANY($2)
     AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)"#
     )
 }
@@ -359,8 +358,7 @@ pub async fn recently_played(
     .bind(limit)
     .fetch_all(&st.db)
     .await?;
-    let mut data =
-        hydrate::items_view(&st.db, &ids, paths_visible(&a.perms), true, Some(&acl)).await?;
+    let mut data = hydrate::items_view(&st.db, &ids, paths_visible(&a.perms), true).await?;
     attach_list_info(&st.db, &mut data, a.user.id, &acl).await?;
     Ok(Json(Value::Array(data)))
 }

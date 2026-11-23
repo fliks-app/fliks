@@ -19,7 +19,7 @@ async fn ctx(pool: PgPool) -> (Router, Vec<String>) {
         INSERT INTO libraries (id, name) VALUES (1, 'L1'), (2, 'L2');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2), (1, 3), (1, 4);
         INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (10, 'Alpha', 'book', 1, 'a'), (11, 'Beta', 'book', 2, 'b');
-        INSERT INTO editions (id, "mediaId", family, format, "libraryId") VALUES (1, 10, 'text', 'epub', NULL), (2, 11, 'text', 'epub', NULL), (3, 10, 'audio', 'm4b', NULL), (4, 10, 'image', 'cbz', NULL);
+        INSERT INTO editions (id, "mediaId", family, format) VALUES (1, 10, 'text', 'epub'), (2, 11, 'text', 'epub'), (3, 10, 'audio', 'm4b'), (4, 10, 'image', 'cbz');
         INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (2, 11, 2), (3, 10, 3), (4, 10, 4);
         "#,
     )
@@ -318,9 +318,9 @@ async fn concurrent_posts_cannot_pass_the_cap(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn an_edition_in_an_unreadable_library_hides_the_item(pool: PgPool) {
+async fn a_media_in_an_unreadable_library_hides_the_item(pool: PgPool) {
     let (app, t) = ctx(pool.clone()).await;
-    sqlx::query(r#"UPDATE editions SET "libraryId" = 2 WHERE id = 1"#)
+    sqlx::query(r#"UPDATE media SET "libraryId" = 2 WHERE id = 10"#)
         .execute(&pool)
         .await
         .unwrap();

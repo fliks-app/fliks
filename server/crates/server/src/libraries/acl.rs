@@ -17,36 +17,19 @@ pub async fn library_ids_of(db: &PgPool, user: i32, all: bool) -> Result<Vec<i32
             .await;
     }
     sqlx::query_scalar!(
-        r#"SELECT "libraryId" AS "library_id!" FROM library_user_access
-           WHERE "userId" = $1 AND "libraryId" IS NOT NULL ORDER BY id"#,
+        r#"SELECT "libraryId" FROM library_user_access WHERE "userId" = $1 ORDER BY id"#,
         user
     )
     .fetch_all(db)
     .await
 }
 
-/// The editions linking a file that sit in a library outside the readable ids bound after it (`books.md` rule 22).
-/// Callers add `) AND hp."mediaFileId" ...`; one rule for hydrate, the lists and `assert_file_accessible`.
-pub const HIDDEN_FILES_FROM: &str = r#"FROM item_parts hp JOIN items hi ON hi.id = hp."itemId"
-  JOIN editions he ON he.id = hi."editionId" JOIN media hm ON hm.id = he."mediaId"
-  WHERE NOT COALESCE(he."libraryId", hm."libraryId") = ANY("#;
-
-/// The predicate every "readable text file" query shares: work, edition and each edition linking
-/// `file` sit in the libraries bound at `acl` (`$n`). Expects the aliases `m` (media) and `e` (edition).
-pub fn readable_file(acl: &str, file: &str) -> String {
-    format!(
-        r#"m."libraryId" = ANY({acl}) AND COALESCE(e."libraryId", m."libraryId") = ANY({acl})
-  AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}{acl}) AND hp."mediaFileId" = {file})"#
-    )
-}
-
-/// 404 `MediaFile #<id> not found` for a missing file, or one linked by an edition outside `ids`
-/// (an edition without `libraryId` follows its media, as in the book read routes).
+/// 404 `MediaFile #<id> not found` for a missing file or one whose media is outside `ids`.
 pub async fn assert_file_accessible(db: &PgPool, file: i32, ids: &[i32]) -> Result<(), AppError> {
-    let ok: bool = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
-        r#"SELECT EXISTS (SELECT 1 FROM media_files WHERE id = $1)
-           AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = $1)"#
-    )))
+    let ok: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM media_files mf JOIN media m ON m.id = mf."mediaId"
+             WHERE mf.id = $1 AND m."libraryId" = ANY($2))"#,
+    )
     .bind(file)
     .bind(ids)
     .fetch_one(db)
@@ -93,16 +76,14 @@ pub fn media_not_found(media_id: i32) -> AppError {
     AppError::not_found(format!("Media #{media_id} not found"))
 }
 
-/// Whether every item is in a library of `acl` for its media and for its edition.
+/// Whether every item's media is in a library of `acl`.
 pub async fn items_open(db: &PgPool, items: &[i32], acl: &[i32]) -> sqlx::Result<bool> {
     sqlx::query_scalar(
         r#"SELECT NOT EXISTS (
                SELECT 1 FROM unnest($1::int[]) AS t(id)
                WHERE NOT EXISTS (
-                   SELECT 1 FROM items i JOIN editions e ON e.id = i."editionId"
-                   JOIN media m ON m.id = i."mediaId"
-                   WHERE i.id = t.id AND m."libraryId" = ANY($2)
-                     AND COALESCE(e."libraryId", m."libraryId") = ANY($2)))"#,
+                   SELECT 1 FROM items i JOIN media m ON m.id = i."mediaId"
+                   WHERE i.id = t.id AND m."libraryId" = ANY($2)))"#,
     )
     .bind(items)
     .bind(acl)

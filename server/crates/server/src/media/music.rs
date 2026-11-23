@@ -44,11 +44,11 @@ LEFT JOIN album_details ad ON ad."mediaId" = m.id
 LEFT JOIN editions te ON te."mediaId" = m.id AND te.family = 'audio'
 CROSS JOIN LATERAL (SELECT EXISTS (SELECT 1 FROM items i JOIN editions e ON e.id = i."editionId"
       WHERE i."mediaId" = m.id AND track_file(i.id) IS NOT NULL
-        AND COALESCE(e."libraryId", m."libraryId") = ANY($3)) AS owned) o
+        AND m."libraryId" = ANY($3)) AS owned) o
 CROSS JOIN LATERAL (SELECT count(*) AS n, count(DISTINCT td."discNumber") AS discs,
       COALESCE(sum(td."durationMs"), 0)::float8 / 1000 AS secs
   FROM items i JOIN track_details td ON td."itemId" = i.id JOIN editions e ON e.id = i."editionId"
-  WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($3)
+  WHERE i."mediaId" = m.id AND m."libraryId" = ANY($3)
     AND (NOT o.owned OR track_file(i.id) IS NOT NULL)) t
 WHERE m.id = ANY($1)"#
     );
@@ -92,7 +92,7 @@ pub(crate) async fn detail(
           JOIN items i ON i.id = td."itemId" WHERE i."editionId" = e.id), 1),
       'albumGain', e."albumGain", 'albumPeak', e."albumPeak", 'coverUrl', e."coverUrl")
     FROM editions e WHERE e."mediaId" = m.id AND e.family = 'audio'
-      AND COALESCE(e."libraryId", m."libraryId") = ANY($2) ORDER BY e.id LIMIT 1),
+      AND m."libraryId" = ANY($2) ORDER BY e.id LIMIT 1),
   'sharedTracks', (SELECT count(*) FROM track_details o
       WHERE o."mediaId" <> m.id
         AND (o."recordingMbid" IN (SELECT x."recordingMbid" FROM track_details x WHERE x."mediaId" = m.id)
@@ -109,7 +109,7 @@ FROM media m LEFT JOIN album_details ad ON ad."mediaId" = m.id WHERE m.id = $1"#
     let items: Vec<i32> = sqlx::query_scalar(
         r#"SELECT i.id FROM items i JOIN media m ON m.id = i."mediaId"
            JOIN editions e ON e.id = i."editionId" JOIN track_details td ON td."itemId" = i.id
-           WHERE i."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+           WHERE i."mediaId" = $1 AND m."libraryId" = ANY($2)
            ORDER BY td."discNumber", td.position, i.id"#,
     )
     .bind(id)
@@ -176,7 +176,7 @@ FROM items i JOIN media m ON m.id = i."mediaId" AND m.type = 'album'
 JOIN editions e ON e.id = i."editionId" JOIN track_details td ON td."itemId" = i.id
 LEFT JOIN LATERAL (SELECT f.id, (f."streamInfo"->>'durationSeconds')::float8 AS dur
     FROM media_files f WHERE f.id = track_file(i.id)) pf ON true
-WHERE i.id = ANY($3) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)"#,
+WHERE i.id = ANY($3) AND m."libraryId" = ANY($2)"#,
     )
     .bind(uid)
     .bind(acl)

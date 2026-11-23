@@ -198,7 +198,7 @@ pub async fn get_media(
     id: Result<PathParams<i32>, AppError>,
 ) -> Result<Json<Value>, AppError> {
     let (id, acl) = gate(&st, &a, id).await?;
-    let mut media = hydrate::detail_for(&st.db, id, paths_visible(&a.perms), Some(&acl))
+    let mut media = hydrate::detail(&st.db, id, paths_visible(&a.perms))
         .await?
         .ok_or_else(|| media_not_found(id))?;
     if media["type"] == MediaKind::Book.as_str() {

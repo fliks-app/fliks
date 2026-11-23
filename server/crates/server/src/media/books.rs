@@ -44,9 +44,9 @@ pub(crate) async fn attach_list_info(
   'formats', COALESCE((SELECT jsonb_agg(f.family ORDER BY f.ord) FROM unnest($4::text[]) WITH ORDINALITY f(family, ord)
       WHERE EXISTS (SELECT 1 FROM editions e JOIN items i ON i."editionId" = e.id JOIN item_parts ip ON ip."itemId" = i.id
                     WHERE e."mediaId" = m.id AND e.family = f.family
-                      AND COALESCE(e."libraryId", m."libraryId") = ANY($3))), '[]'::jsonb),
+                      AND m."libraryId" = ANY($3))), '[]'::jsonb),
   'lastFamily', (SELECT e.family FROM playback_states ps JOIN items i ON i.id = ps."itemId" JOIN editions e ON e.id = i."editionId"
-      WHERE ps."userId" = $2 AND i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($3)
+      WHERE ps."userId" = $2 AND i."mediaId" = m.id AND m."libraryId" = ANY($3)
       ORDER BY ps."lastPlayedAt" DESC, ps.id DESC LIMIT 1)
 ) AS "json!: Value"
 FROM media m WHERE m.id = ANY($1)"#,
@@ -131,7 +131,7 @@ pub(crate) async fn detail(
       'family', e.family, 'format', e.format, 'language', e.language, 'title', e.title, 'publisher', e.publisher,
       'published', (SELECT d.date FROM media_release_dates d WHERE d."editionId" = e.id AND d.kind = 'release'),
       'coverUrl', e."coverUrl", 'durationSeconds', e."durationSeconds", 'pageCount', e."pageCount",
-      'libraryId', e."libraryId", 'label', e.label,
+      'label', e.label,
       'narrators', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'sortName', p."sortName") ORDER BY c.position, c.id)
           FROM media_credits c JOIN persons p ON p.id = c."personId"
           WHERE c."editionId" = e.id AND c.role = 'narrator'), '[]'::jsonb),
@@ -145,7 +145,7 @@ pub(crate) async fn detail(
       'fieldSources', COALESCE((SELECT jsonb_agg(jsonb_build_object('field', s.field, 'provider', s.provider, 'locked', s.locked) ORDER BY s.field)
           FROM edition_field_sources s WHERE s."editionId" = e.id), '[]'::jsonb))
       ORDER BY array_position($3::text[], e.family), e.id)
-      FROM editions e WHERE e."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($2)), '[]'::jsonb)
+      FROM editions e WHERE e."mediaId" = m.id AND m."libraryId" = ANY($2)), '[]'::jsonb)
 ) AS "json!: Value"
 FROM media m LEFT JOIN book_details bd ON bd."mediaId" = m.id WHERE m.id = $1"#,
         id,
@@ -163,7 +163,7 @@ FROM media m LEFT JOIN book_details bd ON bd."mediaId" = m.id WHERE m.id = $1"#,
   iso_ms(ps."lastPlayedAt") AS "last_played!"
 FROM playback_states ps JOIN items i ON i.id = ps."itemId" JOIN editions e ON e.id = i."editionId"
 JOIN media m ON m.id = i."mediaId"
-WHERE ps."userId" = $1 AND i."mediaId" = $2 AND COALESCE(e."libraryId", m."libraryId") = ANY($3)
+WHERE ps."userId" = $1 AND i."mediaId" = $2 AND m."libraryId" = ANY($3)
 ORDER BY ps."lastPlayedAt" DESC, ps.id DESC LIMIT 1"#,
         uid,
         id,
@@ -195,7 +195,7 @@ pub(crate) async fn chapters(
 ) -> Result<Vec<Value>, AppError> {
     let visible = sqlx::query_scalar!(
         r#"SELECT e.id FROM editions e JOIN media m ON m.id = e."mediaId"
-           WHERE e.id = $1 AND e."mediaId" = $2 AND COALESCE(e."libraryId", m."libraryId") = ANY($3)"#,
+           WHERE e.id = $1 AND e."mediaId" = $2 AND m."libraryId" = ANY($3)"#,
         edition,
         media,
         acl

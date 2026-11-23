@@ -44,7 +44,6 @@
                 "itemId": 101,
                 "label": "Paper",
                 "language": "fr",
-                "libraryId": null,
                 "narrators": [],
                 "pageCount": 300,
                 "published": "2002-02-02",
@@ -64,9 +63,8 @@
                 "hasFile": true,
                 "id": 102,
                 "itemId": 102,
-                "label": "Hidden audio",
+                "label": "Audio",
                 "language": "en",
-                "libraryId": 4,
                 "narrators": [
                   {
                     "id": 102,

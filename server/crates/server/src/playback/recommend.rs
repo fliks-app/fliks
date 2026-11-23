@@ -122,7 +122,6 @@ pub async fn recommendations(
     .fetch_all(db)
     .await?
     .into_iter()
-    .flatten()
     .map(i64::from)
     .collect();
     Ok(taste.items(top, &available))

@@ -593,7 +593,7 @@ async fn resolve_file(
     contained_path(&row).await
 }
 
-/// The edition gate of a file: its editions' libraries must be in the user's scope.
+/// The file gate: its media's library must be in the user's scope.
 async fn check_file_edition(
     st: &AppState,
     user: &UserRow,
@@ -633,7 +633,7 @@ async fn subtitle_on_disk(
         .filter(|s| !s.trim().is_empty())
         .ok_or(Fail::Denied)?;
     // The real parent stays under the media directory and the file is a regular one.
-    let (media_id, file_id): (Option<i32>, Option<i32>) =
+    let (media_id, file_id): (i32, Option<i32>) =
         sqlx::query_as(r#"SELECT "mediaId", "mediaFileId" FROM subtitle_files WHERE id = $1"#)
             .bind(id)
             .fetch_one(&st.db)
@@ -641,10 +641,9 @@ async fn subtitle_on_disk(
     if let Some(f) = file_id {
         check_file_edition(st, user, perms, f).await?;
     }
-    let media =
-        crate::subtitles::files::load_media_of(&st.db, media_id.ok_or(Fail::Denied)?, file_id)
-            .await?
-            .ok_or(Fail::Denied)?;
+    let media = crate::subtitles::files::load_media_of(&st.db, media_id, file_id)
+        .await?
+        .ok_or(Fail::Denied)?;
     let dirs = media.dirs("no root").map_err(|_| Fail::Denied)?;
     let absolute = dirs.resolve_file(stored.trim()).map_err(|_| Fail::Denied)?;
     dunce::canonicalize(&absolute).map_err(|_| Fail::Denied)

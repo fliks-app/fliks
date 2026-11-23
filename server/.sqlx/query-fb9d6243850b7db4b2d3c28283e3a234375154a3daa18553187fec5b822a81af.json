@@ -8,7 +8,7 @@
         "Int4",
         "Text",
         "Bool",
-        "Text",
+        "Jsonb",
         "Varchar",
         "Bool"
       ]

@@ -1830,6 +1830,7 @@
       "conf_volatile": "A pasta de configuração não é persistente: os segredos perdem-se quando o contentor é recriado.",
       "data_volatile": "A pasta de dados não é persistente: os dados perdem-se quando o contentor é recriado.",
       "job_failed": "A tarefa {{job}} falhou na última execução.",
+      "accounts_differ_by_case": "As contas {{names}} diferem apenas em maiúsculas e minúsculas. Ambas continuam a iniciar sessão com a sua palavra-passe; mude o nome de uma.",
       "unknown": "Uma verificação assinala um problema."
     }
   },
@@ -4274,6 +4275,7 @@
     "404": "Recurso não encontrado",
     "409": "Conflito: o recurso já existe",
     "already_running": "Isto já está em execução.",
+    "username_taken": "Este nome de utilizador já está em uso.",
     "ambiguous_item": "Este título contém vários itens e nenhum foi escolhido.",
     "no_video_stream": "Este arquivo não tem faixa de vídeo.",
     "subtitle_unavailable": "Esta legenda já não está disponível.",

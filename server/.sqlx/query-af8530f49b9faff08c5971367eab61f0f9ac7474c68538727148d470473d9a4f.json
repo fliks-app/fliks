@@ -178,7 +178,7 @@
     },
     "nullable": [
       false,
-      true,
+      false,
       false,
       null,
       false,

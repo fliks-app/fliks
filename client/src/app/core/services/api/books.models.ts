@@ -32,7 +32,7 @@ export interface BookEdition {
   id: number; itemId: number | null; family: BookFormatFamily; format: string | null;
   language: string | null; title: string | null; publisher: string | null; published: string | null;
   coverUrl: string | null; durationSeconds: number | null; pageCount: number | null;
-  libraryId: number | null; label: string | null; narrators: PersonRef[];
+  label: string | null; narrators: PersonRef[];
   hasFile: boolean; fileIds: number[];
   externalIds: { provider: string; value: string }[];
   fieldSources: { field: string; provider: string | null; locked: boolean }[];

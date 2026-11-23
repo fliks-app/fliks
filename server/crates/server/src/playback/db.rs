@@ -173,8 +173,7 @@ pub async fn beat_item(
     };
     Ok(sqlx::query_scalar!(
         r#"SELECT i.id FROM items i JOIN editions e ON e.id = i."editionId" JOIN media m ON m.id = i."mediaId"
-               WHERE i.id = $1 AND i."mediaId" = $2 AND m."libraryId" = ANY($3)
-                 AND COALESCE(e."libraryId", m."libraryId") = ANY($3)"#,
+               WHERE i.id = $1 AND i."mediaId" = $2 AND m."libraryId" = ANY($3)"#,
         id,
         media,
         acl
@@ -224,21 +223,13 @@ struct ResumeRow {
     episode_number: Option<i32>,
 }
 
-/// The `item_parts` of `p` not linked by a hidden edition of the readable libraries bound at `$n`.
-fn visible_part(n: u8) -> String {
-    format!(
-        r#"AND NOT EXISTS (SELECT 1 {}${n}) AND hp."mediaFileId" = p."mediaFileId")"#,
-        crate::libraries::HIDDEN_FILES_FROM
-    )
-}
-
 pub async fn resume_info(
     db: &PgPool,
     user: i32,
     media: i32,
     libs: &[i32],
 ) -> sqlx::Result<Option<ResumeInfo>> {
-    let row = sqlx::query_as::<_, ResumeRow>(sqlx::AssertSqlSafe(format!(
+    let row = sqlx::query_as::<_, ResumeRow>(
         r#"SELECT
              f.id AS media_file_id,
              CASE WHEN e."groupId" IS NOT NULL THEN e.id END AS episode_id,
@@ -246,9 +237,10 @@ pub async fn resume_info(
              s."number" AS season_number, e."number" AS episode_number
            FROM playback_states ps
            JOIN items e ON e.id = ps."itemId"
+           JOIN media m ON m.id = e."mediaId" AND m."libraryId" = ANY($3)
            LEFT JOIN item_groups s ON s.id = e."groupId"
            LEFT JOIN LATERAL (
-             SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id {}
+             SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id
              ORDER BY (p."mediaFileId" = ps."mediaFileId") DESC NULLS LAST,
                       (p."version" = ps."version") DESC NULLS LAST, p."version" DESC, p."position"
              LIMIT 1) f ON true
@@ -259,8 +251,7 @@ pub async fn resume_info(
              AND ps."positionSeconds" > 0
            ORDER BY ps."lastPlayedAt" DESC
            LIMIT 1"#,
-        visible_part(3)
-    )))
+    )
     .bind(user)
     .bind(media)
     .bind(libs)
@@ -325,7 +316,7 @@ pub async fn continue_watching(
     if libs.is_empty() {
         return Ok(vec![]);
     }
-    let mut items = sqlx::query_as::<_, ContinueItem>(sqlx::AssertSqlSafe(
+    let mut items = sqlx::query_as::<_, ContinueItem>(
         r#"WITH st AS (
              SELECT ps.id, ps."itemId", ps."mediaFileId", ps."version", ps."positionSeconds",
                     ps."durationSeconds", ps.completed, ps."hiddenFromContinueWatching" AS hidden, ps."lastPlayedAt",
@@ -412,16 +403,15 @@ pub async fn continue_watching(
              JOIN items e ON e.id = c."itemId"
              LEFT JOIN item_groups s ON s.id = e."groupId"
              LEFT JOIN LATERAL (
-               SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id @VISIBLE@
+               SELECT p."mediaFileId" AS id FROM item_parts p WHERE p."itemId" = e.id
                ORDER BY (p."mediaFileId" = c."mediaFileId") DESC NULLS LAST,
                         (p."version" = c."version") DESC NULLS LAST, p."version" DESC, p."position"
                LIMIT 1) f ON true
              WHERE f.id IS NOT NULL
            ) x
            ORDER BY date_trunc('milliseconds', x."lastPlayedAt") DESC, x.kind, x."mediaId"
-           LIMIT $3"#
-            .replace("@VISIBLE@", &visible_part(2)),
-    ))
+           LIMIT $3"#,
+    )
     .bind(user)
     .bind(libs)
     .bind(CONTINUE_MAX as i64)

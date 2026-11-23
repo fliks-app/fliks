@@ -59,7 +59,7 @@ pub(crate) async fn import_comic(
     .await?;
     search_added(st, media).await;
     let acl = accessible_library_ids(&st.db, a).await?;
-    let mut out = hydrate::detail_for(&st.db, media, paths_visible(&a.perms), Some(&acl))
+    let mut out = hydrate::detail(&st.db, media, paths_visible(&a.perms))
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(media))?;
     out["comic"] = comics::detail(&st.db, media, a.user.id, &acl).await?;

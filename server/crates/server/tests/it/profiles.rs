@@ -26,7 +26,7 @@ async fn ctx(pool: PgPool) -> Ctx {
         ("settings", false, r#"["settings.access"]"#),
     ] {
         let role: i32 = sqlx::query_scalar(
-            "INSERT INTO roles (name, permissions) VALUES ($1, $2) RETURNING id",
+            "INSERT INTO roles (name, permissions) VALUES ($1, $2::jsonb) RETURNING id",
         )
         .bind(name)
         .bind(perms)

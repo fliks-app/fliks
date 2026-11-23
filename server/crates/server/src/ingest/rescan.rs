@@ -844,12 +844,22 @@ impl Slots {
             .map(|n| n.season as i32)
             .filter(|s| !self.seasons.contains_key(s))
             .collect();
-        let mut created = !seasons.is_empty();
-        if created {
+        let mut created = false;
+        if !seasons.is_empty() {
             let nums: Vec<i32> = seasons.into_iter().collect();
-            let rows = sqlx::query!(
+            created = sqlx::query!(
                 r#"INSERT INTO item_groups ("mediaId", "number", monitored)
-                   SELECT $1, n, n > 0 FROM UNNEST($2::int[]) AS n RETURNING id, "number" AS n"#,
+                   SELECT $1, n, n > 0 FROM UNNEST($2::int[]) AS n
+                   ON CONFLICT ("mediaId", "number") DO NOTHING"#,
+                media,
+                &nums
+            )
+            .execute(db)
+            .await?
+            .rows_affected()
+                > 0;
+            let rows = sqlx::query!(
+                r#"SELECT id, "number" AS n FROM item_groups WHERE "mediaId" = $1 AND "number" = ANY($2)"#,
                 media,
                 &nums
             )
@@ -875,29 +885,42 @@ impl Slots {
             }
         }
         if !fresh.is_empty() {
-            created = true;
             let by_id: HashMap<i32, i32> = self.seasons.iter().map(|(n, id)| (*id, *n)).collect();
             let sids: Vec<i32> = fresh.keys().map(|k| self.seasons[&k.0]).collect();
             let nums: Vec<i32> = fresh.keys().map(|k| k.1).collect();
             let es: Vec<Option<i32>> = fresh.values().copied().collect();
             let edition = items::video_edition(db, media).await?;
-            let rows = sqlx::query!(
+            created |= sqlx::query!(
                 r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", "endNumber", monitored)
                    SELECT v.s, $4, $5, v.n, v.e, true
                    FROM UNNEST($1::int[], $2::int[], $3::int[]) AS v(s, n, e)
-                   RETURNING id, "groupId" AS "season_id!", "number" AS "n!""#,
+                   ON CONFLICT ("groupId", "number") DO NOTHING"#,
                 &sids,
                 &nums,
                 &es as &[Option<i32>],
                 media,
                 edition
             )
+            .execute(db)
+            .await?
+            .rows_affected()
+                > 0;
+            let rows = sqlx::query!(
+                r#"SELECT e.id, e."groupId" AS "season_id!", e."number" AS "n!", e."endNumber" AS end
+                   FROM items e JOIN UNNEST($1::int[], $2::int[]) AS v(s, n)
+                     ON e."groupId" = v.s AND e."number" = v.n"#,
+                &sids,
+                &nums
+            )
             .fetch_all(db)
             .await?;
             for r in rows {
-                let end = fresh.get(&(by_id[&r.season_id], r.n)).copied().flatten();
-                self.episodes
-                    .insert((by_id[&r.season_id], r.n), (r.id, end));
+                let key = (by_id[&r.season_id], r.n);
+                let want = fresh.get(&key).copied().flatten();
+                if let Some(e) = want.filter(|e| Some(*e) != r.end) {
+                    ends.push((r.id, e));
+                }
+                self.episodes.insert(key, (r.id, want.or(r.end)));
             }
         }
         set_ends(db, &ends).await?;
@@ -999,6 +1022,22 @@ pub async fn match_special(
     Ok(match_special_by_title(file_name, &specials).map(|i| specials[i].clone()))
 }
 
+/// The episode `number` of a group and its end number.
+async fn episode_slot(
+    c: &mut sqlx::PgConnection,
+    group: i32,
+    number: i32,
+) -> Result<Option<(i32, Option<i32>)>, sqlx::Error> {
+    Ok(sqlx::query!(
+        r#"SELECT id, "endNumber" AS end FROM items WHERE "groupId" = $1 AND "number" = $2"#,
+        group,
+        number
+    )
+    .fetch_optional(&mut *c)
+    .await?
+    .map(|e| (e.id, e.end)))
+}
+
 /// Rule 45: `(episode id, created)`; a missing season or episode is created.
 pub async fn ensure_season_and_episode(
     db: &sqlx::PgPool,
@@ -1010,66 +1049,37 @@ pub async fn ensure_season_and_episode(
         n.episode as i32,
         n.episode_end.map(|e| e as i32),
     );
-    let mut created = false;
-    let sid = match sqlx::query_scalar!(
-        r#"SELECT id FROM item_groups WHERE "mediaId" = $1 AND "number" = $2 ORDER BY id LIMIT 1"#,
-        media,
-        season
-    )
-    .fetch_optional(db)
-    .await?
-    {
-        Some(id) => id,
-        None => {
-            created = true;
-            sqlx::query_scalar!(
-                r#"INSERT INTO item_groups ("mediaId", "number", monitored) VALUES ($1, $2, $3) RETURNING id"#,
-                media,
-                season,
-                season > 0
-            )
-            .fetch_one(db)
-            .await?
-        }
-    };
-    let ep = sqlx::query!(
-        r#"SELECT id, "endNumber" AS end FROM items WHERE "groupId" = $1 AND "number" = $2
-           ORDER BY id LIMIT 1"#,
-        sid,
-        episode
-    )
-    .fetch_optional(db)
-    .await?;
-    let id = match ep {
-        Some(e) => {
-            if end.is_some() && e.end != end {
-                sqlx::query!(
-                    r#"UPDATE items SET "endNumber" = $2 WHERE id = $1"#,
-                    e.id,
-                    end
-                )
-                .execute(db)
-                .await?;
-            }
-            e.id
-        }
-        None => {
-            created = true;
-            let edition = items::video_edition(db, media).await?;
-            sqlx::query_scalar!(
-                r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", "endNumber", monitored)
-                   VALUES ($1, $2, $3, $4, $5, true) RETURNING id"#,
-                sid,
-                media,
-                edition,
-                episode,
-                end
-            )
-            .fetch_one(db)
-            .await?
-        }
-    };
-    items::cover_ranges(&mut *db.acquire().await?, media).await?;
+    let mut c = db.acquire().await?;
+    let (sid, mut created) = items::ensure_group(&mut c, media, season, season > 0).await?;
+    let mut ep = episode_slot(&mut c, sid, episode).await?;
+    if ep.is_none() {
+        let edition = items::video_edition(&mut *c, media).await?;
+        created |= sqlx::query!(
+            r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", "endNumber", monitored)
+               VALUES ($1, $2, $3, $4, $5, true) ON CONFLICT ("groupId", "number") DO NOTHING"#,
+            sid,
+            media,
+            edition,
+            episode,
+            end
+        )
+        .execute(&mut *c)
+        .await?
+        .rows_affected()
+            > 0;
+        ep = episode_slot(&mut c, sid, episode).await?;
+    }
+    let (id, cur) = ep.ok_or(sqlx::Error::RowNotFound)?;
+    if end.is_some() && cur != end {
+        sqlx::query!(
+            r#"UPDATE items SET "endNumber" = $2 WHERE id = $1"#,
+            id,
+            end
+        )
+        .execute(&mut *c)
+        .await?;
+    }
+    items::cover_ranges(&mut c, media).await?;
     Ok((id, created))
 }
 
@@ -1226,7 +1236,7 @@ pub async fn link_in_place(
     .fetch_optional(&st.db)
     .await?
     {
-        if held.media_id != Some(media.id) {
+        if held.media_id != media.id {
             return Ok(Err("file already linked to another media".into()));
         }
         return Ok(Ok(Linked {

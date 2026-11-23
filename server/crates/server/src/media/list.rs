@@ -126,7 +126,7 @@ fn push_scope(
             .push_bind(v.to_string())
             .push(")");
     }
-    push_book_filters(qb, p, ids, uid);
+    push_book_filters(qb, p, uid);
     for (table, col, v) in [
         ("w", "qualityProfileId", p.quality_profile_id),
         ("media", "languageProfileId", p.language_profile_id),
@@ -138,10 +138,8 @@ fn push_scope(
     match p.missing {
         Some(true) => {
             qb.push(
-                " AND (NOT EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = media.id AND ",
+                " AND (NOT EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = media.id) OR ",
             );
-            push_not_hidden(qb, ids, "f");
-            qb.push(") OR ");
             qb.push(MISSING_EPISODE)
                 .push_bind(today)
                 .push(MISSING_EPISODE_TAIL)
@@ -149,10 +147,8 @@ fn push_scope(
         }
         Some(false) => {
             qb.push(
-                " AND (EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = media.id AND ",
+                " AND (EXISTS (SELECT 1 FROM media_files f WHERE f.\"mediaId\" = media.id) AND NOT ",
             );
-            push_not_hidden(qb, ids, "f");
-            qb.push(") AND NOT ");
             qb.push(MISSING_EPISODE)
                 .push_bind(today)
                 .push(MISSING_EPISODE_TAIL)
@@ -194,36 +190,17 @@ fn push_scope(
     }
 }
 
-/// `NOT <file>.id` among the hidden editions' files of `media`, for the readable libraries `ids`.
-fn push_not_hidden(qb: &mut QueryBuilder<Postgres>, ids: &[i32], file: &str) {
-    qb.push(format!(
-        " NOT {file}.id = ANY(ARRAY(SELECT hp.\"mediaFileId\" {}",
-        crate::libraries::HIDDEN_FILES_FROM
-    ))
-    .push_bind(ids.to_vec())
-    .push(") AND hm.id = media.id AND media.type = 'book'))");
-}
-
-/// ` AND` an edition `e` readable through its own library, else the work's (`books.md` rule 22).
-fn push_visible(qb: &mut QueryBuilder<Postgres>, ids: &[i32]) {
-    qb.push(" AND COALESCE(e.\"libraryId\", media.\"libraryId\") = ANY(")
-        .push_bind(ids.to_vec())
-        .push(")");
-}
-
 /// `books-api.md` A1; `Search::parse` already refused these keys unless the type is exactly book.
-fn push_book_filters(qb: &mut QueryBuilder<Postgres>, p: &Search, ids: &[i32], uid: i32) {
+fn push_book_filters(qb: &mut QueryBuilder<Postgres>, p: &Search, uid: i32) {
     if let Some(f) = &p.format {
         qb.push(" AND EXISTS (SELECT 1 FROM editions e JOIN items i ON i.\"editionId\" = e.id JOIN item_parts ip ON ip.\"itemId\" = i.id WHERE e.\"mediaId\" = media.id AND e.family = ")
             .push_bind(f.clone());
-        push_visible(qb, ids);
         qb.push(")");
     }
     if let Some(l) = &p.language {
         qb.push(" AND EXISTS (SELECT 1 FROM editions e WHERE e.\"mediaId\" = media.id AND lower(e.language) = lower(")
             .push_bind(l.clone())
             .push(")");
-        push_visible(qb, ids);
         qb.push(")");
     }
     if let Some(a) = p.author_id {
@@ -234,7 +211,6 @@ fn push_book_filters(qb: &mut QueryBuilder<Postgres>, p: &Search, ids: &[i32], u
     if let Some(n) = p.narrator_id {
         qb.push(" AND EXISTS (SELECT 1 FROM media_credits c JOIN editions e ON e.id = c.\"editionId\" WHERE c.\"mediaId\" = media.id AND c.role = 'narrator' AND c.\"personId\" = ")
             .push_bind(n);
-        push_visible(qb, ids);
         qb.push(")");
     }
     if let Some(s) = p.series_id {
@@ -250,7 +226,6 @@ fn push_book_filters(qb: &mut QueryBuilder<Postgres>, p: &Search, ids: &[i32], u
         qb.push_bind(uid).push(
             " AND i.\"mediaId\" = media.id AND ps.completed = false AND (ps.\"positionSeconds\" > 0 OR ps.progression > 0)",
         );
-        push_visible(qb, ids);
         qb.push(")");
     }
 }
@@ -367,7 +342,7 @@ pub async fn find_all(
     see_paths: bool,
 ) -> Result<Page, sqlx::Error> {
     let (page_ids, total) = select_ids(db, p, ids, kinds, uid, !p.skip_total).await?;
-    let mut data = hydrate::items_view(db, &page_ids, see_paths, p.grid, Some(ids)).await?;
+    let mut data = hydrate::items_view(db, &page_ids, see_paths, p.grid).await?;
     attach_watched(db, &mut data, &page_ids, uid).await?;
     books::attach_list_info(db, &mut data, uid, ids).await?;
     comics::attach_list_info(db, &mut data, uid, ids).await?;
@@ -501,17 +476,6 @@ pub(crate) async fn watched_map(
         .collect())
 }
 
-/// Whether a book of the readable libraries `ids` has an edition outside them, whose files `push_not_hidden` drops.
-async fn hides_book_files(db: &PgPool, ids: &[i32]) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM editions e JOIN media m ON m.id = e."mediaId"
-             WHERE m.type = 'book' AND m."libraryId" = ANY($1) AND NOT e."libraryId" = ANY($1)) AS "hides!""#,
-        ids
-    )
-    .fetch_one(db)
-    .await
-}
-
 /// Rule 33, Q-R: newest additions by media, by file, or both; `id ASC` breaks ties.
 pub async fn recently_added(
     db: &PgPool,
@@ -525,17 +489,6 @@ pub async fn recently_added(
         return Ok(vec![]);
     }
     let mut qb = QueryBuilder::new("SELECT media.id FROM media");
-    let added = if p.mode != "media"
-        && kinds.has(MediaKind::Book)
-        && hides_book_files(db, ids).await?
-    {
-        qb.push(" LEFT JOIN LATERAL (SELECT CASE WHEN media.type = 'book' THEN (SELECT MAX(mf.\"createdAt\") FROM media_files mf WHERE mf.\"mediaId\" = media.id AND");
-        push_not_hidden(&mut qb, ids, "mf");
-        qb.push(") ELSE media.\"lastFileAddedAt\" END AS added) lf ON true");
-        "lf.added"
-    } else {
-        "media.\"lastFileAddedAt\""
-    };
     qb.push(" WHERE media.\"libraryId\" = ANY(")
         .push_bind(ids.to_vec())
         .push(") AND media.type = ANY(")
@@ -554,15 +507,17 @@ pub async fn recently_added(
         qb.push(" AND media.\"addedById\" = ").push_bind(uid);
     }
     qb.push(match p.mode.as_str() {
-        "file" => format!(" AND {added} IS NOT NULL ORDER BY {added} DESC"),
-        "media" => " ORDER BY media.\"createdAt\" DESC".to_owned(),
-        _ => format!(
-            " ORDER BY GREATEST(media.\"createdAt\", COALESCE({added}, media.\"createdAt\")) DESC"
-        ),
+        "file" => {
+            " AND media.\"lastFileAddedAt\" IS NOT NULL ORDER BY media.\"lastFileAddedAt\" DESC"
+        }
+        "media" => " ORDER BY media.\"createdAt\" DESC",
+        _ => {
+            " ORDER BY GREATEST(media.\"createdAt\", COALESCE(media.\"lastFileAddedAt\", media.\"createdAt\")) DESC"
+        }
     });
     qb.push(", media.id ASC LIMIT ").push_bind(p.limit);
     let page_ids: Vec<i32> = qb.build_query_scalar().fetch_all(db).await?;
-    let mut data = hydrate::items_view(db, &page_ids, see_paths, true, Some(ids)).await?;
+    let mut data = hydrate::items_view(db, &page_ids, see_paths, true).await?;
     books::attach_list_info(db, &mut data, uid, ids).await?;
     comics::attach_list_info(db, &mut data, uid, ids).await?;
     music::attach_list_info(db, &mut data, uid, ids).await?;

@@ -27,7 +27,7 @@ async fn ctx(pool: PgPool) -> Ctx {
 impl Ctx {
     async fn user(&self, name: &str, perms: &str, admin: bool) -> (i32, String) {
         let role: i32 = sqlx::query_scalar(
-            r#"INSERT INTO roles (name, permissions) VALUES ($1, $2) RETURNING id"#,
+            r#"INSERT INTO roles (name, permissions) VALUES ($1, $2::jsonb) RETURNING id"#,
         )
         .bind(format!("role-{name}"))
         .bind(perms)
@@ -342,6 +342,19 @@ async fn create_defaults_and_conflict(pool: PgPool) {
         (s, b["message"].as_str()),
         (409, Some("Username already taken"))
     );
+    let (s, b) = c
+        .call(
+            "POST",
+            "/api/users",
+            &tm,
+            Some(json!({"username": "U", "password": "longenough"})),
+        )
+        .await;
+    assert_eq!(
+        (s, b["key"].as_str()),
+        (409, Some("errors.username_taken")),
+        "a name differing only by case is taken"
+    );
     let with_role = json!({"username": "v", "password": "longenough", "roleId": role});
     let (s, b) = c.call("POST", "/api/users", &tm, Some(with_role)).await;
     assert_eq!(
@@ -561,4 +574,31 @@ async fn avatar_upload_and_clear(pool: PgPool) {
     let (s, b) = c.call("DELETE", "/api/users/me/avatar", &ta, None).await;
     assert_eq!((s, &b["avatar"]), (200, &Value::Null));
     assert!(!file.exists());
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_rename_onto_a_name_differing_by_case_is_refused(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, tm) = c.user("m", r#"["users.manage"]"#, false).await;
+    let (a, _) = c.user("Ann", "[]", false).await;
+    let (b, _) = c.user("Bea", "[]", false).await;
+    let (s, e) = put(&c, &tm, b, json!({"username": "ANN"})).await;
+    assert_eq!(
+        (s, e["message"].as_str()),
+        (409, Some("Username already taken"))
+    );
+    let (s, _) = put(&c, &tm, a, json!({"username": "ann"})).await;
+    assert_eq!(s, 200, "a case-only change of its own name");
+    let name: String = c.column(a, "username").await;
+    assert_eq!(name, "ann");
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_existing_collision_does_not_block_other_edits(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, tm) = c.user("m", r#"["users.manage"]"#, false).await;
+    let (a, _) = c.user("Dee", "[]", false).await;
+    c.user("dee", "[]", false).await;
+    let (s, _) = put(&c, &tm, a, json!({"username": "Dee", "enabled": false})).await;
+    assert_eq!(s, 200);
 }

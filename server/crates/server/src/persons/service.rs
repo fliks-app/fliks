@@ -512,7 +512,7 @@ FROM persons p JOIN media_credits mc ON mc."personId" = p.id JOIN media m ON m.i
 WHERE m.type = 'book' AND m."libraryId" = ANY($1) AND mc.role = $3
   AND (($3 = 'author' AND mc."editionId" IS NULL)
     OR ($3 = 'narrator' AND EXISTS (SELECT 1 FROM editions e
-          WHERE e.id = mc."editionId" AND COALESCE(e."libraryId", m."libraryId") = ANY($2))))
+          WHERE e.id = mc."editionId" AND m."libraryId" = ANY($2))))
   AND ($4::text IS NULL OR p."searchVector" @@ to_tsquery('simple', $4))
 GROUP BY p.id
 ORDER BY CASE WHEN $5 THEN -COUNT(DISTINCT m.id) ELSE 0 END, COALESCE(p."sortName", p.name), p.id
@@ -544,7 +544,7 @@ WHERE m.type = 'book' AND m."libraryId" = ANY($1) AND EXISTS (
   SELECT 1 FROM media_credits mc WHERE mc."mediaId" = m.id AND mc."personId" = $2 AND mc.role = $3
     AND (($3 = 'author' AND mc."editionId" IS NULL)
       OR ($3 = 'narrator' AND EXISTS (SELECT 1 FROM editions e
-            WHERE e.id = mc."editionId" AND COALESCE(e."libraryId", m."libraryId") = ANY($1)))))
+            WHERE e.id = mc."editionId"))))
 ORDER BY m.title, m.id"#,
         acl,
         id,
@@ -609,13 +609,13 @@ pub async fn music_people(
   SELECT c."personId", i."mediaId", i.id FROM item_credits c JOIN items i ON i.id = c."itemId"
    JOIN media m ON m.id = i."mediaId" JOIN editions e ON e.id = i."editionId"
    WHERE c.role = $3 AND m.type = 'album' AND m."libraryId" = ANY($1)
-     AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+     AND m."libraryId" = ANY($2)
      AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
   UNION ALL
   SELECT c."personId", i."mediaId", i.id FROM media_credits c JOIN items i ON i."mediaId" = c."mediaId"
    JOIN media m ON m.id = i."mediaId" JOIN editions e ON e.id = i."editionId"
    WHERE $3 = 'artist' AND c.role = 'artist' AND c."editionId" IS NULL AND m.type = 'album'
-     AND m."libraryId" = ANY($1) AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+     AND m."libraryId" = ANY($1) AND m."libraryId" = ANY($2)
      AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
      AND NOT EXISTS (SELECT 1 FROM item_credits t WHERE t."itemId" = i.id AND t.role = 'artist'))
 SELECT jsonb_build_object('id', p.id, 'name', p.name, 'sortName', p."sortName", 'avatarUrl', p."avatarUrl",
@@ -675,7 +675,7 @@ LEFT JOIN media_external_ids x ON x."mediaId" = m.id AND x.kind = 'album' AND x.
 CROSS JOIN LATERAL (SELECT count(*) AS n,
     count(*) FILTER (WHERE track_file(i.id) IS NOT NULL) AS owned
   FROM items i JOIN editions e ON e.id = i."editionId"
-  WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($2)) t
+  WHERE i."mediaId" = m.id) t
 WHERE c."personId" = $1 AND m.type = 'album' AND m."libraryId" = ANY($2)
 ORDER BY m.year DESC NULLS LAST, m.title, m.id"#,
     )
@@ -762,7 +762,7 @@ async fn popular(
                JOIN items i ON i.id = td."itemId" JOIN media m ON m.id = i."mediaId"
                JOIN editions e ON e.id = i."editionId"
                WHERE td.popularity IS NOT NULL AND td."recordingMbid" IS NOT NULL
-                 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+                 AND m."libraryId" = ANY($2)
                  AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
                  AND (EXISTS (SELECT 1 FROM item_credits c WHERE c."itemId" = i.id AND c.role = 'artist'
                                AND c."personId" = $1)
@@ -785,7 +785,7 @@ async fn popular(
                JOIN items i ON i.id = td."itemId" JOIN media m ON m.id = i."mediaId"
                JOIN editions e ON e.id = i."editionId"
                WHERE td."recordingMbid" = ANY($1::uuid[])
-                 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
+                 AND m."libraryId" = ANY($2)
                  AND EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = i.id)
                ORDER BY td."recordingMbid", i.id"#,
         )

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM book_merges b USING editions e JOIN media m ON m.id = e.\"mediaId\"\n           WHERE b.\"editionId\" = e.id AND b.state IN ('failed', 'retry')\n             AND m.\"libraryId\" = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4045e9b60fc90a76f2bb64b7c29db301f8e58c2b0e1df3fe098efa770f3e1bbd"
+}

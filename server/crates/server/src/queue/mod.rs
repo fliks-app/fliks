@@ -203,8 +203,8 @@ impl Shared {
 pub(crate) async fn emit_managers(st: &AppState, ev: crate::events::SseEvent) {
     let ids = sqlx::query_scalar::<_, i32>(
         r#"SELECT u.id FROM users u LEFT JOIN roles r ON r.id = u."roleId"
-           WHERE u.enabled AND (u."isAdmin" OR r.permissions LIKE '%"manage:all"%'
-             OR r.permissions LIKE '%"settings.access"%')"#,
+           WHERE u.enabled AND (u."isAdmin" OR r.permissions ? 'manage:all'
+             OR r.permissions ? 'settings.access')"#,
     )
     .fetch_all(&st.db)
     .await

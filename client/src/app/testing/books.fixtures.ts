@@ -17,7 +17,7 @@ export const bookListInfoFixture: BookListInfo = {
 export const textEditionFixture: BookEdition = {
   id: 100, itemId: 1000, family: 'text', format: 'epub', language: 'en', title: 'Book One',
   publisher: 'Publisher One', published: '2020-01-01', coverUrl: null, durationSeconds: null,
-  pageCount: 320, libraryId: 1, label: null, narrators: [], hasFile: true, fileIds: [5000],
+  pageCount: 320, label: null, narrators: [], hasFile: true, fileIds: [5000],
   externalIds: [{ provider: 'isbn', value: '9780000000002' }],
   fieldSources: [{ field: 'title', provider: 'openlibrary', locked: false }],
 };

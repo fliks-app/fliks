@@ -5,7 +5,7 @@ use crate::{events::SseEvent, state::AppState};
 pub async fn viewers_for_media(st: &AppState, media_id: i32) -> Vec<i32> {
     let r = sqlx::query_scalar::<_, i32>(
         r#"SELECT u.id FROM users u LEFT JOIN roles r ON r.id = u."roleId"
-           WHERE u.enabled AND (u."isAdmin" OR r.permissions LIKE '%"manage:all"%'
+           WHERE u.enabled AND (u."isAdmin" OR r.permissions ? 'manage:all'
              OR EXISTS (SELECT 1 FROM library_user_access a JOIN media m ON m."libraryId" = a."libraryId"
                         WHERE a."userId" = u.id AND m.id = $1))
            ORDER BY u.id"#,

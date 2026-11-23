@@ -298,10 +298,12 @@ pub async fn remove(
         .await?
         .ok_or_else(|| not_found(id))?;
     let mut tx = st.db.begin().await?;
-    let candidates: Vec<i32> = sqlx::query_scalar(r#"SELECT DISTINCT "channelId" FROM livetv_channel_streams WHERE "sourceId" = $1 AND "channelId" IS NOT NULL"#)
-        .bind(id)
-        .fetch_all(&mut *tx)
-        .await?;
+    let candidates: Vec<i32> = sqlx::query_scalar(
+        r#"SELECT DISTINCT "channelId" FROM livetv_channel_streams WHERE "sourceId" = $1"#,
+    )
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await?;
     // A source deleted by a concurrent request.
     let gone = sqlx::query("DELETE FROM livetv_sources WHERE id = $1")
         .bind(id)

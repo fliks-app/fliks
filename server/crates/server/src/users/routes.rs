@@ -87,7 +87,7 @@ pub async fn create(
     dto.validate()?;
     let mut tx = st.db.begin().await?;
     if db::username_taken(&mut tx, &dto.username, None).await? {
-        return Err(AppError::conflict("Username already taken"));
+        return Err(db::taken_error());
     }
     if dto.role_id.is_some() && !a.perms.can(Action::Manage, &Subject::Role) {
         return Err(AppError::forbidden(MSG_ROLE_ASSIGN));
@@ -168,10 +168,10 @@ pub async fn update(
     {
         return Err(AppError::conflict("Cannot remove the last enabled admin"));
     }
-    if let Some(name) = &dto.username
+    if let Some(name) = dto.username.as_ref().filter(|n| **n != target.username)
         && db::username_taken(&mut tx, name, Some(id)).await?
     {
-        return Err(AppError::conflict("Username already taken"));
+        return Err(db::taken_error());
     }
 
     let mut t = target.clone();

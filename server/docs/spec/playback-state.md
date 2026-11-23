@@ -69,7 +69,7 @@ Library scoping everywhere: `getAccessibleLibraryIds(user)` (libraries spec) is 
 
 ### Recommendations
 
-19. `dismiss(userId, mediaId)`: `INSERT INTO recommendation_dismissals ("userId","mediaId") VALUES ($1,$2) ON CONFLICT DO NOTHING` (`orIgnore`), idempotent on unique `UQ_recommendation_dismissals_user_media (userId, mediaId)`; no check that the media exists or is accessible; 204.
+19. `dismiss(userId, mediaId)`: `INSERT INTO recommendation_dismissals ("userId","mediaId") VALUES ($1,$2) ON CONFLICT DO NOTHING` (`orIgnore`), idempotent on unique `UQ_recommendation_dismissals_user_media (userId, mediaId)`; no check that the media is accessible; an unknown media is 404 `not_found` (the `"mediaId"` foreign key, SQLSTATE 23503); 204.
 20. `resetDismissals`: `DELETE... WHERE "userId" = $1`, answer `{removed: affected ?? 0}`. `countDismissals`: `SELECT COUNT(*)... WHERE "userId" = $1` -> `{count}`.
 21. `getRecommendations(userId, libs, limit?)`: `libs` empty -> `[]`. **History window**: the user's 15 most recent `completed = true` states (`lastPlayedAt` DESC, joined through their item to its media); walk them in order; skip a state whose media is missing or has no genres (it still used one of the 15); skip a media id already taken; keep at most 10 unique media, assigning `rank` 0,1,2... only to kept ones; none kept -> `[]`.
 22. **Genre profile**: for each kept media with `rank r`, `weight = 1/(r+1)` is added to each of its genres (a genre repeated in one media counts each time); `genreSource[g]` = title of the media that first contributed `g`, replaced by the rank-0 media whenever it contributes `g`.

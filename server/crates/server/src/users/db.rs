@@ -5,6 +5,7 @@ use crate::http::{
 };
 use fliks_domain::media::kind::MediaKind;
 use serde::Serialize;
+use serde_json::json;
 use sqlx::{PgConnection, PgPool};
 use std::collections::HashMap;
 
@@ -99,7 +100,7 @@ pub async fn list(db: &PgPool) -> Result<Vec<PublicUser>, sqlx::Error> {
     let rows = load_users(db, None, false).await?;
     let ids: Vec<i32> = rows.iter().map(|(u, _)| u.id).collect();
     let access = sqlx::query!(
-        r#"SELECT "userId" AS "user_id!", "libraryId" AS "library_id!" FROM library_user_access WHERE "userId" = ANY($1) ORDER BY "id""#,
+        r#"SELECT "userId" AS user_id, "libraryId" AS library_id FROM library_user_access WHERE "userId" = ANY($1) ORDER BY "id""#,
         &ids
     )
     .fetch_all(db)
@@ -124,7 +125,7 @@ pub async fn find_one(db: &PgPool, id: i32) -> Result<Option<PublicUser>, sqlx::
         return Ok(None);
     };
     let ids = sqlx::query_scalar!(
-        r#"SELECT "libraryId" AS "library_id!" FROM library_user_access WHERE "userId" = $1 ORDER BY "id""#,
+        r#"SELECT "libraryId" FROM library_user_access WHERE "userId" = $1 ORDER BY "id""#,
         id
     )
     .fetch_all(db)
@@ -234,17 +235,57 @@ pub fn not_found(id: i32) -> AppError {
     AppError::not_found(format!("User #{id} not found"))
 }
 
+/// A name held by another account, in any case.
 pub async fn username_taken(
     c: &mut PgConnection,
     username: &str,
     except: Option<i32>,
 ) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar!(
-        r#"SELECT EXISTS(SELECT 1 FROM users WHERE "username" = $1 AND ($2::int IS NULL OR "id" <> $2)) AS "taken!""#,
+        r#"SELECT EXISTS(SELECT 1 FROM users WHERE lower("username") = lower($1) AND ($2::int IS NULL OR "id" <> $2)) AS "taken!""#,
         username,
         except
     )
     .fetch_one(c)
+    .await
+}
+
+pub fn taken_error() -> AppError {
+    AppError::conflict("Username already taken").keyed("errors.username_taken", json!({}))
+}
+
+pub struct LoginCandidate {
+    pub id: i32,
+    pub username: String,
+    pub hash: Option<String>,
+    pub enabled: bool,
+    pub is_admin: bool,
+}
+
+/// The accounts a sign-in name can mean: the exact-case one, else every one that differs only by case.
+pub async fn login_candidates(db: &PgPool, name: &str) -> Result<Vec<LoginCandidate>, sqlx::Error> {
+    let mut rows = sqlx::query_as!(
+        LoginCandidate,
+        r#"SELECT id, username, "passwordHash" AS hash, enabled, "isAdmin" AS is_admin
+           FROM users WHERE lower(username) = lower($1) ORDER BY id"#,
+        name
+    )
+    .fetch_all(db)
+    .await?;
+    if rows.iter().any(|r| r.username == name) {
+        rows.retain(|r| r.username == name);
+    }
+    Ok(rows)
+}
+
+/// Accounts whose names collide once case is folded, grouped, for the health check.
+pub async fn names_differing_by_case(db: &PgPool) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT username AS "username!" FROM users
+           WHERE lower(username) IN (SELECT lower(username) FROM users GROUP BY 1 HAVING count(*) > 1)
+           ORDER BY lower(username), username COLLATE "C""#
+    )
+    .fetch_all(db)
     .await
 }
 

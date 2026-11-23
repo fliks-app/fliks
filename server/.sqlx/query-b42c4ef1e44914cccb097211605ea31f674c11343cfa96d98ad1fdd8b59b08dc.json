@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id FROM editions e JOIN media m ON m.id = e.\"mediaId\"\n               WHERE e.\"mediaId\" = $1 AND m.\"libraryId\" = ANY($2)\n               ORDER BY e.family <> $3, e.id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "editions",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b42c4ef1e44914cccb097211605ea31f674c11343cfa96d98ad1fdd8b59b08dc"
+}

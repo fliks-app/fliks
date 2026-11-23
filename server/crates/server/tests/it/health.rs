@@ -252,3 +252,30 @@ async fn only_a_health_row_may_lack_a_reporter(pool: PgPool) {
     .await
     .unwrap();
 }
+
+#[sqlx::test(migrations = false)]
+async fn accounts_differing_by_case_are_one_warning_that_links_to_the_users(pool: PgPool) {
+    let tmp = std::env::temp_dir();
+    let c = ctx(pool.clone(), tmp.to_str().unwrap()).await;
+    health::run(&c.st).await.unwrap();
+    let case = |b: &Value| {
+        b["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|k| k["code"] == "accounts_differ_by_case")
+            .cloned()
+    };
+    assert!(case(&call(&c, "GET", "/api/system/checks").await.1).is_none());
+
+    sqlx::query(r#"INSERT INTO users (id, username) VALUES (91, 'Rob'), (92, 'rob')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    health::run(&c.st).await.unwrap();
+    let k = case(&call(&c, "GET", "/api/system/checks").await.1).unwrap();
+    assert_eq!(k["state"], "warn");
+    assert_eq!(k["params"]["names"], "Rob, rob");
+    assert_eq!(k["link"], "/admin/settings/users");
+    assert!(c.hook.lock_clean().is_empty(), "a warning notifies nobody");
+}

@@ -762,22 +762,6 @@ mod resolve {
             let (_, b) = ask(&w.member.1, purpose).await;
             assert_eq!(b["allow"], true, "{purpose}");
         }
-        sqlx::query(r#"INSERT INTO libraries (name) VALUES ('Hidden')"#)
-            .execute(p)
-            .await
-            .unwrap();
-        sqlx::query(
-            r#"UPDATE editions SET "libraryId" = (SELECT id FROM libraries WHERE name = 'Hidden')
-               WHERE "mediaId" = $1"#,
-        )
-        .bind(media)
-        .execute(p)
-        .await
-        .unwrap();
-        for purpose in ["stream", "download", "sprite", "subtitle"] {
-            assert_eq!(ask(&w.member.1, purpose).await.1, denied(), "{purpose}");
-            assert_eq!(ask(&w.admin.1, purpose).await.1["allow"], true, "{purpose}");
-        }
     }
 
     async fn device_token(w: &World, user: i32, kind: crate::device_tokens::Kind) -> String {
@@ -962,32 +946,6 @@ mod resolve {
         );
         assert_eq!(ask_basic(&w, "r", &admin).await["allow"], true);
 
-        let media: i32 = sqlx::query_scalar(r#"SELECT "mediaId" FROM media_files WHERE id = $1"#)
-            .bind(w.file)
-            .fetch_one(p)
-            .await
-            .unwrap();
-        sqlx::query(r#"INSERT INTO libraries (name) VALUES ('Hidden')"#)
-            .execute(p)
-            .await
-            .unwrap();
-        sqlx::query(
-            r#"UPDATE editions SET "libraryId" = (SELECT id FROM libraries WHERE name = 'Hidden') WHERE "mediaId" = $1"#,
-        )
-        .bind(media)
-        .execute(p)
-        .await
-        .unwrap();
-        for purpose in ["stream", "download", "sprite", "subtitle"] {
-            let b = ask_device(&w, &basic("r", &member), Some("basic"), purpose).await;
-            assert_eq!(
-                b,
-                json!({"allow": false, "ttlS": 60.0}),
-                "{purpose}: the edition rule"
-            );
-        }
-        assert_eq!(ask_basic(&w, "r", &admin).await["allow"], true);
-
         sqlx::query(r#"UPDATE users SET enabled = false WHERE id = $1"#)
             .bind(w.admin.0)
             .execute(p)
@@ -1144,7 +1102,7 @@ mod resolve {
     #[sqlx::test(migrations = false)]
     async fn an_audio_item_answers_its_parts_and_a_text_file_its_mime(pool: PgPool) {
         let w = world(pool).await;
-        let (media, f) = book(&w).await;
+        let (_, f) = book(&w).await;
         let ask = |file: i32, token: &str, purpose: &str| {
             resolve(
                 &w,
@@ -1185,20 +1143,6 @@ mod resolve {
         assert!(
             b.get("format").is_none() && b.get("parts").is_none(),
             "video is as before"
-        );
-        sqlx::query(r#"WITH l AS (INSERT INTO libraries (name) VALUES ('Hidden') RETURNING id) UPDATE editions SET "libraryId" = (SELECT id FROM l) WHERE "mediaId" = $1 AND family = 'audio'"#)
-            .bind(media)
-            .execute(&w.c.pool)
-            .await
-            .unwrap();
-        for file in [f[0], f[1], f[2]] {
-            assert_eq!(ask(file, &w.member.1, "stream").await.1, denied(), "{file}");
-            assert_eq!(ask(file, &w.admin.1, "stream").await.1["allow"], true);
-        }
-        assert_eq!(
-            ask(f[3], &w.member.1, "stream").await.1["allow"],
-            true,
-            "the text edition stays"
         );
     }
 

@@ -64,7 +64,7 @@ pub async fn match_report(
             None => unmatched.push(json!({"channelId": id, "name": name})),
         }
     }
-    let rows: Vec<(String, Value, Option<i32>)> = sqlx::query_as(
+    let rows: Vec<(String, Value, i32)> = sqlx::query_as(
         r#"SELECT "channelId", "displayNames", "guideSourceId" FROM livetv_guide_channels
            WHERE ($1::bigint IS NULL OR "guideSourceId" = $1) ORDER BY "channelId" COLLATE "C", id"#,
     )
@@ -114,7 +114,7 @@ async fn ranked(
     let prio: HashMap<i32, i32> = prio.into_iter().collect();
     let keep: HashSet<*const Program> = pick_highest_priority(
         &rows,
-        |r| (r.guide_channel_id.as_str(), r.guide_source_id.unwrap_or(0)),
+        |r| (r.guide_channel_id.as_str(), r.guide_source_id),
         &prio,
     )
     .into_iter()

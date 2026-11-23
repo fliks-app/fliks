@@ -104,6 +104,9 @@ async fn gather(st: &AppState) -> sqlx::Result<Vec<Check>> {
             .filter(|n| crate::jobs::is_core(n))
             .map(|n| checks::job(n)),
     );
+    out.extend(checks::accounts_differ_by_case(
+        &crate::users::names_differing_by_case(&st.db).await?,
+    ));
     Ok(out)
 }
 

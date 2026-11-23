@@ -399,9 +399,9 @@ async fn sprite_of(
         }
     };
     let title = file.media_title.clone().unwrap_or_default();
-    let subject = subject.cloned().unwrap_or_else(|| {
-        Subject::media(file.media_id.unwrap_or_default(), &title, file.media_type)
-    });
+    let subject = subject
+        .cloned()
+        .unwrap_or_else(|| Subject::media(file.media_id, &title, file.media_type));
     let priority = if force {
         JobPriority::Normal
     } else {

@@ -45,8 +45,7 @@ pub async fn resolve(
     let row = sqlx::query!(
         r#"SELECT e.family
            FROM items i JOIN editions e ON e.id = i."editionId" JOIN media m ON m.id = i."mediaId"
-           WHERE i.id = $1 AND m."libraryId" = ANY($2)
-             AND COALESCE(e."libraryId", m."libraryId") = ANY($2)"#,
+           WHERE i.id = $1 AND m."libraryId" = ANY($2)"#,
         id,
         &acl
     )

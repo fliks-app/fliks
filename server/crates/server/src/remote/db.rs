@@ -2,7 +2,7 @@
 use chrono::{DateTime, Utc};
 use fliks_domain::acl::{Action, Permissions, Subject};
 use fliks_domain::media::kind::MediaKind;
-use sqlx::PgPool;
+use sqlx::{PgPool, types::Json};
 
 pub struct Grant {
     pub id: i32,
@@ -27,15 +27,12 @@ struct UserRow {
     username: String,
     enabled: bool,
     is_admin: bool,
-    permissions: Option<String>,
+    permissions: Option<Json<Vec<String>>>,
 }
 
 impl From<UserRow> for User {
     fn from(r: UserRow) -> Self {
-        let perms: Vec<String> = r
-            .permissions
-            .and_then(|p| serde_json::from_str(&p).ok())
-            .unwrap_or_default();
+        let perms = r.permissions.map(|p| p.0).unwrap_or_default();
         User {
             is_admin: Permissions::from(&perms, r.is_admin).can(Action::Manage, &Subject::Settings),
             id: r.id,
@@ -48,7 +45,7 @@ impl From<UserRow> for User {
 pub async fn users_by_ids(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<User>> {
     let rows = sqlx::query_as!(
         UserRow,
-        r#"SELECT u.id, u.username, u.enabled, u."isAdmin" AS is_admin, r.permissions AS "permissions?"
+        r#"SELECT u.id, u.username, u.enabled, u."isAdmin" AS is_admin, r.permissions AS "permissions?: Json<Vec<String>>"
            FROM users u LEFT JOIN roles r ON r.id = u."roleId" WHERE u.id = ANY($1) ORDER BY u.id"#,
         ids
     )
@@ -60,7 +57,7 @@ pub async fn users_by_ids(db: &PgPool, ids: &[i32]) -> sqlx::Result<Vec<User>> {
 pub async fn enabled_admin_ids(db: &PgPool) -> sqlx::Result<Vec<i32>> {
     let rows = sqlx::query_as!(
         UserRow,
-        r#"SELECT u.id AS "id!", u.username AS "username!", u.enabled AS "enabled!", u."isAdmin" AS "is_admin!", r.permissions AS "permissions?"
+        r#"SELECT u.id AS "id!", u.username AS "username!", u.enabled AS "enabled!", u."isAdmin" AS "is_admin!", r.permissions AS "permissions?: Json<Vec<String>>"
            FROM users u LEFT JOIN roles r ON r.id = u."roleId" WHERE u.enabled"#
     )
     .fetch_all(db)

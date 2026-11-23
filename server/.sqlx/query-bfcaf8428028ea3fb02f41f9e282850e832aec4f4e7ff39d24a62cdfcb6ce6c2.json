@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT username AS \"username!\" FROM users\n           WHERE lower(username) IN (SELECT lower(username) FROM users GROUP BY 1 HAVING count(*) > 1)\n           ORDER BY lower(username), username COLLATE \"C\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "username"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bfcaf8428028ea3fb02f41f9e282850e832aec4f4e7ff39d24a62cdfcb6ce6c2"
+}

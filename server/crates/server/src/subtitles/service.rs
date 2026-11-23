@@ -52,6 +52,16 @@ pub struct Search {
     pub hi_mode: Option<HiMode>,
 }
 
+/// The daily prune: the stats view reads the last 30 days only.
+pub async fn prune_stats(db: &sqlx::PgPool) -> sqlx::Result<u64> {
+    let before = super::routes_providers::window_start(crate::jobs::server_tz(), Utc::now());
+    sqlx::query(r#"DELETE FROM subtitle_provider_stats WHERE "queryDate" < $1"#)
+        .bind(before)
+        .execute(db)
+        .await
+        .map(|r| r.rows_affected())
+}
+
 fn record_stat(
     st: &AppState,
     provider: i32,
@@ -182,9 +192,9 @@ pub async fn resolve_file(
     {
         return Err(AppError::bad_request(files::NO_ROOT_DOWNLOAD));
     }
-    let file = files::file_by_id(&st.db, file_id).await?.filter(|f| {
-        f.media_id == Some(media_id) && episode_id.is_none_or(|e| f.episode_id == Some(e))
-    });
+    let file = files::file_by_id(&st.db, file_id)
+        .await?
+        .filter(|f| f.media_id == media_id && episode_id.is_none_or(|e| f.episode_id == Some(e)));
     let file =
         file.ok_or_else(|| AppError::not_found(format!("MediaFile #{file_id} not found")))?;
     Ok((media, file))
@@ -289,12 +299,10 @@ pub async fn upgrade(st: &AppState, id: i32, c: Option<&Candidate>) -> Result<Sa
     if old.provider_type == "ocr" {
         return Err(AppError::bad_request("Cannot upgrade an OCR subtitle"));
     }
-    let (media_id, file_id) = (
-        old.media_id
-            .ok_or_else(|| AppError::not_found("Media #0 not found"))?,
-        old.media_file_id
-            .ok_or_else(|| AppError::not_found("MediaFile #0 not found"))?,
-    );
+    let media_id = old.media_id;
+    let file_id = old
+        .media_file_id
+        .ok_or_else(|| AppError::not_found("MediaFile #0 not found"))?;
     // A missing `searchResult` is 400 only after the row checks.
     let c = c.ok_or_else(|| AppError::bad_request("searchResult should not be empty"))?;
     let mut saved = download(st, media_id, file_id, old.episode_id, c).await?;

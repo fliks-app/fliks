@@ -3,7 +3,7 @@ use super::{OpdsAuthed, PAGE, Params, ROOT, links, missing, nav_entry, page_of, 
 use crate::{
     comics::{MAX_WIDTH, serve_page},
     http::{AppError, kinds::Kinds, validate::PathParams},
-    libraries::{HIDDEN_FILES_FROM, accessible_library_ids},
+    libraries::accessible_library_ids,
     media::{list::find_ids, params::Search},
     state::AppState,
     stream::{book_format, extname},
@@ -42,21 +42,19 @@ pub async fn volumes(
     acl: &[i32],
     uid: i32,
 ) -> Result<Vec<Entry>, sqlx::Error> {
-    let rows: Vec<(i32, String, String, Option<String>, i64)> =
-        sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            r#"SELECT m.id, m.title, iso_ms(m."updatedAt"), m."posterUrl",
+    let rows: Vec<(i32, String, String, Option<String>, i64)> = sqlx::query_as(
+        r#"SELECT m.id, m.title, iso_ms(m."updatedAt"), m."posterUrl",
   (SELECT count(*) FROM comic_issues ci JOIN items i ON i.id = ci."itemId"
      JOIN editions e ON e.id = i."editionId" AND e.family = 'image'
      JOIN media_files f ON f.id = comic_part(i.id, $3)
-    WHERE i."mediaId" = m.id AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-      AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = f.id))
-FROM media m WHERE m.id = ANY($1) AND m.type = 'comic' AND m."libraryId" = ANY($2)"#
-        )))
-        .bind(ids)
-        .bind(acl)
-        .bind(uid)
-        .fetch_all(db)
-        .await?;
+    WHERE i."mediaId" = m.id)
+FROM media m WHERE m.id = ANY($1) AND m.type = 'comic' AND m."libraryId" = ANY($2)"#,
+    )
+    .bind(ids)
+    .bind(acl)
+    .bind(uid)
+    .fetch_all(db)
+    .await?;
     let mut by_id: std::collections::HashMap<i32, Entry> = rows
         .into_iter()
         .filter(|r| r.4 > 0)
@@ -219,7 +217,7 @@ pub async fn volume(
     .fetch_optional(&st.db)
     .await?;
     let (title, updated, publisher) = head.ok_or_else(|| missing("Comic", id))?;
-    let mut rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+    let mut rows: Vec<Row> = sqlx::query_as(
         r#"SELECT i.id AS item, ci.label, ci.kind, i.title, ci."pageCount" AS page_count,
   EXTRACT(year FROM i."airDate")::int AS year, f.id AS file, f."relativePath" AS path, f.size,
   CASE WHEN jsonb_typeof(ps.locator -> 'page') = 'number' THEN LEAST(GREATEST(floor((ps.locator ->> 'page')::numeric), 0), 1000000)::int END AS last_read,
@@ -229,10 +227,9 @@ FROM items i JOIN comic_issues ci ON ci."itemId" = i.id JOIN media m ON m.id = i
   JOIN editions e ON e.id = i."editionId" AND e.family = 'image'
   JOIN media_files f ON f.id = comic_part(i.id, $3)
   LEFT JOIN playback_states ps ON ps."itemId" = i.id AND ps."userId" = $3
-WHERE i."mediaId" = $1 AND COALESCE(e."libraryId", m."libraryId") = ANY($2)
-  AND NOT EXISTS (SELECT 1 {HIDDEN_FILES_FROM}$2) AND hp."mediaFileId" = f.id)
-ORDER BY ci.kind <> 'issue', ci."sortNumber", ci.kind, i.id LIMIT $4 OFFSET $5"#
-    )))
+WHERE i."mediaId" = $1 AND m."libraryId" = ANY($2)
+ORDER BY ci.kind <> 'issue', ci."sortNumber", ci.kind, i.id LIMIT $4 OFFSET $5"#,
+    )
     .bind(id)
     .bind(&acl)
     .bind(a.user.id)

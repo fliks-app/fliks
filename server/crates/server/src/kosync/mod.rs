@@ -7,7 +7,7 @@ use crate::{
         client_ip,
         validate::{PathParams, ValidJson},
     },
-    libraries::{accessible_library_ids, readable_file},
+    libraries::accessible_library_ids,
     playback::{Watch, finish_context, record_watch, serialise},
     state::AppState,
 };
@@ -128,7 +128,7 @@ async fn resolve(
     if !md5_hex(document) || document.bytes().any(|b| b.is_ascii_uppercase()) {
         return Ok(None);
     }
-    let row: Option<(i32, i32, i32)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+    let row: Option<(i32, i32, i32)> = sqlx::query_as(
         r#"SELECT h."mediaFileId", i.id, i."mediaId"
            FROM media_file_hashes h
            JOIN item_parts ip ON ip."mediaFileId" = h."mediaFileId"
@@ -136,10 +136,9 @@ async fn resolve(
            JOIN editions e ON e.id = i."editionId"
            JOIN media m ON m.id = i."mediaId"
            WHERE h.kind = 'koreader' AND h.hash = $1 AND e.family = 'text'
-             AND {}
+             AND m."libraryId" = ANY($2)
            ORDER BY h."mediaFileId", i.id LIMIT 1"#,
-        readable_file("$2", r#"h."mediaFileId""#)
-    )))
+    )
     .bind(document)
     .bind(libraries)
     .fetch_optional(&st.db)

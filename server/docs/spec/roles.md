@@ -17,7 +17,7 @@ CASL semantics and error bodies are in `auth.md` (cited as "auth rule N").
 
 ## Rules
 
-1. `Role` JSON = `{id: number, createdAt: ISO, updatedAt: ISO, name: string, permissions: string[], isDefault: bool, defaultLibraries: Library[], defaultLibraryIds: number[]}`. `permissions` is a `simple-json` column: a JSON array stored as text, returned as an array. `Library` items are full `libraries` rows: `id, createdAt, updatedAt, name, icon (string|null), color (string|null), mediaTypes (('movie'|'series')[]), preferredProvider (string|null), metadataLanguage (string|null), metadataRegion (string|null), defaultQualityProfileId (number|null), defaultLanguageProfileId (number|null), path (string|null), label (string|null)` (no nested profile objects: those relations are not loaded).
+1. `Role` JSON = `{id: number, createdAt: ISO, updatedAt: ISO, name: string, permissions: string[], isDefault: bool, defaultLibraries: Library[], defaultLibraryIds: number[]}`. `permissions` is a `jsonb` column holding an array of strings (`CHECK (jsonb_typeof(permissions) = 'array')`), returned as is. `Library` items are full `libraries` rows: `id, createdAt, updatedAt, name, icon (string|null), color (string|null), mediaTypes (('movie'|'series')[]), preferredProvider (string|null), metadataLanguage (string|null), metadataRegion (string|null), defaultQualityProfileId (number|null), defaultLanguageProfileId (number|null), path (string|null), label (string|null)` (no nested profile objects: those relations are not loaded).
 2. `defaultLibraryIds` is always fresh: `POST` and `PUT` return the ids just written, and `defaultLibraries` matches. The `POST` response's `defaultLibraries` items omit `defaultQualityProfileId` and `defaultLanguageProfileId` (the freshly loaded libraries lack those columns); `PUT`, `GET` and the list carry them (scenarios `roles/create-ok`, `roles/update-libraries`).
 3. Order of `defaultLibraries` and `defaultLibraryIds` inside a role: library id ascending.
 4. `GET /roles`: all roles `ORDER BY name ASC` (database collation) with `defaultLibraries` joined.
@@ -36,14 +36,14 @@ CASL semantics and error bodies are in `auth.md` (cited as "auth rule N").
 
 ## SQL
 
-Tables `roles` (`id, "createdAt", "updatedAt", name UNIQUE, permissions text, "isDefault" bool`), `role_default_libraries` (`"roleId"`, `"libraryId"`; FK cascade on library delete), `libraries`, `users`, `plugin_packages`. Equivalent SQL:
+Tables `roles` (`id, "createdAt", "updatedAt", name UNIQUE, permissions jsonb, "isDefault" bool`), `role_default_libraries` (`"roleId"`, `"libraryId"`; FK cascade on library delete), `libraries`, `users`, `plugin_packages`. Equivalent SQL:
 
 - List: `SELECT r.*, l.* FROM roles r LEFT JOIN role_default_libraries rdl ON rdl."roleId" = r.id LEFT JOIN libraries l ON l.id = rdl."libraryId" ORDER BY r.name ASC`.
 - One: same joins `WHERE r.id = $1`.
 - Name check: `SELECT id FROM roles WHERE name = $1`.
 - Clear default: `UPDATE roles SET "isDefault" = false, "updatedAt" = now() WHERE "isDefault" = true`.
 - Libraries: `SELECT * FROM libraries WHERE id IN ($1,...)` (skipped when the list is empty or absent).
-- Insert: `INSERT INTO roles (name, permissions, "isDefault") VALUES ($1, $2::text, $3) RETURNING id, "createdAt", "updatedAt"` plus `INSERT INTO role_default_libraries ("roleId","libraryId")...`.
+- Insert: `INSERT INTO roles (name, permissions, "isDefault") VALUES ($1, $2::jsonb, $3) RETURNING id, "createdAt", "updatedAt"` plus `INSERT INTO role_default_libraries ("roleId","libraryId")...`.
 - Update: `UPDATE roles SET <changed>, "updatedAt" = now() WHERE id = $1`; join set replaced by deleting the unwanted rows and inserting the new ones.
 - In-use count: `SELECT count(*) FROM users WHERE "roleId" = $1`; delete: `DELETE FROM role_default_libraries WHERE "roleId" = $1; DELETE FROM roles WHERE id = $1`.
 - Seed: `SELECT count(*) FROM roles`, then three inserts (rule 11).

@@ -237,7 +237,8 @@ async fn kind_and_family_checks_match_the_domain(pool: PgPool) {
     }
 }
 
-/// A cascade or restrict check on the parent scans the child unless an index leads with the FK columns;
+/// A cascade or restrict check on the parent scans the child unless an index leads with the FK columns, or with
+/// the child side of a unique key of the parent (a subset of the FK columns that already names one parent row);
 /// a partial index is useless to it.
 #[sqlx::test(migrations = false)]
 async fn every_foreign_key_has_a_covering_index(pool: PgPool) {
@@ -245,22 +246,32 @@ async fn every_foreign_key_has_a_covering_index(pool: PgPool) {
     let missing: Vec<(String, String, String)> = rows(
         &pool,
         r#"
+        WITH idx AS (
+          SELECT indrelid, indisunique, indnkeyatts, string_to_array(indkey::text, ' ')::int2[] AS k
+            FROM pg_index WHERE indisvalid AND indpred IS NULL)
         SELECT c.conrelid::regclass::text, c.conname,
                (SELECT string_agg(a.attname, ', ' ORDER BY a.attnum)
                   FROM pg_attribute a WHERE a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey))
           FROM pg_constraint c
          WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace
            AND NOT EXISTS (
-             SELECT 1 FROM pg_index i
-              WHERE i.indrelid = c.conrelid AND i.indisvalid AND i.indpred IS NULL
-                AND (string_to_array(i.indkey::text, ' ')::int2[])[1:cardinality(c.conkey)] <@ c.conkey
-                AND c.conkey <@ (string_to_array(i.indkey::text, ' ')::int2[])[1:cardinality(c.conkey)])
+             SELECT 1 FROM idx i
+              WHERE i.indrelid = c.conrelid
+                AND ((i.k)[1:cardinality(c.conkey)] <@ c.conkey AND c.conkey <@ (i.k)[1:cardinality(c.conkey)]
+                  OR EXISTS (
+                    SELECT 1 FROM generate_series(1, cardinality(c.conkey)) m
+                      JOIN idx p ON p.indrelid = c.confrelid AND p.indisunique AND p.indnkeyatts = m
+                     CROSS JOIN LATERAL (
+                       SELECT array_agg(c.confkey[array_position(c.conkey, x)]) AS parent
+                         FROM unnest((i.k)[1:m]) x) r
+                     WHERE cardinality((i.k)[1:m]) = m AND (i.k)[1:m] <@ c.conkey
+                       AND r.parent <@ (p.k)[1:m] AND (p.k)[1:m] <@ r.parent)))
          ORDER BY 1, 2"#,
     )
     .await;
     assert!(
         missing.is_empty(),
-        "foreign keys without a non-partial index led by their columns (table, constraint, columns): {missing:?}"
+        "foreign keys without a non-partial index led by their columns or by a unique key of the parent (table, constraint, columns): {missing:?}"
     );
 }
 

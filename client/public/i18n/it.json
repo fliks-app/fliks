@@ -1830,6 +1830,7 @@
       "conf_volatile": "La cartella di configurazione non è persistente: i segreti si perdono quando il container viene ricreato.",
       "data_volatile": "La cartella dei dati non è persistente: i dati si perdono quando il container viene ricreato.",
       "job_failed": "L'attività {{job}} è fallita all'ultima esecuzione.",
+      "accounts_differ_by_case": "Gli account {{names}} differiscono solo per maiuscole e minuscole. Entrambi accedono ancora con la propria password; rinominane uno.",
       "unknown": "Un controllo segnala un problema."
     }
   },
@@ -4274,6 +4275,7 @@
     "404": "Risorsa non trovata",
     "409": "Conflitto: la risorsa esiste già",
     "already_running": "Questa operazione è già in corso.",
+    "username_taken": "Questo nome utente è già in uso.",
     "ambiguous_item": "Questo titolo contiene più elementi e non ne è stato scelto nessuno.",
     "no_video_stream": "Questo file non ha una traccia video.",
     "subtitle_unavailable": "Questo sottotitolo non è più disponibile.",

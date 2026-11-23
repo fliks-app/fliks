@@ -14,8 +14,8 @@ Scope: what the web reader reads of an EPUB edition: the Readium Web Publication
 
 ## Access
 
-1. The file is the first `.epub` part of the item's highest `version` (`items.md` rule 35 order, lowest `position`). It is found by one query that also applies the ACL: the media's library must be readable and no edition linking the file may sit in a library outside the readable ones (`libraries::HIDDEN_FILES_FROM`, `books.md` rule 22, the rule behind `assert_file_accessible`).
-2. A missing item, an item with no EPUB part, an unreadable media and a hidden edition all answer 404 `Item #<id> not found` after the same two queries (the readable libraries, then that lookup): a hidden edition is indistinguishable from a missing one, in the answer and in the work done. A file missing on disk, or outside its folder root, is 404 as well.
+1. The file is the first `.epub` part of the item's highest `version` (`items.md` rule 35 order, lowest `position`). It is found by one query that also applies the ACL: the media's library must be readable (`books.md` rule 22, as in `assert_file_accessible`).
+2. A missing item, an item with no EPUB part, and an unreadable media all answer 404 `Item #<id> not found` after the same two queries (the readable libraries, then that lookup): an unreadable media is indistinguishable from a missing one, in the answer and in the work done. A file missing on disk, or outside its folder root, is 404 as well.
 
 ## Package
 

@@ -227,15 +227,6 @@ pub async fn adoptable_by_email(
     .await
 }
 
-pub async fn username_exists(c: &mut PgConnection, name: &str) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar!(
-        r#"SELECT EXISTS(SELECT 1 FROM users WHERE lower(username) = lower($1)) AS "taken!""#,
-        name
-    )
-    .fetch_one(c)
-    .await
-}
-
 pub async fn default_role(c: &mut PgConnection) -> Result<Option<i32>, sqlx::Error> {
     sqlx::query_scalar!(r#"SELECT id FROM roles WHERE "isDefault" ORDER BY id LIMIT 1"#)
         .fetch_optional(c)
@@ -254,7 +245,7 @@ pub async fn current_access(
     .fetch_one(&mut *c)
     .await?;
     let libs = sqlx::query_scalar!(
-        r#"SELECT "libraryId" AS "library_id!" FROM library_user_access WHERE "userId" = $1 ORDER BY "libraryId""#,
+        r#"SELECT "libraryId" FROM library_user_access WHERE "userId" = $1 ORDER BY "libraryId""#,
         user
     )
     .fetch_all(c)

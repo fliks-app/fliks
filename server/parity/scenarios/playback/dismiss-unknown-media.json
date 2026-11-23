@@ -5,7 +5,12 @@
     {
       "as": "user",
       "expect": {
-        "status": 204
+        "body": {
+          "error": "Not Found",
+          "message": "not_found",
+          "statusCode": 404
+        },
+        "status": 404
       },
       "method": "POST",
       "path": "/api/playback/recommendations/999/dismiss"
@@ -14,7 +19,7 @@
       "as": "user",
       "expect": {
         "body": {
-          "count": 1
+          "count": 0
         },
         "status": 200
       },

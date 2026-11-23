@@ -159,7 +159,7 @@ async fn file_rows(st: &AppState, ids: &[i32]) -> sqlx::Result<HashMap<i32, File
             (
                 r.id,
                 FileRow {
-                    media_id: r.media_id.unwrap_or(0),
+                    media_id: r.media_id,
                     episode_id: r.episode_id,
                     relative_path: r.relative_path,
                     info: r.stream_info.and_then(|v| serde_json::from_value(v).ok()),

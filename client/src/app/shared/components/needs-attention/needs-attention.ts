@@ -14,6 +14,7 @@ const KNOWN_CODES = new Set([
   'conf_volatile',
   'data_volatile',
   'job_failed',
+  'accounts_differ_by_case',
 ]);
 
 @Component({

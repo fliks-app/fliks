@@ -159,7 +159,7 @@ pub async fn import_m3u(
            JOIN editions e ON e.id = i."editionId" JOIN track_details td ON td."itemId" = i.id
            JOIN LATERAL (SELECT f."relativePath" FROM item_parts p JOIN media_files f ON f.id = p."mediaFileId"
              WHERE p."itemId" = i.id ORDER BY p.version DESC, p.position LIMIT 1) f ON true
-           WHERE COALESCE(e."libraryId", m."libraryId") = ANY($1)"#,
+           WHERE m."libraryId" = ANY($1)"#,
     )
     .bind(&acl)
     .fetch_all(&st.db)

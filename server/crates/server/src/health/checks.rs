@@ -136,6 +136,19 @@ pub fn job(name: &str) -> Check {
     )
 }
 
+/// Accounts that differ only by case still sign in (the password picks one); an admin renames one.
+pub fn accounts_differ_by_case(names: &[String]) -> Option<Check> {
+    (!names.is_empty()).then(|| {
+        check(
+            "accounts:case".into(),
+            Level::Warn,
+            "accounts_differ_by_case",
+            json!({ "names": names.join(", ") }),
+            "/admin/settings/users",
+        )
+    })
+}
+
 /// The sentence a notification channel carries, in English like every notification text.
 pub fn text(code: &str, p: &Value) -> String {
     let s = |k: &str| p[k].as_str().unwrap_or_default().to_owned();
@@ -153,6 +166,7 @@ pub fn text(code: &str, p: &Value) -> String {
         "conf_volatile" => "The configuration directory is not persistent".into(),
         "data_volatile" => "The data directory is not persistent".into(),
         "job_failed" => format!("Scheduled job {} failed", s("job")),
+        "accounts_differ_by_case" => format!("Accounts differ only by case: {}", s("names")),
         other => other.to_owned(),
     }
 }
@@ -190,6 +204,16 @@ mod tests {
             Some((Level::Warn, "library_read_only"))
         );
         assert_eq!(f(Some((true, false)), true), None);
+    }
+
+    #[test]
+    fn colliding_account_names_are_one_warning() {
+        assert!(accounts_differ_by_case(&[]).is_none());
+        let c = accounts_differ_by_case(&["Alice".into(), "alice".into()]).unwrap();
+        assert_eq!(
+            (c.level, c.params["names"].as_str()),
+            (Level::Warn, Some("Alice, alice"))
+        );
     }
 
     #[test]

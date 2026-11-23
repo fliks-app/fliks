@@ -1,6 +1,5 @@
 //! `Media` entities as JSON (`media-query.md` rules 30-32): built in SQL, absolute paths added or removed in Rust.
 use super::external_ids;
-use crate::libraries::HIDDEN_FILES_FROM;
 use fliks_domain::{
     media::{kind::MediaKind, path::media_path},
     track_markers,
@@ -19,21 +18,18 @@ struct Row {
 
 /// `MLI` for `ids`, in that order; `sizeOnDisk` and `episodeStats` included, `watched`/`progressPercent` not.
 pub async fn items(db: &PgPool, ids: &[i32], see_paths: bool) -> Result<Vec<Value>, sqlx::Error> {
-    items_view(db, ids, see_paths, false, None).await
+    items_view(db, ids, see_paths, false).await
 }
 
 /// `items`, or with `grid` the card shape (`media-query.md` rule 14a): first file only (five keys, no `streamInfo`)
 /// plus `fileCount`, briefer `library` and `qualityProfile`, no `alternativeTitles`.
-/// With `acl` (the caller's readable libraries) the files of a book's hidden editions are left out (`books.md` rule 22).
 pub async fn items_view(
     db: &PgPool,
     ids: &[i32],
     see_paths: bool,
     grid: bool,
-    acl: Option<&[i32]>,
 ) -> Result<Vec<Value>, sqlx::Error> {
-    let sql = format!(
-        r#"SELECT media.id AS id, tf.path AS lib_path, media."folderName" AS folder_name,
+    let sql = r#"SELECT media.id AS id, tf.path AS lib_path, media."folderName" AS folder_name,
   (jsonb_build_object(
     'id', media.id, 'createdAt', iso_ms(media."createdAt"), 'updatedAt', iso_ms(media."updatedAt"),
     'title', media.title, 'originalTitle', media."originalTitle", 'alternativeTitles', media."alternativeTitles",
@@ -76,19 +72,19 @@ pub async fn items_view(
           'streamInfo', f."streamInfo", 'osdbHash', f."osdbHash", 'osdbBytesize', f."osdbBytesize",
           'mediaId', f."mediaId",
           'episodeId', (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = f.id)) END ORDER BY f.id)
-      FROM media_files f WHERE f."mediaId" = media.id AND NOT f.id = ANY(hid.ids)
-        AND (NOT $2 OR f.id = (SELECT MIN(g.id) FROM media_files g WHERE g."mediaId" = media.id AND NOT g.id = ANY(hid.ids)))), '[]'::jsonb),
-    'sizeOnDisk', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = media.id AND NOT f.id = ANY(hid.ids)), 0))
+      FROM media_files f WHERE f."mediaId" = media.id
+        AND (NOT $2 OR f.id = (SELECT MIN(g.id) FROM media_files g WHERE g."mediaId" = media.id))), '[]'::jsonb),
+    'sizeOnDisk', COALESCE((SELECT SUM(f.size) FROM media_files f WHERE f."mediaId" = media.id), 0))
   || CASE WHEN $2 THEN jsonb_build_object('fileCount',
-       (SELECT COUNT(*) FROM media_files f WHERE f."mediaId" = media.id AND NOT f.id = ANY(hid.ids))) ELSE '{{}}'::jsonb END
+       (SELECT COUNT(*) FROM media_files f WHERE f."mediaId" = media.id)) ELSE '{}'::jsonb END
   || CASE WHEN media.type = ANY($6) AND st.total > 0 THEN
        jsonb_build_object('episodeStats', jsonb_build_object('totalEpisodes', st.total, 'downloadedEpisodes', st.downloaded))
-     ELSE '{{}}'::jsonb END
+     ELSE '{}'::jsonb END
   || COALESCE((SELECT jsonb_build_object('externalIds', jsonb_agg(
        jsonb_build_object('provider', x.provider, 'value', x.value) ORDER BY x.provider))
      FROM media_external_ids x WHERE x."mediaId" = media.id AND x.provider LIKE '%:%'
        AND EXISTS (SELECT 1 FROM provider_namespaces n WHERE n.name = x.provider)
-       AND media.type <> 'book' HAVING count(*) > 0), '{{}}'::jsonb)) AS json
+       AND media.type <> 'book' HAVING count(*) > 0), '{}'::jsonb)) AS json
 FROM media
 LEFT JOIN libraries l ON l.id = media."libraryId"
 LEFT JOIN library_default_folders df ON df."libraryId" = media."libraryId"
@@ -100,7 +96,6 @@ LEFT JOIN LATERAL (SELECT c.id AS cid, x.value::int AS tmdb_id, NULLIF(c.name, '
   FROM collection_entries e JOIN collections c ON c.id = e."collectionId"
   JOIN collection_external_ids x ON x."collectionId" = c.id AND x.provider = 'tmdb'
   WHERE e."mediaId" = media.id AND e."itemId" IS NULL ORDER BY c.id LIMIT 1) coll ON true
-LEFT JOIN LATERAL (SELECT ARRAY(SELECT hp."mediaFileId" {HIDDEN_FILES_FROM}$7) AND hm.id = media.id AND media.type = 'book') AS ids) hid ON true
 LEFT JOIN LATERAL (SELECT max(value) FILTER (WHERE provider = $3)::int AS tmdb,
              max(value) FILTER (WHERE provider = $4)::int AS tvdb,
              max(value) FILTER (WHERE provider = $5) AS imdb
@@ -115,16 +110,14 @@ LEFT JOIN LATERAL (
          COUNT(e.id) FILTER (WHERE EXISTS (SELECT 1 FROM item_parts ip WHERE ip."itemId" = e.id)) AS downloaded
   FROM item_groups s JOIN items e ON e."groupId" = s.id
   WHERE s."mediaId" = media.id AND s."number" > 0) st ON media.type = ANY($6)
-WHERE media.id = ANY($1)"#
-    );
-    let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(sql))
+WHERE media.id = ANY($1)"#;
+    let rows: Vec<Row> = sqlx::query_as(sql)
         .bind(ids)
         .bind(grid)
         .bind(external_ids::TMDB)
         .bind(external_ids::TVDB)
         .bind(external_ids::IMDB)
         .bind(MediaKind::seasonal_names().to_vec())
-        .bind(acl)
         .fetch_all(db)
         .await?;
     let mut by_id: HashMap<i32, _> = rows.into_iter().map(|r| (r.id, r)).collect();
@@ -163,17 +156,7 @@ WHERE media.id = ANY($1)"#
 
 /// `MD`: the `MLI` shape without the derived fields, plus seasons (specials last) and metadata.
 pub async fn detail(db: &PgPool, id: i32, see_paths: bool) -> Result<Option<Value>, sqlx::Error> {
-    detail_for(db, id, see_paths, None).await
-}
-
-/// `detail` for a caller who reads `acl` only (`items_view`).
-pub async fn detail_for(
-    db: &PgPool,
-    id: i32,
-    see_paths: bool,
-    acl: Option<&[i32]>,
-) -> Result<Option<Value>, sqlx::Error> {
-    let Some(mut media) = items_view(db, &[id], see_paths, false, acl).await?.pop() else {
+    let Some(mut media) = items_view(db, &[id], see_paths, false).await?.pop() else {
         return Ok(None);
     };
     let metadata = metadata(db, &[id]).await?.remove(&id);
@@ -246,7 +229,7 @@ pub async fn credit_media(
 ) -> Result<HashMap<i32, Value>, sqlx::Error> {
     let mut meta = metadata(db, ids).await?;
     let mut out = HashMap::new();
-    for mut m in items_view(db, ids, see_paths, true, None).await? {
+    for mut m in items_view(db, ids, see_paths, true).await? {
         let Some(obj) = m.as_object_mut() else {
             continue;
         };

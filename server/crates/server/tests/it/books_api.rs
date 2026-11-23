@@ -1,4 +1,4 @@
-//! The book read routes (`books-api.md`): filters, sorts, the edition ACL, the watched rule, chapters, series, authors.
+//! The book read routes (`books-api.md`): filters, sorts, the work ACL, the watched rule, chapters, series, authors.
 use crate::session;
 use axum::{Router, body::Body, http::Request};
 use fliks_server::{collections, config::Config, media, persons, state::AppState};
@@ -15,7 +15,7 @@ struct Ctx {
     noperm: String,
 }
 
-/// Library 1 is readable by `plain`, library 2 is not; edition 2 of book 10 sits in library 2.
+/// Library 1 is readable by `plain`, library 2 is not; book 13 sits in library 2.
 async fn ctx(pool: PgPool) -> Ctx {
     fliks_server::db::migrate(&pool).await.unwrap();
     let st = AppState::new(pool.clone(), Config::from_lookup(|_| None), SECRET);
@@ -32,11 +32,11 @@ async fn ctx(pool: PgPool) -> Ctx {
           (13, 'Hidden', 2003, 'book', 2, 'h'), (14, 'Delta', 1999, 'book', 1, 'd'), (15, 'Epsilon', 2010, 'book', 1, 'e'),
           (16, 'Movie', 2000, 'movie', 1, 'm');
         INSERT INTO media_release_dates ("mediaId", "editionId", kind, date) VALUES (10, NULL, 'release', '2001-05-01');
-        INSERT INTO editions (id, "mediaId", family, format, language, publisher, "libraryId", "pageCount", "durationSeconds", label) VALUES
-          (1, 10, 'text', 'epub', 'fr', 'Pub', NULL, 300, NULL, 'Paper'),
-          (2, 10, 'audio', 'm4b', 'en', NULL, 2, NULL, 3600, 'Hidden audio'),
-          (3, 11, 'audio', 'm4b', 'fr', NULL, NULL, NULL, 150, NULL),
-          (4, 12, 'audio', 'mp3', 'fr', NULL, NULL, NULL, NULL, NULL);
+        INSERT INTO editions (id, "mediaId", family, format, language, publisher, "pageCount", "durationSeconds", label) VALUES
+          (1, 10, 'text', 'epub', 'fr', 'Pub', 300, NULL, 'Paper'),
+          (2, 10, 'audio', 'm4b', 'en', NULL, NULL, 3600, 'Audio'),
+          (3, 11, 'audio', 'm4b', 'fr', NULL, NULL, 150, NULL),
+          (4, 12, 'audio', 'mp3', 'fr', NULL, NULL, NULL, NULL);
         INSERT INTO media_release_dates ("mediaId", "editionId", kind, date) VALUES (10, 1, 'release', '2002-02-02');
         INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (2, 10, 2), (3, 11, 3), (4, 12, 4);
         INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "streamInfo") VALUES
@@ -118,17 +118,16 @@ fn nums(v: &Value) -> Vec<i64> {
 }
 
 #[sqlx::test(migrations = false)]
-async fn filters_follow_the_edition_acl(pool: PgPool) {
+async fn filters_follow_the_work_acl(pool: PgPool) {
     let c = ctx(pool).await;
     let q = |f: &str| format!("/api/media?type=book&sortBy=title&{f}");
-    // edition 2 (audio, library 2, narrated by 2, english) is hidden from `plain`
     assert_eq!(c.ids(&c.admin, &q("format=audio")).await, [10, 11, 12]);
-    assert_eq!(c.ids(&c.plain, &q("format=audio")).await, [11, 12]);
+    assert_eq!(c.ids(&c.plain, &q("format=audio")).await, [10, 11, 12]);
     assert_eq!(c.ids(&c.plain, &q("format=text")).await, [10]);
     assert_eq!(c.ids(&c.admin, &q("language=EN")).await, [10]);
-    assert!(c.ids(&c.plain, &q("language=en")).await.is_empty());
+    assert_eq!(c.ids(&c.plain, &q("language=en")).await, [10]);
     assert_eq!(c.ids(&c.admin, &q("narratorId=2")).await, [10, 11]);
-    assert_eq!(c.ids(&c.plain, &q("narratorId=2")).await, [11]);
+    assert_eq!(c.ids(&c.plain, &q("narratorId=2")).await, [10, 11]);
     assert_eq!(c.ids(&c.plain, &q("authorId=3")).await, [14]);
     assert_eq!(c.ids(&c.plain, &q("seriesId=1")).await, [10, 11, 12]);
     assert_eq!(c.ids(&c.admin, &q("seriesId=1")).await, [10, 11, 12, 13]);
@@ -202,8 +201,8 @@ async fn list_items_carry_the_book_object_and_other_kinds_do_not(pool: PgPool) {
         &json!({
             "authors": [{"id": 1, "name": "Una Writer", "sortName": "Writer, Una"}],
             "series": {"id": 1, "name": "Cycle", "position": 1, "positionLabel": null},
-            "formats": ["text"],
-            "lastFamily": "text",
+            "formats": ["text", "audio"],
+            "lastFamily": "audio",
         })
     );
     let (_, v) = c.get(&c.admin, "/api/media?type=book&limit=0").await;
@@ -244,36 +243,30 @@ async fn watched_is_any_completed_item_and_progress_is_100_then(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn detail_hides_the_editions_of_unreadable_libraries(pool: PgPool) {
+async fn detail_lists_every_edition_of_a_readable_work(pool: PgPool) {
     let c = ctx(pool).await;
     let (s, plain) = c.get(&c.plain, "/api/media/10").await;
     assert_eq!(s, 200);
     let ed = plain["book"]["editions"].as_array().unwrap();
-    assert_eq!(ed.len(), 1);
+    assert_eq!(ed.len(), 2);
     assert_eq!(
         ed[0],
         json!({
             "id": 1, "itemId": 1, "family": "text", "format": "epub", "language": "fr", "title": null,
             "publisher": "Pub", "published": "2002-02-02", "coverUrl": null, "durationSeconds": null,
-            "pageCount": 300, "libraryId": null, "label": "Paper", "narrators": [], "hasFile": true,
+            "pageCount": 300, "label": "Paper", "narrators": [], "hasFile": true,
             "fileIds": [1], "externalIds": [{"provider": "isbn", "value": "9780000000002"}],
             "fieldSources": [{"field": "title", "provider": "openlibrary", "locked": false}],
         })
     );
-    // the hidden edition's file is not among the work's files
-    assert_eq!(plain["files"].as_array().unwrap().len(), 1);
+    assert_eq!(plain["files"].as_array().unwrap().len(), 2);
     let (_, grid) = c
         .get(&c.plain, "/api/media?type=book&view=grid&sortBy=title")
         .await;
-    assert_eq!(grid["data"][0]["fileCount"], 1);
-    let (_, admin_grid) = c
-        .get(&c.admin, "/api/media?type=book&view=grid&sortBy=title")
-        .await;
-    assert_eq!(admin_grid["data"][0]["fileCount"], 2);
-    // the hidden edition holds the most recent state, yet progress does not name it
-    assert_eq!(plain["book"]["progress"]["editionId"], 1);
-    assert_eq!(plain["book"]["progress"]["itemId"], 1);
-    assert_eq!(plain["book"]["progress"]["progression"], 0.3);
+    assert_eq!(grid["data"][0]["fileCount"], 2);
+    // the most recent state names the audio edition
+    assert_eq!(plain["book"]["progress"]["editionId"], 2);
+    assert_eq!(plain["book"]["progress"]["itemId"], 2);
 
     let (_, admin) = c.get(&c.admin, "/api/media/10").await;
     let ids: Vec<i64> = admin["book"]["editions"]
@@ -287,7 +280,6 @@ async fn detail_hides_the_editions_of_unreadable_libraries(pool: PgPool) {
         admin["book"]["editions"][1]["narrators"][0]["name"],
         "Vic Voice"
     );
-    assert_eq!(admin["book"]["editions"][1]["libraryId"], 2);
     assert_eq!(admin["book"]["progress"], Value::Null);
 }
 
@@ -344,10 +336,9 @@ async fn chapters_follow_the_version_timeline(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn chapters_of_a_hidden_or_foreign_edition_are_404(pool: PgPool) {
+async fn chapters_of_a_foreign_edition_are_404(pool: PgPool) {
     let c = ctx(pool).await;
     for (token, uri) in [
-        (&c.plain, "/api/media/10/editions/2/chapters"),
         (&c.plain, "/api/media/10/editions/3/chapters"),
         (&c.admin, "/api/media/10/editions/3/chapters"),
         (&c.plain, "/api/media/13/editions/1/chapters"),
@@ -355,12 +346,12 @@ async fn chapters_of_a_hidden_or_foreign_edition_are_404(pool: PgPool) {
         let (s, _) = c.get(token, uri).await;
         assert_eq!(s, 404, "{uri}");
     }
-    let (s, v) = c.get(&c.plain, "/api/media/10/editions/2/chapters").await;
+    let (s, v) = c.get(&c.plain, "/api/media/10/editions/3/chapters").await;
     assert_eq!(
         (s, v["message"].as_str()),
-        (404, Some("Edition #2 not found"))
+        (404, Some("Edition #3 not found"))
     );
-    let (s, _) = c.get(&c.admin, "/api/media/10/editions/2/chapters").await;
+    let (s, _) = c.get(&c.plain, "/api/media/10/editions/2/chapters").await;
     assert_eq!(s, 200);
 }
 
@@ -409,7 +400,7 @@ async fn collection_detail_lists_gaps_and_the_next_book(pool: PgPool) {
     assert_eq!(plain["entries"][1]["positionLabel"], "II");
     assert_eq!(
         plain["entries"][0]["media"]["book"]["formats"],
-        json!(["text"])
+        json!(["text", "audio"])
     );
     let (_, admin) = c.get(&c.admin, "/api/collections/1").await;
     assert_eq!(
@@ -451,9 +442,9 @@ async fn persons_list_authors_and_narrators_of_readable_books(pool: PgPool) {
         (admin[0]["id"].clone(), admin[0]["workCount"].clone()),
         (json!(1), json!(4))
     );
-    // narrator 2 voices edition 2 (hidden to plain) and edition 3
+    // narrator 2 voices edition 2 and edition 3
     let (_, n) = c.get(&c.plain, "/api/persons?role=narrator").await;
-    assert_eq!(n[0]["workCount"], 1);
+    assert_eq!(n[0]["workCount"], 2);
     let (_, n) = c.get(&c.admin, "/api/persons?role=narrator").await;
     assert_eq!(n[0]["workCount"], 2);
     let (_, q) = c.get(&c.admin, "/api/persons?role=author&q=aar").await;
@@ -501,7 +492,7 @@ async fn person_works_group_by_series_and_standalone(pool: PgPool) {
     assert_eq!(w["series"].as_array().unwrap().len(), 2);
     let (_, w) = c.get(&c.plain, "/api/persons/2/works?role=narrator").await;
     assert_eq!(w["standalone"], json!([]));
-    assert_eq!(w["series"][0]["works"][0]["media"]["id"], 11);
+    assert_eq!(w["series"][0]["works"][0]["media"]["id"], 10);
     assert_eq!(
         c.get(&c.plain, "/api/persons/99/works?role=author").await.0,
         404
@@ -519,36 +510,6 @@ async fn the_routes_need_media_read(pool: PgPool) {
         "/api/media/10/editions/1/chapters",
     ] {
         assert_eq!(c.get(&c.noperm, uri).await.0, 403, "{uri}");
-    }
-}
-
-#[sqlx::test(migrations = false)]
-async fn file_filters_and_sorts_ignore_hidden_editions_files(pool: PgPool) {
-    let c = ctx(pool.clone()).await;
-    sqlx::raw_sql(
-        r#"
-        INSERT INTO media (id, title, year, type, "libraryId", "folderName") VALUES (17, 'Only hidden', 2011, 'book', 1, 'o');
-        INSERT INTO editions (id, "mediaId", family, format, language, "libraryId") VALUES (5, 17, 'audio', 'm4b', 'en', 2);
-        INSERT INTO items (id, "mediaId", "editionId") VALUES (5, 17, 5);
-        INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "streamInfo") VALUES (6, 17, 1, 'o.m4b', 1, 'M4B', '{}');
-        INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (5, 6, 17, 0, 0);
-        "#,
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-    let q = |f: &str| format!("/api/media?type=book&sortBy=title&{f}");
-    assert!(c.ids(&c.plain, &q("missing=true")).await.contains(&17));
-    assert!(!c.ids(&c.plain, &q("missing=false")).await.contains(&17));
-    assert!(!c.ids(&c.admin, &q("missing=true")).await.contains(&17));
-    assert!(c.ids(&c.admin, &q("missing=false")).await.contains(&17));
-    for (tok, shown) in [(&c.plain, false), (&c.admin, true)] {
-        let (s, v) = c
-            .get(tok, "/api/media/recently-added?mode=file&limit=50")
-            .await;
-        assert_eq!(s, 200, "{v}");
-        let has = v.as_array().unwrap().iter().any(|m| m["id"] == 17);
-        assert_eq!(has, shown);
     }
 }
 

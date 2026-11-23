@@ -27,7 +27,7 @@ Scope: the music API third-party players speak (OpenSubsonic, a superset of Subs
 ## Ids and visibility
 
 14. Ids are strings named by the table they point at, so an id of one kind never names another: `ar-<personId>` (an artist), `al-<mediaId>` (an album), `tr-<itemId>` (a track), `pl-<playlistId>`; a music folder is the library id as is, a JSON number. They are the database ids, which never change (a replaced file gives its track item back, `music.md` rule 32): clients can keep them across scans. An id of the wrong kind or an unknown one is error 70.
-15. Library ACL everywhere, as the album pages: an album is visible when its media sits in a library of the caller (`accessible_library_ids`); a track when, besides, its edition does (`COALESCE(editions."libraryId", media."libraryId")`) and it has a file. Nothing outside is listed, counted, searched or served, and an id outside is error 70, never 50.
+15. Library ACL everywhere, as the album pages: an album is visible when its media sits in a library of the caller (`accessible_library_ids`); a track when, besides, it has a file. Nothing outside is listed, counted, searched or served, and an id outside is error 70, never 50.
 16. An album's songs are the tracks that have a file (`music.md` rule 52: their own, or the one another album of the library plays for the same recording); counts and duration follow. Two releases of one group are two albums.
 17. `musicFolderId` (library id) narrows `getIndexes`, `getArtists`, the lists, `search3`, `getGenres` and `getRandomSongs` to that library when the caller reads it; another library is the empty answer.
 

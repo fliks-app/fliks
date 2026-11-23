@@ -252,7 +252,7 @@ pub async fn folders_out(db: &PgPool, rows: Vec<FolderRow>) -> sqlx::Result<Vec<
 /// `library_user_access.userId` per library, in insertion order.
 pub async fn user_ids(db: &PgPool, libraries: &[i32]) -> sqlx::Result<HashMap<i32, Vec<i32>>> {
     let rows = sqlx::query!(
-        r#"SELECT "libraryId" AS "library_id!", "userId" AS "user_id!" FROM library_user_access
+        r#"SELECT "libraryId" AS library_id, "userId" AS user_id FROM library_user_access
         WHERE "libraryId" = ANY($1) ORDER BY id"#,
         libraries
     )
