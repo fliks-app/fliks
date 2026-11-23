@@ -188,6 +188,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::annotations::create,
         crate::annotations::update,
         crate::annotations::remove,
+        playback::featured,
         playback::recommendations,
         playback::dismiss,
         playback::dismissed_count,

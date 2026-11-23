@@ -485,6 +485,22 @@ pub async fn recently_added(
     uid: i32,
     see_paths: bool,
 ) -> Result<Vec<Value>, sqlx::Error> {
+    let page_ids = recent_ids(db, p, ids, kinds, uid).await?;
+    let mut data = hydrate::items_view(db, &page_ids, see_paths, true).await?;
+    books::attach_list_info(db, &mut data, uid, ids).await?;
+    comics::attach_list_info(db, &mut data, uid, ids).await?;
+    music::attach_list_info(db, &mut data, uid, ids).await?;
+    Ok(data)
+}
+
+/// The ids behind `recently_added`, in order.
+pub(crate) async fn recent_ids(
+    db: &PgPool,
+    p: &Recent,
+    ids: &[i32],
+    kinds: &Kinds,
+    uid: i32,
+) -> Result<Vec<i32>, sqlx::Error> {
     if ids.is_empty() || p.limit == 0 {
         return Ok(vec![]);
     }
@@ -506,6 +522,21 @@ pub async fn recently_added(
     if p.requested_by_me {
         qb.push(" AND media.\"addedById\" = ").push_bind(uid);
     }
+    if p.fanart_only {
+        qb.push(" AND COALESCE(media.\"fanartUrl\", '') <> ''");
+    }
+    if p.exclude_dismissed {
+        qb.push(
+            " AND NOT EXISTS (SELECT 1 FROM recommendation_dismissals d WHERE d.\"mediaId\" = media.id AND d.\"userId\" = ",
+        )
+        .push_bind(uid)
+        .push(")");
+    }
+    if !p.exclude.is_empty() {
+        qb.push(" AND media.id <> ALL(")
+            .push_bind(p.exclude.clone())
+            .push(")");
+    }
     qb.push(match p.mode.as_str() {
         "file" => {
             " AND media.\"lastFileAddedAt\" IS NOT NULL ORDER BY media.\"lastFileAddedAt\" DESC"
@@ -516,12 +547,7 @@ pub async fn recently_added(
         }
     });
     qb.push(", media.id ASC LIMIT ").push_bind(p.limit);
-    let page_ids: Vec<i32> = qb.build_query_scalar().fetch_all(db).await?;
-    let mut data = hydrate::items_view(db, &page_ids, see_paths, true).await?;
-    books::attach_list_info(db, &mut data, uid, ids).await?;
-    comics::attach_list_info(db, &mut data, uid, ids).await?;
-    music::attach_list_info(db, &mut data, uid, ids).await?;
-    Ok(data)
+    qb.build_query_scalar().fetch_all(db).await
 }
 
 #[cfg(test)]
