@@ -81,6 +81,7 @@ plans/
 !/docs/cleanup-rules.md
 !/docs/optimize-workers.md
 docker-compose.yml
+docker-compose.local.yml
 
 # Dev-stack bind mounts (media library, downloads, images, transcode cache).
 .dev/

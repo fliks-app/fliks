@@ -26,7 +26,7 @@
     "webos:compile": "BROWSERSLIST='chrome 76' node scripts/ng-build.mjs --configuration webos && node scripts/stage-licenses.mjs",
     "webos:build": "npm run webos:compile && node webos/build-ipk.mjs"
   },
-  "packageManager": "npm@10.8.2",
+  "packageManager": "npm@11.17.0",
   "dependencies": {
     "@angular/cdk": "^22.3.0",
     "@angular/common": "^22.3.0",
