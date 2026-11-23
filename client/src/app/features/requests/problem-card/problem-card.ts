@@ -13,7 +13,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes } from '../../../core/utils/format-bytes';
-import { mediaDetailLink } from '../../../core/media-kinds';
+import { kindOf, mediaDetailLink } from '../../../core/media-kinds';
 import { TvRowDirective } from '../../../shared/directives/tv-row.directive';
 
 export type ProblemResolveMode = 'resolve' | 'close';
@@ -84,7 +84,7 @@ export class ProblemCardComponent {
 
   protected readonly mediaLink = computed(() => {
     const r = this.row();
-    return r.itemId != null && r.media.type === 'series'
+    return r.itemId != null && kindOf(r.media.type).hasSeasons
       ? ['/series', String(r.media.id), 'episode', String(r.itemId)]
       : mediaDetailLink(r.media.type as Parameters<typeof mediaDetailLink>[0], r.media.id);
   });
