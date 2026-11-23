@@ -877,6 +877,16 @@ export class AuthService {
     return minted;
   }
 
+  /** A days-long token for one file's offline download: the engine data plane only, ended by sign-out. The caller keeps it with the task. */
+  async mintDownloadToken(mediaFileId: number): Promise<{ token: string; expiresAt: number }> {
+    const epoch = this._sessionEpoch();
+    const res = await firstValueFrom(
+      this.http.post<{ downloadToken: string; expiresAt: number }>('/api/auth/download-token', { mediaFileId }),
+    );
+    if (epoch !== this._sessionEpoch()) throw new Error('session ended while minting a download token');
+    return { token: res.downloadToken, expiresAt: res.expiresAt };
+  }
+
   /** A single-use ticket for the events stream (valid 30 s); null only for a server without the route (404), any other failure rejects. */
   mintEventTicket(): Promise<string | null> {
     return firstValueFrom(

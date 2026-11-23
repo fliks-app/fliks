@@ -67,6 +67,8 @@ export function episodeLabel(season: number, episode: number, title?: string | n
 }
 
 /** Quality keys compare by height; `original` tops them all. */
+const DOWNLOAD_TOKEN_RENEW_MS = 24 * 3600 * 1000;
+
 const rungRank = (key: string) => (key === 'original' ? Infinity : parseInt(key, 10) || 0);
 
 /** The wanted rung, else the best one below it, else the lowest on offer. */
@@ -274,7 +276,8 @@ export class DownloadManagerService {
         filename: task.episodeLabel ? `${task.media?.title} - ${task.episodeLabel}` : (task.media?.title ?? ''),
       });
     } else if (this.isNative) {
-      await this.notif.resumeDownload(String(task.id));
+      if (task.downloadToken && task.downloadToken.expiresAt - Date.now() < DOWNLOAD_TOKEN_RENEW_MS) await this.renewNative(task);
+      else await this.notif.resumeDownload(String(task.id));
     } else {
       this.webGates.get(task.id)?.open();
       this.webGates.delete(task.id);
@@ -421,8 +424,8 @@ export class DownloadManagerService {
       }
     }
 
-    // Fresh long-lived stream JWT before baking the URL into the daemon: downloads outlast the 1h access token.
-    await this.auth.ensureStreamToken(mediaFileId);
+    // Desktop and web bake the stream token into the URL; the native daemon gets a download token below.
+    if (!this.isNative) await this.auth.ensureStreamToken(mediaFileId);
 
     // Desktop original: fetch the untouched container to disk via the raw ?download=1 route and play it with mpv; no HLS session.
     if (this.isDesktop && quality === 'original') {
@@ -450,7 +453,8 @@ export class DownloadManagerService {
       undefined,
       /* download */ true,
     );
-    const hlsUrl = this.streamingApi.resolveDownloadUrl(mediaFileId, quality, playbackInfo);
+    if (this.isNative) task.downloadToken = await this.auth.mintDownloadToken(mediaFileId);
+    const hlsUrl = this.streamingApi.resolveDownloadUrl(mediaFileId, quality, playbackInfo, task.downloadToken?.token);
     task.hlsUrl = hlsUrl;
     task.sessionId = playbackInfo.sessionId;
     task.offlineCrop = offlineCropOf(playbackInfo);
@@ -470,25 +474,48 @@ export class DownloadManagerService {
       });
       this.updateTaskStatus(taskId, 'downloading', 0);
     } else if (this.isNative) {
-      const token =
-        this.auth.playbackTokenFor(mediaFileId) ?? '';
-      // Pre-translated copy: the native side never hardcodes text.
-      this.syncNotificationCopy();
-      const notifTitle = episode ? `${title} · ${episode}` : title;
-      this.notif.startDownload(String(taskId), hlsUrl, token, {
-        notifTitle,
-        notifProgress: this.translate.instant('downloads.notif_progress'),
-        notifStale: this.translate.instant('downloads.notif_stale'),
-        notifComplete: this.translate.instant('downloads.notif_complete'),
-        notifFailed: this.translate.instant('downloads.notif_failed'),
-      });
-      this.syncActivityCopy();
+      this.startNative(task, hlsUrl);
       if (!meta?.auto) void this.push.askInContext('download');
     } else {
       this.enqueueWeb(task, hlsUrl);
     }
 
     return task;
+  }
+
+  /** Hands the transfer to the OS daemon with its pre-translated copy: the native side never hardcodes text. */
+  private startNative(task: DownloadTask, hlsUrl: string): void {
+    this.syncNotificationCopy();
+    const title = task.media?.title ?? '';
+    this.notif.startDownload(String(task.id), hlsUrl, task.downloadToken?.token ?? '', {
+      notifTitle: task.episodeLabel ? `${title} · ${task.episodeLabel}` : title,
+      notifProgress: this.translate.instant('downloads.notif_progress'),
+      notifStale: this.translate.instant('downloads.notif_stale'),
+      notifComplete: this.translate.instant('downloads.notif_complete'),
+      notifFailed: this.translate.instant('downloads.notif_failed'),
+    });
+    this.syncActivityCopy();
+  }
+
+  /** A paused transfer holds the URL and token it started with: past this margin of the token's life it restarts on a fresh session. */
+  private async renewNative(task: DownloadTask): Promise<void> {
+    const info = await this.streamingApi.getPlaybackInfo(
+      task.mediaFileId,
+      this.deviceProfile.getProfile(),
+      undefined,
+      undefined,
+      task.quality,
+      undefined,
+      /* download */ true,
+    );
+    const downloadToken = await this.auth.mintDownloadToken(task.mediaFileId);
+    const hlsUrl = this.streamingApi.resolveDownloadUrl(task.mediaFileId, task.quality, info, downloadToken.token);
+    const staleSid = task.sessionId;
+    await this.notif.removeDownload(String(task.id));
+    const next: DownloadTask = { ...task, hlsUrl, sessionId: info.sessionId, downloadToken, status: 'downloading', progress: 0 };
+    this.persistTask(next);
+    if (staleSid) this.streamingApi.stopSession(staleSid).catch(() => {});
+    this.startNative(next, hlsUrl);
   }
 
   /** Puts a book edition on the device, in the background: no HLS, the files are kept as they are on the server. */

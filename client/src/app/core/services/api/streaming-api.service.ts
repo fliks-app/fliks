@@ -330,12 +330,13 @@ export class StreamingApiService {
     startQuality?: string,
     startAt?: number,
     sessionId?: string,
+    token?: string,
   ): string {
     const base = this.serverConfig.isNative
       ? this.serverConfig.resolveUrl(`/api/stream/${mediaFileId}/master.m3u8`)
       : `/api/stream/${mediaFileId}/master.m3u8`;
     const query = this.hlsQuery({
-      token: this.tokenFor(base),
+      token: token ?? this.tokenFor(base),
       sid: sessionId,
       startQuality,
       startAt,
@@ -348,15 +349,15 @@ export class StreamingApiService {
    *  with the CURRENT token, since the one baked into `pi.playUrl` goes stale. */
   buildPlayUrl(
     pi: { playMethod: PlayMethod; playUrl: string },
-    opts: { sid?: string; startAt?: number; startQuality?: string } = {},
+    opts: { sid?: string; startAt?: number; startQuality?: string; token?: string } = {},
   ): string {
     const { path, remux } = this.parsePlayUrlFlags(pi.playUrl);
     const base = this.serverConfig.isNative ? this.serverConfig.resolveUrl(path) : path;
     if (pi.playMethod === 'DirectPlay') {
-      return this.withTokenAndSid(base, opts.sid);
+      return this.withTokenAndSid(base, opts.sid, opts.token);
     }
     const query = this.hlsQuery({
-      token: this.tokenFor(path),
+      token: opts.token ?? this.tokenFor(path),
       sid: opts.sid,
       remux,
       startQuality: opts.startQuality,
@@ -418,16 +419,17 @@ export class StreamingApiService {
     mediaFileId: number,
     quality: string,
     pi: Pick<PlaybackInfoResponse, 'playMethod' | 'playUrl' | 'sessionId'>,
+    token?: string,
   ): string {
     return pi.playMethod === 'DirectStream'
-      ? this.buildPlayUrl(pi, { sid: pi.sessionId })
-      : this.getHlsUrl(mediaFileId, quality, undefined, pi.sessionId);
+      ? this.buildPlayUrl(pi, { sid: pi.sessionId, token })
+      : this.getHlsUrl(mediaFileId, quality, undefined, pi.sessionId, token);
   }
 
   /** Token+sid query shared by `buildPlayUrl`'s DirectPlay branch and the
    *  sidecar/thumbnail URL builders below. */
-  private withTokenAndSid(base: string, sessionId?: string): string {
-    const query = this.hlsQuery({ token: this.tokenFor(base), sid: sessionId });
+  private withTokenAndSid(base: string, sessionId?: string, token?: string): string {
+    const query = this.hlsQuery({ token: token ?? this.tokenFor(base), sid: sessionId });
     return query ? `${base}?${query}` : base;
   }
 
