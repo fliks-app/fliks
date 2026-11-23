@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object('id', p.id, 'name', p.name, 'sortName', p.\"sortName\", 'avatarUrl', p.\"avatarUrl\",\n  'workCount', COUNT(DISTINCT m.id)::int) AS \"json!: Value\"\nFROM persons p JOIN media_credits mc ON mc.\"personId\" = p.id JOIN media m ON m.id = mc.\"mediaId\"\nWHERE m.type = 'book' AND m.\"libraryId\" = ANY($1) AND mc.role = $3\n  AND (($3 = 'author' AND mc.\"editionId\" IS NULL)\n    OR ($3 = 'narrator' AND EXISTS (SELECT 1 FROM editions e\n          WHERE e.id = mc.\"editionId\" AND COALESCE(e.\"libraryId\", m.\"libraryId\") = ANY($2))))\n  AND ($4::text IS NULL OR p.\"searchVector\" @@ to_tsquery('simple', $4))\nGROUP BY p.id\nORDER BY CASE WHEN $5 THEN -COUNT(DISTINCT m.id) ELSE 0 END, COALESCE(p.\"sortName\", p.name), p.id\nLIMIT $6 OFFSET $7",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4Array",
+        "Text",
+        "Text",
+        "Bool",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a967b86910067816cded31036bfb74284c1e22793df6037d3d3ff9c515c7044d"
+}

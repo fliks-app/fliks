@@ -10,7 +10,7 @@ Scope: the four persons routes (the book `list` and `works` routes are `books-ap
 
 | Method path | Auth | Request | Response | Errors | Side effects |
 |---|---|---|---|---|---|
-| `GET /api/persons/search` | authenticated, no policy | query `q?` string, unknown keys ignored (rules 2-6) | 200 `Person[]` (rule 7) | 401; 400 when `q` is repeated (rule 2) | none |
+| `GET /api/persons/search` | authenticated, no policy | query `q?` string, `page?` and `limit?` (default 50, 1-based, as `/api/persons`), `letter?` (A-Z or `#`), `department?`; unknown keys ignored (rules 2-6) | 200 `Person[]` (rule 7) | 401; 400 when `q` is repeated (rule 2) | none |
 | `GET /api/persons/:id` | same | path `id`: canonical `i32` (rule 8) | 200 `{person: Person, cast: CastRow[], crew: CrewRow[]}` (rules 9-17) | 400 `Validation failed (numeric string is expected)`; 404 `Person #<id> not found` `{message, error:"Not Found", statusCode:404}`; provider and image failures never surface (rule 13) | may UPDATE `persons` and write 2 image files (rules 9-12) |
 | `GET /api/persons/:id/provider-credits` | `media.read` (403 without) | path `id` as above | 200 `{provider: string|null, cast: Credit[], crew: Credit[]}` (rules 19-21) | 400 / 404 as above; 403; upstream failure 503 `Metadata request failed on <provider>: <reason>` | may UPDATE `person_external_ids.provider` (rule 11) |
 | `GET /api/persons/:id/bibliography` | `media.read` (403 without) | path `id` as above | 200 `BookSearchResult[]` (rule 23) | 400 / 404 as above; upstream failure 503 `Metadata search failed on openlibrary: <reason>` | none |
@@ -23,10 +23,10 @@ Scope: the four persons routes (the book `list` and `works` routes are `books-ap
 
 1. Authentication is required on all four routes. The client sends a credential on each; Apple TV, Cast and Electron main do not call these routes.
 2. `q` is an optional query string: a missing, empty or whitespace-only `q` lists persons (rule 3); a repeated `q` is 400 (standard validation body).
-3. Empty or blank `q`: the first 50 persons ordered by `name ASC, id ASC`. Every search lists only persons credited (`media_credits` or `item_credits`) on a media of a library the caller can read.
+3. Empty or blank `q`: the requested page (50 by default) of persons ordered by `name ASC, id ASC`. Every search lists only persons credited (`media_credits` or `item_credits`) on a media of a library the caller can read.
 4. Non-empty `q`: the trimmed `q` is split on whitespace; each word is a prefix term, all words ANDed, `p."searchVector" @@ to_tsquery('simple', f_unaccent($1))`, config `simple` (no stemming, no stop words, lowercase, accents folded).
 5. Words are sanitised before they reach `to_tsquery`: each word is reduced to its letter/digit/`-`/`_` runs, empties are dropped, and each run is quoted as a lexeme with `:*`. Operators are never interpreted (`a&`, `x!`, `(`, `a|b`, `!a` are plain text), `o'brien` and `jean-luc` still match "O'Brien" and "Jean-Luc" (`jean-luc` → `'jean-luc':* <-> 'jean':* <-> 'luc':*`), and a `q` with no usable word answers `[]`.
-6. Order and size: `ORDER BY ts_rank(p."searchVector", to_tsquery('simple', f_unaccent($1))) DESC, p.name ASC, p.id ASC LIMIT 50`. `searchVector` is NULL only for a person never indexed, which never matches (rule 22).
+6. Order and size: `ORDER BY ts_rank(p."searchVector", to_tsquery('simple', f_unaccent($1))) DESC, p.name ASC, p.id ASC` with the requested `LIMIT`/`OFFSET`; `letter` and `department` filter before the page. `searchVector` is NULL only for a person never indexed, which never matches (rule 22).
 7. Result = `Person[]` (`searchVector` never selected). Empty result `[]`.
 
 ### B. Detail (`GET :id`)

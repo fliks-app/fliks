@@ -172,6 +172,24 @@ async fn search_folds_accents_in_every_library_language(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn search_survives_characters_the_fold_expands(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO media (id, title, year, type, "libraryId", "folderName")
+           VALUES (20, '8½', 1963, 'movie', 1, 'f20')"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    for q in ["8%C2%BD", "%E2%91%B4"] {
+        let (s, _) = c.get(&c.admin, &format!("/api/media?q={q}")).await;
+        assert_eq!(s, 200, "{q}");
+    }
+    let (_, r) = c.get(&c.admin, "/api/media?q=8%C2%BD").await;
+    assert_eq!(ids(&r), [20]);
+}
+
+#[sqlx::test(migrations = false)]
 async fn equal_sort_keys_page_by_id(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, p1) = c.get(&c.admin, "/api/media?sortBy=year&limit=2").await;

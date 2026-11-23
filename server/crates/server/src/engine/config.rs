@@ -172,6 +172,53 @@ fn max_sessions_per_owner(raw: &HashMap<String, String>) -> u32 {
         .unwrap_or(LifetimeConfig::default().max_sessions_per_owner)
 }
 
+const IMPORTED: &str = "streaming.env_limits_imported";
+/// Read as env before the settings page owned the cap; the engine's defaults stand for the job timings.
+const IGNORED_ENV: [&str; 2] = ["STREAM_JOB_GRACE_MS", "STREAM_JOB_FALLBACK_TIMEOUT_MS"];
+
+/// Boot: `STREAM_MAX_SESSIONS_PER_USER` seeds the setting once; a failure warns and the boot goes on.
+pub async fn import_env(db: &sqlx::PgPool) {
+    if let Err(e) = import_with(db, |k| std::env::var(k).ok()).await {
+        tracing::warn!("session cap not imported from the environment: {e}");
+    }
+}
+
+async fn import_with(db: &sqlx::PgPool, get: impl Fn(&str) -> Option<String>) -> sqlx::Result<()> {
+    for var in IGNORED_ENV.iter().filter(|v| get(v).is_some()) {
+        tracing::warn!("{var} is deprecated and ignored: the engine's default applies");
+    }
+    let imported = crate::settings::text(db, IMPORTED).await?.as_deref() == Some("true");
+    let cap = get("STREAM_MAX_SESSIONS_PER_USER").and_then(|v| {
+        let n = parse_int(&v).filter(|n| *n > 0)?;
+        u32::try_from(n).ok()
+    });
+    let kept = crate::settings::text(db, "streaming_max_sessions_per_user")
+        .await?
+        .is_some_and(|v| !v.is_empty());
+    let mut tx = db.begin().await?;
+    match cap {
+        Some(_) if imported || kept => tracing::warn!(
+            "STREAM_MAX_SESSIONS_PER_USER is ignored: set the cap in the streaming settings"
+        ),
+        Some(n) => {
+            crate::settings::set_in(
+                &mut tx,
+                "streaming_max_sessions_per_user",
+                Some(&n.to_string()),
+            )
+            .await?;
+            tracing::warn!(
+                "STREAM_MAX_SESSIONS_PER_USER is deprecated: imported {n} into the streaming settings"
+            );
+        }
+        None => {}
+    }
+    if !imported {
+        crate::settings::set_in(&mut tx, IMPORTED, Some("true")).await?;
+    }
+    tx.commit().await
+}
+
 /// The saved `streaming_*` settings, resolved like the config push does.
 pub async fn load_streaming(db: &sqlx::PgPool) -> sqlx::Result<StreamingConfig> {
     Ok(streaming(
@@ -503,5 +550,47 @@ mod tests {
         assert!(!ok("streaming_ffmpeg_slots", Some("2.5")));
         assert!(!ok("streaming_ffmpeg_slots", Some("99999999999")));
         assert!(ok("streaming_cache_max_gb", Some("whatever")));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn the_removed_session_cap_env_seeds_the_setting_once(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        let env = |v: &'static str| {
+            move |k: &str| (k == "STREAM_MAX_SESSIONS_PER_USER").then(|| v.to_owned())
+        };
+        let cap = || async {
+            crate::settings::text(&pool, "streaming_max_sessions_per_user")
+                .await
+                .unwrap()
+        };
+        import_with(&pool, env("3")).await.unwrap();
+        assert_eq!(cap().await.as_deref(), Some("3"));
+        sqlx::query(
+            "UPDATE app_settings SET value = '7' WHERE key = 'streaming_max_sessions_per_user'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        import_with(&pool, env("5")).await.unwrap();
+        assert_eq!(cap().await.as_deref(), Some("7"));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn an_existing_cap_is_not_overwritten_by_the_env(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        crate::settings::set_in(&mut tx, "streaming_max_sessions_per_user", Some("7"))
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        import_with(&pool, |k| {
+            (k == "STREAM_MAX_SESSIONS_PER_USER").then(|| "3".to_owned())
+        })
+        .await
+        .unwrap();
+        let v = crate::settings::text(&pool, "streaming_max_sessions_per_user")
+            .await
+            .unwrap();
+        assert_eq!(v.as_deref(), Some("7"));
     }
 }

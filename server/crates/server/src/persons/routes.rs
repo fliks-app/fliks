@@ -8,6 +8,7 @@ use crate::{
     libraries::accessible_library_ids,
     media::{
         aggregates,
+        list::fold,
         params::{Reader, paging_of},
     },
     state::AppState,
@@ -101,20 +102,34 @@ pub async fn resolve(
     Ok(Json(json!({"id": person})))
 }
 
+const SEARCH_PAGE: f64 = 50.0;
+
 #[utoipa::path(get, path = "/api/persons/search", responses((status = 200)))]
 pub async fn search(
     State(st): State<AppState>,
     a: Authed,
     Query(q): Query<Vec<(String, String)>>,
 ) -> Res {
-    let mut qs = q.iter().filter(|(k, _)| k == "q");
-    let q = match (qs.next(), qs.next()) {
-        (_, Some(_)) => return Err(AppError::bad_request(vec!["q must be a string"])),
-        (Some((_, v)), None) => v.trim(),
-        _ => "",
-    };
+    // Unknown keys are ignored: every key present counts as known.
+    let keys: Vec<&str> = q.iter().map(|(k, _)| k.as_str()).collect();
+    let mut r = Reader::new(&q, &keys);
+    let text = r.string("q");
+    let (letter, department) = (r.string("letter"), r.string("department"));
+    let (page, limit) = (r.number("page"), r.number("limit"));
+    r.finish()?;
+    let paging = paging_of(page, limit, SEARCH_PAGE)?.unwrap_or((SEARCH_PAGE as i64, 0));
     let acl = accessible_library_ids(&st.db, &a).await?;
-    Ok(Json(Value::Array(service::search(&st.db, q, &acl).await?)))
+    Ok(Json(Value::Array(
+        service::search(
+            &st.db,
+            text.as_deref().map_or("", str::trim),
+            &acl,
+            paging,
+            letter.as_deref(),
+            department.as_deref().filter(|d| !d.is_empty()),
+        )
+        .await?,
+    )))
 }
 
 #[utoipa::path(get, path = "/api/persons/{id}", responses((status = 200)))]
@@ -183,7 +198,10 @@ pub async fn list(
         return Ok(Json(Value::Array(vec![])));
     };
     let name = name.as_deref().map(str::trim).filter(|q| !q.is_empty());
-    let tsq = name.map(tsquery);
+    let tsq = match name {
+        Some(n) => Some(tsquery(&fold(&st.db, n).await?)),
+        None => None,
+    };
     if matches!(tsq, Some(None)) {
         return Ok(Json(Value::Array(vec![])));
     }

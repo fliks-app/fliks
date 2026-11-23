@@ -61,30 +61,33 @@
           }
         </div>
       </cdk-virtual-scroll-viewport>
-
-      <!-- Alphabet sidebar -->
-      <nav data-alpha-index class="fixed inset-y-0 right-3 z-20 flex flex-col items-center justify-center gap-0 select-none pointer-events-none">
-        @for (letter of alphabet; track letter) {
-          <button
-            type="button"
-            class="text-sm font-medium w-5 h-5 flex items-center justify-center rounded transition-colors pointer-events-auto"
-            [class.bg-primary]="list.activeLetter() === letter"
-            [class.text-primary-content]="list.activeLetter() === letter"
-            [class.text-base-content/60]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
-            [class.text-base-content/15]="!list.availableLetters().has(letter)"
-            [class.hover:bg-primary/20]="list.activeLetter() !== letter && list.availableLetters().has(letter)"
-            [disabled]="!list.availableLetters().has(letter)"
-            (click)="scrollToLetter(letter)"
-          >
-            {{ letter }}
-          </button>
-        }
-      </nav>
     </div>
-
+    @if (paged.more()) {
+      <button type="button" class="btn btn-ghost self-center" data-testid="persons-more" [disabled]="paged.loading()" (click)="loadMore()">{{ 'common.show_more' | translate }}</button>
+    }
   }
 
-  @if (list.total() > 0) {
+  @if (list.total() > 0 || letter()) {
+    <nav data-alpha-index class="fixed inset-y-0 right-3 z-20 flex flex-col items-center justify-center gap-0 select-none pointer-events-none">
+      @for (letter of alphabet; track letter) {
+        <button
+          type="button"
+          class="text-sm font-medium w-5 h-5 flex items-center justify-center rounded transition-colors pointer-events-auto"
+          [class.bg-primary]="letterActive(letter)"
+          [class.text-primary-content]="letterActive(letter)"
+          [class.text-base-content/60]="!letterActive(letter) && letterEnabled(letter)"
+          [class.text-base-content/15]="!letterEnabled(letter)"
+          [class.hover:bg-primary/20]="!letterActive(letter) && letterEnabled(letter)"
+          [disabled]="!letterEnabled(letter)"
+          (click)="scrollToLetter(letter)"
+        >
+          {{ letter }}
+        </button>
+      }
+    </nav>
+  }
+
+  @if (list.total() > 0 && !paged.more()) {
     <div class="flex items-center gap-6 mt-6 px-2 py-3 border-t border-base-200 text-sm text-base-content/70">
       <div><span class="font-semibold">{{ 'persons.total' | translate }}</span> {{ list.total() }}</div>
     </div>

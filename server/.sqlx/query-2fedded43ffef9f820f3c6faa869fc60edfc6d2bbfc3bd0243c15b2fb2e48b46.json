@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object('id', p.id, 'createdAt', iso_ms(p.\"createdAt\"), 'updatedAt', iso_ms(p.\"updatedAt\"),\n    'provider', x.provider, 'tmdbId', x.value::int, 'name', p.name, 'avatarUrl', p.\"avatarUrl\", 'biography', p.biography,\n    'birthday', p.birthday, 'deathday', p.deathday, 'placeOfBirth', p.\"placeOfBirth\",\n    'knownForDepartment', p.\"knownForDepartment\", 'departments', p.departments,\n    'metadataRefreshedAt', iso_ms(p.\"metadataRefreshedAt\")) AS \"json!: Value\"\nFROM persons p LEFT JOIN person_ids x ON x.\"personId\" = p.id\nWHERE ($1::text IS NULL OR p.\"searchVector\" @@ to_tsquery('simple', $1))\n  AND (EXISTS (SELECT 1 FROM media_credits mc JOIN media m ON m.id = mc.\"mediaId\"\n                WHERE mc.\"personId\" = p.id AND m.\"libraryId\" = ANY($2))\n    OR EXISTS (SELECT 1 FROM item_credits ic JOIN items i ON i.id = ic.\"itemId\" JOIN media m ON m.id = i.\"mediaId\"\n                WHERE ic.\"personId\" = p.id AND m.\"libraryId\" = ANY($2)))\n  AND ($3::text IS NULL OR ($3 = '#' AND p.name !~ '^[A-Za-z]') OR ($3 <> '#' AND UPPER(LEFT(p.name, 1)) = $3))\n  AND ($4::text IS NULL OR p.departments @> jsonb_build_array($4::text))\nORDER BY CASE WHEN $1::text IS NULL THEN 0 ELSE ts_rank(p.\"searchVector\", to_tsquery('simple', $1)) END DESC,\n  p.name ASC, p.id ASC\nLIMIT $5 OFFSET $6",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "json!: Value",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4Array",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2fedded43ffef9f820f3c6faa869fc60edfc6d2bbfc3bd0243c15b2fb2e48b46"
+}

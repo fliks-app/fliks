@@ -533,6 +533,37 @@ async fn person_search(pool: PgPool) {
         50,
         "a blank query lists one page"
     );
+    let page3_body = search("?page=3").await.1;
+    let (page2, page3) = (names(&search("?page=2").await.1).len(), names(&page3_body));
+    assert_eq!(
+        (page2, page3.len(), page3.last().copied()),
+        (50, 5, Some("Zz 99")),
+        "the next pages carry on past the first 50"
+    );
+    assert_eq!(names(&search("?page=1&limit=2").await.1).len(), 2);
+    assert_eq!(search("?page=0").await.0, 400);
+    assert_eq!(
+        names(&search("?letter=z&limit=200").await.1).len(),
+        100,
+        "the letter is applied before the page"
+    );
+    assert_eq!(names(&search("?letter=A").await.1), ["Amélie Poulain"]);
+    assert_eq!(names(&search("?letter=%23").await.1).len(), 0);
+    sqlx::query(
+        r#"UPDATE persons SET departments = '["Acting"]' WHERE name IN ('Zz 7', 'Claude Rains')"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        names(&search("?department=Acting&limit=200").await.1),
+        ["Claude Rains", "Zz 7"],
+        "the department is applied before the page"
+    );
+    for q in ["8%C2%BD", "%E2%91%B4"] {
+        let (s, _) = search(Box::leak(format!("?q={q}").into_boxed_str())).await;
+        assert_eq!(s, 200, "search {q}");
+    }
     sqlx::query("DELETE FROM persons WHERE name LIKE 'Zz %'")
         .execute(&pool)
         .await

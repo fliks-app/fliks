@@ -1815,6 +1815,87 @@ mod book_ingest {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn a_split_version_re_homes_the_readers_by_the_part_their_position_falls_in(
+        pool: PgPool,
+    ) {
+        let c = ctx(pool).await;
+        c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);
+        let m = book(&c, "Orfaline").await;
+        layout_of(&c, m, "Orfaline", &["Title Part 1.m4b", "Title Part 2.m4b"]).await;
+        let file = |p: &'static str| {
+            let db = c.st.db.clone();
+            async move {
+                sqlx::query_scalar::<_, i32>(
+                    r#"SELECT id FROM media_files WHERE "relativePath" = $1"#,
+                )
+                .bind(format!("Orfaline/{p}"))
+                .fetch_one(&db)
+                .await
+                .unwrap()
+            }
+        };
+        let p1 = file("Title Part 1.m4b").await;
+        let p2 = file("Title Part 2.m4b").await;
+        let item: i32 =
+            sqlx::query_scalar(r#"SELECT "itemId" FROM item_parts WHERE "mediaFileId" = $1"#)
+                .bind(p1)
+                .fetch_one(&c.st.db)
+                .await
+                .unwrap();
+        // Both readers hold the first part of the version; one is 10 s into the second part.
+        for (user, at) in [("admin", 70.0), ("editor", 20.0)] {
+            sqlx::query(
+                r#"INSERT INTO playback_states ("userId", "itemId", "mediaFileId", "positionSeconds")
+                   VALUES ((SELECT id FROM users WHERE username = $1), $2, $3, $4)"#,
+            )
+            .bind(user)
+            .bind(item)
+            .bind(p1)
+            .bind(at)
+            .execute(&c.st.db)
+            .await
+            .unwrap();
+        }
+        let dup: i32 = sqlx::query_scalar(
+            r#"INSERT INTO media_files ("folderId", "mediaId", "relativePath", size, quality)
+               SELECT "folderId", "mediaId", 'Orfaline/Title Part 2 (copy).m4b', 6, 'm4b' FROM media_files
+               WHERE id = $1 RETURNING id"#,
+        )
+        .bind(p2)
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+        let mut tx = c.st.db.begin().await.unwrap();
+        books::parts::write_versions(&mut tx, m, item, &[vec![p1], vec![p2], vec![dup]])
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let state = |user: &'static str| {
+            let db = c.st.db.clone();
+            async move {
+                sqlx::query_as::<_, (Option<i32>, i32, f64)>(
+                    r#"SELECT version, "mediaFileId", "positionSeconds" FROM playback_states
+                       WHERE "userId" = (SELECT id FROM users WHERE username = $1)"#,
+                )
+                .bind(user)
+                .fetch_one(&db)
+                .await
+                .unwrap()
+            }
+        };
+        assert_eq!(
+            state("admin").await,
+            (Some(1), p2, 10.0),
+            "moved with its part"
+        );
+        assert_eq!(
+            state("editor").await,
+            (Some(0), p1, 20.0),
+            "stays in the part that stays"
+        );
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn the_m4b_of_disc_folders_are_one_version_and_numbered_ones_are_not(pool: PgPool) {
         let c = ctx(pool).await;
         c.fake.script("POST", "/v1/probe", vec![ok(audio_probe())]);

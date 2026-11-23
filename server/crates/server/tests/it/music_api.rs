@@ -249,6 +249,21 @@ async fn the_track_text_filter_matches_track_album_and_artist(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn work_search_survives_characters_the_fold_expands(pool: PgPool) {
+    let (_, t, st) = ctx_with_state(&pool).await;
+    let app = fliks_server::metadata::music::works::router().with_state(st);
+    for q in ["8%C2%BD", "%E2%91%B4", "alleg"] {
+        let (status, rows) = call(&app, &t, "GET", &format!("/api/works?q={q}"), None).await;
+        assert_eq!(status, 200, "{q}");
+        assert_eq!(
+            rows.as_array().unwrap().len(),
+            usize::from(q == "alleg"),
+            "{q}"
+        );
+    }
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_track_row_carries_the_last_closed_attempt_that_covers_it(pool: PgPool) {
     let (app, t) = ctx(&pool).await;
     let last = |d: &Value| {

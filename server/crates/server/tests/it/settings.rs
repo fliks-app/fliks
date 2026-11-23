@@ -669,6 +669,32 @@ async fn setup_checklist_items_and_dismissal(pool: PgPool) {
     assert!(done(&items, 8));
 }
 
+/// An import recorded before the durable marker existed still shows the checklist item as done.
+#[sqlx::test(migrations = false)]
+async fn data_import_marker_is_backfilled_from_completed_imports(pool: PgPool) {
+    let _c = ctx(pool.clone()).await;
+    let marker = || {
+        sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM app_settings WHERE key = 'data_import_done')",
+        )
+    };
+    let backfill =
+        include_str!("../../../../migrations/1789000001370_backfill-data-import-marker.sql");
+    sqlx::query("INSERT INTO commands (name, status) VALUES ('ImportSeerrRequests', 'failed')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::raw_sql(backfill).execute(&pool).await.unwrap();
+    assert!(!marker().fetch_one(&pool).await.unwrap());
+    sqlx::query("INSERT INTO commands (name, status) VALUES ('ImportWatchHistory', 'completed')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::raw_sql(backfill).execute(&pool).await.unwrap();
+    sqlx::raw_sql(backfill).execute(&pool).await.unwrap();
+    assert!(marker().fetch_one(&pool).await.unwrap());
+}
+
 /// `counts.md`: the three counters, each scoped by its own ability.
 #[sqlx::test(migrations = false)]
 async fn sidebar_counts(pool: PgPool) {

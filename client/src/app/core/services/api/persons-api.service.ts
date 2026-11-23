@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { abortable } from '../../utils/abortable';
 import { Media } from './media.service';
@@ -55,15 +55,22 @@ export interface PersonProviderCredits {
   crew: PersonProviderCreditItem[];
 }
 
+export interface PersonsFilter {
+  page?: number;
+  limit?: number;
+  letter?: string;
+  department?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PersonsApiService {
   private readonly http = inject(HttpClient);
 
-  search(q: string, signal?: AbortSignal) {
-    return abortable(
-      this.http.get<Person[]>('/api/persons/search', { params: { q } }),
-      signal,
-    );
+  /** The server pages a search 50 at a time by default; `letter` and `department` filter before the page is cut. */
+  search(q: string, signal?: AbortSignal, filter: PersonsFilter = {}) {
+    let params = new HttpParams().set('q', q);
+    for (const [k, v] of Object.entries(filter)) if (v !== undefined) params = params.set(k, String(v));
+    return abortable(this.http.get<Person[]>('/api/persons/search', { params }), signal);
   }
 
   getOne(id: number) {
