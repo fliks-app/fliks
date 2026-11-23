@@ -107,6 +107,7 @@ pub(crate) async fn import_album(
             user: Some(a.user.id).filter(|u| *u != 0),
             links: vec![],
             seasons: None,
+            follow_new_seasons: None,
             wants: specs.as_deref(),
             prio: Priority::Interactive,
         },
@@ -378,6 +379,7 @@ pub async fn import_album_for_request(
             user: added_by.filter(|u| *u != 0),
             links: vec![],
             seasons: None,
+            follow_new_seasons: None,
             wants: Some(wants),
             prio: Priority::Interactive,
         },
@@ -466,6 +468,7 @@ pub(crate) async fn want_recording(
                 user: Some(a.user.id).filter(|u| *u != 0),
                 links: vec![],
                 seasons: None,
+                follow_new_seasons: None,
                 wants: specs.as_deref(),
                 prio: Priority::Interactive,
             };

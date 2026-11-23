@@ -246,7 +246,7 @@ pub async fn rescan_files(
         let on_disk: HashSet<&str> = disk.iter().map(|(r, _)| r.as_str()).collect();
         if media.has_seasons() {
             let wanted = wanted_numbers(&base, &rows, &on_disk, &disk, &linked);
-            slots_created |= slots.ensure(&st.db, media_id, &wanted).await?;
+            slots_created |= slots.ensure(st, media_id, &wanted).await?;
         }
         if w.complete {
             remove_missing(st, media_id, &rows, &on_disk, &mut c).await?;
@@ -835,7 +835,7 @@ impl Slots {
     /// Rule 45 in batches: the missing seasons and episodes are inserted, end numbers widened.
     async fn ensure(
         &mut self,
-        db: &sqlx::PgPool,
+        st: &AppState,
         media: i32,
         wanted: &[EpisodeNumbers],
     ) -> Result<bool, sqlx::Error> {
@@ -844,12 +844,15 @@ impl Slots {
             .map(|n| n.season as i32)
             .filter(|s| !self.seasons.contains_key(s))
             .collect();
+        let db = &st.db;
         let mut created = false;
         if !seasons.is_empty() {
             let nums: Vec<i32> = seasons.into_iter().collect();
+            let before = crate::media::service::media_flag(db, media).await?;
             created = sqlx::query!(
                 r#"INSERT INTO item_groups ("mediaId", "number", monitored)
-                   SELECT $1, n, n > 0 FROM UNNEST($2::int[]) AS n
+                   SELECT m.id, n, n > 0 AND m."monitorNewSeasons" FROM media m, UNNEST($2::int[]) AS n
+                   WHERE m.id = $1
                    ON CONFLICT ("mediaId", "number") DO NOTHING"#,
                 media,
                 &nums
@@ -858,6 +861,7 @@ impl Slots {
             .await?
             .rows_affected()
                 > 0;
+            crate::media::service::announce_flip(st, media, before).await?;
             let rows = sqlx::query!(
                 r#"SELECT id, "number" AS n FROM item_groups WHERE "mediaId" = $1 AND "number" = ANY($2)"#,
                 media,
@@ -892,8 +896,9 @@ impl Slots {
             let edition = items::video_edition(db, media).await?;
             created |= sqlx::query!(
                 r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", "endNumber", monitored)
-                   SELECT v.s, $4, $5, v.n, v.e, true
+                   SELECT v.s, $4, $5, v.n, v.e, g.monitored
                    FROM UNNEST($1::int[], $2::int[], $3::int[]) AS v(s, n, e)
+                   JOIN item_groups g ON g.id = v.s
                    ON CONFLICT ("groupId", "number") DO NOTHING"#,
                 &sids,
                 &nums,
@@ -1040,7 +1045,7 @@ async fn episode_slot(
 
 /// Rule 45: `(episode id, created)`; a missing season or episode is created.
 pub async fn ensure_season_and_episode(
-    db: &sqlx::PgPool,
+    st: &AppState,
     media: i32,
     n: EpisodeNumbers,
 ) -> Result<(i32, bool), sqlx::Error> {
@@ -1049,14 +1054,19 @@ pub async fn ensure_season_and_episode(
         n.episode as i32,
         n.episode_end.map(|e| e as i32),
     );
-    let mut c = db.acquire().await?;
-    let (sid, mut created) = items::ensure_group(&mut c, media, season, season > 0).await?;
+    let mut c = st.db.acquire().await?;
+    let before = crate::media::service::media_flag(&mut *c, media).await?;
+    let (sid, mut created) = items::ensure_group(&mut c, media, season).await?;
+    if created {
+        crate::media::service::announce_flip(st, media, before).await?;
+    }
     let mut ep = episode_slot(&mut c, sid, episode).await?;
     if ep.is_none() {
         let edition = items::video_edition(&mut *c, media).await?;
         created |= sqlx::query!(
             r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", "endNumber", monitored)
-               VALUES ($1, $2, $3, $4, $5, true) ON CONFLICT ("groupId", "number") DO NOTHING"#,
+               SELECT $1, $2, $3, $4, $5, monitored FROM item_groups WHERE id = $1
+               ON CONFLICT ("groupId", "number") DO NOTHING"#,
             sid,
             media,
             edition,
@@ -1255,7 +1265,7 @@ pub async fn link_in_place(
                 None => return Ok(Err("no SxxEyy pattern found".into())),
             },
             Some(n) => {
-                let (ep, c) = ensure_season_and_episode(&st.db, media.id, n).await?;
+                let (ep, c) = ensure_season_and_episode(st, media.id, n).await?;
                 episode_id = Some(ep);
                 last = n.episode_end.map(|e| e as i32);
                 created = c;

@@ -164,10 +164,10 @@ pub async fn apply_season(
     let edition = items::video_edition(&mut *c, media).await?;
     sqlx::query!(
         r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", title, overview, "airDate", runtime, monitored)
-           SELECT $1, $7, $8, v.n, v.title, v.overview, v.air::date, v.runtime, true
-           FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::int[])
+           SELECT $1, $7, $8, v.n, v.title, v.overview, v.air::date, v.runtime, g.monitored
+           FROM item_groups g, UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::int[])
              AS v(n, title, overview, air, runtime)
-           WHERE NOT EXISTS (SELECT 1 FROM items e WHERE e."groupId" = $1 AND e."number" = v.n)
+           WHERE g.id = $1 AND NOT EXISTS (SELECT 1 FROM items e WHERE e."groupId" = $1 AND e."number" = v.n)
            ON CONFLICT ("groupId", "number") DO NOTHING"#,
         sid,
         &numbers,
@@ -207,15 +207,17 @@ pub(crate) async fn apply_seasons(
     reset: bool,
 ) -> Result<i64, AppError> {
     let before: i64 = count_episodes(st, media_id).await?;
+    let flag = super::monitored::media_flag(&st.db, media_id).await?;
     let mut tx = st.db.begin().await?;
     crate::media::items::lock_versions(&mut tx, media_id).await?;
+    items::lock_media(&mut tx, media_id).await?;
     if reset {
         clear_season_values(&mut tx, media_id).await?;
     }
     let mut applied = vec![];
     for sd in seasons {
         let n = sd.season_number;
-        let (sid, _) = items::ensure_group(&mut tx, media_id, n, n > 0).await?;
+        let (sid, _) = items::ensure_group(&mut tx, media_id, n).await?;
         let stills = apply_season(&mut tx, sid, sd).await?;
         let live: HashSet<i32> = sd.episodes.iter().map(|e| e.episode_number).collect();
         if !live.is_empty() {
@@ -233,6 +235,7 @@ pub(crate) async fn apply_seasons(
     }
     crate::media::items::cover_ranges(&mut tx, media_id).await?;
     tx.commit().await?;
+    super::monitored::announce_flip(st, media_id, flag).await?;
     let inserted = (count_episodes(st, media_id).await? - before).max(0);
     for (sid, stills, poster) in applied {
         download_season_images(st, sid, stills, poster).await;
@@ -373,6 +376,7 @@ pub(crate) async fn drop_absent(
     let live: Vec<i32> = seasons.iter().map(|s| s.season_number).collect();
     let mut tx = st.db.begin().await?;
     items::lock_versions(&mut tx, id).await?;
+    items::lock_media(&mut tx, id).await?;
     let gone: Vec<i32> = sqlx::query_scalar!(
         r#"SELECT i.id FROM items i JOIN item_groups g ON g.id = i."groupId"
            WHERE g."mediaId" = $1 AND NOT (g."number" = ANY($2))"#,

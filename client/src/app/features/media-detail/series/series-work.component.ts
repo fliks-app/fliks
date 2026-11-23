@@ -281,7 +281,7 @@ export class SeriesWorkComponent extends VideoWorkBase {
           ? { ...s, monitored: updated.monitored, episodes: s.episodes.map((e) => ({ ...e, monitored: updated.monitored })) }
           : s,
       );
-      this.host.media.set({ ...m, seasons: nextSeasons });
+      this.host.media.set({ ...m, ...updated.media, seasons: nextSeasons });
       this.syncActiveSeason();
     } finally {
       this.seasonBusy.set(null);

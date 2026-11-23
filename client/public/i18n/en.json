@@ -1486,7 +1486,10 @@
       "other": "Passed over"
     },
     "downloads_title": "Downloads",
-    "downloads_see_all": "See all"
+    "downloads_see_all": "See all",
+    "monitored_partial": "Partially monitored",
+    "monitor_all_seasons": "Monitor all seasons",
+    "follow_new_seasons": "Follow new seasons"
   },
   "requests": {
     "approve_album": "Approve the whole album",
@@ -4320,7 +4323,8 @@
     "remove_from_list": "Remove from this list",
     "actions": "Actions",
     "chip_missing": "Missing",
-    "chip_wanted": "Wanted"
+    "chip_wanted": "Wanted",
+    "monitored_partial": "Partially monitored"
   },
   "cast": {
     "error": {
@@ -6291,5 +6295,8 @@
     "go_to": "Show title {{n}}",
     "play_episode": "Play {{code}}",
     "resume_episode": "Resume {{code}}"
+  },
+  "add_dialog": {
+    "follow_new_seasons": "Follow new seasons"
   }
 }

@@ -74,6 +74,8 @@ const TITLE_ACTIONS = {
   'media.open-tracking': noop,
   'media.request': noop,
   'media.toggle-monitored': noop,
+  'media.stop-monitoring': noop,
+  'media.toggle-follow-new-seasons': noop,
   'media.edit-profiles': noop,
   'media.edit-library': noop,
   'media.delete': noop,
@@ -98,6 +100,8 @@ interface MediaFixture {
   episodeId?: number;
   selectedFileId: number | null;
   monitored: boolean;
+  monitoring?: 'none' | 'partial' | 'all';
+  followNewSeasons?: boolean | null;
   qualityProfileName: string | null;
   userHasOpenWholeRequest?: boolean;
   sharingDisabled?: boolean;
@@ -239,6 +243,8 @@ async function createFixture(
   if (media.download) fixture.componentRef.setInput('download', media.download);
   if (media.subtitles) fixture.componentRef.setInput('subtitles', media.subtitles);
   fixture.componentRef.setInput('monitored', media.monitored);
+  fixture.componentRef.setInput('monitoring', media.monitoring);
+  fixture.componentRef.setInput('followNewSeasons', media.followNewSeasons);
   fixture.componentRef.setInput('qualityProfileName', media.qualityProfileName);
   // Series-root watched state comes from `seriesFullyWatched`, not the playback-state
   // fetch - the component reads it directly when there's no episode context.
@@ -1138,5 +1144,33 @@ describe('DetailHeroComponent - a title with no video', () => {
     el.querySelector<HTMLButtonElement>('button[aria-label="playlists.add_to_playlist"]')!.click();
     expect(toggled).toHaveBeenCalled();
     expect(open).toHaveBeenCalledWith({ episodeId: 42 });
+  });
+});
+
+describe('detail hero: series monitoring', () => {
+  const base = { mediaType: 'series' as const, selectedFileId: null, monitored: true, qualityProfileName: 'HD-1080p' };
+  beforeEach(() => TestBed.resetTestingModule());
+
+  it('offers both monitor-all-seasons and stop-monitoring when partially monitored', async () => {
+    const shown = labels(await createFixture(OWNER, { ...base, monitoring: 'partial', followNewSeasons: true }));
+    expect(shown).toContain('media_detail.monitor_all_seasons');
+    expect(shown).toContain('media_detail.unmonitor');
+    expect(shown).not.toContain('media_detail.monitor');
+  });
+
+  it('offers only stop-monitoring when fully monitored', async () => {
+    const shown = labels(await createFixture(OWNER, { ...base, monitoring: 'all', followNewSeasons: true }));
+    expect(shown.filter((l) => l === 'media_detail.unmonitor').length).toBe(1);
+    expect(shown).not.toContain('media_detail.monitor_all_seasons');
+  });
+
+  it('shows the follow-new-seasons row only when the server reports the policy', async () => {
+    expect(labels(await createFixture(OWNER, { ...base, monitoring: 'none', followNewSeasons: false }))).toContain('media_detail.follow_new_seasons');
+    expect(labels(await createFixture(OWNER, base))).not.toContain('media_detail.follow_new_seasons');
+  });
+
+  it('shows the partial chip on a desktop layout', async () => {
+    const fixture = await createFixture(OWNER, { ...base, monitoring: 'partial' });
+    expect((fixture.componentInstance as unknown as { chips(): { label: string }[] }).chips().map((c) => c.label)).toContain('media_detail.monitored_partial');
   });
 });

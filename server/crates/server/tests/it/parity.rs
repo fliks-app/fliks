@@ -715,6 +715,8 @@ fn uses_stub(sc: &Value) -> bool {
 const ADDITIVE: &[&str] = &[
     "$..trackMarkers",
     "$.providers",
+    "$..monitoring",
+    "$..monitorNewSeasons",
     "$.fieldSources",
     "$..lastSearch",
     "$..identities",

@@ -52,6 +52,7 @@ pub(crate) async fn import_comic(
             user: Some(a.user.id).filter(|u| *u != 0),
             links: vec![],
             seasons: None,
+            follow_new_seasons: None,
             wants: None,
             prio: Priority::Interactive,
         },

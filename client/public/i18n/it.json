@@ -1486,7 +1486,10 @@
       "other": "Scartata"
     },
     "downloads_title": "Download",
-    "downloads_see_all": "Vedi tutto"
+    "downloads_see_all": "Vedi tutto",
+    "monitored_partial": "Monitorata in parte",
+    "monitor_all_seasons": "Monitora tutte le stagioni",
+    "follow_new_seasons": "Segui le nuove stagioni"
   },
   "requests": {
     "title": "Richieste",
@@ -4320,7 +4323,8 @@
     "remove_from_list": "Rimuovi da questa playlist",
     "actions": "Azioni",
     "chip_missing": "Mancante",
-    "chip_wanted": "Desiderato"
+    "chip_wanted": "Desiderato",
+    "monitored_partial": "Monitorata in parte"
   },
   "cast": {
     "error": {
@@ -6291,5 +6295,8 @@
     "go_to": "Mostra il titolo {{n}}",
     "play_episode": "Riproduci {{code}}",
     "resume_episode": "Riprendi {{code}}"
+  },
+  "add_dialog": {
+    "follow_new_seasons": "Segui le nuove stagioni"
   }
 }

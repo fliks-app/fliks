@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET \"monitorNewSeasons\" = $1 WHERE id = ANY($2) AND \"monitorNewSeasons\" IS DISTINCT FROM $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ca82436a5a73658da92ec9592f2517dcdaccb5462fcc0996d56f9ce20b4953a1"
+}

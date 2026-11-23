@@ -36,6 +36,8 @@ export interface MediaDetailHost {
   openIdentify(): void;
   deleteMedia(): Promise<void>;
   toggleMonitored(): Promise<void>;
+  setMonitored(monitored: boolean): Promise<void>;
+  setFollowNewSeasons(follow: boolean): Promise<void>;
   refreshMetadata(): Promise<void>;
 }
 

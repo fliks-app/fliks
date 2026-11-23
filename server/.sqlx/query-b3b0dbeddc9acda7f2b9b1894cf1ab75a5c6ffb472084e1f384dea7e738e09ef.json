@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT m.id, m.type AS \"media_type!\" FROM media m\n           WHERE m.id = ANY($1) AND m.monitored IS DISTINCT FROM $2",
+  "query": "SELECT m.id, m.type AS \"media_type!\", m.monitored AS was FROM media m\n           WHERE m.id = ANY($1) ORDER BY m.id FOR NO KEY UPDATE",
   "describe": {
     "columns": [
       {
@@ -24,18 +24,29 @@
             "name": "type"
           }
         }
+      },
+      {
+        "ordinal": 2,
+        "name": "was",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "monitored"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Int4Array",
-        "Bool"
+        "Int4Array"
       ]
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "f1231dc23efe4936e0e4c5b26741b00f0cf8ec162d17496740a85480b918efdd"
+  "hash": "b3b0dbeddc9acda7f2b9b1894cf1ab75a5c6ffb472084e1f384dea7e738e09ef"
 }

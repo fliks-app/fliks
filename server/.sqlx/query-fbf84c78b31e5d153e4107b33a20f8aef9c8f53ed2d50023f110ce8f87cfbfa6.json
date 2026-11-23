@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO items (\"groupId\", \"mediaId\", \"editionId\", \"number\", title, overview, \"airDate\", runtime, monitored)\n           SELECT $1, $7, $8, v.n, v.title, v.overview, v.air::date, v.runtime, g.monitored\n           FROM item_groups g, UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::int[])\n             AS v(n, title, overview, air, runtime)\n           WHERE g.id = $1 AND NOT EXISTS (SELECT 1 FROM items e WHERE e.\"groupId\" = $1 AND e.\"number\" = v.n)\n           ON CONFLICT (\"groupId\", \"number\") DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "Int4Array",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fbf84c78b31e5d153e4107b33a20f8aef9c8f53ed2d50023f110ce8f87cfbfa6"
+}

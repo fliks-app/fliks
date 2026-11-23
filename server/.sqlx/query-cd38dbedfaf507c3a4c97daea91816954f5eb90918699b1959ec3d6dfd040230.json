@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO items (\"groupId\", \"mediaId\", \"editionId\", \"number\", \"endNumber\", monitored)\n               SELECT $1, $2, $3, $4, $5, monitored FROM item_groups WHERE id = $1\n               ON CONFLICT (\"groupId\", \"number\") DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cd38dbedfaf507c3a4c97daea91816954f5eb90918699b1959ec3d6dfd040230"
+}

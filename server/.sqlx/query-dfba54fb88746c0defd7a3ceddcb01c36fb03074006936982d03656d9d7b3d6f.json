@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media SET \"monitorNewSeasons\" = monitored WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dfba54fb88746c0defd7a3ceddcb01c36fb03074006936982d03656d9d7b3d6f"
+}

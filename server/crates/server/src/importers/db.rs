@@ -113,9 +113,9 @@ pub struct NewMedia<'a> {
 pub async fn insert_media(db: &PgPool, m: &NewMedia<'_>) -> Result<i32, WriteError> {
     let mut tx = db.begin().await?;
     let id = sqlx::query_scalar!(
-        r#"INSERT INTO media (title, year, type, status, monitored, "libraryId", "folderName",
+        r#"INSERT INTO media (title, year, type, status, monitored, "monitorNewSeasons", "libraryId", "folderName",
                               overview)
-           VALUES ($1, $2, $3, $4::text::media_status_enum, $5, $6, $7, $8)
+           VALUES ($1, $2, $3, $4::text::media_status_enum, $5, $5, $6, $7, $8)
            RETURNING id"#,
         m.title,
         m.year,

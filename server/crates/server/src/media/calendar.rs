@@ -122,7 +122,7 @@ FROM items ep
 INNER JOIN item_groups season ON season.id = ep."groupId"
 INNER JOIN media media ON media.id = season."mediaId"
 WHERE ep."airDate" BETWEEN $1::text::date AND $2::text::date
-  AND ($3::bool IS NOT TRUE OR (media.monitored = true AND ep.monitored = true))
+  AND ($3::bool IS NOT TRUE OR (media.monitored = true AND season.monitored = true AND ep.monitored = true))
   AND ($4::int IS NULL OR media."addedById" = $4)
   AND media."libraryId" = ANY($5)
 ORDER BY ep."airDate" ASC, ep.id ASC"#,

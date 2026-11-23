@@ -49,6 +49,7 @@ mod remote;
 mod requests;
 mod roles;
 mod routes;
+mod series_monitoring;
 mod session;
 mod settings;
 mod smart_playlists;

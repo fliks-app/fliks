@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media (title, \"originalTitle\", \"alternativeTitles\", year, type,\n             overview, status, \"posterUrl\", \"fanartUrl\", \"logoUrl\", rating, genres, runtime,\n             monitored, \"monitorNewSeasons\", \"metadataRefreshedAt\", \"languageProfileId\", \"libraryId\",\n             \"folderName\", \"addedById\")\n           VALUES ($1, $2, $3, $4, $5, $6, $7::text::media_status_enum, $8, $9,\n             $10, $11, $12, $13,\n             true, $18, now(), $14, $15, NULLIF($16, ''), $17)\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Jsonb",
+        "Int4",
+        "Text",
+        "Text",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Float8",
+        "Jsonb",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Text",
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b983a4ef800542a8549f8d6c716e225bae170fe7ae67d448362d8824d12efd95"
+}

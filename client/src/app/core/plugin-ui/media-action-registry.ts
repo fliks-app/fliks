@@ -14,6 +14,8 @@ export type CoreMediaActionId =
   | 'media.analyze'
   | 'media.optimize'
   | 'media.toggle-monitored'
+  | 'media.stop-monitoring'
+  | 'media.toggle-follow-new-seasons'
   | 'media.delete'
   | 'media.toggle-like'
   | 'media.download'
@@ -64,6 +66,8 @@ const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.analyze',
   'media.optimize',
   'media.toggle-monitored',
+  'media.stop-monitoring',
+  'media.toggle-follow-new-seasons',
   'media.delete',
   'media.request-deletion',
   'media.report-problem',

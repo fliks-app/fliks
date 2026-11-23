@@ -79,6 +79,13 @@ export class AddDialogComponent {
   protected readonly selectedSeasons = signal<Set<number>>(new Set());
   protected readonly seasonsLoading = signal(false);
   protected readonly seasonsFailed = signal(false);
+  private readonly followOverride = signal<boolean | null>(null);
+  /** Preset: no season picked, or the picked ones include the latest known season; the user's tick wins. */
+  protected readonly followNewSeasons = computed(() => {
+    const picked = this.selectedSeasons();
+    const latest = Math.max(...this.seasons().map((s) => s.seasonNumber), 0);
+    return this.followOverride() ?? (picked.size === 0 || picked.has(latest));
+  });
   private readonly allowances = signal<RequestAllowance | null>(null);
   protected readonly kind = computed<MediaType>(() => this.req()?.kind ?? 'movie');
   protected readonly hasSeasons = computed(() => kindOf(this.kind()).hasSeasons);
@@ -153,6 +160,7 @@ export class AddDialogComponent {
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());
     this.seasonsFailed.set(false);
+    this.followOverride.set(null);
     this.wants.set([{ family: 'text', language: null }]);
     this.allowances.set(null);
   }
@@ -226,6 +234,10 @@ export class AddDialogComponent {
       })
       .catch(() => this.seasonsFailed.set(true))
       .finally(() => this.seasonsLoading.set(false));
+  }
+
+  protected toggleFollowNewSeasons() {
+    this.followOverride.set(!this.followNewSeasons());
   }
 
   protected toggleSeason(n: number) {
@@ -308,6 +320,7 @@ export class AddDialogComponent {
           languageProfileId: this.languageId() ?? undefined,
           ...place,
           ...(this.hasSeasons() && !this.seasonsFailed() ? { monitoredSeasons: [...this.selectedSeasons()].sort((a, b) => a - b) } : {}),
+          ...(kindOf(r.kind).hasSeasons ? { monitorNewSeasons: this.followNewSeasons() } : {}),
         });
         return saved.id;
       }

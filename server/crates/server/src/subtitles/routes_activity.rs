@@ -299,7 +299,7 @@ pub async fn missing(
              FROM media m
              JOIN language_profiles lp ON lp.id = m."languageProfileId"
              CROSS JOIN LATERAL jsonb_array_elements(lp."subtitleLanguages") AS lang
-             WHERE m.monitored = true AND lang->>'isoCode' IS NOT NULL
+             WHERE lang->>'isoCode' IS NOT NULL
                AND ($4::int[] IS NULL OR m."libraryId" = ANY($4))
            )
            SELECT r.media_id, r.media_title, r.media_type, r.language, r.forced, f.id AS file_id,

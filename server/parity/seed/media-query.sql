@@ -151,10 +151,11 @@ INSERT INTO item_groups (id, "createdAt", "updatedAt", "number", monitored, "med
  (10, '2026-01-01', '2026-01-01', 1, true, 44, NULL, NULL, NULL),
  (11, '2026-01-01', '2026-01-01', 2, true, 44, NULL, NULL, NULL),
  (12, '2026-01-01', '2026-01-01', 1, true, 45, NULL, NULL, NULL),
- (13, '2026-01-01', '2026-01-01', 1, true, 46, NULL, NULL, NULL),
+ (13, '2026-01-01', '2026-01-01', 1, false, 46, NULL, NULL, NULL),
  (14, '2026-01-01', '2026-01-01', 1, true, 47, NULL, NULL, NULL),
  (15, '2026-01-01', '2026-01-01', 0, true, 47, NULL, NULL, NULL),
  (16, '2026-01-01', '2026-01-01', 2, true, 47, NULL, NULL, NULL);
+UPDATE media SET "monitorNewSeasons" = false WHERE id = 46;
 INSERT INTO items (id, "createdAt", "updatedAt", "number", "endNumber", title, "airDate", runtime, monitored, "stillUrl", "markersScannedAt", "groupId", "mediaId", "editionId") VALUES
  (13, '2026-01-01', '2026-01-01', 1, 2, 'Episode 1', '2000-01-01', 45, true, '/api/images/43/still-1', '2026-01-10T00:00:00Z', 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),
  (14, '2026-01-01', '2026-01-01', 2, NULL, 'Episode 2', '2000-01-01', NULL, true, NULL, NULL, 7, 43, (SELECT id FROM editions WHERE "mediaId" = 43)),

@@ -948,30 +948,61 @@ pub async fn monitored_seasons(db: &PgPool, media_id: i32, season: i64) -> sqlx:
     Ok(nums.into_iter().map(i64::from).collect())
 }
 
-/// Whole media monitored, and the listed seasons of a series (`applyMonitoredForRequestScope`).
+/// Whole media monitored; a series gets its seasons and its new-seasons policy instead (`applyMonitoredForRequestScope`).
 pub async fn monitor_scope(
     db: &PgPool,
     media_id: i32,
     seasons: Option<&[i64]>,
 ) -> sqlx::Result<()> {
-    sqlx::query!(
-        "UPDATE media SET monitored = true WHERE id = $1 AND NOT monitored",
+    let mut tx = db.begin().await?;
+    let kind = sqlx::query_scalar!(
+        "SELECT type FROM media WHERE id = $1 FOR NO KEY UPDATE",
         media_id
     )
-    .execute(db)
+    .fetch_optional(&mut *tx)
     .await?;
-    if let Some(s) = seasons.filter(|s| !s.is_empty()) {
-        let nums: Vec<i32> = s.iter().filter_map(|n| i32::try_from(*n).ok()).collect();
+    if kind.as_deref() != Some("series") {
         sqlx::query!(
-            r#"UPDATE item_groups SET monitored = true
-            WHERE "mediaId" = $1 AND "number" = ANY($2) AND NOT monitored"#,
-            media_id,
-            &nums
+            "UPDATE media SET monitored = true WHERE id = $1 AND NOT monitored",
+            media_id
         )
-        .execute(db)
+        .execute(&mut *tx)
+        .await?;
+        return tx.commit().await;
+    }
+    let scope = seasons.filter(|s| !s.is_empty());
+    let nums: Vec<i32> = scope
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|n| i32::try_from(*n).ok())
+        .collect();
+    let latest = sqlx::query_scalar!(
+        r#"SELECT MAX("number") FROM item_groups WHERE "mediaId" = $1"#,
+        media_id
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query!(
+        r#"WITH flipped AS (
+             UPDATE item_groups SET monitored = true
+             WHERE "mediaId" = $1 AND NOT monitored AND ($2::boolean AND "number" > 0 OR "number" = ANY($3))
+             RETURNING id)
+           UPDATE items SET monitored = true WHERE "groupId" IN (SELECT id FROM flipped)"#,
+        media_id,
+        scope.is_none(),
+        &nums
+    )
+    .execute(&mut *tx)
+    .await?;
+    if scope.is_none() || latest.is_none_or(|l| nums.contains(&l)) {
+        sqlx::query!(
+            r#"UPDATE media SET "monitorNewSeasons" = true WHERE id = $1 AND NOT "monitorNewSeasons""#,
+            media_id
+        )
+        .execute(&mut *tx)
         .await?;
     }
-    Ok(())
+    tx.commit().await
 }
 
 /// Episodes of a media, for the coverage check of `onImportComplete`.
@@ -1291,7 +1322,7 @@ pub async fn lock_media_holding(
     t: &TitleKey,
 ) -> sqlx::Result<bool> {
     sqlx::query_scalar(
-        r#"SELECT EXISTS (SELECT 1 FROM (SELECT id FROM media WHERE id = $1 FOR UPDATE) m
+        r#"SELECT EXISTS (SELECT 1 FROM (SELECT id FROM media WHERE id = $1 FOR NO KEY UPDATE) m
              JOIN media_external_ids e ON e."mediaId" = m.id
              WHERE e.kind = $2 AND e.provider = $3 AND e.value = $4)"#,
     )

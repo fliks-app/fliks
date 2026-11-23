@@ -127,6 +127,7 @@ pub struct Import {
     pub language_profile_id: Option<i32>,
     pub added_by: Option<i32>,
     pub monitored_seasons: Option<Vec<i32>>,
+    pub follow_new_seasons: Option<bool>,
     /// Ids linked to the new media before it is announced.
     pub links: Vec<(Namespace, String)>,
 }
@@ -191,8 +192,14 @@ pub async fn import_title(
         let scope = imp.monitored_seasons.clone().filter(|s| !s.is_empty());
         for sd in &found.seasons {
             let n = sd.season_number;
-            let monitored = scope.as_ref().map_or(n > 0, |s| s.contains(&n));
-            let (sid, _) = crate::media::items::ensure_group(&mut tx, id, n, monitored).await?;
+            let (sid, _) = crate::media::items::ensure_group(&mut tx, id, n).await?;
+            sqlx::query!(
+                "UPDATE item_groups SET monitored = $2 WHERE id = $1 AND monitored IS DISTINCT FROM $2",
+                sid,
+                scope.as_ref().map_or(n > 0, |s| s.contains(&n))
+            )
+            .execute(&mut *tx)
+            .await?;
             stills.push((
                 sid,
                 refresh::apply_season(&mut tx, sid, sd).await?,
@@ -368,14 +375,19 @@ async fn insert_media(
     folder: &str,
 ) -> Result<(i32, bool), sqlx::Error> {
     let d = &found.details;
+    let scope = imp.monitored_seasons.as_ref().filter(|s| !s.is_empty());
+    let latest = found.seasons.iter().map(|s| s.season_number).max();
+    let follow = imp
+        .follow_new_seasons
+        .unwrap_or_else(|| scope.is_none_or(|s| latest.is_none_or(|l| s.contains(&l))));
     let id = sqlx::query_scalar!(
         r#"INSERT INTO media (title, "originalTitle", "alternativeTitles", year, type,
              overview, status, "posterUrl", "fanartUrl", "logoUrl", rating, genres, runtime,
-             monitored, "metadataRefreshedAt", "languageProfileId", "libraryId",
+             monitored, "monitorNewSeasons", "metadataRefreshedAt", "languageProfileId", "libraryId",
              "folderName", "addedById")
            VALUES ($1, $2, $3, $4, $5, $6, $7::text::media_status_enum, $8, $9,
              $10, $11, $12, $13,
-             true, now(), $14, $15, NULLIF($16, ''), $17)
+             true, $18, now(), $14, $15, NULLIF($16, ''), $17)
            RETURNING id"#,
         d.title,
         d.original_title.clone().unwrap_or_else(|| d.title.clone()),
@@ -393,7 +405,8 @@ async fn insert_media(
         imp.language_profile_id,
         imp.library_id,
         folder,
-        imp.added_by.filter(|u| *u != 0)
+        imp.added_by.filter(|u| *u != 0),
+        follow
     )
     .fetch_one(&mut *tx)
     .await?;
@@ -477,6 +490,7 @@ pub async fn import_in(
             user: added_by,
             links,
             seasons,
+            follow_new_seasons: None,
             wants: None,
             prio: Priority::Interactive,
         },
@@ -555,9 +569,9 @@ pub async fn create_unmatched(st: &AppState, u: Unmatched, added_by: i32) -> Res
     let title = u.title;
     let mut tx = st.db.begin().await?;
     let id = sqlx::query_scalar!(
-        r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "alternativeTitles",
+        r#"INSERT INTO media (title, "originalTitle", year, type, status, monitored, "monitorNewSeasons", "alternativeTitles",
              genres, "libraryId", "folderName", "languageProfileId", "addedById")
-           VALUES ($1, $1, $2, $3, 'released', false, '[]', '[]', $4, $5, $6, $7)
+           VALUES ($1, $1, $2, $3, 'released', false, false, '[]', '[]', $4, $5, $6, $7)
            RETURNING id"#,
         title,
         u.year,

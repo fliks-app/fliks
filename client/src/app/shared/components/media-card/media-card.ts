@@ -738,7 +738,10 @@ export class MediaCardComponent {
     if (!s) return null;
     switch (s) {
       case 'missing-monitored':
-        return { text: this.translate.instant('media_card.monitored'), class: 'badge-warning' };
+        return {
+          text: this.translate.instant(this.media()?.monitoring === 'partial' ? 'media_card.monitored_partial' : 'media_card.monitored'),
+          class: 'badge-warning',
+        };
       case 'missing-unmonitored':
         return { text: this.translate.instant('media_card.unmonitored'), class: 'badge-error' };
       case 'unreleased':

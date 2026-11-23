@@ -204,6 +204,7 @@ pub(super) async fn import(
                     user: Some(user),
                     links: vec![],
                     seasons: None,
+                    follow_new_seasons: None,
                     wants: Some(&specs),
                     prio: Priority::Background,
                 },

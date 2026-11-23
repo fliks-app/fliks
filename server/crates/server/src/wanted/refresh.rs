@@ -423,6 +423,7 @@ async fn add_album(
             user: Some(job.user),
             links: vec![],
             seasons: None,
+            follow_new_seasons: None,
             wants: Some(specs),
             prio: BACKGROUND,
         },

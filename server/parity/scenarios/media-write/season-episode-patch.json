@@ -49,7 +49,7 @@
             "logoUrl": null,
             "metadata": null,
             "minimumAvailability": "released",
-            "monitored": true,
+            "monitored": false,
             "originalTitle": null,
             "overview": "Work show",
             "path": "/tmp/fliks-parity/s5-ingest/work/series/Work Show",

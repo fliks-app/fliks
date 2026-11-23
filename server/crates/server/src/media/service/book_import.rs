@@ -107,6 +107,7 @@ pub(crate) async fn import_book(
             user: Some(a.user.id).filter(|u| *u != 0),
             links: vec![],
             seasons: None,
+            follow_new_seasons: None,
             wants: wants.as_deref(),
             prio: Priority::Interactive,
         },

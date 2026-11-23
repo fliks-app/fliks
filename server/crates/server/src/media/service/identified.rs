@@ -46,6 +46,8 @@ pub struct Creation<'a> {
     pub links: Vec<(Namespace, String)>,
     /// Series only: the seasons to monitor, every one but the specials when unset.
     pub seasons: Option<Vec<i32>>,
+    /// Series only: whether new seasons are monitored; unset, true unless `seasons` leaves out the latest one.
+    pub follow_new_seasons: Option<bool>,
     /// Book only: the wants, one per family when unset.
     pub wants: Option<&'a [WantSpec]>,
     pub prio: Priority,
@@ -77,6 +79,7 @@ pub async fn create_identified(st: &AppState, c: &Creation<'_>) -> Result<i32, A
                 .await?,
                 added_by: c.user,
                 monitored_seasons: c.seasons.clone(),
+                follow_new_seasons: c.follow_new_seasons,
                 links: c.links.clone(),
             };
             import_title(st, Some(ns.as_str().into()), value.to_owned(), imp, c.prio).await

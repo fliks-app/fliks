@@ -254,20 +254,24 @@ describe('MediaDetailSeasonsComponent — unreleased greyscale', () => {
 });
 
 describe('MediaDetailSeasonsComponent — episode dimming', () => {
-  const episode = (monitored: boolean) => ({ id: 1, monitored }) as Episode;
+  const ep = (monitored: boolean) => ({ id: 1, monitored }) as Episode;
+  const withSeason = (seasonMonitored: boolean, seriesMonitoring: Media['monitoring'] = 'partial') => {
+    const season = { ...SEASON, monitored: seasonMonitored, episodes: [ep(false)] };
+    return makeMedia({ monitored: true, monitoring: seriesMonitoring, seasons: [season] });
+  };
 
-  it('dims an unmonitored episode of a monitored series', async () => {
-    const fixture = await createFixture({ media: makeMedia({ monitored: true }) });
-    expect(fixture.componentInstance.episodeDimmed(episode(false))).toBe(true);
+  it('dims an unmonitored episode of a monitored season', async () => {
+    const fixture = await createFixture({ media: withSeason(true) });
+    expect(fixture.componentInstance.episodeDimmed(ep(false))).toBe(true);
   });
 
   it('leaves a monitored episode alone', async () => {
-    const fixture = await createFixture({ media: makeMedia({ monitored: true }) });
-    expect(fixture.componentInstance.episodeDimmed(episode(true))).toBe(false);
+    const fixture = await createFixture({ media: withSeason(true) });
+    expect(fixture.componentInstance.episodeDimmed(ep(true))).toBe(false);
   });
 
-  it('VERDICT: dims nothing when the series itself is unmonitored, where every row would dim', async () => {
-    const fixture = await createFixture({ media: makeMedia({ monitored: false }) });
-    expect(fixture.componentInstance.episodeDimmed(episode(false))).toBe(false);
+  it('dims nothing in an unmonitored season, even when the series is partially monitored', async () => {
+    const fixture = await createFixture({ media: withSeason(false) });
+    expect(fixture.componentInstance.episodeDimmed(ep(false))).toBe(false);
   });
 });

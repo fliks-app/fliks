@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH flipped AS (\n             UPDATE item_groups SET monitored = true\n             WHERE \"mediaId\" = $1 AND NOT monitored AND ($2::boolean AND \"number\" > 0 OR \"number\" = ANY($3))\n             RETURNING id)\n           UPDATE items SET monitored = true WHERE \"groupId\" IN (SELECT id FROM flipped)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool",
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "10002d9a5b6ad94443c3a3cbae2bd77d0720d9bffd476564d1668e92ab5660e9"
+}

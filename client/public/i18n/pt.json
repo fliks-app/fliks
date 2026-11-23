@@ -1486,7 +1486,10 @@
       "other": "Preterida"
     },
     "downloads_title": "Transferências",
-    "downloads_see_all": "Ver tudo"
+    "downloads_see_all": "Ver tudo",
+    "monitored_partial": "Parcialmente monitorizada",
+    "monitor_all_seasons": "Monitorizar todas as temporadas",
+    "follow_new_seasons": "Seguir as novas temporadas"
   },
   "requests": {
     "title": "Pedidos",
@@ -4320,7 +4323,8 @@
     "remove_from_list": "Remover desta lista",
     "actions": "Ações",
     "chip_missing": "Em falta",
-    "chip_wanted": "Desejado"
+    "chip_wanted": "Desejado",
+    "monitored_partial": "Parcialmente monitorizada"
   },
   "cast": {
     "error": {
@@ -6291,5 +6295,8 @@
     "go_to": "Mostrar o título {{n}}",
     "play_episode": "Reproduzir {{code}}",
     "resume_episode": "Retomar {{code}}"
+  },
+  "add_dialog": {
+    "follow_new_seasons": "Seguir as novas temporadas"
   }
 }

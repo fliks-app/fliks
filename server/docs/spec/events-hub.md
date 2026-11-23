@@ -189,7 +189,7 @@ Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent`
 | Event | Payload |
 |---|---|
 | `media.imported` | `{mediaId: number, externalIds: ExternalId[], mediaType: string, libraryId: number|null, addedByUserId: number|null}` |
-| `media.monitored.changed` | `{mediaId: number, monitored: boolean}` |
+| `media.monitored.changed` | `{mediaId: number, monitored: boolean}` (also fired when a season write, a refresh or a rescan flips the derived flag of a series) |
 | `media.season.monitored.changed` | `{mediaId: number, seasonNumber: number, monitored: boolean}` |
 | `media.removed` | `{mediaId: number, externalIds: ExternalId[], mediaType: string}` |
 | `media.files.imported` | `{mediaId: number, family: 'video'|'audio'|'text'|'image', seasonNumber?: number, episodeNumber?: number, episodes?: {seasonNumber: number, episodeNumber: number}[], source: 'download'|'disk'}` |
