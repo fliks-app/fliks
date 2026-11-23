@@ -1,83 +1,87 @@
 <div
   class="min-h-screen flex items-center justify-center bg-base-200 px-4 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]"
 >
-  <div class="card w-full max-w-sm bg-base-100 shadow-xl">
-    <div class="card-body gap-5 p-6 sm:p-8">
-      <img src="fliks-logo-ondark.svg" alt="{{ 'app.name' | translate }}" class="h-12 w-auto mx-auto mb-2" />
+  <div class="flex w-full max-w-sm flex-col items-center gap-4">
+    <div class="card w-full bg-base-100 shadow-xl">
+      <div class="card-body gap-5 p-6 sm:p-8">
+        <img src="fliks-logo-ondark.svg" alt="{{ 'app.name' | translate }}" class="h-12 w-auto mx-auto mb-2" />
 
-      @if (error()) {
-        <div role="alert" class="alert alert-error">
-          <span>{{ error() }}</span>
-        </div>
-      }
+        @if (error()) {
+          <div role="alert" class="alert alert-error">
+            <span>{{ error() }}</span>
+          </div>
+        }
 
-      @if (passwordFolded()) {
-        <div class="flex flex-col gap-2">
-          <app-sso-buttons />
-          <button type="button" class="btn btn-ghost btn-sm" data-testid="admin-sign-in" (click)="adminSignIn.set(true)">
-            {{ 'login.admin_sign_in' | translate }}
-          </button>
-        </div>
-      } @else {
-        <form class="flex flex-col gap-3" [formGroup]="form" (ngSubmit)="onSubmit()">
-          <fieldset class="fieldset p-0">
-            <label class="fieldset-label" for="username">{{ 'login.username' | translate }}</label>
-            <input
-              id="username"
-              type="text"
-              class="input input-bordered w-full"
-              formControlName="username"
-              autocomplete="username"
-              autocapitalize="none"
-              autocorrect="off"
-              spellcheck="false"
-              [readOnly]="usernameLocked"
-            />
-          </fieldset>
-
-          <fieldset class="fieldset p-0">
-            <label class="fieldset-label" for="password">{{ 'login.password' | translate }}</label>
-            <input
-              id="password"
-              type="password"
-              class="input input-bordered w-full"
-              formControlName="password"
-              autocomplete="current-password"
-            />
-          </fieldset>
-
-          <button type="submit" class="btn btn-primary w-full mt-3" [disabled]="loading()">
-            @if (loading()) {
-              <span class="loading loading-spinner loading-sm"></span>
-            }
-            {{ 'login.submit' | translate }}
-          </button>
-        </form>
-
-        <div class="divider my-0 text-sm text-base-content/60">{{ 'login.or' | translate }}</div>
-        <div class="flex flex-col gap-2">
-          <app-sso-buttons />
-          <button type="button" class="btn btn-outline w-full gap-2" (click)="goToQuickConnect()">
-            <svg [lucideIcon]="icons.MonitorSmartphone" class="h-5 w-5"></svg>
-            {{ 'select_user.use_quick_connect' | translate }}
-          </button>
-        </div>
-      }
-
-      @if (canPickUser() || isNative) {
-        <div class="flex flex-wrap justify-center gap-1 border-t border-base-content/10 pt-3">
-          @if (canPickUser()) {
-            <button type="button" class="btn btn-ghost btn-sm" (click)="goToSelectUser()">
-              {{ 'login.back_to_picker' | translate }}
+        @if (passwordFolded()) {
+          <div class="flex flex-col gap-2">
+            <app-sso-buttons />
+            <button type="button" class="btn btn-ghost btn-sm" data-testid="admin-sign-in" (click)="adminSignIn.set(true)">
+              {{ 'login.admin_sign_in' | translate }}
             </button>
-          }
-          @if (isNative) {
-            <button type="button" class="btn btn-ghost btn-sm" (click)="changeServer()">
-              {{ 'nav.change_server' | translate }}
+          </div>
+        } @else {
+          <form class="flex flex-col gap-3" [formGroup]="form" (ngSubmit)="onSubmit()">
+            <fieldset class="fieldset p-0">
+              <label class="fieldset-label" for="username">{{ 'login.username' | translate }}</label>
+              <input
+                id="username"
+                type="text"
+                class="input input-bordered w-full read-only:bg-base-200 read-only:text-base-content/60 read-only:cursor-default"
+                formControlName="username"
+                autocomplete="username"
+                autocapitalize="none"
+                autocorrect="off"
+                spellcheck="false"
+                [readOnly]="usernameLocked"
+              />
+            </fieldset>
+
+            <fieldset class="fieldset p-0">
+              <label class="fieldset-label" for="password">{{ 'login.password' | translate }}</label>
+              <input
+                id="password"
+                type="password"
+                class="input input-bordered w-full"
+                formControlName="password"
+                autocomplete="current-password"
+              />
+            </fieldset>
+
+            <button type="submit" class="btn btn-primary w-full mt-3" [disabled]="loading()">
+              @if (loading()) {
+                <span class="loading loading-spinner loading-sm"></span>
+              }
+              {{ 'login.submit' | translate }}
             </button>
-          }
-        </div>
-      }
+          </form>
+
+          <div class="divider my-0 text-sm text-base-content/60">{{ 'login.or' | translate }}</div>
+          <div class="flex flex-col gap-2">
+            <app-sso-buttons />
+            <button type="button" class="btn btn-outline w-full gap-2" (click)="goToQuickConnect()">
+              <svg [lucideIcon]="icons.MonitorSmartphone" class="h-5 w-5"></svg>
+              {{ 'select_user.use_quick_connect' | translate }}
+            </button>
+          </div>
+        }
+
+        @if (usernameLocked && canPickUser()) {
+          <button type="button" class="btn btn-ghost btn-sm self-center" (click)="goToSelectUser()">
+            {{ 'login.back_to_picker' | translate }}
+          </button>
+        }
+      </div>
     </div>
+
+    @if (isNative) {
+      <button type="button" class="btn btn-ghost btn-sm gap-2 text-base-content/70" (click)="changeServer()">
+        <svg [lucideIcon]="icons.Server" class="h-4 w-4"></svg>
+        @if (serverHost(); as host) {
+          <span class="truncate max-w-48">{{ host }}</span>
+          <span aria-hidden="true">·</span>
+        }
+        {{ 'nav.change_server' | translate }}
+      </button>
+    }
   </div>
 </div>
