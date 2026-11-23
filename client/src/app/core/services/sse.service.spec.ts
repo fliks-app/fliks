@@ -339,7 +339,7 @@ describe('SseService: resume refresh', () => {
   }
 
   const redial = (h: ReturnType<typeof dialled>, stream: { readyState: number }, lastMessageAt: number) => {
-    h.raw.eventSource = stream;
+    h.raw.eventSource = { ...stream, close: () => {} };
     h.raw.lastMessageAt = lastMessageAt;
     h.sse.resume();
     h.raw.ingest('{"type":"sse.connected","connectionId":"b"}');
