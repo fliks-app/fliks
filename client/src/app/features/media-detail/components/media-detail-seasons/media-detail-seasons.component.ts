@@ -1,12 +1,14 @@
 import type { CardAction } from '../../../../core/services/card-actions.service';
 import {
   Component,
+  ElementRef,
   computed,
   effect,
   inject,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet, UpperCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
@@ -362,7 +364,21 @@ export class MediaDetailSeasonsComponent {
     );
   }
 
+  private readonly seasonNav = viewChild<ElementRef<HTMLElement>>('seasonNav');
+
   constructor() {
+    effect(() => {
+      const nav = this.seasonNav()?.nativeElement;
+      if (!nav || this.activeSeasonId() == null) return;
+      requestAnimationFrame(() => {
+        const row = nav.querySelector<HTMLElement>('[aria-current="true"]');
+        if (!row) return;
+        const top = row.offsetTop;
+        if (top < nav.scrollTop || top + row.offsetHeight > nav.scrollTop + nav.clientHeight) {
+          nav.scrollTop = top - (nav.clientHeight - row.offsetHeight) / 2;
+        }
+      });
+    });
     effect(() => {
       const id = this.centerTarget();
       if (id == null) return;
