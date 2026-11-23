@@ -15,10 +15,11 @@
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#1d232a">
-  <!-- Pre-paint navy bg avoids the white flash before styles.css; :where() keeps zero specificity so daisyUI overrides it. -->
+  <!-- Pre-paint navy bg avoids the white flash before styles.css. Unlayered, it beats daisyUI's base layer, so it
+       repeats daisyUI's own value: the scroll-lock dim must reach the scrollbar gutter. -->
   <style>
     html, body { margin: 0; }
-    :where(html) { background-color: #1d232a; }
+    :where(html) { background-color: var(--page-scroll-bg, var(--root-bg, #1d232a)); }
   </style>
   <!-- Request art falls back to the TMDB CDN for rows without stored local
        images — pre-open the connection so that first fetch skips DNS+TLS. -->
