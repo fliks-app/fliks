@@ -1,3 +1,6 @@
 FLIKS_CAST_APP_ID = 66BF4DAE
+// Installs next to the release app; APNs only delivers to the release id.
+FLIKS_APP_ID = media.fliks.app.debug
+FLIKS_APP_NAME = Fliks Debug
 // Written by client/scripts/cast-app-id.mjs from the repo's .env.local.
 #include? "Local.xcconfig"
