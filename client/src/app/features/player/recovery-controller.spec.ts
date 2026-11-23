@@ -28,7 +28,7 @@ function setup(overrides: Record<string, unknown> = {}) {
     showFailure: vi.fn(() => (carded = true)),
     tryFallback: vi.fn(() => false),
     abandonReload: vi.fn(),
-    reloadSession: vi.fn(async () => true),
+    reloadSession: vi.fn(async (): Promise<'done' | 'superseded'> => 'done'),
     warmSession: vi.fn(async () => {}),
     beat: vi.fn(async () => {}),
     dropStall: vi.fn(() => null),
@@ -96,6 +96,26 @@ describe('RecoveryController', () => {
     await vi.advanceTimersByTimeAsync(2_000);
     await vi.advanceTimersByTimeAsync(4_000);
     expect(host.reloadSession).toHaveBeenCalledTimes(3);
+    expect(engine.unload).toHaveBeenCalled();
+    expect(host.showFailure).toHaveBeenCalledExactlyOnceWith({ thrown: new Error('gone') });
+  });
+
+  it('a superseded reload spends no attempt and reports nothing; a later recovery still gets three', async () => {
+    const reloadSession = vi.fn(async (): Promise<'done' | 'superseded'> => 'superseded');
+    const { ctl, host, engine } = setup({ reloadSession });
+    for (let i = 0; i < 5; i++) await ctl.recoverFromLostSession('stall');
+    expect(reloadSession).toHaveBeenCalledTimes(5);
+    expect(host.reportRecovery).not.toHaveBeenCalled();
+    expect(host.setRecovering).toHaveBeenLastCalledWith(false);
+    expect(host.showFailure).not.toHaveBeenCalled();
+    ctl.checkStall();
+    expect(host.showFailure).not.toHaveBeenCalled();
+
+    reloadSession.mockImplementation(async () => { throw new Error('gone'); });
+    await ctl.recoverFromLostSession('stall');
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(reloadSession).toHaveBeenCalledTimes(8);
     expect(engine.unload).toHaveBeenCalled();
     expect(host.showFailure).toHaveBeenCalledExactlyOnceWith({ thrown: new Error('gone') });
   });

@@ -23,7 +23,7 @@ export interface RecoveryHost {
   /** The tab or app is in the background. */
   isHidden(): boolean;
   isLoading(): boolean;
-  /** A user reload (switch, episode swap, far seek) owns the engine. */
+  /** A load (launch, reload, switch, recovery) owns the engine. */
   reloadInFlight(): boolean;
   /** The last seek or settled reload: ffmpeg may still be respawning for either. */
   lastSeekOrReloadAt(): number;
@@ -36,10 +36,10 @@ export interface RecoveryHost {
   showFailure(failure: PlaybackFailure): void;
   /** Reloads with a fallback stream for an error the current copy can't play; false when none applies. */
   tryFallback(e: EngineError): boolean;
-  /** Drops the hold of a reload left hanging, so the next load can clear the spinner. */
+  /** Ends the load left hanging, so the next one can clear the spinner. */
   abandonReload(): void;
-  /** Mint a fresh session and reload the engine at `pos`. */
-  reloadSession(pos: number): Promise<unknown>;
+  /** Mint a fresh session and reload the engine at `pos`; `superseded` when another load owns the session. */
+  reloadSession(pos: number): Promise<'done' | 'superseded'>;
   /** Refresh the stream token, then warm the live session; best effort. */
   warmSession(): Promise<void>;
   /** Push one heartbeat now. */
@@ -317,7 +317,16 @@ export class RecoveryController {
     const pos = this.host.resumePosition();
     const gen = this.gen;
     try {
-      await this.host.reloadSession(pos);
+      if ((await this.host.reloadSession(pos)) === 'superseded') {
+        // The load that took the session reports its own outcome: no attempt spent.
+        if (gen === this.gen) {
+          this.attempts -= 1;
+          this.host.setRecovering(false);
+          this.episode = null;
+          this.deadlineAt = 0;
+        }
+        return;
+      }
       if (gen !== this.gen) return;
       const episode = this.episode;
       this.episode = null;

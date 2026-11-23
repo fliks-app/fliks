@@ -86,8 +86,21 @@ function buildPi(mediaFileId: number, overrides: Partial<PlaybackInfoResponse> =
 function fakeEngine() {
   const loadCalls: { url: string; startTime?: number; mimeType?: string }[] = [];
   const handlers = new Map<string, Set<(data: any) => void>>();
+  let gate: Promise<void> | null = null;
   return {
     loadCalls,
+    /** The next loads start (`loadCalls`) but settle only on `release()` or `fail()`. */
+    holdLoads() {
+      let release!: () => void;
+      let fail!: (e: unknown) => void;
+      const held = new Promise<void>((res, rej) => ((release = res), (fail = rej)));
+      held.catch(() => {});
+      gate = held;
+      return {
+        release: () => ((gate = null), release()),
+        fail: (e: unknown) => ((gate = null), fail(e)),
+      };
+    },
     currentTime: 0,
     duration: 100,
     muted: false,
@@ -96,9 +109,11 @@ function fakeEngine() {
     unload: vi.fn(async () => {}),
     load: vi.fn(async (url: string, startTime?: number, mimeType?: string) => {
       loadCalls.push({ url, startTime, mimeType });
+      await gate;
     }),
     play: vi.fn(async () => {}),
     pause: vi.fn(async () => {}),
+    seek: vi.fn(async (_t: number) => {}),
     destroy: vi.fn(async () => {}),
     selectAudioTrack: vi.fn(async (_id: string) => {}),
     getAudioTracks: vi.fn(() => [] as any[]),
@@ -142,12 +157,33 @@ const MOVIE: Media = {
   files: [{ id: MAIN_FILE_ID, quality: '1080p', relativePath: 'x', size: 0, streamInfo: { durationSeconds: 100 } as any }],
 };
 
+type Harness = Awaited<ReturnType<typeof createHarness>>;
+
+/** The session id the last playback-info call answered. */
+const lastSid = async (h: { streamingApi: { getPlaybackInfo: { mock: { results: { value: unknown }[] } } } }) =>
+  ((await h.streamingApi.getPlaybackInfo.mock.results.at(-1)!.value) as PlaybackInfoResponse).sessionId;
+
+/** Commits `pi` (or forgets the session) through a loader op, as a launch's negotiation does. */
+async function seed(component: any, pi: Partial<PlaybackInfoResponse> | null): Promise<void> {
+  if (!pi) {
+    component.loader.forget();
+    return;
+  }
+  await component.loader.run('launch', (op: any) => op.negotiate(() => Promise.resolve(pi as PlaybackInfoResponse), { replace: false }));
+}
+
+/** A reload body run inside a loader op, as the recovery or a hand-back runs it. */
+const refresh = (c: any, pos: number, opts: Record<string, unknown>) =>
+  c.loader.run('resume', (op: unknown) => c.refreshSidAndReload(op, pos, opts), true);
+const reloadInOp = (c: any, pos: number, opts: Record<string, unknown>) =>
+  c.loader.run('resume', (op: unknown) => c.reloadAt(op, pos, opts), true);
+
 /** Runs the pre-roll step of a launch inside a loader op, as `launch` does. */
 function startPreRoll(h: { component: any }, startTime: number | undefined) {
   return h.component.loader.run('launch', (op: unknown) => h.component.maybeStartPreRoll(op, startTime));
 }
 
-function createHarness(opts: {
+async function createHarness(opts: {
   preRoll?: { mediaFileId: number; labelKey?: string; skippable?: boolean }[];
   trailerPlaybackInfo?: PlaybackInfoResponse | 'reject';
 } = {}) {
@@ -157,13 +193,16 @@ function createHarness(opts: {
     navigateByUrl: vi.fn().mockResolvedValue(true),
     url: '/watch/1',
   };
+  // Every negotiation opens a fresh session, as the server does.
+  let opened = 0;
+  const fresh = (pi: PlaybackInfoResponse): PlaybackInfoResponse => ({ ...pi, sessionId: `${pi.sessionId}-${++opened}` });
   const getPlaybackInfo = vi.fn(async (mediaFileId: number) => {
-    if (mediaFileId === MAIN_FILE_ID) return buildPi(MAIN_FILE_ID, { preRoll: opts.preRoll });
+    if (mediaFileId === MAIN_FILE_ID) return fresh(buildPi(MAIN_FILE_ID, { preRoll: opts.preRoll }));
     if (mediaFileId === TRAILER_FILE_ID) {
       if (opts.trailerPlaybackInfo === 'reject') throw new Error('negotiation failed');
-      return opts.trailerPlaybackInfo ?? buildPi(TRAILER_FILE_ID);
+      return opts.trailerPlaybackInfo ?? fresh(buildPi(TRAILER_FILE_ID));
     }
-    return buildPi(mediaFileId);
+    return fresh(buildPi(mediaFileId));
   });
   const getPlaybackState = vi.fn(async () => null);
   const stopSession = vi.fn(async () => ({}));
@@ -192,9 +231,6 @@ function createHarness(opts: {
     getEdl: vi.fn(async () => [] as unknown[]),
     getPlaybackState,
     stopSession,
-    retireSession: (sid?: string) =>
-      StreamingApiService.prototype.retireSession.call({ auth: TestBed.inject(AuthService), stopSession }, sid),
-    stopUnreplaced: (r: { replaces?: string }) => StreamingApiService.prototype.stopUnreplaced.call({ stopSession }, r),
     updatePlaybackState,
     getHlsUrl,
     buildPlayUrl,
@@ -371,7 +407,7 @@ function createHarness(opts: {
   component.mediaId = MEDIA_ID;
   component.episodeId = undefined;
   component.media = MOVIE;
-  component.loader.adopt(buildPi(MAIN_FILE_ID, { preRoll: opts.preRoll }));
+  await seed(component, buildPi(MAIN_FILE_ID, { preRoll: opts.preRoll }));
   component.initCompleted = true;
   const engine = fakeEngine();
   component.engine = engine;
@@ -398,7 +434,7 @@ describe('PlayerComponent pre-roll', () => {
   });
 
   it('plays the pre-roll item before the main item, then the main item after it ends', async () => {
-    const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID, labelKey: 'x' }] });
+    const h = await createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID, labelKey: 'x' }] });
 
     await startPreRoll(h, undefined);
 
@@ -418,11 +454,11 @@ describe('PlayerComponent pre-roll', () => {
 
     expect(h.component.preRollActive()).toBe(false);
     expect(h.component.mediaFileId).toBe(MAIN_FILE_ID);
-    expect(h.engine.loadCalls.at(-1)?.url).toBe(`stream://${MAIN_FILE_ID}?sid=sid-${MAIN_FILE_ID}`);
+    expect(h.engine.loadCalls.at(-1)?.url).toBe(`stream://${MAIN_FILE_ID}?sid=${await lastSid(h)}`);
   });
 
   it('skips pre-roll entirely on a resume launch (startTime > 0)', async () => {
-    const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
+    const h = await createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
 
     await startPreRoll(h, 120);
 
@@ -433,7 +469,7 @@ describe('PlayerComponent pre-roll', () => {
   });
 
   it('a failing pre-roll negotiation does not stop the main video from playing', async () => {
-    const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }], trailerPlaybackInfo: 'reject' });
+    const h = await createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }], trailerPlaybackInfo: 'reject' });
 
     await startPreRoll(h, undefined);
 
@@ -448,7 +484,7 @@ describe('PlayerComponent pre-roll', () => {
   it.each([false, true])(
     'reports the resume point while the clock still reads 0 (videoStarted=%s)',
     async (started) => {
-      const h = createHarness();
+      const h = await createHarness();
       (h.component as unknown as { pendingStartTime: number }).pendingStartTime = 3600;
       h.state.videoStarted.set(started);
       h.engine.currentTime = 0;
@@ -463,7 +499,7 @@ describe('PlayerComponent pre-roll', () => {
   );
 
   it('reports the engine once it moves, and never substitutes again', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const c = h.component as unknown as { pendingStartTime: number };
     c.pendingStartTime = 3600;
     h.engine.currentTime = 12;
@@ -483,7 +519,7 @@ describe('PlayerComponent pre-roll', () => {
   });
 
   it('sends no heartbeat while the error card is up', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.engine.currentTime = 12;
     h.state.setError('failed');
 
@@ -493,7 +529,7 @@ describe('PlayerComponent pre-roll', () => {
   });
 
   it('does not queue a beat the server refuses', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.engine.currentTime = 12;
     h.streamingApi.updatePlaybackState.mockRejectedValueOnce(new HttpErrorResponse({ status: 409 }) as never);
 
@@ -503,7 +539,7 @@ describe('PlayerComponent pre-roll', () => {
   });
 
   it('records no progress while a pre-roll item is playing', async () => {
-    const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
+    const h = await createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
     await startPreRoll(h, undefined);
     expect(h.component.preRollActive()).toBe(true);
 
@@ -513,7 +549,7 @@ describe('PlayerComponent pre-roll', () => {
   });
 
   it('skip advances past the current pre-roll item onto the main video', async () => {
-    const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID, skippable: true }] });
+    const h = await createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID, skippable: true }] });
     await startPreRoll(h, undefined);
     expect(h.component.preRollActive()).toBe(true);
     expect(h.component.preRollSkippable()).toBe(true);
@@ -522,13 +558,13 @@ describe('PlayerComponent pre-roll', () => {
     await flush();
 
     expect(h.component.preRollActive()).toBe(false);
-    expect(h.engine.loadCalls.at(-1)?.url).toBe(`stream://${MAIN_FILE_ID}?sid=sid-${MAIN_FILE_ID}`);
+    expect(h.engine.loadCalls.at(-1)?.url).toBe(`stream://${MAIN_FILE_ID}?sid=${await lastSid(h)}`);
   });
 
   it('an in-place episode advance does not replay pre-roll, and still resumes that episode', async () => {
     const NEXT_FILE_ID = 2;
     // Already on the main item, as for every non-launch reload (advance(), the queue, a retry).
-    const h = createHarness();
+    const h = await createHarness();
     // The backend answers `preRoll` on every playback-info call, including a plain in-place
     // reload — the client must ignore it there.
     h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(
@@ -547,7 +583,7 @@ describe('PlayerComponent pre-roll', () => {
   });
 
   it('a pre-roll transition does not resume it from the main film\'s stored position', async () => {
-    const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
+    const h = await createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
     await startPreRoll(h, undefined);
     h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(buildPi(TRAILER_FILE_ID, { startAtSeconds: 42 }));
 
@@ -559,7 +595,7 @@ describe('PlayerComponent pre-roll', () => {
   });
 
   it('keeps progress gated while remounting away from a dead pre-roll', async () => {
-    const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
+    const h = await createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
     await startPreRoll(h, undefined);
     expect(h.component.preRollActive()).toBe(true);
 
@@ -573,7 +609,7 @@ describe('PlayerComponent pre-roll', () => {
   });
 
   it('reaches the main video even when a transition is refused', async () => {
-    const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
+    const h = await createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
     await startPreRoll(h, undefined);
     expect(h.component.preRollActive()).toBe(true);
     // reloadForEpisode refuses silently without an engine, as it does mid-reload.
@@ -593,8 +629,8 @@ describe('PlayerComponent startup pause', () => {
     TestBed.resetTestingModule();
   });
 
-  it('one tap pauses during launch, the next plays', () => {
-    const h = createHarness();
+  it('one tap pauses during launch, the next plays', async () => {
+    const h = await createHarness();
     h.state.reset();
     h.component.onTogglePlay();
     expect(h.engine.pause).toHaveBeenCalledTimes(1);
@@ -605,8 +641,8 @@ describe('PlayerComponent startup pause', () => {
     expect(h.state.uiPaused()).toBe(false);
   });
 
-  it('a stale EDL end flag does not rewind a later episode on play', () => {
-    const h = createHarness();
+  it('a stale EDL end flag does not rewind a later episode on play', async () => {
+    const h = await createHarness();
     h.component.edlEnded = true;
     h.state.ended.set(false);
     const seek = vi.spyOn(h.component, 'seekInternal');
@@ -615,15 +651,15 @@ describe('PlayerComponent startup pause', () => {
   });
 
   it('a remote pause during launch shows play', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.state.reset();
     await h.component['remote'].applyRemoteCommand({ action: 'pause' });
     expect(h.state.startingPlayback()).toBe(false);
     expect(h.state.uiPaused()).toBe(true);
   });
 
-  it('an admin pause during launch shows play', () => {
-    const h = createHarness();
+  it('an admin pause during launch shows play', async () => {
+    const h = await createHarness();
     h.state.reset();
     h.component.pausePlayback();
     expect(h.state.uiPaused()).toBe(true);
@@ -642,11 +678,11 @@ describe('PlayerComponent wake / resume', () => {
   }
 
   it('a clock gap warms the existing session instead of reloading the engine', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const fetchMock = vi.fn(async (_url: string) => ({ ok: true }) as any);
     vi.stubGlobal('fetch', fetchMock);
     h.state.playbackMode.set('transcode');
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' }));
+    await seed(h.component, buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' }));
     h.engine.currentTime = 640;
 
     sleep(h.component, 10 * 60 * 1000);
@@ -667,7 +703,7 @@ describe('PlayerComponent wake / resume', () => {
   });
 
   it('the frozen interval does not read as a stalled playhead', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true }) as any));
     h.state.loading.set(false);
     h.state.paused.set(false);
@@ -686,29 +722,15 @@ describe('PlayerComponent wake / resume', () => {
     expect(h.engine.loadCalls.length).toBe(0);
   });
 
-  it('a quality pick made during a running reload is replayed once it settles', async () => {
-    const h = createHarness();
-    h.component.reloadingStream = true;
-    await h.component.reloadStream(undefined, { reason: 'quality' });
-    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
-
-    h.component.reloadingStream = false;
-    const run = vi.spyOn(h.component, 'doReloadStream').mockResolvedValue(undefined);
-    h.component.drainPendingReload();
-    await flush();
-
-    expect(run).toHaveBeenCalledTimes(1);
-  });
-
   it('a failed stream-token mint fails the load instead of baking the access token', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.component.authService.ensureStreamToken = vi.fn(async () => null);
 
     await expect(h.component.requireStreamToken()).rejects.toThrow('stream token unavailable');
   });
 
   it('direct play has no encoder to warm', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const fetchMock = vi.fn(async () => ({ ok: true }) as any);
     vi.stubGlobal('fetch', fetchMock);
     h.state.playbackMode.set('direct');
@@ -722,7 +744,7 @@ describe('PlayerComponent wake / resume', () => {
   });
 
   it('a native tick beats the heartbeat once 10 s have passed since the last save', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true }) as any));
     h.component.lastSaveAt = Date.now() - 4_000;
     h.component.heartbeatOnNativeTick();
@@ -736,7 +758,7 @@ describe('PlayerComponent wake / resume', () => {
   });
 
   it('a heartbeat lost to the network is retried, not swallowed', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true }) as any));
     h.streamingApi.updatePlaybackState.mockRejectedValueOnce(
       new Error('offline'),
@@ -765,8 +787,8 @@ describe('PlayerComponent seek OSD', () => {
   const press = (key: string) =>
     ({ key, keyCode: 0, target: document.body, preventDefault: vi.fn(), stopPropagation: vi.fn() }) as unknown as KeyboardEvent;
 
-  function hiddenBar() {
-    const h = createHarness();
+  async function hiddenBar() {
+    const h = await createHarness();
     const focusSeekbar = vi.fn();
     h.component.controls = () => ({ seekbar: () => ({ focus: focusSeekbar }) });
     h.component.onSeek = vi.fn();
@@ -775,8 +797,8 @@ describe('PlayerComponent seek OSD', () => {
     return { ...h, focusSeekbar };
   }
 
-  it('an arrow on a hidden bar raises the seek-only OSD with the seekbar focused, without seeking', () => {
-    const h = hiddenBar();
+  it('an arrow on a hidden bar raises the seek-only OSD with the seekbar focused, without seeking', async () => {
+    const h = await hiddenBar();
 
     h.component['keyboard'].onKeyDown(press('ArrowRight'));
 
@@ -786,8 +808,8 @@ describe('PlayerComponent seek OSD', () => {
     expect(h.component.onSeek).not.toHaveBeenCalled();
   });
 
-  it('a further arrow keeps the OSD, any other key escalates to the full bar', () => {
-    const h = hiddenBar();
+  it('a further arrow keeps the OSD, any other key escalates to the full bar', async () => {
+    const h = await hiddenBar();
 
     h.component['keyboard'].onKeyDown(press('ArrowLeft'));
     h.component['keyboard'].onKeyDown(press('ArrowLeft'));
@@ -798,8 +820,8 @@ describe('PlayerComponent seek OSD', () => {
     expect(h.component.chrome.visible()).toBe(true);
   });
 
-  it('hiding from the OSD fades out as-is, without flashing the full bar in', () => {
-    const h = hiddenBar();
+  it('hiding from the OSD fades out as-is, without flashing the full bar in', async () => {
+    const h = await hiddenBar();
 
     h.component['keyboard'].onKeyDown(press('ArrowRight'));
     h.component.chrome.hide();
@@ -811,8 +833,8 @@ describe('PlayerComponent seek OSD', () => {
     expect(h.component.nativeSubtitleBottomBump()).toBe(0);
   });
 
-  it('OK on a hidden bar raises it instead of pressing the button it holds', () => {
-    const h = hiddenBar();
+  it('OK on a hidden bar raises it instead of pressing the button it holds', async () => {
+    const h = await hiddenBar();
     const e = press('Enter');
 
     h.component['keyboard'].onKeyDown(e);
@@ -823,8 +845,8 @@ describe('PlayerComponent seek OSD', () => {
     expect(e.preventDefault).toHaveBeenCalled();
   });
 
-  it('lets a focused reaction row pick and send with the bar hidden', () => {
-    const h = hiddenBar();
+  it('lets a focused reaction row pick and send with the bar hidden', async () => {
+    const h = await hiddenBar();
     const dock = document.createElement('app-party-reaction-dock');
     const emoji = document.createElement('button');
     dock.append(emoji);
@@ -842,8 +864,8 @@ describe('PlayerComponent seek OSD', () => {
     }
   });
 
-  it('cues clear a smaller bar in OSD mode, and sit flush once it hides', () => {
-    const h = hiddenBar();
+  it('cues clear a smaller bar in OSD mode, and sit flush once it hides', async () => {
+    const h = await hiddenBar();
     expect(h.component.nativeSubtitleBottomBump()).toBe(0);
 
     h.component['keyboard'].onKeyDown(press('ArrowRight'));
@@ -870,8 +892,8 @@ describe('PlayerComponent remote control', () => {
     };
   }
 
-  it('a remote pause always pauses, even mid-toggle-coalesce window (absolute, not a toggle)', () => {
-    const h = createHarness();
+  it('a remote pause always pauses, even mid-toggle-coalesce window (absolute, not a toggle)', async () => {
+    const h = await createHarness();
     h.state.paused.set(false);
     // Simulate a local spacebar toggle having just fired, still inside its
     // coalesce window: onTogglePlay() would drop a second call here.
@@ -883,8 +905,8 @@ describe('PlayerComponent remote control', () => {
     expect(h.state.paused()).toBe(true);
   });
 
-  it('a remote mute sets the flag absolutely instead of toggling audible/silent', () => {
-    const h = createHarness();
+  it('a remote mute sets the flag absolutely instead of toggling audible/silent', async () => {
+    const h = await createHarness();
     h.engine.muted = false;
     h.engine.volume = 1;
 
@@ -893,8 +915,8 @@ describe('PlayerComponent remote control', () => {
     expect(h.engine.muted).toBe(true);
   });
 
-  it('rejects a seek received before duration is known instead of clamping to 0', () => {
-    const h = createHarness();
+  it('rejects a seek received before duration is known instead of clamping to 0', async () => {
+    const h = await createHarness();
     h.state.duration.set(0);
     h.engine.currentTime = 42;
 
@@ -905,8 +927,8 @@ describe('PlayerComponent remote control', () => {
     expect(h.remoteService.markApplied).toHaveBeenCalledWith('cmd-1', 'duration_unknown');
   });
 
-  it('reports a locally-driven pause at once instead of at the next save tick', () => {
-    const h = createHarness();
+  it('reports a locally-driven pause at once instead of at the next save tick', async () => {
+    const h = await createHarness();
     h.state.videoStarted.set(true);
     // The source does not matter (spacebar, click, media key, mpv, TV remote):
     // every one of them lands on the transport flag this reads.
@@ -915,8 +937,8 @@ describe('PlayerComponent remote control', () => {
     expect(h.streamingApi.updatePlaybackState).toHaveBeenCalled();
   });
 
-  it('does not re-report a transport value that has not changed', () => {
-    const h = createHarness();
+  it('does not re-report a transport value that has not changed', async () => {
+    const h = await createHarness();
     h.state.videoStarted.set(true);
     h.component.reportTransportChange(true);
     h.streamingApi.updatePlaybackState.mockClear();
@@ -926,8 +948,8 @@ describe('PlayerComponent remote control', () => {
     expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
   });
 
-  it('stays quiet before the first frame, when the load path moves the flag', () => {
-    const h = createHarness();
+  it('stays quiet before the first frame, when the load path moves the flag', async () => {
+    const h = await createHarness();
     h.state.videoStarted.set(false);
     h.streamingApi.updatePlaybackState.mockClear();
 
@@ -936,8 +958,8 @@ describe('PlayerComponent remote control', () => {
     expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
   });
 
-  it('resolves a controller-sent audio index against this engine own track ids', () => {
-    const h = createHarness();
+  it('resolves a controller-sent audio index against this engine own track ids', async () => {
+    const h = await createHarness();
     // The web engine names tracks by Shaka audioId; a controller only ever
     // knows the streamInfo order, so the index has to be translated.
     h.component.availableAudioTracks.set([
@@ -950,8 +972,8 @@ describe('PlayerComponent remote control', () => {
     expect(h.component.activeAudioTrackId()).toBe('shaka-7');
   });
 
-  it('ignores an audio index no local track answers to', () => {
-    const h = createHarness();
+  it('ignores an audio index no local track answers to', async () => {
+    const h = await createHarness();
     h.component.availableAudioTracks.set([
       { id: 'shaka-4', label: 'French', language: 'fr' },
     ]);
@@ -963,8 +985,8 @@ describe('PlayerComponent remote control', () => {
     expect(h.remoteService.markApplied).not.toHaveBeenCalled();
   });
 
-  it('applying a command acks it and forces an immediate heartbeat', () => {
-    const h = createHarness();
+  it('applying a command acks it and forces an immediate heartbeat', async () => {
+    const h = await createHarness();
     h.state.paused.set(true);
 
     h.remoteService.validated.next(baseCmd({ action: 'play' }));
@@ -981,8 +1003,8 @@ describe('PlayerComponent loading spinner', () => {
   });
 
   /** Ready to play, nothing painted yet: the state a refused autoplay leaves. */
-  function ready() {
-    const h = createHarness();
+  async function ready() {
+    const h = await createHarness();
     h.state.loading.set(false);
     h.state.buffering.set(false);
     h.state.videoStarted.set(false);
@@ -990,8 +1012,8 @@ describe('PlayerComponent loading spinner', () => {
     return h;
   }
 
-  it('hides the spinner when the browser refused autoplay', () => {
-    const h = ready();
+  it('hides the spinner when the browser refused autoplay', async () => {
+    const h = await ready();
     expect(h.component.spinnerVisible()).toBe(true);
 
     h.component.autoplayBlocked.set(true);
@@ -1001,8 +1023,8 @@ describe('PlayerComponent loading spinner', () => {
     expect(h.component.spinnerVisible()).toBe(false);
   });
 
-  it('drops the spinner once playback fails mid-buffering', () => {
-    const h = ready();
+  it('drops the spinner once playback fails mid-buffering', async () => {
+    const h = await ready();
     h.state.buffering.set(true);
     expect(h.component.spinnerVisible()).toBe(true);
 
@@ -1011,8 +1033,8 @@ describe('PlayerComponent loading spinner', () => {
     expect(h.component.spinnerVisible()).toBe(false);
   });
 
-  it('keeps the spinner for a genuine load or rebuffer', () => {
-    const h = ready();
+  it('keeps the spinner for a genuine load or rebuffer', async () => {
+    const h = await ready();
     h.component.autoplayBlocked.set(true);
 
     h.state.loading.set(true);
@@ -1038,16 +1060,16 @@ describe('PlayerComponent DirectStream URL building', () => {
       playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`,
     });
 
-  it('never resolves a startQuality while playMethod is DirectStream, in auto', () => {
-    const h = createHarness();
-    h.component.loader.adopt(DIRECT_STREAM_PI());
+  it('never resolves a startQuality while playMethod is DirectStream, in auto', async () => {
+    const h = await createHarness();
+    await seed(h.component, DIRECT_STREAM_PI());
     TestBed.inject(QualityManagerService).activeQualityId.set('auto');
 
     expect(h.component.resolveStartQuality()).toBeUndefined();
   });
 
-  it('never resolves a startQuality while playMethod is DirectStream, even for a no-ABR client in auto', () => {
-    const h = createHarness();
+  it('never resolves a startQuality while playMethod is DirectStream, even for a no-ABR client in auto', async () => {
+    const h = await createHarness();
     const deviceProfileService = TestBed.inject(BrowserDeviceProfileService) as any;
     deviceProfileService.getProfile = () => ({ ...DEVICE_PROFILE, supportsAbr: false });
     const qm = TestBed.inject(QualityManagerService);
@@ -1060,28 +1082,28 @@ describe('PlayerComponent DirectStream URL building', () => {
     // (proves the gate is doing real work, not vacuously passing on an empty list).
     expect(qm.topRungId()).toBe('1080p');
 
-    h.component.loader.adopt(DIRECT_STREAM_PI());
+    await seed(h.component, DIRECT_STREAM_PI());
     expect(h.component.resolveStartQuality()).toBeUndefined();
   });
 
-  it('resolves the picked rung once the backend has re-decided Transcode for it', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' }));
+  it('resolves the picked rung once the backend has re-decided Transcode for it', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' }));
     TestBed.inject(QualityManagerService).activeQualityId.set('720p');
 
     expect(h.component.resolveStartQuality()).toBe('720p');
   });
 
-  it('never sends best as a startQuality', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' }));
+  it('never sends best as a startQuality', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' }));
     TestBed.inject(QualityManagerService).activeQualityId.set('best');
 
     expect(h.component.resolveStartQuality()).toBeUndefined();
   });
 
   it('picking a rung during a DirectStream session reaches the backend and lands on the transcoded rung', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const qm = TestBed.inject(QualityManagerService);
     qm.availableQualities.set([
       { id: 'auto', label: 'Auto', height: 0 },
@@ -1089,7 +1111,7 @@ describe('PlayerComponent DirectStream URL building', () => {
       { id: '720p', label: '720p', height: 720 },
     ] as any);
     qm.activeQualityId.set('original');
-    h.component.loader.adopt(DIRECT_STREAM_PI());
+    await seed(h.component, DIRECT_STREAM_PI());
     h.state.playbackMode.set('remux');
     h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(
       buildPi(MAIN_FILE_ID, { playMethod: 'Transcode', playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t` }),
@@ -1105,9 +1127,9 @@ describe('PlayerComponent DirectStream URL building', () => {
     expect(h.engine.loadCalls[0]!.url).toContain('q=720p');
   });
 
-  it('buildPlayUrl carries remux=1 and no startQuality for DirectStream; DirectPlay ignores quality entirely', () => {
-    const h = createHarness();
-    h.component.loader.adopt(DIRECT_STREAM_PI());
+  it('buildPlayUrl carries remux=1 and no startQuality for DirectStream; DirectPlay ignores quality entirely', async () => {
+    const h = await createHarness();
+    await seed(h.component, DIRECT_STREAM_PI());
     TestBed.inject(QualityManagerService).activeQualityId.set('auto');
 
     const { url, mimeType } = h.component.buildPlayUrl({ startTime: 30 });
@@ -1120,8 +1142,8 @@ describe('PlayerComponent DirectStream URL building', () => {
   });
 
   it('prewarm hits the exact same URL the load path would build for the same position', async () => {
-    const h = createHarness();
-    h.component.loader.adopt(DIRECT_STREAM_PI());
+    const h = await createHarness();
+    await seed(h.component, DIRECT_STREAM_PI());
     h.state.playbackMode.set('remux');
     h.engine.currentTime = 77;
     const fetchMock = vi.fn(async (_url: string) => ({ ok: true }) as any);
@@ -1141,9 +1163,9 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
   });
 
   it('re-negotiates once with rejectCopy on an undecodable error while delivering remux, then stops', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.state.playbackMode.set('remux');
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`,
     }));
@@ -1167,10 +1189,10 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
   });
 
   it('re-evaluates the video crop from the new decision and re-adds the active subtitle', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const crop = { width: 1920, height: 800, x: 0, y: 140 };
     h.state.playbackMode.set('remux');
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`,
       videoCopyStream: true,
@@ -1202,32 +1224,24 @@ describe('PlayerComponent remux fallback (rejectCopy)', () => {
     expect(h.engine.setTextVisibility).toHaveBeenCalledWith(true);
   });
 
-  it('cards instead of leaving a dead player when another reload never idles', async () => {
-    const h = createHarness();
+  it('cards instead of leaving a dead player when the fallback reload fails', async () => {
+    const h = await createHarness();
     h.state.playbackMode.set('remux');
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`,
     }));
-    h.component.reloadingStream = true; // another reload in flight, never clears
+    h.streamingApi.getPlaybackInfo.mockRejectedValue(new Error('boom'));
 
-    vi.useFakeTimers();
-    try {
-      const handled = h.component.fallBackFromRemuxOnLoadError({ category: 4, code: 4032 }, 0);
-      expect(handled).toBe(true);
-      await vi.advanceTimersByTimeAsync(3_100);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(h.component.fallBackFromRemuxOnLoadError({ category: 4, code: 4032 }, 0)).toBe(true);
 
-    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
-    expect(h.state.error()).toBeTruthy();
+    await vi.waitFor(() => expect(h.state.error()).toBeTruthy());
   });
 
   it('an error during the still-pending first load waits for it instead of racing a second load()', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.state.playbackMode.set('remux');
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`,
     }));
@@ -1290,7 +1304,7 @@ describe('PlayerComponent selectSubtitle Cast guard', () => {
   });
 
   it('no-ops while casting, so a racing auto-select never reloads the local (unloaded) engine', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     // volume/muted are stubbed too: ngOnDestroy's savePosition reads them once
     // isConnected is true, and the harness's default mock doesn't define them.
     h.component.castService.isConnected = () => true;
@@ -1316,9 +1330,9 @@ describe('PlayerComponent stats overlay: delivery-based labels', () => {
     TestBed.resetTestingModule();
   });
 
-  it('labels Direct Play for a raw (non-HLS) stream URL', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, { playMethod: 'DirectPlay' }));
+  it('labels Direct Play for a raw (non-HLS) stream URL', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, { playMethod: 'DirectPlay' }));
     h.component.lastStreamUrl = `stream://${MAIN_FILE_ID}?sid=sid-${MAIN_FILE_ID}`;
     h.component.statsVisible.set(true);
 
@@ -1327,9 +1341,9 @@ describe('PlayerComponent stats overlay: delivery-based labels', () => {
     expect(stats?.mismatch).toBeUndefined();
   });
 
-  it('labels Remux for remux=1 with no startQuality, even with no variant introspection', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, { playMethod: 'DirectStream' }));
+  it('labels Remux for remux=1 with no startQuality, even with no variant introspection', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, { playMethod: 'DirectStream' }));
     h.component.lastStreamUrl = `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`;
     h.component.statsVisible.set(true);
 
@@ -1338,9 +1352,9 @@ describe('PlayerComponent stats overlay: delivery-based labels', () => {
     expect(stats?.mismatch).toBeUndefined();
   });
 
-  it('flags the mismatch when remux=1 + startQuality collapses delivery to a transcoded rung', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, { playMethod: 'DirectStream' }));
+  it('flags the mismatch when remux=1 + startQuality collapses delivery to a transcoded rung', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, { playMethod: 'DirectStream' }));
     h.component.lastStreamUrl = `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1&startQuality=original`;
 
     h.component.statsVisible.set(true);
@@ -1350,9 +1364,9 @@ describe('PlayerComponent stats overlay: delivery-based labels', () => {
     expect(stats?.mismatch).toBeTruthy();
   });
 
-  it('remux without a source video bitrate: remuxMasterBandwidthBps, never a transcode rung target', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('remux without a source video bitrate: remuxMasterBandwidthBps, never a transcode rung target', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       remuxMasterBandwidthBps: 8_000_000,
       // A transcode rung target that would show through if the rateMap
@@ -1368,9 +1382,9 @@ describe('PlayerComponent stats overlay: delivery-based labels', () => {
     expect(stats?.videoStreamBitrate).toBe('8.0 Mbps');
   });
 
-  it('transcode: video bitrate is the active rung\'s rateMap entry', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('transcode: video bitrate is the active rung\'s rateMap entry', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'Transcode',
       transcodeBitrateByQuality: {
         '720p': { videoBitrateBps: 1_900_000, audioBitrateBps: 128_000, totalBitrateBps: 2_000_000 },
@@ -1384,9 +1398,9 @@ describe('PlayerComponent stats overlay: delivery-based labels', () => {
     expect(stats?.videoStreamBitrate).toBe('1.9 Mbps');
   });
 
-  it('direct: video bitrate falls back to the source file bitrate, not a rateMap/remux figure', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('direct: video bitrate falls back to the source file bitrate, not a rateMap/remux figure', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectPlay',
       source: { container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', durationSeconds: 100, videoBitRate: 5_000_000 },
     }));
@@ -1397,9 +1411,9 @@ describe('PlayerComponent stats overlay: delivery-based labels', () => {
     expect(stats?.videoStreamBitrate).toBe('5.0 Mbps');
   });
 
-  it('audio: a transcoded track shows the measured/rung bitrate, never the source codec bitrate', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('audio: a transcoded track shows the measured/rung bitrate, never the source codec bitrate', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'Transcode',
       audioCopyStream: false,
       audioTracks: [{ index: 0, codec: 'dts', copy: false, outputCodec: 'aac', reasonFlags: ['AudioCodecNotSupported'] }],
@@ -1418,9 +1432,9 @@ describe('PlayerComponent stats overlay: delivery-based labels', () => {
     expect(stats?.audioStreamBitrate).toBe('128 kbps');
   });
 
-  it('audio: a copied non-default track reports no figure rather than the source default track\'s bitrate', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('audio: a copied non-default track reports no figure rather than the source default track\'s bitrate', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       audioCopyStream: true,
       audioTracks: [
@@ -1438,9 +1452,9 @@ describe('PlayerComponent stats overlay: delivery-based labels', () => {
     expect(stats?.audioStreamBitrate).toBe('');
   });
 
-  it('hides the audio section for a source with no audio stream', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('hides the audio section for a source with no audio stream', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectPlay',
       audioCopyStream: true,
       audioTracks: [],
@@ -1460,17 +1474,17 @@ describe('PlayerComponent: playerStats reads deliveredKind from the current stre
     TestBed.resetTestingModule();
   });
 
-  it('a Transcode URL reports transcode', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' }));
+  it('a Transcode URL reports transcode', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' }));
     h.component.lastStreamUrl = `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&startQuality=720p`;
     h.component.statsVisible.set(true);
     expect(h.component.playerStats()?.streamTypeKey).toBe('player.stats_stream_type_transcode');
   });
 
-  it('a DirectStream (remux) URL reports remux', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('a DirectStream (remux) URL reports remux', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       playUrl: `/api/stream/${MAIN_FILE_ID}/master.m3u8?token=t&remux=1`,
     }));
@@ -1485,9 +1499,9 @@ describe('PlayerComponent stats overlay: bitrate cascade', () => {
     TestBed.resetTestingModule();
   });
 
-  it('video: a remux pinned to a quality id does not borrow the transcode ladder target, and prefers the source bitrate over the muxed master bandwidth', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('video: a remux pinned to a quality id does not borrow the transcode ladder target, and prefers the source bitrate over the muxed master bandwidth', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       transcodeBitrateByQuality: {
         '1080p': { videoBitrateBps: 8_000_000, audioBitrateBps: 128_000, totalBitrateBps: 8_128_000 },
@@ -1506,9 +1520,9 @@ describe('PlayerComponent stats overlay: bitrate cascade', () => {
     expect(stats?.videoStreamBitrate).toBe('7.5 Mbps');
   });
 
-  it('video: a genuine transcode still reads the ladder target', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('video: a genuine transcode still reads the ladder target', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'Transcode',
       transcodeBitrateByQuality: {
         '720p': { videoBitrateBps: 3_000_000, audioBitrateBps: 128_000, totalBitrateBps: 3_128_000 },
@@ -1523,9 +1537,9 @@ describe('PlayerComponent stats overlay: bitrate cascade', () => {
     expect(stats?.videoStreamBitrate).toBe('3.0 Mbps');
   });
 
-  it('audio: reads the active track\'s own bitrate/sample rate from playbackInfo.audioTracks', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('audio: reads the active track\'s own bitrate/sample rate from playbackInfo.audioTracks', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       audioTracks: [{ index: 0, codec: 'aac', copy: true, outputCodec: 'aac', reasonFlags: [], bitrateBps: 256_000, sampleRate: 48_000 }],
       source: { container: 'mkv', videoCodec: 'hevc', audioCodec: 'ac3', audioBitRate: 640_000, audioSampleRate: 48_000, durationSeconds: 100 } as any,
@@ -1539,9 +1553,9 @@ describe('PlayerComponent stats overlay: bitrate cascade', () => {
     expect(stats?.audioDetailLine).toBe('48000 Hz');
   });
 
-  it('audio: shows nothing (not the source\'s primary-stream numbers) when the backend sends no per-track bitrate for a non-DirectPlay delivery', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('audio: shows nothing (not the source\'s primary-stream numbers) when the backend sends no per-track bitrate for a non-DirectPlay delivery', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       audioTracks: [{ index: 0, codec: 'aac', copy: true, outputCodec: 'aac', reasonFlags: [] }],
       source: { container: 'mkv', videoCodec: 'hevc', audioCodec: 'ac3', audioBitRate: 640_000, audioSampleRate: 48_000, durationSeconds: 100 } as any,
@@ -1555,9 +1569,9 @@ describe('PlayerComponent stats overlay: bitrate cascade', () => {
     expect(stats?.audioDetailLine).toBe('');
   });
 
-  it('audio: DirectPlay falls back to the source values (byte-identical to the active track)', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('audio: DirectPlay falls back to the source values (byte-identical to the active track)', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectPlay',
       source: { container: 'mp4', videoCodec: 'h264', audioCodec: 'aac', audioBitRate: 192_000, audioSampleRate: 44_100, durationSeconds: 100 } as any,
     }));
@@ -1575,9 +1589,9 @@ describe('PlayerComponent: cropAppliedByPlayer reads what was actually applied',
     TestBed.resetTestingModule();
   });
 
-  it('web: true once videoCropStyle is set, independent of the delivery kind', () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+  it('web: true once videoCropStyle is set, independent of the delivery kind', async () => {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'Transcode',
       source: { container: 'mkv', videoCodec: 'hevc', audioCodec: 'aac', durationSeconds: 100, crop: { width: 1000, height: 1000, x: 0, y: 0 } } as any,
     }));
@@ -1589,10 +1603,10 @@ describe('PlayerComponent: cropAppliedByPlayer reads what was actually applied',
     expect(h.component.playerStats()?.cropAppliedByPlayer).toBe(true);
   });
 
-  it('desktop: reads the flag applyVideoCrop set on its mpv configure() call, not the delivery kind', () => {
-    const h = createHarness();
+  it('desktop: reads the flag applyVideoCrop set on its mpv configure() call, not the delivery kind', async () => {
+    const h = await createHarness();
     h.component.isDesktopNative = true;
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       videoCopyStream: true,
       source: { container: 'mkv', videoCodec: 'hevc', audioCodec: 'aac', durationSeconds: 100, crop: { width: 1000, height: 1000, x: 0, y: 0 } } as any,
@@ -1603,7 +1617,7 @@ describe('PlayerComponent: cropAppliedByPlayer reads what was actually applied',
     h.component.applyVideoCrop();
     expect(h.component.playerStats()?.cropAppliedByPlayer).toBe(true);
 
-    h.component.loader.adopt({ ...h.component.loader.info(), videoCopyStream: false });
+    await seed(h.component, { ...h.component.loader.info(), videoCopyStream: false });
     h.component.applyVideoCrop();
     expect(h.component.playerStats()?.cropAppliedByPlayer).toBe(false);
   });
@@ -1614,8 +1628,8 @@ describe('PlayerComponent: desktop far-seek reload gating', () => {
     TestBed.resetTestingModule();
   });
 
-  function desktopHarness() {
-    const h = createHarness();
+  async function desktopHarness() {
+    const h = await createHarness();
     h.component.isDesktopNative = true;
     Object.setPrototypeOf(h.engine, DesktopEngine.prototype);
     h.engine.currentTime = 10;
@@ -1627,26 +1641,26 @@ describe('PlayerComponent: desktop far-seek reload gating', () => {
     return h;
   }
 
-  it('applies to a multi-audio remux master too, not only transcode', () => {
-    const h = desktopHarness();
+  it('applies to a multi-audio remux master too, not only transcode', async () => {
+    const h = await desktopHarness();
     h.state.playbackMode.set('remux');
     expect(h.component.desktopFarSeekNeedsReload(200)).toBe(true);
   });
 
-  it('still applies to a multi-audio transcode master', () => {
-    const h = desktopHarness();
+  it('still applies to a multi-audio transcode master', async () => {
+    const h = await desktopHarness();
     h.state.playbackMode.set('transcode');
     expect(h.component.desktopFarSeekNeedsReload(200)).toBe(true);
   });
 
-  it('never applies to DirectPlay (one raw file, no child playlists)', () => {
-    const h = desktopHarness();
+  it('never applies to DirectPlay (one raw file, no child playlists)', async () => {
+    const h = await desktopHarness();
     h.state.playbackMode.set('direct');
     expect(h.component.desktopFarSeekNeedsReload(200)).toBe(false);
   });
 
-  it('never applies with a single audio track, regardless of mode', () => {
-    const h = desktopHarness();
+  it('never applies with a single audio track, regardless of mode', async () => {
+    const h = await desktopHarness();
     h.component.availableAudioTracks.set([{ id: 'a', label: 'A', language: 'en' }]);
     h.state.playbackMode.set('remux');
     expect(h.component.desktopFarSeekNeedsReload(200)).toBe(false);
@@ -1659,8 +1673,8 @@ describe('PlayerComponent: refreshSidAndReload adopts the fresh decision', () =>
   });
 
   it('updates playbackMode and re-applies crop from the NEW pi, not just quality', async () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, {
       playMethod: 'DirectStream',
       videoCopyStream: true,
       source: { container: 'mkv', videoCodec: 'hevc', audioCodec: 'aac', durationSeconds: 100, crop: { width: 1000, height: 800, x: 0, y: 100 } } as any,
@@ -1674,7 +1688,7 @@ describe('PlayerComponent: refreshSidAndReload adopts the fresh decision', () =>
       }),
     );
 
-    await h.component.refreshSidAndReload(30, { preservePause: false, unmute: false });
+    await refresh(h.component, 30, { preservePause: false, unmute: false });
 
     expect(h.state.playbackMode()).toBe('transcode');
     // videoCopyStream flipped false server-side (it re-encoded): the client must not double-crop.
@@ -1688,10 +1702,10 @@ describe('PlayerComponent: the previous session on a reload', () => {
   });
 
   const reloadWith = async (feature: boolean) => {
-    const h = createHarness();
+    const h = await createHarness();
     (TestBed.inject(AuthService) as any).hasServerFeature = (f: string) => feature && f === 'sessionReplaces';
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {}));
-    await h.component.refreshSidAndReload(30, { preservePause: false, unmute: false });
+    await seed(h.component, buildPi(MAIN_FILE_ID, {}));
+    await refresh(h.component, 30, { preservePause: false, unmute: false });
     return h;
   };
 
@@ -1702,11 +1716,11 @@ describe('PlayerComponent: the previous session on a reload', () => {
   });
 
   it('is stopped after all when the reload fails before the new session exists', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     (TestBed.inject(AuthService) as any).hasServerFeature = (f: string) => f === 'sessionReplaces';
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, {}));
+    await seed(h.component, buildPi(MAIN_FILE_ID, {}));
     h.streamingApi.getPlaybackInfo.mockRejectedValueOnce(new Error('boom'));
-    await expect(h.component.refreshSidAndReload(30, { preservePause: false, unmute: false })).rejects.toThrow();
+    await expect(refresh(h.component, 30, { preservePause: false, unmute: false })).rejects.toThrow();
     expect(h.streamingApi.stopSession).toHaveBeenCalledWith(`sid-${MAIN_FILE_ID}`);
   });
 
@@ -1723,7 +1737,7 @@ describe('PlayerComponent reloadStream: startAt', () => {
   });
 
   it('passes the live position as startAt, never the backend-saved DB position', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.engine.currentTime = 456;
 
     await h.component.reloadStream();
@@ -1732,7 +1746,7 @@ describe('PlayerComponent reloadStream: startAt', () => {
   });
 
   it('passes 0 explicitly rather than omitting it, so a restart-to-0 overrides a stale saved position', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.engine.currentTime = 0;
 
     await h.component.reloadStream();
@@ -1747,9 +1761,9 @@ describe('PlayerComponent session refresh: startAt and load window', () => {
   });
 
   it('puts the resume position in the play URL and loads at it', async () => {
-    const h = createHarness();
+    const h = await createHarness();
 
-    await (h.component as any).refreshSidAndReload(321, { preservePause: true, unmute: false });
+    await refresh(h.component, 321, { preservePause: true, unmute: false });
 
     expect(h.streamingApi.buildPlayUrl).toHaveBeenLastCalledWith(
       expect.anything(),
@@ -1758,22 +1772,22 @@ describe('PlayerComponent session refresh: startAt and load window', () => {
     expect(h.engine.loadCalls.at(-1)?.startTime).toBe(321);
   });
 
-  it('treats an engine error during the load as expected teardown, then clears the window', async () => {
-    const h = createHarness();
+  it('holds the loader busy while the engine loads, and frees it once the load settled or failed', async () => {
+    const h = await createHarness();
     const seen: boolean[] = [];
     h.engine.load = vi.fn(async () => {
-      seen.push((h.component as any).reloadLoadPending);
+      seen.push(h.component.loader.busy());
     }) as any;
 
-    await (h.component as any).refreshSidAndReload(10, { preservePause: true, unmute: false });
+    await refresh(h.component, 10, { preservePause: true, unmute: false });
     expect(seen).toEqual([true]);
-    expect((h.component as any).reloadLoadPending).toBe(false);
+    expect(h.component.loader.busy()).toBe(false);
 
     h.engine.load = vi.fn(async () => {
       throw new Error('boom');
     }) as any;
-    await expect((h.component as any).reloadAt(10, { preservePause: true, unmute: false, restart: false })).rejects.toThrow();
-    expect((h.component as any).reloadLoadPending).toBe(false);
+    await expect(reloadInOp(h.component, 10, { preservePause: true, unmute: false, restart: false })).rejects.toThrow();
+    expect(h.component.loader.busy()).toBe(false);
   });
 });
 
@@ -1782,16 +1796,16 @@ describe('PlayerComponent reload QoE event', () => {
     TestBed.resetTestingModule();
   });
 
-  function spied() {
-    const h = createHarness();
+  async function spied() {
+    const h = await createHarness();
     h.state.videoStarted.set(true);
     h.component.media = AUDIO_MEDIA;
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, { sessionId: 'sid-old' }));
+    await seed(h.component, buildPi(MAIN_FILE_ID, { sessionId: 'sid-old' }));
     return { h, spy: vi.spyOn((h.component as any).qoe, 'onReload') };
   }
 
   it('names the audio tracks of a streamInfo audio switch, on the old sid', async () => {
-    const { h, spy } = spied();
+    const { h, spy } = await spied();
     h.component.availableAudioTracks.set([
       { id: 'si-0', label: 'Français 5.1', language: 'fr' },
       { id: 'si-1', label: 'English', language: 'en' },
@@ -1808,7 +1822,7 @@ describe('PlayerComponent reload QoE event', () => {
   });
 
   it('reloads an engine track pick on an engine that cannot switch in place, never toggling the track', async () => {
-    const { h, spy } = spied();
+    const { h, spy } = await spied();
     (TestBed.inject(BrowserDeviceProfileService) as any).engineTraits = () => ENGINE_TRAITS[EngineKind.WEBOS];
     h.component.availableAudioTracks.set([
       { id: 'audio-0', label: 'Italiano', language: 'it' },
@@ -1827,7 +1841,7 @@ describe('PlayerComponent reload QoE event', () => {
   });
 
   it('flags a burn-in switch with its language, and its removal without one', async () => {
-    const { h, spy } = spied();
+    const { h, spy } = await spied();
     h.component.subs.availableSubtitles.set([
       subOption('emb-9', 'fr', { burnIn: true, subtitleDbId: 9, isImage: true }),
     ]);
@@ -1842,7 +1856,7 @@ describe('PlayerComponent reload QoE event', () => {
   });
 
   it('shows a styled track as plain text when picked automatically, and burns it in when the viewer picks it', async () => {
-    const { h, spy } = spied();
+    const { h, spy } = await spied();
     h.component.subs.availableSubtitles.set([
       subOption('emb-2', 'en', { burnIn: true, styled: true, subtitleDbId: 5 }),
     ]);
@@ -1859,7 +1873,7 @@ describe('PlayerComponent reload QoE event', () => {
   });
 
   it('reports a quality reload as quality, so no event is added for it', async () => {
-    const { h, spy } = spied();
+    const { h, spy } = await spied();
     TestBed.inject(QualityManagerService).availableQualities.set([
       { id: 'original', label: 'Original', height: 1080 },
       { id: '720p', label: '720p', height: 720 },
@@ -1873,7 +1887,7 @@ describe('PlayerComponent reload QoE event', () => {
   });
 
   it('defaults to other, and the remux fallback reports its own reason', async () => {
-    const { h, spy } = spied();
+    const { h, spy } = await spied();
     await h.component.reloadStream();
     await h.component.reloadStream(5, { reason: 'remux_fallback' });
     expect(spy.mock.calls.map((c) => c[2])).toEqual([{ reason: 'other' }, { reason: 'remux_fallback' }]);
@@ -1891,13 +1905,13 @@ describe('PlayerComponent playback-info request', () => {
   }
 
   it('reloadStream, the recovery reload and the far-seek reload all negotiate the same track state', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.component.subs.activeBurnInId = 7;
     h.component.activeAudioStreamIndex = 2;
     h.engine.currentTime = 30;
 
     await h.component.reloadStream();
-    await h.component.refreshSidAndReload(30, { preservePause: false, unmute: false });
+    await refresh(h.component, 30, { preservePause: false, unmute: false });
 
     const [viaReload, viaRecovery] = h.streamingApi.getPlaybackInfo.mock.calls as unknown[][];
     expect(trackArgs(viaReload)).toEqual({ burnIn: 7, audio: 2, quality: undefined });
@@ -1929,8 +1943,8 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
   }
 
   it('reloadStream: a Shaka load-time fatal on a remux re-negotiates with rejectCopy at the same anchor', async () => {
-    const h = createHarness();
-    h.component.loader.adopt(REMUX_PI('sid-old'));
+    const h = await createHarness();
+    await seed(h.component, REMUX_PI('sid-old'));
     h.state.playbackMode.set('remux');
     h.engine.currentTime = 42;
     h.streamingApi.getPlaybackInfo
@@ -1949,8 +1963,8 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
   });
 
   it('reloadStream: a load-time fatal on DirectPlay re-negotiates a remux, keeping the copy', async () => {
-    const h = createHarness();
-    h.component.loader.adopt(buildPi(MAIN_FILE_ID, { playMethod: 'DirectPlay', sessionId: 'sid-old' }));
+    const h = await createHarness();
+    await seed(h.component, buildPi(MAIN_FILE_ID, { playMethod: 'DirectPlay', sessionId: 'sid-old' }));
     h.state.playbackMode.set('direct');
     h.engine.currentTime = 12;
     h.streamingApi.getPlaybackInfo
@@ -1969,7 +1983,7 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
   });
 
   it('reloadForEpisode: the new file falls back when its remux fails to load', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.component.mediaFileId = 7;
     h.streamingApi.getPlaybackInfo
       .mockResolvedValueOnce(REMUX_PI('sid-ep'))
@@ -1984,15 +1998,15 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
   });
 
   it('refreshSidAndReload: a recovery reload that lands on an undecodable remux falls back', async () => {
-    const h = createHarness();
-    h.component.loader.adopt(REMUX_PI('sid-old'));
+    const h = await createHarness();
+    await seed(h.component, REMUX_PI('sid-old'));
     h.state.playbackMode.set('remux');
     h.streamingApi.getPlaybackInfo
       .mockResolvedValueOnce(REMUX_PI('sid-recovered'))
       .mockResolvedValueOnce(TRANSCODE_PI());
     failFirstLoad(h);
 
-    await h.component.refreshSidAndReload(30, { preservePause: false, unmute: false });
+    await refresh(h.component, 30, { preservePause: false, unmute: false });
 
     await vi.waitFor(() => expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(2));
     expect(rejectCopyOf(h, 1)).toBe(true);
@@ -2000,8 +2014,8 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
   });
 
   it('seekByReload: hands the far seek to the fallback instead of polling under its guard', async () => {
-    const h = createHarness();
-    h.component.loader.adopt(REMUX_PI('sid-old'));
+    const h = await createHarness();
+    await seed(h.component, REMUX_PI('sid-old'));
     h.state.playbackMode.set('remux');
     h.state.seekLocked.set(true);
     h.streamingApi.getPlaybackInfo
@@ -2018,8 +2032,8 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
   });
 
   it('initial load: the catch hands the rejection to the same gate, which absorbs a duplicate report', async () => {
-    const h = createHarness();
-    h.component.loader.adopt(REMUX_PI());
+    const h = await createHarness();
+    await seed(h.component, REMUX_PI());
     h.state.playbackMode.set('remux');
     h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(TRANSCODE_PI());
     h.component.wireErrorRecovery(h.engine);
@@ -2038,17 +2052,17 @@ describe('PlayerComponent remux fallback on a rejected load', () => {
   });
 
   it('rejectCopy sticks for the file: a later reload without a fresh failure still sends it', async () => {
-    const h = createHarness();
-    h.component.loader.adopt(REMUX_PI());
+    const h = await createHarness();
+    await seed(h.component, REMUX_PI());
     h.state.playbackMode.set('remux');
     h.streamingApi.getPlaybackInfo.mockResolvedValue(TRANSCODE_PI());
     h.component.wireErrorRecovery(h.engine);
 
     h.engine.emit('error', { source: 'shaka', code: 4032 });
     await vi.waitFor(() => expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(h.component.reloadingStream).toBe(false));
+    await vi.waitFor(() => expect(h.component.loader.busy()).toBe(false));
 
-    await h.component.refreshSidAndReload(5, { preservePause: false, unmute: false });
+    await refresh(h.component, 5, { preservePause: false, unmute: false });
     await h.component.reloadStream();
     expect(rejectCopyOf(h, 1)).toBe(true);
     expect(rejectCopyOf(h, 2)).toBe(true);
@@ -2060,10 +2074,10 @@ describe('PlayerComponent stats overlay: offline delivery', () => {
     TestBed.resetTestingModule();
   });
 
-  it('claims no delivery kind or copy mode for an offline copy whose packaging is not recorded', () => {
-    const h = createHarness();
+  it('claims no delivery kind or copy mode for an offline copy whose packaging is not recorded', async () => {
+    const h = await createHarness();
     h.component.isOfflinePlayback = true;
-    h.component.loader.adopt(null);
+    await seed(h.component, null);
     h.component.lastStreamUrl = 'offline:123';
     h.component.statsVisible.set(true);
 
@@ -2083,11 +2097,11 @@ describe('PlayerComponent: offline crop', () => {
 
   const stored = { x: 0, y: 140, width: 1920, height: 800, sourceWidth: 1920, sourceHeight: 1080 };
 
-  it('feeds the crop stored with the download through the desktop mpv path', () => {
-    const h = createHarness();
+  it('feeds the crop stored with the download through the desktop mpv path', async () => {
+    const h = await createHarness();
     h.component.isDesktopNative = true;
     h.component.isOfflinePlayback = true;
-    h.component.loader.adopt(null);
+    await seed(h.component, null);
     h.component.offlineCrop = stored;
 
     expect(h.component.sourceSize()).toEqual({ width: 1920, height: 1080 });
@@ -2095,12 +2109,12 @@ describe('PlayerComponent: offline crop', () => {
     expect(h.engine.configure).toHaveBeenCalledWith({ videoCrop: '1920x800+0+140' });
   });
 
-  it('hands the native engine the stored rect with its source size', () => {
-    const h = createHarness();
+  it('hands the native engine the stored rect with its source size', async () => {
+    const h = await createHarness();
     const engine = Object.assign(Object.create(NativeEngine.prototype), { setCrop: vi.fn(() => true) });
     h.component.engine = engine;
     h.component.isOfflinePlayback = true;
-    h.component.loader.adopt(null);
+    await seed(h.component, null);
     h.component.offlineCrop = stored;
 
     h.component.applyVideoCrop();
@@ -2111,22 +2125,22 @@ describe('PlayerComponent: offline crop', () => {
     );
   });
 
-  it('hands the Tizen engine the stored rect with its source size', () => {
-    const h = createHarness();
+  it('hands the Tizen engine the stored rect with its source size', async () => {
+    const h = await createHarness();
     const engine = Object.assign(Object.create(TizenEngine.prototype), { setCrop: vi.fn(() => true) });
     h.component.engine = engine;
     h.component.isOfflinePlayback = true;
-    h.component.loader.adopt(null);
+    await seed(h.component, null);
     h.component.offlineCrop = stored;
 
     h.component.applyVideoCrop();
     expect(engine.setCrop).toHaveBeenCalledWith(expect.objectContaining({ y: 140 }), 1920, 1080);
   });
 
-  it('applies nothing for a download without a stored crop', () => {
-    const h = createHarness();
+  it('applies nothing for a download without a stored crop', async () => {
+    const h = await createHarness();
     h.component.isOfflinePlayback = true;
-    h.component.loader.adopt(null);
+    await seed(h.component, null);
     h.component.offlineCrop = null;
     expect(h.component.activeCropRect()).toBeUndefined();
   });
@@ -2138,14 +2152,14 @@ describe('PlayerComponent: native PiP bypasses the crop on iOS only', () => {
     vi.restoreAllMocks();
   });
 
-  function nativeCropInPip(platform: string) {
+  async function nativeCropInPip(platform: string) {
     vi.spyOn(Capacitor, 'getPlatform').mockReturnValue(platform as never);
-    const h = createHarness();
+    const h = await createHarness();
     const engine = Object.assign(Object.create(NativeEngine.prototype), { setCrop: vi.fn(() => true) });
     h.component.engine = engine;
     h.component.isNativeEngine.set(true);
     h.component.isOfflinePlayback = true;
-    h.component.loader.adopt(null);
+    await seed(h.component, null);
     h.component.offlineCrop = { x: 0, y: 140, width: 1920, height: 800, sourceWidth: 1920, sourceHeight: 1080 };
     h.component.applyVideoCrop();
     h.component.inPipMode.set(true);
@@ -2153,13 +2167,13 @@ describe('PlayerComponent: native PiP bypasses the crop on iOS only', () => {
     return h;
   }
 
-  it('AVPictureInPicture renders the full frame, so the crop reads as bypassed', () => {
-    const h = nativeCropInPip('ios');
+  it('AVPictureInPicture renders the full frame, so the crop reads as bypassed', async () => {
+    const h = await nativeCropInPip('ios');
     expect(h.component.playerStats()?.cropBypassed).toBe(true);
   });
 
-  it('Android keeps the same view hierarchy in PiP, so the crop still applies', () => {
-    const h = nativeCropInPip('android');
+  it('Android keeps the same view hierarchy in PiP, so the crop still applies', async () => {
+    const h = await nativeCropInPip('android');
     expect(h.component.playerStats()?.cropBypassed).toBe(false);
   });
 });
@@ -2171,7 +2185,7 @@ describe('PlayerComponent startup', () => {
   });
 
   it('negotiates playback once, with the audio index resolved from the preferred language', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const audio = [{ language: 'eng' }, { language: 'fra' }];
     const media = {
       ...MOVIE,
@@ -2194,7 +2208,7 @@ describe('PlayerComponent startup', () => {
   });
 
   it('opens the first load paused when the route was launched paused', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const tracks = { fileId: MAIN_FILE_ID, audioStreamIndex: 2, subtitleId: 'ext-5' };
     const snapshot = { item: { fileId: MAIN_FILE_ID, mediaId: MEDIA_ID }, position: 0, paused: true, tracks };
     (TestBed.inject(Router) as any).getCurrentNavigation = () => ({ extras: { state: { snapshot } } });
@@ -2212,30 +2226,30 @@ describe('PlayerComponent startup', () => {
   });
 
   describe('pre-roll first', () => {
-    const launch = (h: ReturnType<typeof createHarness>, query: Record<string, string> = {}) => {
+    const launch = (h: Harness, query: Record<string, string> = {}) => {
       (TestBed.inject(ActivatedRoute).snapshot.queryParams as any) = { mediaId: String(MEDIA_ID), ...query };
       h.component.createShakaEngine = async () => { h.component.engine = h.engine; };
       return h.component.ngAfterViewInit();
     };
     const deferred = (): PlaybackInfoResponse =>
       ({ deferred: true, preRoll: [{ mediaFileId: TRAILER_FILE_ID }] }) as unknown as PlaybackInfoResponse;
-    const asked = (h: ReturnType<typeof createHarness>) =>
+    const asked = (h: Harness) =>
       (h.streamingApi.getPlaybackInfo.mock.calls as any[][]).map((c) => [c[0], c[7]?.preRollFirst]);
 
     it('asks for the pre-roll first on a plain launch', async () => {
-      const h = createHarness();
+      const h = await createHarness();
       await launch(h);
       expect(asked(h)).toEqual([[MAIN_FILE_ID, true]]);
     });
 
     it.each<Record<string, string>>([{ t: '30' }, { noPreRoll: '1' }])('does not ask when %o', async (query) => {
-      const h = createHarness();
+      const h = await createHarness();
       await launch(h, query);
       expect(asked(h)).toEqual([[MAIN_FILE_ID, false]]);
     });
 
     it('plays the pre-roll without ever opening the film, which opens after the last item', async () => {
-      const h = createHarness();
+      const h = await createHarness();
       h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(deferred());
       await launch(h);
 
@@ -2252,25 +2266,25 @@ describe('PlayerComponent startup', () => {
     });
 
     it('opens the film at once when every pre-roll item fails to negotiate', async () => {
-      const h = createHarness({ trailerPlaybackInfo: 'reject' });
+      const h = await createHarness({ trailerPlaybackInfo: 'reject' });
       h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(deferred());
       await launch(h);
 
       expect(asked(h)).toEqual([[MAIN_FILE_ID, true], [TRAILER_FILE_ID, undefined], [MAIN_FILE_ID, undefined]]);
       expect(h.component.preRollActive()).toBe(false);
-      expect(h.component.loader.info().sessionId).toBe(`sid-${MAIN_FILE_ID}`);
+      expect(h.component.loader.info().sessionId).toBe(await lastSid(h));
     });
 
     it('still stops the film session a server older than this opened for it', async () => {
-      const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
+      const h = await createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
       await launch(h);
-      expect(h.streamingApi.stopSession).toHaveBeenCalledWith(`sid-${MAIN_FILE_ID}`);
+      expect(h.streamingApi.stopSession).toHaveBeenCalledWith(`sid-${MAIN_FILE_ID}-1`);
       expect(h.component.mediaFileId).toBe(TRAILER_FILE_ID);
     });
   });
 
   it('crops on the Tizen engine before its first load', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const crop = { x: 0, y: 140, width: 1920, height: 800 };
     h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(
       buildPi(MAIN_FILE_ID, {
@@ -2305,8 +2319,8 @@ const AUDIO_MEDIA: Media = {
   files: [{ ...MOVIE.files![0], streamInfo: { durationSeconds: 100, audio: AUDIO_STREAMS } as any }],
 };
 
-function audioHarness() {
-  const h = createHarness();
+async function audioHarness() {
+  const h = await createHarness();
   h.component.media = AUDIO_MEDIA;
   h.component.activeAudioStreamIndex = 0;
   return h;
@@ -2323,7 +2337,7 @@ describe('PlayerComponent audio target', () => {
     ['shaka-4', 'shaka-7'],
     ['avplay-audio-1', 'avplay-audio-2'],
   ])('a pick of %s / %s reaches the next negotiation as a streamInfo index', async (first, second) => {
-    const h = audioHarness();
+    const h = await audioHarness();
     h.component.availableAudioTracks.set([
       { id: first, label: '', language: 'en' },
       { id: second, label: '', language: 'fr' },
@@ -2336,19 +2350,19 @@ describe('PlayerComponent audio target', () => {
     expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
   });
 
-  it('lists the engine audio tracks in file order whatever order the engine reports', () => {
-    const h = audioHarness();
+  it('lists the engine audio tracks in file order whatever order the engine reports', async () => {
+    const h = await audioHarness();
     (h.component as any).adoptAudioTracks([engineTrack('audio-0', 'fra', true), engineTrack('audio-1', 'eng')]);
     expect(h.component.availableAudioTracks().map((t: { id: string }) => t.id)).toEqual(['audio-1', 'audio-0']);
   });
 
   it('configures the engine with the target language before every load, not the session-start one', async () => {
-    const h = audioHarness();
+    const h = await audioHarness();
     h.component.activeAudioStreamIndex = 1;
     h.engine.currentTime = 10;
 
     await h.component.reloadStream();
-    await h.component.refreshSidAndReload(10, { preservePause: false, unmute: false });
+    await refresh(h.component, 10, { preservePause: false, unmute: false });
 
     const configures = h.engine.configure.mock.calls
       .map((c: any[], i: number) => (c[0]?.preferredAudioLanguage != null ? h.engine.configure.mock.invocationCallOrder[i] : 0))
@@ -2360,7 +2374,7 @@ describe('PlayerComponent audio target', () => {
   });
 
   it('leaves a server master\'s DEFAULT rendition to Shaka instead of preferring a language', async () => {
-    const h = audioHarness();
+    const h = await audioHarness();
     h.component.activeAudioStreamIndex = 1;
     h.streamingApi.getPlaybackInfo.mockResolvedValueOnce(buildPi(MAIN_FILE_ID, { playMethod: 'DirectStream' }));
 
@@ -2370,8 +2384,8 @@ describe('PlayerComponent audio target', () => {
     expect(h.engine.configure).not.toHaveBeenCalledWith({ preferredAudioLanguage: 'fr' });
   });
 
-  it('puts an engine that fell back to its default track back on the target, keeping the target', () => {
-    const h = audioHarness();
+  it('puts an engine that fell back to its default track back on the target, keeping the target', async () => {
+    const h = await audioHarness();
     h.component.activeAudioStreamIndex = 1;
     h.component.wireAudioTracks(h.engine);
 
@@ -2384,8 +2398,8 @@ describe('PlayerComponent audio target', () => {
     expect(h.component.activeAudioStreamIndex).toBe(1);
   });
 
-  it('does nothing when the engine already plays the target', () => {
-    const h = audioHarness();
+  it('does nothing when the engine already plays the target', async () => {
+    const h = await audioHarness();
     h.component.activeAudioStreamIndex = 1;
     h.component.wireAudioTracks(h.engine);
 
@@ -2397,8 +2411,8 @@ describe('PlayerComponent audio target', () => {
     expect(h.component.activeAudioTrackId()).toBe('audio-1');
   });
 
-  it('lists an undecodable track as unsupported without moving the others', () => {
-    const h = audioHarness();
+  it('lists an undecodable track as unsupported without moving the others', async () => {
+    const h = await audioHarness();
     h.component.wireAudioTracks(h.engine);
 
     h.engine.emit('audioTracksChanged', {
@@ -2411,8 +2425,8 @@ describe('PlayerComponent audio target', () => {
     ]);
   });
 
-  it('never switches the engine to an unsupported target', () => {
-    const h = audioHarness();
+  it('never switches the engine to an unsupported target', async () => {
+    const h = await audioHarness();
     h.component.activeAudioStreamIndex = 1;
     h.component.wireAudioTracks(h.engine);
 
@@ -2425,7 +2439,7 @@ describe('PlayerComponent audio target', () => {
   });
 
   it('ignores a pick of an unsupported track', async () => {
-    const h = audioHarness();
+    const h = await audioHarness();
     h.component.availableAudioTracks.set([
       { id: 'audio-0', label: '', language: 'en' },
       { id: 'audio-1', label: '', language: 'fr', supported: false },
@@ -2437,8 +2451,8 @@ describe('PlayerComponent audio target', () => {
     expect(h.component.activeAudioStreamIndex).toBe(0);
   });
 
-  it('asks once for a switch even when the engine keeps reporting the old track for a moment', () => {
-    const h = audioHarness();
+  it('asks once for a switch even when the engine keeps reporting the old track for a moment', async () => {
+    const h = await audioHarness();
     h.component.activeAudioStreamIndex = 1;
     h.component.wireAudioTracks(h.engine);
     const stale = { tracks: [engineTrack('audio-0', 'eng', true), engineTrack('audio-1', 'fra')] };
@@ -2455,7 +2469,7 @@ describe('PlayerComponent audio target', () => {
   });
 
   it('lets the latest of two quick picks keep the target and the check mark', async () => {
-    const h = audioHarness();
+    const h = await audioHarness();
     h.component.availableAudioTracks.set([
       { id: 'shaka-4', label: '', language: 'en' },
       { id: 'shaka-7', label: '', language: 'fr' },
@@ -2476,7 +2490,7 @@ describe('PlayerComponent audio target', () => {
   });
 
   it('wires the Tizen engine to the same track reports as the others', async () => {
-    const h = audioHarness();
+    const h = await audioHarness();
     h.component.activeAudioStreamIndex = 1;
     h.component.createSurface = async () => ({ engine: h.engine });
 
@@ -2529,8 +2543,8 @@ describe('PlayerComponent item change', () => {
     TestBed.resetTestingModule();
   });
 
-  function episodeHarness() {
-    const h = createHarness();
+  async function episodeHarness() {
+    const h = await createHarness();
     h.component.media = TWO_EPISODES;
     h.component.activeAudioStreamIndex = 1;
     h.component.availableAudioTracks.set([
@@ -2545,7 +2559,7 @@ describe('PlayerComponent item change', () => {
   }
 
   it('starts the next episode from a clean track state, subtitle off on the engine before it loads', async () => {
-    const h = episodeHarness();
+    const h = await episodeHarness();
 
     await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
 
@@ -2562,7 +2576,7 @@ describe('PlayerComponent item change', () => {
   });
 
   it('menus the new episode\'s tracks, not the previous episode\'s same-count list', async () => {
-    const h = episodeHarness();
+    const h = await episodeHarness();
     h.component.wireAudioTracks(h.engine);
 
     await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
@@ -2580,8 +2594,8 @@ describe('PlayerComponent native sidecar subtitles', () => {
     TestBed.resetTestingModule();
   });
 
-  function sidecarHarness(lists: Record<number, unknown[]>) {
-    const h = createHarness();
+  async function sidecarHarness(lists: Record<number, unknown[]>) {
+    const h = await createHarness();
     h.component.media = TWO_EPISODES;
     const engine = nativeStub();
     h.component.engine = engine;
@@ -2591,7 +2605,7 @@ describe('PlayerComponent native sidecar subtitles', () => {
   }
 
   it('lists the direct-play externals in the order subtitleOrdinal ranks them, forced flag included', async () => {
-    const { h, engine } = sidecarHarness({
+    const { h, engine } = await sidecarHarness({
       [EP1_FILE_ID]: [
         subOption('ext-9', 'en', { subtitleDbId: 9 }),
         subOption('emb-2', 'en', { subtitleDbId: undefined }),
@@ -2610,7 +2624,7 @@ describe('PlayerComponent native sidecar subtitles', () => {
   });
 
   it('hands each load the sidecars of the file and mode it is about to play', async () => {
-    const { h, engine } = sidecarHarness({
+    const { h, engine } = await sidecarHarness({
       [EP1_FILE_ID]: [subOption('ext-1', 'en', { subtitleDbId: 1 })],
       [EP2_FILE_ID]: [subOption('ext-7', 'fr', { subtitleDbId: 7 })],
     });
@@ -2635,7 +2649,7 @@ describe('PlayerComponent native sidecar subtitles', () => {
   });
 
   it('passes an episode its sidecars before its load', async () => {
-    const { h, engine } = sidecarHarness({ [EP2_FILE_ID]: [subOption('ext-7', 'fr', { subtitleDbId: 7 })] });
+    const { h, engine } = await sidecarHarness({ [EP2_FILE_ID]: [subOption('ext-7', 'fr', { subtitleDbId: 7 })] });
 
     await h.component.reloadForEpisode(EP2_FILE_ID, MEDIA_ID, undefined);
 
@@ -2654,21 +2668,21 @@ describe('PlayerComponent subtitle selection', () => {
   const ext = (n: number, language: string, extra: Record<string, unknown> = {}) =>
     subOption(`ext-${n}`, language, { subtitleDbId: n, ...extra });
 
-  function subtitleHarness() {
-    const h = createHarness();
+  async function subtitleHarness() {
+    const h = await createHarness();
     h.state.videoStarted.set(true);
     return { h, tracks: TestBed.inject(TrackManagerService) as any };
   }
 
   /** The descriptor the picker builds on a click, so a restore must build the same one. */
-  const lastSelected = (h: ReturnType<typeof createHarness>) =>
+  const lastSelected = (h: Harness) =>
     h.engine.selectTextTrack.mock.calls.at(-1)?.[0] as Record<string, unknown>;
 
   it.each([
     ['reloadStream', (c: any) => c.reloadStream()],
-    ['refreshSidAndReload', (c: any) => c.refreshSidAndReload(10, { preservePause: false, unmute: false })],
+    ['refreshSidAndReload', (c: any) => refresh(c, 10, { preservePause: false, unmute: false })],
   ])('%s restores the active subtitle with its ordinal, embedded index and image flag', async (_name, reload) => {
-    const { h } = subtitleHarness();
+    const { h } = await subtitleHarness();
     h.engine.currentTime = 10;
     h.component.subs.availableSubtitles.set([
       ext(1, 'en'),
@@ -2691,18 +2705,18 @@ describe('PlayerComponent subtitle selection', () => {
   });
 
   it('restores on a native engine too, which the recovery reload used to skip', async () => {
-    const { h } = subtitleHarness();
+    const { h } = await subtitleHarness();
     h.component.isNativeEngine.set(true);
     h.component.subs.availableSubtitles.set([ext(1, 'en')]);
     h.component.subs.activeSubtitleId.set('ext-1');
 
-    await h.component.refreshSidAndReload(10, { preservePause: false, unmute: false });
+    await refresh(h.component, 10, { preservePause: false, unmute: false });
 
     expect(h.engine.selectTextTrack).toHaveBeenCalled();
   });
 
   it('restores nothing while Off, and leaves a burn-in to the server', async () => {
-    const { h } = subtitleHarness();
+    const { h } = await subtitleHarness();
     h.component.subs.availableSubtitles.set([ext(1, 'en', { burnIn: true })]);
     await h.component.reloadStream();
     h.component.subs.activeSubtitleId.set('ext-1');
@@ -2712,7 +2726,7 @@ describe('PlayerComponent subtitle selection', () => {
   });
 
   it('turns the soft subtitle off before a burn-in reload, and does not bring it back', async () => {
-    const { h } = subtitleHarness();
+    const { h } = await subtitleHarness();
     h.component.subs.availableSubtitles.set([ext(1, 'en'), subOption('emb-9', 'en', { burnIn: true, subtitleDbId: 9, isImage: true })]);
     await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
     h.engine.setTextVisibility.mockClear();
@@ -2730,7 +2744,7 @@ describe('PlayerComponent subtitle selection', () => {
   });
 
   it('keeps the latest pick when an older one finishes loading last', async () => {
-    const { h, tracks } = subtitleHarness();
+    const { h, tracks } = await subtitleHarness();
     const a = ext(1, 'en');
     const b = ext(2, 'fr');
     h.component.subs.availableSubtitles.set([a, b]);
@@ -2754,7 +2768,7 @@ describe('PlayerComponent subtitle selection', () => {
   });
 
   it('does not let a pick of the previous episode land on the next one', async () => {
-    const { h } = subtitleHarness();
+    const { h } = await subtitleHarness();
     h.component.media = TWO_EPISODES;
     const a = ext(1, 'en');
     h.component.subs.availableSubtitles.set([a]);
@@ -2771,7 +2785,7 @@ describe('PlayerComponent subtitle selection', () => {
   });
 
   it('remembers a viewer\'s pick and not the automatic one', async () => {
-    const { h, tracks } = subtitleHarness();
+    const { h, tracks } = await subtitleHarness();
     const a = ext(1, 'en', { forced: true });
     tracks.loadSubtitles = vi.fn(async () => [a]);
     tracks.autoSelectSubtitle = vi.fn(async (_s: unknown, _a: unknown, _i: unknown, _f: unknown, onSelect: (s: unknown) => Promise<unknown>) => {
@@ -2790,7 +2804,7 @@ describe('PlayerComponent subtitle selection', () => {
   });
 
   it('decides the automatic pick from the audio that will play, before any engine lists a track', async () => {
-    const { h, tracks } = subtitleHarness();
+    const { h, tracks } = await subtitleHarness();
     h.component.media = AUDIO_MEDIA;
     h.component.activeAudioStreamIndex = 1;
 
@@ -2811,8 +2825,8 @@ describe('PlayerComponent cast session picks', () => {
     id, label: id, url: '', language: 'en', burnIn: false, subtitleDbId: Number(id.replace(/\D/g, '')), ...over,
   });
 
-  function casting() {
-    const h = createHarness();
+  async function casting() {
+    const h = await createHarness();
     const cast = TestBed.inject(CastService) as unknown as Record<string, unknown>;
     Object.assign(cast, {
       isConnected: () => true, deviceName: () => 'Living room', currentTime: () => 42, duration: () => 100, volume: () => 1, muted: () => false,
@@ -2823,7 +2837,7 @@ describe('PlayerComponent cast session picks', () => {
   }
 
   it('reports the cast output\'s sid, picks and rung, not the local ones, while casting', async () => {
-    const { h } = casting();
+    const { h } = await casting();
     h.component.activeAudioStreamIndex = 0;
     h.component.subs.activeSubtitleId.set('emb-1');
 
@@ -2844,25 +2858,26 @@ describe('PlayerComponent cast session picks', () => {
   });
 
   it('makes no session call for a stream another user loaded', async () => {
-    const { h, cp } = casting();
+    const { h, cp } = await casting();
     (cp as unknown as Record<string, unknown>)['controlOnly'] = () => true;
     await h.component.savePosition(true);
     expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
   });
 
   describe('when the session ends and the player stays', () => {
-    function resumeWith(
+    async function resumeWith(
       picked: { subtitleId: string | null; audioStreamIndex: number | undefined } | null,
       subs: unknown[],
     ) {
-      const { h } = casting();
+      const { h } = await casting();
       h.component.subs.availableSubtitles.set(subs);
       h.component.activeAudioStreamIndex = 0;
       h.component.subs.activeBurnInId = 99;
       h.component.subs.activeSubtitleId.set('ext-1');
       let seen: unknown;
       let opts: unknown;
-      h.component.refreshSidAndReload = vi.fn(async (_p: number, o: unknown) => {
+      h.component.postLoadDone = true;
+      h.component.refreshSidAndReload = vi.fn(async (_op: unknown, _p: number, o: unknown) => {
         opts = o;
         seen = {
           audio: h.component.activeAudioStreamIndex,
@@ -2880,7 +2895,7 @@ describe('PlayerComponent cast session picks', () => {
     }
 
     it('reloads on the audio and the burn-in picked on the receiver', async () => {
-      const r = resumeWith(
+      const r = await resumeWith(
         { subtitleId: 'emb-4', audioStreamIndex: 2 },
         [castSub('ext-1'), castSub('emb-4', { burnIn: true, isImage: true })],
       );
@@ -2889,13 +2904,13 @@ describe('PlayerComponent cast session picks', () => {
     });
 
     it('reloads paused when the receiver was paused', async () => {
-      const r = resumeWith(null, []);
+      const r = await resumeWith(null, []);
       await r.run(true);
       expect(r.opts()).toEqual(expect.objectContaining({ paused: true }));
     });
 
     it('opens the first load paused when the receiver was paused', async () => {
-      const r = resumeWith(null, []);
+      const r = await resumeWith(null, []);
       const c = r.h.component;
       c.engine = undefined;
       let armed: unknown;
@@ -2908,8 +2923,8 @@ describe('PlayerComponent cast session picks', () => {
       expect(c.resumePaused).toBe(false);
     });
 
-    it('shows paused after re-pausing an engine that fired no event', () => {
-      const c = createHarness().component;
+    it('shows paused after re-pausing an engine that fired no event', async () => {
+      const c = (await createHarness()).component;
       c.engine = { paused: true, pause: vi.fn(async () => {}), play: vi.fn(), destroy: vi.fn(async () => {}) };
       c.state.paused.set(false);
       c.state.startingPlayback.set(true);
@@ -2917,8 +2932,8 @@ describe('PlayerComponent cast session picks', () => {
       expect(c.state.uiPaused()).toBe(true);
     });
 
-    it('shows playing after a reload that resumes an engine already playing', () => {
-      const c = createHarness().component;
+    it('shows playing after a reload that resumes an engine already playing', async () => {
+      const c = (await createHarness()).component;
       c.engine = { paused: false, pause: vi.fn(async () => {}), play: vi.fn(async () => {}), destroy: vi.fn(async () => {}) };
       c.state.paused.set(true);
       c.state.startingPlayback.set(false);
@@ -2926,15 +2941,15 @@ describe('PlayerComponent cast session picks', () => {
       expect(c.state.uiPaused()).toBe(false);
     });
 
-    it('skips the post-load play of an engine that cannot open paused', () => {
-      const c = createHarness().component;
+    it('skips the post-load play of an engine that cannot open paused', async () => {
+      const c = (await createHarness()).component;
       c.resumePaused = true;
       c.armStartPaused({});
       expect(c.loadedPaused).toBe(true);
     });
 
     it('shows a bitmap pick the local engine renders itself without burning it in', async () => {
-      const r = resumeWith(
+      const r = await resumeWith(
         { subtitleId: 'emb-4', audioStreamIndex: 0 },
         [castSub('emb-4', { burnIn: false, isImage: true })],
       );
@@ -2943,21 +2958,21 @@ describe('PlayerComponent cast session picks', () => {
     });
 
     it('clears the subtitle and burn-in turned off on the receiver', async () => {
-      const r = resumeWith({ subtitleId: null, audioStreamIndex: 0 }, [castSub('ext-1')]);
+      const r = await resumeWith({ subtitleId: null, audioStreamIndex: 0 }, [castSub('ext-1')]);
       await r.run();
       expect(r.seen()).toEqual({ audio: 0, burnIn: null, subtitle: null });
     });
 
     it('keeps the local picks when the receiver was playing another file', async () => {
-      const r = resumeWith(null, [castSub('ext-1')]);
+      const r = await resumeWith(null, [castSub('ext-1')]);
       await r.run();
       expect(r.seen()).toEqual({ audio: 0, burnIn: 99, subtitle: 'ext-1' });
     });
   });
 
   it('hands the local session id over so the session can stop it once the cast stream is up', async () => {
-    const { h } = casting();
-    h.component.loader.adopt({ sessionId: 'local-sid' } as PlaybackInfoResponse);
+    const { h } = await casting();
+    await seed(h.component, { sessionId: 'local-sid' } as PlaybackInfoResponse);
     h.component.engine.unload = vi.fn(async () => {});
 
     const handoff = await h.component.releaseForHandoff();
@@ -2967,7 +2982,7 @@ describe('PlayerComponent cast session picks', () => {
   });
 
   it('hands a local Off over to the cast as Off', async () => {
-    const { h } = casting();
+    const { h } = await casting();
     h.component.subs.availableSubtitles.set([castSub('ext-5')]);
     h.component.subs.activeSubtitleId.set(null);
 
@@ -2987,8 +3002,8 @@ describe('PlayerComponent subtitle delivery', () => {
     subOption(id, language, { subtitleDbId: Number(id.slice(4)), ...extra });
   const pgs = (id: string) => dbSub(id, 'en', { burnIn: true, isImage: true, url: '' });
 
-  function deliveryHarness(kind: EngineKind, opts: { serverFeature?: boolean } = {}) {
-    const h = createHarness();
+  async function deliveryHarness(kind: EngineKind, opts: { serverFeature?: boolean } = {}) {
+    const h = await createHarness();
     h.state.videoStarted.set(true);
     const profiles = TestBed.inject(BrowserDeviceProfileService) as any;
     profiles.engineTraits = () => ENGINE_TRAITS[kind];
@@ -2997,7 +3012,7 @@ describe('PlayerComponent subtitle delivery', () => {
   }
 
   /** The server's answer: an HLS remux whenever the request rules DirectPlay out, a transcode for a burn-in. */
-  function answerLikeServer(h: ReturnType<typeof createHarness>) {
+  function answerLikeServer(h: Harness) {
     (h.streamingApi.getPlaybackInfo as any).mockImplementation(async (id: number, profile: any, burnIn?: number) =>
       buildPi(id, {
         playMethod: burnIn ? 'Transcode' : profile.needsHlsSubtitles ? 'DirectStream' : 'DirectPlay',
@@ -3005,11 +3020,11 @@ describe('PlayerComponent subtitle delivery', () => {
     );
   }
 
-  const negotiations = (h: ReturnType<typeof createHarness>) => h.streamingApi.getPlaybackInfo.mock.calls as any[][];
+  const negotiations = (h: Harness) => h.streamingApi.getPlaybackInfo.mock.calls as any[][];
 
   describe('bitmap subtitles', () => {
     it('are rendered by an engine that can, from the DirectPlay container', async () => {
-      const h = deliveryHarness(EngineKind.ANDROID);
+      const h = await deliveryHarness(EngineKind.ANDROID);
       h.component.subs.availableSubtitles.set([pgs('emb-9')]);
 
       await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
@@ -3025,7 +3040,7 @@ describe('PlayerComponent subtitle delivery', () => {
       ['AVPlayer renders no bitmap at all', EngineKind.IOS, 'direct', 'emb-9'],
       ['the browser renders no bitmap at all', EngineKind.WEB, 'direct', 'emb-9'],
     ])('are burned in when %s', async (_why, kind, mode, id) => {
-      const h = deliveryHarness(kind);
+      const h = await deliveryHarness(kind);
       answerLikeServer(h);
       h.state.playbackMode.set(mode as 'direct' | 'remux');
       h.component.subs.availableSubtitles.set([pgs(id)]);
@@ -3037,7 +3052,7 @@ describe('PlayerComponent subtitle delivery', () => {
     });
 
     it('follow the play mode a reload lands on: rendered in DirectPlay, burned in once it is HLS', async () => {
-      const h = deliveryHarness(EngineKind.ANDROID);
+      const h = await deliveryHarness(EngineKind.ANDROID);
       answerLikeServer(h);
       h.component.subs.availableSubtitles.set([pgs('emb-9')]);
       await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
@@ -3048,6 +3063,8 @@ describe('PlayerComponent subtitle delivery', () => {
       );
 
       await h.component.reloadStream();
+      // The burn-in is restored once the reload has ended, as a reload of its own.
+      await vi.waitFor(() => expect(negotiations(h)).toHaveLength(2));
 
       expect(negotiations(h).map((c) => c[2])).toEqual([undefined, 9]);
       expect(h.component.subs.activeBurnInId).toBe(9);
@@ -3056,7 +3073,7 @@ describe('PlayerComponent subtitle delivery', () => {
     });
 
     it('stay burned in across further reloads without renegotiating again', async () => {
-      const h = deliveryHarness(EngineKind.IOS);
+      const h = await deliveryHarness(EngineKind.IOS);
       answerLikeServer(h);
       h.component.subs.availableSubtitles.set([pgs('emb-9')]);
       await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
@@ -3068,7 +3085,7 @@ describe('PlayerComponent subtitle delivery', () => {
     });
 
     it('are not brought back when a text subtitle replaces the burned-in one', async () => {
-      const h = deliveryHarness(EngineKind.WEB);
+      const h = await deliveryHarness(EngineKind.WEB);
       answerLikeServer(h);
       h.component.subs.availableSubtitles.set([pgs('emb-9'), dbSub('ext-1', 'en')]);
       await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
@@ -3087,7 +3104,7 @@ describe('PlayerComponent subtitle delivery', () => {
     const text = () => dbSub('ext-1', 'en');
 
     it('renegotiates once for HLS on an explicit pick in DirectPlay, before selecting the track', async () => {
-      const h = deliveryHarness(EngineKind.IOS);
+      const h = await deliveryHarness(EngineKind.IOS);
       answerLikeServer(h);
       h.component.subs.availableSubtitles.set([text(), dbSub('ext-2', 'fr')]);
 
@@ -3104,7 +3121,7 @@ describe('PlayerComponent subtitle delivery', () => {
     });
 
     it('stops asking for HLS once the subtitle is turned off', async () => {
-      const h = deliveryHarness(EngineKind.IOS);
+      const h = await deliveryHarness(EngineKind.IOS);
       answerLikeServer(h);
       h.component.subs.availableSubtitles.set([text()]);
       await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
@@ -3119,7 +3136,7 @@ describe('PlayerComponent subtitle delivery', () => {
       ['an engine that sideloads', EngineKind.WEB, true],
       ['a server that does not know the field', EngineKind.IOS, false],
     ])('keeps DirectPlay for %s', async (_why, kind, serverFeature) => {
-      const h = deliveryHarness(kind, { serverFeature });
+      const h = await deliveryHarness(kind, { serverFeature });
       h.component.subs.availableSubtitles.set([text()]);
 
       await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
@@ -3129,7 +3146,7 @@ describe('PlayerComponent subtitle delivery', () => {
     });
 
     it('does not leave a bitmap pick the engine renders itself', async () => {
-      const h = deliveryHarness(EngineKind.IOS);
+      const h = await deliveryHarness(EngineKind.IOS);
       h.component.subs.availableSubtitles.set([pgs('emb-9')]);
 
       await h.component.subs.selectSubtitle(h.component.subs.availableSubtitles()[0]);
@@ -3138,7 +3155,7 @@ describe('PlayerComponent subtitle delivery', () => {
     });
 
     describe('before the first negotiation', () => {
-      const withAutoPick = (h: ReturnType<typeof createHarness>, pick: unknown) => {
+      const withAutoPick = (h: Harness, pick: unknown) => {
         const tracks = TestBed.inject(TrackManagerService) as any;
         tracks.loadSubtitles = vi.fn(async () => [text(), pgs('emb-9')]);
         tracks.autoSelectSubtitle = vi.fn(async (_s: unknown, _a: unknown, _i: unknown, _f: unknown, onSelect: (s: unknown) => Promise<unknown>) => {
@@ -3148,7 +3165,7 @@ describe('PlayerComponent subtitle delivery', () => {
       };
 
       it('asks for HLS when the automatic selection will pick a text subtitle', async () => {
-        const h = deliveryHarness(EngineKind.IOS);
+        const h = await deliveryHarness(EngineKind.IOS);
         const tracks = withAutoPick(h, text());
 
         await h.component.planSubtitleDelivery();
@@ -3164,7 +3181,7 @@ describe('PlayerComponent subtitle delivery', () => {
         ['picks a bitmap subtitle', pgs('emb-9'), EngineKind.IOS],
         ['picks text on an engine that sideloads', text(), EngineKind.WEB],
       ])('does not when the selection %s', async (_why, pick, kind) => {
-        const h = deliveryHarness(kind);
+        const h = await deliveryHarness(kind);
         withAutoPick(h, pick);
 
         await h.component.planSubtitleDelivery();
@@ -3174,7 +3191,7 @@ describe('PlayerComponent subtitle delivery', () => {
       });
 
       it('does not even fetch the list for an engine that sideloads', async () => {
-        const h = deliveryHarness(EngineKind.WEB);
+        const h = await deliveryHarness(EngineKind.WEB);
         const tracks = withAutoPick(h, text());
 
         await h.component.planSubtitleDelivery();
@@ -3183,7 +3200,7 @@ describe('PlayerComponent subtitle delivery', () => {
       });
 
       it('applies to the next episode\'s first negotiation too', async () => {
-        const h = deliveryHarness(EngineKind.IOS);
+        const h = await deliveryHarness(EngineKind.IOS);
         h.component.media = TWO_EPISODES;
         withAutoPick(h, text());
 
@@ -3200,8 +3217,8 @@ describe('PlayerComponent launch picks', () => {
     TestBed.resetTestingModule();
   });
 
-  it('opens on the audio picked before play, ahead of the automatic rules', () => {
-    const h = audioHarness();
+  it('opens on the audio picked before play, ahead of the automatic rules', async () => {
+    const h = await audioHarness();
     h.component.launchTracks = { fileId: MAIN_FILE_ID, audioStreamIndex: 1 };
 
     h.component.resolveAudioTarget();
@@ -3209,8 +3226,8 @@ describe('PlayerComponent launch picks', () => {
     expect(h.component.activeAudioStreamIndex).toBe(1);
   });
 
-  it('ignores a pick made on another file or outside the file\'s tracks', () => {
-    const h = audioHarness();
+  it('ignores a pick made on another file or outside the file\'s tracks', async () => {
+    const h = await audioHarness();
 
     h.component.launchTracks = { fileId: TRAILER_FILE_ID, audioStreamIndex: 1 };
     h.component.resolveAudioTarget();
@@ -3222,7 +3239,7 @@ describe('PlayerComponent launch picks', () => {
   });
 
   it('hands the picked subtitle to the first selection only', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const tracks = TestBed.inject(TrackManagerService) as any;
     h.component.launchTracks = { fileId: MAIN_FILE_ID, subtitleId: null };
 
@@ -3233,7 +3250,7 @@ describe('PlayerComponent launch picks', () => {
   });
 
   it('plans the HLS subtitle delivery for the picked subtitle', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     (TestBed.inject(BrowserDeviceProfileService) as any).engineTraits = () => ENGINE_TRAITS[EngineKind.IOS];
     const tracks = TestBed.inject(TrackManagerService) as any;
     h.component.launchTracks = { fileId: MAIN_FILE_ID, subtitleId: 'ext-3' };
@@ -3249,8 +3266,8 @@ describe('PlayerComponent offline subtitle order', () => {
     TestBed.resetTestingModule();
   });
 
-  function offlineHarness(trackKeys: (string | undefined)[], extra: Record<string, unknown> = {}) {
-    const h = createHarness();
+  async function offlineHarness(trackKeys: (string | undefined)[], extra: Record<string, unknown> = {}) {
+    const h = await createHarness();
     const subtitles = trackKeys.map((trackKey, i) => ({
       key: `sub-${i}`, language: 'en', label: `s${i}`, forced: false, trackKey, ...extra,
     }));
@@ -3262,7 +3279,7 @@ describe('PlayerComponent offline subtitle order', () => {
   }
 
   it('lists the sidecars embedded-first by stream index, then externals by DB id', async () => {
-    const h = offlineHarness(['ext-9', 'emb-4', 'ext-2']);
+    const h = await offlineHarness(['ext-9', 'emb-4', 'ext-2']);
 
     const urls = (await h.component.getOfflineSubtitleConfigs()).map((s: { url: string }) => s.url);
 
@@ -3270,7 +3287,7 @@ describe('PlayerComponent offline subtitle order', () => {
   });
 
   it('ranks same-language downloads like the manifest, so the Nth pick is the Nth rendition', async () => {
-    const h = offlineHarness(['ext-9', 'emb-4']);
+    const h = await offlineHarness(['ext-9', 'emb-4']);
     await h.component.loadOfflineSubtitles();
     const [first, second] = h.component.subs.availableSubtitles();
 
@@ -3280,7 +3297,7 @@ describe('PlayerComponent offline subtitle order', () => {
   });
 
   it('labels downloads on two lines like the online menu, the flags on the subline', async () => {
-    const h = offlineHarness(['emb-3'], { forced: true, hearingImpaired: false, codec: 'subrip' });
+    const h = await offlineHarness(['emb-3'], { forced: true, hearingImpaired: false, codec: 'subrip' });
     await h.component.loadOfflineSubtitles();
     const [sub] = h.component.subs.availableSubtitles();
 
@@ -3288,7 +3305,7 @@ describe('PlayerComponent offline subtitle order', () => {
   });
 
   it('shows the stored one-line label for a download saved before its descriptors', async () => {
-    const h = offlineHarness(['emb-3']);
+    const h = await offlineHarness(['emb-3']);
     await h.component.loadOfflineSubtitles();
     const [sub] = h.component.subs.availableSubtitles();
 
@@ -3296,7 +3313,7 @@ describe('PlayerComponent offline subtitle order', () => {
   });
 
   it('keeps the stored order for a download saved before the source was recorded', async () => {
-    const h = offlineHarness([undefined, undefined]);
+    const h = await offlineHarness([undefined, undefined]);
 
     const urls = (await h.component.getOfflineSubtitleConfigs()).map((s: { url: string }) => s.url);
 
@@ -3310,7 +3327,7 @@ describe('PlayerComponent negotiation entry points', () => {
   });
 
   it('negotiates a pre-roll item through the shared path, without the main file\'s picks', async () => {
-    const h = createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
+    const h = await createHarness({ preRoll: [{ mediaFileId: TRAILER_FILE_ID }] });
     h.component.subs.activeBurnInId = 7;
     h.component.activeAudioStreamIndex = 2;
     h.component.subs.needsHlsSubtitles = true;
@@ -3325,8 +3342,8 @@ describe('PlayerComponent negotiation entry points', () => {
     expect([call[2], call[3]]).toEqual([undefined, undefined]);
   });
 
-  it('hands the local rung to the cast without a playback-info of its own', () => {
-    const h = createHarness();
+  it('hands the local rung to the cast without a playback-info of its own', async () => {
+    const h = await createHarness();
     h.component.activeQualityId.set('720p');
     h.streamingApi.getPlaybackInfo.mockClear();
 
@@ -3340,34 +3357,34 @@ describe('PlayerComponent stall counting', () => {
     TestBed.resetTestingModule();
   });
 
-  function stalling() {
-    const h = createHarness();
+  async function stalling() {
+    const h = await createHarness();
     const c = h.component as any;
     return { c, spy: vi.spyOn(c.qoe, 'setStalled') };
   }
 
-  it('counts buffering that nothing explains', () => {
-    const { c, spy } = stalling();
+  it('counts buffering that nothing explains', async () => {
+    const { c, spy } = await stalling();
     c.trackStall(true);
     expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: false }));
   });
 
-  it('does not count buffering behind a fatal error', () => {
-    const { c, spy } = stalling();
+  it('does not count buffering behind a fatal error', async () => {
+    const { c, spy } = await stalling();
     c.state.failWith(new Error('boom'));
     c.trackStall(true);
     expect(spy).toHaveBeenLastCalledWith(false, expect.anything());
   });
 
-  it('ignores buffering inside the grace window a finished reload leaves', () => {
-    const { c, spy } = stalling();
+  it('ignores buffering inside the grace window a finished reload leaves', async () => {
+    const { c, spy } = await stalling();
     c.qoeGraceUntil = Date.now() + 3_000;
     c.trackStall(true);
     expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: true }));
   });
 
-  it('reports an unknown buffer when the engine only echoes the playhead', () => {
-    const { c, spy } = stalling();
+  it('reports an unknown buffer when the engine only echoes the playhead', async () => {
+    const { c, spy } = await stalling();
     c.engine.measuresBuffer = false;
     c.engine.currentTime = 200;
     c.state.bufferedEnd.set(200);
@@ -3375,8 +3392,8 @@ describe('PlayerComponent stall counting', () => {
     expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ bufferAheadS: null }));
   });
 
-  it('flags a frozen playhead without any buffering event', () => {
-    const h = createHarness();
+  it('flags a frozen playhead without any buffering event', async () => {
+    const h = await createHarness();
     const c = h.component as any;
     h.state.loading.set(false);
     h.state.paused.set(false);
@@ -3399,8 +3416,8 @@ describe('PlayerComponent stall counting', () => {
     spy.mockRestore();
   });
 
-  it('judges the ignore windows at the backdated start', () => {
-    const { c, spy } = stalling();
+  it('judges the ignore windows at the backdated start', async () => {
+    const { c, spy } = await stalling();
     const now = Date.now();
     c.lastSeekAt = now - 3_000;
     c.trackStall(true, now - 2_500);
@@ -3410,9 +3427,9 @@ describe('PlayerComponent stall counting', () => {
     expect(spy).toHaveBeenLastCalledWith(true, expect.objectContaining({ ignored: false }));
   });
 
-  it('keeps one episode when the engine ends a short buffering but the playhead stays frozen', () => {
+  it('keeps one episode when the engine ends a short buffering but the playhead stays frozen', async () => {
     const spy = vi.spyOn(Date, 'now').mockReturnValue(100_000);
-    const h = createHarness();
+    const h = await createHarness();
     const c = h.component as any;
     h.state.loading.set(false);
     h.state.paused.set(false);
@@ -3442,9 +3459,9 @@ describe('PlayerComponent stall counting', () => {
     spy.mockRestore();
   });
 
-  it('does not carry buffering over into a stall before the first frame', () => {
+  it('does not carry buffering over into a stall before the first frame', async () => {
     const spy = vi.spyOn(Date, 'now').mockReturnValue(100_000);
-    const h = createHarness();
+    const h = await createHarness();
     const c = h.component as any;
     h.state.loading.set(false);
     h.state.paused.set(false);
@@ -3460,8 +3477,8 @@ describe('PlayerComponent stall counting', () => {
     spy.mockRestore();
   });
 
-  it('does not flag a native engine whose position refreshes once a second', () => {
-    const h = createHarness();
+  it('does not flag a native engine whose position refreshes once a second', async () => {
+    const h = await createHarness();
     const c = h.component as any;
     h.state.loading.set(false);
     h.state.paused.set(false);
@@ -3480,18 +3497,19 @@ describe('PlayerComponent stall counting', () => {
 
   it('counts a freeze once when the recovery it triggers follows it', async () => {
     const spy = vi.spyOn(Date, 'now').mockReturnValue(100_000);
-    const h = createHarness();
+    const h = await createHarness();
     const c = h.component as any;
     c.mediaFileId = 1;
-    c.loader.adopt({ sessionId: 's1' });
+    await seed(c, { sessionId: 's1' });
     c.qoe.current('s1');
     const record = vi.spyOn(c.qoe.reporter, 'record').mockImplementation(() => {});
     h.state.loading.set(false);
     c.trackStall(true, 100_000);
     spy.mockReturnValue(117_000);
-    vi.spyOn(c, 'refreshSidAndReload').mockImplementation(async () => {
+    vi.spyOn(c, 'refreshSidAndReload').mockImplementation(async (op: any) => {
       spy.mockReturnValue(119_000);
-      c.loader.adopt({ sessionId: 's2' });
+      await op.negotiate(() => Promise.resolve({ sessionId: 's2' }), { replace: false });
+      return true;
     });
     await c.recovery.recoverFromLostSession('stall', 100_000);
     spy.mockReturnValue(120_000);
@@ -3501,16 +3519,16 @@ describe('PlayerComponent stall counting', () => {
     spy.mockRestore();
   });
 
-  it('stamps the seek grace from the video seeking event', () => {
-    const h = createHarness();
+  it('stamps the seek grace from the video seeking event', async () => {
+    const h = await createHarness();
     const c = h.component as any;
     c.lastSeekAt = 0;
     c.onSeeking();
     expect(c.lastSeekAt).toBeGreaterThan(0);
   });
 
-  it('leaves the engine position unread while the playhead is not watched', () => {
-    const h = createHarness();
+  it('leaves the engine position unread while the playhead is not watched', async () => {
+    const h = await createHarness();
     const c = h.component as any;
     h.state.paused.set(true);
     const read = vi.fn(() => 5);
@@ -3519,8 +3537,8 @@ describe('PlayerComponent stall counting', () => {
     expect(read).not.toHaveBeenCalled();
   });
 
-  it('does not flag a paused playhead', () => {
-    const h = createHarness();
+  it('does not flag a paused playhead', async () => {
+    const h = await createHarness();
     const c = h.component as any;
     h.state.loading.set(false);
     h.state.paused.set(true);
@@ -3534,7 +3552,7 @@ describe('PlayerComponent stall counting', () => {
   });
 
   it('awaitSeekUnlock: a rejected seek releases the seekbar lock', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.state.seekLocked.set(true);
     (h.engine as any).seek = vi.fn().mockRejectedValue(new Error('seek timeout'));
     await (h.component as any).awaitSeekUnlock(100);
@@ -3542,7 +3560,7 @@ describe('PlayerComponent stall counting', () => {
   });
 
   it('TV hide banks the position and pauses; show does nothing', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const c = h.component as any;
     const save = vi.spyOn(c, 'savePosition').mockResolvedValue(undefined);
     const vis = vi.spyOn(document, 'visibilityState', 'get');
@@ -3558,10 +3576,10 @@ describe('PlayerComponent stall counting', () => {
   });
 
   it('destroy stops the server session only after the engine has torn down', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     const c = h.component as any;
     c.session.isLocal = () => true;
-    c.loader.adopt(buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' }));
+    await seed(c, buildPi(MAIN_FILE_ID, { playMethod: 'Transcode' }));
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response());
     let finish!: () => void;
     h.engine.destroy.mockImplementation(() => new Promise<void>((r) => (finish = r)));
@@ -3572,8 +3590,8 @@ describe('PlayerComponent stall counting', () => {
     expect(fetchSpy.mock.calls.some(([u]) => u === 'stop://x')).toBe(true);
   });
 
-  it('unload banks the playhead with a keepalive PUT that carries no sid', () => {
-    const h = createHarness();
+  it('unload banks the playhead with a keepalive PUT that carries no sid', async () => {
+    const h = await createHarness();
     const c = h.component as any;
     h.engine.currentTime = 123;
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response());
@@ -3591,7 +3609,7 @@ describe('PlayerComponent: passthrough and .edl mute ranges', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   const negotiate = async (edl: unknown[] | 'reject', offers = true) => {
-    const h = createHarness();
+    const h = await createHarness();
     const profiles = TestBed.inject(BrowserDeviceProfileService) as any;
     profiles.offersPassthrough = () => offers;
     profiles.getProfile = vi.fn(() => DEVICE_PROFILE);
@@ -3629,47 +3647,37 @@ describe('PlayerComponent review fixes', () => {
     TestBed.resetTestingModule();
   });
 
-  it('seekByReload replays a pick made while it ran', async () => {
-    const h = createHarness();
-    h.state.seekLocked.set(true);
-    h.component.pendingReload = { reason: 'quality' };
-    h.component.pollSeekConverge = vi.fn(async () => {});
-    h.component.reloadStream = vi.fn(async () => {});
-
-    await h.component.seekByReload(600);
-
-    expect(h.component.reloadStream).toHaveBeenCalledWith(undefined, { reason: 'quality' });
-  });
-
   it('parks a reload picked while the launch loads and replays it once the launch ends', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     let endLaunch!: () => void;
     h.component.launch = () => new Promise<boolean>((r) => (endLaunch = () => r(true)));
-    h.component.doReloadStream = vi.fn(async () => {});
 
     const starting = h.component.startLocal(undefined, 'launch');
-    await h.component.reloadStream(undefined, { reason: 'quality' });
-    expect(h.component.doReloadStream).not.toHaveBeenCalled();
+    const picked = h.component.reloadStream(undefined, { reason: 'quality' });
+    await flush();
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
 
     endLaunch();
     await starting;
-    await flush();
 
-    expect(h.component.doReloadStream).toHaveBeenCalledTimes(1);
+    expect(await picked).toBe('done');
+    expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
+    expect(h.engine.loadCalls).toHaveLength(1);
   });
 
   it('writes no position while an episode switch holds the old stream under the new ids', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.engine.currentTime = 95;
-    h.component.switchingItem = true;
+    void h.component.loader.run('switch', () => new Promise<void>(() => {}));
 
     await h.component.savePosition(true);
 
     expect(h.streamingApi.updatePlaybackState).not.toHaveBeenCalled();
+    h.component.loader.abort();
   });
 
   it('keeps the episode ids unsaved until the new stream is loaded', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.engine.currentTime = 95;
     h.engine.load = vi.fn(async () => {
       await h.component.savePosition(true);
@@ -3681,29 +3689,35 @@ describe('PlayerComponent review fixes', () => {
     const saves = h.streamingApi.updatePlaybackState.mock.calls as unknown as [number, { mediaFileId: number; positionSeconds: number }][];
     expect(saves).toHaveLength(1);
     expect(saves[0][1]).toMatchObject({ mediaFileId: MAIN_FILE_ID, positionSeconds: 95 });
-    expect(h.component.switchingItem).toBe(false);
+    expect(h.component.loader.busy()).toBe(false);
   });
 
-  it('a reload that finds the player destroyed never loads the engine', async () => {
-    const h = createHarness();
-    h.component.destroyed = true;
+  it('a reload outdated by the player leaving never loads the engine and stops the session it opened', async () => {
+    const h = await createHarness();
+    let answer!: (pi: PlaybackInfoResponse) => void;
+    h.streamingApi.getPlaybackInfo.mockReturnValueOnce(new Promise((r) => (answer = r)));
 
-    await expect(h.component.refreshSidAndReload(30, { preservePause: false, unmute: false })).rejects.toThrow();
+    const reloading = refresh(h.component, 30, { preservePause: false, unmute: false });
+    await flush();
+    h.component.loader.abort();
+    answer(buildPi(MAIN_FILE_ID, { sessionId: 'late' }));
+    await reloading;
 
     expect(h.engine.load).not.toHaveBeenCalled();
+    expect(h.streamingApi.stopSession).toHaveBeenCalledWith('late');
   });
 
   it('reloads with the same anchor it negotiated, 0 included', async () => {
-    const h = createHarness();
+    const h = await createHarness();
 
-    await h.component.refreshSidAndReload(0, { preservePause: false, unmute: false });
+    await refresh(h.component, 0, { preservePause: false, unmute: false });
 
     expect((h.streamingApi.getPlaybackInfo.mock.calls.at(-1) as unknown[])[5]).toBe(0);
     expect(h.engine.loadCalls.at(-1)!.startTime).toBeUndefined();
   });
 
   it('loads the media aside to build the series queue', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.component.queueCtl.syncSeriesQueue = vi.fn();
 
     h.component.loadMediaAside();
@@ -3713,7 +3727,7 @@ describe('PlayerComponent review fixes', () => {
   });
 
   it('follows the item the output switches to', async () => {
-    const h = createHarness();
+    const h = await createHarness();
     h.component.queueCtl.syncSeriesQueue = vi.fn();
 
     await h.component.adoptOutputItem({ fileId: 2, mediaId: MEDIA_ID, episodeId: 5 });
@@ -3727,15 +3741,15 @@ describe('PlayerComponent review fixes', () => {
     });
   });
 
-  it('leaves the local seek lock alone while dragging over another output', () => {
-    const h = createHarness();
+  it('leaves the local seek lock alone while dragging over another output', async () => {
+    const h = await createHarness();
     h.component.session.isLocal = () => false;
     h.component.onSeekDragChange(true);
     expect(h.state.seekLocked()).toBe(false);
   });
 
-  it('keyboard seeks read the output while casting, not the unloaded engine', () => {
-    const h = createHarness();
+  it('keyboard seeks read the output while casting, not the unloaded engine', async () => {
+    const h = await createHarness();
     h.component.elsewhere = () => ({ paused: () => false, position: () => 600 });
 
     expect(h.component.keyboard.host.playhead()).toEqual({ paused: false, currentTime: 600 });
@@ -3745,8 +3759,8 @@ describe('PlayerComponent review fixes', () => {
 describe('PlayerComponent next item warm-up', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('reads the next item media once the credits start', () => {
-    const h = createHarness();
+  it('reads the next item media once the credits start', async () => {
+    const h = await createHarness();
     const getOne = TestBed.inject(MediaService).getOne as ReturnType<typeof vi.fn>;
     h.component.queueCtl.upNext = () => ({ mediaId: 42, title: 'next' });
     h.state.duration.set(100);
@@ -3765,8 +3779,8 @@ describe('PlayerComponent: leaving during the launch', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   /** playback-info answers when the test says so, with a fresh session id per answer. */
-  function slowLaunch() {
-    const h = createHarness();
+  async function slowLaunch() {
+    const h = await createHarness();
     const answers: ((pi: PlaybackInfoResponse) => void)[] = [];
     h.streamingApi.getPlaybackInfo.mockImplementation(
       () => new Promise<PlaybackInfoResponse>((resolve) => answers.push(resolve)),
@@ -3788,7 +3802,7 @@ describe('PlayerComponent: leaving during the launch', () => {
 
   it('registers the listeners before the first await', async () => {
     const add = vi.spyOn(window, 'addEventListener');
-    const { h, launching } = slowLaunch();
+    const { h, launching } = await slowLaunch();
     expect(add.mock.calls.some(([e]) => e === 'app:playerBack')).toBe(true);
     h.component.ngOnDestroy();
     await launching;
@@ -3796,7 +3810,7 @@ describe('PlayerComponent: leaving during the launch', () => {
   });
 
   it('Back during the negotiation deletes the session the late answer opens and creates no engine', async () => {
-    const { h, answer, surfaces, launching } = slowLaunch();
+    const { h, answer, surfaces, launching } = await slowLaunch();
     await flush();
     h.component.onBack();
     h.component.ngOnDestroy();
@@ -3809,7 +3823,7 @@ describe('PlayerComponent: leaving during the launch', () => {
   });
 
   it('destroys an engine that is created after the view was left', async () => {
-    const { h, answer, surfaces, launching } = slowLaunch();
+    const { h, answer, surfaces, launching } = await slowLaunch();
     await flush();
     answer('sid-1');
     await flush();
@@ -3824,7 +3838,7 @@ describe('PlayerComponent: leaving during the launch', () => {
   });
 
   it('stops the committed session on destroy when the answer came before it', async () => {
-    const { h, answer, launching } = slowLaunch();
+    const { h, answer, launching } = await slowLaunch();
     await flush();
     answer('sid-1');
     await flush();
@@ -3838,12 +3852,192 @@ describe('PlayerComponent: leaving during the launch', () => {
   });
 
   it('bounds the launch negotiation at 30 s', async () => {
-    const { h, answer, launching } = slowLaunch();
+    const { h, answer, launching } = await slowLaunch();
     await flush();
     answer('sid-1');
     const opts = (h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[7];
     expect(opts.timeoutMs).toBe(30_000);
     h.component.ngOnDestroy();
     await launching;
+  });
+});
+
+describe('PlayerComponent: every load goes through the loader', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  const sidOf = async (h: Harness, n: number) =>
+    ((await h.streamingApi.getPlaybackInfo.mock.results[n].value) as PlaybackInfoResponse).sessionId;
+  const optsOf = (h: Harness, n: number) => (h.streamingApi.getPlaybackInfo.mock.calls[n] as unknown as any[])[7];
+  const loads = (h: Harness, n: number) => vi.waitFor(() => expect(h.engine.load).toHaveBeenCalledTimes(n));
+
+  it('a switch replaces the old file\'s session inside its own playback-info call', async () => {
+    const h = await createHarness();
+
+    await h.component.reloadForEpisode(2, MEDIA_ID, undefined);
+
+    expect(optsOf(h, 0)).toMatchObject({ replaces: `sid-${MAIN_FILE_ID}` });
+    expect(h.streamingApi.stopSession).not.toHaveBeenCalled();
+    expect(h.component.loader.sessionId()).toBe(await sidOf(h, 0));
+  });
+
+  it('a quality pick during a recovery reload waits for it: two loads in a row, one session at the end', async () => {
+    const h = await createHarness();
+    const gate = h.engine.holdLoads();
+
+    const recovering = h.component.recoverStream(10);
+    await loads(h, 1);
+    const picked = h.component.reloadStream(undefined, { reason: 'quality' });
+    await flush();
+    expect(h.engine.load).toHaveBeenCalledTimes(1);
+    gate.release();
+    await recovering;
+
+    expect(await picked).toBe('done');
+    expect(h.engine.load).toHaveBeenCalledTimes(2);
+    expect(optsOf(h, 1)).toMatchObject({ replaces: await sidOf(h, 0) });
+    expect(h.streamingApi.stopSession).not.toHaveBeenCalled();
+    expect(h.component.loader.sessionId()).toBe(await sidOf(h, 1));
+  });
+
+  it('an item switch during a reload outdates it instead of being refused', async () => {
+    const h = await createHarness();
+    const gate = h.engine.holdLoads();
+
+    const reloading = h.component.reloadStream(undefined, { reason: 'quality' });
+    await loads(h, 1);
+    const switching = h.component.reloadForEpisode(2, MEDIA_ID, undefined);
+    await loads(h, 2);
+    gate.release();
+
+    await switching;
+    expect(await reloading).toBe('superseded');
+    expect(h.component.mediaFileId).toBe(2);
+    expect(h.component.loader.sessionId()).toBe(await sidOf(h, 1));
+  });
+
+  it('a Cast started during a reload hands over the live session and the stale reload never plays', async () => {
+    const h = await createHarness();
+    const gate = h.engine.holdLoads();
+
+    const reloading = h.component.reloadStream(undefined, { reason: 'quality' });
+    await loads(h, 1);
+    const handoff = await h.component.releaseForHandoff();
+    gate.release();
+
+    expect(handoff?.localSessionId).toBe(await sidOf(h, 0));
+    expect(h.component.loader.sessionId()).toBeUndefined();
+    expect(await reloading).toBe('superseded');
+    expect(h.engine.play).not.toHaveBeenCalled();
+  });
+
+  it('a step aside during the launch, then a take-back, reopens through startLocal with one engine', async () => {
+    const h = await createHarness();
+    const second = fakeEngine();
+    const made = [h.engine, second];
+    h.component.engine = null;
+    h.component.createShakaEngine = async () => {
+      h.component.engine = made.shift();
+    };
+    (TestBed.inject(ActivatedRoute).snapshot.queryParams as any) = { mediaId: String(MEDIA_ID) };
+    const gate = h.engine.holdLoads();
+
+    const launching = h.component.ngAfterViewInit();
+    await loads(h, 1);
+    h.component.stepAside();
+    await launching;
+    expect(h.component.engine).toBeNull();
+
+    await h.component.resumeLocal({ item: { fileId: MAIN_FILE_ID, mediaId: MEDIA_ID }, position: 0, paused: false, tracks: null });
+    gate.release();
+
+    expect(h.component.engine).toBe(second);
+    expect(second.load).toHaveBeenCalledTimes(1);
+    expect(h.engine.destroy).toHaveBeenCalledTimes(1);
+    expect(second.destroy).not.toHaveBeenCalled();
+  });
+
+  it('a seek made during a reload lands once the load did, and frees the seek bar', async () => {
+    const h = await createHarness();
+    h.engine.seek = vi.fn(async (t: number) => {
+      h.engine.currentTime = t;
+    });
+    const gate = h.engine.holdLoads();
+
+    const reloading = h.component.reloadStream(undefined, { reason: 'quality' });
+    await loads(h, 1);
+    h.component.seekInternal(500);
+    expect(h.engine.seek).not.toHaveBeenCalled();
+    expect(h.state.seekLocked()).toBe(true);
+    gate.release();
+    await reloading;
+
+    await vi.waitFor(() => expect(h.engine.seek).toHaveBeenCalledWith(500));
+    await vi.waitFor(() => expect(h.state.seekLocked()).toBe(false));
+  });
+
+  it.each([
+    ['a Shaka engine', false],
+    ['a native-surface engine', true],
+  ])('a quality reload failing before its load hands over to the recovery, not a card (%s)', async (_name, native) => {
+    const h = await createHarness();
+    h.component.isNativeEngine.set(native);
+    const recover = vi.spyOn(h.component.recovery, 'recoverFromLostSession').mockResolvedValue(undefined);
+    h.streamingApi.getPlaybackInfo.mockRejectedValueOnce(new Error('boom'));
+
+    expect(await h.component.reloadStream(undefined, { reason: 'quality' })).toBe('failed');
+
+    await vi.waitFor(() => expect(recover).toHaveBeenCalledWith('other'));
+    expect(h.state.error()).toBeNull();
+  });
+
+  it.each([false, true])('a restart reload pauses the old stream through the engine (native surface: %s)', async (native) => {
+    const h = await createHarness();
+    h.component.isNativeEngine.set(native);
+
+    await h.component.reloadStream();
+
+    expect(h.engine.pause).toHaveBeenCalled();
+    expect(h.engine.unload).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [false, 0],
+    [true, 1],
+  ])('a switch unloads the old stream of a native-surface engine only (native surface: %s)', async (native, unloads) => {
+    const h = await createHarness();
+    h.component.isNativeEngine.set(native);
+
+    await h.component.reloadForEpisode(2, MEDIA_ID, undefined);
+
+    expect(h.engine.unload).toHaveBeenCalledTimes(unloads);
+  });
+
+  it('an engine error right after a reload\'s load, during the subtitle restore, reaches the recovery', async () => {
+    const h = await createHarness();
+    h.state.loading.set(false);
+    h.component.wireErrorRecovery(h.engine);
+    h.component.subs.restoreSubtitle = vi.fn(() => new Promise<void>(() => {}));
+    const recover = vi.spyOn(h.component.recovery, 'recoverFromLostSession').mockResolvedValue(undefined);
+
+    expect(await h.component.reloadStream()).toBe('done');
+    await vi.waitFor(() => expect(h.component.subs.restoreSubtitle).toHaveBeenCalled());
+    h.engine.emit('error', { source: 'shaka', code: 1001 });
+
+    expect(recover).toHaveBeenCalledWith('other');
+  });
+
+  it('a burn-in restored after a reload runs as a reload of its own once the first ended', async () => {
+    const h = await createHarness();
+    h.component.subs.availableSubtitles.set([subOption('emb-9', 'en', { subtitleDbId: 9, burnIn: true, isImage: true, url: '' })]);
+    h.component.subs.activeSubtitleId.set('emb-9');
+
+    expect(await h.component.reloadStream()).toBe('done');
+
+    await vi.waitFor(() => expect(h.engine.load).toHaveBeenCalledTimes(2));
+    expect(h.component.subs.activeBurnInId).toBe(9);
+    expect(optsOf(h, 1)).toMatchObject({ replaces: await sidOf(h, 0) });
+    await vi.waitFor(() => expect(h.component.loader.busy()).toBe(false));
   });
 });

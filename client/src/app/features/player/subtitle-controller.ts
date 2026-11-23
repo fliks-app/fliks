@@ -21,8 +21,7 @@ export interface SubtitleHost {
   playbackMode(): PlaybackMode;
   /** ExoPlayer and AVPlayer read subtitles at load(); false on desktop mpv. */
   readsSubtitlesAtLoad(): boolean;
-  reloadStream(at: number | undefined, why: ReloadWhy): Promise<void>;
-  doReloadStream(position: number): Promise<void>;
+  reloadStream(at: number | undefined, why: ReloadWhy): Promise<unknown>;
 }
 
 /** Subtitle selection on the local engine: what is on screen, whether it is burned in or
@@ -203,7 +202,7 @@ export class SubtitleController {
       if (!sub.subtitleDbId || this.activeBurnInId === sub.subtitleDbId) return;
       this.hideSoftSubtitle();
       this.activeBurnInId = sub.subtitleDbId;
-      await this.host.doReloadStream(position);
+      await this.host.reloadStream(position, { reason: 'subtitles' });
       return;
     }
     try {

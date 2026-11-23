@@ -29,10 +29,10 @@ export interface QueueHost {
   engineDuration(): number | undefined;
   duration(): number;
   isOfflinePlayback(): boolean;
-  reloadingStream(): boolean;
   clearEdlEnded(): void;
   setBackdropUrl(url: string): void;
-  reloadForEpisode(mediaFileId: number, mediaId: number, episodeId: number | undefined): Promise<void>;
+  /** Switches the open engine to another file; false when the switch did not run to its end. */
+  reloadForEpisode(mediaFileId: number, mediaId: number, episodeId: number | undefined): Promise<boolean>;
 }
 
 /** What plays next: the playback queue (playlist or series), the notification controls,
@@ -170,8 +170,7 @@ export class QueueController {
       if (!auto) this.session.command({ type: 'next' });
       return;
     }
-    // Don't move the queue cursor while a quality/audio reload is still settling.
-    if (this.advancing || this.host.reloadingStream()) return;
+    if (this.advancing) return;
     if (!this.upNext()) {
       console.warn('[player] advance: no next item in the queue');
       return;
@@ -226,8 +225,7 @@ export class QueueController {
       return false;
     }
     if (this.state.ended()) await this.markCurrentComplete();
-    await this.loadItem(queueItem, mediaFileId);
-    return true;
+    return this.loadItem(queueItem, mediaFileId);
   }
 
   /** The previous queue item, or the party's. */
@@ -243,7 +241,7 @@ export class QueueController {
       this.session.command({ type: 'item', index });
       return;
     }
-    if (this.advancing || this.host.reloadingStream() || this.host.preRollActive()) return;
+    if (this.advancing || this.host.preRollActive()) return;
     if (index === this.queue.index()) return; // already playing it
     const item = this.queue.items()[index];
     if (!item) return;
@@ -270,7 +268,7 @@ export class QueueController {
 
   /** Loads a resolved item in place, or through a full remount for offline / Cast.
    *  The queue cursor is expected to already point at `item`. */
-  private async loadItem(item: QueueItem, mediaFileId: number): Promise<void> {
+  private async loadItem(item: QueueItem, mediaFileId: number): Promise<boolean> {
     // Clear the end-of-stream latch so a reload that no-ops can't re-trigger auto-advance.
     this.state.ended.set(false);
     this.host.clearEdlEnded();
@@ -292,7 +290,7 @@ export class QueueController {
         { fileId: mediaFileId, mediaId: item.mediaId, episodeId: item.episodeId },
         { fromStart: true, expand: false },
       );
-      return;
+      return true;
     }
 
     const canReloadInPlace =
@@ -309,8 +307,7 @@ export class QueueController {
         queryParams: qp,
         replaceUrl: true,
       });
-      await this.host.reloadForEpisode(mediaFileId, item.mediaId, item.episodeId);
-      return;
+      return this.host.reloadForEpisode(mediaFileId, item.mediaId, item.episodeId);
     }
 
     // Offline / Cast fallback: detour through `/` to force a remount, as the router would reuse the component.
@@ -322,5 +319,6 @@ export class QueueController {
           replaceUrl: true,
         }),
       );
+    return true;
   }
 }

@@ -17,8 +17,8 @@ import { PlayerStateService } from '../../core/services/player-state.service';
 import { ToastService } from '../../core/services/toast.service';
 import { QueueController } from './queue-controller';
 
-function setup(isLocal: boolean) {
-  const session = { partyActive: signal(false), isLocal: () => isLocal, play: vi.fn(async () => 'cast') };
+function setup(isLocal: boolean, host: Record<string, unknown> = {}) {
+  const session = { partyActive: signal(false), isLocal: () => isLocal, output: () => undefined, play: vi.fn(async () => 'cast') };
   const stub = (token: unknown) => ({ provide: token, useValue: {} });
   TestBed.configureTestingModule({
     providers: [
@@ -35,18 +35,18 @@ function setup(isLocal: boolean) {
       stub(DeviceService),
       stub(MediaService),
       stub(StreamingApiService),
-      stub(NavbarService),
+      { provide: NavbarService, useValue: { markAsBackNavigation: vi.fn() } },
       stub(ToastService),
       stub(LikesApiService),
     ],
   });
   const ctl = TestBed.inject(QueueController);
   ctl.attach({
-    reloadingStream: () => false,
     preRollActive: () => false,
     hasEngine: () => false,
     isOfflinePlayback: () => false,
     clearEdlEnded: () => {},
+    ...host,
   } as never);
   const queue = TestBed.inject(PlaybackQueueService);
   queue.start(
@@ -75,5 +75,44 @@ describe('QueueController while another output plays', () => {
     const { ctl, queue } = setup(false);
     ctl.followItem(1, 2);
     expect(queue.index()).toBe(1);
+  });
+});
+
+describe('QueueController while a reload runs', () => {
+  const inPlace = (reloadForEpisode: () => Promise<boolean>) => ({
+    hasEngine: () => true,
+    mediaId: () => 1,
+    engineDuration: () => undefined,
+    duration: () => 0,
+    setBackdropUrl: () => {},
+    reloadForEpisode,
+  });
+
+  const setupInPlace = (reloadForEpisode: () => Promise<boolean>) =>
+    setup(true, inPlace(reloadForEpisode));
+
+  it('playQueueItem switches without waiting for the running reload', async () => {
+    const reloadForEpisode = vi.fn(async () => true);
+    const { ctl, queue } = setupInPlace(reloadForEpisode);
+    await ctl.playQueueItem(1);
+    expect(queue.index()).toBe(1);
+    expect(reloadForEpisode).toHaveBeenCalledExactlyOnceWith(12, 1, 2);
+  });
+
+  it('advance switches without waiting for the running reload', async () => {
+    const reloadForEpisode = vi.fn(async () => true);
+    const { ctl, queue } = setupInPlace(reloadForEpisode);
+    await ctl.advance();
+    expect(queue.index()).toBe(1);
+    expect(reloadForEpisode).toHaveBeenCalledExactlyOnceWith(12, 1, 2);
+  });
+
+  it('openPartyItem returns what the switch returns', async () => {
+    const item = { mediaId: 1, mediaFileId: 12, episodeId: 2 };
+    const ok = setupInPlace(async () => true);
+    expect(await ok.ctl.openPartyItem(item)).toBe(true);
+    TestBed.resetTestingModule();
+    const cut = setupInPlace(async () => false);
+    expect(await cut.ctl.openPartyItem(item)).toBe(false);
   });
 });
