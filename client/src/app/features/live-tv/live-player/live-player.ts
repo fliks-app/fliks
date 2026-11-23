@@ -10,6 +10,8 @@ import {
   ElementRef,
   DestroyRef,
   afterNextRender,
+  untracked,
+  Injector,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -18,6 +20,8 @@ import { Capacitor } from '@capacitor/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import {
   LiveTvApiService,
+  LiveChannel,
+  LiveProgram,
   OnNowEntry,
   PlaySession,
 } from '../../../core/services/api/livetv-api.service';
@@ -25,6 +29,9 @@ import { DeviceService } from '../../../core/services/device.service';
 import { ServerConfigService } from '../../../core/services/server-config.service';
 import { engineKindFor } from '../../../core/services/engine-traits';
 import { ToastService } from '../../../core/services/toast.service';
+import { NetworkService } from '../../../core/services/network.service';
+import { PlayerStateService } from '../../../core/services/player-state.service';
+import { RecoveryController, type PlaybackFailure } from '../../player/recovery-controller';
 import { SessionSyncService } from '../../../core/services/session-sync.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { CachedSrcDirective } from '../../../shared/directives/cached-src.directive';
@@ -64,13 +71,17 @@ const REWIND_STEP_SECONDS = 10;
 /** Rewind below this reads as "at live": it is measured against the live point,
  *  not the manifest edge, so it needs no room for the player's own latency. */
 const LIVE_EDGE_TOLERANCE_SECONDS = 1;
-/** A full 500-channel page each tick, so this stays minutes apart, not seconds;
- *  the mini guide forces its own refresh when opened. */
-const CHANNEL_REFRESH_MS = 120_000;
 const NUMBER_ENTRY_COMMIT_MS = 1_500;
-/** Channel up and down walk the whole lineup, paged at the backend's own
- *  `@Max` on `on-now` rather than fetched as one oversized, rejected request. */
-const ZAP_LIST_PAGE_SIZE = 50;
+/** Page size of `on-now`, the backend's own `@Max`; row `i` of the lineup sits on page `floor(i / size) + 1`. */
+const ON_NOW_PAGE_SIZE = 50;
+/** A cached now/next page older than this is fetched again when the overlay shows it. */
+const PAGE_STALE_MS = 60_000;
+/** The playing channel's page is refreshed this often, or as soon as its programme ends. */
+const CURRENT_PAGE_REFRESH_MS = 120_000;
+/** The overlay renders its rows in steps of this many, one step above and below the scrollport. */
+const WINDOW_STEP_ROWS = 8;
+/** Height of an overlay row (`h-20`) plus its gap, until a rendered one is measured. */
+const DEFAULT_ROW_PX = 84;
 
 /** Playhead-to-clock drift that means the timeline was rebased, not merely that
  *  the manifest has yet to refresh. Well above one refresh interval. */
@@ -132,7 +143,20 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   readonly nativeSurfaceClaimed = signal(false);
 
   readonly session = signal<PlaySession | null>(null);
-  readonly channels = signal<OnNowEntry[]>([]);
+  readonly channels = signal<LiveChannel[]>([]);
+  private readonly nowNext = signal(new Map<number, { now: LiveProgram | null; next: LiveProgram | null }>());
+  /** When each `on-now` page was last merged into {@link nowNext}. */
+  private pageFetchedAt = new Map<number, number>();
+  private pagesInFlight = new Set<number>();
+  /** Overlay rows in the DOM: only the window around the scrollport, the rest is spacer. */
+  readonly windowFirst = signal(0);
+  readonly windowSize = signal(4 * WINDOW_STEP_ROWS);
+  readonly rowPx = signal(DEFAULT_ROW_PX);
+  readonly windowRows = computed(() =>
+    this.channels()
+      .slice(this.windowFirst(), this.windowFirst() + this.windowSize())
+      .map((channel) => ({ channel, ...this.nowNext().get(channel.id) })),
+  );
   readonly currentChannelId = signal<number>(Number(this.route.snapshot.paramMap.get('channelId')));
   readonly loading = signal(true);
   readonly paused = signal(false);
@@ -143,8 +167,12 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   readonly guideAnimates = signal(false);
   private readonly armGuideAnimation = afterNextRender(() => this.guideAnimates.set(true));
   readonly numberBuffer = signal('');
-  readonly volume = signal(1);
+  /** The level the video player keeps too: one volume for the user, saved across sessions. */
+  private readonly level = inject(PlayerStateService).volume;
+  readonly volume = this.level.asReadonly();
   readonly muted = signal(false);
+  /** A retry is running (re-tune, backoff, waiting for the network): the spinner stays up. */
+  readonly recovering = signal(false);
   /** How far the playhead sits behind the live edge, in seconds. The one thing
    *  the engine can tell us that means anything on a stream with no duration. */
   private readonly behindLive = signal(0);
@@ -225,21 +253,26 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   readonly isNative = this.serverConfig.isNative;
   readonly pipAvailable = computed(() => !this.device.isTv() && !this.serverConfig.isNative);
 
-  readonly currentEntry = computed<OnNowEntry | null>(
-    () => this.channels().find((e) => e.channel.id === this.currentChannelId()) ?? null,
-  );
-  readonly sortedChannels = computed(() =>
-    [...this.channels()].sort((a, b) => a.channel.number - b.channel.number),
-  );
+  readonly currentEntry = computed<OnNowEntry | null>(() => {
+    const channel = this.channels().find((c) => c.id === this.currentChannelId());
+    if (!channel) return null;
+    return { channel, now: null, next: null, ...this.nowNext().get(channel.id) };
+  });
   readonly channelTitle = computed(() => this.currentEntry()?.channel.name ?? '');
   readonly channelLogo = computed(() => this.currentEntry()?.channel.logoPath ?? null);
   readonly programTitle = computed(() => this.currentEntry()?.now?.title ?? '');
 
-  private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly network = inject(NetworkService);
+  private readonly injector = inject(Injector);
+  protected recovery = this.createRecovery();
+  private watchTimer: ReturnType<typeof setInterval> | null = null;
+  /** User zaps and tunes in flight: they own the session, recovery stands aside. */
+  private zaps = 0;
   private numberBufferTimer: ReturnType<typeof setTimeout> | null = null;
   private miniGuideScrollTimer: ReturnType<typeof setTimeout> | null = null;
   private tuneSeq = 0;
-  private refreshSeq = 0;
+  private channelsSeq = 0;
+  private readonly miniListEl = viewChild<ElementRef<HTMLElement>>('miniList');
   /** Mirrors `session()?.sessionId`, but a concurrent `tune()` never nulls it
    *  early, so the next call can still find and stop the session it replaces. */
   private currentSessionId: string | null = null;
@@ -262,7 +295,12 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     window.addEventListener('pagehide', this.releaseOnUnload);
     if (this.isHideSuspendedTv) document.addEventListener('visibilitychange', this.onTvVisibility);
     window.addEventListener('app:playerBack', this.onPlayerBackEvent);
-    this.refreshTimer = setInterval(() => void this.refreshChannels(), CHANNEL_REFRESH_MS);
+    this.recovery.armClock();
+    this.watchTimer = setInterval(() => {
+      this.recovery.tickClockWatch();
+      this.recovery.checkStall();
+      this.refreshCurrentPageIfDue();
+    }, 1000);
     this.screen.open();
   }
 
@@ -313,7 +351,8 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     window.removeEventListener('pagehide', this.releaseOnUnload);
     document.removeEventListener('visibilitychange', this.onTvVisibility);
     window.removeEventListener('app:playerBack', this.onPlayerBackEvent);
-    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    if (this.watchTimer) clearInterval(this.watchTimer);
+    this.recovery.dispose();
     if (this.numberBufferTimer) clearTimeout(this.numberBufferTimer);
     if (this.miniGuideScrollTimer) clearTimeout(this.miniGuideScrollTimer);
     if (this.statsTimer) clearInterval(this.statsTimer);
@@ -324,36 +363,106 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   }
 
   private async bootstrap(): Promise<void> {
-    // The zap list's now/next payload is only for the overlay; video start
-    // shouldn't wait behind it on a slow connection.
-    await Promise.all([this.tune(this.currentChannelId()), this.refreshChannels()]);
+    // The lineup is only for zapping and the overlay; video start shouldn't wait behind it.
+    await Promise.all([this.tune(this.currentChannelId()), this.loadChannels()]);
+    void this.fetchPage(this.currentPage(), true);
   }
 
-  private async refreshChannels(): Promise<void> {
-    const seq = ++this.refreshSeq;
+  private async loadChannels(): Promise<void> {
+    const seq = ++this.channelsSeq;
     try {
-      // The zap list needs every channel, so it pages through the whole
-      // lineup rather than asking for the single oversized page the backend rejects.
-      const entries: OnNowEntry[] = [];
-      let page = 1;
-      for (;;) {
-        const answer = await this.api.getOnNow({ page, pageSize: ZAP_LIST_PAGE_SIZE });
-        if (seq !== this.refreshSeq) return;
-        entries.push(...answer.entries);
-        if (answer.entries.length === 0 || entries.length >= answer.total) break;
-        page++;
-      }
-      this.channels.set(entries);
+      const list = await this.api.getChannels();
+      if (seq !== this.channelsSeq) return;
+      const sameLineup = list.length === this.channels().length && list.every((c, i) => c.id === this.channels()[i].id);
+      if (!sameLineup) this.pageFetchedAt.clear();
+      this.channels.set(list);
     } catch {
       // keep the last known list; the overlay just goes a bit stale
     }
   }
 
-  private async tune(channelId: number): Promise<void> {
-    // A zap fired while a previous one is still awaiting release/play must not
-    // let a late resolution overwrite a more recent one's session or engine load.
-    const seq = ++this.tuneSeq;
-    this.loading.set(true);
+  /** The `on-now` page holding the playing channel, 0 until the lineup is known. */
+  private currentPage(): number {
+    const idx = this.channels().findIndex((c) => c.id === this.currentChannelId());
+    return idx < 0 ? 0 : Math.floor(idx / ON_NOW_PAGE_SIZE) + 1;
+  }
+
+  /** Merges one `on-now` page into the now/next map; skipped while fresh unless `force`. */
+  private async fetchPage(page: number, force = false): Promise<void> {
+    if (page < 1 || this.pagesInFlight.has(page)) return;
+    const at = this.pageFetchedAt.get(page);
+    if (!force && at !== undefined && Date.now() - at < PAGE_STALE_MS) return;
+    this.pagesInFlight.add(page);
+    try {
+      const answer = await this.api.getOnNow({ page, pageSize: ON_NOW_PAGE_SIZE });
+      const merged = new Map(this.nowNext());
+      for (const e of answer.entries) merged.set(e.channel.id, { now: e.now, next: e.next });
+      this.nowNext.set(merged);
+      this.pageFetchedAt.set(page, Date.now());
+    } catch {
+      // the rows keep their last now/next
+    } finally {
+      this.pagesInFlight.delete(page);
+    }
+  }
+
+  private refreshCurrentPageIfDue(): void {
+    const page = this.currentPage();
+    const at = this.pageFetchedAt.get(page);
+    if (at === undefined) return;
+    const age = Date.now() - at;
+    const ended = this.currentEntry()?.now && new Date(this.currentEntry()!.now!.endsAt).getTime() <= Date.now();
+    if (age >= CURRENT_PAGE_REFRESH_MS || (ended && age >= 10_000)) void this.fetchPage(page, true);
+  }
+
+  /** Fetches now/next for the pages the rendered overlay rows sit on. */
+  private readonly windowPagesEffect = effect(() => {
+    if (!this.miniGuideOpen()) return;
+    const first = this.windowFirst();
+    const last = Math.min(first + this.windowSize(), this.channels().length) - 1;
+    if (last < first) return;
+    untracked(() => {
+      for (let p = Math.floor(first / ON_NOW_PAGE_SIZE) + 1; p <= Math.floor(last / ON_NOW_PAGE_SIZE) + 1; p++) {
+        void this.fetchPage(p);
+      }
+    });
+  });
+
+  /** Moves the rendered rows to the scroll offset, in whole steps so a scroll re-renders once per step. */
+  updateWindow(el: HTMLElement): void {
+    const li = el.querySelector<HTMLElement>('[data-channel-id]');
+    if (li) {
+      const gap = parseFloat(getComputedStyle(li.parentElement!).rowGap) || 0;
+      const stride = li.getBoundingClientRect().height + gap;
+      if (stride !== this.rowPx()) this.rowPx.set(stride);
+    }
+    const rowPx = this.rowPx();
+    const step = Math.floor(el.scrollTop / rowPx / WINDOW_STEP_ROWS);
+    this.windowFirst.set(Math.max(0, (step - 1) * WINDOW_STEP_ROWS));
+    this.windowSize.set((Math.ceil(el.clientHeight / rowPx / WINDOW_STEP_ROWS) + 3) * WINDOW_STEP_ROWS);
+  }
+
+  /** A passive listener, not a template binding: only a window step re-renders the overlay. */
+  private readonly windowEffect = effect((onCleanup) => {
+    const el = this.miniListEl()?.nativeElement;
+    if (!el) return;
+    let raf: number | null = null;
+    const onScroll = () => {
+      raf ??= requestAnimationFrame(() => {
+        raf = null;
+        this.updateWindow(el);
+      });
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    untracked(() => this.updateWindow(el));
+    onCleanup(() => {
+      el.removeEventListener('scroll', onScroll);
+      if (raf !== null) cancelAnimationFrame(raf);
+    });
+  });
+
+  /** One channel's tune-in, throwing on failure. False when a newer tune owns the session. */
+  private async startSession(channelId: number, seq: number): Promise<boolean> {
     // The next channel brings its own timeline; carrying the mapping over would
     // show the previous one's clock until the drift check caught up.
     this.playbackError.set(null);
@@ -363,6 +472,7 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     // have nulled the signal, which would hide the session this one must stop.
     const outgoingSessionId = this.currentSessionId;
     this.currentChannelId.set(channelId);
+    void this.fetchPage(this.currentPage(), true);
     // Released before tuning, not after: a subscription capped at one connection
     // answers 409 to every zap while the outgoing channel still holds the slot.
     if (outgoingSessionId) {
@@ -370,30 +480,101 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       this.session.set(null);
       await this.api.stopSession(outgoingSessionId).catch(() => {});
       this.currentSessionId = null;
-      if (seq !== this.tuneSeq) return;
+      if (seq !== this.tuneSeq) return false;
     }
+    const session = await this.api.play(channelId, {
+      directPlay: supportsLiveDirectPlay(this.engineKind),
+      useTs: liveNeedsTs(this.engineKind),
+    });
+    if (seq !== this.tuneSeq) {
+      // A later zap already won; don't leak this session or fight over the engine.
+      void this.api.stopSession(session.sessionId).catch(() => {});
+      return false;
+    }
+    this.currentSessionId = session.sessionId;
+    this.session.set(session);
+    this.liveQoe.begin(session.sessionId, () => this.engine);
+    await this.loadIntoEngine(session);
+    if (seq !== this.tuneSeq) return false;
+    this.liveEdgeReached.set(true);
+    this.recovery.resetStallWatchdog();
+    return true;
+  }
+
+  private async tune(channelId: number): Promise<void> {
+    // A zap fired while a previous one is still awaiting release/play must not
+    // let a late resolution overwrite a more recent one's session or engine load.
+    const seq = ++this.tuneSeq;
+    this.zaps++;
+    this.loading.set(true);
+    this.recovery.clearEpisode();
+    this.recovery.armClock();
     try {
-      const session = await this.api.play(channelId, {
-        directPlay: supportsLiveDirectPlay(this.engineKind),
-        useTs: liveNeedsTs(this.engineKind),
-      });
-      if (seq !== this.tuneSeq) {
-        // A later zap already won; don't leak this session or fight over the engine.
-        void this.api.stopSession(session.sessionId).catch(() => {});
-        return;
-      }
-      this.currentSessionId = session.sessionId;
-      this.session.set(session);
-      this.liveQoe.begin(session.sessionId, () => this.engine);
-      await this.loadIntoEngine(session);
-      if (seq !== this.tuneSeq) return;
-      this.liveEdgeReached.set(true);
+      await this.startSession(channelId, seq);
     } catch (err) {
       if (seq === this.tuneSeq) this.handlePlayError(err);
-      return;
     } finally {
+      this.zaps--;
       if (seq === this.tuneSeq) this.loading.set(false);
     }
+  }
+
+  /** Recovery's re-tune of the playing channel: the playback position means nothing live. */
+  private async retune(): Promise<'done' | 'superseded'> {
+    const seq = ++this.tuneSeq;
+    return (await this.startSession(this.currentChannelId(), seq)) ? 'done' : 'superseded';
+  }
+
+  private createRecovery(): RecoveryController {
+    return new RecoveryController({
+      playhead: () => this.engine,
+      isDestroyed: () => this.destroyed,
+      isOnline: () => this.network.isOnline(),
+      hasMedia: () => !!this.currentSessionId || !!this.session(),
+      isPaused: () => this.paused(),
+      isLoading: () => this.loading(),
+      reloadInFlight: () => this.zaps > 0,
+      resumePosition: () => this.engine?.currentTime ?? 0,
+      setRecovering: (on) => this.recovering.set(on),
+      hasError: () => !!this.playbackError(),
+      showFailure: (f) => this.showFailure(f),
+      abandonReload: () => {
+        this.tuneSeq++;
+        this.loading.set(false);
+      },
+      reloadSession: () => this.retune(),
+      reportRecovery: () => {},
+    });
+  }
+
+  /** The error card for a failure the recovery gave up on; same taxonomy and panel as on-demand playback. */
+  private showFailure(f: PlaybackFailure): void {
+    this.loading.set(false);
+    if ('thrown' in f && f.thrown !== undefined) {
+      this.handlePlayError(f.thrown);
+      return;
+    }
+    if ('engine' in f) {
+      const e = f.engine;
+      const source = e.source ?? 'engine';
+      this.liveQoe.onError({ code: e.code, message: e.message, category: source });
+      this.playbackError.set({
+        userMessage: this.translate.instant(
+          e.errorKey ?? userMessageKeyFor({ source, code: e.code, category: e.category }),
+        ),
+        source,
+        code: e.code,
+        category: e.category,
+        severity: e.severity,
+        data: e.data,
+        variant: e.variant,
+        message: e.message,
+      });
+      return;
+    }
+    const source = f.source ?? 'session';
+    this.liveQoe.onError({ code: f.code, category: source });
+    this.playbackError.set({ userMessage: this.translate.instant(userMessageKeyFor({ source, code: f.code })), source, code: f.code });
   }
 
   /** Only a gone or unreachable channel sends the viewer back; capacity, transient 5xx and timeouts surface on the retry overlay. */
@@ -448,32 +629,21 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       throw new Error('live player destroyed during engine creation');
     }
     this.nativeSurfaceClaimed.set(surface.usesNativeSurface);
-    engine.on('error', (e) => {
-      // Same taxonomy and same panel as on-demand playback.
-      const source = e.source ?? 'engine';
-      this.liveQoe.onError({ code: e.code, message: e.message, category: source });
-      this.playbackError.set({
-        userMessage: this.translate.instant(
-          e.errorKey ?? userMessageKeyFor({ source, code: e.code, category: e.category }),
-        ),
-        source,
-        code: e.code,
-        category: e.category,
-        severity: e.severity,
-        data: e.data,
-        variant: e.variant,
-        message: e.message,
-      });
-      this.loading.set(false);
-    });
-    engine.on('sessionExpired', () => this.retuneAfterExpiry());
+    this.bindEngine(engine);
+    return engine;
+  }
+
+  private bindEngine(engine: PlaybackEngine): void {
+    engine.volume = this.level();
+    engine.on('error', (e) => this.recovery.onEngineError(e));
+    engine.on('sessionExpired', () => void this.recovery.recoverFromLostSession('session_expired'));
     engine.on('stateChanged', ({ state }) => {
       this.paused.set(state === 'paused');
       this.liveQoe.onState(state);
     });
     engine.on('firstFrame', () => this.liveQoe.onFirstFrame());
     engine.on('volumechange', ({ volume, muted }) => {
-      this.volume.set(volume);
+      this.level.set(volume);
       this.muted.set(muted);
     });
     engine.on('timeUpdate', ({ position }) => {
@@ -490,7 +660,6 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
       this.trackPlayheadClock(position, fromEdge);
     });
     this.engine = engine;
-    return engine;
   }
 
   errorDiagnostics(): string {
@@ -503,13 +672,10 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** A reaped session (sleep, network loss) is replaced by tuning the same channel again. */
-  private retuneAfterExpiry(): void {
-    if (this.destroyed || this.loading()) return;
-    void this.tune(this.currentChannelId());
-  }
-
   retryPlayback(): void {
+    // The spent controller keeps its attempt count: a fresh one gives the new tune its full retries.
+    this.recovery.dispose();
+    this.recovery = this.createRecovery();
     this.playbackError.set(null);
     void this.tune(this.currentChannelId());
   }
@@ -599,11 +765,11 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   }
 
   private zapBy(direction: 1 | -1): void {
-    const list = this.sortedChannels();
+    const list = this.channels();
     if (list.length === 0) return;
-    const idx = list.findIndex((e) => e.channel.id === this.currentChannelId());
+    const idx = list.findIndex((c) => c.id === this.currentChannelId());
     const nextIdx = (idx + direction + list.length) % list.length;
-    void this.router.navigate(['/watch-live', list[nextIdx].channel.id]);
+    void this.router.navigate(['/watch-live', list[nextIdx].id]);
   }
 
   goBack(): void {
@@ -617,16 +783,26 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     }
     this.miniGuideOpen.set(true);
     this.chrome.show();
-    void this.refreshChannels();
+    void this.loadChannels();
     if (this.miniGuideScrollTimer) clearTimeout(this.miniGuideScrollTimer);
-    // A hundred channels in: open on the one being watched, not on the top.
+    // A hundred channels in: open on the one being watched, not on the top. An off-window row has no DOM, so the window moves first.
     this.miniGuideScrollTimer = setTimeout(() => {
       this.miniGuideScrollTimer = null;
-      const row = this.miniGuideEl()?.nativeElement.querySelector(
-        `[data-channel-id="${this.currentChannelId()}"]`,
+      const list = this.miniListEl()?.nativeElement;
+      if (!list) return;
+      const idx = this.channels().findIndex((c) => c.id === this.currentChannelId());
+      if (idx >= 0) {
+        list.scrollTop = Math.max(0, idx * this.rowPx() - (list.clientHeight - this.rowPx()) / 2);
+        this.updateWindow(list);
+      }
+      afterNextRender(
+        () => {
+          const row = list.querySelector(`[data-channel-id="${this.currentChannelId()}"]`);
+          row?.scrollIntoView({ block: 'center' });
+          (row?.querySelector('button') as HTMLElement | null)?.focus();
+        },
+        { injector: this.injector },
       );
-      row?.scrollIntoView({ block: 'center' });
-      (row?.querySelector('button') as HTMLElement | null)?.focus();
     });
   }
 
@@ -642,9 +818,9 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     if (inPanel) this.guideBtn()?.nativeElement.focus({ preventScroll: true });
   }
 
-  selectFromMiniGuide(entry: OnNowEntry): void {
+  selectFromMiniGuide(channel: LiveChannel): void {
     this.closeMiniGuide();
-    if (entry.channel.id !== this.currentChannelId()) void this.router.navigate(['/watch-live', entry.channel.id]);
+    if (channel.id !== this.currentChannelId()) void this.router.navigate(['/watch-live', channel.id]);
   }
 
   // ── Overlay + remote/keyboard ──
@@ -821,8 +997,8 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
     const buffer = this.numberBuffer();
     this.numberBuffer.set('');
     if (!buffer) return;
-    const target = this.channels().find((e) => e.channel.number === Number(buffer));
-    if (target) void this.router.navigate(['/watch-live', target.channel.id]);
+    const target = this.channels().find((c) => c.number === Number(buffer));
+    if (target) void this.router.navigate(['/watch-live', target.id]);
   }
 
   private async teardownSession(): Promise<void> {

@@ -494,7 +494,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private readonly copyFallback = inject(CopyFallbackController);
   private readonly _copyFallbackAttach = (this.copyFallback.attach(this), null);
   protected readonly recovery = new RecoveryController({
-    engine: () => this.engine,
+    playhead: () => this.engine,
     isDestroyed: () => this.destroyed,
     isCasting: () => !this.session.isLocal(),
     isOnline: () => this.network.isOnline(),

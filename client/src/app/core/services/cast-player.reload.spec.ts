@@ -13,6 +13,7 @@ function harness(infos: Promise<Info>[]) {
   Object.assign(svc, {
     reloads: new LatestWins(),
     reloading: signal(false),
+    failed: signal(false),
     mediaFileId: () => 1,
     liveSessionId: () => live,
     activeAudioStreamIndex: () => undefined,

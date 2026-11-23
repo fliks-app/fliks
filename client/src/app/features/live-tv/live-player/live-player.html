@@ -25,7 +25,7 @@
     (back)="goBack()"
   />
 
-  @if (!playbackError() && loading()) {
+  @if (!playbackError() && (loading() || recovering())) {
     <div class="absolute inset-0 flex items-center justify-center">
       <span class="loading loading-spinner loading-lg"></span>
     </div>
@@ -34,7 +34,7 @@
   <app-player-controls
     [visible]="chrome.visible()"
     [paused]="paused()"
-    [spinner]="!playbackError() && loading()"
+    [spinner]="!playbackError() && (loading() || recovering())"
     [videoStarted]="true"
     [currentTime]="dvrPosition()"
     [duration]="dvrWindow()"
@@ -151,34 +151,40 @@
       </button>
     </div>
 
-    <ul class="menu menu-vertical w-full flex-1 flex-nowrap gap-1 overflow-y-auto px-2 pb-4">
-      @for (entry of sortedChannels(); track entry.channel.id) {
-        <li [attr.data-channel-id]="entry.channel.id">
-          <button
-            type="button"
-            class="flex items-start gap-3 py-2"
-            [class.menu-active]="entry.channel.id === currentChannelId()"
-            (click)="selectFromMiniGuide(entry)"
-          >
-            <span class="w-8 shrink-0 pt-0.5 text-right tabular-nums opacity-60">
-              {{ entry.channel.number }}
-            </span>
-            <span class="flex min-w-0 flex-1 flex-col items-start gap-1">
-              <span class="w-full truncate font-medium">{{ entry.channel.name }}</span>
-              <span class="w-full truncate opacity-70">
-                {{ entry.now?.title ?? ('liveTv.guide.no_program' | translate) }}
+    <!-- Scroller with padding so the first row's focus ring isn't clipped; the list's height and top padding stand in for the rows outside the window. -->
+    <div #miniList class="flex-1 overflow-y-auto px-2 pb-4 pt-2 scroll-py-2">
+      <ul
+        class="menu menu-vertical w-full flex-nowrap gap-1 p-0"
+        [style.height.px]="channels().length * rowPx()"
+        [style.padding-top.px]="windowFirst() * rowPx()"
+      >
+        @for (row of windowRows(); track row.channel.id) {
+          <li [attr.data-channel-id]="row.channel.id">
+            <button
+              type="button"
+              class="flex h-20 items-start gap-3 py-2"
+              [class.menu-active]="row.channel.id === currentChannelId()"
+              (click)="selectFromMiniGuide(row.channel)"
+            >
+              <span class="w-8 shrink-0 pt-0.5 text-right tabular-nums opacity-60">
+                {{ row.channel.number }}
               </span>
-              @if (entry.now) {
+              <span class="flex min-w-0 flex-1 flex-col items-start gap-1">
+                <span class="w-full truncate font-medium">{{ row.channel.name }}</span>
+                <span class="w-full truncate opacity-70">
+                  {{ row.now?.title ?? ('liveTv.guide.no_program' | translate) }}
+                </span>
                 <progress
                   class="progress progress-primary h-1 w-full"
-                  [value]="progressPercent(entry.now)"
+                  [class.invisible]="!row.now"
+                  [value]="progressPercent(row.now)"
                   max="100"
                 ></progress>
-              }
-            </span>
-          </button>
-        </li>
-      }
-    </ul>
+              </span>
+            </button>
+          </li>
+        }
+      </ul>
+    </div>
   </aside>
 </div>

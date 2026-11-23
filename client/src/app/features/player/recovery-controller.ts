@@ -12,21 +12,20 @@ export type PlaybackFailure =
 /** Shaka's RECOVERABLE severity: the engine heals it itself. */
 const SEVERITY_RECOVERABLE = 1;
 
-/** What the controller needs from the player, so it never reaches into the component directly. */
+/** The playhead the watchdog reads and the stream it can reset or retry: an engine, or whatever mirrors one. */
+export type RecoveryPlayhead = Pick<PlaybackEngine, 'currentTime' | 'duration' | 'resetRecoveryGuard' | 'retry' | 'unload'>;
+
+/** What the controller needs from its player, so it never reaches into the component directly. Everything
+ *  below `isLoading` is optional: a player without that concept leaves it out. */
 export interface RecoveryHost {
-  engine(): PlaybackEngine | null;
+  playhead(): RecoveryPlayhead | null;
   isDestroyed(): boolean;
-  isCasting(): boolean;
   isOnline(): boolean;
   hasMedia(): boolean;
   isPaused(): boolean;
-  /** The tab or app is in the background. */
-  isHidden(): boolean;
   isLoading(): boolean;
   /** A load (launch, reload, switch, recovery) owns the engine. */
   reloadInFlight(): boolean;
-  /** The last seek or settled reload: ffmpeg may still be respawning for either. */
-  lastSeekOrReloadAt(): number;
   /** Playhead to resume from: the engine's, else the last mirrored one. */
   resumePosition(): number;
   setRecovering(recovering: boolean): void;
@@ -34,22 +33,29 @@ export interface RecoveryHost {
   hasError(): boolean;
   /** Puts up the error card for `failure`. */
   showFailure(failure: PlaybackFailure): void;
-  /** Reloads with a fallback stream for an error the current copy can't play; false when none applies. */
-  tryFallback(e: EngineError): boolean;
   /** Ends the load left hanging, so the next one can clear the spinner. */
   abandonReload(): void;
   /** Mint a fresh session and reload the engine at `pos`; `superseded` when another load owns the session. */
   reloadSession(pos: number): Promise<'done' | 'superseded'>;
-  /** Refresh the stream token, then warm the live session; best effort. */
-  warmSession(): Promise<void>;
-  /** Push one heartbeat now. */
-  beat(): Promise<void>;
-  /** Stall bookkeeping on the QoE session. */
-  dropStall(): number | null;
-  closeStall(): boolean;
   reportRecovery(position: number, wait?: { reason: QoeRecoveryReason; durationMs: number }): void;
+
+  /** The receiver owns the session: no stall watch, wake resume or recovery. */
+  isCasting?(): boolean;
+  /** The tab or app is in the background. */
+  isHidden?(): boolean;
+  /** The last seek or settled reload: ffmpeg may still be respawning for either. */
+  lastSeekOrReloadAt?(): number;
+  /** Reloads with a fallback stream for an error the current copy can't play; false when none applies. */
+  tryFallback?(e: EngineError): boolean;
+  /** Refresh the stream token, then warm the live session; best effort. */
+  warmSession?(): Promise<void>;
+  /** Push one heartbeat now. */
+  beat?(): Promise<void>;
+  /** Stall bookkeeping on the QoE session. */
+  dropStall?(): number | null;
+  closeStall?(): boolean;
   /** Buffering right after a reload or recovery settles is not a stall. */
-  graceAfterReload(): void;
+  graceAfterReload?(): void;
 }
 
 /** A 1 s tick this late means the process was frozen (sleep, throttled tab); `visibilitychange` doesn't
@@ -137,7 +143,7 @@ export class RecoveryController {
   /** Re-baseline the stall watchdog so the next window starts from the current playhead; call wherever the
    *  playhead legitimately jumps (load, seek, recovery). */
   resetStallWatchdog(): void {
-    this.lastProgressPos = this.host.engine()?.currentTime ?? 0;
+    this.lastProgressPos = this.host.playhead()?.currentTime ?? 0;
     this.lastProgressAt = Date.now();
   }
 
@@ -147,7 +153,7 @@ export class RecoveryController {
     const now = Date.now();
     const gap = now - this.lastTickAt;
     this.lastTickAt = now;
-    if (this.host.isPaused() || this.host.isHidden()) this.idleAt = now;
+    if (this.host.isPaused() || this.host.isHidden?.()) this.idleAt = now;
     if (gap > WAKE_GAP_MS) {
       this.lastWakeAt = now;
       // A frozen interval is not a frozen playhead: skip the stall watchdog's black-screen reload this tick.
@@ -166,7 +172,7 @@ export class RecoveryController {
    *  Refresh the token, re-fetch the manifest at the playhead (respawns ffmpeg), beat once; no engine reload. */
   async resumeAfterGap(): Promise<void> {
     if (this.host.isDestroyed() || !this.host.hasMedia() || this.host.hasError()) return;
-    if (this.host.isCasting()) return;
+    if (this.host.isCasting?.()) return;
     if (!this.host.isOnline()) {
       this.resumeDue = true;
       return;
@@ -174,11 +180,11 @@ export class RecoveryController {
     this.resumeDue = false;
     this.lastResumeAt = Date.now();
     try {
-      await this.host.warmSession();
+      await this.host.warmSession?.();
     } catch {
       // Best effort: the heartbeat below is what actually drives recovery.
     }
-    await this.host.beat();
+    await this.host.beat?.();
   }
 
   /** Ticked once a second; detects a frozen playhead during intended playback and routes it through the
@@ -189,9 +195,9 @@ export class RecoveryController {
       this.fail();
       return;
     }
-    const engine = this.host.engine();
+    const engine = this.host.playhead();
     if (!engine) return;
-    if (this.host.isCasting()) return;
+    if (this.host.isCasting?.()) return;
     // Not playing (yet): keep the baseline fresh.
     if (this.host.isPaused() || this.host.isLoading() || this.recovering || this.host.reloadInFlight()) {
       this.resetStallWatchdog();
@@ -219,7 +225,7 @@ export class RecoveryController {
       return;
     }
     const timeout =
-      Date.now() - this.host.lastSeekOrReloadAt() < SEEK_STALL_GRACE_MS ? SEEK_STALL_GRACE_MS : STALL_TIMEOUT_MS;
+      Date.now() - (this.host.lastSeekOrReloadAt?.() ?? 0) < SEEK_STALL_GRACE_MS ? SEEK_STALL_GRACE_MS : STALL_TIMEOUT_MS;
     if (Date.now() - this.lastProgressAt >= timeout) {
       const frozenSince = this.lastProgressAt;
       this.resetStallWatchdog();
@@ -236,7 +242,7 @@ export class RecoveryController {
     // The recovery's own reload reports its outcome.
     if (this.recovering || this.retryTimer) return;
     // The fallback waits for a load in flight itself.
-    if (this.host.tryFallback(e)) return;
+    if (this.host.tryFallback?.(e)) return;
     if (this.host.isLoading() || this.host.reloadInFlight()) return;
     if (isUndecodableError(e)) {
       this.fail({ engine: e });
@@ -267,8 +273,8 @@ export class RecoveryController {
       this.fail();
       return;
     }
-    if (this.host.isCasting()) return;
-    const engine = this.host.engine();
+    if (this.host.isCasting?.()) return;
+    const engine = this.host.playhead();
     if (!engine || !this.host.hasMedia()) return;
     this.deadlineAt ||= Date.now() + RECOVERY_DEADLINE_MS;
     if (!this.host.isOnline()) {
@@ -296,8 +302,8 @@ export class RecoveryController {
     // The first trigger names the episode. An open stall already counts the freeze on the old sid, so the wait
     // starts now; otherwise at the last progress. A lost sid's open stall moves to the new one.
     if (!this.episode) {
-      const openSince = reason === 'session_lost' ? this.host.dropStall() : null;
-      const counted = openSince == null && this.host.closeStall();
+      const openSince = reason === 'session_lost' ? (this.host.dropStall?.() ?? null) : null;
+      const counted = openSince == null && this.host.closeStall?.();
       const since =
         openSince ??
         (counted ? Date.now() : Math.min(Date.now(), frozenSince ?? (this.lastProgressAt || Date.now())));
@@ -305,7 +311,7 @@ export class RecoveryController {
       const quiet =
         reason !== 'stall' &&
         reason !== 'other' &&
-        (this.host.isPaused() || this.host.isHidden() || Date.now() - this.idleAt < HEARTBEAT_MS);
+        (this.host.isPaused() || this.host.isHidden?.() || Date.now() - this.idleAt < HEARTBEAT_MS);
       this.episode = { reason, since: Math.max(since, this.lastWakeAt), quiet };
     }
     this.recovering = true;
@@ -357,7 +363,7 @@ export class RecoveryController {
     } finally {
       if (gen === this.gen) {
         this.recovering = false;
-        this.host.graceAfterReload();
+        this.host.graceAfterReload?.();
       }
     }
   }
@@ -386,7 +392,7 @@ export class RecoveryController {
     this.episode = null;
     this.host.setRecovering(false);
     this.host.abandonReload();
-    void this.host.engine()?.unload();
+    void this.host.playhead()?.unload();
     this.host.showFailure(failure ?? this.lastFailure ?? { source: 'session', code: 0 });
     this.lastFailure = null;
   }

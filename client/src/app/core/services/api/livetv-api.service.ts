@@ -323,6 +323,11 @@ export class LiveTvApiService {
     );
   }
 
+  /** The whole visible lineup, unpaged, favorites first then number: the order of `on-now`. */
+  getChannels() {
+    return firstValueFrom(this.http.get<LiveChannel[]>('/api/livetv/channels'));
+  }
+
   getOnNow(opts: { page?: number; pageSize?: number; group?: string; query?: string } = {}) {
     return firstValueFrom(
       this.http.get<OnNowPage>('/api/livetv/channels/on-now', {
