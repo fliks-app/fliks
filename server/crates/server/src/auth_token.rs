@@ -79,6 +79,30 @@ pub struct Claims {
     pub exp: i64,
 }
 
+/// The routes of the engine data plane, which resolves its own credentials (`engine/resolve.rs`) and so
+/// takes a session token from the URL on all of them.
+const DATA_PLANE_PATH: &str = "/api/stream/";
+
+/// COMPAT, retired with the NAT-TVOS release: released native shells put their full session token in
+/// the URL of these routes until a stream token exists (playback and sidecar URLs, the stop of a
+/// session, Live TV logos, orphan covers).
+fn released_shell_route(path: &str) -> bool {
+    path.starts_with(DATA_PLANE_PATH)
+        || path == "/api/imports/orphans/cover"
+        || path
+            .strip_prefix("/api/livetv/channels/")
+            .is_some_and(|rest| rest.ends_with("/logo"))
+}
+
+impl Claims {
+    /// Whether the token may arrive in the URL of `path`, which ends up in logs: a scoped one always,
+    /// a session token only on a route a released native shell calls that way. The one rule of the
+    /// API extractors; the data plane's routes are all in it.
+    pub fn may_travel_in_url(&self, path: &str) -> bool {
+        self.scope.is_some() || released_shell_route(path)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Signed {
     pub token: String,
@@ -196,13 +220,13 @@ impl Jwt {
         )
     }
 
-    /// A file-bound stream credential for one Cast LOAD.
+    /// A stream credential for one Cast LOAD, bound to a file when the caller names one.
     pub fn sign_cast(
         &self,
         user_id: i32,
         username: &str,
         sid: i32,
-        media_file_id: u32,
+        media_file_id: Option<u32>,
     ) -> Result<Signed, AppError> {
         self.sign(
             user_id,
@@ -210,7 +234,7 @@ impl Jwt {
             Some(TokenScope::Stream),
             CAST_TTL_SECS,
             Bound {
-                mf: Some(media_file_id),
+                mf: media_file_id,
                 ..Bound::session(sid)
             },
         )
@@ -435,11 +459,35 @@ mod tests {
     }
 
     #[test]
+    fn a_session_token_travels_in_a_url_only_on_the_routes_released_shells_call() {
+        let j = jwt();
+        let claims = |t: Signed| j.verify(&t.token).unwrap();
+        let session = claims(j.sign_access(1, "a", 2).unwrap());
+        let stream = claims(j.sign_stream(1, "a", 2).unwrap());
+        for path in [
+            "/api/stream/9/master.m3u8",
+            "/api/stream/sessions/x",
+            "/api/imports/orphans/cover",
+            "/api/livetv/channels/3/logo",
+        ] {
+            assert!(session.may_travel_in_url(path), "{path}");
+        }
+        for path in [
+            "/api/auth/me",
+            "/api/livetv/channels/3/prefs",
+            "/api/system/events",
+        ] {
+            assert!(!session.may_travel_in_url(path), "{path}");
+            assert!(stream.may_travel_in_url(path), "{path}");
+        }
+    }
+
+    #[test]
     fn stream_and_cast_tokens_carry_the_scope() {
         let j = jwt();
         let (s, c) = (
             j.sign_stream(1, "a", 2).unwrap(),
-            j.sign_cast(1, "a", 2, 9).unwrap(),
+            j.sign_cast(1, "a", 2, Some(9)).unwrap(),
         );
         assert_eq!(j.verify(&s.token).unwrap().scope, Some(TokenScope::Stream));
         assert_eq!(j.verify(&c.token).unwrap().scope, Some(TokenScope::Stream));

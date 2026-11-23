@@ -210,7 +210,7 @@ pub(crate) async fn map_user(
     a: Authed,
     ValidJson(body): ValidJson<UserMapping>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
-    a.require(Action::Manage, Subject::Settings)?;
+    a.require(Action::Manage, Subject::User)?;
     let known = body.provider == "seerr"
         || body
             .provider

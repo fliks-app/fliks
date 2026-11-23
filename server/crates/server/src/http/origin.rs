@@ -16,7 +16,8 @@ async fn trusted_proxies(st: &AppState) -> Option<Vec<Cidr>> {
 }
 
 /// The client address (`auth.md` rule 63): `X-Forwarded-For` entries then the socket peer, walked
-/// from the right past the trusted proxies to the first hop outside them.
+/// from the right past the trusted proxies to the first hop outside them. The engine's loopback
+/// hop is always trusted, on top of the admin list.
 pub async fn client_ip(
     st: &AppState,
     headers: &HeaderMap,
@@ -31,7 +32,7 @@ fn walk(
     trusted: Option<&[Cidr]>,
 ) -> Option<IpAddr> {
     let is_trusted = |ip: IpAddr| match trusted {
-        Some(list) => list.iter().any(|c| c.contains(ip)),
+        Some(list) => ip.is_loopback() || list.iter().any(|c| c.contains(ip)),
         None => classify(ip) == Class::Private,
     };
     let mut chain: Vec<IpAddr> = headers
@@ -168,21 +169,22 @@ mod tests {
 
     #[test]
     fn an_admin_list_narrows_the_proxies_and_closes_the_lan_spoof() {
-        let engine_only = Some(&["127.0.0.0/8"][..]);
+        let none = Some(&[][..]);
         assert_eq!(
-            walk_with(&["1.1.1.1", "192.168.1.7"], "127.0.0.1", engine_only),
+            walk_with(&["1.1.1.1", "192.168.1.7"], "127.0.0.1", none),
             Some("192.168.1.7".parse().unwrap()),
             "the hop the engine saw wins over a claimed one"
         );
-        let caddy = Some(&["127.0.0.0/8", "192.168.1.2"][..]);
+        let caddy = Some(&["192.168.1.2"][..]);
         assert_eq!(
             walk_with(&["8.8.8.8", "192.168.1.2"], "127.0.0.1", caddy),
-            Some("8.8.8.8".parse().unwrap())
+            Some("8.8.8.8".parse().unwrap()),
+            "the engine's loopback hop is trusted without being listed"
         );
         assert_eq!(
-            walk_with(&["8.8.8.8"], "127.0.0.1", Some(&[])),
-            Some("127.0.0.1".parse().unwrap()),
-            "an empty list trusts nobody"
+            walk_with(&["8.8.8.8"], "10.0.0.1", none),
+            Some("10.0.0.1".parse().unwrap()),
+            "an empty list trusts only the loopback hop"
         );
     }
 }

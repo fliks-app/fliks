@@ -139,7 +139,7 @@ pub async fn resolve(
     }
     // A device token opens the families of its catalogue only (a Kobo, text editions): it travels in URLs.
     if let Some(families) = device.and_then(device_tokens::Kind::families)
-        && !in_families(&st, &request.media_id, families).await?
+        && !in_families(&st, &request.media_id, &families).await?
     {
         return Ok(Json(deny()));
     }

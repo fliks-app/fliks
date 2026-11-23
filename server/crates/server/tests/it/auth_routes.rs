@@ -292,15 +292,20 @@ async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
             .mf,
         None
     );
-    let (s, _, _) = call(
-        &c,
-        "POST",
-        "/api/auth/cast-info",
-        &[("authorization", &h)],
-        None,
-    )
-    .await;
-    assert_eq!(s, 400, "cast-info names the file it casts");
+    for body in [None, Some(json!({}))] {
+        let (s, _, i) = call(
+            &c,
+            "POST",
+            "/api/auth/cast-info",
+            &[("authorization", &h)],
+            body,
+        )
+        .await;
+        assert_eq!(s, 201, "a released app asks for an unbound cast token");
+        let claims = c.st.jwt.verify(i["token"].as_str().unwrap()).unwrap();
+        assert_eq!((claims.mf, claims.sub), (None, id));
+        assert!(claims.scope.is_some());
+    }
     let (s, _, i) = call(
         &c,
         "POST",
@@ -728,6 +733,17 @@ async fn the_trusted_proxies_setting_decides_who_is_the_client(pool: PgPool) {
     assert_eq!(
         picker(&c, "127.0.0.1", Some("10.0.0.5, 8.8.8.8")).await,
         json!([])
+    );
+    sqlx::query(
+        "UPDATE app_settings SET value = '[\"192.168.1.2\"]' WHERE key = 'trusted_proxies'",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        picker(&c, "127.0.0.1", Some("8.8.8.8, 192.168.1.2")).await,
+        json!([]),
+        "the engine's loopback hop is trusted when only the reverse proxy is listed"
     );
 }
 

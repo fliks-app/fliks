@@ -911,6 +911,37 @@ async fn import_leaves_a_same_name_local_account_alone(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn import_maps_the_account_a_released_import_created(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    seed_library(&pool).await;
+    let earlier: i32 = sqlx::query_scalar(
+        r#"INSERT INTO users (username, "mediaServerType") VALUES ('USER', 'emby') RETURNING id"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let id = add_server(&c, "ok", &[], true).await;
+    let ev = run_import(&c, id).await;
+    let SseEvent::WatchHistoryImportCompleted {
+        users_created,
+        unmapped_count,
+        ..
+    } = &ev[2]
+    else {
+        panic!("{ev:?}")
+    };
+    assert_eq!((*users_created, *unmapped_count), (1, 0));
+    let mapped: Option<i32> = sqlx::query_scalar(
+        r#"SELECT "userId" FROM user_external_ids WHERE provider = $1 AND "externalId" = 'u1'"#,
+    )
+    .bind(format!("emby:{id}"))
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+    assert_eq!(mapped, Some(earlier));
+}
+
+#[sqlx::test(migrations = false)]
 async fn import_pages_through_the_total(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     let id = add_server(&c, "big", &[], true).await;

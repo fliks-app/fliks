@@ -380,7 +380,7 @@ async fn authenticate_bound(
     let claims = state
         .jwt
         .verify(&token)
-        .filter(|c| c.live.is_none() && (!in_query || c.scope.is_some()))
+        .filter(|c| c.live.is_none() && (!in_query || c.may_travel_in_url(parts.uri.path())))
         .ok_or_else(unauthorized)?;
     let sid = claims.sid.ok_or_else(unauthorized)?;
     let (user, role) = load_session_user(&state.db, claims.sub, sid)
