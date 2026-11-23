@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { NO_ERRORS_SCHEMA, provideZonelessChangeDetection, signal } from '@angular/core';
+import { NO_ERRORS_SCHEMA, provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, RouterLink, RouterLinkActive, provideRouter } from '@angular/router';
 import { TranslateLoader, TranslatePipe, provideTranslateService } from '@ngx-translate/core';
@@ -40,7 +40,6 @@ interface Setup {
   libraries?: LibrarySummary[];
   badgeCounts?: Record<string, number>;
   registry?: Partial<Record<SlotId, UiContribution[]>>;
-  pinned?: boolean;
   url?: string;
   backdrop?: string;
 }
@@ -65,10 +64,7 @@ async function setup(o: Setup = {}): Promise<{ fixture: ComponentFixture<NavRail
         useValue: {
           railMode: () => (o.tv ? 'collapsed' : (o.mode ?? 'collapsed')),
           railDocked: () => true,
-          canPin: () => !o.tv,
           dockedBars: () => [],
-          sidebarPinned: signal(!!o.pinned),
-          toggleSidebarPinned: () => {},
         },
       },
     ],
@@ -175,7 +171,7 @@ describe('NavRailComponent', () => {
     expect(entries(el).some((e) => e.label === 'x.broken')).toBe(false);
   });
 
-  it('rests collapsed, opens while focused from the keyboard or D-pad, and stays open once pinned', async () => {
+  it('rests collapsed, opens while focused from the keyboard or D-pad, and stays open when expanded', async () => {
     const { fixture, el } = await setup({ tv: true });
     const root = el.querySelector('.nav-rail')!;
     expect(root.classList.contains('rail-open')).toBe(false);
@@ -191,6 +187,22 @@ describe('NavRailComponent', () => {
     TestBed.resetTestingModule();
     const pinned = await setup({ mode: 'expanded' });
     expect(pinned.el.querySelector('.nav-rail')!.classList.contains('rail-open')).toBe(true);
+  });
+
+  it('opens on a first tap without following the link, and closes on a tap outside', async () => {
+    const { fixture, el } = await setup();
+    const root = el.querySelector('.nav-rail')!;
+    const link = el.querySelector('.rail-list a') as HTMLElement;
+    link.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    const tap = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(tap);
+    fixture.detectChanges();
+    expect(tap.defaultPrevented).toBe(true);
+    expect(root.classList.contains('rail-open')).toBe(true);
+
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
+    fixture.detectChanges();
+    expect(root.classList.contains('rail-open')).toBe(false);
   });
 
   it('is an overlay-free list in the drawer: expanded, never reported as overlaying the page', async () => {

@@ -70,7 +70,7 @@ body.tv .nav-rail.rail-collapsed:not(.rail-open) .rail-icon {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: calc(env(safe-area-inset-top, 0px) / 2 + 0.75rem) 0.75rem 0.75rem;
+  padding: calc(env(safe-area-inset-top, 0px) + 1.5rem) 0.75rem 0.75rem;
   scroll-padding-block: 0.75rem;
 }
 /* The footer sits at the bottom while everything fits, after the last entry once it does not. */
@@ -175,8 +175,16 @@ body.tv .rail-item {
   padding: 0;
   justify-content: center;
 }
-.nav-rail.rail-open .rail-user-row .rail-reveal {
+.nav-rail.rail-open .rail-user-row .rail-icon-btn {
   margin-left: 0.25rem;
+}
+/* Collapsed, settings stacks above the avatar. */
+.nav-rail:not(.rail-open) .rail-user-row {
+  flex-direction: column-reverse;
+  gap: 0.25rem;
+}
+.nav-rail:not(.rail-open) .rail-user-row .rail-icon-btn {
+  width: 100%;
 }
 
 /* A docked now-playing bar: the cover alone with a progress ring while collapsed, the whole bar once open. */
