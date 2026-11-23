@@ -12,10 +12,12 @@
 - Bump it with `scripts/bump-engine.sh <version>`, which rewrites `engine.lock` (version + sha256 per platform, for the desktop bundles), the `ENGINE_IMAGE` default in the `Dockerfile` (`ghcr.io/fliks-app/engine:<version>@sha256:<digest>`) and the `fliks-engine-core` tag of `server/crates/server/Cargo.toml` (and both `Cargo.lock`); `engine-lock.yml` fails a PR where they disagree.
 - The image is built `FROM` the engine image (`ARG ENGINE_IMAGE`): ffmpeg, mkvmerge, fpcalc, OpenCL and the `fliks-engine` binary are defined in the engine repo, not here. Test an unreleased engine with `--build-arg ENGINE_IMAGE=ghcr.io/fliks-app/engine:main` (or the `engine_image` input of the publish workflow).
 - The dev stack (`docker-compose.dev.example.yml`) mirrors production: the engine (`../fliks-engine`, cargo watch) is the front door on :3000 and forwards to `server` (`fliks-server`, cargo watch on `server/`, :3001), the whole HTTP API. The dev `server` builds against that same engine checkout through a Cargo patch kept in the container, with a container-private `Cargo.lock` (`.dev/server-Cargo.lock`, seeded from `server/Cargo.lock` at each start), so `server/Cargo.lock` stays clean; restart `server` after a pull that changes it.
+- The dev stack runs `docker-compose.dev.example.yml` itself, never a copy: `.env` sets `COMPOSE_FILE=docker-compose.dev.example.yml:docker-compose.local.yml`, and only local differences live in the gitignored `docker-compose.local.yml`.
+- Client dependencies: `npm ci`, never `npm install` (it rewrites `package-lock.json`). The lock is generated with the npm pinned in `client/package.json` (`packageManager`, the one CI's Node ships); a dependency change regenerates it with that npm.
 
 ### Dev database re-baseline
 
-Dev DBs built by TypeORM `synchronize` have an empty migrations ledger and `fliks-server migrate` refuses them. The same recipe fixes a DB that applied unreleased migrations later consolidated (sqlx `migration N was previously applied but is missing in the resolved migrations`, or `has been modified`). Once per dev DB, from the repo root (`dc` = `docker compose -f docker-compose.yml`):
+Dev DBs built by TypeORM `synchronize` have an empty migrations ledger and `fliks-server migrate` refuses them. The same recipe fixes a DB that applied unreleased migrations later consolidated (sqlx `migration N was previously applied but is missing in the resolved migrations`, or `has been modified`). Once per dev DB, from the repo root (`dc` = `docker compose`, which reads `COMPOSE_FILE` from `.env`):
 
 ```bash
 dc stop server

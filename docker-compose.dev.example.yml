@@ -1,6 +1,8 @@
 # Dev stack: fliks-server (Rust) + Angular in watch mode on the mounted sources.
-# Copy to `docker-compose.yml` (gitignored), point the media paths at your own
-# library, then `docker compose up` → UI on http://localhost:4500.
+# Used as is, never copied (a copy drifts from this file): put
+# `COMPOSE_FILE=docker-compose.dev.example.yml:docker-compose.local.yml` in `.env` and keep only your
+# local differences (media paths, GPU devices) in `docker-compose.local.yml` (gitignored, may be empty:
+# `services: {}`), then `docker compose up` → UI on http://localhost:4500.
 # The client's npm dependencies live in its image, above the bind-mounted sources:
 # `docker compose build client` after a package.json change.
 # The engine is the front door (:3000, --upstream server:3001), as in production; server has no published port.
