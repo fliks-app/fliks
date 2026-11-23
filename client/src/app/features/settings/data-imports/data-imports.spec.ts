@@ -88,3 +88,19 @@ describe('DataImportsSettingsComponent — Radarr and Sonarr forms', () => {
     expect(cmp.arr.sonarr.result()?.imported).toBe(1);
   });
 });
+
+describe('DataImportsSettingsComponent: unmapped import users', () => {
+  it('counts what the import events could not match and drops a user once mapped', async () => {
+    const { cmp } = await createComponent();
+    expect(cmp.unmappedCount()).toBe(0);
+    const note = cmp as unknown as { noteUnmapped(source: string, event: Record<string, unknown>): void };
+    const ana = { provider: 'seerr', externalId: '7', username: 'ana' };
+    note.noteUnmapped('seerr', { unmapped: [ana], unmappedCount: 3 });
+    note.noteUnmapped('emby:2', { unmapped: [{ provider: 'emby:2', externalId: 'b', username: 'bob' }], unmappedCount: 1 });
+    expect(cmp.unmappedCount()).toBe(4);
+    expect(cmp.unmappedUsers().length).toBe(2);
+    cmp.onUserMapped(ana);
+    expect(cmp.unmappedCount()).toBe(3);
+    expect(cmp.unmappedUsers().map((u) => u.username)).toEqual(['bob']);
+  });
+});

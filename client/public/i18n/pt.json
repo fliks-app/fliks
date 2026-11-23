@@ -2908,6 +2908,23 @@
         "import_started": "Importação Seerr iniciada",
         "import_completed": "{{users}}, {{imported}}, atualizados: {{updated}}, ignorados: {{skipped}}",
         "import_failed": "Falha na importação do Seerr: {{error}}"
+      },
+      "unmapped_notice_one": "{{count}} utilizador de origem não pôde ser associado: uma conta já tem o seu nome.",
+      "unmapped_notice_other": "{{count}} utilizadores de origem não puderam ser associados: uma conta já tem o seu nome.",
+      "unmapped_review": "Associar utilizadores",
+      "user_mapping": {
+        "title": "Associar utilizadores importados",
+        "description": "Estes utilizadores partilham o nome com uma conta existente. Escolha a conta de cada um ou crie uma nova.",
+        "provider_seerr": "Seerr",
+        "provider_emby": "Emby",
+        "account_label": "Conta Fliks",
+        "pick": "Escolher uma conta",
+        "create": "Criar uma conta nova",
+        "new_username": "Novo nome de utilizador",
+        "map": "Associar",
+        "mapped": "{{name}} está associado",
+        "error": "Não foi possível associar este utilizador",
+        "empty": "Todos os utilizadores estão associados."
       }
     },
     "libraries": {

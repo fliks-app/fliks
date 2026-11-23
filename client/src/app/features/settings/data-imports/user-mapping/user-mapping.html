@@ -1,0 +1,69 @@
+<dialog appModal boxClass="max-w-2xl" [shown]="shown()" (close)="closed.emit()">
+  <app-modal-header>
+    <div>
+      <h3 class="text-lg font-bold">{{ 'settings.data_imports.user_mapping.title' | translate }}</h3>
+      <p class="text-base text-base-content/60 mt-1">
+        {{ 'settings.data_imports.user_mapping.description' | translate }}
+      </p>
+    </div>
+  </app-modal-header>
+
+  @if (users().length === 0) {
+    <p class="mt-4 text-sm text-base-content/60">{{ 'settings.data_imports.user_mapping.empty' | translate }}</p>
+  } @else {
+    <ul class="scroll-ring-safe mt-4 flex max-h-96 flex-col gap-3 overflow-y-auto">
+      @for (u of users(); track key(u)) {
+        <li class="flex flex-col gap-2 rounded-lg border border-base-200 p-3">
+          <div class="flex items-baseline justify-between gap-2">
+            <span class="truncate font-medium">{{ u.username }}</span>
+            <span class="shrink-0 text-sm text-base-content/60">
+              {{ (u.provider === 'seerr' ? 'settings.data_imports.user_mapping.provider_seerr' : 'settings.data_imports.user_mapping.provider_emby') | translate }}
+            </span>
+          </div>
+          <select
+            appTvSelect
+            class="select select-bordered select-sm w-full"
+            [attr.aria-label]="'settings.data_imports.user_mapping.account_label' | translate"
+            [ngModel]="choice()[key(u)] ?? ''"
+            (ngModelChange)="setChoice(u, $event)"
+          >
+            <option value="" disabled>{{ 'settings.data_imports.user_mapping.pick' | translate }}</option>
+            @for (a of accounts(); track a.id) {
+              <option [value]="a.id">{{ a.username }}</option>
+            }
+            <option [value]="NEW_ACCOUNT">{{ 'settings.data_imports.user_mapping.create' | translate }}</option>
+          </select>
+          @if (choice()[key(u)] === NEW_ACCOUNT) {
+            <input
+              type="text"
+              class="input input-bordered input-sm w-full"
+              [attr.aria-label]="'settings.data_imports.user_mapping.new_username' | translate"
+              [placeholder]="'settings.data_imports.user_mapping.new_username' | translate"
+              [ngModel]="newName()[key(u)] ?? ''"
+              (ngModelChange)="setNewName(u, $event)"
+            />
+          }
+          <div class="flex justify-end">
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              [disabled]="!canMap(u) || busy() !== null"
+              (click)="map(u)"
+            >
+              @if (busy() === key(u)) {
+                <span class="loading loading-spinner loading-xs"></span>
+              }
+              {{ 'settings.data_imports.user_mapping.map' | translate }}
+            </button>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+
+  <app-modal-footer>
+    <button type="button" class="btn btn-ghost" (click)="closed.emit()">
+      {{ 'common.close' | translate }}
+    </button>
+  </app-modal-footer>
+</dialog>

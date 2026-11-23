@@ -2908,6 +2908,23 @@
         "import_started": "Seerr import started",
         "import_completed": "{{users}}, {{imported}}, updated: {{updated}}, skipped: {{skipped}}",
         "import_failed": "Seerr import failed: {{error}}"
+      },
+      "unmapped_notice_one": "{{count}} source user could not be matched: an account already holds its name.",
+      "unmapped_notice_other": "{{count}} source users could not be matched: an account already holds their name.",
+      "unmapped_review": "Map users",
+      "user_mapping": {
+        "title": "Map imported users",
+        "description": "These users share a name with an existing account. Pick the account each one belongs to, or create a new one.",
+        "provider_seerr": "Seerr",
+        "provider_emby": "Emby",
+        "account_label": "Fliks account",
+        "pick": "Choose an account",
+        "create": "Create a new account",
+        "new_username": "New username",
+        "map": "Map",
+        "mapped": "{{name}} is mapped",
+        "error": "Could not map this user",
+        "empty": "Every user is mapped."
       }
     },
     "libraries": {

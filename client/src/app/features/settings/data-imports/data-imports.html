@@ -11,6 +11,15 @@
       <span class="loading loading-spinner loading-lg"></span>
     </div>
   } @else {
+    @if (unmappedCount() > 0) {
+      <div role="alert" class="alert alert-warning text-sm py-2">
+        <span>{{ unmappedNotice() }}</span>
+        <button type="button" class="btn btn-sm" (click)="userMappingShown.set(true)">
+          {{ 'settings.data_imports.unmapped_review' | translate }}
+        </button>
+      </div>
+    }
+
     <!-- Disk import (manual scan + match) -->
     <section class="card bg-base-200/60 border border-base-200">
       <div class="card-body gap-4">
@@ -433,6 +442,13 @@
       </app-modal-footer>
     </dialog>
   }
+
+  <app-import-user-mapping
+    [users]="unmappedUsers()"
+    [shown]="userMappingShown()"
+    (closed)="userMappingShown.set(false)"
+    (mapped)="onUserMapped($event)"
+  />
 </div>
 
 <ng-template #keyActions let-p>
