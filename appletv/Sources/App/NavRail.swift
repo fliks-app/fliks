@@ -48,8 +48,8 @@ struct NavRail: View {
                     ForEach(libraries) { lib in
                         row("lib:\(lib.id)", lib.name, lib.symbol) { go([.library(id: lib.id)]) }
                     }
-                    if libraryStore.visible.count > Self.shownLibraries, libraries.count <= Self.shownLibraries {
-                        row("more", tr("nav.more"), "ellipsis") { showAllLibraries = true }
+                    if libraryStore.visible.count > Self.shownLibraries, (libraries.count <= Self.shownLibraries || focus.wrappedValue == "more") {
+                        row("more", tr("nav.more"), "ellipsis") { revealLibraries() }
                     }
                 }
                 row("playlists", tr("sidebar.playlists"), "list.and.film") { go([.playlists]) }
@@ -90,6 +90,14 @@ struct NavRail: View {
             Button(tr("common.cancel"), role: .cancel) {}
         }
         .task { await libraryStore.load() }
+    }
+
+    // The "more" row stays until focus leaves it, so focus moves on without passing through nil.
+    private func revealLibraries() {
+        showAllLibraries = true
+        if let next = libraryStore.visible.dropFirst(Self.shownLibraries).first {
+            Task { @MainActor in focus.wrappedValue = "lib:\(next.id)" }
+        }
     }
 
     private func go(_ stack: [Route]) {
