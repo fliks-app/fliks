@@ -6,6 +6,8 @@ import UIKit
 /// resolves it once, at `.full` size.
 @Observable final class Backdrop {
     var url: String?
+    /// The hero carousel on screen owns the picture: `scroll` runs from 0 at rest to 1 once scrolled past it.
+    private(set) var hero: (owner: UUID, scroll: Double)?
 }
 
 extension Backdrop {
@@ -15,6 +17,22 @@ extension Backdrop {
         guard url == nil, let path else { return }
         url = path
     }
+
+    /// A focused card's artwork, unless a hero holds the picture.
+    func follow(_ path: String?) {
+        guard hero == nil, let path else { return }
+        url = path
+    }
+
+    func claimHero(_ owner: UUID, url path: String?, scroll: Double) {
+        if let path { url = path }
+        hero = (owner, scroll)
+    }
+
+    /// The page leaving can disappear after the next one claimed: only the owner lets go.
+    func releaseHero(_ owner: UUID) {
+        if hero?.owner == owner { hero = nil }
+    }
 }
 
 struct BackdropView: View {
@@ -23,16 +41,34 @@ struct BackdropView: View {
     var body: some View {
         // Same stack as the web client's page background: the fanart unblurred
         // under a 95% base-100 veil (`--bg-veil`), then the brand tint.
-        let base = Color(red: 29 / 255, green: 35 / 255, blue: 42 / 255)
         ZStack {
-            base
+            Self.base
             // Clamp so a changing image never resizes the root layout.
             CrossfadeImage(url: ImageURL.build(backdrop.url, size: .full))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            base.opacity(0.95)
+            if let hero = backdrop.hero { Self.heroVeil(hero.scroll) } else { Self.base.opacity(Self.ambient) }
             Color.fliks("primary").opacity(0.15)
         }
+        .animation(.easeInOut(duration: 0.6), value: backdrop.hero == nil)
         .ignoresSafeArea()
+    }
+
+    private static let base = Color(red: 29 / 255, green: 35 / 255, blue: 42 / 255)
+    private static let ambient = 0.95
+
+    /// The web client's hero veil: light at the top and right, solid behind the text, the ambient veil once scrolled.
+    private static func heroVeil(_ scroll: Double) -> some View {
+        let v = ambient * min(1, 2 * scroll)
+        // Each side stop lets through a linear mix of the hero and ambient amounts, so a scroll never brightens.
+        func side(_ a: Double) -> Color {
+            base.opacity(min(1, max(0, 1 - ((1 - scroll) * (1 - a) + (1 - ambient) * scroll) / (1 - v))))
+        }
+        return ZStack {
+            LinearGradient(stops: [.init(color: side(1), location: 0), .init(color: side(0.85), location: 0.28),
+                                   .init(color: side(0), location: 0.62)], startPoint: .leading, endPoint: .trailing)
+            LinearGradient(stops: [.init(color: base.opacity(v), location: 0.25),
+                                   .init(color: base.opacity(ambient), location: 0.6)], startPoint: .top, endPoint: .bottom)
+        }
     }
 }
 

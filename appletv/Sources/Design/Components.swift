@@ -119,7 +119,7 @@ struct MediaCard: View {
             // A card with no artwork (a playlist with no posters, a request
             // without a poster) keeps the current backdrop rather than
             // flashing the bare black root.
-            if pushesBackdrop, let path = backdropPath ?? imagePath { backdrop.url = path }
+            if pushesBackdrop { backdrop.follow(backdropPath ?? imagePath) }
         }
     }
 }

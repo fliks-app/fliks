@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A few featured titles, one at a time, over their own fanart: the tvOS side of the client's
+/// A few featured titles, one at a time, over their fanart drawn as the page backdrop: the tvOS side of the client's
 /// `app-hero-carousel`. Auto-advances unless focus is inside, the app is inactive or motion is reduced.
 struct HeroCarousel: View {
     let items: [Media]
@@ -18,6 +18,9 @@ struct HeroCarousel: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(PlaylistPicker.self) private var playlistPicker
     @Environment(WatchedStore.self) private var watched
+    @Environment(Backdrop.self) private var backdrop
+    @State private var owner = UUID()
+    @State private var scroll = 0.0
 
     private var compact: Bool { label != nil }
     private var height: CGFloat { compact ? 560 : 740 }
@@ -26,7 +29,6 @@ struct HeroCarousel: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            picture
             if let m = current {
                 VStack(alignment: .leading, spacing: 22) {
                     if let label { Text(label).font(.title3.weight(.semibold)).foregroundStyle(.secondary) }
@@ -41,6 +43,18 @@ struct HeroCarousel: View {
             }
         }
         .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .bottomLeading)
+        .background {
+            GeometryReader { geo in
+                Color.clear.onChange(of: geo.frame(in: .global).minY) { _, y in
+                    // Two fifths of the screen past its top, the backdrop has its ambient look back.
+                    scroll = min(1, max(0, -y / 432))
+                    claim()
+                }
+            }
+        }
+        .onAppear(perform: claim)
+        .onChange(of: current?.id) { claim() }
+        .onDisappear { backdrop.releaseHero(owner) }
         .focusSection()
         .task(id: "\(index)-\(running)") {
             guard running else { return }
@@ -51,16 +65,8 @@ struct HeroCarousel: View {
         .task(id: current?.id) { await resolveTarget() }
     }
 
-    /// Fades out to transparent, not to a colour: the page's ambient backdrop shows through, with no seam.
-    private var picture: some View {
-        CrossfadeImage(url: ImageURL.build(current?.fanartUrl, size: .full))
-            .overlay(LinearGradient(colors: [.black.opacity(0.7), .black.opacity(0.2), .clear],
-                                    startPoint: .leading, endPoint: .trailing))
-            .mask(LinearGradient(colors: [.black, .black, .clear], startPoint: .top, endPoint: .bottom))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-            .ignoresSafeArea()
-            .accessibilityHidden(true)
+    private func claim() {
+        backdrop.claimHero(owner, url: current?.fanartUrl, scroll: scroll)
     }
 
     private func slide(_ m: Media) -> some View {
