@@ -345,7 +345,7 @@ pub fn spawn(st: &AppState) {
         }
         _ => {}
     };
-    let on_lag = move || {
+    let on_lag = move |_: u64| {
         let lc = on_lag.clone();
         tokio::spawn(async move { lc.reconcile().await });
     };

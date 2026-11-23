@@ -260,6 +260,7 @@ interface host {
   acquisition-candidates: func(query: candidates-query) -> result<candidates-page, host-error>;
   releases-match: func(titles: list<release-title>, min-age-minutes: option<u32>)
     -> result<list<release-match>, host-error>;
+  /// Since fliks 7.2.0.
   releases-score: func(
     media-id: u32, family: option<family>, language: option<string>, unit: option<unit-ref>,
     releases: list<candidate-release>,
@@ -283,6 +284,7 @@ interface host {
   /// Needs `playlists:write`.
   playlist-sync: func(user-id: u32, name: string, item-ids: list<u32>) -> result<u32, host-error>;
 
+  /// Since fliks 7.2.0.
   library-ingest: func(request: ingest-request) -> result<ingest-result, host-error>;
 
   events-publish: func(events: list<acquisition-event>) -> result<_, host-error>;
@@ -353,6 +355,7 @@ interface notify {
     media-id: option<u32>,
   }
 
+  /// Since fliks 7.1.0.
   notify-users: func(audience: notify-audience, notification: notification) -> result<_, host-error>;
 }
 

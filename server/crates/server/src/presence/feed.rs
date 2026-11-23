@@ -26,7 +26,7 @@ pub(super) async fn run(
     on_lag: impl Fn(),
 ) {
     let on_event = |feed: &Feed| apply(&presence, feed).iter().for_each(|sid| on_end(sid));
-    crate::events::listen("presence feed", rx, on_event, on_lag).await;
+    crate::events::listen("presence feed", rx, on_event, |_| on_lag()).await;
 }
 
 /// The sids that left presence.

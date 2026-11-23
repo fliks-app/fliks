@@ -213,7 +213,7 @@ Two in-process feeds: the all-frames bus (`subscribe`, audience-blind, every SSE
 | request lifecycle | `acquisition.grabbed` | APPROVED to PROCESSING for the media and season | the same reconcile |
 | new-episode notifier (`push.md` rule 35) | `media.files.imported` | groups imports of a series for 5 minutes, then `push::notify` | lossy by contract: no marker says which import was lost |
 | plugin webhook dispatcher | all 12 domain types (filtered by each plugin's declared webhooks) | HTTP webhook delivery | the full acquisition sweep of `plugins.md` rule 66, in place of a lost `media.acquisition.requested`; the delivery itself is lossy by contract |
-| plugin process dispatcher | all 12 | NDJSON event to every ready `process` plugin | the same sweep; the push itself is lossy by contract |
+| plugin process dispatcher | all 12 | NDJSON event to every ready `process` plugin | the same sweep; the push itself is lossy by contract, the lost count goes to each receiving plugin's `eventDropCount` (`plugins.md` rule 46) |
 
 The notification hook of rule 51 is a hub-level hook (like the household fan-out), not a bus subscriber. Not subscribers: media-server dispatch and notification dispatch are direct calls at the emitting sites, and the settings change consumers are the direct calls of `settings.md` rule 11, not the bus.
 

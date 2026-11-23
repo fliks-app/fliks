@@ -460,7 +460,7 @@ fn listen(st: AppState) -> impl Future<Output = ()> {
             }
         }
     };
-    crate::events::listen("new-episode listener", rx, on_event, || {})
+    crate::events::listen("new-episode listener", rx, on_event, |_| {})
 }
 
 /// Users who watch the series (a row not hidden from continue watching), still read its library and

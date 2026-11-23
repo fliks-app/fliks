@@ -2,19 +2,19 @@
 use tokio::sync::broadcast::{Receiver, error::RecvError};
 
 /// Runs `on_event` for every item until the channel closes. A lagged receiver lost events, so
-/// `on_lag` runs the subscriber's reconcile (or nothing, where its spec says the feed is lossy).
+/// `on_lag(lost)` runs the subscriber's reconcile (or nothing, where its spec says the feed is lossy).
 pub async fn listen<T: Clone>(
     name: &str,
     mut rx: Receiver<T>,
     mut on_event: impl FnMut(&T),
-    on_lag: impl Fn(),
+    on_lag: impl Fn(u64),
 ) {
     loop {
         match rx.recv().await {
             Ok(ev) => on_event(&ev),
             Err(RecvError::Lagged(n)) => {
                 tracing::warn!("{name} lagged by {n}, reconciling");
-                on_lag();
+                on_lag(n);
             }
             Err(RecvError::Closed) => return,
         }
@@ -38,12 +38,12 @@ mod tests {
             "test feed",
             rx,
             |i| seen.borrow_mut().push(*i),
-            || {
-                lags.fetch_add(1, Ordering::SeqCst);
+            |n| {
+                lags.fetch_add(n as usize, Ordering::SeqCst);
             },
         )
         .await;
-        assert_eq!(lags.load(Ordering::SeqCst), 1);
+        assert_eq!(lags.load(Ordering::SeqCst), 3, "on_lag gets the lost count");
         assert_eq!(*seen.borrow(), [3, 4]);
     }
 }

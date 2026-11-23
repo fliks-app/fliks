@@ -415,3 +415,35 @@ async fn lists_go_through_the_plugin_and_are_validated() {
     h.finish().await;
     s.finish().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn kept_data_without_a_schema_holds_its_signer() {
+    let Some((s, h, _)) = up("pvkept", |_| {}, |_| {}).await else {
+        return;
+    };
+    let uri = format!("/api/plugins/{ID}");
+    assert_eq!(h.call("DELETE", &uri, Some(&h.admin), None).await.0, 204);
+    let mut m = template("fixture-provider");
+    m["provider"]["namespaces"] = json!([{"name": "tmdb"}]);
+    m["provider"]["kinds"] = json!({"series": ["search", "work", "children", "findBy"]});
+    let w = wasm("fixture_provider").unwrap();
+    let (st, r) = h.upload(&pack(&m, "0.1.0", &w, None)).await;
+    assert_eq!((st, &r["installable"]), (201, &json!(true)), "{r}");
+    let (st, c) = h
+        .call(
+            "POST",
+            "/api/plugins/import/confirm",
+            Some(&h.admin),
+            Some(json!({"stagingId": r["stagingId"], "sha256": r["sha256"]})),
+        )
+        .await;
+    assert_eq!(
+        (st, c["code"].as_str()),
+        (409, Some("PLUGIN_KEPT_DATA_SIGNER")),
+        "data/<id>/ was left by another signer: {c}"
+    );
+    let r = h.install(&pack(&m, "0.1.0", &w, Some(&test_key()))).await;
+    assert_eq!(r["status"], "active", "the same signer adopts: {r}");
+    h.finish().await;
+    s.finish().await;
+}

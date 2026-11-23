@@ -52,7 +52,7 @@ impl Queue {
 #[derive(Default)]
 pub struct Sweeps {
     /// Held from a media's in-flight check to its grab.
-    pub(crate) claims: KeyedLocks<i32>,
+    pub claims: KeyedLocks<i32>,
     slots: Mutex<HashMap<String, Arc<Semaphore>>>,
     queue: Mutex<Queue>,
     /// The instant a cooling media is asked again, by media: one timer per instant.

@@ -409,6 +409,19 @@ impl Plugins {
             if m["kind"] == "process" && origin != "bundled" {
                 self.check_link(i).await?;
             }
+            // Before any write; the record also covers `data/<id>/`, so schema-less plugins too.
+            if m["kind"] == "process"
+                && !super::db::may_adopt(
+                    &super::db::kept(&self.db, id).await.map_err(internal)?,
+                    i.signed_by.as_deref(),
+                )
+            {
+                return Err(ie(
+                    StatusCode::CONFLICT,
+                    "PLUGIN_KEPT_DATA_SIGNER",
+                    "the data kept by an earlier uninstall belongs to another signer: uninstall the plugin with data deletion first",
+                ));
+            }
             if unsigned_ok {
                 sqlx::query(
                     r#"UPDATE provider_namespaces SET "signerKeyId" = NULL WHERE "pluginId" = $1"#,
@@ -437,14 +450,6 @@ impl Plugins {
                 ));
             }
             if m["kind"] == "process" && m["database"]["schema"] == Value::Bool(true) {
-                let kept = super::db::kept(&self.db, id).await.map_err(internal)?;
-                if !super::db::may_adopt(&kept, i.signed_by.as_deref()) {
-                    return Err(ie(
-                        StatusCode::CONFLICT,
-                        "PLUGIN_KEPT_DATA_SIGNER",
-                        "the data kept by an earlier uninstall belongs to another signer: uninstall the plugin with data deletion first",
-                    ));
-                }
                 let refs = packages::core_refs(m);
                 super::db::provision(&self.db, id, &refs)
                     .await
