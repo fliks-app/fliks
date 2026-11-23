@@ -65,6 +65,7 @@
                     [attr.aria-expanded]="plusOpen()" (click)="plusOpen.set(!plusOpen())">
               <span class="rail-icon"><svg [lucideIcon]="icons.Ellipsis" class="h-6 w-6"></svg></span>
               <span class="rail-label">{{ 'nav.more' | translate }}</span>
+              <span class="rail-badge text-base-content/60"><svg [lucideIcon]="icons.ChevronRight" class="h-4 w-4"></svg></span>
             </button>
             <app-popover-menu [open]="plusOpen()" [anchor]="plus" placement="right-start" [heading]="'home.libraries' | translate" (closed)="plusOpen.set(false)">
               <ul class="menu w-full p-2 gap-0.5">

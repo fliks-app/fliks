@@ -76,6 +76,7 @@ body.tv {
   color: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
   font-weight: 600;
+  cursor: pointer;
 }
 .rail-item:hover {
   background: rgba(255, 255, 255, 0.06);
