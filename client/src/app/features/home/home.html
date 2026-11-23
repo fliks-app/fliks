@@ -60,6 +60,12 @@
   @for (section of visibleSections(); track section.key) {
     @switch (section.type) {
 
+      @case ('hero-carousel') {
+        @if (featured().length) {
+          <app-hero-carousel [items]="featured()" [parked]="routeFresh()" />
+        }
+      }
+
       <!-- Watch parties -->
       @case ('watch-parties') {
         @if (parties().length) {

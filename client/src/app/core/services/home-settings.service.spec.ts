@@ -3,6 +3,9 @@ import { HomeSettingsService, type HomeSectionPref } from './home-settings.servi
 import { TvService } from './tv.service';
 
 const lib = (id: number, name: string) => ({ id, name });
+/** The zones below the carousel, which is pinned first and tested on its own. */
+const zones = (svc: HomeSettingsService, ...a: Parameters<HomeSettingsService['resolve']>) =>
+  svc.resolve(...a).filter((s) => s.key !== 'hero-carousel');
 const keys = (sections: { key: string }[]) => sections.map((s) => s.key);
 
 /** Built through the injector: the zone catalogue reads the form factor, so the
@@ -25,9 +28,10 @@ const make = (isTv = false): HomeSettingsService => {
 describe('HomeSettingsService.resolve', () => {
   beforeEach(() => localStorage.clear());
 
-  it('returns the canonical built-in order, all visible, for a fresh user', () => {
+  it('returns the canonical built-in order for a fresh user, libraries hidden', () => {
     const svc = make();
     expect(keys(svc.resolve([]))).toEqual([
+      'hero-carousel',
       'watch-parties',
       'received-recommendations',
       'libraries',
@@ -38,7 +42,7 @@ describe('HomeSettingsService.resolve', () => {
       'playlists',
       'coming-soon',
     ]);
-    expect(svc.resolve([]).every((s) => s.visible)).toBe(true);
+    expect(svc.resolve([]).filter((s) => !s.visible).map((s) => s.key)).toEqual(['libraries']);
   });
 
   it('honours a saved order for zones still available', () => {
@@ -54,7 +58,7 @@ describe('HomeSettingsService.resolve', () => {
       { key: 'playlists', visible: true },
       { key: 'coming-soon', visible: true },
     ]);
-    expect(keys(svc.resolve([]))).toEqual([
+    expect(keys(zones(svc, []))).toEqual([
       'likes',
       'libraries',
       'received-recommendations',
@@ -65,7 +69,7 @@ describe('HomeSettingsService.resolve', () => {
       'playlists',
       'coming-soon',
     ]);
-    expect(svc.resolve([]).find((s) => s.key === 'likes')?.visible).toBe(false);
+    expect(zones(svc, []).find((s) => s.key === 'likes')?.visible).toBe(false);
   });
 
   it('appends a built-in the saved layout predates, at its canonical position', () => {
@@ -81,7 +85,7 @@ describe('HomeSettingsService.resolve', () => {
       { key: 'playlists', visible: true },
       { key: 'coming-soon', visible: true },
     ]);
-    expect(keys(svc.resolve([]))).toEqual([
+    expect(keys(zones(svc, []))).toEqual([
       'watch-parties',
       'received-recommendations',
       'libraries',
@@ -105,7 +109,7 @@ describe('HomeSettingsService.resolve', () => {
       { key: 'playlists', visible: true },
       { key: 'coming-soon', visible: true },
     ]);
-    expect(keys(svc.resolve([])).slice(0, 2)).toEqual(['watch-parties', 'received-recommendations']);
+    expect(keys(zones(svc, [])).slice(0, 2)).toEqual(['watch-parties', 'received-recommendations']);
   });
 
   it('puts watch-parties on top, visible, when a saved layout predates it', () => {
@@ -115,7 +119,7 @@ describe('HomeSettingsService.resolve', () => {
       { key: 'libraries', visible: false },
       { key: 'continue-watching', visible: true },
     ]);
-    const resolved = svc.resolve([]);
+    const resolved = zones(svc, []);
     expect(keys(resolved)[0]).toBe('watch-parties');
     expect(resolved[0]).toMatchObject({ type: 'watch-parties', visible: true });
     expect(resolved.find((s) => s.key === 'libraries')?.visible).toBe(false);
@@ -128,7 +132,7 @@ describe('HomeSettingsService.resolve', () => {
       { key: 'libraries', visible: true },
       { key: 'watch-parties', visible: false },
     ]);
-    const resolved = svc.resolve([]);
+    const resolved = zones(svc, []);
     expect(keys(resolved).indexOf('watch-parties')).toBe(2);
     expect(resolved[2].visible).toBe(false);
   });
@@ -146,12 +150,12 @@ describe('HomeSettingsService.resolve', () => {
       { key: 'playlists', visible: true },
       { key: 'coming-soon', visible: true },
     ]);
-    expect(keys(svc.resolve([]))).not.toContain('library-recent:99');
+    expect(keys(zones(svc, []))).not.toContain('library-recent:99');
   });
 
   it('appends one hidden-by-default zone per library not yet in the saved order', () => {
     const svc = make();
-    const result = svc.resolve([lib(1, 'Movies'), lib(2, 'Series')]);
+    const result = zones(svc, [lib(1, 'Movies'), lib(2, 'Series')]);
     const movies = result.find((s) => s.key === 'library-recent:1');
     const series = result.find((s) => s.key === 'library-recent:2');
     expect(movies).toMatchObject({ type: 'library-recent', visible: false, libraryId: 1, libraryName: 'Movies' });
@@ -174,19 +178,36 @@ describe('HomeSettingsService.resolve', () => {
       { key: 'playlists', visible: true },
       { key: 'coming-soon', visible: true },
     ]);
-    const result = svc.resolve([lib(1, 'Movies')]);
+    const result = zones(svc, [lib(1, 'Movies')]);
     expect(keys(result)[0]).toBe('library-recent:1');
     expect(result[0].visible).toBe(true);
   });
 
+  it('pins the carousel first, visible, over a saved layout that predates it', () => {
+    const svc = make();
+    svc.setOrder([{ key: 'continue-watching', visible: true }]);
+    expect(svc.resolve([])[0]).toMatchObject({ type: 'hero-carousel', visible: true });
+  });
+
+  it('keeps a saved position and hidden state for the carousel', () => {
+    const svc = make();
+    svc.setOrder([
+      { key: 'continue-watching', visible: true },
+      { key: 'hero-carousel', visible: false },
+    ]);
+    const resolved = svc.resolve([]);
+    expect(keys(resolved).indexOf('hero-carousel')).toBeGreaterThan(keys(resolved).indexOf('continue-watching'));
+    expect(resolved.find((s) => s.key === 'hero-carousel')?.visible).toBe(false);
+  });
+
   it('omits requests-recent when the caller does not opt in', () => {
     const svc = make();
-    expect(keys(svc.resolve([]))).not.toContain('requests-recent');
+    expect(keys(zones(svc, []))).not.toContain('requests-recent');
   });
 
   it('inserts requests-recent just above recently-added, visible by default, when opted in with no saved preference', () => {
     const svc = make();
-    const result = svc.resolve([], { requests: true });
+    const result = zones(svc, [], { requests: true });
     const idx = keys(result).indexOf('requests-recent');
     expect(idx).toBe(keys(result).indexOf('recently-added') - 1);
     expect(result[idx].visible).toBe(true);
@@ -206,7 +227,7 @@ describe('HomeSettingsService.resolve', () => {
       { key: 'playlists', visible: true },
       { key: 'coming-soon', visible: true },
     ]);
-    const result = svc.resolve([], { requests: true });
+    const result = zones(svc, [], { requests: true });
     expect(keys(result)[0]).toBe('requests-recent');
     expect(result[0].visible).toBe(false);
   });
@@ -214,7 +235,7 @@ describe('HomeSettingsService.resolve', () => {
   it('drops requests-recent entirely once the caller stops opting in, even if it was saved', () => {
     const svc = make();
     svc.setOrder([{ key: 'requests-recent', visible: true }]);
-    expect(keys(svc.resolve([]))).not.toContain('requests-recent');
+    expect(keys(zones(svc, []))).not.toContain('requests-recent');
   });
 });
 
@@ -244,7 +265,7 @@ describe('HomeSettingsService persistence', () => {
     svc.setOrder([{ key: 'likes', visible: false }]);
     svc.setMode('both');
     svc.resetLayout();
-    expect(keys(svc.resolve([]))).toEqual([
+    expect(keys(zones(svc, []))).toEqual([
       'watch-parties',
       'received-recommendations',
       'libraries',
@@ -255,7 +276,7 @@ describe('HomeSettingsService persistence', () => {
       'playlists',
       'coming-soon',
     ]);
-    expect(svc.resolve([]).every((s) => s.visible)).toBe(true);
+    expect(svc.resolve([]).filter((s) => !s.visible).map((s) => s.key)).toEqual(['libraries']);
     expect(svc.settings().recentlyAddedMode).toBe('both');
   });
 });

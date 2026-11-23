@@ -1,5 +1,4 @@
 import { Component, computed, inject, input } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import type { MediaType } from '../../../core/enums/media-type.enum';
@@ -9,16 +8,12 @@ import { NavbarService } from '../../../core/services/navbar.service';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../../core/utils/viewport';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
 import { TvRowDirective } from '../../directives/tv-row.directive';
+import { HeroMetaRowComponent, type HeroChip } from './hero-meta-row';
 import { HeroPosterComponent } from '../hero-poster/hero-poster';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
 import { SynopsisComponent } from '../synopsis/synopsis';
 
-/** A badge of the meta row, with its daisyUI classes. */
-export interface HeroChip {
-  /** A translation key, or a name that has none (a library) and shows as is. */
-  label: string;
-  cls: string;
-}
+export type { HeroChip };
 
 /** The desktop tree from `md` up, and always on a TV (`tv:` in CSS); the mobile one otherwise. Call from an injection context. */
 export function heroDesktopLayout() {
@@ -31,7 +26,7 @@ export function heroDesktopLayout() {
  *  Slots: `heroMeta` (before the meta row), `heroTags` (after it), `heroActions` (the button row), `heroStatus` (under it), and the default one. */
 @Component({
   selector: 'app-hero-base',
-  imports: [DecimalPipe, RouterLink, ResolveUrlPipe, TranslatePipe, SpoilerDirective, TvRowDirective, HeroPosterComponent, MobileFanartHeroComponent, SynopsisComponent],
+  imports: [HeroMetaRowComponent, RouterLink, ResolveUrlPipe, TranslatePipe, SpoilerDirective, TvRowDirective, HeroPosterComponent, MobileFanartHeroComponent, SynopsisComponent],
   templateUrl: './hero-base.html',
   host: { class: 'block' },
 })
@@ -67,7 +62,6 @@ export class HeroBaseComponent {
   protected readonly navbar = inject(NavbarService);
   protected readonly desktop = heroDesktopLayout();
   protected readonly fanartLayout = computed(() => !!this.fanartUrl() || this.expectFanart());
-  protected readonly showMetaRow = computed(() => !!(this.rating() || this.metaParts().length || this.chips().length));
   protected readonly titleClass = computed(() =>
     this.desktop() ? 'text-2xl lg:text-4xl font-bold tracking-tight' : 'text-3xl font-semibold tracking-tight leading-tight',
   );

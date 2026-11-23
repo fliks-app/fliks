@@ -1,0 +1,79 @@
+@if (current(); as m) {
+  <section
+    class="relative"
+    [class.hero-carousel-compact]="height() === 'compact'"
+    aria-roledescription="carousel"
+    [attr.aria-label]="'hero_carousel.label' | translate"
+  >
+    @if (!desktop()) {
+      <app-mobile-fanart-hero class="block" [fanartUrl]="m.fanartUrl" />
+    }
+    <div
+      class="grid relative z-20"
+      [class.-mt-16]="!desktop()"
+      [class.hero-carousel-stage]="desktop()"
+      [style.padding-top]="desktop() ? navbar.heroPaddingTop() : null"
+    >
+      @for (s of [m]; track s.id) {
+        <div
+          class="hc-slide [grid-area:1/1] flex flex-col justify-end max-w-3xl"
+          [style.--hc-delay]="changed() ? null : '0ms'"
+          animate.enter="hc-in"
+          animate.leave="hc-out"
+          aria-live="off"
+        >
+          <div class="hc-item" style="--i: 0">
+            @if (s.logoUrl) {
+              <img [src]="s.logoUrl | resolveUrl: 'medium'" [alt]="s.title" class="max-h-24 lg:max-h-32 max-w-full object-contain object-left" />
+            } @else {
+              <h2 class="text-3xl lg:text-5xl font-bold tracking-tight">{{ s.title }}</h2>
+            }
+          </div>
+          <div class="hc-item" style="--i: 1">
+            <app-hero-meta-row [rating]="s.rating || null" [parts]="metaParts()" [desktop]="desktop()" />
+          </div>
+          @if (s.overview) {
+            <p class="hc-item mt-3 text-base-content/90 leading-relaxed line-clamp-3" style="--i: 2">{{ s.overview }}</p>
+          }
+          <div class="hc-item" style="--i: 3">
+            <div appTvRow class="flex flex-wrap items-center gap-2 mt-5">
+              @if (opensDetail()) {
+                <a [routerLink]="detailLink()" data-home-focus="hero:primary" class="btn btn-primary">
+                  <svg lucideInfo class="size-5"></svg>{{ 'hero_carousel.details' | translate }}
+                </a>
+              } @else {
+                <button type="button" data-home-focus="hero:primary" class="btn btn-primary" (click)="play(s)">
+                  <svg lucidePlay class="size-5" fill="currentColor"></svg>{{ 'hero_carousel.play' | translate }}
+                </button>
+                <a [routerLink]="detailLink()" class="btn btn-ghost">{{ 'hero_carousel.details' | translate }}</a>
+              }
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+    @if (items().length > 1) {
+      <div appTvRow class="relative z-20 flex items-center gap-2 mt-4">
+        @for (_ of items(); track $index) {
+          <button
+            type="button"
+            class="hc-dot"
+            [class.hc-dot-on]="$index === index()"
+            [attr.aria-current]="$index === index() ? 'true' : null"
+            [attr.aria-label]="'hero_carousel.go_to' | translate: { n: $index + 1 }"
+            (click)="go($index)"
+            (focus)="go($index)"
+          ></button>
+        }
+        <button
+          type="button"
+          class="btn btn-ghost btn-circle btn-sm tv:hidden"
+          [attr.aria-label]="(userPaused() ? 'hero_carousel.resume' : 'hero_carousel.pause') | translate"
+          (click)="userPaused.set(!userPaused())"
+        >
+          @if (userPaused()) { <svg lucidePlay class="size-4" fill="currentColor"></svg> } @else { <svg lucidePause class="size-4" fill="currentColor"></svg> }
+        </button>
+      </div>
+    }
+  </section>
+}

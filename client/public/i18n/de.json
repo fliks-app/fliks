@@ -4478,6 +4478,7 @@
     "sections_title": "Bereiche der Startseite",
     "sections_hint": "Wählen Sie die anzuzeigenden Bereiche und ihre Reihenfolge. Ziehen Sie zum Neuanordnen oder verwenden Sie die Pfeile.",
     "section": {
+      "hero_carousel": "Empfehlungs-Karussell",
       "watch_parties": "Watch Partys",
       "libraries": "Bibliotheken",
       "continue_watching": "Wiedergabe fortsetzen",
@@ -6283,5 +6284,13 @@
         "other": "Alles andere zu dieser Datei"
       }
     }
+  },
+  "hero_carousel": {
+    "label": "Empfohlene Titel",
+    "play": "Abspielen",
+    "details": "Details",
+    "go_to": "Titel {{n}} anzeigen",
+    "pause": "Karussell anhalten",
+    "resume": "Karussell fortsetzen"
   }
 }

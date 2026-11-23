@@ -37,6 +37,7 @@ import { DisplaySettingsService } from '../../core/services/display-settings.ser
 import { HomeSettingsService, HomeSectionType, ResolvedHomeSection } from '../../core/services/home-settings.service';
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { CardAction } from '../../core/services/card-actions.service';
+import { HeroCarouselComponent } from '../../shared/components/hero-carousel/hero-carousel';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
@@ -67,6 +68,7 @@ import type { MediaType } from '../../core/enums/media-type.enum';
   imports: [
     RecentlyPlayedRowComponent,
     MediaLinkPipe,
+    HeroCarouselComponent,
     RouterLink, TranslatePipe, DefaultFocusDirective,
     LocaleDatePipe,
     MediaCardComponent,
@@ -116,7 +118,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private static readonly SCROLL_KEY = 'home';
   /** Cached route: the stale signals stay on screen while a cache-first pass
    *  repaints and a forced pass brings in what changed elsewhere. */
-  private readonly routeFresh = keepRouteFresh({
+  protected readonly routeFresh = keepRouteFresh({
     refresh: () => {
       const freshSince = Date.now();
       void this.loadAllSections({ known: true });
@@ -174,7 +176,13 @@ export class HomeComponent implements OnInit, OnDestroy {
     return p.playlist ? `${when} · ${this.translate.instant('party.playlist_label', { name: p.playlist.name })}` : when;
   }
   protected readonly leavingLabel = (m: Media) => leavingLabel(this.translate, m.deleteAt!);
-  readonly recommendations = signal<RecommendationItem[]>([]);
+  private readonly recommendationsRaw = signal<RecommendationItem[]>([]);
+  /** The carousel's picks; its own ids leave the recommendations row so the two never repeat. */
+  protected readonly featured = signal<Media[]>([]);
+  readonly recommendations = computed(() => {
+    const shown = new Set(this.heroVisible() ? this.featured().map((m) => m.id) : []);
+    return this.recommendationsRaw().filter((r) => !shown.has(r.media.id));
+  });
   /** Accessible playlists ordered by last modification, for the "playlists" zone. */
   readonly playlists = signal<Playlist[]>([]);
   /** The viewer's liked content, for the "likes" zone. */
@@ -225,6 +233,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   /** Shape of one skeleton row: how the zone's cards are laid out. */
   private static readonly SHAPES: Partial<Record<HomeSectionType, 'tile' | 'landscape' | 'portrait'>> = {
+    'hero-carousel': 'landscape',
     'watch-parties': 'landscape',
     libraries: 'tile',
     'continue-watching': 'landscape',
@@ -243,11 +252,15 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.sections().filter((s) => s.visible),
   );
 
-  /** The most frequent TV action is resuming: land on Continue watching when it shows, else on the first library. */
+  private readonly heroVisible = computed(() => this.visibleSections().some((s) => s.type === 'hero-carousel'));
+
+  /** The most frequent TV action is resuming: land on Continue watching when it shows, else on the carousel, else on the first library. */
   protected readonly defaultFocus = computed(() =>
     this.continueWatching().length && this.visibleSections().some((s) => s.type === 'continue-watching')
       ? "[data-home-focus^='cw:']"
-      : "a[data-home-focus^='library:']",
+      : this.heroVisible() && this.featured().length
+        ? "[data-home-focus='hero:primary']"
+        : "a[data-home-focus^='library:']",
   );
 
   qualityProfileDisplay(id: number | null): string {
@@ -412,6 +425,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** Cards actually rendered by each zone, for the layout snapshot. */
   private sectionCount(s: ResolvedHomeSection): number {
     switch (s.type) {
+      case 'hero-carousel': return this.featured().length ? 1 : 0;
       case 'watch-parties': return this.parties().length;
       case 'libraries': return this.displayLibraries().length;
       case 'continue-watching': return this.continueWatching().length;
@@ -509,17 +523,19 @@ export class HomeComponent implements OnInit, OnDestroy {
       this.loadRecentRequests(opts);
       this.loadParties();
       globalRows = this.loadGlobalRows(opts);
-      const [libs, cw, recs] = await Promise.all([
+      const [libs, cw, recs, featured] = await Promise.all([
         this.librariesApi.listMine(opts).catch(() => null),
         this.streamingApi.getContinueWatching(undefined, opts).catch(() => null),
         this.streamingApi.getRecommendations(opts).catch(() => null),
+        this.streamingApi.getFeatured(opts).catch(() => null),
       ]);
       if (libs) {
         this.libraries.set(libs);
         this.librariesLoaded.set(true);
       }
       if (cw) this.continueWatchingRaw.set(cw);
-      if (recs) this.recommendations.set(recs);
+      if (recs) this.recommendationsRaw.set(recs);
+      if (featured) this.featured.set(featured.map((f) => f.media));
     } catch { /* ignore */ }
     // The per-library rows read which libraries are visible, so they wait for the list.
     await Promise.all([globalRows, this.loadLibraryRows(opts)]);
@@ -660,14 +676,14 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** Removes the card optimistically; a failed request restores the list via a fresh fetch. */
   async dismissRecommendation(rec: RecommendationItem) {
     const id = rec.media.id;
-    this.recommendations.update((list) => list.filter((r) => r.media.id !== id));
+    this.recommendationsRaw.update((list) => list.filter((r) => r.media.id !== id));
     try {
       await this.streamingApi.dismissRecommendation(id);
     } catch {
       // Restore the row by refetching — the global error toast already fired.
       this.streamingApi
         .getRecommendations()
-        .then((list) => this.recommendations.set(list))
+        .then((list) => this.recommendationsRaw.set(list))
         .catch(() => {});
     }
   }
@@ -704,7 +720,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         if (!fileId) return;
         await this.streamingApi.toggleWatched(id, fileId);
       }
-      this.recommendations.update((list) => list.filter((r) => r.media.id !== id));
+      this.recommendationsRaw.update((list) => list.filter((r) => r.media.id !== id));
     } catch {
       /* global error toast */
     }

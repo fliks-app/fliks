@@ -14,6 +14,7 @@ import {
 import { SseService } from '../sse.service';
 import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import type { MediaType } from '../../enums/media-type.enum';
+import type { Media } from './media.service';
 import type { EdlRange } from '../../utils/edl-policy';
 import type { PreRollItem } from '@fliks/plugin-ui';
 import type { QoeSample } from '../playback-engine/playback-engine';
@@ -228,6 +229,12 @@ export interface WatchHistoryItem {
   /** Episode still — null for movies or when TMDB had no still. */
   stillUrl: string | null;
   episodeLabel: string | null;
+}
+
+export interface FeaturedItem {
+  media: Media;
+  reason: 'recommended' | 'recent';
+  becauseTitle: string | null;
 }
 
 export interface RecommendationItem {
@@ -750,6 +757,16 @@ export class StreamingApiService {
         '/api/playback/recommendations',
         reqOpts,
       ),
+    );
+  }
+
+  /** The hero carousel picks: available recommendations, then the newest unwatched additions. */
+  getFeatured(opts: CacheRead & { libraryId?: number; limit?: number } = {}) {
+    const params: Record<string, string> = {};
+    if (opts.libraryId) params['libraryId'] = String(opts.libraryId);
+    if (opts.limit) params['limit'] = String(opts.limit);
+    return firstValueFrom(
+      this.http.get<FeaturedItem[]>('/api/home/featured', { params, headers: cacheHeaders(opts) }),
     );
   }
 

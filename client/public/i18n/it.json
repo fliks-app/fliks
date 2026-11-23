@@ -4478,6 +4478,7 @@
     "sections_title": "Sezioni della home",
     "sections_hint": "Scegli le sezioni da mostrare e il loro ordine. Trascina per riordinare, oppure usa le frecce.",
     "section": {
+      "hero_carousel": "Carosello in evidenza",
       "watch_parties": "Sessioni",
       "libraries": "Librerie",
       "continue_watching": "Riprendi la riproduzione",
@@ -6283,5 +6284,13 @@
         "other": "Qualsiasi altro problema con questo file"
       }
     }
+  },
+  "hero_carousel": {
+    "label": "Titoli in evidenza",
+    "play": "Riproduci",
+    "details": "Dettagli",
+    "go_to": "Mostra il titolo {{n}}",
+    "pause": "Metti in pausa il carosello",
+    "resume": "Riprendi il carosello"
   }
 }

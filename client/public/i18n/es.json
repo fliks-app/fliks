@@ -4478,6 +4478,7 @@
     "sections_title": "Zonas del inicio",
     "sections_hint": "Elija las zonas a mostrar y su orden. Arrastre para reordenar, o use las flechas.",
     "section": {
+      "hero_carousel": "Carrusel destacado",
       "watch_parties": "Sesiones",
       "libraries": "Bibliotecas",
       "continue_watching": "Reanudar la reproducción",
@@ -6283,5 +6284,13 @@
         "other": "Cualquier otra cosa sobre este archivo"
       }
     }
+  },
+  "hero_carousel": {
+    "label": "Títulos destacados",
+    "play": "Reproducir",
+    "details": "Detalles",
+    "go_to": "Mostrar el título {{n}}",
+    "pause": "Pausar el carrusel",
+    "resume": "Reanudar el carrusel"
   }
 }
