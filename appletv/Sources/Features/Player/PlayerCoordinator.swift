@@ -956,9 +956,10 @@ import UIKit
     /// then forces an ack heartbeat so the controller sees `lastCmdId`, for a refused command as for an applied one.
     func applyRemoteCommand(_ cmd: RemoteCommand) {
         guard let player, let item = player.currentItem else {
-            Log.remote.notice("no player loaded yet, dropping \(cmd.action, privacy: .public) (\(cmd.cmdId, privacy: .public))")
+            RemoteControlService.shared.refuse(cmd, "no_player")
             return
         }
+        var refused: String?
         switch cmd.action {
         case "play": player.play()
         case "pause": player.pause()
@@ -967,18 +968,21 @@ import UIKit
         case "seek":
             guard let seconds = cmd.positionSeconds else {
                 Log.remote.notice("seek without positionSeconds (\(cmd.cmdId, privacy: .public)), ignoring")
+                refused = "bad_args"
                 break
             }
             player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
         case "volume":
             guard let level = cmd.level else {
                 Log.remote.notice("volume without level (\(cmd.cmdId, privacy: .public)), ignoring")
+                refused = "bad_args"
                 break
             }
             player.volume = Float(level)
         case "mute":
             guard let muted = cmd.muted else {
                 Log.remote.notice("mute without a muted flag (\(cmd.cmdId, privacy: .public)), ignoring")
+                refused = "bad_args"
                 break
             }
             userMuted = muted
@@ -988,12 +992,14 @@ import UIKit
         case "next":
             guard let next = nextEpisode else {
                 Log.remote.notice("next with no next episode available, ignoring")
+                refused = "no_next"
                 break
             }
             Task { await advance(to: next) }
         case "audio":
             guard let group = audibleGroup, let option = matchOption(cmd.trackId, in: group) else {
                 Log.remote.notice("audio track \(cmd.trackId ?? "nil", privacy: .public) not found (\(cmd.cmdId, privacy: .public)), ignoring")
+                refused = "no_track"
                 break
             }
             item.select(option, in: group)
@@ -1001,11 +1007,13 @@ import UIKit
         case "subtitle":
             guard let group = legibleGroup else {
                 Log.remote.notice("no subtitle group loaded yet, dropping \(cmd.cmdId, privacy: .public)")
+                refused = "no_track"
                 break
             }
             if let subtitleId = cmd.subtitleId {
                 guard let option = matchOption(subtitleId, in: group) else {
                     Log.remote.notice("subtitle track \(subtitleId, privacy: .public) not found (\(cmd.cmdId, privacy: .public)), ignoring")
+                    refused = "no_track"
                     break
                 }
                 item.select(option, in: group)
@@ -1016,15 +1024,16 @@ import UIKit
         case "quality":
             guard let id = cmd.qualityId, playback.qualityOptions.contains(where: { $0.id == id }) else {
                 Log.remote.notice("quality \(cmd.qualityId ?? "nil", privacy: .public) not offered (\(cmd.cmdId, privacy: .public)), ignoring")
+                refused = "no_quality"
                 break
             }
             selectQuality(id)
         default:
             Log.remote.notice("unknown action \(cmd.action, privacy: .public) (\(cmd.cmdId, privacy: .public)), ignoring")
-            break
+            refused = "unsupported_action"
         }
-        // A refused command is acked too: the controller must not read a refusal as a dead device.
-        RemoteControlService.shared.lastAppliedCmdId = cmd.cmdId
+        // A refused command is acked too, with its reason: the controller must not read a refusal as a dead device.
+        RemoteControlService.shared.settle(cmd.cmdId, refused: refused)
         let position = player.currentTime().seconds
         let duration = item.duration.seconds
         playback.notifyStateChange(

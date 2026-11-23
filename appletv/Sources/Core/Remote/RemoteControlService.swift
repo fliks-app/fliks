@@ -7,6 +7,13 @@ import UIKit
 /// SSE) this polls for pending commands every 2s: same cadence as
 /// `QuickConnectView`: instead of duplicating reconnect/backoff/token
 /// rotation for a second transport.
+/// Body of `POST /api/remote/ack`.
+struct RemoteAck: Encodable, Equatable {
+    let targetId: String
+    let cmdId: String
+    let refused: String?
+}
+
 @MainActor @Observable final class RemoteControlService {
     static let shared = RemoteControlService()
 
@@ -16,7 +23,15 @@ import UIKit
     private(set) var targetId: String?
     private var pollTask: Task<Void, Never>?
     /// Echoed by every beat as `lastCmdId`, the ack a controller waits on; a `load` is acked by the player it starts.
-    @ObservationIgnored var lastAppliedCmdId: String?
+    @ObservationIgnored private(set) var lastAppliedCmdId: String?
+    /// Echoed beside `lastCmdId` when that command was refused: a short code, at most 64 characters.
+    @ObservationIgnored private(set) var lastCmdRefused: String?
+
+    /// The answer a beat carries for `cmdId`; a refusal names its reason.
+    func settle(_ cmdId: String, refused: String? = nil) {
+        lastAppliedCmdId = cmdId
+        lastCmdRefused = refused
+    }
 
     /// An audio `load` was applied: the Now Playing screen opens.
     var onOpenMusic: (() -> Void)?
@@ -55,6 +70,7 @@ import UIKit
     func reset() {
         targetId = nil
         lastAppliedCmdId = nil
+        lastCmdRefused = nil
     }
 
     // MARK: - Registration
@@ -107,10 +123,12 @@ import UIKit
         coordinator.onStopRequested?()
     }
 
-    /// A command this target cannot apply is logged and acked by the next beat, which only a running player sends.
-    private func refuse(_ cmd: RemoteCommand, _ reason: String) {
+    /// A command this target cannot apply while no player beats is answered at once: a beat needs a session.
+    func refuse(_ cmd: RemoteCommand, _ reason: String) {
         Log.remote.notice("refusing \(cmd.cmdId, privacy: .public): \(reason, privacy: .public)")
-        lastAppliedCmdId = cmd.cmdId
+        settle(cmd.cmdId, refused: reason)
+        guard let targetId else { return }
+        Task { try? await api.post("/api/remote/ack", body: RemoteAck(targetId: targetId, cmdId: cmd.cmdId, refused: reason)) }
     }
 
     private static let audioKinds: Set<String> = ["album", "book"]
@@ -119,7 +137,7 @@ import UIKit
     @MainActor
     private func loadAudio(_ cmd: RemoteCommand, kind: String) {
         guard kind == "album", let mediaId = cmd.mediaId else {
-            refuse(cmd, "no tvOS player for a \(kind) load")
+            refuse(cmd, "unsupported_load")
             return
         }
         Task { @MainActor in
@@ -127,13 +145,14 @@ import UIKit
                 let all = try await MusicAPI.albumPage(mediaId).queue
                 let wanted = cmd.queueItemIds ?? cmd.itemId.map { [$0] } ?? all.map(\.itemId)
                 let (tracks, start) = try await Self.queueTracks(wanted, at: cmd.queueIndex ?? 0, known: all)
-                lastAppliedCmdId = cmd.cmdId
+                settle(cmd.cmdId)
                 onOpenMusic?()
                 MusicPlayer.shared.resume(tracks, from: start, shuffle: cmd.shuffle ?? false,
                                           repeatMode: cmd.repeatMode.flatMap(RepeatMode.init(rawValue:)) ?? .off,
                                           position: cmd.positionSeconds ?? 0, autoplay: !(cmd.paused ?? false))
             } catch {
-                refuse(cmd, "audio load failed: \(error)")
+                Log.remote.error("audio load failed: \(String(describing: error), privacy: .public)")
+                refuse(cmd, "load_failed")
             }
         }
     }
@@ -168,17 +187,17 @@ import UIKit
                 return
             }
             guard let mediaFileId = cmd.mediaFileId, let mediaId = cmd.mediaId else {
-                refuse(cmd, "load without mediaFileId or mediaId")
+                refuse(cmd, "bad_args")
                 return
             }
-            lastAppliedCmdId = cmd.cmdId
+            settle(cmd.cmdId)
             onLoadRequested?(mediaFileId, mediaId, cmd.episodeId, cmd.positionSeconds, cmd.paused ?? false,
                              cmd.launchTracks)
             return
         }
         guard let coordinator = activeCoordinator else {
             if MusicPlayer.shared.current != nil { return applyMusic(cmd) }
-            refuse(cmd, "no active player for \(cmd.action)")
+            refuse(cmd, "no_player")
             return
         }
         coordinator.applyRemoteCommand(cmd)
@@ -188,7 +207,7 @@ import UIKit
     @MainActor
     private func applyMusic(_ cmd: RemoteCommand) {
         let player = MusicPlayer.shared
-        lastAppliedCmdId = cmd.cmdId
+        settle(cmd.cmdId)
         switch cmd.action {
         case "play": player.perform(.play)
         case "pause": player.perform(.pause)

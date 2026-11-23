@@ -306,6 +306,7 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
             let subtitleTrackIndex: Int?
             let subtitleId: Nullable
             let lastCmdId: String?
+            let lastCmdRefused: String?
             let volume: Double?
             let muted: Bool?
             let supportsVolume: Bool
@@ -322,6 +323,7 @@ func resolveStart(_ intent: Double?, server: Double?) -> Double { intent ?? serv
             episodeId: episodeId, sessionId: sid, state: paused ? "paused" : "playing",
             audioTrackIndex: audioTrackIndex, subtitleTrackIndex: subtitleTrackIndex,
             subtitleId: Nullable(value: subtitleId), lastCmdId: RemoteControlService.shared.lastAppliedCmdId,
+            lastCmdRefused: RemoteControlService.shared.lastCmdRefused,
             volume: level?.volume, muted: level?.muted, supportsVolume: true,
             quality: qualityId,
             qualities: qualityOptions.map { Rung(id: $0.id, label: $0.label, lowBandwidth: $0.lowBandwidth) },

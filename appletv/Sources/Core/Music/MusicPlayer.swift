@@ -534,6 +534,7 @@ enum MusicTransport: Equatable {
         let state: String
         let targetId: String?
         let lastCmdId: String?
+        let lastCmdRefused: String?
         /// The TV's own remote sets the volume: the music player takes no volume command.
         let supportsVolume = false
         let queue: QueueBeat?
@@ -579,6 +580,7 @@ enum MusicTransport: Equatable {
                         state: state ?? (isPlaying ? "playing" : "paused"),
                         targetId: RemoteControlService.shared.targetId,
                         lastCmdId: RemoteControlService.shared.lastAppliedCmdId,
+                        lastCmdRefused: RemoteControlService.shared.lastCmdRefused,
                         queue: queueToSend(sid: r.sessionId))
         let bearer = APIClient.bearerHeader
         Task {
