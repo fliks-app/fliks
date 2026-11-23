@@ -133,6 +133,11 @@ describe('DownloadManagerService native events', () => {
 
 describe('DownloadManagerService native start', () => {
   const ask = vi.fn();
+  const startDownload = vi.fn();
+  const removeDownload = vi.fn(async () => undefined);
+  const resumeDownload = vi.fn(async () => undefined);
+  const resolveDownloadUrl = vi.fn((..._a: unknown[]) => 'https://s.test/hls');
+  const mintDownloadToken = vi.fn(async (_id: number) => ({ token: 'dl', expiresAt: Date.now() + 7 * 86_400_000 }));
 
   function setup(): DownloadManagerService {
     vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
@@ -141,7 +146,7 @@ describe('DownloadManagerService native start', () => {
         DownloadManagerService,
         {
           provide: StreamingApiService,
-          useValue: { getPlaybackInfo: async () => ({ sessionId: 's' }), resolveDownloadUrl: () => 'https://s.test/hls' },
+          useValue: { getPlaybackInfo: async () => ({ sessionId: 's' }), resolveDownloadUrl, stopSession: async () => undefined },
         },
         { provide: SubtitlesApiService, useValue: {} },
         { provide: MediaService, useValue: {} },
@@ -150,7 +155,9 @@ describe('DownloadManagerService native start', () => {
           provide: DownloadNotificationService,
           useValue: {
             nativeEvents: new Subject(),
-            startDownload: vi.fn(),
+            startDownload,
+            removeDownload,
+            resumeDownload,
             setNotificationCopy: vi.fn(),
             getDownloads: () => Promise.resolve([]),
           },
@@ -162,7 +169,7 @@ describe('DownloadManagerService native start', () => {
             sessionEpoch: () => 0,
             isAuthenticated: () => false,
             ensureStreamToken: async () => undefined,
-            playbackTokenFor: () => 't',
+            mintDownloadToken,
           },
         },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
@@ -180,11 +187,33 @@ describe('DownloadManagerService native start', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    ask.mockClear();
+    for (const m of [ask, startDownload, removeDownload, resumeDownload, resolveDownloadUrl, mintDownloadToken]) m.mockClear();
   });
   afterEach(() => {
     vi.restoreAllMocks();
     TestBed.resetTestingModule();
+  });
+
+  it('starts the transfer on a download token kept with the task', async () => {
+    const service = setup();
+    const task = await service.createDownload(10, '1080p', 'T');
+    expect(resolveDownloadUrl.mock.calls[0][3]).toBe('dl');
+    expect(startDownload).toHaveBeenCalledWith(String(task.id), 'https://s.test/hls', 'dl', expect.anything());
+    expect(task.downloadToken?.token).toBe('dl');
+  });
+
+  it('restarts a paused transfer on a fresh token and session once its token nears expiry', async () => {
+    const service = setup();
+    const task = await service.createDownload(10, '1080p', 'T');
+    startDownload.mockClear();
+    await service.resumeDownload(task);
+    expect(resumeDownload).toHaveBeenCalledWith(String(task.id));
+    expect(removeDownload).not.toHaveBeenCalled();
+
+    mintDownloadToken.mockResolvedValueOnce({ token: 'dl2', expiresAt: Date.now() + 7 * 86_400_000 });
+    await service.resumeDownload({ ...task, downloadToken: { token: 'dl', expiresAt: Date.now() + 3_600_000 } });
+    expect(removeDownload).toHaveBeenCalledWith(String(task.id));
+    expect(startDownload).toHaveBeenCalledWith(String(task.id), 'https://s.test/hls', 'dl2', expect.anything());
   });
 
   it('offers notifications when the user starts a download, not for an automatic one', async () => {

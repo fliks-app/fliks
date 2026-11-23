@@ -57,6 +57,8 @@ export interface DownloadTask {
   createdAt: string;
   /** HLS URL used for the download — needed for native offline playback via CacheDataSource. */
   hlsUrl?: string;
+  /** Native transfer credential minted for this file: a transfer cannot change its URL, so it is renewed by restarting. */
+  downloadToken?: { token: string; expiresAt: number };
   /** The pinned server session the transfer runs on, released once the task settles. */
   sessionId?: string;
   /** Bytes the finished download occupies on device, measured once it lands (mid-transfer figures are the part received). */

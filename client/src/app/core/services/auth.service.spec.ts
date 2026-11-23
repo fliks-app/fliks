@@ -82,6 +82,26 @@ describe('AuthService.mintEventTicket', () => {
   });
 });
 
+describe('AuthService.mintDownloadToken', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('mints a download token for the file', async () => {
+    const post = vi.fn().mockReturnValue(of({ downloadToken: 'dt', expiresAt: 99 }));
+    TestBed.configureTestingModule({
+      providers: [
+        AuthService,
+        { provide: HttpClient, useValue: { get: () => NEVER, post } },
+        { provide: Router, useValue: {} },
+        { provide: ServerConfigService, useValue: { serverUrl: () => 'https://s', isNative: false } },
+        { provide: ServerCacheService, useValue: {} },
+        { provide: SessionStoreService, useValue: { active: () => null } },
+      ],
+    });
+    expect(await TestBed.inject(AuthService).mintDownloadToken(7)).toEqual({ token: 'dt', expiresAt: 99 });
+    expect(post).toHaveBeenCalledWith('/api/auth/download-token', { mediaFileId: 7 });
+  });
+});
+
 describe('AuthService.ensureStreamToken', () => {
   afterEach(() => TestBed.resetTestingModule());
 

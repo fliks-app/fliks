@@ -193,7 +193,7 @@ describe('StreamingApiService.resolveDownloadUrl', () => {
     const buildPlayUrl = vi.spyOn(service, 'buildPlayUrl');
     const getHlsUrl = vi.spyOn(service, 'getHlsUrl');
     const url = service.resolveDownloadUrl(123, 'original', downloadPi('DirectStream'));
-    expect(buildPlayUrl).toHaveBeenCalledWith(downloadPi('DirectStream'), { sid: 'sid-1' });
+    expect(buildPlayUrl).toHaveBeenCalledWith(downloadPi('DirectStream'), { sid: 'sid-1', token: undefined });
     expect(getHlsUrl).not.toHaveBeenCalled();
     expect(url).not.toContain('startQuality');
   });
@@ -202,7 +202,7 @@ describe('StreamingApiService.resolveDownloadUrl', () => {
     const buildPlayUrl = vi.spyOn(service, 'buildPlayUrl');
     const getHlsUrl = vi.spyOn(service, 'getHlsUrl');
     const url = service.resolveDownloadUrl(123, '720p', downloadPi('Transcode'));
-    expect(getHlsUrl).toHaveBeenCalledWith(123, '720p', undefined, 'sid-1');
+    expect(getHlsUrl).toHaveBeenCalledWith(123, '720p', undefined, 'sid-1', undefined);
     expect(buildPlayUrl).not.toHaveBeenCalled();
     expect(url).toContain('startQuality=720p');
   });
@@ -211,8 +211,12 @@ describe('StreamingApiService.resolveDownloadUrl', () => {
     const buildPlayUrl = vi.spyOn(service, 'buildPlayUrl');
     const getHlsUrl = vi.spyOn(service, 'getHlsUrl');
     service.resolveDownloadUrl(123, 'original', downloadPi('DirectPlay'));
-    expect(getHlsUrl).toHaveBeenCalledWith(123, 'original', undefined, 'sid-1');
+    expect(getHlsUrl).toHaveBeenCalledWith(123, 'original', undefined, 'sid-1', undefined);
     expect(buildPlayUrl).not.toHaveBeenCalled();
+  });
+
+  it('a download token replaces the stream token in the URL', () => {
+    expect(service.resolveDownloadUrl(123, '720p', downloadPi('Transcode'), 'dl')).toContain('token=dl');
   });
 });
 
