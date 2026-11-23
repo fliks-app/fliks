@@ -29,7 +29,7 @@ export class NavbarService {
   readonly scrollAtTop = signal(true);
   /** True when at least one in-app navigation has happened since entering — used to gate back buttons. */
   readonly canGoBack = signal(false);
-  /** Whether the rail stays expanded at lg+ (desktop and tablet); persisted, on by default. */
+  /** Whether a tablet's rail stays expanded at lg+ (a desktop's always does); persisted, on by default. */
   readonly sidebarPinned = signal(
     localStorage.getItem('fliks.sidebarPinned') !== 'false',
   );
@@ -40,11 +40,12 @@ export class NavbarService {
     if (this.phoneDock()) return 'none';
     if (this.device.isTv()) return 'collapsed';
     if (this.device.isPhone() || !this.isMediumScreen()) return 'drawer';
-    return this.sidebarPinned() && this.isLargeScreen() ? 'expanded' : 'collapsed';
+    if (!this.isLargeScreen()) return 'collapsed';
+    return this.device.isDesktop() || this.sidebarPinned() ? 'expanded' : 'collapsed';
   });
 
-  /** The pin only means something where the rail is a column and a pointer can reach it. */
-  readonly canPin = computed(() => this.railDocked() && !this.device.isTv());
+  /** Only a tablet's rail can be unpinned; a desktop's stays open. */
+  readonly canPin = computed(() => this.railDocked() && this.device.isTablet());
 
   /** The rail is a permanent column (collapsed or expanded) rather than a drawer or absent. */
   readonly railDocked = computed(() => this.railMode() === 'collapsed' || this.railMode() === 'expanded');
