@@ -1,13 +1,13 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { TranslatePipe } from '@ngx-translate/core';
-import { LucideCircleAlert, LucideFlag } from '@lucide/angular';
+import { LucideCircleAlert } from '@lucide/angular';
 import { SERVER_SINCE, ServerVersionService } from '../../../core/services/server-version.service';
 import type { PlaybackError } from '../../../core/services/playback-engine/playback-error';
 
 /** The failure panel for any playback surface: on-demand and live alike. */
 @Component({
   selector: 'app-player-error-overlay',
-  imports: [TranslatePipe, LucideCircleAlert, LucideFlag],
+  imports: [TranslatePipe, LucideCircleAlert],
   templateUrl: './player-error-overlay.html',
 })
 export class PlayerErrorOverlayComponent {

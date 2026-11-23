@@ -322,7 +322,7 @@ export const CORE_MEDIA_ACTIONS: readonly UiContribution[] = [
     slot: 'media.actions',
     weight: 1300,
     labelKey: 'problems.report.action',
-    icon: 'flag',
+    icon: 'clipboard-list',
     when: [since('problems'), 'hasFiles'],
     action: { kind: 'action', actionId: 'media.report-problem' },
   },
