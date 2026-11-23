@@ -23,16 +23,13 @@ describe('NavbarService', () => {
     const realMatchMedia = window.matchMedia;
     afterEach(() => {
       window.matchMedia = realMatchMedia;
-      localStorage.removeItem('fliks.sidebarPinned');
     });
 
-    const make = (form: 'tv' | 'phone' | 'tablet' | 'desktop', width: number, pinned = true) => {
+    const make = (form: 'tv' | 'phone' | 'tablet' | 'desktop', width: number) => {
       window.matchMedia = ((q: string) => {
         const min = Number(/min-width:\s*(\d+)px/.exec(q)?.[1] ?? 0);
         return { matches: width >= min, addEventListener: () => {}, removeEventListener: () => {} } as unknown as MediaQueryList;
       }) as typeof window.matchMedia;
-      if (pinned) localStorage.removeItem('fliks.sidebarPinned');
-      else localStorage.setItem('fliks.sidebarPinned', 'false');
       TestBed.configureTestingModule({
         providers: [
           provideRouter([{ path: '**', component: PageStub }]),
@@ -50,29 +47,17 @@ describe('NavbarService', () => {
       return TestBed.inject(NavbarService);
     };
 
-    it('is collapsed on a TV, whatever the pin preference says', () => {
-      expect(make('tv', 1920, true).railMode()).toBe('collapsed');
+    it('is collapsed on a TV', () => {
+      expect(make('tv', 1920).railMode()).toBe('collapsed');
     });
 
-    it('keeps a desktop expanded at lg and up whatever the pin says, and a tablet until unpinned', () => {
+    it('keeps a desktop and a tablet expanded at lg and up', () => {
       expect(make('desktop', 1280).railMode()).toBe('expanded');
       TestBed.resetTestingModule();
-      expect(make('desktop', 1280, false).railMode()).toBe('expanded');
-      TestBed.resetTestingModule();
       expect(make('tablet', 1280).railMode()).toBe('expanded');
-      TestBed.resetTestingModule();
-      expect(make('tablet', 1280, false).railMode()).toBe('collapsed');
     });
 
-    it('offers the pin on a tablet only', () => {
-      expect(make('tablet', 1280).canPin()).toBe(true);
-      TestBed.resetTestingModule();
-      expect(make('desktop', 1280).canPin()).toBe(false);
-      TestBed.resetTestingModule();
-      expect(make('tv', 1920).canPin()).toBe(false);
-    });
-
-    it('stays collapsed between md and lg even when pinned', () => {
+    it('stays collapsed between md and lg', () => {
       expect(make('desktop', 900).railMode()).toBe('collapsed');
     });
 

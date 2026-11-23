@@ -285,6 +285,11 @@ export class App implements OnInit, OnDestroy {
       this.navbar.goBack();
       return;
     }
+    // A top-level page other than home steps back to home before leaving the app.
+    if (this.router.url.split(/[?#]/)[0] !== '/') {
+      void this.router.navigateByUrl('/', { state: { rootEntry: true } });
+      return;
+    }
     // Top level without in-app history: leave the app; Return was preventDefault'd, so fire Tizen's application.exit / webOS's platformBack.
     const platform = this.tv.tvPlatform();
     if (platform === 'tizen') {

@@ -226,6 +226,12 @@ function prune(conn: IDBDatabase): void {
 }
 
 /** Wipe the IDB store, closing our connection first so `deleteDatabase` isn't blocked by it; never waits on an open, and bounded so it never gates a login spinner. */
+/** The last known body of a cached GET, without the network: what a boot paint restores. */
+export async function cachedBody<T>(url: string): Promise<T | null> {
+  const entry = await getCached(url);
+  return entry ? (adopt(entry).body as T) : null;
+}
+
 export function clearRequestCache(): Promise<void> {
   forgetState();
   try { db?.close(); } catch { /* ignore */ }

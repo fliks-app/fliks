@@ -638,8 +638,6 @@
     "settings": "Paramètres",
     "open_menu": "Ouvrir le menu",
     "rail_label": "Navigation principale",
-    "pin_rail": "Garder la navigation ouverte",
-    "unpin_rail": "Replier la navigation",
     "edit_library_order": "Organiser les bibliothèques",
     "logout": "Se déconnecter",
     "switch_user": "Changer d'utilisateur",

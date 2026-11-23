@@ -21,7 +21,8 @@ import { Keyboard } from '@capacitor/keyboard';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../core/services/auth.service';
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
-import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
+import { MyLibrariesService } from '../../core/services/my-libraries.service';
+import type { LibrarySummary } from '../../core/services/api/libraries-api.service';
 import { PushService } from '../../core/services/push.service';
 import { CountsApiService, SidebarCounts } from '../../core/services/api/counts-api.service';
 import { ServerConfigService } from '../../core/services/server-config.service';
@@ -117,7 +118,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
-  private readonly librariesApi = inject(LibrariesApiService);
   private readonly libraryPrefs = inject(LibraryPrefsService);
   private readonly countsApi = inject(CountsApiService);
   private readonly push = inject(PushService);
@@ -272,12 +272,11 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.lastScrollY = y;
   }
 
-  /** Accessible libraries for the sidebar (raw, as fetched). */
-  readonly libraries = signal<LibrarySummary[]>([]);
-  readonly librariesLoaded = signal(false);
+  private readonly myLibraries = inject(MyLibrariesService);
+  readonly librariesLoaded = this.myLibraries.loaded;
   /** Sidebar-facing list: the user's chosen order with hidden ones removed. */
   readonly displayLibraries = computed(() =>
-    this.libraryPrefs.present(this.libraries()),
+    this.libraryPrefs.present(this.myLibraries.list()),
   );
   /** Media count per library ID. */
   readonly libraryCounts = signal<Record<number, number>>({});
@@ -378,7 +377,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     if (navigator.onLine) {
       this.refreshCounts();
     } else {
-      this.librariesLoaded.set(true);
+      this.myLibraries.loaded.set(true);
       window.addEventListener('online', () => {
         this.refreshCounts();
       }, { once: true });
@@ -485,11 +484,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
 
   async refreshCounts() {
-    // The list paints from cache; waiting on the uncached counts lets it drop in late and shift the nav.
-    const libs = this.librariesApi
-      .listMine()
-      .then((l) => this.libraries.set(l), () => undefined)
-      .finally(() => this.librariesLoaded.set(true));
+    // Waiting on the uncached counts would let the list drop in late and shift the nav.
+    const libs = this.myLibraries.refresh();
     try {
       this.applyCounts(await this.countsApi.get());
     } catch {

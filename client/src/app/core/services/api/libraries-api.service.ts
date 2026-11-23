@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
-import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
+import { CacheRead, cacheHeaders, cachedBody } from '../../interceptors/cache.interceptor';
 import type { MediaType } from '../../enums/media-type.enum';
 
 /** A folder a user can choose for new files. No path: only managers see those. */
@@ -130,6 +130,11 @@ export class LibrariesApiService {
   }
 
   /** User-accessible lightweight list (sidebar, route resolution). */
+  /** {@link listMine}'s last cached answer, or null; never touches the network. */
+  cachedMine() {
+    return cachedBody<LibrarySummary[]>('/api/libraries/mine');
+  }
+
   listMine(opts: CacheRead = {}) {
     return firstValueFrom(
       this.http.get<LibrarySummary[]>(

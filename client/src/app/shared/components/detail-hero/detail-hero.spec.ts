@@ -178,8 +178,6 @@ async function createFixture(
           mobileNavbarVisible: () => true,
           railMode: () => 'drawer',
           railDocked: () => false,
-          sidebarPinned: () => false,
-          toggleSidebarPinned: () => {},
           setPageTitle: () => {},
           resetNavHistory: () => {},
           goBack: () => {},

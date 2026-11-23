@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -33,7 +33,7 @@ const RAIL_LIBRARIES = 3;
     LucideDynamicIcon,
     LucideIconComponent, NavIconComponent, PopoverMenuComponent, UserMenuComponent, TvRowDirective, TvSectionDirective,
   ],
-  host: { class: 'block h-full' },
+  host: { class: 'block h-full', '(document:pointerdown)': 'onDocumentPointer($event)' },
   templateUrl: './nav-rail.html',
 })
 export class NavRailComponent {
@@ -77,12 +77,27 @@ export class NavRailComponent {
   protected readonly plusOpen = signal(false);
   private readonly hovered = signal(false);
   private readonly focused = signal(false);
-  /** Labels show when pinned or in the drawer, while hovered or focused, and while "Plus" is open beside the rail. */
+  private readonly tapped = signal(false);
+  /** WebView clicks carry no reliable `pointerType`: the pointerdown before them does. */
+  private lastPointer = '';
+  /** Labels show when pinned or in the drawer, while hovered, focused or tapped open, and while "Plus" is open beside the rail. */
   protected readonly open = computed(
-    () => this.mode() === 'expanded' || this.hovered() || this.focused() || this.plusOpen(),
+    () => this.mode() === 'expanded' || this.hovered() || this.focused() || this.tapped() || this.plusOpen(),
   );
+  private readonly host: HTMLElement = inject(ElementRef).nativeElement;
 
   private readonly overlayingEffect = effect(() => this.overlaying.emit(this.mode() === 'collapsed' && this.open()));
+  private readonly closeTapped = effect(() => {
+    this.url();
+    this.mode();
+    untracked(() => this.tapped.set(false));
+  });
+
+  constructor() {
+    // Capture phase: the tap that opens the rail must not also follow the link under the finger.
+    this.host.addEventListener('pointerdown', (e) => (this.lastPointer = e.pointerType), true);
+    this.host.addEventListener('click', (e) => this.onTap(e), true);
+  }
 
   protected readonly libraryUrl = libraryUrl;
   protected readonly libraryIcon = libraryIcon;
@@ -105,6 +120,18 @@ export class NavRailComponent {
 
   protected onFocusOut(e: FocusEvent, host: HTMLElement): void {
     if (!host.contains(e.relatedTarget as Node | null)) this.focused.set(false);
+  }
+
+  /** Touch has no hover: a first tap opens the collapsed rail, a tap outside or a navigation closes it. */
+  private onTap(e: MouseEvent): void {
+    if (this.mode() !== 'collapsed' || this.open() || (this.lastPointer !== 'touch' && this.lastPointer !== 'pen')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.tapped.set(true);
+  }
+
+  protected onDocumentPointer(e: PointerEvent): void {
+    if (this.tapped() && !this.host.contains(e.target as Node | null)) this.tapped.set(false);
   }
 
   /** Hover opens it for a mouse only: touch emulates it on tap. */

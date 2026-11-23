@@ -30,23 +30,16 @@ export class NavbarService {
   /** Whether the window is scrolled near the top (updated by LayoutComponent). */
   /** True when at least one in-app navigation has happened since entering — used to gate back buttons. */
   readonly canGoBack = signal(false);
-  /** Whether a tablet's rail stays expanded at lg+ (a desktop's always does); persisted, on by default. */
-  readonly sidebarPinned = signal(
-    localStorage.getItem('fliks.sidebarPinned') !== 'false',
-  );
 
   /** How the left rail shows: `none` (phone dock), `drawer` (hamburger, below md and on phones without the dock),
-   *  `collapsed` (icons; TV, md to lg) or `expanded` (lg+ when pinned). */
+   *  `collapsed` (icons; TV, md to lg) or `expanded` (lg+). */
   readonly railMode = computed<RailMode>(() => {
     if (this.phoneDock()) return 'none';
     if (this.device.isTv()) return 'collapsed';
     if (this.device.isPhone() || !this.isMediumScreen()) return 'drawer';
     if (!this.isLargeScreen()) return 'collapsed';
-    return this.device.isDesktop() || this.sidebarPinned() ? 'expanded' : 'collapsed';
+    return 'expanded';
   });
-
-  /** Only a tablet's rail can be unpinned; a desktop's stays open. */
-  readonly canPin = computed(() => this.railDocked() && this.device.isTablet());
 
   /** The rail is a permanent column (collapsed or expanded) rather than a drawer or absent. */
   readonly railDocked = computed(() => this.railMode() === 'collapsed' || this.railMode() === 'expanded');
@@ -302,12 +295,6 @@ export class NavbarService {
     });
     mo.observe(host, { childList: true, subtree: true });
     this.heroWatch.mo = mo;
-  }
-
-  toggleSidebarPinned() {
-    const next = !this.sidebarPinned();
-    this.sidebarPinned.set(next);
-    localStorage.setItem('fliks.sidebarPinned', String(next));
   }
 
   setPageTitle(title: string, icon: { name: string; color?: string } | null = null) {

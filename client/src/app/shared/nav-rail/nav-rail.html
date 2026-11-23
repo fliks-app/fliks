@@ -22,18 +22,6 @@
       </span>
       <span class="rail-label text-xl font-bold">{{ 'app.name' | translate }}</span>
     </div>
-    @if (navbar.canPin()) {
-        <button
-          type="button"
-          class="rail-reveal btn btn-ghost btn-sm btn-square hidden lg:inline-flex"
-          [class.text-primary]="navbar.sidebarPinned()"
-          [attr.aria-pressed]="navbar.sidebarPinned()"
-          [attr.aria-label]="(navbar.sidebarPinned() ? 'nav.unpin_rail' : 'nav.pin_rail') | translate"
-          (click)="navbar.toggleSidebarPinned()"
-        >
-          <svg [lucideIcon]="icons.Pin" class="h-4 w-4"></svg>
-        </button>
-    }
   </div>
 
   <nav class="rail-list mt-4" [attr.aria-label]="'nav.rail_label' | translate">
@@ -118,7 +106,7 @@
     <div appTvRow class="rail-user-row">
       <app-user-menu class="rail-user" placement="top-start" [row]="true" />
       <a routerLink="/app-settings" [state]="{ rootEntry: true }" routerLinkActive="rail-item-active" ariaCurrentWhenActive="page"
-         class="rail-item rail-icon-btn rail-reveal" [attr.aria-label]="'nav.app_settings' | translate">
+         class="rail-item rail-icon-btn" [attr.aria-label]="'nav.app_settings' | translate">
         <svg [lucideIcon]="icons.Settings" class="h-5 w-5"></svg>
       </a>
     </div>
