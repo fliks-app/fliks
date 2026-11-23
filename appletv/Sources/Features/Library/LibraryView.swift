@@ -135,7 +135,6 @@ struct LibraryView: View {
             }
             .buttonStyle(.bordered)
         }
-        .focusSection()
     }
 
     private func load(reset: Bool, page start: Int = 1) async {
