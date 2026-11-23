@@ -178,7 +178,7 @@ fn reset_db(db: &str, tpl: &str) {
     );
 }
 
-// ---- tiny JSONPath: `$.a.b[0]`, `[*]`, and `$..key` (last segment only, for ignore) ----
+// ---- tiny JSONPath: `$.a.b[0]`, `[*]`, and `$..key` at any depth (for ignore) ----
 
 enum Seg {
     Key(String),
@@ -236,10 +236,27 @@ fn strip(v: &mut Value, key: &str) {
     }
 }
 
+/// Applies `f` to every value stored under `key`, at any depth.
+fn each_desc(v: &mut Value, key: &str, f: &mut dyn FnMut(&mut Value)) {
+    match v {
+        Value::Object(o) => {
+            for (k, c) in o.iter_mut() {
+                if k == key {
+                    f(c);
+                }
+                each_desc(c, key, f);
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(|c| each_desc(c, key, f)),
+        _ => {}
+    }
+}
+
 fn remove(v: &mut Value, p: &[Seg]) {
     match p {
         [] => {}
         [Seg::Desc(k)] => strip(v, k),
+        [Seg::Desc(k), rest @ ..] => each_desc(v, k, &mut |c| remove(c, rest)),
         [Seg::Key(k)] => {
             if let Some(o) = v.as_object_mut() {
                 o.remove(k);
@@ -1043,4 +1060,22 @@ async fn parity() {
     }
     println!("parity: {ok} passed, {failed} failed, {skipped} skipped (engine {engine})");
     assert_eq!(failed, 0);
+}
+
+#[test]
+fn a_descendant_segment_ignores_at_any_depth() {
+    let mut v = serde_json::json!({
+        "channels": [{"programs": [{"id": 1, "title": "a"}], "id": 7}],
+        "other": {"deep": {"programs": [{"id": 2}]}},
+        "id": 9
+    });
+    remove(&mut v, &parse_path("$..programs..id"));
+    assert_eq!(
+        v,
+        serde_json::json!({
+            "channels": [{"programs": [{"title": "a"}], "id": 7}],
+            "other": {"deep": {"programs": [{}]}},
+            "id": 9
+        })
+    );
 }
