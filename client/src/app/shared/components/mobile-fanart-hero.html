@@ -15,11 +15,13 @@
       fetchpriority="high"
       (load)="onIncomingLoad()"
       [class.hero-fanart-fade]="!outgoing() && !blur()"
-      class="relative w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:max-h-[47vh] landscape:aspect-video object-cover object-[50%_25%]"
+      [class]="sizeClass()"
+      class="relative w-full min-h-[230px] landscape:min-h-0 landscape:h-auto landscape:max-h-[47vh] landscape:aspect-video object-cover"
     />
   } @empty {
     <div
-      class="w-full min-h-[230px] h-[38svh] max-h-[53svh] landscape:min-h-0 landscape:h-auto landscape:aspect-video landscape:max-h-[47vh] bg-base-300"
+      [class]="tall() ? 'h-[55svh] max-h-[60svh]' : 'h-[38svh] max-h-[53svh]'"
+      class="w-full min-h-[230px] landscape:min-h-0 landscape:h-auto landscape:aspect-video landscape:max-h-[47vh] bg-base-300"
     ></div>
   }
   <!-- Outgoing picture held OVER the incoming one and faded once that loads: a fade on the incoming image is skipped for cached pictures. -->

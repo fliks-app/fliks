@@ -46,3 +46,21 @@
   transition: opacity 200ms, width 200ms;
 }
 .hc-dot-on { opacity: 1; width: 1.5rem; }
+
+/* Phone: the text sits on the bottom fade of the full-width picture, the dots under it. */
+.hc-mobile-stage {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2.25rem;
+  padding: 0 1rem;
+}
+.hc-top-shade {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0));
+}
+.hc-btn-compact {
+  height: 2.5rem;
+  min-height: 2.5rem;
+  padding-inline: 1.1rem;
+  font-size: 0.9rem;
+}

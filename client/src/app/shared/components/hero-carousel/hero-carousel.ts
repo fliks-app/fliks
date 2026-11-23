@@ -1,4 +1,5 @@
 import { AnimationCallbackEvent, Component, DestroyRef, computed, effect, inject, input, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import type { Media } from '../../../core/services/api/media.service';
@@ -18,7 +19,7 @@ import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
 /** A few featured titles, one at a time: backdrop through the global background, text swapped with the keyframes in the stylesheet. */
 @Component({
   selector: 'app-hero-carousel',
-  imports: [RouterLink, TranslatePipe, ResolveUrlPipe, TvRowDirective, HeroMetaRowComponent, LucideDynamicIcon, MobileFanartHeroComponent],
+  imports: [NgTemplateOutlet, RouterLink, TranslatePipe, ResolveUrlPipe, TvRowDirective, HeroMetaRowComponent, LucideDynamicIcon, MobileFanartHeroComponent],
   templateUrl: './hero-carousel.html',
   styleUrl: './hero-carousel.css',
   host: {
@@ -73,7 +74,8 @@ export class HeroCarouselComponent {
   protected readonly metaParts = computed(() => {
     const m = this.current();
     if (!m) return [];
-    const parts = [m.year ? String(m.year) : '', m.runtime ? `${m.runtime}min` : '', (m.genres ?? []).slice(0, 3).join(', ')];
+    const desktop = this.desktop();
+    const parts = [m.year ? String(m.year) : '', desktop && m.runtime ? `${m.runtime}min` : '', (m.genres ?? []).slice(0, desktop ? 3 : 2).join(', ')];
     return parts.filter(Boolean);
   });
   protected readonly opensDetail = computed(() => {

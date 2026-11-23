@@ -18,6 +18,11 @@ export class MobileFanartHeroComponent {
   readonly imageAlt = input('');
   /** The picture is a cover standing in for fanart: drawn small and blurred. */
   readonly blur = input(false);
+  /** The taller hero of a carousel: about 55% of the viewport, the picture shifted toward its right-hand subject. */
+  readonly tall = input(false);
+  protected readonly sizeClass = computed(() =>
+    this.tall() ? 'h-[55svh] max-h-[60svh] object-[62%_20%]' : 'h-[38svh] max-h-[53svh] object-[50%_25%]',
+  );
   /** Pairs the hero with the opening card for the poster morph; on the wrapper so the title scrim travels with it. Null where nothing pairs. */
   readonly viewTransitionName = input<string | null>(null);
 

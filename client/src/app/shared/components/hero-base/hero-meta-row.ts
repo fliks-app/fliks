@@ -21,5 +21,6 @@ export class HeroMetaRowComponent {
   readonly chips = input<HeroChip[]>([]);
   /** Desktop spacing; the mobile row sits tighter. */
   readonly desktop = input(true);
+  readonly centered = input(false);
   readonly visible = computed(() => !!(this.rating() || this.parts().length || this.chips().length));
 }
