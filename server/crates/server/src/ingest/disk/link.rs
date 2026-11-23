@@ -229,7 +229,7 @@ async fn relink_in_place(
             family: Family::Video,
             season_number: None,
             episode_number: None,
-            episodes: episodes_of_files(st, &file_ids).await,
+            episodes: episodes_of_files(st, media.id, &file_ids).await,
             source: ImportSource::Disk,
         });
         st.ingest.settle.schedule(st, media.id);
@@ -238,8 +238,9 @@ async fn relink_in_place(
     Ok(linked)
 }
 
-/// The episodes the given files hold; a lookup failure is logged and yields none.
-async fn episodes_of_files(st: &AppState, files: &[i32]) -> Vec<EpisodeRef> {
+/// The episodes the given files hold that no other file of the media holds; a lookup failure is logged and yields none.
+async fn episodes_of_files(st: &AppState, media: i32, files: &[i32]) -> Vec<EpisodeRef> {
+    let held = crate::ingest::library::held_by_other_files(st, media, files).await;
     let rows: sqlx::Result<Vec<(i32, i32)>> = sqlx::query_as(
         r#"SELECT DISTINCT g."number", e."number" FROM media_file_items fi
            JOIN items e ON e.id = fi."episodeId" JOIN item_groups g ON g.id = e."groupId"
@@ -251,6 +252,7 @@ async fn episodes_of_files(st: &AppState, files: &[i32]) -> Vec<EpisodeRef> {
     match rows {
         Ok(rows) => rows
             .into_iter()
+            .filter(|k| !held.contains(k))
             .map(|(s, e)| EpisodeRef {
                 season_number: i64::from(s),
                 episode_number: i64::from(e),

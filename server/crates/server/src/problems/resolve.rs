@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 /// Resolves the active reports of `media` (every media for `None`) whose replacement arrived: the
 /// pinned file is gone and a file of the scope was added since, or it was rewritten with another size.
+/// A whole-title report of a series never resolves on a new file: any episode would match.
 /// A report whose item is gone with a season or episode scope stays for a manager.
 pub async fn auto_resolve(st: &AppState, media: Option<i32>) -> sqlx::Result<()> {
     let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
@@ -19,7 +20,7 @@ pub async fn auto_resolve(st: &AppState, media: Option<i32>) -> sqlx::Result<()>
              AND ((i."mediaFileId" IS NULL AND EXISTS (
                      SELECT 1 FROM media_files f
                      WHERE f."mediaId" = i."mediaId" AND f."createdAt" > i."createdAt"
-                       AND (i."itemId" IS NULL OR EXISTS (SELECT 1 FROM item_parts p
+                       AND ((i."itemId" IS NULL AND m.type::text = 'movie') OR EXISTS (SELECT 1 FROM item_parts p
                                                           WHERE p."itemId" = i."itemId" AND p."mediaFileId" = f.id))))
                   OR EXISTS (SELECT 1 FROM media_files f WHERE f.id = i."mediaFileId" AND f.size <> i."fileSize"))
            RETURNING {ROW_COLS}"#

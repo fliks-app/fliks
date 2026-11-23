@@ -4733,6 +4733,27 @@ mod scene_import {
     }
 
     #[sqlx::test(migrations = false)]
+    async fn only_a_really_new_episode_is_announced_as_imported(pool: PgPool) {
+        let c = ctx(pool).await;
+        let m = mapped(&c, 375921).await;
+        let mut rx = c.st.hub.subscribe_domain();
+        let mut announced = || {
+            let mut out = vec![];
+            while let Ok(ev) = rx.try_recv() {
+                if let crate::events::DomainEvent::MediaFilesImported { episodes, .. } = &*ev {
+                    out.push(episodes.len());
+                }
+            }
+            out
+        };
+        import(&c, m, "Show.S01E01.720p.mkv", None).await;
+        assert_eq!(announced(), [1]);
+        let again = import(&c, m, "Show.S01E01.1080p.mp4", None).await;
+        assert_eq!(again.imported.len(), 1, "{:?}", again.errors);
+        assert_eq!(announced(), [0], "a second version is not a new episode");
+    }
+
+    #[sqlx::test(migrations = false)]
     async fn a_superseding_file_rearms_the_markers_of_its_episode(pool: PgPool) {
         let c = ctx(pool).await;
         let m = mapped(&c, 375921).await;

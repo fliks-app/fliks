@@ -21,6 +21,8 @@ use std::{
 
 const DAY: u32 = 86_400;
 const GROUP_WINDOW: Duration = Duration::from_secs(300);
+/// A request updated this recently still gets its own pushes: the flush runs a full group window after the import.
+const REQUEST_RECENCY: Duration = Duration::from_secs(2 * GROUP_WINDOW.as_secs());
 
 fn params(v: Value) -> Map<String, Value> {
     v.as_object().cloned().unwrap_or_default()
@@ -482,7 +484,7 @@ pub(super) async fn episode_recipients(
     )
     .bind(media)
     .bind(crate::requests::IN_FLIGHT.map(String::from).to_vec())
-    .bind(GROUP_WINDOW.as_secs_f64())
+    .bind(REQUEST_RECENCY.as_secs_f64())
     .fetch_all(&st.db)
     .await?;
     let mut to = vec![];
@@ -702,6 +704,62 @@ mod tests {
             episode_recipients(&st, media, None).await.unwrap(),
             [a, mixed]
         );
+    }
+
+    #[sqlx::test]
+    async fn a_request_made_available_before_the_group_window_ended_is_still_excluded(
+        pool: sqlx::PgPool,
+    ) {
+        let st = state(&pool).await;
+        let u = user(&pool, "u").await;
+        let media: i32 = sqlx::query_scalar(
+            "INSERT INTO media (title, type) VALUES ('S', 'series') RETURNING id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let edition: i32 = sqlx::query_scalar(
+            r#"INSERT INTO editions ("mediaId", family) VALUES ($1, 'video') RETURNING id"#,
+        )
+        .bind(media)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let item: i32 = sqlx::query_scalar(
+            r#"INSERT INTO items ("mediaId", "editionId") VALUES ($1, $2) RETURNING id"#,
+        )
+        .bind(media)
+        .bind(edition)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query(r#"INSERT INTO playback_states ("userId", "itemId") VALUES ($1, $2)"#)
+            .bind(u)
+            .bind(item)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO requests ("mediaType", provider, "externalId", title, status, "userId", "mediaId") VALUES ('series', 'tmdb', '1', 'S', 'available', $1, $2)"#)
+            .bind(u)
+            .bind(media)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("ALTER TABLE requests DISABLE TRIGGER set_updated_at")
+            .execute(&pool)
+            .await
+            .unwrap();
+        for (ago, expected) in [(480, vec![]), (700, vec![u])] {
+            sqlx::query(r#"UPDATE requests SET "updatedAt" = now() - make_interval(secs => $1)"#)
+                .bind(f64::from(ago))
+                .execute(&pool)
+                .await
+                .unwrap();
+            assert_eq!(
+                episode_recipients(&st, media, None).await.unwrap(),
+                expected
+            );
+        }
     }
 
     #[sqlx::test(migrations = false)]

@@ -2221,13 +2221,30 @@ mod sessions {
     async fn a_hold_opened_after_the_listing_survives_the_resync(pool: PgPool) {
         let w = world(pool).await;
         let c = &w.c;
-        opened(&w).await;
-        session::stamp_holds(&c.st, crate::presence::now_ms() + 60_000.0);
-        c.fake.script("GET", "/v1/live", vec![ok(json!([]))]);
-        tokio::time::sleep(Duration::from_millis(5)).await;
-        session::resync(&c.st).await.unwrap();
-        let (viewers, holds) = session::peek(&c.st);
-        assert!(viewers.is_empty(), "the engine no longer lists the viewer");
+        let held = c.fake.pause("POST", "/v1/live");
+        c.fake.script(
+            "POST",
+            "/v1/live",
+            vec![ok(open_answer("sid-1", SELF, "remux"))],
+        );
+        c.fake.script(
+            "GET",
+            "/v1/live",
+            vec![crate::engine::testkit::slow(300, ok(json!([])))],
+        );
+        let opening = open(&w, w.a, "A");
+        let racing = async {
+            held.reached().await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            let st = c.st.clone();
+            let resync = tokio::spawn(async move { session::resync(&st).await });
+            tokio::time::sleep(Duration::from_millis(80)).await;
+            held.release();
+            resync.await.unwrap().unwrap();
+        };
+        let (opened, ()) = tokio::join!(opening, racing);
+        opened.map_err(err_body).unwrap();
+        let (_, holds) = session::peek(&c.st);
         assert_eq!(
             holds.len(),
             1,

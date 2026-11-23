@@ -16,7 +16,7 @@ use crate::{
     state::AppState,
 };
 use axum::http::StatusCode;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use fliks_domain::{
     acl::{Action, Subject},
     media::{kind::MediaKind, wants::WantSpec},
@@ -162,7 +162,9 @@ async fn check_quota(tx: &mut PgConnection, a: &Authed, media_type: MediaKind) -
     }
     let period = quota_period(a);
     let since = Utc::now() - chrono::Duration::days(i64::from(period));
-    let count = db::quota_count(&mut *tx, a.user.id, media_type, since).await?;
+    let count = db::quota_window(&mut *tx, a.user.id, media_type, since)
+        .await?
+        .len() as i64;
     if count >= i64::from(limit) {
         return Err(AppError::forbidden(format!(
             "Quota exceeded: {count}/{limit} {media_type} requests in last {period} days"
@@ -175,6 +177,14 @@ async fn check_quota(tx: &mut PgConnection, a: &Authed, media_type: MediaKind) -
     Ok(())
 }
 
+/// When a slot frees: the request whose leaving brings the count under `limit`, a period after it.
+/// A non-positive limit never frees.
+fn next_free_at(window: &[DateTime<Utc>], limit: i32, period: i32) -> Option<DateTime<Utc>> {
+    let limit = usize::try_from(limit).ok().filter(|l| *l > 0)?;
+    let leaving = window.get(window.len().checked_sub(limit)?)?;
+    Some(*leaving + chrono::Duration::days(i64::from(period)))
+}
+
 /// Per kind with a limit: `{limit, used, periodDays, nextFreeAt}`, counted as `check_quota` does.
 pub async fn allowance(st: &AppState, a: &Authed) -> Res<Value> {
     let period = quota_period(a);
@@ -185,11 +195,10 @@ pub async fn allowance(st: &AppState, a: &Authed) -> Res<Value> {
         if limit == 0 {
             continue;
         }
-        let used = db::quota_count(&st.db, a.user.id, kind, since).await?;
-        let next_free = match db::quota_oldest(&st.db, a.user.id, kind, since).await? {
-            Some(t) => json!(fliks_domain::js::iso(
-                t + chrono::Duration::days(i64::from(period))
-            )),
+        let window = db::quota_window(&st.db, a.user.id, kind, since).await?;
+        let used = window.len() as i64;
+        let next_free = match next_free_at(&window, limit, period) {
+            Some(t) => json!(fliks_domain::js::iso(t)),
             None => Value::Null,
         };
         out.insert(
@@ -1487,4 +1496,24 @@ pub async fn list(st: &AppState, a: &Authed, q: dto::List) -> Res<Value> {
     }
     let total = db::count(&st.db, &f).await?;
     Ok(json!({"data": data, "total": total}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_slot_frees_when_the_count_drops_under_the_limit() {
+        let t0 = Utc::now();
+        let w: Vec<_> = (0..4).map(|i| t0 + chrono::Duration::hours(i)).collect();
+        let day = chrono::Duration::days(1);
+        assert_eq!(next_free_at(&w, 4, 1), Some(w[0] + day));
+        assert_eq!(
+            next_free_at(&w, 2, 1),
+            Some(w[2] + day),
+            "limit lowered under the count"
+        );
+        assert_eq!(next_free_at(&w, 5, 1), None);
+        assert_eq!(next_free_at(&w, -1, 1), None);
+    }
 }

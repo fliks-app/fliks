@@ -144,6 +144,30 @@ fn path(tpl: &str, tg: &t::Target) -> String {
         .replace(":id", &tg.media_id.to_string())
 }
 
+/// When the target is searched again: the retry delay when busy, the cooldown, else the next sweep.
+fn next_search(
+    out: &Outcome,
+    cooling: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+    interval_minutes: i64,
+) -> Option<DateTime<Utc>> {
+    let by_interval = now + chrono::Duration::minutes(interval_minutes);
+    match out {
+        Outcome::Grabbed(_) => None,
+        Outcome::Busy => Some(now + chrono::Duration::from_std(RETRY_DELAY).unwrap_or_default()),
+        Outcome::Cooling(at) => Some((*at).min(now + MAX_COOLDOWN)),
+        _ => Some(cooling.unwrap_or(by_interval)),
+    }
+}
+
+/// A cooling provider is waited for, not reported as failed.
+fn note_failure(tally: &mut Tally, id: &str, e: &RouteError) {
+    match e {
+        RouteError::Cooling(at) => tally.cool(*at),
+        _ => tally.failed.push(id.to_owned()),
+    }
+}
+
 /// Why a route call to a provider failed.
 pub enum RouteError {
     Unavailable,
@@ -277,13 +301,12 @@ impl Plugins {
             Outcome::TimedOut(_) => "timed_out",
             Outcome::Skipped(_) | Outcome::Error(_) => return,
         };
-        let next_at = match out {
-            Outcome::Grabbed(_) => None,
-            _ => Some(match tally.cooling {
-                Some(at) => at,
-                None => Utc::now() + chrono::Duration::minutes(self.sweep_interval_minutes().await),
-            }),
-        };
+        let next_at = next_search(
+            out,
+            tally.cooling,
+            Utc::now(),
+            self.sweep_interval_minutes().await,
+        );
         let failed = tally
             .failed
             .iter()
@@ -401,10 +424,7 @@ impl Plugins {
                 }
                 Err(e) => {
                     busy |= e.is_transient();
-                    if let RouteError::Cooling(at) = e {
-                        tally.cool(at);
-                    }
-                    tally.failed.push(id.clone());
+                    note_failure(tally, &id, &e);
                     tracing::warn!(
                         "acquisition: search of \"{}\" at \"{id}\" failed: {e}",
                         tg.title
@@ -634,6 +654,25 @@ pub fn spawn_tick(st: &AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn busy_announces_the_retry_delay_and_cooling_is_not_a_failure() {
+        let now = Utc::now();
+        let at = now + chrono::Duration::minutes(10);
+        assert_eq!(
+            next_search(&Outcome::Busy, Some(at), now, 360),
+            Some(now + chrono::Duration::seconds(30))
+        );
+        assert_eq!(
+            next_search(&Outcome::Cooling(at), Some(at), now, 360),
+            Some(at)
+        );
+        let mut t = Tally::default();
+        note_failure(&mut t, "p", &RouteError::Cooling(at));
+        assert!(t.failed.is_empty() && t.cooling == Some(at));
+        note_failure(&mut t, "p", &RouteError::Busy);
+        assert_eq!(t.failed, ["p"]);
+    }
 
     fn rel(title: &str, rank: i64, cf: i64) -> Value {
         json!({"title": title, "rank": rank, "customFormatScore": cf, "allowed": true, "rejections": []})

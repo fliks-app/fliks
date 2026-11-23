@@ -353,6 +353,15 @@ async fn pending(db: &sqlx::PgPool) -> Result<(Vec<i32>, Vec<i32>), sqlx::Error>
     Ok((files, media))
 }
 
+/// `recover` once the engine is adopted: a probe before that fails `NotRunning` and leaves the file unmarked.
+pub async fn recover_when_engine_ready(st: &AppState) {
+    let mut adopted = st.engine.adoptions();
+    if !st.engine.enabled() && adopted.changed().await.is_err() {
+        return;
+    }
+    recover(st).await;
+}
+
 /// Replays the work a restart lost: the files without `enrichedAt` and the media with a file newer
 /// than their `settledAt`, bounded by age and count. Runs at boot and on the daily prune tick.
 pub async fn recover(st: &AppState) {
@@ -546,6 +555,33 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(pending(&db).await.unwrap(), (vec![2], vec![2]));
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn boot_recovery_waits_for_the_engine(pool: sqlx::PgPool) {
+        crate::db::migrate(&pool).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO libraries (id, name) VALUES (1, 'L');
+               INSERT INTO library_folders (id, "libraryId", path) VALUES (1, 1, '/m');
+               INSERT INTO media (id, title, type, "libraryId", "folderName", "settledAt")
+                 VALUES (1, 'A', 'movie', 1, 'a', NULL);
+               INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality, "createdAt", "enrichedAt")
+                 VALUES (1, 1, 1, 'a.mkv', 1, 'x', now() - interval '1 hour', now())"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let st = crate::metadata::books::tests::state(&pool, vec![]);
+        let task = tokio::spawn({
+            let st = st.clone();
+            async move { recover_when_engine_ready(&st).await }
+        });
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(
+            st.ingest.settle.timers.lock_clean().is_empty(),
+            "no engine yet"
+        );
+        task.abort();
     }
 
     #[sqlx::test(migrations = false)]

@@ -246,7 +246,7 @@ async fn boot(cfg: Config) -> Result<(AppState, axum::Router), BoxError> {
     ingest::books::merge::resume_backfills(&state).await;
     tokio::spawn({
         let st = state.clone();
-        async move { ingest::post_import::recover(&st).await }
+        async move { ingest::post_import::recover_when_engine_ready(&st).await }
     });
     party::boot(&state).await?;
     party::spawn(&state);
