@@ -167,7 +167,7 @@ pub(super) async fn delete_one(
     match job::act(st, media_id, scope, true).await {
         Ok(true) => Ok(()),
         Ok(false) => Err(dto::not_candidate(media_id)),
-        Err(e) => Err(AppError::internal(e)),
+        Err(e) => Err(AppError::internal_shown(e)),
     }
 }
 

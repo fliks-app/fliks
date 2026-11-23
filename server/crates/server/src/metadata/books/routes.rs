@@ -16,7 +16,7 @@ use crate::{
     media::{
         external_ids::{self, EDITION_NAMESPACES, edition_id},
         field_sources,
-        write::body::Body,
+        service::body::Body,
     },
     metadata::{
         MetaError,
@@ -584,7 +584,7 @@ pub async fn series_reset(
         .await
         .map_err(|e| match e.retry {
             true => AppError::with_message(axum::http::StatusCode::SERVICE_UNAVAILABLE, e.cause),
-            false => AppError::internal(e.cause),
+            false => AppError::internal_shown(e.cause),
         })?;
     let series = current_series(&mut *st.db.acquire().await?, g.media).await?;
     Ok(Json(json!({ "series": series })))
@@ -609,7 +609,7 @@ async fn write_series(st: &AppState, g: &Gate, entry: Option<(Pick<'_>, Option<&
     sqlx::query!("SELECT pg_advisory_xact_lock(hashtext('books:link'))")
         .execute(&mut *tx)
         .await?;
-    crate::media::write::orphans::hold(&mut tx).await?;
+    crate::media::service::orphans::hold(&mut tx).await?;
     let title = sqlx::query_scalar!("SELECT title FROM media WHERE id = $1 FOR UPDATE", media)
         .fetch_optional(&mut *tx)
         .await?

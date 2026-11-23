@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT s.id, s.method, p.name AS \"provider_name?\", s.\"userAgent\" AS user_agent,\n                  s.\"createdAt\" AS created_at, s.\"lastSeenAt\" AS last_seen_at\n           FROM sessions s LEFT JOIN oidc_providers p ON p.id = s.\"providerId\"\n           WHERE s.\"userId\" = $1 AND session_is_live(s.id, $2)\n           ORDER BY s.\"lastSeenAt\" DESC, s.id DESC",
+  "query": "SELECT s.id, s.method, p.name AS \"provider_name?\", s.\"userAgent\" AS user_agent,\n                  s.client, s.\"createdAt\" AS created_at, s.\"lastSeenAt\" AS last_seen_at\n           FROM sessions s LEFT JOIN oidc_providers p ON p.id = s.\"providerId\"\n           WHERE s.\"userId\" = $1 AND session_is_live(s.id, $2)\n           ORDER BY s.\"lastSeenAt\" DESC, s.id DESC",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,17 @@
       },
       {
         "ordinal": 4,
+        "name": "client",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sessions",
+            "name": "client"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "last_seen_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -81,9 +92,10 @@
       true,
       false,
       true,
+      true,
       false,
       false
     ]
   },
-  "hash": "e2b284f3c032f88c5b3cd14ca8fba51a316451f30ad43705ee98c7d1fb9d5d63"
+  "hash": "20c51feb5e4769d2cd9026d68ef6ebdcfea6f6def476a0bd4b836df83f3b2b47"
 }

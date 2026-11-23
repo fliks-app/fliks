@@ -241,7 +241,7 @@ async fn boot(cfg: Config) -> Result<(AppState, axum::Router), BoxError> {
     remote::init(&state);
     push::init(&state);
     account_session::spawn(&state).await;
-    media::write::recover(&state).await;
+    media::service::recover(&state).await;
     ingest::books::backfill_unmatched(&state).await;
     ingest::books::merge::resume_backfills(&state).await;
     tokio::spawn({

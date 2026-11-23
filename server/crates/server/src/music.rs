@@ -216,7 +216,7 @@ pub async fn want_recording(
     ValidJson(v): ValidJson<Value>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     a.require(Action::Create, Subject::Media)?;
-    crate::media::write::album_import::want_recording(&st, &a, v).await
+    crate::media::service::album_import::want_recording(&st, &a, v).await
 }
 
 /// `GET /api/music/albums/tracks` (`docs/spec/music.md` rule 74): the tracklist an album added to a library would get.

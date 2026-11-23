@@ -19,7 +19,7 @@ fn sample() -> Value {
 }
 
 async fn refresh(c: &Ctx, id: i32) {
-    fliks_server::media::write::refresh_metadata(&c.st, id, false, Priority::Background)
+    fliks_server::media::service::refresh_metadata(&c.st, id, false, Priority::Background)
         .await
         .unwrap();
 }

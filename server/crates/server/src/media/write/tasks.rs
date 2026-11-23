@@ -1,5 +1,6 @@
 //! `POST /api/media/:id/rescan` and `/analyze` (rules 59-61): detached work, answered at once.
-use super::{already_running, gate};
+use super::gate;
+use crate::media::service::already_running;
 use crate::{
     events::{DomainEvent, SseEvent},
     http::{

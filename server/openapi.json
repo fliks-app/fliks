@@ -692,7 +692,7 @@
     "/api/comics/issues/{itemId}": {
       "patch": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`PATCH /api/comics/issues/:itemId`: `number` (the label), `sort`, `kind`, `title`, `overview`,\n`releaseDate`. Each edited field is locked on the issue.",
         "operationId": "patch_issue",
@@ -1468,7 +1468,7 @@
       },
       "delete": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`DELETE /api/libraries/:id` (rules 75-76): every media row, never a file; not transactional.",
         "operationId": "remove_library",
@@ -2078,7 +2078,7 @@
       },
       "post": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`POST /api/media` (rule 18): columns only, no library, no folder, no hook.",
         "operationId": "create",
@@ -2214,7 +2214,7 @@
     "/api/media/bulk": {
       "patch": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`PATCH /api/media/bulk` (rule 31): all or nothing, in one transaction.",
         "operationId": "bulk",
@@ -2270,7 +2270,7 @@
     "/api/media/episodes/{episodeId}": {
       "patch": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`PATCH /api/media/episodes/:episodeId` (rule 34): no hook, no event.",
         "operationId": "patch_episode",
@@ -2293,7 +2293,7 @@
     "/api/media/import": {
       "post": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`POST /api/media/import` (rule 17: a numeric `externalId` and a known `provider`).",
         "operationId": "import_media",
@@ -2305,7 +2305,7 @@
     "/api/media/import/tmdb": {
       "post": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`POST /api/media/import/tmdb` (rules 10-13).",
         "operationId": "import_tmdb",
@@ -2361,7 +2361,7 @@
     "/api/media/seasons/{seasonId}": {
       "patch": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`PATCH /api/media/seasons/:seasonId` (rules 32-33).",
         "operationId": "patch_season",
@@ -2393,7 +2393,7 @@
       },
       "put": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`PUT /api/media/:id` (rules 26-28).",
         "operationId": "update",
@@ -2403,7 +2403,7 @@
       },
       "delete": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`DELETE /api/media/:id` (rule 66): the folder goes after the response, contained (rule 70).",
         "operationId": "remove",
@@ -2415,7 +2415,7 @@
     "/api/media/{id}/analyze": {
       "post": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "No claim, no event: two analyses of one media both run (rule 60).",
         "operationId": "analyze",
@@ -2449,7 +2449,7 @@
     "/api/media/{id}/comic": {
       "patch": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`PATCH /api/media/:id/comic`: `title`, `overview`, `publisher`, `startYear`, `volume`. Each edited\nfield is locked, so a scan never fills it again.",
         "operationId": "patch_volume",
@@ -2483,7 +2483,7 @@
     "/api/media/{id}/episodes/{episodeId}/refresh": {
       "post": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`POST /api/media/:id/episodes/:episodeId/refresh` (rules 54-55: the episode is under `:id`).",
         "operationId": "refresh_episode",
@@ -2495,7 +2495,7 @@
     "/api/media/{id}/files/{fileId}": {
       "delete": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`DELETE /api/media/:id/files/:fileId` (rule 77): only the string `true` deletes on disk.",
         "operationId": "remove_file",
@@ -2507,7 +2507,7 @@
     "/api/media/{id}/files/{fileId}/companions": {
       "get": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "operationId": "companions_list",
         "responses": {
@@ -2516,7 +2516,7 @@
       },
       "delete": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "Rules 93-95: a tracked subtitle goes through the subtitle delete, anything else is a contained unlink.",
         "operationId": "companions_delete",
@@ -2528,7 +2528,7 @@
     "/api/media/{id}/files/{fileId}/companions/download": {
       "get": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "operationId": "companions_download",
         "responses": {
@@ -2539,7 +2539,7 @@
     "/api/media/{id}/files/{fileId}/companions/edl": {
       "post": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`POST .../companions/edl` (rules 89-92): the uploaded bytes, written atomically beside the video.",
         "operationId": "companions_edl",
@@ -2551,7 +2551,7 @@
     "/api/media/{id}/grab-best": {
       "post": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`POST /api/media/:id/grab-best` (`plugins.md` rule 68): the sweep's search and grab for one target, run in\nthe background (a search can outlast a proxy's timeout); the outcome comes as `acquisition.grab-best`.",
         "operationId": "grab_best",
@@ -2563,7 +2563,7 @@
     "/api/media/{id}/identify": {
       "post": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`POST /api/media/:id/identify` (rules 47-50).",
         "operationId": "identify",
@@ -2575,7 +2575,7 @@
     "/api/media/{id}/library": {
       "patch": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`PATCH /api/media/:id/library` (rule 29): a media with files moves them to the library's default folder.",
         "operationId": "patch_library",
@@ -2587,7 +2587,7 @@
     "/api/media/{id}/move": {
       "post": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "operationId": "move_media",
         "responses": {
@@ -2598,7 +2598,7 @@
     "/api/media/{id}/music/candidates": {
       "get": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`GET /api/media/:id/music/candidates`: the releases the files of an album may be (`music.md` rule 33).",
         "operationId": "album_candidates",
@@ -2622,7 +2622,7 @@
     "/api/media/{id}/profiles": {
       "patch": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`PATCH /api/media/:id/profiles` (rule 30): `media.grab` or `media.edit`.",
         "operationId": "patch_profiles",
@@ -2634,7 +2634,7 @@
     "/api/media/{id}/refresh": {
       "post": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "summary": "`POST /api/media/:id/refresh` (rule 52): `metadata.started` goes out before the claim.",
         "operationId": "refresh",
@@ -2646,7 +2646,7 @@
     "/api/media/{id}/rescan": {
       "post": {
         "tags": [
-          "media::write"
+          "media"
         ],
         "operationId": "rescan",
         "responses": {
@@ -2980,17 +2980,6 @@
         }
       }
     },
-    "/api/metadata/movie/{tmdbId}": {
-      "get": {
-        "tags": [
-          "metadata"
-        ],
-        "operationId": "legacy_movie",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
     "/api/metadata/popular/movie": {
       "get": {
         "tags": [
@@ -3066,28 +3055,6 @@
           "metadata"
         ],
         "operationId": "trending_tv",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
-    "/api/metadata/tv/{tmdbId}": {
-      "get": {
-        "tags": [
-          "metadata"
-        ],
-        "operationId": "legacy_tv",
-        "responses": {
-          "200": {}
-        }
-      }
-    },
-    "/api/metadata/tv/{tmdbId}/seasons": {
-      "get": {
-        "tags": [
-          "metadata"
-        ],
-        "operationId": "legacy_seasons",
         "responses": {
           "200": {}
         }

@@ -361,7 +361,7 @@ async fn an_add_with_nothing_wanted_asks_no_search(pool: PgPool) {
         .await
         .unwrap();
     let _ = domain(&mut c);
-    fliks_server::media::write::search_added(&c.st, id).await;
+    fliks_server::media::service::search_added(&c.st, id).await;
     assert!(domain(&mut c).is_empty());
 }
 

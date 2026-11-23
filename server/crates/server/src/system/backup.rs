@@ -39,7 +39,7 @@ pub struct Entry {
 }
 
 pub(super) fn internal(msg: impl Into<String>) -> AppError {
-    AppError::internal(msg.into())
+    AppError::internal_shown(msg.into())
 }
 
 /// The extensions of a backup: `.dump` archives and the plain `.sql` files of earlier builds.

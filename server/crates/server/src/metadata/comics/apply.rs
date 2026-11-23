@@ -8,7 +8,7 @@ use crate::{
     media::{
         field_sources,
         items::lock_versions,
-        write::fields::{Fields, apply, merge_unmatched},
+        service::fields::{Fields, apply, merge_unmatched},
     },
     state::AppState,
 };

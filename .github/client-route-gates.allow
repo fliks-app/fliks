@@ -1,0 +1,20 @@
+# URLs the check cannot resolve, or built before the check existed. A new line needs a reason in the PR.
+# Baseline against v7.0.1: routes of the unreleased minor whose callers are not gated by SERVER_SINCE.
+/api/books/{itemId}/pub/*
+/api/books/{}/pub/manifest.json
+/api/images/**
+/api/imports/{}
+/api/imports/{}/preview
+/api/imports/{}/test
+/api/metadata/{}/{}/{}
+/api/metadata/search/album
+/api/metadata/search/{kind}
+/api/parties/:id/karaoke/ws
+/api/plugins/{}{}
+/api/plugins/<id>
+/api/push/pending/{}
+/api/push/status
+/api/requests/allowance
+/api/requests/{}/watch
+/api/system/checks
+/api/system/checks/run

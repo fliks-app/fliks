@@ -269,6 +269,12 @@ pub(crate) async fn sign_in(
         now,
     )
     .await?;
+    db::set_client(
+        &mut *tx,
+        refresh.session,
+        crate::http::client::from_headers(headers).as_deref(),
+    )
+    .await?;
     tx.commit().await?;
     let access = st
         .jwt
@@ -334,6 +340,12 @@ pub(crate) async fn refresh(
         Refreshed::Expired => return Err(AppError::unauthorized("Refresh token expired")),
         Refreshed::Disabled => return Err(AppError::unauthorized("Account disabled")),
     };
+    db::set_client(
+        &st.db,
+        issued.session,
+        crate::http::client::from_headers(&headers).as_deref(),
+    )
+    .await?;
     let access = st.jwt.sign_access(user_id, &username, issued.session)?;
     let set = cookie(&headers, &st, &access.token);
     Ok((StatusCode::CREATED, set, Json(pair(access, issued))).into_response())
@@ -384,6 +396,8 @@ pub(crate) struct SessionItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     provider_name: Option<String>,
     user_agent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client: Option<String>,
     #[serde(with = "iso_ms")]
     created_at: DateTime<Utc>,
     #[serde(with = "iso_ms")]
@@ -405,6 +419,7 @@ pub(crate) async fn sessions(
                 method: r.method,
                 provider_name: r.provider_name,
                 user_agent: r.user_agent,
+                client: r.client,
                 created_at: r.created_at,
                 last_seen_at: r.last_seen_at,
             })
@@ -798,6 +813,8 @@ pub(crate) async fn pairing_status(
             username,
             issued,
         } => {
+            let client = crate::http::client::from_headers(&headers);
+            db::set_client(&st.db, issued.session, client.as_deref()).await?;
             let access = st.jwt.sign_access(user_id, &username, issued.session)?;
             let set = cookie(&headers, &st, &access.token);
             let mut body = serde_json::to_value(pair(access, issued)).map_err(|_| internal())?;

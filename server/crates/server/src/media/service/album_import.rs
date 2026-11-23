@@ -68,7 +68,7 @@ fn body_recordings(b: &Body) -> Result<Option<Vec<String>>, AppError> {
     }
 }
 
-pub(super) async fn import_album(
+pub(crate) async fn import_album(
     st: &AppState,
     a: &Authed,
     v: Value,

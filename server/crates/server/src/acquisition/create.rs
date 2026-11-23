@@ -2,7 +2,7 @@
 use super::*;
 use crate::media::{
     external_ids,
-    write::{book_import::held_book, import_in},
+    service::{book_import::held_book, import_in},
 };
 use crate::metadata::books::ANCHOR;
 use crate::plugins::imports::{db_err, host_err};

@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod client;
 pub mod cookies;
 pub mod csp;
 pub mod error;

@@ -2,8 +2,7 @@
 use super::{
     book_import::create_book_from,
     comic_import::create_comic_from,
-    import::{Import, Target, import_title},
-    resolve_profile,
+    import::{Import, Target, import_title, resolve_profile},
 };
 use crate::{
     events::DomainEvent,
@@ -22,7 +21,7 @@ use fliks_domain::{
 };
 use sqlx::{Postgres, Transaction};
 
-pub(super) const TAKEN: &str = "This title is already in the library";
+pub(crate) const TAKEN: &str = "This title is already in the library";
 pub(crate) const ANOTHER_LIBRARY: &str = "Media already belongs to another library";
 
 /// A title held in another library: 400 naming nothing new when the caller can read that library,

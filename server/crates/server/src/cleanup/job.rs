@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     ingest::load_media,
-    media::write::{
+    media::service::{
         delete_media_file, remove_media_folder, remove_media_with_dir, set_media_monitored,
         set_season_monitored,
     },

@@ -1,5 +1,5 @@
 //! Manual edits of a comic volume and its issues (`docs/spec/comics.md`, rules 35-37).
-use super::body::Body;
+use crate::media::service::body::Body;
 use crate::{
     http::{
         AppError,

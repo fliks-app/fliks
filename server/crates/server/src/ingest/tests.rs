@@ -664,7 +664,7 @@ async fn a_refresh_gives_the_items_it_creates_inside_a_range_their_parts(pool: P
             })
             .collect(),
     };
-    crate::media::write::apply_seasons(&c.st, s, &[season], false)
+    crate::media::service::apply_seasons(&c.st, s, &[season], false)
         .await
         .unwrap();
     assert_eq!(
@@ -1136,7 +1136,7 @@ async fn a_deleted_media_takes_only_what_nothing_else_holds(pool: PgPool) {
         touch(&data.join(f), b"x");
     }
     let mut tx = db.begin().await.unwrap();
-    let refs = crate::media::write::orphans::refs_of(&mut tx, gone)
+    let refs = crate::media::service::orphans::refs_of(&mut tx, gone)
         .await
         .unwrap();
     sqlx::query("DELETE FROM media WHERE id = $1")
@@ -1146,7 +1146,7 @@ async fn a_deleted_media_takes_only_what_nothing_else_holds(pool: PgPool) {
         .unwrap();
     tx.commit().await.unwrap();
 
-    crate::media::write::orphans::clean(&c.st, &refs)
+    crate::media::service::orphans::clean(&c.st, &refs)
         .await
         .unwrap();
 
@@ -1203,7 +1203,7 @@ async fn a_merged_book_leaves_no_orphan_and_keeps_its_poster(pool: PgPool) {
         .unwrap();
     tx.commit().await.unwrap();
     crate::metadata::books::absorb::carry_poster(&c.st, from, into).await;
-    crate::media::write::orphans::clean(&c.st, &refs)
+    crate::media::service::orphans::clean(&c.st, &refs)
         .await
         .unwrap();
     let persons: Vec<i32> = sqlx::query_scalar("SELECT id FROM persons ORDER BY id")
@@ -3300,7 +3300,7 @@ mod book_ingest {
             b"<movie><title>Other Title</title><year>2005</year><plot>Plot two.</plot></movie>",
         );
         assert!(
-            crate::media::write::fields::merge_unmatched(&c.st, id)
+            crate::media::service::fields::merge_unmatched(&c.st, id)
                 .await
                 .unwrap()
         );
@@ -3324,7 +3324,7 @@ mod book_ingest {
         let m = media(&c, l, "Offline Film", "movie").await;
         file_row(&c, m, "Offline Film.mkv").await;
         assert!(
-            !crate::media::write::fields::merge_unmatched(&c.st, m)
+            !crate::media::service::fields::merge_unmatched(&c.st, m)
                 .await
                 .unwrap()
         );
@@ -3558,7 +3558,7 @@ mod book_ingest {
             .await
             .unwrap()
             .unwrap();
-        let e = crate::media::write::refresh_any(
+        let e = crate::media::service::refresh_any(
             &c.st,
             &row,
             false,
@@ -4545,7 +4545,7 @@ mod comic_ingest {
         .await
         .unwrap();
         assert_eq!(d, (None, None, None));
-        crate::media::write::fields::merge_unmatched(&c.st, m)
+        crate::media::service::fields::merge_unmatched(&c.st, m)
             .await
             .unwrap();
         let d: (Option<String>, Option<i32>, Option<i32>) = sqlx::query_as(
@@ -4595,7 +4595,7 @@ mod comic_ingest {
                 .await
                 .unwrap();
         assert_eq!((title, overview), (None, Some("S".to_owned())));
-        crate::media::write::fields::merge_unmatched(&c.st, m)
+        crate::media::service::fields::merge_unmatched(&c.st, m)
             .await
             .unwrap();
         let p: Option<String> =
@@ -7339,7 +7339,7 @@ mod keeps_user_data {
     async fn a_refresh_that_stops_listing_an_episode_keeps_the_one_a_user_touched(pool: PgPool) {
         let (c, s) = setup(pool, &["Show - S01E01.mkv", "Show - S01E03.mkv"]).await;
         let all = [season(1, &[1, 2, 3, 9, 10])];
-        crate::media::write::apply_seasons(&c.st, s, &all, false)
+        crate::media::service::apply_seasons(&c.st, s, &all, false)
             .await
             .unwrap();
         let (e3, e9, e10) = (
@@ -7350,7 +7350,7 @@ mod keeps_user_data {
         touched_by_a_user(&c, s, e3).await;
         touched_by_a_user(&c, s, e9).await;
         let reordered = [season(1, &[1, 2])];
-        crate::media::write::apply_seasons(&c.st, s, &reordered, false)
+        crate::media::service::apply_seasons(&c.st, s, &reordered, false)
             .await
             .unwrap();
         assert_eq!(
@@ -7396,14 +7396,14 @@ mod keeps_user_data {
             season(3, &[1]),
             season(4, &[1]),
         ];
-        crate::media::write::apply_seasons(&c.st, s, &tmdb, false)
+        crate::media::service::apply_seasons(&c.st, s, &tmdb, false)
             .await
             .unwrap();
         let (e2, e3) = (item(&c, s, 2, 1).await, item(&c, s, 3, 1).await);
         touched_by_a_user(&c, s, e2).await;
         touched_by_a_user(&c, s, e3).await;
         let tvdb = [season(1, &[1])];
-        crate::media::write::drop_absent(&c.st, s, &tvdb)
+        crate::media::service::drop_absent(&c.st, s, &tvdb)
             .await
             .unwrap();
         assert_eq!(
@@ -7422,7 +7422,7 @@ mod keeps_user_data {
     #[sqlx::test(migrations = false)]
     async fn a_replaced_file_rearms_the_detected_markers_only(pool: PgPool) {
         let (c, s) = setup(pool, &["Show - S01E01.mkv"]).await;
-        crate::media::write::apply_seasons(&c.st, s, &[season(1, &[1])], false)
+        crate::media::service::apply_seasons(&c.st, s, &[season(1, &[1])], false)
             .await
             .unwrap();
         let e = item(&c, s, 1, 1).await;

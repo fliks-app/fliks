@@ -25,7 +25,7 @@ impl Body {
         let unknown: Vec<String> = m
             .keys()
             .filter(|k| !allowed.contains(&k.as_str()))
-            .map(|k| format!("property {prefix}{k} should not exist"))
+            .map(|k| format!("{prefix}property {k} should not exist"))
             .collect();
         if !unknown.is_empty() {
             return Err(AppError::bad_request(unknown));

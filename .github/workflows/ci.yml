@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
-      - run: .github/scripts/main-is-green.test.sh && .github/scripts/route-retention.test.sh
+      - run: .github/scripts/main-is-green.test.sh && .github/scripts/route-retention.test.sh && .github/scripts/client-route-gates.test.sh
       # Early signal on the release PR; release-please.yml gates the tag itself. The script comes from the
       # base branch, never from the PR. Only a branch of this repository is a release PR (a fork's is a PR).
       - name: the release PR's base commit is green on main
@@ -256,6 +256,20 @@ jobs:
           git fetch -q --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
           git show "$tag:server/openapi.json" > "$RUNNER_TEMP/released-openapi.json"
           .github/scripts/route-retention.sh "$RUNNER_TEMP/released-openapi.json" server/openapi.json
+      # A client URL the oldest release of the window (the last patch of the previous minor) does not serve needs SERVER_SINCE.
+      - name: client routes are gated on the support window
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          latest=$(gh release view --json tagName --jq .tagName)
+          major=$(echo "${latest#v}" | cut -d. -f1)
+          minor=$(echo "${latest#v}" | cut -d. -f2)
+          oldest=$(git ls-remote --tags origin "refs/tags/v$major.$((minor - 1)).*" | sed 's|.*refs/tags/||' | sort -V | tail -1)
+          oldest=${oldest:-$latest}
+          git fetch -q --depth=1 origin "refs/tags/$oldest:refs/tags/$oldest"
+          git show "$oldest:server/openapi.json" > "$RUNNER_TEMP/oldest-openapi.json"
+          .github/scripts/client-route-gates.py "$RUNNER_TEMP/oldest-openapi.json" .github/client-route-gates.allow client/src
       - name: wire-breaks.txt changes carry the wire-break label
         if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'wire-break')
         env:

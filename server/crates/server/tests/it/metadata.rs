@@ -354,11 +354,10 @@ async fn detail_routes_map_input_and_upstream_errors(pool: PgPool) {
     assert_eq!(get("/api/metadata/tmdb/movie/abc").await.0, 400);
     assert_eq!(get("/api/metadata/tmdb/movie/007").await.0, 400);
     assert_eq!(get("/api/metadata/tv/tv/seasons").await.0, 400);
-    assert_eq!(get("/api/metadata/movie/search").await.0, 400);
     assert_eq!(get("/api/metadata/tmdb/movie/9").await.0, 404);
     assert_eq!(get("/api/metadata/tmdb/tv/9/seasons").await.0, 404);
     c.stub.fail("work/movie/9", 500);
-    assert_eq!(get("/api/metadata/movie/9").await.0, 503);
+    assert_eq!(get("/api/metadata/tmdb/movie/9").await.0, 503);
     assert!(c.stub.seen("work/movie/abc").is_empty());
     assert_eq!(call(&c, "/api/metadata/tmdb/movie/9", None).await.0, 401);
 }
@@ -368,7 +367,7 @@ async fn details_seasons_and_stubs_pass_the_provider_records_through(pool: PgPoo
     let c = ctx(pool).await;
     let film = json!({"tmdbId": 603, "title": "Sample Film", "year": 1999, "status": "released", "tmdbCollectionName": "C"});
     c.stub.ok("work/movie/603", film.clone());
-    let (s, d) = call(&c, "/api/metadata/movie/603", Some(&c.reader)).await;
+    let (s, d) = call(&c, "/api/metadata/tmdb/movie/603", Some(&c.reader)).await;
     assert_eq!((s, d), (200, film));
     c.stub.ok(
         "stubs/7",
@@ -1758,7 +1757,6 @@ INSERT INTO users (username, "isAdmin", "roleId") VALUES ('none', false, (SELECT
         "/api/metadata/genres/tv",
         "/api/persons/1/provider-credits",
         "/api/metadata/tmdb/movie/1",
-        "/api/metadata/movie/1",
         "/api/metadata/metron/comic/1",
         "/api/metadata/openlibrary/book/OL1W",
         "/api/metadata/musicbrainz/album/1",

@@ -7,8 +7,8 @@ use crate::{
     },
     libraries::accessible_library_ids,
     media::{
+        service::{body::Body, resolve_target_in},
         wants,
-        write::{body::Body, resolve_target_in},
     },
     state::AppState,
 };
@@ -188,7 +188,7 @@ pub async fn follow_put(
     let id = id?.0;
     // Held before the checks: the orphan sweep cannot drop the person between them and the insert.
     let mut tx = st.db.begin().await?;
-    crate::media::write::orphans::hold(&mut tx).await?;
+    crate::media::service::orphans::hold(&mut tx).await?;
     person_name(&st, id).await?;
     let requested = match v.get("role") {
         None | Some(Value::Null) => None,
@@ -292,7 +292,7 @@ pub async fn watch_put(
 ) -> Res {
     let id = id?.0;
     let mut tx = st.db.begin().await?;
-    crate::media::write::orphans::hold(&mut tx).await?;
+    crate::media::service::orphans::hold(&mut tx).await?;
     series_name(&st, &a, id).await?;
     let p = read_put(&st, &a, v, true, MediaKind::Book).await?;
     let wants = p

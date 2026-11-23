@@ -14,6 +14,7 @@ pub(crate) mod music;
 pub(crate) mod params;
 mod related;
 mod routes;
+pub mod service;
 mod streams;
 mod tracking;
 pub mod wants;
@@ -21,3 +22,4 @@ pub(crate) mod watched;
 pub mod write;
 
 pub use routes::*;
+pub use write::*;
