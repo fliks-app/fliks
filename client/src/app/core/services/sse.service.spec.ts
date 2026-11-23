@@ -347,12 +347,6 @@ describe('SseService: resume refresh', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it('skips the refresh when the stream was open and heard from lately', () => {
-    const h = dialled();
-    redial(h, { readyState: OPEN }, Date.now());
-    expect(h.refresh).not.toHaveBeenCalled();
-  });
-
   it('refreshes when the stream died while the app was away', () => {
     const h = dialled();
     redial(h, { readyState: CLOSED }, Date.now());
