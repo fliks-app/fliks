@@ -2,15 +2,22 @@
   <button
     trigger
     type="button"
-    class="btn btn-ghost btn-circle"
-    [attr.aria-label]="'nav.user_menu' | translate"
+    [class]="row() ? 'rail-item' : 'btn btn-ghost btn-circle'"
+    [attr.aria-label]="row() ? null : ('nav.user_menu' | translate)"
   >
     @if (auth.user(); as user) {
-      <app-user-avatar
-        [username]="user.username"
-        [avatar]="user.avatar"
-        size="w-7 h-7 md:w-9 md:h-9 text-sm border border-primary/40"
-      />
+      @if (row()) {
+        <span class="rail-icon">
+          <app-user-avatar [username]="user.username" [avatar]="user.avatar" size="w-6 h-6 text-xs border border-primary/40" />
+        </span>
+        <span class="rail-label">{{ user.username }}</span>
+      } @else {
+        <app-user-avatar
+          [username]="user.username"
+          [avatar]="user.avatar"
+          size="w-7 h-7 md:w-9 md:h-9 text-sm border border-primary/40"
+        />
+      }
     } @else {
       <svg [lucideIcon]="icons.User" class="h-5 w-5 md:h-6 md:w-6"></svg>
     }

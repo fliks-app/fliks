@@ -108,6 +108,7 @@
   </nav>
 
   <div class="rail-foot">
+    <div role="separator" class="rail-sep"></div>
     @for (bar of navbar.dockedBars(); track bar) {
       <ng-container [ngTemplateOutlet]="bar" />
     }
@@ -115,9 +116,7 @@
       <span class="rail-icon"><svg [lucideIcon]="icons.Settings" class="h-6 w-6"></svg></span>
       <span class="rail-label">{{ 'nav.app_settings' | translate }}</span>
     </a>
-    <div class="rail-item rail-user">
-      <app-user-menu placement="right-end" />
-    </div>
+    <app-user-menu class="rail-user" placement="right-end" [row]="true" />
   </div>
 </div>
 

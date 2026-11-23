@@ -131,16 +131,8 @@ body.tv {
   display: inline-flex;
 }
 
-/* The user menu is only an avatar: it keeps the item's footprint without a second hover fill. */
-.rail-user {
-  /* The 2.5rem avatar button centres on the icons' axis. */
-  padding: 0 0 0 calc((var(--rail-w) - 4rem) / 2);
-}
-.rail-user:hover {
-  background: none;
-}
-/* The dropdown opens from the row's edge, so it clears the rail instead of overlapping it. */
-.rail-user app-user-menu,
+/* The user row's dropdown opens from the row's edge, so it clears the rail instead of overlapping it. */
+.rail-user,
 .rail-user .dropdown {
   display: block;
   width: 100%;
