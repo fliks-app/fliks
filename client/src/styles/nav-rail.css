@@ -137,6 +137,12 @@ body.tv {
 .rail-user:hover {
   background: none;
 }
+/* The dropdown opens from the row's edge, so it clears the rail instead of overlapping it. */
+.rail-user app-user-menu,
+.rail-user .dropdown {
+  display: block;
+  width: 100%;
+}
 
 /* A docked now-playing bar: the cover alone with a progress ring while collapsed, the whole bar once open. */
 .rail-bar {

@@ -9,7 +9,7 @@
      (pointerenter)="onPointer($event, true)"
      (pointerleave)="onPointer($event, false)">
   <div class="rail-head">
-    <a routerLink="/" [state]="{ rootEntry: true }" class="rail-item">
+    <div class="rail-item pointer-events-none">
       <span class="rail-icon relative">
         <img src="fliks-icon.svg" alt="" class="h-8 w-8" />
         @if (!network.isOnline()) {
@@ -17,7 +17,7 @@
         }
       </span>
       <span class="rail-label text-xl font-bold">{{ 'app.name' | translate }}</span>
-    </a>
+    </div>
     @if (navbar.railDocked() && !tv.isTv()) {
         <button
           type="button"
