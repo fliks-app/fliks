@@ -1497,6 +1497,12 @@
     "filter_kind_all": "Tutti i tipi",
     "kind_add": "Aggiunta",
     "kind_delete": "Eliminazione",
+    "kind_problems": "Problemi",
+    "problem_filter_active": "Aperte",
+    "problem_filter_resolved": "Risolte",
+    "problem_filter_closed": "Chiuse",
+    "problem_filter_all": "Tutte",
+    "problems_empty": "Nessun problema segnalato",
     "col_title": "Titolo",
     "col_type": "Tipo",
     "col_status": "Stato",
@@ -6190,6 +6196,87 @@
     "health_fixed": {
       "title": "Problema di sistema risolto",
       "body": "{{message}}"
+    }
+  },
+  "problems": {
+    "card": {
+      "system": "Sistema",
+      "scope_title": "Titolo intero",
+      "scope_season": "Stagione {{n}}",
+      "auto_resolved": "Risolta automaticamente",
+      "closed_by": "Chiusa da {{name}}",
+      "thread": "Discussione ({{count}})",
+      "comment_placeholder": "Scrivi un commento",
+      "comment_send": "Invia",
+      "delete_comment": "Elimina",
+      "search_releases": "Cerca release",
+      "search_subtitles": "Cerca sottotitoli",
+      "mark_fixed": "Segna come risolta",
+      "close": "Chiudi",
+      "withdraw": "Ritira",
+      "reopen": "Riapri",
+      "reopen_note_placeholder": "Che cosa non va ancora?",
+      "reopen_send": "Riapri la segnalazione",
+      "reopen_already_open": "Una segnalazione uguale è già aperta.",
+      "reopen_cap": "Hai troppe segnalazioni aperte.",
+      "reopen_window": "Questa segnalazione non può più essere riaperta.",
+      "reopen_failed": "Impossibile riaprire la segnalazione.",
+      "qoe_title": "Sessione di riproduzione",
+      "qoe_stalls": "{{count}} interruzioni",
+      "qoe_errors": "{{count}} errori"
+    },
+    "resolve": {
+      "title_fix": "Segna come risolta",
+      "title_close": "Chiudi la segnalazione",
+      "reply_placeholder": "Risposta a chi ha segnalato (facoltativa)",
+      "reason_placeholder": "Perché viene chiusa?",
+      "submit_fix": "Segna risolta",
+      "submit_close": "Chiudi",
+      "chip_new_file": "È stato importato un nuovo file",
+      "chip_subtitles_replaced": "I sottotitoli sono stati sostituiti",
+      "chip_cannot_reproduce": "Qui funziona, riprova",
+      "chip_not_a_defect": "Il file è fatto così",
+      "chip_duplicate": "Già segnalato"
+    },
+    "status": {
+      "open": "Aperta",
+      "acknowledged": "Vista",
+      "resolved": "Risolta",
+      "closed": "Chiusa"
+    },
+    "kind": {
+      "video": "Immagine",
+      "audio": "Audio",
+      "subtitles": "Sottotitoli",
+      "playback": "Non parte",
+      "other": "Altro"
+    },
+    "report": {
+      "action": "Segnala un problema",
+      "title": "Segnala un problema",
+      "kind_label": "Tipo di problema",
+      "send": "Invia",
+      "sent": "Grazie, la segnalazione è stata inviata.",
+      "sent_hint": "Riceverai un avviso quando sarà risolta o riceverà risposta.",
+      "my_reports": "Le mie segnalazioni",
+      "season": "Stagione {{n}}",
+      "season_label": "Stagione",
+      "episode_label": "Episodio",
+      "whole_title": "Tutto il titolo",
+      "whole_season": "Tutta la stagione",
+      "file_label": "File",
+      "file_any": "Non so",
+      "note_placeholder": "Cosa hai notato? (facoltativo)",
+      "error": "Impossibile inviare la segnalazione.",
+      "error_problem_already_open": "Hai già segnalato questo problema.",
+      "error_problem_cap": "Hai troppe segnalazioni aperte. Attendi che alcune vengano risolte.",
+      "hint": {
+        "video": "Sfocato, colori sbagliati, scatti o artefatti",
+        "audio": "Nessun audio, fuori sincrono o lingua errata",
+        "subtitles": "Mancanti, fuori sincrono o testo errato",
+        "playback": "Non parte, si blocca o si ferma",
+        "other": "Qualsiasi altro problema con questo file"
+      }
     }
   }
 }

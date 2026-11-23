@@ -29,7 +29,8 @@ export type CoreMediaActionId =
   | 'media.edit-sources'
   | 'media.edit-series'
   | 'media.details'
-  | 'media.request-deletion';
+  | 'media.request-deletion'
+  | 'media.report-problem';
 
 const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.recommend',
@@ -65,6 +66,7 @@ const CORE_MEDIA_ACTION_IDS: ReadonlySet<string> = new Set<CoreMediaActionId>([
   'media.toggle-monitored',
   'media.delete',
   'media.request-deletion',
+  'media.report-problem',
 ]);
 
 /** Handlers a surface supplies; partial since card and detail menus each serve a subset, and an id without one is dropped. */

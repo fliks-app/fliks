@@ -14,6 +14,7 @@ import { DownloadProgressService } from '../../core/services/download-progress.s
 import { NavbarService } from '../../core/services/navbar.service';
 import { CachingReuseStrategy } from '../../core/services/route-reuse.strategy';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
+import { ServerVersionService } from '../../core/services/server-version.service';
 import { SseService } from '../../core/services/sse.service';
 import { ToastService } from '../../core/services/toast.service';
 import { sseStub } from '../../testing/sse.stub';
@@ -48,6 +49,7 @@ function setup(opts: SetupOpts = {}) {
       { provide: ConfirmationService, useValue: { confirm } },
       { provide: ToastService, useValue: toast },
       { provide: ScrollMemoryService, useValue: { activate: vi.fn(), deactivateIf: vi.fn(), restoreSticky: vi.fn() } },
+      { provide: ServerVersionService, useValue: { supports: () => true } },
       { provide: SseService, useValue: sse },
       { provide: DownloadProgressService, useValue: { progress: signal(new Map()) } },
       { provide: AuthService, useValue: { user: signal({ id: 1 }), hasPermission: () => true } },
@@ -130,6 +132,24 @@ describe('RequestsComponent', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('opens the problems view from the URL and keeps the request list quiet', async () => {
+    const { cmp, query, list } = setup();
+    await Promise.resolve();
+    const before = list.mock.calls.length;
+    query.next(convertToParamMap({ view: 'problems', status: 'active' }));
+    expect(cmp.problemsView()).toBe(true);
+    expect(cmp.problemStatus()).toBe('active');
+    expect(cmp.statusFilter()).toBe('');
+    cmp.reload();
+    expect(list.mock.calls.length).toBe(before);
+  });
+
+  it('writes the Problems kind to the URL with the Open status', async () => {
+    const { cmp, navigate } = setup();
+    await cmp.onKindChange('problems');
+    expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { view: 'problems', status: 'active' } }));
   });
 
   describe('approve all', () => {

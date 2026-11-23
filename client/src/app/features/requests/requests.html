@@ -10,13 +10,29 @@
       <select
         appTvSelect
         class="select select-bordered select-sm w-full sm:w-40"
-        [ngModel]="kindFilter()"
+        [ngModel]="problemsView() ? 'problems' : kindFilter()"
         (ngModelChange)="onKindChange($event)"
       >
         <option value="">{{ 'requests.filter_kind_all' | translate }}</option>
         <option value="add">{{ 'requests.kind_add' | translate }}</option>
         <option value="delete">{{ 'requests.kind_delete' | translate }}</option>
+        @if (problemsSupported()) {
+          <option value="problems">{{ 'requests.kind_problems' | translate }}</option>
+        }
       </select>
+      @if (problemsView()) {
+        <select
+          appTvSelect
+          class="select select-bordered select-sm w-full sm:w-48"
+          [ngModel]="problemStatus()"
+          (ngModelChange)="onStatusChange($event)"
+        >
+          <option value="active">{{ 'requests.problem_filter_active' | translate }}</option>
+          <option value="resolved">{{ 'requests.problem_filter_resolved' | translate }}</option>
+          <option value="closed">{{ 'requests.problem_filter_closed' | translate }}</option>
+          <option value="">{{ 'requests.problem_filter_all' | translate }}</option>
+        </select>
+      } @else {
       <select
         appTvSelect
         class="select select-bordered select-sm w-full sm:w-48"
@@ -32,6 +48,7 @@
         <option value="failed">{{ 'requests.status.failed' | translate }}</option>
         <option value="removed">{{ 'requests.status.removed' | translate }}</option>
       </select>
+      }
       @if (approvableRows().length) {
         <button
           type="button"
@@ -51,7 +68,9 @@
     </div>
   </div>
 
-  @if (loading() && rows().length === 0) {
+  @if (problemsView()) {
+    <app-problems-list [status]="problemStatus()" />
+  } @else if (loading() && rows().length === 0) {
     <app-row-skeleton />
   } @else if (rows().length === 0) {
     <app-empty-state icon="clapperboard" [title]="'requests.empty' | translate" />
@@ -382,7 +401,7 @@
     </div>
   }
 
-  @if (canLoadMore()) {
+  @if (canLoadMore() && !problemsView()) {
     <div class="flex justify-center">
       <button
         type="button"

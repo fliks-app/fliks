@@ -1497,6 +1497,12 @@
     "filter_kind_all": "Todos los tipos",
     "kind_add": "Adición",
     "kind_delete": "Eliminación",
+    "kind_problems": "Problemas",
+    "problem_filter_active": "Abiertos",
+    "problem_filter_resolved": "Corregidos",
+    "problem_filter_closed": "Cerrados",
+    "problem_filter_all": "Todos",
+    "problems_empty": "No hay problemas informados",
     "col_title": "Título",
     "col_type": "Tipo",
     "col_status": "Estado",
@@ -6190,6 +6196,87 @@
     "health_fixed": {
       "title": "Problema del sistema resuelto",
       "body": "{{message}}"
+    }
+  },
+  "problems": {
+    "card": {
+      "system": "Sistema",
+      "scope_title": "Título completo",
+      "scope_season": "Temporada {{n}}",
+      "auto_resolved": "Corregido automáticamente",
+      "closed_by": "Cerrado por {{name}}",
+      "thread": "Hilo ({{count}})",
+      "comment_placeholder": "Escribe un comentario",
+      "comment_send": "Enviar",
+      "delete_comment": "Eliminar",
+      "search_releases": "Buscar releases",
+      "search_subtitles": "Buscar subtítulos",
+      "mark_fixed": "Marcar como corregido",
+      "close": "Cerrar",
+      "withdraw": "Retirar",
+      "reopen": "Reabrir",
+      "reopen_note_placeholder": "¿Qué sigue mal?",
+      "reopen_send": "Reabrir el informe",
+      "reopen_already_open": "Ya hay un informe igual abierto.",
+      "reopen_cap": "Tienes demasiados informes abiertos.",
+      "reopen_window": "Este informe ya no se puede reabrir.",
+      "reopen_failed": "No se pudo reabrir el informe.",
+      "qoe_title": "Sesión de reproducción",
+      "qoe_stalls": "{{count}} cortes",
+      "qoe_errors": "{{count}} errores"
+    },
+    "resolve": {
+      "title_fix": "Marcar como corregido",
+      "title_close": "Cerrar el informe",
+      "reply_placeholder": "Respuesta a quien lo informó (opcional)",
+      "reason_placeholder": "¿Por qué se cierra?",
+      "submit_fix": "Marcar corregido",
+      "submit_close": "Cerrar",
+      "chip_new_file": "Se importó un archivo nuevo",
+      "chip_subtitles_replaced": "Se reemplazaron los subtítulos",
+      "chip_cannot_reproduce": "Aquí funciona, inténtalo de nuevo",
+      "chip_not_a_defect": "El archivo es así",
+      "chip_duplicate": "Ya informado"
+    },
+    "status": {
+      "open": "Abierto",
+      "acknowledged": "Visto",
+      "resolved": "Corregido",
+      "closed": "Cerrado"
+    },
+    "kind": {
+      "video": "Imagen",
+      "audio": "Sonido",
+      "subtitles": "Subtítulos",
+      "playback": "No se reproduce",
+      "other": "Otro"
+    },
+    "report": {
+      "action": "Informar de un problema",
+      "title": "Informar de un problema",
+      "kind_label": "Tipo de problema",
+      "send": "Enviar",
+      "sent": "Gracias, tu informe se ha enviado.",
+      "sent_hint": "Se te avisará cuando se corrija o se responda.",
+      "my_reports": "Mis informes",
+      "season": "Temporada {{n}}",
+      "season_label": "Temporada",
+      "episode_label": "Episodio",
+      "whole_title": "Todo el título",
+      "whole_season": "Toda la temporada",
+      "file_label": "Archivo",
+      "file_any": "No estoy seguro",
+      "note_placeholder": "¿Qué has notado? (opcional)",
+      "error": "No se pudo enviar el informe.",
+      "error_problem_already_open": "Ya informaste de este problema.",
+      "error_problem_cap": "Tienes demasiados informes abiertos. Espera a que se corrijan algunos.",
+      "hint": {
+        "video": "Borroso, colores incorrectos, tirones o artefactos",
+        "audio": "Sin sonido, desfasado o idioma incorrecto",
+        "subtitles": "Ausentes, desfasados o con texto incorrecto",
+        "playback": "No arranca, se congela o se detiene",
+        "other": "Cualquier otra cosa sobre este archivo"
+      }
     }
   }
 }

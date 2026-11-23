@@ -125,7 +125,9 @@
     [error]="error()"
     [diagnostics]="errorDiagnostics()"
     [canRetry]="canRetry()"
+    [reportable]="reportable"
     (retry)="onRetry()"
+    (report)="onReport()"
     (back)="onBack()"
   />
 
