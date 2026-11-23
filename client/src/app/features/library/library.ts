@@ -10,6 +10,8 @@ import {
   Component,
   signal,
   computed,
+  effect,
+  untracked,
   inject,
   Injector,
   OnInit,
@@ -48,6 +50,7 @@ import type {
 } from '../../core/services/api/streaming-api.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
+import { HeroCarouselComponent } from '../../shared/components/hero-carousel/hero-carousel';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
 import { NavbarService } from '../../core/services/navbar.service';
 import { keepRouteFresh } from '../../core/services/keep-route-fresh';
@@ -153,6 +156,7 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
     MediaCardComponent,
     DefaultFocusDirective,
     TvRowDirective,
+    HeroCarouselComponent,
     DropdownMenuComponent,
     TvSelectDirective,
     HorizontalScrollerComponent,
@@ -205,7 +209,10 @@ export class LibraryComponent implements OnInit, OnDestroy {
   /** Cached per library name: revalidate the grid on return and restore its
    *  saved offset. */
   protected readonly detached = keepRouteFresh({
-    refresh: () => this.refreshCurrentView(),
+    refresh: () => {
+      this.refreshCurrentView();
+      void this.loadFeatured();
+    },
     scrollKey: () => this.scrollMemoryKey(),
     onAttach: () => {
       const lib = this.library();
@@ -232,6 +239,22 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   /** Resolved library (null while loading or if not found). */
   readonly library = signal<LibrarySummary | null>(null);
+  /** The compact carousel above the tabs of the all and suggestions views. */
+  protected readonly featured = signal<Media[]>([]);
+  protected readonly showCarousel = computed(
+    () => this.featured().length > 0 && (this.viewMode() === 'all' || this.viewMode() === 'suggestions'),
+  );
+  private readonly featuredEffect = effect(() => {
+    this.library()?.id;
+    untracked(() => void this.loadFeatured());
+  });
+
+  private async loadFeatured(): Promise<void> {
+    const id = this.library()?.id;
+    if (!id) return this.featured.set([]);
+    const list = await this.streamingApi.getFeatured({ libraryId: id }).catch(() => null);
+    if (list && this.library()?.id === id) this.featured.set(list.map((f) => f.media));
+  }
   readonly mixedLibrary = computed(() => (this.library()?.mediaTypes.length ?? 0) > 1);
   readonly hasMusic = computed(() => !!this.library()?.mediaTypes.includes('album'));
   readonly hasBooks = computed(() => !!this.library()?.mediaTypes.includes('book'));

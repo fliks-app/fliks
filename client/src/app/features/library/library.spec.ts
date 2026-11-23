@@ -1,4 +1,5 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -116,7 +117,7 @@ function createHarness(remembered?: number) {
       },
       { provide: Router, useValue: { navigate: vi.fn() } },
       { provide: MediaService, useValue: { getAll: vi.fn(async () => ({ data: [], total: 0 })) } },
-      { provide: StreamingApiService, useValue: { toggleWatched: vi.fn(async () => {}), toggleSeriesWatched: vi.fn(async () => {}) } },
+      { provide: StreamingApiService, useValue: { getFeatured: vi.fn(async () => []), toggleWatched: vi.fn(async () => {}), toggleSeriesWatched: vi.fn(async () => {}) } },
       { provide: OfflinePlaybackSyncService, useValue: {} },
       { provide: PlayableMediaService, useValue: {} },
       { provide: SocialApiService, useValue: {} },
@@ -544,5 +545,26 @@ describe('LibraryComponent: book library', () => {
       { labelKey: 'books_library.legend_with_file', done: 1, total: null },
       { labelKey: 'legend.movie_files', done: 0, total: null },
     ]);
+  });
+});
+
+describe('LibraryComponent: featured carousel', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.restoreAllMocks();
+  });
+
+  it('loads the featured titles of the library and shows them on all and suggestions only', async () => {
+    const { component } = createHarness();
+    const featured = { id: 5, title: 'F' } as unknown as Media;
+    vi.mocked(TestBed.inject(StreamingApiService).getFeatured).mockResolvedValue([{ media: featured, reason: 'recent', becauseTitle: null }]);
+    component.library.set({ id: 3, name: 'Movies', mediaTypes: ['movie'] } as never);
+    await TestBed.inject(ApplicationRef).whenStable();
+    await new Promise((r) => setTimeout(r));
+    expect(TestBed.inject(StreamingApiService).getFeatured).toHaveBeenCalledWith({ libraryId: 3 });
+    component.viewMode.set('all');
+    expect(component['showCarousel']()).toBe(true);
+    component.viewMode.set('genres');
+    expect(component['showCarousel']()).toBe(false);
   });
 });
