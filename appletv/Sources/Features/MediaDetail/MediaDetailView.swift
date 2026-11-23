@@ -124,34 +124,25 @@ struct MediaDetailView: View {
                     }
                 }
 
-                Button(action: { Task { await toggleFavorite() } }) {
-                    Image(systemName: liked ? "heart.fill" : "heart")
-                        .foregroundStyle(liked ? Color.red : Color.primary)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityLabel(liked ? tr("media_detail.unfavorite") : tr("media_detail.favorite"))
+                IconAction(systemImage: liked ? "heart.fill" : "heart",
+                           label: liked ? tr("media_detail.unfavorite") : tr("media_detail.favorite"),
+                           tint: liked ? .red : nil) { Task { await toggleFavorite() } }
 
-                Button(action: { Task { await toggleWatched(media) } }) {
-                    Image(systemName: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
-                }
-                .buttonStyle(.bordered)
-                .accessibilityLabel(watchedLabel(media))
+                IconAction(systemImage: isWatched ? "checkmark.circle.fill" : "checkmark.circle",
+                           label: watchedLabel(media)) { Task { await toggleWatched(media) } }
 
                 if let target, party.canCreate {
-                    Button(action: {
+                    IconAction(systemImage: "person.2.fill", label: tr("party.watch_together")) {
                         party.openCreate(PartyCreateTarget(name: media.title, mediaId: mediaId,
                                                            mediaFileId: target.mediaFileId, episodeId: target.episodeId))
-                    }) {
-                        Label(tr("party.watch_together"), systemImage: "person.2.fill")
                     }
-                    .buttonStyle(.bordered)
                 }
 
-                Button(action: { playlistPicker.open(mediaId: mediaId) }) {
-                    Label(tr("playlists.add_to_short"), systemImage: "text.badge.plus")
+                IconAction(systemImage: "text.badge.plus", label: tr("playlists.add_to_playlist_title")) {
+                    playlistPicker.open(mediaId: mediaId)
                 }
-                .buttonStyle(.bordered)
             }
+            .fixedSize()
         }
         .focusSection()
     }

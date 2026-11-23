@@ -116,11 +116,12 @@ struct HeroCarousel: View {
                     .buttonStyle(.bordered)
                     .focused($focus, equals: .details)
             }
-            Button { playlistPicker.open(mediaId: m.id) } label: { Image(systemName: "text.badge.plus") }
-                .buttonStyle(.bordered)
-                .focused($focus, equals: .add)
-                .accessibilityLabel(tr("playlists.add_to_playlist"))
+            IconAction(systemImage: "text.badge.plus", label: tr("playlists.add_to_playlist_title")) {
+                playlistPicker.open(mediaId: m.id)
+            }
+            .focused($focus, equals: .add)
         }
+        .fixedSize()
         .defaultFocus($focus, .primary)
     }
 

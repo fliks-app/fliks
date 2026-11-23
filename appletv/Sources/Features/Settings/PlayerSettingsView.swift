@@ -52,6 +52,8 @@ struct PlayerSettingsView: View {
                     Toggle(tr("playback_settings.player_auto_play_next"), isOn: $settings.autoPlayNext)
                 }
             }
+            // Aligned with the title; a List left at its own margins runs under the navigation rail.
+            .padding(.horizontal, 60)
         }
     }
 }

@@ -341,6 +341,24 @@ struct SkeletonRail: View {
     }
 }
 
+/// A secondary action as a round icon button, as in the Apple TV app: only the primary actions carry a label,
+/// so an action row never squeezes its labels onto two lines.
+struct IconAction: View {
+    let systemImage: String
+    let label: String
+    var tint: Color?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage).foregroundStyle(tint.map(AnyShapeStyle.init) ?? AnyShapeStyle(.primary))
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel(label)
+    }
+}
+
 /// No system focus decoration — for controls that draw their own.
 struct FlatButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {

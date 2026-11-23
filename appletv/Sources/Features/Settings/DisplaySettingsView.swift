@@ -35,6 +35,8 @@ struct DisplaySettingsView: View {
                     Text(tr("display_settings.home_background_hint"))
                 }
             }
+            // Aligned with the title; a List left at its own margins runs under the navigation rail.
+            .padding(.horizontal, 60)
         }
     }
 }
