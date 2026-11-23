@@ -11,15 +11,13 @@ export interface CopyFallbackHost {
   currentSid(): string | undefined;
   currentMediaFileId(): number;
   hasServerFeature(feature: string): boolean;
-  /** Sync snapshot of "no reload/recovery holds the engine right now". */
-  isReloadIdle(): boolean;
-  reloadStream(position: number, why: ReloadWhy): Promise<void>;
+  /** Reloads the stream; one asked while a load runs waits for it. */
+  reloadStream(position: number, why: ReloadWhy): Promise<'done' | 'superseded' | 'failed'>;
   /** Ends playback on the error card. */
   fail(e: unknown): void;
 }
 
 const DEVICE_PROFILE_EXTENSIONS_FEATURE = 'deviceProfileExtensions';
-const RELOAD_IDLE_WAIT_MS = 3_000;
 
 /** Copy fallback: an undecodable copy is rejected once per session and reloaded, with the failed audio codec
  *  dropped from the profile when the engine names it, else one step down: DirectPlay to a remux, a remux to
@@ -122,29 +120,15 @@ export class CopyFallbackController {
     return true;
   }
 
-  /** The load path that reported the failure still holds its reload guard, so
-   *  wait for it before reloading. Always cards on failure: the copy is gone. */
+  /** The load path that reported the failure is still running: the reload waits for it in the loader's slot.
+   *  Always cards on failure: the copy is gone. */
   private async runRemuxFallback(position: number, why: ReloadWhy): Promise<void> {
     try {
-      if (!(await this.waitForReloadIdle())) {
-        console.warn('[player] remux fallback dropped: another reload is still running');
-        this.host.fail(new Error('remux fallback dropped: another reload is still running'));
-        return;
-      }
-      await this.host.reloadStream(position, why);
-      await this.remuxFallbackOnRecovered?.();
+      const outcome = await this.host.reloadStream(position, why);
+      if (outcome === 'failed') throw new Error('remux fallback reload failed');
+      if (outcome === 'done') await this.remuxFallbackOnRecovered?.();
     } catch (e) {
       this.host.fail(e);
     }
-  }
-
-  /** Resolves true once no reload or session recovery holds the engine, false
-   *  if one is still running after {@link RELOAD_IDLE_WAIT_MS}. */
-  async waitForReloadIdle(): Promise<boolean> {
-    const deadline = Date.now() + RELOAD_IDLE_WAIT_MS;
-    while (!this.host.isReloadIdle() && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    return this.host.isReloadIdle();
   }
 }

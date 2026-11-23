@@ -28,7 +28,7 @@ import { SessionSyncService } from '../../core/services/session-sync.service';
 import { backTarget } from './back-target';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
 import { LocalPlaybackOutput } from './local-playback-output';
-import { PlayerLoader, isLoadSuperseded, type LoadKind, type LoadOp } from './player-loader';
+import { PlayerLoader, isLoadSuperseded, type LoadOp, type LoadOutcome, type ReloadRequest } from './player-loader';
 import type { CastStart, PlaybackOutput, PlaybackSnapshot, VideoHandoff } from '../../core/services/playback/playback-output';
 import { PickerRow } from '../../shared/remote-picker/remote-picker-list';
 import { AuthService } from '../../core/services/auth.service';
@@ -73,7 +73,7 @@ import { NativeEngine } from '../../core/services/playback-engine/native-engine'
 import { DesktopEngine } from '../../core/services/playback-engine/desktop-engine';
 import { directPlayMime } from '../../core/services/device-capabilities/direct-play-mime';
 import { isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-avplay';
-import { NativePlayer, type NativeSidecarSubtitle } from '../../core/plugins/native-player.plugin';
+import type { NativeSidecarSubtitle } from '../../core/plugins/native-player.plugin';
 import { PlayerScreen } from './player-screen';
 import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
 import { PlayerStateService } from '../../core/services/player-state.service';
@@ -501,7 +501,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     hasMedia: () => !!this.mediaFileId,
     isPaused: () => this.paused(),
     isLoading: () => this.state.loading(),
-    reloadInFlight: () => this.reloadingStream || this.reloadLoadPending,
+    reloadInFlight: () => this.loader.busy(),
     lastSeekOrReloadAt: () => Math.max(this.lastSeekAt, this.lastReloadAt),
     resumePosition: () => {
       // engine.currentTime can read 0 right after an error (e.g. Tizen AVPlay): use the mirrored position.
@@ -519,8 +519,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         { source: e.source, code: e.code, message: e.message, audioCodec: e.audioCodec },
         this.engine?.currentTime || this.state.currentTime() || 0,
       ),
-    abandonReload: () => this.state.abandonReloads(),
-    reloadSession: (pos) => this.refreshSidAndReload(pos, { preservePause: true, unmute: false }),
+    abandonReload: () => this.loader.supersede(),
+    reloadSession: (pos) => this.recoverStream(pos),
     warmSession: async () => {
       await this.authService.ensureStreamToken(this.mediaFileId);
       await this.prewarmCurrentStream();
@@ -547,7 +547,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     engineDuration: () => this.engine?.duration,
     duration: () => this.duration(),
     isOfflinePlayback: () => this.isOfflinePlayback,
-    reloadingStream: () => this.reloadingStream,
     clearEdlEnded: () => { this.edlEnded = false; },
     setBackdropUrl: (url) => this.showBackdrop(url),
     reloadForEpisode: (fileId, mediaId, episodeId) => this.reloadForEpisode(fileId, mediaId, episodeId),
@@ -706,7 +705,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     playbackMode: () => this.playbackMode(),
     readsSubtitlesAtLoad: () => this.isNative && !this.isDesktopNative,
     reloadStream: (at, why) => this.reloadStream(at, why),
-    doReloadStream: (position) => this.doReloadStream(position),
   }), null);
   protected readonly remote = inject(RemoteController);
   private readonly _remoteAttach = (this.remote.attach({
@@ -873,9 +871,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   hasServerFeature(feature: string): boolean {
     return this.authService.hasServerFeature(feature);
   }
-  isReloadIdle(): boolean {
-    return !this.reloadingStream && !this.loader.busy() && !this.recovery.active;
-  }
   fail(e: unknown): void {
     this.recovery.fail({ thrown: e });
   }
@@ -924,15 +919,22 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   protected readonly loader = new PlayerLoader({
     stopSession: (sid) => void this.streamingApi.stopSession(sid).catch(() => {}),
     canReplace: () => this.authService.hasServerFeature('sessionReplaces'),
-    discardEngine: (engine, releaseSurface) => {
-      if (releaseSurface) {
-        releaseEngineSurface();
-        const video = this.videoEl()?.nativeElement;
-        if (video) video.style.display = '';
-      }
-      void engine.destroy().catch(() => {});
+    discardEngine: (engine, releaseSurface) => this.discardEngine(engine, releaseSurface),
+    ended: (kind) => {
+      if (kind === 'launch') return;
+      this.qoeGraceUntil = Date.now() + 3_000;
+      if (kind === 'reload') this.lastReloadAt = Date.now();
     },
   });
+
+  private discardEngine(engine: PlaybackEngine, releaseSurface: boolean): void {
+    if (releaseSurface) {
+      releaseEngineSurface();
+      const video = this.videoEl()?.nativeElement;
+      if (video) video.style.display = '';
+    }
+    void engine.destroy().catch(() => {});
+  }
 
   /** Last URL handed to the engine's load(), surfaced (token-redacted) in the
    *  error diagnostics so a failed open shows which endpoint/format was tried. */
@@ -1227,17 +1229,10 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Opens the local engine on the route's item, at `resumeTime` when given; false when the launch did not run to its end. */
-  private async startLocal(resumeTime: number | undefined, kind: LoadKind): Promise<boolean> {
+  private async startLocal(resumeTime: number | undefined, kind: 'launch' | 'resume'): Promise<boolean> {
     // The chunk downloads during the start requests; createShakaEngine awaits the same import.
     if (!this.isTizen && !this.isWebOs && !this.isDesktopNative && !this.isNative) preloadShakaEngine();
-    let settle!: () => void;
-    this.firstLoadSettled = new Promise<void>((resolve) => (settle = resolve));
-    try {
-      return (await this.loader.run(kind, (op) => this.launch(op, resumeTime))) ?? false;
-    } finally {
-      settle();
-      this.drainPendingReload();
-    }
+    return (await this.loader.run(kind, (op) => this.launch(op, resumeTime))) ?? false;
   }
 
   /** The launch body: every await is `op.wait`, so a leave or a newer launch stops it where it stands. */
@@ -1390,12 +1385,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         }
       }
 
+      op.check();
       this.qualityManager.applyQualityPreferenceAfterLoad(this.engine, this.playbackMode());
       this.firstLoadSetupDone = true;
       await this.completePostLoadSetup();
 
     } catch (e: any) {
-      if (op.stale()) return false;
+      if (op.stale()) {
+        this.discardUnfinishedEngine();
+        return false;
+      }
       console.error('[Player] Init error:', e?.code, e?.category, e?.data, e);
       const recovered = () => {
         if (this.firstLoadSetupDone) return;
@@ -1427,6 +1426,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       if (!op.stale()) this.state.loading.set(false);
     }
     return true;
+  }
+
+  /** A launch that ended before its first load settled leaves no engine behind: a take-back reopens through `startLocal`. */
+  private discardUnfinishedEngine(): void {
+    const engine = this.engine;
+    if (!engine || this.postLoadDone) return;
+    this.engine = null;
+    this.isTizenEngine.set(false);
+    this.isNativeEngine.set(false);
+    this.discardEngine(engine, !this.loader.busy());
   }
 
   private registerListeners(): void {
@@ -1580,17 +1589,14 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (!this.preRollActive() || this.preRollAdvancing) return;
     this.preRollAdvancing = true;
     try {
-      // `reloadForEpisode` refuses while another reload is in flight. Consuming the item first
-      // would strand the run on a finished one, with nothing left to re-trigger this.
-      await this.copyFallback.waitForReloadIdle();
       const next = this.preRollRest.shift();
       if (next) this.preRollCurrent.set(next);
       const fileId = next ? next.mediaFileId : this.preRollMainFileId;
       this.state.ended.set(false);
       this.state.error.set(null);
       await this.reloadForEpisode(fileId, this.mediaId, this.episodeId, { noResumeLookup: true });
-      // Any refusal above is silent, so the loaded file is the only proof it happened.
-      if (this.mediaFileId !== fileId) this.remountWithoutPreRoll();
+      // With no engine to switch on, the item never lands: a fresh mount plays the main film.
+      if (!this.destroyed && !this.engine && this.mediaFileId !== fileId && this.session.isLocal()) this.remountWithoutPreRoll();
     } finally {
       // Guards lift only once the main item is the loaded file — a chained
       // failure re-enters this before landing there.
@@ -1995,11 +2001,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // `state.currentTime.set(t)` pins it at the target until `awaitSeekUnlock` releases.
       this.state.seekLocked.set(true);
       this.state.currentTime.set(t);
-      // A seek to 0 is the user's, not an unsettled load.
-      this.pendingStartTime = 0;
       this.lastSeekAt = Date.now();
-      if (this.desktopFarSeekNeedsReload(t)) void this.seekByReload(t);
-      else void this.awaitSeekUnlock(t);
+      if (this.loader.seek(t)) {
+        // A load in flight starts there: the lock lifts once it has landed (see `landAimedSeek`).
+        this.pendingStartTime = t;
+      } else {
+        // A seek to 0 is the user's, not an unsettled load.
+        this.pendingStartTime = 0;
+        if (this.desktopFarSeekNeedsReload(t)) void this.seekByReload(t);
+        else void this.awaitSeekUnlock(t);
+      }
     }
     // Every engine funnels through here, unlike the DOM `seeked` event (<video> only), so desktop/native seeks
     // reach a controller before the next heartbeat.
@@ -2070,39 +2081,41 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   }
 
   /** Far-seek path: reload the stream anchored at `target` instead of seeking in place, then release the
-   *  seekbar lock once the playhead converges. Serialised against other reloads via {@link reloadingStream}. */
+   *  seekbar lock once the playhead converges. */
   private async seekByReload(target: number): Promise<void> {
     const gen = ++this.seekGeneration;
-    if (this.reloadingStream) {
-      void this.awaitSeekUnlock(target);
+    this.state.loading.set(true);
+    let reloaded = false;
+    const outcome = await this.loader.reload({ at: target }, async (op) => {
+      this.engine?.resetRecoveryGuard();
+      try {
+        reloaded = await this.refreshSidAndReload(op, target, { preservePause: true, unmute: false });
+      } catch (e) {
+        if (!isLoadSuperseded(e)) this.recoverOnceEnded(op);
+        throw e;
+      }
+    });
+    this.state.loading.set(false);
+    // The fallback reload anchors at `target` itself, and a failed one is the recovery's.
+    if (outcome !== 'done' || !reloaded) {
+      this.state.seekLocked.set(false);
       return;
     }
-    this.reloadingStream = true;
-    this.state.loading.set(true);
-    this.engine?.resetRecoveryGuard();
-    try {
-      const reloaded = await this.refreshSidAndReload(target, {
-        preservePause: true,
-        unmute: false,
-      });
-      // The fallback reload anchors at `target` itself; polling here would hold
-      // the reload guard it waits on.
-      if (!reloaded) {
-        this.state.loading.set(false);
-        this.state.seekLocked.set(false);
-        return;
-      }
-      this.recovery.resetStallWatchdog();
-      this.state.loading.set(false);
-      await this.pollSeekConverge(target, gen);
-    } catch (e) {
-      console.error('[Player] far-seek reload failed:', e);
-      this.state.loading.set(false);
-    } finally {
-      this.reloadingStream = false;
-      this.qoeGraceUntil = Date.now() + 3_000;
-      this.drainPendingReload();
-    }
+    this.recovery.resetStallWatchdog();
+    await this.pollSeekConverge(target, gen);
+  }
+
+  /** The seek a viewer made while a load ran lands once it has: the engine seeks if the load started far from it. */
+  private landAimedSeek(op: LoadOp, startedAt: number): void {
+    const target = op.aimed();
+    if (target === undefined) return;
+    if (Math.abs(target - startedAt) > 2) void this.awaitSeekUnlock(target);
+    else void this.pollSeekConverge(target, ++this.seekGeneration);
+  }
+
+  /** A load that failed on its own: the recovery takes over once the op has ended and no longer counts as busy. */
+  private recoverOnceEnded(op: LoadOp): void {
+    op.after(() => this.recovery.recoverFromLostSession('other'));
   }
 
   // ── Skip-intro UX ──
@@ -2208,24 +2221,33 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     );
   }
 
-  /** Switch to another episode of the open series without tearing the player down: swap the source like {@link
-   *  doReloadStream} and refresh episode-scoped state. Serialised via {@link reloadingStream}. */
+  /** Switch to another file of the open series without tearing the player down: swap the source like a reload and
+   *  refresh episode-scoped state. Outdates any load in flight; false when it did not run to its end. */
   private async reloadForEpisode(
     mediaFileId: number,
     mediaId: number,
     episodeId: number | undefined,
     opts: { noResumeLookup?: boolean } = {},
-  ): Promise<void> {
-    if (!this.engine || this.reloadingStream || mediaFileId === this.mediaFileId) return;
-    // The outgoing item's last beat is up to 10 s old and `switchingItem` closes the saves: bank it first.
+  ): Promise<boolean> {
+    if (!this.engine || mediaFileId === this.mediaFileId) return false;
+    // The outgoing item's last beat is up to 10 s old and a switch closes the saves: bank it first.
     this.lastForcedSaveAt = 0;
     void this.savePosition(true);
-    this.reloadingStream = true;
-    this.reloadLoadPending = true;
-    this.switchingItem = true;
-    this.engine.resetRecoveryGuard();
+    const switched = await this.loader.run('switch', (op) => this.switchItem(op, mediaFileId, mediaId, episodeId, opts), true);
+    return switched !== undefined;
+  }
+
+  private async switchItem(
+    op: LoadOp,
+    mediaFileId: number,
+    mediaId: number,
+    episodeId: number | undefined,
+    opts: { noResumeLookup?: boolean },
+  ): Promise<boolean> {
+    const engine = this.engine!;
+    engine.resetRecoveryGuard();
     const previousSessionId = this.loader.sessionId();
-    this.qoe.setStalled(false, { sessionId: previousSessionId, position: this.engine.currentTime });
+    this.qoe.setStalled(false, { sessionId: previousSessionId, position: engine.currentTime });
     this.qoe.onTeardown(previousSessionId);
     this.qoe.flushKeepalive(previousSessionId);
     let startTime: number | undefined;
@@ -2236,16 +2258,13 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       this.qoe.reset();
       this.recovery.clearEpisode();
       this.edlEnded = false;
-      // Drop the outgoing episode's info so an early failure doesn't report its stale playMethod/hwAccel.
+      // The outgoing session is carried, not stopped: the next negotiation replaces it, so other devices on the
+      // file stay alive and the account's session moves to the new item.
       this.loader.forget();
       this.resetTrackState();
 
-      // Native engines must be stopped before a fresh load to avoid a freeze;
-      // release the outgoing file's session (other devices on it stay alive).
-      if (this.isNativeEngine()) await NativePlayer.stop().catch(() => {});
-      if (previousSessionId) {
-        await this.streamingApi.stopSession(previousSessionId).catch(() => {});
-      }
+      // A fresh load needs the outgoing stream stopped: native surfaces freeze otherwise, AVPlay and mpv play on.
+      if (this.isNativeEngine()) await op.wait(engine.unload().catch(() => {}));
 
       this.mediaFileId = mediaFileId;
       this.episodeId = episodeId;
@@ -2253,7 +2272,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
       // (a queue can cross media). Refresh the title/logo when it does.
       if (mediaId && mediaId !== this.mediaId) {
         this.mediaId = mediaId;
-        this.media = await this.mediaService.getOne(mediaId, { silent: true });
+        this.media = await op.wait(this.mediaService.getOne(mediaId, { silent: true }));
       }
       // Recompute next-item context + refresh the episode label / backdrop.
       this.mediaLoadedTick.update((v) => v + 1);
@@ -2266,32 +2285,31 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
       // The new file opens on its own audio pick; the backend marks it DEFAULT.
       this.resolveAudioTarget();
-      await this.planSubtitleDelivery();
+      await op.wait(this.planSubtitleDelivery());
 
       // The new file's token goes into its own playback-info call.
-      await this.requireStreamToken();
-      await this.negotiateAndLoad({
+      await op.wait(this.requireStreamToken());
+      await this.negotiateAndLoad(op, {
         start: (pi) => {
           // Skipped for a pre-roll transition: the ids stay on the main film, so it would seek a trailer.
           if (!opts.noResumeLookup) startTime = pi.startAtSeconds || undefined;
           this.pendingStartTime = startTime ?? 0;
-          startTime = this.edlStartTime(startTime);
+          startTime = op.start(this.edlStartTime(startTime));
+          this.pendingStartTime = startTime ?? 0;
           return { url: startTime, load: startTime };
         },
         onLoaded: () => this.edl.settle(),
       });
-      await this.completeEpisodeSwitchSetup();
+      op.after(() => this.completeEpisodeSwitchSetup());
     } catch (e: any) {
-      if (this.fallBackFromRemuxOnLoadError(e, startTime ?? 0, () => this.completeEpisodeSwitchSetup())) return;
-      this.recovery.fail({ thrown: e });
+      if (isLoadSuperseded(e)) throw e;
+      if (!this.fallBackFromRemuxOnLoadError(e, startTime ?? 0, () => this.completeEpisodeSwitchSetup())) {
+        this.recovery.fail({ thrown: e });
+      }
     } finally {
-      this.switchingItem = false;
-      this.reloadingStream = false;
-      this.qoeGraceUntil = Date.now() + 3_000;
-      this.reloadLoadPending = false;
-      this.state.loading.set(false);
-      this.drainPendingReload();
+      if (!op.stale()) this.state.loading.set(false);
     }
+    return true;
   }
 
   onVolumeChange(vol: number) {
@@ -2449,8 +2467,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     const at = since ?? Date.now();
     const ignored =
       this.state.seekLocked() ||
-      this.reloadingStream ||
-      this.reloadLoadPending ||
+      this.loader.busy() ||
       this.recovery.active ||
       at < this.qoeGraceUntil ||
       at - Math.max(this.lastSeekAt, this.lastReloadAt) < 2_000;
@@ -2540,35 +2557,48 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     else await this.session.moveTo(row.kind === 'remote' ? 'remote' : 'cast', row.kind === 'cast-web' ? undefined : row.id);
   }
 
-  /** Settles when the first launch ends (loaded or failed), so a handoff never races the engine it would unload. */
-  private firstLoadSettled: Promise<void> = Promise.resolve();
   private trackSetup: Promise<void> = Promise.resolve();
 
-  /** Moving off this device: the engine falls silent and unloads, and what the target needs is handed over. */
+  /** Moving off this device: the load in flight ends, the engine falls silent and unloads, and what the target needs is handed over. */
   private async releaseForHandoff(): Promise<VideoHandoff | null> {
     const resolveSubtitle = !this.firstLoadSetupDone;
-    await this.firstLoadSettled;
-    await this.trackSetup.catch(() => {});
-    const engine = this.engine;
-    if (!engine || !this.mediaId) return null;
+    // No engine and no launch on its way: nothing plays here.
+    if (!this.mediaId || (!this.engine && !this.loader.busy())) return null;
     // The cast must start on the main item, never on a trailer.
     if (this.preRollActive()) {
       this.preRollRest = [];
-      await this.advancePreRoll();
+      if (this.engine) await this.advancePreRoll();
+      else this.preRollCurrent.set(null);
+      this.mediaFileId = this.preRollMainFileId;
     }
+    const localSessionId = this.loader.handOff();
+    await this.trackSetup.catch(() => {});
+    const engine = this.engine;
+    const snapshot = this.snapshot() ?? this.targetSnapshot();
     // The picture leaves: the phone turns freely.
     this.screen.releaseForCast();
-    const snapshot = this.snapshot()!;
-    await this.pausePlayback();
-    engine.muted = true;
-    await engine.unload();
+    if (engine) {
+      await this.pausePlayback();
+      engine.muted = true;
+      await engine.unload();
+    }
     return {
       kind: 'video',
       snapshot,
       cast: this.castStart(),
       resolveSubtitle,
       audioLanguage: this.targetAudioLanguage(),
-      localSessionId: this.loader.sessionId(),
+      localSessionId,
+    };
+  }
+
+  /** The item and position a launch still in flight is headed to, for a handoff that came before the engine did. */
+  private targetSnapshot(): PlaybackSnapshot {
+    return {
+      item: { fileId: this.mediaFileId, mediaId: this.mediaId, episodeId: this.episodeId },
+      position: this.pendingStartTime,
+      paused: false,
+      tracks: { fileId: this.mediaFileId, audioStreamIndex: this.activeAudioStreamIndex, subtitleId: this.subs.activeSubtitleId() },
     };
   }
 
@@ -2585,6 +2615,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Another output already plays: this engine pauses and mutes, whichever kind it is. */
   private stepAside(): void {
+    this.loader.supersede();
     this.screen.releaseForCast();
     void this.pausePlayback();
     if (this.engine) this.engine.muted = true;
@@ -2818,15 +2849,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** Mint a fresh LiveSession via `playback-info` and reload the engine at
    *  `pos` with the new sid. False when the remux fallback took the reload over. */
   private async refreshSidAndReload(
+    op: LoadOp,
     pos: number,
-    opts: { preservePause: boolean; unmute: boolean; paused?: boolean },
+    opts: { preservePause: boolean; unmute: boolean; paused?: boolean; restart?: boolean },
   ): Promise<boolean> {
     if (!this.engine || !this.mediaFileId) return true;
     try {
-      await this.reloadAt(pos, { ...opts, restart: false });
+      await this.reloadAt(op, pos, { ...opts, restart: opts.restart ?? false });
       return true;
     } catch (e) {
-      if (!this.fallBackFromRemuxOnLoadError(e, pos)) throw e;
+      if (isLoadSuperseded(e) || !this.fallBackFromRemuxOnLoadError(e, pos)) throw e;
       return false;
     }
   }
@@ -2839,7 +2871,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Native engines autoplay on load(), so a paused user must be actively re-paused after a reload. */
   private restorePlayState(wasPaused: boolean): void {
-    if (!this.engine) return;
+    if (!this.engine || !this.session.isLocal()) return;
     if (wasPaused) void this.pausePlayback();
     else this.playPlayback();
   }
@@ -2852,7 +2884,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
    *  intervals, seeked listener, sprites), whether the load or its copy fallback succeeded. */
   private async completePostLoadSetup(): Promise<void> {
     // A fallback can settle after ngOnDestroy; its intervals would never be cleared.
-    if (this.destroyed || !this.engine) return;
+    if (this.destroyed || !this.engine || !this.session.isLocal()) return;
     this.postLoadDone = true;
     // Tracks and subtitles load beside playback: a slow subtitle list must not delay the first frame.
     const trackSetupPromise = this.trackSetup = (async () => {
@@ -2926,6 +2958,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   /** Post-load steps for an episode switch, run after its own load or its copy fallback. */
   private async completeEpisodeSwitchSetup(): Promise<void> {
+    if (!this.session.isLocal()) return;
+    if (!this.isNativeEngine() && !this.loadedPaused) this.engine?.play().catch(() => this.autoplayBlocked.set(true));
     this.subs.availableSubtitles.set(await this.itemSubtitles());
     this.loadAudioTracks();
     await this.autoSelectSubtitle();
@@ -2934,7 +2968,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.spriteAbort?.abort();
     void this.loadSpriteMetadata();
 
-    if (!this.isNativeEngine() && !this.loadedPaused) this.engine?.play().catch(() => this.autoplayBlocked.set(true));
     // Reveal the controls across the switch so the new title/episode shows;
     // the auto-hide countdown retracts them on the usual delay.
     this.chrome.show();
@@ -2975,13 +3008,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.sdrFallbackFileIds.add(id);
     this.state.setRecovering(true);
     try {
-      if (!(await this.copyFallback.waitForReloadIdle())) {
-        this.state.setError(this.translate.instant('player.error_airplay_unsupported'), {
-          message: 'AirPlay SDR fallback dropped: another reload is still running',
-        });
-        return;
-      }
-      this.state.setRecovering(true);
       await this.reloadStream(this.engine.currentTime, { reason: 'sdr_fallback' });
     } catch (e) {
       if (!this.state.error()) this.state.failWith(e);
@@ -3093,7 +3119,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     this.screen.applyLandscapeOnOpen();
     const adopted = this.itemAdopted;
     this.itemAdopted = false;
-    const reload = !!this.engine;
+    // A launch that ended before its first load settled left no engine: that one reopens through `startLocal`.
+    const reload = !!this.engine && this.postLoadDone;
     try {
       if (!reload) this.state.loading.set(true);
       if (await this.openLocal(s, reload ? 'reload' : 'resume') && reload && adopted) {
@@ -3108,7 +3135,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** The one way this device's engine opens: the first launch and every hand-back apply position, pause and picks here. */
   private async openLocal(
     { position, paused, tracks }: { position: number | undefined; paused: boolean; tracks: LaunchTracks | null },
-    how: LoadKind | 'reload',
+    how: 'launch' | 'resume' | 'reload',
   ): Promise<boolean> {
     this.resumePaused = paused;
     try {
@@ -3117,7 +3144,12 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
         return await this.startLocal(position, how);
       }
       this.adoptTracks(tracks);
-      return await this.refreshSidAndReload(position ?? 0, { preservePause: false, unmute: true, paused });
+      const reloaded = await this.loader.run(
+        'resume',
+        (op) => this.refreshSidAndReload(op, position ?? 0, { preservePause: false, unmute: true, paused }),
+        true,
+      );
+      return reloaded ?? false;
     } finally {
       this.resumePaused = false;
     }
@@ -3668,133 +3700,98 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
 
   // ── Private helpers ──
 
-  /** Guards against overlapping reloads: a user switch racing a recovery (or another switch) must not run two
-   *  getPlaybackInfo + load cycles at once, which races the engine and leaks a session. */
-  private reloadingStream = false;
-  /** True until a reload's `engine.load()` resolves: the window where an engine error is
-   *  the expected teardown, unlike one raised during the post-load awaits. */
-  private reloadLoadPending = false;
-  /** Set once doReloadStream reaches a successful engine.load(), so the reloadStream catch can tell a dead
-   *  surface (failure before load) from a live one. */
-  private reloadReachedPlayback = false;
+  /** Reload the stream (burn-in toggle, audio switch, quality). User-initiated, so re-arm the native recovery guard;
+   *  one asked while a load runs waits in the loader's slot, with `at` overriding the resume anchor. */
+  async reloadStream(at?: number, why: ReloadWhy = { reason: 'other' }): Promise<LoadOutcome> {
+    if (!this.engine) return 'superseded';
+    return this.loader.reload({ at, why }, (op, req) => this.userReload(op, req));
+  }
 
-  /** Reload the stream (burn-in toggle, audio switch). User-initiated, so re-arm the native recovery guard and
-   *  serialise against other reloads/recoveries; `at` overrides the resume anchor. */
-  async reloadStream(at?: number, why: ReloadWhy = { reason: 'other' }) {
-    if (!this.engine) return;
-    if (this.reloadingStream || this.loader.busy()) {
-      // A pick made mid-reload or mid-launch is already persisted; replay it once that run settles.
-      if (at === undefined) this.pendingReload = why;
-      return;
-    }
-    this.reloadingStream = true;
-    this.reloadReachedPlayback = false;
-    this.engine.resetRecoveryGuard();
+  private async userReload(op: LoadOp, req: ReloadRequest): Promise<void> {
+    const engine = this.engine;
+    if (!engine) return;
+    engine.resetRecoveryGuard();
     // A locked seekbar holds a target the engine hasn't reached: anchor there,
     // or a mid-seek switch restarts where the user just left.
-    const anchor = at ?? (this.state.seekLocked() ? this.currentTime() : this.engine.currentTime);
-    this.qoe.onReload(this.activeSessionId(), anchor, why);
+    const anchor = req.at ?? (this.state.seekLocked() ? this.currentTime() : engine.currentTime);
+    this.qoe.onReload(this.activeSessionId(), anchor, req.why ?? { reason: 'other' });
     try {
-      await this.doReloadStream(anchor);
+      await this.refreshSidAndReload(op, anchor, { preservePause: true, unmute: false, restart: true });
     } catch (e) {
-      if (this.fallBackFromRemuxOnLoadError(e, anchor)) return;
-      // Capacitor drops its surface before re-negotiating and desktop mpv's failure never surfaces: both need a
-      // card. Tizen/Shaka/webOS self-heal via 410 -> sessionExpired; a throw after load() means video plays.
-      console.error('[Player] reloadStream failed:', e);
-      if (
-        this.isNativeEngine() &&
-        !this.isTizenEngine() &&
-        !this.reloadReachedPlayback &&
-        !this.destroyed
-      ) {
-        this.recovery.fail({ thrown: e });
-      }
+      if (!isLoadSuperseded(e)) this.recoverOnceEnded(op);
       throw e;
-    } finally {
-      this.reloadingStream = false;
-      this.lastReloadAt = Date.now();
-      this.qoeGraceUntil = Date.now() + 3_000;
-      this.drainPendingReload();
     }
   }
 
-  private pendingReload: ReloadWhy | null = null;
-  private drainPendingReload(): void {
-    const why = this.pendingReload;
-    this.pendingReload = null;
-    if (why && !this.destroyed) this.reloadStream(undefined, why).catch(() => {});
-  }
-
-  private async doReloadStream(currentPos: number) {
-    if (!this.engine) return;
-    await this.reloadAt(currentPos, { preservePause: true, unmute: false, restart: true });
+  /** A recovery's reload: yields to the load that already runs, since that one owns the session. */
+  private async recoverStream(pos: number): Promise<'done' | 'superseded'> {
+    if (!this.engine || !this.mediaFileId) return 'done';
+    const out = await this.loader.recover((op) =>
+      this.refreshSidAndReload(op, pos, { preservePause: true, unmute: false }),
+    );
+    return out === undefined ? 'superseded' : 'done';
   }
 
   /** Negotiate the stream of the current file, adopt it and load it: the part a reload and an episode switch share.
    *  `start` runs once the info is adopted and gives the position the URL and the engine start from. */
-  private async negotiateAndLoad(o: {
-    negotiateAt?: number;
-    replace?: { replaces?: string };
-    timeoutMs?: number;
-    start: (pi: PlaybackInfoResponse) => { url?: number; load?: number };
-    onLoaded: () => void;
-  }): Promise<void> {
+  private async negotiateAndLoad(
+    op: LoadOp,
+    o: {
+      negotiateAt?: number;
+      timeoutMs?: number;
+      start: (pi: PlaybackInfoResponse) => { url?: number; load?: number };
+      onLoaded?: () => void;
+    },
+  ): Promise<void> {
     const engine = this.engine!;
-    const pi = await this.negotiatePlayback(o.negotiateAt, {}, { ...o.replace, timeoutMs: o.timeoutMs });
-    this.loader.adopt(pi, o.replace?.replaces);
+    const pi = await op.negotiate((replaces) =>
+      this.negotiatePlayback(o.negotiateAt, {}, { replaces, timeoutMs: o.timeoutMs }),
+    );
     this.adoptPlaybackInfo(pi);
     // Refresh a near-expiry stream token first: it's baked into every segment URL and can't be swapped after
     // load.
-    await this.requireStreamToken();
+    await op.wait(this.requireStreamToken());
     const start = o.start(pi);
     const { url, mimeType } = this.buildPlayUrl({ startTime: start.url });
-    await this.prepareLoad();
-    if (this.destroyed) throw new Error('player destroyed');
-    await engine.load(url, start.load, mimeType);
-    this.reloadLoadPending = false;
-    o.onLoaded();
+    await op.wait(this.prepareLoad());
+    await op.load(engine, url, start.load, mimeType);
+    op.loaded();
+    o.onLoaded?.();
     this.qualityManager.applyQualityPreferenceAfterLoad(engine, this.playbackMode());
     this.restorePlaybackRate();
+    this.landAimedSeek(op, start.load ?? start.url ?? 0);
   }
 
-  /** The reload sequence around {@link negotiateAndLoad}. The URL always carries `startAt` and the load window is tracked;
-   *  `restart` (user switch) also stops the native surface first, else the session is refreshed behind a live one. Throws on failure, after releasing the unreplaced session. */
+  /** The reload sequence around {@link negotiateAndLoad}. The URL always carries `startAt`;
+   *  `restart` (user switch) also pauses the old stream first, else the session is refreshed behind a live one. */
   private async reloadAt(
+    op: LoadOp,
     pos: number,
     opts: { preservePause: boolean; unmute: boolean; restart: boolean; paused?: boolean },
   ): Promise<void> {
     const engine = this.engine!;
     const at = this.reloadStartAt(pos) ?? 0;
     const endReload = this.state.beginReload();
-    this.reloadLoadPending = true;
-    let replace: { replaces?: string } = {};
     try {
       // Capture the viewer's play/pause intent before the teardown: a switch must not resume a paused player.
       const wasPaused = opts.paused ?? (opts.preservePause ? this.pauseIntent() : false);
-      if (opts.restart && this.isNativeEngine()) await NativePlayer.stop().catch(() => {});
       // The new stream restarts at `at`: the old one must not play on through the renegotiation.
-      else if (opts.restart) await engine.pause().catch(() => {});
-      // Only this device's session goes; multi-device viewers on the same file stay alive.
-      replace = await this.streamingApi.retireSession(this.loader.sessionId());
+      if (opts.restart) await op.wait(engine.pause().catch(() => {}));
       if (opts.unmute) engine.muted = false;
-      await this.negotiateAndLoad({
+      await this.negotiateAndLoad(op, {
         negotiateAt: at,
-        replace,
         // A request sent on a keep-alive socket a NAT dropped never answers; the abort frees it for the retry.
         timeoutMs: RELOAD_NEGOTIATE_TIMEOUT_MS,
         start: () => {
           engine.keepFrame = opts.restart;
-          return { url: at, load: opts.restart || at > 0 ? at : undefined };
+          const from = op.start(at) ?? 0;
+          return { url: from, load: opts.restart || from > 0 ? from : undefined };
         },
-        onLoaded: () => (this.reloadReachedPlayback = true),
       });
+      op.check();
       this.restorePlayState(wasPaused);
-      await this.subs.restoreSubtitle(at);
-    } catch (e) {
-      this.streamingApi.stopUnreplaced(replace);
-      throw e;
+      op.after(() => this.subs.restoreSubtitle(at));
     } finally {
-      this.reloadLoadPending = false;
       endReload();
     }
   }
@@ -3802,7 +3799,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** The 10 s cadence loses up to 10 s of resume point when the window closes; HttpClient requests die with the page. */
   private keepalivePositionSave(): void {
     const pos = this.state.seekLocked() ? this.state.currentTime() : (this.engine?.currentTime ?? 0);
-    if (!this.mediaId || !this.mediaFileId || this.preRollActive() || !this.session.isLocal() || this.switchingItem) return;
+    if (!this.mediaId || !this.mediaFileId || this.preRollActive() || !this.session.isLocal() || this.loader.kind() === 'switch') return;
     if (!Number.isFinite(pos) || pos <= 0) return;
     const { url, init } = this.streamingApi.positionRequest(this.mediaId);
     const body = JSON.stringify({
@@ -3826,9 +3823,6 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   private getActiveVariant(): VariantTrack | null {
     return this.engine?.getVariantTracks?.().find((t) => t.active) ?? null;
   }
-
-  /** An episode switch is between the old stream and the new one: no save may pair either with the other's ids. */
-  private switchingItem = false;
 
   /** Where the load in flight is seeking to; see {@link savePosition}. */
   private pendingStartTime = 0;
@@ -3876,7 +3870,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // escaped write here would stamp the film's row with the trailer's position.
     const out = this.currentOutput();
     // Another device's output beats for itself.
-    if (!out.reportsHere() || this.switchingItem) return;
+    if (!out.reportsHere() || this.loader.kind() === 'switch') return;
     // An errored player has nothing to report: its beats would only keep a dead session alive.
     if (this.state.error()) return;
     if (!this.mediaId || this.preRollActive()) {

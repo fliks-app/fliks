@@ -21,8 +21,7 @@ function createHost(overrides: Partial<CopyFallbackHost> = {}): CopyFallbackHost
     currentSid: () => 'sid-1',
     currentMediaFileId: () => 1,
     hasServerFeature: () => true,
-    isReloadIdle: () => true,
-    reloadStream: vi.fn(async () => {}),
+    reloadStream: vi.fn(async (): Promise<'done' | 'superseded' | 'failed'> => 'done'),
     fail: vi.fn(),
     ...overrides,
   };
@@ -100,7 +99,7 @@ describe('CopyFallbackController: one-shot-per-sid reload', () => {
   });
 
   it('absorbs a second report of the same sid while the reload is in flight, keeping either onRecovered', async () => {
-    const reload = deferred<void>();
+    const reload = deferred<'done' | 'superseded' | 'failed'>();
     const host = createHost({ reloadStream: vi.fn(() => reload.promise) });
     const controller = createController(host);
     const onRecovered = vi.fn();
@@ -111,7 +110,7 @@ describe('CopyFallbackController: one-shot-per-sid reload', () => {
     // the post-load setup its own catch skipped.
     expect(controller.maybeFallback(UNDECODABLE, 12, onRecovered)).toBe(true);
 
-    reload.resolve();
+    reload.resolve('done');
     await flush();
 
     expect(host.reloadStream).toHaveBeenCalledTimes(1);
@@ -145,39 +144,37 @@ describe('CopyFallbackController: one-shot-per-sid reload', () => {
   });
 });
 
-describe('CopyFallbackController: waitForReloadIdle', () => {
-  it('cards instead of leaving a dead player when another reload never idles', async () => {
-    const host = createHost({ isReloadIdle: () => false });
+describe('CopyFallbackController: reload outcome', () => {
+  it('asks for the reload at once, with no wait of its own', () => {
+    const reload = deferred<'done' | 'superseded' | 'failed'>();
+    const host = createHost({ reloadStream: vi.fn(() => reload.promise) });
     const controller = createController(host);
-
-    vi.useFakeTimers();
-    try {
-      expect(controller.maybeFallback(UNDECODABLE, 0)).toBe(true);
-      await vi.advanceTimersByTimeAsync(3_100);
-    } finally {
-      vi.useRealTimers();
-    }
-
-    expect(host.reloadStream).not.toHaveBeenCalled();
-    expect(host.fail).toHaveBeenCalledWith(expect.any(Error));
+    expect(controller.maybeFallback(UNDECODABLE, 7)).toBe(true);
+    expect(host.reloadStream).toHaveBeenCalledExactlyOnceWith(7, { reason: 'remux_fallback' });
   });
 
-  it('proceeds once the guard lifts before the deadline', async () => {
-    let idle = false;
-    const host = createHost({ isReloadIdle: () => idle });
-    const controller = createController(host);
-
-    vi.useFakeTimers();
-    try {
-      controller.maybeFallback(UNDECODABLE, 7);
-      await vi.advanceTimersByTimeAsync(500);
-      idle = true;
-      await vi.advanceTimersByTimeAsync(200);
-    } finally {
-      vi.useRealTimers();
+  it('runs onRecovered only when the reload is done', async () => {
+    for (const outcome of ['superseded', 'failed'] as const) {
+      const host = createHost({ reloadStream: vi.fn(async () => outcome) });
+      const onRecovered = vi.fn();
+      createController(host).maybeFallback(UNDECODABLE, 0, onRecovered);
+      await flush();
+      expect(onRecovered).not.toHaveBeenCalled();
     }
+  });
 
-    expect(host.reloadStream).toHaveBeenCalledExactlyOnceWith(7, { reason: 'remux_fallback' });
+  it('a superseded reload leaves the card to the load that took over', async () => {
+    const host = createHost({ reloadStream: vi.fn(async () => 'superseded' as const) });
+    createController(host).maybeFallback(UNDECODABLE, 0);
+    await flush();
+    expect(host.fail).not.toHaveBeenCalled();
+  });
+
+  it('cards when the reload fails', async () => {
+    const host = createHost({ reloadStream: vi.fn(async () => 'failed' as const) });
+    createController(host).maybeFallback(UNDECODABLE, 0);
+    await flush();
+    expect(host.fail).toHaveBeenCalledExactlyOnceWith(expect.any(Error));
   });
 });
 
