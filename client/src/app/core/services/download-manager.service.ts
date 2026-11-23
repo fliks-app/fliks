@@ -453,7 +453,7 @@ export class DownloadManagerService {
       undefined,
       /* download */ true,
     );
-    if (this.isNative) task.downloadToken = await this.auth.mintDownloadToken(mediaFileId);
+    if (this.isNative) task.downloadToken = (await this.auth.mintDownloadToken(mediaFileId)) ?? undefined;
     const hlsUrl = this.streamingApi.resolveDownloadUrl(mediaFileId, quality, playbackInfo, task.downloadToken?.token);
     task.hlsUrl = hlsUrl;
     task.sessionId = playbackInfo.sessionId;
@@ -509,10 +509,10 @@ export class DownloadManagerService {
       /* download */ true,
     );
     const downloadToken = await this.auth.mintDownloadToken(task.mediaFileId);
-    const hlsUrl = this.streamingApi.resolveDownloadUrl(task.mediaFileId, task.quality, info, downloadToken.token);
+    const hlsUrl = this.streamingApi.resolveDownloadUrl(task.mediaFileId, task.quality, info, downloadToken?.token);
     const staleSid = task.sessionId;
     await this.notif.removeDownload(String(task.id));
-    const next: DownloadTask = { ...task, hlsUrl, sessionId: info.sessionId, downloadToken, status: 'downloading', progress: 0 };
+    const next: DownloadTask = { ...task, hlsUrl, sessionId: info.sessionId, downloadToken: downloadToken ?? undefined, status: 'downloading', progress: 0 };
     this.persistTask(next);
     if (staleSid) this.streamingApi.stopSession(staleSid).catch(() => {});
     this.startNative(next, hlsUrl);
