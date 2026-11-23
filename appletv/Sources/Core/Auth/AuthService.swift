@@ -146,22 +146,23 @@ import os
         return try await fetchMe()
     }
 
-    /// Per-user display preference: libraries kept out of Home and the sidebar. The profile changes at once,
-    /// so every screen follows; the server's answer either confirms it or puts the previous list back.
+    /// Per-user library order and the libraries kept out of Home and the rail. The profile changes at once,
+    /// so every screen follows; the server's answer either confirms it or puts the previous values back.
     @MainActor
-    func setHiddenLibraries(_ ids: [Int]) {
+    func setLibraryPrefs(order: [Int], hidden: [Int]) {
         guard let user = currentUser else { return }
-        let previous = user.hiddenLibraryIds
+        let previous = (user.libraryOrder, user.hiddenLibraryIds)
         let epoch = sessionEpoch
-        patchCurrentUser { $0.hiddenLibraryIds = ids }
+        patchCurrentUser { $0.libraryOrder = order; $0.hiddenLibraryIds = hidden }
         Task { @MainActor in
-            struct Body: Encodable { let hiddenLibraryIds: [Int] }
+            struct Body: Encodable { let libraryOrder: [Int]; let hiddenLibraryIds: [Int] }
             do {
-                try await api.put("/api/users/\(user.id)", body: Body(hiddenLibraryIds: ids))
+                try await api.put("/api/users/\(user.id)", body: Body(libraryOrder: order, hiddenLibraryIds: hidden))
             } catch {
-                Log.library.error("saving the hidden libraries failed: \(String(describing: error), privacy: .public)")
-                guard sessionEpoch == epoch, currentUser?.hiddenLibraryIds == ids else { return }
-                patchCurrentUser { $0.hiddenLibraryIds = previous }
+                Log.library.error("saving the library prefs failed: \(String(describing: error), privacy: .public)")
+                guard sessionEpoch == epoch, currentUser?.libraryOrder == order,
+                      currentUser?.hiddenLibraryIds == hidden else { return }
+                patchCurrentUser { $0.libraryOrder = previous.0; $0.hiddenLibraryIds = previous.1 }
             }
         }
     }

@@ -127,7 +127,7 @@ struct HomeLayoutView: View {
     private func setLibraryVisible(_ id: Int, _ visible: Bool) {
         var hidden = hiddenLibraryIds
         if visible { hidden.remove(id) } else { hidden.insert(id) }
-        auth.setHiddenLibraries(hidden.sorted())
+        auth.setLibraryPrefs(order: libraries.map(\.id), hidden: hidden.sorted())
     }
 
     private func persist() {
@@ -182,7 +182,7 @@ private struct LibraryRow: View {
     }
 }
 
-private struct SettingsRow<Controls: View>: View {
+struct SettingsRow<Controls: View>: View {
     let label: String
     var icon: String? = nil
     var tint: Color = .white
@@ -207,7 +207,7 @@ private struct SettingsRow<Controls: View>: View {
     }
 }
 
-private struct VisibilityButton: View {
+struct VisibilityButton: View {
     let visible: Bool
     var action: () -> Void
 
@@ -219,7 +219,7 @@ private struct VisibilityButton: View {
 }
 
 /// Focusable pill that inverts on focus, so the remote always shows where it is.
-private struct ControlButton: View {
+struct ControlButton: View {
     var systemImage: String? = nil
     var label: String? = nil
     var disabled = false
@@ -229,7 +229,8 @@ private struct ControlButton: View {
     @FocusState private var focused: Bool
 
     private var foreground: Color {
-        if disabled { return .white.opacity(0.25) }
+        // A move can disable the button under focus: keep its glyph readable on the white pill.
+        if disabled { return focused ? .black.opacity(0.3) : .white.opacity(0.25) }
         return (focused || active) ? .black : .white
     }
 
