@@ -4350,6 +4350,7 @@
     "error_cast_select_failed": "Impossible de se connecter à ce Chromecast.",
     "error_command_failed": "Impossible de joindre cet appareil.",
     "error_no_response": "Cet appareil ne répond pas.",
+    "error_refused": "Cet appareil n'a pas pu le faire.",
     "idle_message": "Aucun média en cours de lecture",
     "connecting_message": "Connexion...",
     "offline_message": "Cet appareil n'est plus joignable.",
