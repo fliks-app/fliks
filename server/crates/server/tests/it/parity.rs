@@ -712,6 +712,20 @@ const ADDITIVE: &[&str] = &[
     "$[*].guideShiftMinutes",
     "$.channels[*].guideShiftMinutes",
     "$.entries[*].channel.guideShiftMinutes",
+    "$..unmapped",
+    "$..unmappedCount",
+    "$..lastError",
+    "$..lastErrorAt",
+    "$..lastSentAt",
+    "$..settledAt",
+    "$.watchers",
+    "$.requestId",
+    "$.requestedByMe",
+    "$.requesterCount",
+    "$.watching",
+    "$.dbGaps",
+    "$.dbLimited",
+    "$.dbSuperuser",
 ];
 
 /// Step-level `ignore`: paths dropped from that step's body only.
