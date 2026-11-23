@@ -714,7 +714,7 @@ INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/m');
         call(&c.app, "GET", "/api/counts", Some(&c.admin), Value::Null).await,
         (
             200,
-            json!({"badgeCounts": {}, "pendingRequests": 1, "mediaByLibrary": {"1": 2}, "attention": 1, "openProblems": 0})
+            json!({"badgeCounts": {}, "pendingRequests": 1, "mediaByLibrary": {"1": 2}, "attention": 1, "openProblems": 0, "systemAttention": 0})
         )
     );
     assert_eq!(
