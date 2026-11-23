@@ -695,3 +695,36 @@ async fn create_and_withdraw_loop_is_throttled(pool: PgPool) {
     }
     assert_eq!(last, 429);
 }
+
+#[sqlx::test(migrations = false)]
+async fn resolve_and_reopen_loop_is_throttled(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, row) = report(&c, &c.rep, 10, json!({"kind": "video"})).await;
+    let id = row["id"].as_i64().unwrap();
+    let mut last = 0;
+    for _ in 0..12 {
+        let (s, _) = call(
+            &c,
+            "POST",
+            &format!("/api/problems/{id}/resolve"),
+            &c.mgr,
+            Some(json!({})),
+        )
+        .await;
+        assert!(s < 300);
+        let (s, _) = call(
+            &c,
+            "POST",
+            &format!("/api/problems/{id}/reopen"),
+            &c.rep,
+            Some(json!({"note": "still broken"})),
+        )
+        .await;
+        last = s;
+        if s != 201 {
+            break;
+        }
+    }
+    assert_eq!(last, 429);
+    assert_eq!(status_of(&c, id).await, "resolved");
+}

@@ -22,7 +22,7 @@ pub type Res<T> = Result<T, AppError>;
 pub const KINDS: [&str; 5] = ["video", "audio", "subtitles", "playback", "other"];
 const STATUSES: [&str; 5] = ["active", "open", "acknowledged", "resolved", "closed"];
 const MAX_ACTIVE: i64 = 20;
-/// Creations per user and throttle window: a create+withdraw loop frees the active cap each time.
+/// Creates and reopens per user and throttle window: a create+withdraw loop frees the active cap each time.
 const MAX_CREATES: u32 = 10;
 const MAX_TEXT: usize = 2000;
 const REPORTER_REOPEN: Duration = Duration::days(14);
@@ -173,6 +173,20 @@ async fn one(st: &AppState, id: i32) -> Res<Value> {
         .ok_or_else(|| not_found(id))
 }
 
+/// Counts one `problem.created` announcement of the caller (a create or a reopen) against the window.
+fn announce_budget(st: &AppState, a: &Authed) -> Res<()> {
+    if st
+        .problem_throttle
+        .attempt_key(&a.user.id.to_string(), MAX_CREATES)
+    {
+        return Ok(());
+    }
+    Err(AppError::with_message(
+        StatusCode::TOO_MANY_REQUESTS,
+        "Too many problem reports, try again later",
+    ))
+}
+
 /// `POST /api/media/{id}/problems`.
 pub async fn create(st: &AppState, a: &Authed, media: i32, body: Create) -> Res<Value> {
     if !KINDS.contains(&body.kind.as_str()) {
@@ -223,15 +237,7 @@ pub async fn create(st: &AppState, a: &Authed, media: i32, body: Create) -> Res<
     if db::active_count(&mut tx, a.user.id).await? >= MAX_ACTIVE {
         return Err(AppError::conflict("problem_cap"));
     }
-    if !st
-        .problem_throttle
-        .attempt_key(&a.user.id.to_string(), MAX_CREATES)
-    {
-        return Err(AppError::with_message(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Too many problem reports, try again later",
-        ));
-    }
+    announce_budget(st, a)?;
     let id = db::insert(
         &mut tx,
         &New {
@@ -413,6 +419,7 @@ pub async fn reopen(st: &AppState, a: &Authed, id: i32, body: Reopen) -> Res<Val
             return Err(AppError::conflict("problem_cap"));
         }
     }
+    announce_budget(st, a)?;
     if !db::transition(&mut tx, id, from, "open", None).await? {
         return Err(AppError::conflict("problem_reopen_denied"));
     }

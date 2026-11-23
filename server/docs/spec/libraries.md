@@ -31,7 +31,7 @@ No route emits an SSE or domain event (Events: none).
 3. `GET /libraries` scope: ids = `accessible_library_ids(caller)` (rule 30); `[]` gives an empty result; then `ORDER BY name COLLATE "C", id ASC` (byte order, like `/api/settings`).
 4. `GET /libraries/:id` and `GET /libraries/:id/access` apply the library ACL (rule 40).
 5. `GET /libraries/mine` `Summary` = exactly `{id, name, icon, color, mediaTypes, defaultQualityProfileId, defaultLanguageProfileId, folders}` (no dates, `path`, `label`, `disk`, `userIds`; the two profile ids are `int|null`; `folders` is rule 49), scoped like rule 3, `ORDER BY name COLLATE "C", id ASC`. Any authenticated user with `media.read` (the sidebar).
-6. `statfs` semantics (Linux `statvfs`, run off the async runtime so a slow mount does not stall requests): `freeSpace = f_bfree * f_bsize` (free blocks including root-reserved, NOT `f_bavail`), `totalSpace = f_blocks * f_bsize`; JSON numbers; `accessible = (freeSpace !== -1)`.
+6. `statfs` semantics (Linux `statvfs`, run off the async runtime so a slow mount does not stall requests; a call that does not answer within 5 s is a failure, as for the health probe): `freeSpace = f_bfree * f_bsize` (free blocks including root-reserved, NOT `f_bavail`), `totalSpace = f_blocks * f_bsize`; JSON numbers; `accessible = (freeSpace !== -1)`.
 7. `userIds` of a library = `library_user_access.userId` of that library, `ORDER BY lua.id` (insertion order, same reasoning as `users.md` rule 3). Admins appear only if they hold a row.
 
 ### B. Create and update (writes disk)

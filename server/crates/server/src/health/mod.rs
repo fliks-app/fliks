@@ -148,10 +148,18 @@ pub async fn run(st: &AppState) -> sqlx::Result<()> {
 
 /// A tick skips when a run is in progress instead of queuing behind it.
 async fn tick(st: AppState) {
-    let Ok(_one) = RUN.try_lock() else { return };
-    if let Err(e) = evaluate(&st).await {
+    if let Some(Err(e)) = skip_if_running(&RUN, || evaluate(&st)).await {
         tracing::warn!("health checks failed: {e}");
     }
+}
+
+/// Runs `f` unless `lock` is held; `None` when skipped.
+async fn skip_if_running<T, F: Future<Output = T>>(
+    lock: &Mutex<()>,
+    f: impl FnOnce() -> F,
+) -> Option<T> {
+    let _one = lock.try_lock().ok()?;
+    Some(f().await)
 }
 
 /// A run now, then every 5 minutes; the cron timer dies with the runtime.
@@ -169,4 +177,18 @@ pub fn spawn(st: &AppState) {
             tokio::spawn(tick(st.clone()));
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_tick_skips_while_a_run_holds_the_lock_and_runs_after() {
+        let lock = Mutex::new(());
+        let held = lock.lock().await;
+        assert_eq!(skip_if_running(&lock, || async { 1 }).await, None);
+        drop(held);
+        assert_eq!(skip_if_running(&lock, || async { 1 }).await, Some(1));
+    }
 }
