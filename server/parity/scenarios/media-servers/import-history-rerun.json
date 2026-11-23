@@ -12,6 +12,22 @@
   "steps": [
     {
       "as": "admin",
+      "body": {
+        "externalId": "u1",
+        "provider": "emby:1",
+        "userId": 2
+      },
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      },
+      "method": "POST",
+      "path": "/api/imports/user-mappings"
+    },
+    {
+      "as": "admin",
       "expect": {
         "body": [
           {

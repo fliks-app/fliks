@@ -11,6 +11,12 @@
       "expect": {
         "body": [
           {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "All languages",
+            "subtitleLanguages": []
+          },
+          {
             "audioLanguages": [
               {
                 "isoCode": "fr",
@@ -57,12 +63,6 @@
                 "name": "English"
               }
             ]
-          },
-          {
-            "audioLanguages": [],
-            "id": 1,
-            "name": "All languages",
-            "subtitleLanguages": []
           }
         ],
         "status": 200
@@ -75,6 +75,12 @@
       "expect": {
         "body": [
           {
+            "audioLanguages": [],
+            "id": 1,
+            "name": "All languages",
+            "subtitleLanguages": []
+          },
+          {
             "audioLanguages": [
               {
                 "isoCode": "fr",
@@ -121,12 +127,6 @@
                 "name": "English"
               }
             ]
-          },
-          {
-            "audioLanguages": [],
-            "id": 1,
-            "name": "All languages",
-            "subtitleLanguages": []
           }
         ],
         "status": 200

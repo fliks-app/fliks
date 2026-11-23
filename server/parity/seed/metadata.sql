@@ -34,3 +34,6 @@ INSERT INTO media_credits (id, "createdAt", "updatedAt", role, job, department, 
  (5, '2026-01-01', '2026-01-01', 'crew', 'Director', 'Directing', 0, 3, 1),
  (6, '2026-01-01', '2026-01-01', 'crew', 'Writer', 'Writing', 0, 19, 1);
 SELECT setval('media_credits_id_seq', 6);
+-- /api/persons/search lists only credited persons: the rest are credited on an item, which leaves their media cast empty
+INSERT INTO item_credits ("itemId", "personId", role, "position")
+SELECT (SELECT min(id) FROM items WHERE "mediaId" = 1), id, 'composer', id FROM persons WHERE id BETWEEN 2 AND 10;

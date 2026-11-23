@@ -28,7 +28,8 @@ import {
   requestAddLink,
 } from '../../core/services/api/requests.service';
 import { PROBLEM_STATUS_FILTERS, ProblemStatusFilter } from '../../core/services/api/problems.service';
-import { SERVER_SINCE, ServerVersionService } from '../../core/services/server-version.service';
+import { ServerVersionService } from '../../core/services/server-version.service';
+import { problemsSupported } from '../../core/services/api/problems.service';
 import { ProfilesService } from '../../core/services/api/profiles.service';
 import {
   LibrariesApiService,
@@ -130,7 +131,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.route.queryParamMap.pipe(map((q) => RequestsComponent.statusOf(q) ?? '')),
     { initialValue: RequestsComponent.statusOf(this.route.snapshot.queryParamMap) ?? '' },
   );
-  protected readonly problemsSupported = () => this.serverVersion.supports(SERVER_SINCE.problems);
+  protected readonly problemsSupported = () => problemsSupported(this.serverVersion);
   /** `?view=problems`: the list source is the problem reports, and `status` is theirs (`active`, `resolved`, `closed`). */
   readonly problemsView = toSignal(
     this.route.queryParamMap.pipe(map((q) => this.problemsSupported() && q.get('view') === 'problems')),

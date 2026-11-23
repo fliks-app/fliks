@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
+import { SERVER_SINCE, type ServerVersionService } from '../server-version.service';
 
 export const PROBLEM_KINDS = ['video', 'audio', 'subtitles', 'playback', 'other'] as const;
 export type ProblemKind = (typeof PROBLEM_KINDS)[number];
@@ -80,6 +81,9 @@ export interface ListProblemsParams {
 
 /** The reporter can reopen a fixed report this long after it was resolved. */
 export const PROBLEM_REOPEN_DAYS = 14;
+
+/** Whether the connected server serves the problem routes: every caller gates its entry point on this. */
+export const problemsSupported = (version: Pick<ServerVersionService, 'supports'>) => version.supports(SERVER_SINCE.problems);
 
 @Injectable({ providedIn: 'root' })
 export class ProblemsService {

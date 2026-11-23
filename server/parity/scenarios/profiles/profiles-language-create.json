@@ -119,6 +119,12 @@
         "body": [
           {
             "audioLanguages": [],
+            "id": 1,
+            "name": "All languages",
+            "subtitleLanguages": []
+          },
+          {
+            "audioLanguages": [],
             "id": 5,
             "name": "Bare",
             "subtitleLanguages": []
@@ -208,12 +214,6 @@
                 "name": "English"
               }
             ]
-          },
-          {
-            "audioLanguages": [],
-            "id": 1,
-            "name": "All languages",
-            "subtitleLanguages": []
           }
         ],
         "status": 200

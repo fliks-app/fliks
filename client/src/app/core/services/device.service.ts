@@ -83,7 +83,7 @@ export function applyDeviceOverrideFromUrl(): void {
 /** Form factor, input modality and TV OS; module-scope so bootstrap-time providers can branch before the injector exists. */
 export function detectDevice(): DetectResult {
   if (typeof window === 'undefined') {
-    return { input: 'mouse', formFactor: 'desktop', tvPlatform: null, desktopPlatform: null, standalone: false, chromium: false };
+    return { input: 'mouse', formFactor: 'desktop', tvPlatform: null, desktopPlatform: null, standalone: false, chromium: false, smartTv: null };
   }
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
   // Raw platform facts, never the QA override: a forced TV look in a browser must keep the cookie session.
@@ -94,7 +94,8 @@ export function detectDevice(): DetectResult {
     desktopPlatform !== null ||
     /AndroidTV\/\d|\bTizen\b|SMART-TV|Web0S|webOS|BRAVIA|SHIELD|AFT[A-Z0-9]+|GoogleTV/i.test(ua);
   const chromium = /Chrome\//.test(ua) && !/CriOS/.test(ua);
-  const facts = { desktopPlatform, standalone, chromium };
+  const smartTv: DetectResult['smartTv'] = /\bTizen\b|SMART-TV/.test(ua) ? 'tizen' : /Web0S|webOS/.test(ua) ? 'webos' : null;
+  const facts = { desktopPlatform, standalone, chromium, smartTv };
 
   const override = readOverride();
   if (override) return { ...override, ...facts };
@@ -168,6 +169,8 @@ interface DetectResult {
   standalone: boolean;
   /** Blink engine (iOS Chrome is WebKit): the only one the Cast sender runs in. */
   chromium: boolean;
+  /** The Smart TV OS the user agent names, whatever the QA override says. */
+  smartTv: 'tizen' | 'webos' | null;
 }
 
 /** Single source of truth for input modality and form factor (two orthogonal axes), detected in decreasing confidence order;

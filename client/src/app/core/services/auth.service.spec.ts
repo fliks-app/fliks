@@ -98,7 +98,25 @@ describe('AuthService.mintDownloadToken', () => {
       ],
     });
     expect(await TestBed.inject(AuthService).mintDownloadToken(7)).toEqual({ token: 'dt', expiresAt: 99 });
-    expect(post).toHaveBeenCalledWith('/api/auth/download-token', { mediaFileId: 7 });
+    expect(post).toHaveBeenCalledWith('/api/auth/download-token', { mediaFileId: 7 }, expect.anything());
+  });
+
+  it('answers null for a server without the route, and rejects any other failure', async () => {
+    const post = vi.fn().mockReturnValue(throwError(() => new HttpErrorResponse({ status: 404 })));
+    TestBed.configureTestingModule({
+      providers: [
+        AuthService,
+        { provide: HttpClient, useValue: { get: () => NEVER, post } },
+        { provide: Router, useValue: {} },
+        { provide: ServerConfigService, useValue: { serverUrl: () => 'https://s', isNative: false } },
+        { provide: ServerCacheService, useValue: {} },
+        { provide: SessionStoreService, useValue: { active: () => null } },
+      ],
+    });
+    const auth = TestBed.inject(AuthService);
+    expect(await auth.mintDownloadToken(7)).toBeNull();
+    post.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 500 })));
+    await expect(auth.mintDownloadToken(7)).rejects.toBeInstanceOf(HttpErrorResponse);
   });
 });
 

@@ -9,6 +9,22 @@
   "steps": [
     {
       "as": "admin",
+      "method": "POST",
+      "path": "/api/imports/user-mappings",
+      "body": {
+        "externalId": "u1",
+        "provider": "emby:6",
+        "userId": 2
+      },
+      "expect": {
+        "body": {
+          "ok": true
+        },
+        "status": 201
+      }
+    },
+    {
+      "as": "admin",
       "method": "GET",
       "path": "/api/system/events?device=ms",
       "expect": {

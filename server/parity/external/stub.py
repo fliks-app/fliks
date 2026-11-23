@@ -29,6 +29,20 @@ def fixture(kind, rest, query):
     return p if os.path.exists(p) else None
 
 
+def with_appended(rest, query, path):
+    """TMDB `append_to_response=season/N,...`: the sub-answers sit under their own keys; a season without a fixture is absent."""
+    body = open(path, "rb").read()
+    tokens = [t for v in query.get("append_to_response", []) for t in v.split(",") if t.startswith("season/")]
+    if not tokens:
+        return body
+    d = json.loads(body)
+    for t in tokens:
+        sp = fixture("tmdb", f"{rest.rstrip('/')}/{t}", {})
+        if sp:
+            d[t] = json.load(open(sp))
+    return json.dumps(d).encode()
+
+
 SUBDL = {
     "movie": [(101, "Work.Movie.2020.1080p.BluRay.x264-GRP", False), (102, "Work.Movie.2020.720p.WEB-DL.x264-OTHER", False), (103, "Work.Movie.2020.1080p.BluRay.x264-GRP.HI", True)],
     "tv": [(201, "Work.Show.S01E01.1080p.WEB-DL.x264-GRP", False), (202, "Work.Show.S01E02.1080p.WEB-DL.x264-GRP", False), (203, "Work.Show.S01.COMPLETE.720p.BluRay-PACK", False)],
@@ -107,6 +121,8 @@ class H(BaseHTTPRequestHandler):
             if u.path.startswith(prefix + "/"):
                 p = fixture(kind, u.path[len(prefix):], query)
                 if p:
+                    if kind == "tmdb":
+                        return self.send(200, with_appended(u.path[len(prefix):], query, p))
                     return self.send(200, open(p, "rb").read())
                 return self.send(404, {"status_code": 34, "status_message": "The resource you requested could not be found.", "message": "not found"})
         self.send(404, {})

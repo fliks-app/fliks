@@ -111,13 +111,20 @@ impl Scratch {
         self.pool.close().await;
         let admin = self.url.rsplit_once('/').unwrap().0.to_owned() + "/postgres";
         let mut c = PgConnection::connect(&admin).await.unwrap();
-        sqlx::query(sqlx::AssertSqlSafe(format!(
-            "DROP DATABASE IF EXISTS {} WITH (FORCE)",
-            self.name
-        )))
-        .execute(&mut c)
-        .await
-        .unwrap();
+        let sql = format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", self.name);
+        // An autovacuum worker on the fresh database is not the app role's to terminate: it leaves in moments.
+        for _ in 0..40 {
+            match sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+                .execute(&mut c)
+                .await
+            {
+                Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some("42501") => {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                }
+                r => return r.map(drop).unwrap(),
+            }
+        }
+        panic!("{} could not be dropped", self.name);
     }
 }
 

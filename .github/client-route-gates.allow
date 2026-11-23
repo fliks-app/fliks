@@ -18,3 +18,5 @@
 /api/requests/{}/watch
 /api/system/checks
 /api/system/checks/run
+# 404 falls back to the session token in AuthService.mintDownloadToken.
+/api/auth/download-token
