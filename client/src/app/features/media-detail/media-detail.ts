@@ -454,7 +454,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
   async toggleMonitored() {
     const m = this.media();
     if (!m) return;
-    await this.setMonitored(m.type === 'series' && m.monitoring ? m.monitoring !== 'all' : !m.monitored);
+    await this.setMonitored(kindOf(m.type).hasSeasons && m.monitoring ? m.monitoring !== 'all' : !m.monitored);
   }
 
   async setMonitored(monitored: boolean) {

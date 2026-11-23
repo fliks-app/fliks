@@ -320,7 +320,7 @@ export class AddDialogComponent {
           languageProfileId: this.languageId() ?? undefined,
           ...place,
           ...(this.hasSeasons() && !this.seasonsFailed() ? { monitoredSeasons: [...this.selectedSeasons()].sort((a, b) => a - b) } : {}),
-          ...(r.kind === 'series' ? { monitorNewSeasons: this.followNewSeasons() } : {}),
+          ...(kindOf(r.kind).hasSeasons ? { monitorNewSeasons: this.followNewSeasons() } : {}),
         });
         return saved.id;
       }
