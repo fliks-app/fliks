@@ -1,7 +1,7 @@
 /* Text swap, variant "Sobre": the outgoing text leaves left, the incoming one starts when it is gone.
    Only transform and filter, never individual translate/scale, so webOS (no CSS downlevel) keeps it.
    Swap a variant by editing the two keyframes and the durations below. */
-.hero-carousel-stage { min-height: 52vh; }
+.hero-carousel-stage { min-height: 58vh; }
 .hero-carousel-compact .hero-carousel-stage { min-height: 30vh; }
 
 .hc-out {

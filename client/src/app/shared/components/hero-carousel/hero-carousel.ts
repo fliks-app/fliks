@@ -24,6 +24,7 @@ import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
   styleUrl: './hero-carousel.css',
   host: {
     class: 'block',
+    '[class.mb-4]': "height() === 'compact'",
     '(pointerenter)': 'hovered.set($event.pointerType === \'mouse\')',
     '(pointerleave)': 'hovered.set(false)',
     '(focusin)': 'focused.set($any($event.target).matches(\':focus-visible\'))',
