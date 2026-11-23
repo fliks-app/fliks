@@ -62,7 +62,7 @@
   } @else if (rows().length === 0) {
     <p class="text-center py-12 text-base-content/60">{{ 'liveTv.guide.empty' | translate }}</p>
   } @else if (isGrid()) {
-    <div #scrollArea class="overflow-auto rounded-lg border border-base-200 max-h-[70vh]">
+    <div #scrollArea class="overflow-auto rounded-lg border border-base-200 max-h-[70vh] scroll-pl-44 scroll-pt-8">
       <div class="relative" [style.width.px]="176 + timelineWidthPx()">
         <!-- Time ruler -->
         <div class="sticky top-0 z-20 flex h-8 bg-base-200 border-b border-base-300">

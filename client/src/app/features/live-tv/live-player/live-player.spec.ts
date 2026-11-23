@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TranslateService } from '@ngx-translate/core';
 import { describe, expect, it, vi } from 'vitest';
+import { PlayerStateService } from '../../../core/services/player-state.service';
 import { LivePlayerComponent } from './live-player';
 import { LiveTvApiService, PlaySession } from '../../../core/services/api/livetv-api.service';
 import { DeviceService } from '../../../core/services/device.service';
@@ -41,7 +42,7 @@ async function flush(times = 4): Promise<void> {
  * children declared in the template, pulling in their whole DI graph for a
  * test that only exercises the component's own bookkeeping.
  */
-function createComponent() {
+function createComponent(overrides: Record<string, unknown> = {}) {
   const stopCalls: string[] = [];
   const plays = new Map<number, ReturnType<typeof deferred<PlaySession>>>();
   const api = {
@@ -54,6 +55,9 @@ function createComponent() {
       stopCalls.push(id);
       return Promise.resolve();
     }),
+    getChannels: vi.fn().mockResolvedValue([]),
+    getOnNow: vi.fn().mockResolvedValue({ entries: [], page: 1, pageSize: 50, total: 0 }),
+    ...overrides,
   };
   const router = { navigate: vi.fn() };
 
@@ -85,7 +89,7 @@ function createComponent() {
         useValue: { isNative: false, resolveUrl: (p: string) => p },
       },
       { provide: ToastService, useValue: { error: vi.fn(), success: vi.fn() } },
-      { provide: TranslateService, useValue: { instant: (key: string) => key } },
+      { provide: TranslateService, useValue: { instant: (key: string) => key, currentLang: () => 'en' } },
       { provide: SessionSyncService, useValue: { registerPlayer: () => () => {} } },
       ControlsVisibilityService,
     ],
@@ -220,30 +224,97 @@ describe('LivePlayerComponent — handlePlayError', () => {
 });
 
 describe('LivePlayerComponent — sessionExpired', () => {
-  it('re-tunes the current channel once the session was reaped', async () => {
+  it('re-tunes the current channel through the recovery controller', async () => {
     const { component, api, stopCalls, plays } = createComponent();
+    component.engine = { currentTime: 0 };
     component.currentSessionId = 's5';
     component.session.set(makeSession('s5', 5));
     component.currentChannelId.set(5);
     component.loading.set(false);
 
-    component.retuneAfterExpiry();
-    await flush();
+    void component.recovery.recoverFromLostSession('session_expired');
+    await flush(8);
     plays.get(5)!.resolve(makeSession('s5b', 5));
-    await flush();
+    await flush(8);
 
     expect(stopCalls).toEqual(['s5']);
     expect(api.play).toHaveBeenCalledWith(5, expect.anything());
     expect(component.session().sessionId).toBe('s5b');
   });
 
-  it('ignores an expiry while a tune is already running', () => {
+  it('stands aside while a user zap is in flight', async () => {
     const { component, api } = createComponent();
-    component.loading.set(true);
+    component.engine = { currentTime: 0 };
+    component.currentSessionId = 's5';
+    component.zaps = 1;
 
-    component.retuneAfterExpiry();
+    await component.recovery.recoverFromLostSession('session_expired');
 
     expect(api.play).not.toHaveBeenCalled();
+  });
+
+  it('throws from the re-tune when the session cannot be minted, so the controller backs off', async () => {
+    const { component } = createComponent({ play: vi.fn().mockRejectedValue(new Error('down')) });
+    component.currentChannelId.set(5);
+
+    await expect(component.retune()).rejects.toThrow('down');
+  });
+});
+
+describe('LivePlayerComponent volume', () => {
+  it('shares the level with the video player and pushes it on engine creation', async () => {
+    const { component } = createComponent();
+    const state = TestBed.inject(PlayerStateService);
+    const handlers: Record<string, (e: unknown) => void> = {};
+    const engine = { volume: 1, on: (n: string, h: (e: unknown) => void) => (handlers[n] = h) };
+    state.volume.set(0.4);
+    expect(component.volume()).toBe(0.4);
+
+    component.bindEngine(engine);
+    expect(engine.volume).toBe(0.4);
+
+    handlers['volumechange']({ volume: 0.7, muted: true });
+    expect(state.volume()).toBe(0.7);
+    expect(component.muted()).toBe(true);
+  });
+});
+
+describe('LivePlayerComponent zap list', () => {
+  const lineup = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: i + 1, name: `C${i + 1}`, number: i + 1 }));
+
+  it('is built from one channels call, in server order', async () => {
+    const list = lineup(3);
+    const { component, api, router } = createComponent({ getChannels: vi.fn().mockResolvedValue(list) });
+    component.currentChannelId.set(3);
+
+    await component.loadChannels();
+    component.channelUp();
+
+    expect(api.getChannels).toHaveBeenCalledTimes(1);
+    expect(api.getOnNow).not.toHaveBeenCalled();
+    expect(router.navigate).toHaveBeenCalledWith(['/watch-live', 1]);
+  });
+
+  it('fetches now/next only for the pages of the rendered window', async () => {
+    const { component, api } = createComponent();
+    const list = lineup(120);
+    api.getOnNow.mockImplementation(async ({ page }: { page: number }) => ({
+      entries: list.slice((page - 1) * 50, page * 50).map((channel) => ({ channel, now: null, next: null })),
+      page,
+      pageSize: 50,
+      total: 120,
+    }));
+    component.channels.set(list);
+    component.miniGuideOpen.set(true);
+    TestBed.tick();
+    await flush(8);
+    expect(api.getOnNow.mock.calls.map((c: unknown[]) => (c[0] as { page: number }).page)).toEqual([1]);
+
+    component.windowFirst.set(40);
+    TestBed.tick();
+    await flush(8);
+    expect(api.getOnNow.mock.calls.map((c: unknown[]) => (c[0] as { page: number }).page)).toEqual([1, 2]);
   });
 });
 
