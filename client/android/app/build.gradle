@@ -61,6 +61,7 @@ android {
     }
     buildTypes {
         debug {
+            applicationIdSuffix ".debug"
             if (castAppId) {
                 resValue "string", "cast_receiver_app_id", castAppId
             }
@@ -124,6 +125,8 @@ try {
     def servicesJSON = file('google-services.json')
     if (servicesJSON.text) {
         apply plugin: 'com.google.gms.google-services'
+        // The debug app id has no Firebase client: its build skips FCM instead of failing.
+        googleServices { missingGoogleServicesStrategy = 'WARN' }
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
