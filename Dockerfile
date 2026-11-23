@@ -6,7 +6,7 @@
 ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:1.30.1@sha256:b3fe4a2378c1af733b3d924b912afaeaebfe6fcdf51662b9b33b697b775e9387
 
 # --- Stage 1: Build client ---
-FROM node:24.22.0-alpine AS client-build
+FROM node:26.13.1-alpine AS client-build
 WORKDIR /app
 COPY client/package.json client/package-lock.json ./
 RUN npm ci
