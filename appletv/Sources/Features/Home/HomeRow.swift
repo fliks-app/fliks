@@ -107,7 +107,8 @@ struct HomeRow: View {
 
 // MARK: - Watch parties
 
-/// Live and scheduled parties of the viewer, live first (server order), after the "New party" entry.
+/// Live and scheduled parties of the viewer, live first (server order), after the "New party" entry. Without
+/// any party the Home's closing cards offer to start one instead.
 private struct WatchPartiesRow: View {
     var onSelect: (Int) -> Void
     @Environment(PartyService.self) private var service
@@ -119,9 +120,8 @@ private struct WatchPartiesRow: View {
     }
 
     var body: some View {
-        let entries = (service.canCreate ? [Entry.new] : []) + service.homeParties.map(Entry.party)
-        if !entries.isEmpty {
-            rail(entries)
+        if !service.homeParties.isEmpty {
+            rail((service.canCreate ? [Entry.new] : []) + service.homeParties.map(Entry.party))
         }
     }
 

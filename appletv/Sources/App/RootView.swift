@@ -180,7 +180,8 @@ struct RootView: View {
                         onSelectLibrary: { path.append(Route.library(id: $0)) },
                         onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) },
                         onSelectParty: { path.append(Route.partyDetail(id: $0)) },
-                        onPlay: { path.append(Route.player(mediaFileId: $0, mediaId: $1, episodeId: $2, startAt: nil)) }
+                        onPlay: { path.append(Route.player(mediaFileId: $0, mediaId: $1, episodeId: $2, startAt: nil)) },
+                        onCustomize: { path.append(Route.homeLayout) }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // Back on Home shows the rail first, then leaves the app (the system's own Back from the rail).
@@ -254,6 +255,8 @@ struct RootView: View {
                             PartyDetailView(partyId: id)
                         case .settings:
                             SettingsView()
+                        case .homeLayout:
+                            HomeLayoutView()
                         default:
                             EmptyView() // onboarding routes never belong in the signed-in stack
                         }

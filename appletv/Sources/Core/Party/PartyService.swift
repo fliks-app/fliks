@@ -25,6 +25,7 @@ import os
     private(set) var createTarget = PartyCreateTarget()
     /// Live and scheduled parties of the viewer, for the Home rail.
     private(set) var homeParties: [Party] = []
+    private(set) var homePartiesLoaded = false
     /// The invite or settings sheet, shared by the lobby and the player.
     var sheet: Sheet?
     /// The host asked to leave from the player menu: confirm before ending the party for everyone.
@@ -224,6 +225,7 @@ import os
         reset()
         stream.stop()
         homeParties = []
+        homePartiesLoaded = false
         preview = nil
     }
 
@@ -421,6 +423,7 @@ import os
     func refreshHomeParties() async {
         do {
             homeParties = try await APIClient.shared.get("/api/parties")
+            homePartiesLoaded = true
         } catch {
             Log.party.error("home rail fetch failed: \(String(describing: error), privacy: .public)")
         }
