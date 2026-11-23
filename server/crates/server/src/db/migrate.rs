@@ -1,3 +1,4 @@
+use sha2::{Digest, Sha384};
 use sqlx::ConnectOptions;
 use sqlx::migrate::{Migrate, Migrator};
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -17,16 +18,55 @@ pub enum Ledger {
     Same,
 }
 
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The checksum a build whose checkout turned the file into CRLF (a Windows runner) embedded.
+fn crlf_checksum(m: &sqlx::migrate::Migration) -> Vec<u8> {
+    let crlf = m.sql.as_str().replace("\r\n", "\n").replace('\n', "\r\n");
+    Sha384::digest(crlf.as_bytes()).to_vec()
+}
+
 /// `checksum` is the bytea as `COPY` writes it (`\\x<hex>`); absent when the dump has no such column.
+/// The file's CRLF twin counts as the same file: only the line endings differ.
 pub fn ledger_row(version: i64, checksum: Option<&str>) -> Ledger {
     let Some(m) = migration_for_version(version) else {
         return Ledger::Unknown;
     };
-    let hex: String = m.checksum.iter().map(|b| format!("{b:02x}")).collect();
-    match checksum {
-        Some(c) if c.strip_prefix("\\\\x") != Some(hex.as_str()) => Ledger::Edited,
+    match checksum.map(|c| c.strip_prefix("\\\\x")) {
+        Some(c)
+            if c != Some(hex(&m.checksum).as_str())
+                && c != Some(hex(&crlf_checksum(m)).as_str()) =>
+        {
+            Ledger::Edited
+        }
         _ => Ledger::Same,
     }
+}
+
+/// A database migrated by a build that saw CRLF files holds the CRLF checksums: rewrite them to the file's own,
+/// so the ledger of one database fits a build from any checkout.
+async fn normalise_line_endings(
+    pool: &PgPool,
+    applied: &[sqlx::migrate::AppliedMigration],
+) -> Result<(), MigrateError> {
+    for a in applied {
+        let Some(m) = migration_for_version(a.version) else {
+            continue;
+        };
+        if a.checksum.as_ref() != m.checksum.as_ref()
+            && a.checksum.as_ref() == crlf_checksum(m).as_slice()
+        {
+            sqlx::query("UPDATE _sqlx_migrations SET checksum = $1 WHERE version = $2")
+                .bind(m.checksum.as_ref())
+                .bind(a.version)
+                .execute(pool)
+                .await
+                .map_err(MigrateError::Execute)?;
+        }
+    }
+    Ok(())
 }
 
 /// A ledger row this build has no file for was written by a newer Fliks: say so instead of sqlx's raw text.
@@ -191,6 +231,7 @@ async fn run_logged(pool: &PgPool) -> Result<(), MigrateError> {
     conn.ensure_migrations_table(&MIGRATOR.table_name).await?;
     let applied = conn.list_applied_migrations(&MIGRATOR.table_name).await?;
     drop(conn);
+    normalise_line_endings(pool, &applied).await?;
     let pending = MIGRATOR
         .iter()
         .filter(|m| !m.migration_type.is_down_migration())
@@ -324,6 +365,45 @@ mod tests {
 
         dispose(&admin, pool).await;
         Ok(())
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn a_ledger_written_from_crlf_files_is_normalised(admin: PgPool) -> sqlx::Result<()> {
+        let pool = empty(&admin).await;
+        migrate(&pool).await.unwrap();
+        let m = MIGRATOR.iter().next().unwrap();
+        sqlx::query("UPDATE _sqlx_migrations SET checksum = $1 WHERE version = $2")
+            .bind(crlf_checksum(m))
+            .bind(m.version)
+            .execute(&pool)
+            .await?;
+        migrate(&pool).await.unwrap();
+        let stored: Vec<u8> =
+            sqlx::query_scalar("SELECT checksum FROM _sqlx_migrations WHERE version = $1")
+                .bind(m.version)
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(stored.as_slice(), m.checksum.as_ref());
+        dispose(&admin, pool).await;
+        Ok(())
+    }
+
+    #[test]
+    fn a_backup_ledger_with_the_crlf_checksum_is_the_same_file() {
+        let m = MIGRATOR.iter().next().unwrap();
+        let dump = |sum: &[u8]| format!("\\\\x{}", hex(sum));
+        assert_eq!(
+            ledger_row(m.version, Some(&dump(&crlf_checksum(m)))),
+            Ledger::Same
+        );
+        assert_eq!(
+            ledger_row(m.version, Some(&dump(&m.checksum))),
+            Ledger::Same
+        );
+        assert_eq!(
+            ledger_row(m.version, Some(&dump(&[0u8; 48]))),
+            Ledger::Edited
+        );
     }
 
     #[sqlx::test(migrations = false)]

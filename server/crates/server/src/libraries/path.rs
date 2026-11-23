@@ -114,14 +114,17 @@ pub async fn probe(path: &str) -> Option<Probe> {
     bounded(PROBE_TIMEOUT, move || probe_blocking(path)).await
 }
 
-/// Disk space of `path`, off the async runtime.
+/// Disk space of `path`, off the async runtime; unavailable when it does not answer within [`PROBE_TIMEOUT`].
 pub async fn disk(path: &str) -> Disk {
     let path = path.to_owned();
-    match tokio::task::spawn_blocking(move || space(path))
-        .await
-        .ok()
-        .flatten()
-    {
+    disk_within(PROBE_TIMEOUT, move || space(path)).await
+}
+
+async fn disk_within(
+    limit: Duration,
+    f: impl FnOnce() -> Option<(i64, i64)> + Send + 'static,
+) -> Disk {
+    match bounded(limit, f).await {
         Some((free_space, total_space)) => Disk {
             free_space,
             total_space,
@@ -366,6 +369,18 @@ mod tests {
         assert_eq!(r, None);
         drop(hold);
         assert_eq!(bounded(Duration::from_secs(5), || Some(2)).await, Some(2));
+    }
+
+    #[tokio::test]
+    async fn a_disk_call_that_never_returns_reports_unavailable() {
+        let (hold, wait) = std::sync::mpsc::channel::<()>();
+        let d = disk_within(Duration::from_millis(50), move || {
+            let _ = wait.recv();
+            Some((1, 2))
+        })
+        .await;
+        assert_eq!((d.free_space, d.total_space, d.accessible), (-1, -1, false));
+        drop(hold);
     }
 
     #[test]

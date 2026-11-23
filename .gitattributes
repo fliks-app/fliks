@@ -1,0 +1,2 @@
+# Migration files hash by their bytes: a Windows checkout must not turn them into CRLF.
+*.sql text eol=lf
