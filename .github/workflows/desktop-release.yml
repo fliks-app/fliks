@@ -136,13 +136,11 @@ jobs:
           [[ -s "$notes" ]] || echo 'No changes to the app in this version.' > "$notes"
           cat "$notes"
 
-      # desktop/package.json declares Node >= 20, but electron-builder 26's
-      # transitive deps (@electron/rebuild, node-abi, app-builder-lib) require
-      # Node >= 22.12, so the runner uses 22. The addon's Electron 45 ABI is
-      # pinned via node-gyp --target/--dist-url and is independent of host Node.
+      # electron-builder 26's transitive deps need Node >= 22.12. The addon's Electron 45 ABI is
+      # pinned via node-gyp --target/--dist-url, independent of host Node.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: |
             desktop/package-lock.json
