@@ -73,9 +73,15 @@ struct BackdropView: View {
         func side(_ a: Double) -> Color {
             base.opacity(min(1, max(0, 1 - ((1 - scroll) * (1 - a) + (1 - ambient) * scroll) / (1 - v))))
         }
+        // (1 - t³)² reaches the rim with a zero slope: linear stops draw the ellipse's outline as a visible line.
+        let fade = [0, 0.2, 0.4, 0.55, 0.7, 0.8, 0.9, 1].map { Gradient.Stop(color: side(pow(1 - pow($0, 3), 2)), location: $0) }
         return ZStack {
-            LinearGradient(stops: [.init(color: side(1), location: 0), .init(color: side(0.85), location: 0.28),
-                                   .init(color: side(0), location: 0.62)], startPoint: .leading, endPoint: .trailing)
+            // From the rail's edge, centred on the text block.
+            GeometryReader { geo in
+                EllipticalGradient(stops: fade, endRadiusFraction: 0.5)
+                    .frame(width: 2 * 0.62 * geo.size.width, height: 2 * 0.85 * geo.size.height)
+                    .position(x: NavRail.collapsedWidth, y: 0.6 * geo.size.height)
+            }
             LinearGradient(stops: [.init(color: base.opacity(v), location: 0.25),
                                    .init(color: base.opacity(ambient), location: 0.6)], startPoint: .top, endPoint: .bottom)
         }
