@@ -39,7 +39,7 @@ describe('scrolledBetween', () => {
 @Component({
   imports: [BottomSheetComponent],
   template: `
-    <app-bottom-sheet [open]="open()" [fullHeight]="full()">
+    <app-bottom-sheet [open]="open()" [fullHeight]="full()" [aboveDock]="dock()">
       <div #list style="overflow-y: auto">
         <button #row type="button" aria-current="true">current</button>
       </div>
@@ -49,6 +49,7 @@ describe('scrolledBetween', () => {
 class SheetHost {
   readonly open = signal(false);
   readonly full = signal(false);
+  readonly dock = signal(false);
   readonly list = viewChild.required<ElementRef<HTMLElement>>('list');
   readonly row = viewChild.required<ElementRef<HTMLElement>>('row');
   readonly sheet = viewChild.required(BottomSheetComponent);
@@ -80,6 +81,27 @@ describe('BottomSheetComponent: scroll to the current choice', () => {
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 470, behavior: 'instant' });
     expect(document.activeElement).not.toBe(row);
+  });
+
+  it('dims only the page above a sheet resting on the dock', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: TvService, useValue: { isTv: () => false } },
+        { provide: DismissableStackService, useValue: { push: () => {}, remove: () => {} } },
+      ],
+    });
+    const fixture = TestBed.createComponent(SheetHost);
+    fixture.componentInstance.dock.set(true);
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const scrims = fixture.nativeElement.querySelectorAll('.bottom-sheet-backdrop') as NodeListOf<HTMLElement>;
+    const sheet = fixture.nativeElement.querySelector('[data-tv-modal]') as HTMLElement;
+    expect(scrims.length).toBe(1);
+    expect(scrims[0].classList).toContain('sheet-dock-scrim');
+    expect(scrims[0].nextElementSibling).toBe(sheet);
   });
 
   it('scopes D-pad navigation to the open sheet', async () => {

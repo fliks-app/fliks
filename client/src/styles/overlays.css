@@ -36,6 +36,20 @@ body.tablet [data-touch-only] {
 .shaka-text-container .shaka-text-wrapper {
   line-height: 1.1 !important;
 }
+/* The scrim above a sheet resting on the dock reaches under its rounded top corners (rounded-t-3xl)
+   and stops at their arcs, so no undimmed sliver shows between the two. */
+.sheet-dock-scrim {
+  --r: 1.5rem;
+  bottom: calc(100% - var(--r));
+  /* Flush with the straight edge; the arcs blend over the sheet's own antialiased pixel, so neither a dark rim nor a
+     light seam shows. */
+  --corners:
+    linear-gradient(#000 0 0) top / 100% calc(100% - var(--r)) no-repeat,
+    radial-gradient(circle var(--r) at 100% 100%, transparent calc(var(--r) - 0.5px), #000 calc(var(--r) + 0.5px)) bottom left / var(--r) var(--r) no-repeat,
+    radial-gradient(circle var(--r) at 0 100%, transparent calc(var(--r) - 0.5px), #000 calc(var(--r) + 0.5px)) bottom right / var(--r) var(--r) no-repeat;
+  -webkit-mask: var(--corners);
+  mask: var(--corners);
+}
 /* Backdrop fade-in via `@starting-style`; older WebKit without it just shows the backdrop instantly. */
 .bottom-sheet-backdrop {
   @starting-style {
@@ -74,6 +88,14 @@ html.keyboard-open [data-alpha-index] {
     var(--dock-edge) calc(50% + 25px)
   );
 }
+/* A resting libraries sheet runs on under the dock, which drops its own fill and blur meanwhile. The swap is
+   instant: a fade would stack both surfaces and flash the dock darker. */
+.dock.dock-with-fab-cradle.dock-joined,
+.dock.dock-with-fab-cradle.dock-joined::before {
+  background-color: transparent;
+  -webkit-backdrop-filter: blur(0);
+  backdrop-filter: blur(0);
+}
 .dock-with-fab-cradle::before {
   content: '';
   position: absolute;
@@ -84,7 +106,7 @@ html.keyboard-open [data-alpha-index] {
   /* FAB centre is 20px below the dock top; cradle radius 32 = FAB 28 + 4px gap, `top: -12` aligns the centres. */
   top: -12px;
   transform: translateX(-50%);
-  background: color-mix(in oklab, var(--color-base-100) 70%, transparent);
+  background: color-mix(in oklab, var(--color-base-100) 80%, transparent);
   border: 1px solid var(--dock-edge);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);

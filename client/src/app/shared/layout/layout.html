@@ -196,7 +196,7 @@
     <!-- Native bottom navigation bar — phones only.
          Tablets and TV use the drawer/sidebar instead. -->
     @if (navbar.phoneDock() && !keyboardOpen()) {
-      <div class="dock z-40 dock-with-fab-cradle bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95">
+      <div class="dock z-40 dock-with-fab-cradle bg-base-100/80 backdrop-blur-sm reduced-effects:bg-base-100/95" [class.dock-joined]="librarySheetSettled()">
         @if (dockHome(); as item) {
           <a [routerLink]="item.route" routerLinkActive #dockLink="routerLinkActive" [class.dock-active]="dockLink.isActive && !librarySheetOpen()" [routerLinkActiveOptions]="{ exact: item.exact }"
              [state]="{ rootEntry: true }" (click)="dismissLibrarySheet()">
@@ -248,7 +248,7 @@
          [attr.aria-label]="'search.title' | translate">
         <svg [lucideIcon]="icons.Search" class="h-5 w-5"></svg>
       </a>
-        <app-bottom-sheet [aboveDock]="true" [open]="librarySheetOpen()" [heading]="'home.libraries' | translate" (closed)="librarySheetOpen.set(false)">
+        <app-bottom-sheet [aboveDock]="true" [(settled)]="librarySheetSettled" [open]="librarySheetOpen()" [heading]="'home.libraries' | translate" (closed)="librarySheetOpen.set(false)">
           <ul class="menu w-full p-2 gap-0.5">
             @for (lib of displayLibraries(); track lib.id) {
               <li>
