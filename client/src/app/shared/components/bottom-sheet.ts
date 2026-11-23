@@ -13,6 +13,7 @@ import {
   Injector,
   afterNextRender,
   inject,
+  model,
 } from '@angular/core';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 import { TvService } from '../../core/services/tv.service';
@@ -26,7 +27,7 @@ import {
 import { SheetDrag, sheetDurationMs } from './sheet-drag';
 
 /** The phone dock's own surface, so a sheet resting on it reads as one piece. */
-const DOCK_BG = 'bg-base-100/70 backdrop-blur-sm reduced-effects:bg-base-100/95';
+const DOCK_BG = 'bg-base-100/80 backdrop-blur-sm reduced-effects:bg-base-100/95';
 
 @Component({
   selector: 'app-bottom-sheet',
@@ -43,7 +44,7 @@ export class BottomSheetComponent {
   readonly rightAligned = input(false);
   /** Covers the whole viewport instead of the usual bottom card: a full page that slides up and is dismissed by dragging it down. */
   readonly fullHeight = input(false);
-  /** Leaves the phone dock uncovered: the scrim and the sheet stack under it and the sheet rests on top of it. */
+  /** Leaves the phone dock uncovered: the sheet rests on it and dims only the page above itself. */
   readonly aboveDock = input(false);
   protected readonly layers = computed(() =>
     this.aboveDock()
@@ -63,6 +64,9 @@ export class BottomSheetComponent {
    *  slide-down exit before it is removed. */
   readonly visible = signal(false);
   private exitTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The sheet rests still on the dock: its surface may run on under it. Down while it slides in, is dragged or leaves. */
+  readonly settled = model(false);
+  private settleTimer: ReturnType<typeof setTimeout> | null = null;
 
   private readonly dismissStack = inject(DismissableStackService);
   private readonly tv = inject(TvService);
@@ -100,6 +104,7 @@ export class BottomSheetComponent {
             this.exitTimer = null;
           }
           this.visible.set(true);
+          this.settleAfterSlide();
           this.dismissing.set(false);
           this.drag.reset();
           if (!this.scrollLocked && typeof document !== 'undefined') {
@@ -138,14 +143,39 @@ export class BottomSheetComponent {
       });
     });
 
+    // A drag lifts the sheet off the dock; a release that keeps it open settles it again once it has slid back.
+    effect(() => {
+      const dragging = this.dragging();
+      untracked(() => {
+        if (dragging) this.unsettle();
+        else if (this.visible() && !this.exitTimer && !this.settled()) this.settleAfterSlide();
+      });
+    });
+
     // Cleanup if destroyed while open (route change, parent `@if`; PopoverMenu hardcodes `[open]="true"`, so the effect's close branch never runs).
     destroyRef.onDestroy(() => {
+      this.unsettle();
       if (this.exitTimer) {
         clearTimeout(this.exitTimer);
         this.exitTimer = null;
       }
       this.releaseOpenState();
     });
+  }
+
+  private settleAfterSlide() {
+    this.unsettle();
+    this.settleTimer = setTimeout(() => this.settled.set(true), sheetDurationMs(document.documentElement));
+  }
+
+  private unsettle() {
+    if (this.settleTimer) clearTimeout(this.settleTimer);
+    this.settleTimer = null;
+    this.settled.set(false);
+  }
+
+  sheetTransition(): string {
+    return this.dragging() ? 'none' : 'transform var(--transition-duration-sheet) ease-out';
   }
 
   sheetTransform(): string {
@@ -176,6 +206,7 @@ export class BottomSheetComponent {
   /** Slides the sheet down, then removes it and notifies the parent; idempotent, and every close path funnels here. */
   private beginClose() {
     if (this.exitTimer || !this.visible()) return;
+    this.unsettle();
     this.releaseOpenState();
     this.dismissing.set(true);
     this.drag.reset();

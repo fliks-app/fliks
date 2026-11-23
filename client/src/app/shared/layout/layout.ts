@@ -295,6 +295,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
   /** The collapsed rail is open over the page, which dims. */
   readonly railOverlaying = signal(false);
   readonly librarySheetOpen = signal(false);
+  /** The libraries sheet rests still on the dock, which then lets the sheet's surface run on under it. */
+  protected readonly librarySheetSettled = signal(false);
   readonly isLibraryRoute = signal(this.router.url.startsWith('/libraries/'));
   /** The dock's Library cell opens the library itself when there is only one, else a sheet. */
   readonly soleLibrary = computed(() => (this.displayLibraries().length === 1 ? this.displayLibraries()[0] : null));
