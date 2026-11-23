@@ -29,9 +29,9 @@ export class NavbarService {
   readonly scrollAtTop = signal(true);
   /** True when at least one in-app navigation has happened since entering — used to gate back buttons. */
   readonly canGoBack = signal(false);
-  /** Whether the rail stays expanded at lg+ (desktop and tablet); persisted, off by default. */
+  /** Whether the rail stays expanded at lg+ (desktop and tablet); persisted, on by default. */
   readonly sidebarPinned = signal(
-    localStorage.getItem('fliks.sidebarPinned') === 'true',
+    localStorage.getItem('fliks.sidebarPinned') !== 'false',
   );
 
   /** How the left rail shows: `none` (phone dock), `drawer` (hamburger, below md and on phones without the dock),

@@ -26,12 +26,12 @@ describe('NavbarService', () => {
       localStorage.removeItem('fliks.sidebarPinned');
     });
 
-    const make = (form: 'tv' | 'phone' | 'tablet' | 'desktop', width: number, pinned = false) => {
+    const make = (form: 'tv' | 'phone' | 'tablet' | 'desktop', width: number, pinned = true) => {
       window.matchMedia = ((q: string) => {
         const min = Number(/min-width:\s*(\d+)px/.exec(q)?.[1] ?? 0);
         return { matches: width >= min, addEventListener: () => {}, removeEventListener: () => {} } as unknown as MediaQueryList;
       }) as typeof window.matchMedia;
-      if (pinned) localStorage.setItem('fliks.sidebarPinned', 'true');
+      if (!pinned) localStorage.setItem('fliks.sidebarPinned', 'false');
       TestBed.configureTestingModule({
         providers: [
           provideRouter([{ path: '**', component: PageStub }]),
@@ -53,14 +53,16 @@ describe('NavbarService', () => {
       expect(make('tv', 1920, true).railMode()).toBe('collapsed');
     });
 
-    it('rests collapsed on desktop and tablet, the pin keeping it expanded at lg and up', () => {
-      expect(make('desktop', 1280).railMode()).toBe('collapsed');
+    it('is expanded at lg and up on desktop and tablet until unpinned', () => {
+      expect(make('desktop', 1280).railMode()).toBe('expanded');
       TestBed.resetTestingModule();
-      expect(make('tablet', 1280, true).railMode()).toBe('expanded');
+      expect(make('tablet', 1280).railMode()).toBe('expanded');
+      TestBed.resetTestingModule();
+      expect(make('desktop', 1280, false).railMode()).toBe('collapsed');
     });
 
     it('stays collapsed between md and lg even when pinned', () => {
-      expect(make('desktop', 900, true).railMode()).toBe('collapsed');
+      expect(make('desktop', 900).railMode()).toBe('collapsed');
     });
 
     it('is a drawer below md and on a phone', () => {
