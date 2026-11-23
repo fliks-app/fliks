@@ -57,9 +57,6 @@ pub fn router() -> Router<AppState> {
         &format!("{m}/{{provider}}/tv/{{externalId}}/season-stubs"),
         get(season_stubs),
     )
-    .route(&format!("{m}/movie/{{tmdbId}}"), get(legacy_movie))
-    .route(&format!("{m}/tv/{{tmdbId}}"), get(legacy_tv))
-    .route(&format!("{m}/tv/{{tmdbId}}/seasons"), get(legacy_seasons))
 }
 
 /// A bare `@Query` string; a repeated key is an array to the pipe, joined here (only `q` rejects it).
@@ -279,7 +276,6 @@ fn target(st: &AppState, provider: &str, id: &str) -> Result<(Namespace, String)
     Ok((p, id))
 }
 
-type Legacy = Result<PathParams<String>, AppError>;
 pub(crate) type Ids = Result<PathParams<(String, String)>, AppError>;
 
 async fn details(st: &AppState, a: &Authed, p: Namespace, kind: MediaKind, id: &str) -> Res {
@@ -335,25 +331,4 @@ pub async fn season_stubs(State(st): State<AppState>, a: Authed, ids: Ids) -> Re
     let PathParams((p, id)) = ids?;
     let (p, id) = target(&st, &p, &id)?;
     seasons_of(&st, &a, p, &id, true).await
-}
-
-#[utoipa::path(get, path = "/api/metadata/movie/{tmdbId}", responses((status = 200)))]
-pub async fn legacy_movie(State(st): State<AppState>, a: Authed, id: Legacy) -> Res {
-    a.require(Action::Read, Subject::Media)?;
-    let (p, id) = target(&st, "tmdb", &id?.0)?;
-    details(&st, &a, p, MediaKind::Movie, &id).await
-}
-
-#[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}", responses((status = 200)))]
-pub async fn legacy_tv(State(st): State<AppState>, a: Authed, id: Legacy) -> Res {
-    a.require(Action::Read, Subject::Media)?;
-    let (p, id) = target(&st, "tmdb", &id?.0)?;
-    details(&st, &a, p, MediaKind::Series, &id).await
-}
-
-#[utoipa::path(get, path = "/api/metadata/tv/{tmdbId}/seasons", responses((status = 200)))]
-pub async fn legacy_seasons(State(st): State<AppState>, a: Authed, id: Legacy) -> Res {
-    a.require(Action::Read, Subject::Media)?;
-    let (p, id) = target(&st, "tmdb", &id?.0)?;
-    seasons_of(&st, &a, p, &id, false).await
 }

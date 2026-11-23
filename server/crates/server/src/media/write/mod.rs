@@ -1,19 +1,9 @@
 //! `/api/media` write routes and `DELETE /api/libraries/:id` (`docs/spec/media-write.md`).
-pub(crate) mod body;
-pub(crate) mod book_import;
-pub use album_import::import_album_for_request;
-pub use book_import::import_book_for_request;
-pub use identified::search_added;
-pub(crate) mod album_import;
 mod comic_edit;
-mod comic_import;
 mod companions;
 mod delete;
-pub mod fields;
-mod identified;
 mod import;
 mod metadata;
-pub mod orphans;
 mod relocate;
 mod tasks;
 mod update;
@@ -21,7 +11,6 @@ mod update;
 pub use comic_edit::*;
 pub use companions::*;
 pub use delete::*;
-pub use identified::*;
 pub use import::*;
 pub use metadata::*;
 pub use relocate::*;
@@ -121,49 +110,4 @@ pub async fn detail_or_404(st: &AppState, a: &Authed, id: i32) -> Result<Value, 
     hydrate::detail(&st.db, id, paths_visible(&a.perms))
         .await?
         .ok_or_else(|| crate::libraries::media_not_found(id))
-}
-
-fn already_running() -> AppError {
-    AppError::conflict("errors.already_running")
-}
-
-/// Rule 15: a requested id must exist, else the library default when it still exists, else the lowest id.
-pub async fn resolve_profile(
-    db: &PgPool,
-    language: bool,
-    requested: Option<i32>,
-    library_default: Option<i32>,
-) -> Result<Option<i32>, AppError> {
-    let exists = |id: i32| async move {
-        if language {
-            sqlx::query_scalar!("SELECT id FROM language_profiles WHERE id = $1", id)
-                .fetch_optional(db)
-                .await
-        } else {
-            sqlx::query_scalar!("SELECT id FROM quality_profiles WHERE id = $1", id)
-                .fetch_optional(db)
-                .await
-        }
-    };
-    if let Some(id) = requested {
-        let what = if language { "Language" } else { "Quality" };
-        return exists(id)
-            .await?
-            .map(Some)
-            .ok_or_else(|| AppError::bad_request(format!("{what} profile #{id} not found")));
-    }
-    if let Some(id) = library_default
-        && let Some(id) = exists(id).await?
-    {
-        return Ok(Some(id));
-    }
-    Ok(if language {
-        sqlx::query_scalar!("SELECT id FROM language_profiles ORDER BY id LIMIT 1")
-            .fetch_optional(db)
-            .await?
-    } else {
-        sqlx::query_scalar!("SELECT id FROM quality_profiles ORDER BY id LIMIT 1")
-            .fetch_optional(db)
-            .await?
-    })
 }

@@ -368,7 +368,7 @@ async fn concurrent_approvals_of_one_work_keep_every_edition_wished(pool: PgPool
     let import = |w: WantSpec| {
         let st = c.st.clone();
         tokio::spawn(async move {
-            crate::media::write::import_book_for_request(
+            crate::media::service::import_book_for_request(
                 &st,
                 "OL6W",
                 &[w],

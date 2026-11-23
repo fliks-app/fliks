@@ -6,6 +6,8 @@ Per-domain specs live under [`spec/`](spec/), one file per domain. The parity sc
 
 Client kinds: [`spec/client-kinds.md`](spec/client-kinds.md) (`X-Fliks-Kinds`: the media kinds a client declares, the default, the filtered routes).
 
+Compatibility window: [`spec/compatibility.md`](spec/compatibility.md) (`X-Fliks-Client`, the support window of released clients, when a route or field may be retired).
+
 Push notifications: [`spec/push.md`](spec/push.md) (the push pipeline, relay client and identity file, RFC 8291 encryption, Web Push, subscriptions, the catalogue, text, actions, the `attention` badge).
 
 Problem reports on a media: [`spec/problems.md`](spec/problems.md) (`media_issues`, the states, auto-resolve of a replaced file, push and counts).

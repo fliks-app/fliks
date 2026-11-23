@@ -282,7 +282,7 @@ pub async fn put_output(
     .await?
     .ok_or_else(conflict)?;
     let staged = if name.is_empty() {
-        staged.ok_or_else(|| AppError::internal("remote job without a staging path"))?
+        staged.ok_or_else(|| AppError::internal_shown("remote job without a staging path"))?
     } else {
         upload_path(id, attempt, name)
             .to_string_lossy()
@@ -298,7 +298,7 @@ pub async fn put_output(
     let mut up = slot.lock().await;
     up.load(path)
         .await
-        .map_err(|e| AppError::internal(format!("{}: {e}", path.display())))?;
+        .map_err(|e| AppError::internal_shown(format!("{}: {e}", path.display())))?;
     if offset != up.len {
         return Ok((StatusCode::CONFLICT, ack(up.len)).into_response());
     }
@@ -312,7 +312,7 @@ pub async fn put_output(
     {
         tokio::fs::create_dir_all(dir)
             .await
-            .map_err(|e| AppError::internal(format!("{}: {e}", dir.display())))?;
+            .map_err(|e| AppError::internal_shown(format!("{}: {e}", dir.display())))?;
     }
     let mut f = match OpenOptions::new()
         .write(true)
@@ -326,7 +326,7 @@ pub async fn put_output(
             (up.len, up.hasher) = (0, Sha256::new());
             return Ok((StatusCode::CONFLICT, ack(0)).into_response());
         }
-        Err(e) => return Err(AppError::internal(format!("{}: {e}", path.display()))),
+        Err(e) => return Err(AppError::internal_shown(format!("{}: {e}", path.display()))),
     };
     // The file holds exactly the counted bytes before a chunk: leftovers of a failed write are cut.
     let written = async {
@@ -341,7 +341,7 @@ pub async fn put_output(
     .await;
     if let Err(e) = written {
         let _ = f.set_len(up.len).await;
-        return Err(AppError::internal(e.to_string()));
+        return Err(AppError::internal_shown(e.to_string()));
     }
     up.hasher.update(&body);
     up.len += body.len() as u64;

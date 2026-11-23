@@ -3,6 +3,8 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
 
+const GENERIC: &str = "Internal server error";
+
 /// 4.x error body: `{statusCode, message}` when built bare, plus `error` when built with a message.
 #[derive(Debug)]
 pub struct AppError {
@@ -11,6 +13,8 @@ pub struct AppError {
     with_message: bool,
     /// A translation key and its params, beside `message` and never under `error`.
     key: Option<(String, Value)>,
+    /// The body carries the generic text; `message` stays for logs, SSE `error` fields and job `errors[]`.
+    hidden: bool,
 }
 
 impl AppError {
@@ -21,6 +25,7 @@ impl AppError {
             message: status.canonical_reason().unwrap_or_default().into(),
             with_message: false,
             key: None,
+            hidden: false,
         }
     }
 
@@ -31,6 +36,7 @@ impl AppError {
             message: message.into(),
             with_message: false,
             key: None,
+            hidden: false,
         }
     }
 
@@ -41,6 +47,7 @@ impl AppError {
             message: message.into(),
             with_message: true,
             key: None,
+            hidden: false,
         }
     }
 
@@ -68,7 +75,15 @@ impl AppError {
     pub fn payload_too_large(message: impl Into<Value>) -> Self {
         Self::with_message(StatusCode::PAYLOAD_TOO_LARGE, message)
     }
+    /// An unexpected fault: logged with its cause, answered with the generic body.
     pub fn internal(message: impl Into<Value>) -> Self {
+        let mut e = Self::internal_shown(message);
+        e.hidden = true;
+        e
+    }
+
+    /// A fault the admin acts on (a missing tool, a path): the body keeps the text.
+    pub fn internal_shown(message: impl Into<Value>) -> Self {
         let e = Self::with_message(StatusCode::INTERNAL_SERVER_ERROR, message);
         tracing::error!(error = %e.text(), "internal error");
         e
@@ -98,6 +113,9 @@ impl std::fmt::Display for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        if self.hidden {
+            return Self::plain(self.status, GENERIC).into_response();
+        }
         let mut body = json!({"statusCode": self.status.as_u16(), "message": self.message});
         if self.with_message {
             body["error"] = self.status.canonical_reason().unwrap_or_default().into();
@@ -114,7 +132,7 @@ impl IntoResponse for AppError {
 impl From<sqlx::Error> for AppError {
     fn from(e: sqlx::Error) -> Self {
         tracing::error!(error = %e, "database error");
-        Self::plain(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
+        Self::plain(StatusCode::INTERNAL_SERVER_ERROR, GENERIC)
     }
 }
 
@@ -165,6 +183,22 @@ mod tests {
         let (_, b) = body(AppError::bad_request(vec!["a must be a string"])).await;
         assert_eq!(b["message"], json!(["a must be a string"]));
         assert_eq!(b["error"], "Bad Request");
+    }
+
+    #[tokio::test]
+    async fn an_internal_error_hides_its_cause_but_keeps_it_for_jobs() {
+        let e = AppError::internal("open /srv/x: denied");
+        assert_eq!(e.text(), "open /srv/x: denied");
+        let (s, b) = body(e).await;
+        assert_eq!(
+            (s, b),
+            (
+                500,
+                json!({"statusCode": 500, "message": "Internal server error"})
+            )
+        );
+        let (_, b) = body(AppError::internal_shown("pg_dump is not available")).await;
+        assert_eq!(b["message"], "pg_dump is not available");
     }
 
     #[tokio::test]

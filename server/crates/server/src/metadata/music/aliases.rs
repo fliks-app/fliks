@@ -3,7 +3,7 @@
 use crate::ingest::music::pairing::{Key, assign};
 use crate::media::items::move_user_rows;
 use crate::metadata::books::absorb::same_library;
-use crate::{media::write::orphans::Refs, state::AppState};
+use crate::{media::service::orphans::Refs, state::AppState};
 use fliks_domain::external_id::ExternalProvider;
 use sqlx::{PgConnection, PgPool};
 
@@ -413,7 +413,7 @@ pub async fn absorb_into(st: &AppState, from: i32, into: i32) -> sqlx::Result<bo
     }
     let refs = fold(&mut tx, from, into, None).await?;
     tx.commit().await?;
-    crate::media::write::orphans::release(st, refs);
+    crate::media::service::orphans::release(st, refs);
     Ok(true)
 }
 

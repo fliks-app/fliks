@@ -2,7 +2,7 @@
 use super::*;
 use crate::{
     ingest::books,
-    media::write::book_import::{book_or_held, held_book_in},
+    media::service::book_import::{book_or_held, held_book_in},
 };
 use fliks_domain::{
     external_id::Namespace,

@@ -476,13 +476,13 @@ async fn settle(st: &AppState, media_id: i32) -> bool {
             return true;
         }
         Some(MediaKind::Comic) => {
-            if let Err(e) = crate::media::write::fields::merge_unmatched(st, media_id).await {
+            if let Err(e) = crate::media::service::fields::merge_unmatched(st, media_id).await {
                 tracing::warn!("Post-import[comic #{media_id}]: file merge failed: {e}");
             }
             return true;
         }
         _ => {
-            if let Err(e) = crate::media::write::fields::merge_unmatched(st, media_id).await {
+            if let Err(e) = crate::media::service::fields::merge_unmatched(st, media_id).await {
                 tracing::warn!("Post-import[media #{media_id}]: file merge failed: {e}");
             }
         }

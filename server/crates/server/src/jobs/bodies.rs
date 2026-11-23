@@ -251,7 +251,7 @@ async fn refresh_loop(
             }
             let refreshed = match crate::ingest::load_media(&st.db, m.id).await {
                 Ok(Some(full)) => {
-                    crate::media::write::refresh_any(st, &full, false, Priority::Background).await
+                    crate::media::service::refresh_any(st, &full, false, Priority::Background).await
                 }
                 Ok(None) => continue,
                 Err(e) => Err(e.into()),

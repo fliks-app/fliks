@@ -45,7 +45,7 @@ async fn with_no_provider_lists_and_search_answer_empty_and_a_request_waits() {
         let (st, body) = get(&h, &format!("/api/metadata/{uri}")).await;
         assert_eq!((st, &body), (200, &json!([])), "{uri}");
     }
-    let (st, body) = get(&h, "/api/metadata/movie/603").await;
+    let (st, body) = get(&h, "/api/metadata/tmdb/movie/603").await;
     assert_eq!(st, 400, "{body}");
     assert_eq!(body["message"], "Unknown provider: tmdb");
 

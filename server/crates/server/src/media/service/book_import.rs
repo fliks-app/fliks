@@ -50,7 +50,7 @@ const FIELDS: [&str; 6] = [
 ];
 const NOT_READABLE: &str = "errors.book_library_not_accessible";
 
-pub(super) async fn import_book(
+pub(crate) async fn import_book(
     st: &AppState,
     a: &Authed,
     v: Value,
@@ -355,7 +355,7 @@ async fn create_from_edition(
         Err(e) => {
             if held.is_none() {
                 let guard = st.ingest.media.lock(id).await;
-                if let Err(d) = super::delete::remove_media(st, &guard, id).await {
+                if let Err(d) = super::remove::remove_media(st, &guard, id).await {
                     tracing::warn!("book #{id} left behind after a failed import: {}", d.text());
                 }
             }

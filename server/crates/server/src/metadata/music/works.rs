@@ -97,7 +97,7 @@ pub async fn set_track_works(
     if works.is_empty() {
         return Ok(());
     }
-    crate::media::write::orphans::hold(c).await?;
+    crate::media::service::orphans::hold(c).await?;
     let mut ids: Vec<i32> = vec![];
     for w in works {
         let id = work(c, w).await?;

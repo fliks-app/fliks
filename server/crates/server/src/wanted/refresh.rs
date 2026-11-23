@@ -3,13 +3,13 @@ use crate::{
     http::{AppError, auth::Authed},
     libraries::{accessible_library_ids, metadata_profile},
     media::{
-        wants,
-        write::{
+        service::{
             Creation,
             album_import::create_album_from,
             book_import::{NewBook, create_book},
             resolve_target_in,
         },
+        wants,
     },
     metadata::books::{ANCHOR, author_works, series_works, text, work_id},
     state::AppState,
@@ -409,7 +409,7 @@ fn provider_of(s: &Source) -> Namespace {
 async fn add_album(
     st: &AppState,
     job: &Job,
-    target_library: &crate::media::write::Target,
+    target_library: &crate::media::service::Target,
     work: &str,
     specs: &[fliks_domain::media::wants::WantSpec],
 ) -> Result<(), AppError> {

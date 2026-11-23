@@ -130,7 +130,7 @@ pub async fn replace_album_artists(
     if list.is_empty() {
         return Ok(());
     }
-    crate::media::write::orphans::hold(c).await?;
+    crate::media::service::orphans::hold(c).await?;
     let mut persons: Vec<i32> = vec![];
     for a in list {
         let p = person(c, &a.name, a.mbid.as_deref(), a.sort_name.as_deref()).await?;
@@ -162,7 +162,7 @@ pub async fn replace_track_credits(
     role: &str,
     list: &[Credited],
 ) -> sqlx::Result<()> {
-    crate::media::write::orphans::hold(c).await?;
+    crate::media::service::orphans::hold(c).await?;
     let mut rows: Vec<(i32, &Credited)> = vec![];
     for a in list {
         let p = person(c, &a.name, a.mbid.as_deref(), a.sort_name.as_deref()).await?;

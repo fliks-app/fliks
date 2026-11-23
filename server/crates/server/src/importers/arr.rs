@@ -350,7 +350,8 @@ pub(super) async fn import(
                     continue;
                 };
                 if let Err(e) =
-                    crate::media::write::refresh_any(&st, &media, false, Priority::Background).await
+                    crate::media::service::refresh_any(&st, &media, false, Priority::Background)
+                        .await
                 {
                     tracing::warn!(media_id = id, error = %e, "metadata refresh after Sonarr import");
                 }
@@ -448,7 +449,7 @@ async fn import_one(
             .await
             .map_err(|e| format!("{title}: {e}"))?;
             if let Some(m) = monitored.filter(|m| *m != e.monitored) {
-                crate::media::write::set_media_monitored(st, &[e.id], m)
+                crate::media::service::set_media_monitored(st, &[e.id], m)
                     .await
                     .map_err(fail)?;
             }

@@ -28,7 +28,7 @@ pub fn router() -> Router<AppState> {
             "/api/libraries/{id}",
             get(routes::get_one)
                 .patch(routes::update)
-                .delete(crate::media::write::remove_library),
+                .delete(crate::media::remove_library),
         )
         .route("/api/libraries/{id}/folders", post(folders::add))
         .route(

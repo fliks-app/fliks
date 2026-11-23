@@ -343,7 +343,7 @@ pub(crate) mod tests {
         use tower::ServiceExt;
         let tok = crate::auth::testing::token(st, 1, "admin").await;
         let mut rx = st.hub.subscribe();
-        let app = crate::media::write::routes(axum::Router::new())
+        let app = crate::media::routes(axum::Router::new())
             .merge(crate::music::router())
             .with_state(st.clone());
         let req = Request::builder()

@@ -1,7 +1,7 @@
 //! Folds a duplicate book into the work that already holds its id.
 use crate::{
     images::paths::{Size, Target, Variant},
-    media::write::orphans::{self, Refs},
+    media::service::orphans::{self, Refs},
     state::AppState,
 };
 use sqlx::PgConnection;

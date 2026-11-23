@@ -399,10 +399,10 @@ pub async fn remove(
     let (mut removed, mut unlinked) = (0, 0);
     for (m, guard) in media.iter().zip(&guards) {
         if elsewhere.contains(m) {
-            crate::media::write::unlink_folder_files(&st, guard, *m, folder).await?;
+            crate::media::service::unlink_folder_files(&st, guard, *m, folder).await?;
             unlinked += 1;
         } else {
-            crate::media::write::remove_media(&st, guard, *m).await?;
+            crate::media::service::remove_media(&st, guard, *m).await?;
             removed += 1;
         }
     }

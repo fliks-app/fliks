@@ -948,6 +948,63 @@ async fn refresh_keeps_the_session_and_a_reuse_revokes_it(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_session_records_the_client_it_logs_in_and_refreshes_from(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    user(&pool, "bob", Some("[]"), false, true).await;
+    let (s, _, b) = call(
+        &c,
+        "POST",
+        "/api/auth/login",
+        &[("x-fliks-client", "ios/7.1.0")],
+        Some(json!({"username": "bob", "password": "bob-pass"})),
+    )
+    .await;
+    assert_eq!(s, 201, "{b}");
+    let list = |tok: String| {
+        let c = &c;
+        async move {
+            let h = format!("Bearer {tok}");
+            call(
+                c,
+                "GET",
+                "/api/auth/sessions",
+                &[("authorization", &h)],
+                None,
+            )
+            .await
+            .2
+        }
+    };
+    let l = list(b["accessToken"].as_str().unwrap().to_owned()).await;
+    assert_eq!(l[0]["client"], "ios/7.1.0");
+    let (s, _, r) = call(
+        &c,
+        "POST",
+        "/api/auth/refresh",
+        &[("x-fliks-client", "ios/7.2.0")],
+        Some(json!({"refreshToken": b["refreshToken"]})),
+    )
+    .await;
+    assert_eq!(s, 201, "{r}");
+    let l = list(r["accessToken"].as_str().unwrap().to_owned()).await;
+    assert_eq!(l[0]["client"], "ios/7.2.0");
+    let (s, _, r2) = call(
+        &c,
+        "POST",
+        "/api/auth/refresh",
+        &[],
+        Some(json!({"refreshToken": r["refreshToken"]})),
+    )
+    .await;
+    assert_eq!(s, 201, "{r2}");
+    let l = list(r2["accessToken"].as_str().unwrap().to_owned()).await;
+    assert_eq!(
+        l[0]["client"], "ios/7.2.0",
+        "a request without the header keeps it"
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn sessions_are_listed_and_revoked_by_their_owner_only(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     user(&pool, "bob", Some("[]"), false, true).await;

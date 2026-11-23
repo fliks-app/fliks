@@ -921,7 +921,7 @@ pub async fn folder_cover(st: &AppState, media: i32) -> Option<Vec<u8>> {
 /// Settles an album once its post-import work is done: its file record merged, the cover (embedded first,
 /// then the folder's), then its identification while it holds no id.
 pub async fn settled(st: &AppState, media: i32) {
-    if let Err(e) = crate::media::write::fields::merge_unmatched(st, media).await {
+    if let Err(e) = crate::media::service::fields::merge_unmatched(st, media).await {
         tracing::warn!("Post-import[album #{media}]: file merge failed: {e}");
     }
     super::books::embedded_cover(st, media).await;

@@ -518,7 +518,7 @@ pub async fn ensure_media(
         };
         if let Err(e) = wanted {
             if !held {
-                crate::media::write::discard(st, media_id, MediaKind::Album).await;
+                crate::media::service::discard(st, media_id, MediaKind::Album).await;
             }
             return Err(e);
         }
@@ -1350,7 +1350,7 @@ async fn approve_delete(st: &AppState, a: &Authed, row: &db::Req) -> Res<Value> 
                         let _lock = removed.lock;
                         for path in removed.disk_paths {
                             let shown = path.dir.display().to_string();
-                            if let Err(e) = crate::media::write::remove_media_folder(path).await {
+                            if let Err(e) = crate::media::service::remove_media_folder(path).await {
                                 tracing::error!(
                                     "Media file deletion failed after delete request #{id}: title=\"{}\" path=\"{}\" error={e}",
                                     removed.title,

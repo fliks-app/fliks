@@ -298,7 +298,7 @@ pub async fn rescan_files(
     if slots_created
         && crate::media::external_ids::any(&st.db, media_id).await?
         && let Err(e) =
-            crate::media::write::refresh_series_episodes(st, &media, Priority::Background).await
+            crate::media::service::refresh_series_episodes(st, &media, Priority::Background).await
     {
         tracing::warn!("Rescan[media #{media_id}]: episode metadata refresh failed: {e:?}");
     }

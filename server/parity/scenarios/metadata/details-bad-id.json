@@ -36,18 +36,6 @@
         "status": 400
       },
       "method": "GET",
-      "path": "/api/metadata/movie/search"
-    },
-    {
-      "as": "admin",
-      "expect": {
-        "body": {
-          "error": "Bad Request",
-          "statusCode": 400
-        },
-        "status": 400
-      },
-      "method": "GET",
       "path": "/api/metadata/tmdb/movie/007"
     }
   ]

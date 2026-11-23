@@ -18,7 +18,7 @@ use crate::{
         validate::{PathParams, ValidJson},
     },
     libraries::{accessible_library_ids, paths_visible},
-    media::write::{self as mw, body::Body},
+    media::service::{self as mw, body::Body},
     state::AppState,
 };
 use axum::{

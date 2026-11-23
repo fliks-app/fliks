@@ -746,7 +746,7 @@ async fn a_held_book_is_named_only_to_a_reader_of_its_library(pool: PgPool) {
         .await
         .unwrap();
     let held = |readable: &'static [i32]| {
-        crate::media::write::book_import::held_book_in(
+        crate::media::service::book_import::held_book_in(
             &c.pool,
             Namespace::OPENLIBRARY,
             "OL1W",

@@ -21,7 +21,7 @@ use serde_json::Value;
 
 const FIELDS: [&str; 5] = ["type", "provider", "externalId", "libraryId", "folderId"];
 
-pub(super) async fn import_comic(
+pub(crate) async fn import_comic(
     st: &AppState,
     a: &Authed,
     v: Value,

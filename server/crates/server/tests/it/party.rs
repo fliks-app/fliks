@@ -4415,7 +4415,7 @@ async fn removing_the_playing_media_ends_the_party_for_its_members(pool: PgPool)
     let body = Some(json!({"deviceId": "da"}));
     c.call("POST", &format!("{url}/join"), &a, body).await;
     let guard = c.st.ingest.media.lock(1).await;
-    fliks_server::media::write::remove_media(&c.st, &guard, 1)
+    fliks_server::media::service::remove_media(&c.st, &guard, 1)
         .await
         .unwrap();
     drop(guard);

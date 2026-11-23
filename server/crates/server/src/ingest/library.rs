@@ -1175,7 +1175,7 @@ async fn remove_superseded(
                     crate::subtitles::sidecars::carry_over(st, media.id, old.id, h.file_id).await,
                 );
             }
-            crate::media::write::delete_media_file(st, media, old.id, true)
+            crate::media::service::delete_media_file(st, media, old.id, true)
                 .await
                 .map_err(|e| format!("{e:?}"))?;
             if let (Some(s), Some(e)) = (old.season_number, old.episode_number) {

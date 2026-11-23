@@ -13,7 +13,7 @@ use crate::{
         editions::{self, Facts},
         external_ids::{self, Link, edition_id},
         field_sources,
-        write::fields::{Fields, apply},
+        service::fields::{Fields, apply},
     },
     metadata::{MetaError, Override, Upstream},
     state::AppState,
@@ -121,7 +121,7 @@ pub async fn attach_with(
         // The file alone fills empty fields and its own, never a hand edit.
         let mut c = st.db.acquire().await?;
         work_locked.extend(field_sources::not_from_file(&mut *c, media).await?);
-        work_locked.extend(crate::media::write::fields::unsourced(&mut c, media).await?);
+        work_locked.extend(crate::media::service::fields::unsourced(&mut c, media).await?);
     }
     let edition_locked = match edition {
         Some(e) => Some(editions::locked_fields(&st.db, e).await?),
@@ -145,7 +145,7 @@ pub async fn attach_with(
     sqlx::query!("SELECT pg_advisory_xact_lock(hashtext('books:link'))")
         .execute(&mut *tx)
         .await?;
-    crate::media::write::orphans::hold(&mut tx).await?;
+    crate::media::service::orphans::hold(&mut tx).await?;
     let alive = sqlx::query_scalar!("SELECT id FROM media WHERE id = $1 FOR UPDATE", media)
         .fetch_optional(&mut *tx)
         .await?;
@@ -186,7 +186,7 @@ pub async fn attach_with(
                     let held = absorb(&mut tx, media, holder).await?;
                     tx.commit().await?;
                     carry_poster(st, media, holder).await;
-                    crate::media::write::orphans::release(st, held);
+                    crate::media::service::orphans::release(st, held);
                     return Box::pin(attach_with(st, holder, edition, m, file, prio)).await;
                 }
                 None => {

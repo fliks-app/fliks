@@ -102,7 +102,7 @@ pub async fn apply(c: &mut PgConnection, media: i32, f: &Fields) -> sqlx::Result
 }
 
 /// The shared columns of `media` a merge or an edit reasons about, as `jsonb_build_object` arguments.
-pub(super) const SHARED_COLUMNS: &str = r#"'title', title, 'originalTitle', "originalTitle", 'year', year,
+pub(crate) const SHARED_COLUMNS: &str = r#"'title', title, 'originalTitle', "originalTitle", 'year', year,
     'overview', overview, 'posterUrl', "posterUrl", 'fanartUrl', "fanartUrl", 'logoUrl', "logoUrl",
     'rating', rating, 'genres', genres, 'runtime', runtime, 'alternativeTitles', "alternativeTitles""#;
 

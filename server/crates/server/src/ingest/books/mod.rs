@@ -998,7 +998,7 @@ pub async fn backfill_unmatched(st: &AppState) {
         for r in ids {
             if r.r#type == "book" {
                 settled(&st, r.id).await;
-            } else if let Err(e) = crate::media::write::fields::merge_unmatched(&st, r.id).await {
+            } else if let Err(e) = crate::media::service::fields::merge_unmatched(&st, r.id).await {
                 tracing::warn!("Backfill[media #{}]: file merge failed: {e}", r.id);
             }
         }

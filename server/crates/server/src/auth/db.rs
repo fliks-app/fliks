@@ -370,8 +370,26 @@ pub struct SessionRow {
     pub method: Option<String>,
     pub provider_name: Option<String>,
     pub user_agent: Option<String>,
+    pub client: Option<String>,
     pub created_at: DateTime<Utc>,
     pub last_seen_at: DateTime<Utc>,
+}
+
+/// Records the app a session was last seen from; a request without the header keeps the stored one.
+pub async fn set_client(
+    db: impl sqlx::PgExecutor<'_>,
+    session: i32,
+    client: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    let Some(client) = client else { return Ok(()) };
+    sqlx::query!(
+        r#"UPDATE sessions SET client = $2 WHERE id = $1"#,
+        session,
+        client
+    )
+    .execute(db)
+    .await?;
+    Ok(())
 }
 
 /// The user's live sessions, most recently seen first; one whose refresh tokens all lapsed is gone.
@@ -383,7 +401,7 @@ pub async fn list_sessions(
     sqlx::query_as!(
         SessionRow,
         r#"SELECT s.id, s.method, p.name AS "provider_name?", s."userAgent" AS user_agent,
-                  s."createdAt" AS created_at, s."lastSeenAt" AS last_seen_at
+                  s.client, s."createdAt" AS created_at, s."lastSeenAt" AS last_seen_at
            FROM sessions s LEFT JOIN oidc_providers p ON p.id = s."providerId"
            WHERE s."userId" = $1 AND session_is_live(s.id, $2)
            ORDER BY s."lastSeenAt" DESC, s.id DESC"#,

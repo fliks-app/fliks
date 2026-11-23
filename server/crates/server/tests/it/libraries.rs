@@ -800,7 +800,7 @@ async fn removing_a_media_clears_its_directory_in_every_folder(pool: PgPool) {
         std::fs::create_dir_all(c.tmp.join(f).join("Multi")).unwrap();
     }
     let guard = c.st.ingest.media.lock(id).await;
-    let (_, dirs) = fliks_server::media::write::remove_media_with_dir(&c.st, &guard, id)
+    let (_, dirs) = fliks_server::media::service::remove_media_with_dir(&c.st, &guard, id)
         .await
         .unwrap();
     let mut dirs: Vec<_> = dirs.into_iter().map(|d| d.dir).collect();
@@ -817,7 +817,7 @@ async fn a_media_dir_reached_through_a_symlink_in_another_folder_is_kept(pool: P
     std::fs::create_dir_all(c.tmp.join("f1/Shared")).unwrap();
     std::os::unix::fs::symlink(c.tmp.join("f1/Shared"), c.tmp.join("f2/Link")).unwrap();
     let guard = c.st.ingest.media.lock(id).await;
-    let (_, dirs) = fliks_server::media::write::remove_media_with_dir(&c.st, &guard, id)
+    let (_, dirs) = fliks_server::media::service::remove_media_with_dir(&c.st, &guard, id)
         .await
         .unwrap();
     assert!(dirs.is_empty(), "{dirs:?}");
@@ -1244,7 +1244,7 @@ async fn the_boot_sweep_unlinks_the_sources_of_a_committed_move(pool: PgPool) {
     put(&c, "f2/Mv/.keep", b"");
     std::fs::hard_link(c.tmp.join("f1/Mv/0.mkv"), c.tmp.join("f2/Mv/0.mkv")).unwrap();
     journal_for(&c, &pool, id, true, true).await;
-    fliks_server::media::write::recover(&c.st).await;
+    fliks_server::media::service::recover(&c.st).await;
     assert!(!c.tmp.join("f1/Mv/0.mkv").exists());
     assert!(c.tmp.join("f2/Mv/0.mkv").is_file());
     let left: i64 = sqlx::query_scalar("SELECT count(*) FROM media_moves")
@@ -1263,7 +1263,7 @@ async fn the_boot_sweep_removes_the_copies_of_an_uncommitted_move(pool: PgPool) 
     put(&c, "f2/Mv/.keep", b"");
     std::fs::hard_link(c.tmp.join("f1/Mv/0.mkv"), c.tmp.join("f2/Mv/0.mkv")).unwrap();
     journal_for(&c, &pool, id, false, true).await;
-    fliks_server::media::write::recover(&c.st).await;
+    fliks_server::media::service::recover(&c.st).await;
     assert!(c.tmp.join("f1/Mv/0.mkv").is_file());
     assert!(!c.tmp.join("f2/Mv/0.mkv").exists());
     let left: i64 = sqlx::query_scalar("SELECT count(*) FROM media_moves")
@@ -1280,7 +1280,7 @@ async fn the_boot_sweep_keeps_a_source_with_no_identical_copy(pool: PgPool) {
     let id = media_with_files(&pool, "Mv", &[f2]).await;
     put(&c, "f1/Mv/0.mkv", b"zero");
     journal_for(&c, &pool, id, true, true).await;
-    fliks_server::media::write::recover(&c.st).await;
+    fliks_server::media::service::recover(&c.st).await;
     assert!(c.tmp.join("f1/Mv/0.mkv").is_file());
 }
 

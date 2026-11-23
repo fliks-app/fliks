@@ -1,7 +1,7 @@
 //! The music reads and writes of the import lists (`docs/spec/plugins.md`): a track wanted by its recording, a
 //! playlist mirrored from item ids. The plugin never calls MusicBrainz itself: the host resolves for it.
 use super::*;
-use crate::media::write::{Creation, album_import::want_new, resolve_target_in};
+use crate::media::service::{Creation, album_import::want_new, resolve_target_in};
 use crate::metadata::music::want::{self, Recording, Scope};
 use crate::plugins::imports::{db_err, host_err};
 use crate::plugins::runtime::HostError;
@@ -104,12 +104,13 @@ async fn check_profile(st: &AppState, group: &str, library: Option<u32>) -> Resu
         .map(i32::try_from)
         .transpose()
         .map_err(|_| host_err("ERR_VALIDATION", "libraryId is out of range"))?;
-    let all = crate::media::write::all_library_ids(&st.db)
+    let all = crate::media::service::all_library_ids(&st.db)
         .await
         .map_err(db_err)?;
-    let target = crate::media::write::resolve_target_in(st, &all, MediaKind::Album, library, None)
-        .await
-        .map_err(|e| host_err("ERR_VALIDATION", e.text()))?;
+    let target =
+        crate::media::service::resolve_target_in(st, &all, MediaKind::Album, library, None)
+            .await
+            .map_err(|e| host_err("ERR_VALIDATION", e.text()))?;
     let lang = crate::metadata::library_language(st, target.id)
         .await
         .map_err(|e| host_err("ERR", e.text()))?;
@@ -194,7 +195,7 @@ pub async fn want_recording(
                     .find(|i| i.provider == "musicbrainz")
                     .ok_or_else(|| host_err("ERR_NOT_FOUND", "no album names that ISRC"))?;
                 check_profile(st, &group.value, library_id).await?;
-                let all = crate::media::write::all_library_ids(&st.db)
+                let all = crate::media::service::all_library_ids(&st.db)
                     .await
                     .map_err(db_err)?;
                 let target = resolve_target_in(st, &all, MediaKind::Album, library, None)

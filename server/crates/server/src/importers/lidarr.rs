@@ -3,7 +3,7 @@
 use super::{arr::Arr, dto, fetch};
 use crate::{
     http::{AppError, auth::Authed},
-    media::write::{Creation, album_import::create_album, resolve_target_in},
+    media::service::{Creation, album_import::create_album, resolve_target_in},
     outbound::{LIST_TIMEOUT, base_url},
     state::AppState,
 };

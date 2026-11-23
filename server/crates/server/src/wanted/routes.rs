@@ -6,7 +6,7 @@ use crate::{
         validate::{PathParams, ValidJson},
     },
     libraries::{accessible_library_ids, assert_media_accessible},
-    media::{params::Reader, wants, write::body::Body},
+    media::{params::Reader, service::body::Body, wants},
     state::AppState,
 };
 use axum::{

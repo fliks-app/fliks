@@ -4,7 +4,7 @@ use crate::{
     http::{AppError, auth::load_users},
     images::paths::{Target, Variant},
     libraries::library_ids_of,
-    media::write::{
+    media::service::{
         all_library_ids, import_album_for_request, import_book_for_request, import_in,
         remove_media_with_dir, resolve_target_in,
     },
