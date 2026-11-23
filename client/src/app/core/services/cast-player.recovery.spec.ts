@@ -19,9 +19,9 @@ import { NetworkService } from './network.service';
 import { SessionSyncService } from './session-sync.service';
 import { ToastService } from './toast.service';
 
-type Priv = { reloadCastStream: (...a: unknown[]) => Promise<string>; qoeReporter: unknown };
+type Priv = { reloadCastStream: (...a: unknown[]) => Promise<string>; qoeReporter: unknown; controller: () => Promise<unknown> };
 
-function setup() {
+async function setup() {
   const cast = {
     isConnected: signal(true),
     receiverMedia: signal<Record<string, unknown> | null>(null),
@@ -61,6 +61,8 @@ function setup() {
   svc.hasMedia.set(true);
   svc.mediaFileId.set(7);
   const reload = vi.spyOn(svc as unknown as Priv, 'reloadCastStream');
+  await (svc as unknown as Priv).controller();
+  TestBed.tick();
   return { svc, cast, toast, reload };
 }
 
@@ -72,7 +74,7 @@ describe('cast receiver error recovery', () => {
   });
 
   it('reloads at the reported position', async () => {
-    const { cast, reload, svc } = setup();
+    const { cast, reload, svc } = await setup();
     reload.mockResolvedValue('done');
     (svc as unknown as { recordRecovery: () => void }).recordRecovery = vi.fn();
     cast.playbackError$.next({ position: 12 });
@@ -81,7 +83,7 @@ describe('cast receiver error recovery', () => {
   });
 
   it('backs off between failing reloads, then toasts once the cap is spent', async () => {
-    const { cast, reload, toast } = setup();
+    const { cast, reload, toast } = await setup();
     reload.mockRejectedValue(new Error('boom'));
     cast.playbackError$.next({});
     await vi.advanceTimersByTimeAsync(0);
@@ -96,7 +98,7 @@ describe('cast receiver error recovery', () => {
   });
 
   it('treats a refused LOAD as a failed attempt', async () => {
-    const { cast, reload } = setup();
+    const { cast, reload } = await setup();
     reload.mockResolvedValue('refused');
     cast.playbackError$.next({});
     await vi.advanceTimersByTimeAsync(2_000);
@@ -104,7 +106,7 @@ describe('cast receiver error recovery', () => {
   });
 
   it('leaves an error during a user reload to that reload', async () => {
-    const { svc, cast, reload } = setup();
+    const { svc, cast, reload } = await setup();
     svc.reloading.set(true);
     cast.playbackError$.next({});
     await vi.advanceTimersByTimeAsync(10_000);
@@ -112,7 +114,7 @@ describe('cast receiver error recovery', () => {
   });
 
   it('reloads when the receiver playhead freezes while playing', async () => {
-    const { reload } = setup();
+    const { reload } = await setup();
     reload.mockResolvedValue('done');
     await vi.advanceTimersByTimeAsync(20_000);
     expect(reload).toHaveBeenCalledTimes(1);

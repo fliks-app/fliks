@@ -1,4 +1,4 @@
-import { DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CastService, type CastResumeState } from './cast.service';
 import { SessionSyncService } from './session-sync.service';
@@ -24,7 +24,7 @@ import {
 } from '../utils/edl-policy';
 import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { NetworkService } from './network.service';
-import { RecoveryController } from '../../features/player/recovery-controller';
+import type { RecoveryController } from '../../features/player/recovery-controller';
 import { ServerConfigService } from './server-config.service';
 import { formatAudioParts, formatAudioLabel, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode, type TimeMarker } from '../utils/player.utils';
 import {
@@ -179,7 +179,8 @@ const fromOtherLoad = (q: ReceiverSample, sid: string | null) => !!q.sid && q.si
 /** Global Cast stream state, so the Cast overlay works independently of PlayerComponent. */
 @Injectable({ providedIn: 'root' })
 export class CastPlayerService {
-  private readonly cast = inject(CastService);
+  readonly cast = inject(CastService);
+  private readonly injector = inject(Injector);
   private readonly sessionSync = inject(SessionSyncService);
   private readonly castSettings = inject(CastSettingsService);
   private readonly streamingApi = inject(StreamingApiService);
@@ -191,9 +192,9 @@ export class CastPlayerService {
   private readonly nowPlaying = inject(NowPlayingMetadataService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly trackManager = inject(TrackManagerService);
-  private readonly translate = inject(TranslateService);
-  private readonly toast = inject(ToastService);
-  private readonly network = inject(NetworkService);
+  readonly translate = inject(TranslateService);
+  readonly toast = inject(ToastService);
+  readonly network = inject(NetworkService);
 
   /** One profile for every kind, from the receiver's probe: its MSE codecs and the audio files it opens.
    * Without a v2 probe `videoCodecs` stays empty (H.264 SDR transcode) and audio is AAC stereo. */
@@ -399,7 +400,7 @@ export class CastPlayerService {
     activeAudioStreamIndex: number | undefined;
   }) {
     this.failed.set(false);
-    this.recovery.clearEpisode();
+    this.recovery?.clearEpisode();
     this.playbackId = opts.playbackId ?? newPlaybackId();
     this.mediaFileId.set(opts.mediaFileId);
     this.mediaId.set(opts.mediaId);
@@ -503,7 +504,7 @@ export class CastPlayerService {
 
   private restore(s: VideoCastState): void {
     this.failed.set(false);
-    this.recovery.clearEpisode();
+    this.recovery?.clearEpisode();
     this.mediaFileId.set(s.mediaFileId);
     this.mediaId.set(s.mediaId);
     this.episodeId.set(s.episodeId);
@@ -606,28 +607,9 @@ export class CastPlayerService {
         void this.probeReceiverCapabilities();
       }
     });
-    // Recoverable receiver error (session GC'd, 410 on next segment): reload a fresh stream and resume.
-    this.cast.playbackError$.subscribe(({ position, mediaFileId }) => {
-      if (mediaFileId != null && mediaFileId !== this.mediaFileId()) return;
-      if (!this.hasMedia() || this.controlOnly() || !this.cast.receiverPlays(this.mediaFileId())) return;
-      this.errorPosition = position ?? 0;
-      void this.recovery.recoverFromLostSession('other');
-      this.errorPosition = 0;
-    });
-    // A frozen receiver playhead is caught by the stall watchdog, polled once a second while media plays.
-    effect((onCleanup) => {
-      if (!this.hasMedia() || !this.cast.isConnected()) return;
-      this.recovery.armClock();
-      const id = setInterval(() => {
-        if (this.controlOnly() || !this.cast.receiverPlays(this.mediaFileId())) return;
-        this.recovery.tickClockWatch();
-        this.recovery.checkStall();
-      }, 1000);
-      onCleanup(() => clearInterval(id));
-    });
-    inject(DestroyRef).onDestroy(() => {
-      this.destroyed = true;
-      this.recovery.dispose();
+    // The controller (receiver errors, stall watchdog) loads once there is media to recover.
+    effect(() => {
+      if (this.hasMedia() && this.cast.isConnected()) void this.controller();
     });
     this.cast.receiverError$.subscribe((e) => {
       const sid = this.liveSessionId();
@@ -636,46 +618,23 @@ export class CastPlayerService {
   }
 
   /** Latest reload wins: an older one aborts after its playback-info; `reloading` mutes the other recoveries. */
-  private readonly reloads = new LatestWins();
+  readonly reloads = new LatestWins();
   readonly reloading = signal(false);
   /** Recovery gave up: the failure toast is up and nothing retries until new media loads. */
-  private readonly failed = signal(false);
-  private destroyed = false;
+  readonly failed = signal(false);
+  destroyed = false;
   /** The position the receiver reported with its error, consumed by the recovery it triggers. */
-  private errorPosition = 0;
+  errorPosition = 0;
 
-  private readonly recovery = new RecoveryController({
-    // The receiver keeps its own picture: there is no local stream to reset or unload.
-    playhead: () => ({
-      currentTime: this.cast.currentTime(),
-      duration: this.cast.duration(),
-      resetRecoveryGuard: () => {},
-      unload: async () => {},
-    }),
-    isDestroyed: () => this.destroyed,
-    isOnline: () => this.network.isOnline(),
-    hasMedia: () => this.hasMedia(),
-    isPaused: () => this.cast.isPaused(),
-    isLoading: () => this.cast.buffering(),
-    reloadInFlight: () => this.reloading(),
-    resumePosition: () => (this.errorPosition > 0 ? this.errorPosition : this.cast.currentTime()),
-    setRecovering: () => {},
-    hasError: () => this.failed(),
-    showFailure: () => {
-      this.failed.set(true);
-      this.toast.error(this.translate.instant('cast.error.recovery_failed'));
-    },
-    abandonReload: () => {
-      this.reloads.cancel();
-      this.reloading.set(false);
-    },
-    reloadSession: async (pos) => {
-      const outcome = await this.reloadCastStream(pos);
-      if (outcome === 'refused') throw new Error('cast LOAD refused');
-      return outcome;
-    },
-    reportRecovery: (position, wait) => this.recordRecovery(position, wait?.reason),
-  });
+  private recovery: RecoveryController | null = null;
+  private recoveryLoad: Promise<RecoveryController> | null = null;
+
+  /** Loaded on first use: the controller belongs to the lazy player chunk, not the initial one. */
+  private controller(): Promise<RecoveryController> {
+    return (this.recoveryLoad ??= import('../../features/player/cast-recovery').then(
+      (m) => (this.recovery = m.castRecovery(this, this.injector)),
+    ));
+  }
 
   /** Opens the new session as the replacement of the old one; the receiver plays its buffered segments until the LOAD lands. */
   async reloadCastStream(positionOverride?: number, autoplay = true, snapQualityId?: string) {
@@ -930,7 +889,7 @@ export class CastPlayerService {
   }
 
   /** The reload that just minted the current sid was a recovery. */
-  private recordRecovery(position: number, reason?: QoeRecoveryReason): void {
+  recordRecovery(position: number, reason?: QoeRecoveryReason): void {
     this.recoveries = 1;
     const sid = this.liveSessionId();
     if (sid) this.qoeReporter.record(sid, { type: 'recovery', at: Date.now(), position, reason }, false, this.playbackId ?? undefined);
