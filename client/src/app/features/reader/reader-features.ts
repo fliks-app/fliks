@@ -41,5 +41,5 @@ export const READER_FEATURES: Record<ReaderFormat, ReaderFeatures> = {
     runningHead: true,
   },
   pdf: { ...NONE, contents: true, bookmarks: true, appearance: ['theme'], zoom: true, listen: true },
-  comic: { ...NONE, appearance: ['comic'], zoom: true },
+  comic: { ...NONE, bookmarks: true, appearance: ['comic'], zoom: true },
 };

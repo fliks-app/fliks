@@ -47,7 +47,7 @@
             @if (s.episodeLabel) {
               <a
                 [routerLink]="s.episodeId ? episodeLink(s) : mediaLink(s)"
-                class="text-xs text-base-content/60 truncate block mt-0.5 hover:underline"
+                class="text-sm text-base-content/60 truncate block mt-0.5 hover:underline"
                 >{{ s.episodeLabel }}</a
               >
             }
@@ -84,7 +84,7 @@
         <div class="divider my-0 mx-3"></div>
 
         <!-- Stream details -->
-        <div class="px-3 py-2 space-y-1.5 text-xs">
+        <div class="px-3 py-2 space-y-1.5 text-sm">
           <div class="flex gap-2">
             <span class="text-base-content/60 w-10 shrink-0">{{
               'system.streams_label_stream' | translate
@@ -200,7 +200,7 @@
         <div class="divider my-0 mx-3"></div>
 
         <!-- User + device -->
-        <div class="text-center text-xs text-base-content/60 py-1.5">
+        <div class="text-center text-sm text-base-content/60 py-1.5">
           {{ s.username ?? '-' }}
           @if (formatDevice(s.device, s.systemName); as deviceLabel) {
             <div class="text-base-content/60">

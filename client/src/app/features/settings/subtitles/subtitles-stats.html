@@ -7,16 +7,16 @@
   @if (stats(); as s) {
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
       <div class="stat bg-base-100 border border-base-200 rounded-lg p-4">
-        <div class="stat-title text-xs">{{ 'settings.subtitles.stats_total' | translate }}</div>
+        <div class="stat-title text-sm">{{ 'settings.subtitles.stats_total' | translate }}</div>
         <div class="stat-value text-2xl">{{ s.total }}</div>
       </div>
       <div class="stat bg-base-100 border border-base-200 rounded-lg p-4">
-        <div class="stat-title text-xs">{{ 'settings.subtitles.stats_missing' | translate }}</div>
+        <div class="stat-title text-sm">{{ 'settings.subtitles.stats_missing' | translate }}</div>
         <div class="stat-value text-2xl" [class.text-warning]="missingCount() > 0">{{ missingCount() }}</div>
       </div>
       @for (entry of statusEntries(); track entry[0]) {
         <div class="stat bg-base-100 border border-base-200 rounded-lg p-4">
-          <div class="stat-title text-xs">{{ statusLabel(entry[0]) }}</div>
+          <div class="stat-title text-sm">{{ statusLabel(entry[0]) }}</div>
           <div class="stat-value text-2xl">{{ entry[1] }}</div>
         </div>
       }

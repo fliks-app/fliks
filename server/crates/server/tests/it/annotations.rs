@@ -9,7 +9,7 @@ use tower::ServiceExt;
 const SECRET: &str = "0123456789abcdef0123456789abcdef";
 
 /// Users 1 admin, 2 and 3 plain readers of library 1. Items: 1 a text item of library 1, 2 a text item of
-/// library 2 (unreadable by 2 and 3), 3 an audio item of library 1.
+/// library 2 (unreadable by 2 and 3), 3 an audio item of library 1, 4 a comic (image) item of library 1.
 async fn ctx(pool: PgPool) -> (Router, Vec<String>) {
     fliks_server::db::migrate(&pool).await.unwrap();
     sqlx::raw_sql(
@@ -19,8 +19,8 @@ async fn ctx(pool: PgPool) -> (Router, Vec<String>) {
         INSERT INTO libraries (id, name) VALUES (1, 'L1'), (2, 'L2');
         INSERT INTO library_user_access ("libraryId", "userId") VALUES (1, 2), (1, 3), (1, 4);
         INSERT INTO media (id, title, type, "libraryId", "folderName") VALUES (10, 'Alpha', 'book', 1, 'a'), (11, 'Beta', 'book', 2, 'b');
-        INSERT INTO editions (id, "mediaId", family, format, "libraryId") VALUES (1, 10, 'text', 'epub', NULL), (2, 11, 'text', 'epub', NULL), (3, 10, 'audio', 'm4b', NULL);
-        INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (2, 11, 2), (3, 10, 3);
+        INSERT INTO editions (id, "mediaId", family, format, "libraryId") VALUES (1, 10, 'text', 'epub', NULL), (2, 11, 'text', 'epub', NULL), (3, 10, 'audio', 'm4b', NULL), (4, 10, 'image', 'cbz', NULL);
+        INSERT INTO items (id, "mediaId", "editionId") VALUES (1, 10, 1), (2, 11, 2), (3, 10, 3), (4, 10, 4);
         "#,
     )
     .execute(&pool)
@@ -113,6 +113,17 @@ async fn create_list_update_delete_round_trip(pool: PgPool) {
     );
     assert_eq!(call(&app, &t[1], "DELETE", &uri, None).await.0, 204);
     assert_eq!(call(&app, &t[1], "DELETE", &uri, None).await.0, 404);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_comic_edition_takes_bookmarks(pool: PgPool) {
+    let (app, t) = ctx(pool).await;
+    let body = json!({"kind": "bookmark", "locator": {"page": 3}});
+    let (s, _) = call(&app, &t[1], "POST", "/api/items/4/annotations", Some(body)).await;
+    assert_eq!(s, 201);
+    let (s, list) = call(&app, &t[1], "GET", "/api/items/4/annotations", None).await;
+    assert_eq!(s, 200);
+    assert_eq!(list.as_array().unwrap().len(), 1);
 }
 
 #[sqlx::test(migrations = false)]

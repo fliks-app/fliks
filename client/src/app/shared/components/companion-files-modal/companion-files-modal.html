@@ -17,7 +17,7 @@
             <p class="text-sm font-medium break-all">{{ c.name }}</p>
             <p class="text-sm text-base-content/60">{{ formatSize(c.size) }} · {{ formatDate(c.mtime) }}</p>
             @if (c.sharedWith.length) {
-              <p class="text-xs text-warning">{{ 'file_info.companions_shared' | translate: { name: sharedNames(c) } }}</p>
+              <p class="text-sm text-warning">{{ 'file_info.companions_shared' | translate: { name: sharedNames(c) } }}</p>
             }
           </div>
           @if (c.subtitle; as sub) {

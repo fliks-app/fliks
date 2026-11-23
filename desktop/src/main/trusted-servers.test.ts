@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   acceptCertificate,
+  isPinnedCertificate,
   httpsUpgradeOrigin,
   isReportedServer,
   loadTrust,
@@ -196,4 +197,15 @@ test('a second certificate arriving during a prompt is asked about, not accepted
   assert.deepEqual(results, [true, false]);
   assert.deepEqual(asked.map((p) => p.cert.fingerprint), ['a', 'b']);
   assert.equal(await acceptCertificate('https://race.lan/', UNKNOWN_CA, cert('b'), ask(true)), false);
+});
+
+test('a verify proc accepts only the pinned certificate of a reported server host', async () => {
+  const { ask } = fresh();
+  trustServer('https://nas.lan:8443');
+  await acceptCertificate('https://nas.lan:8443/', UNKNOWN_CA, cert('a'), ask(true));
+  assert.equal(isPinnedCertificate('NAS.lan', 'a'), true);
+  assert.equal(isPinnedCertificate('nas.lan', 'b'), false);
+  assert.equal(isPinnedCertificate('other.lan', 'a'), false);
+  trustServer('https://other.lan');
+  assert.equal(isPinnedCertificate('nas.lan', 'a'), false);
 });

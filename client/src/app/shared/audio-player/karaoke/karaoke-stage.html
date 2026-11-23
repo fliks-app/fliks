@@ -104,7 +104,7 @@
             </button>
           </div>
         </div>
-        <p class="min-h-4 text-xs text-base-content/60" [class.invisible]="pitch() === 0">{{ 'karaoke.key_stems_off' | translate }}</p>
+        <p class="min-h-4 text-sm text-base-content/60" [class.invisible]="pitch() === 0">{{ 'karaoke.key_stems_off' | translate }}</p>
         @if (canSing) {
           <div class="flex items-center justify-between gap-3">
             <span class="text-sm font-semibold">
@@ -115,11 +115,11 @@
               {{ 'karaoke.calibrate' | translate }}
             </button>
           </div>
-          <p class="min-h-4 text-xs text-base-content/60" [class.invisible]="calibrated() !== false">{{ 'karaoke.calibrate_failed' | translate }}</p>
+          <p class="min-h-4 text-sm text-base-content/60" [class.invisible]="calibrated() !== false">{{ 'karaoke.calibrate_failed' | translate }}</p>
         }
         @if (canEdit()) {
           <div class="flex flex-col gap-2 border-t border-base-content/10 pt-3">
-            <span class="text-xs text-base-content/60">{{ 'karaoke.recompute' | translate }}</span>
+            <span class="text-sm text-base-content/60">{{ 'karaoke.recompute' | translate }}</span>
             <div class="flex flex-wrap gap-2">
               <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="recompute.emit('melody')" data-testid="karaoke-recompute-melody">{{ 'karaoke.recompute_melody' | translate }}</button>
               <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="recompute.emit('sync')" data-testid="karaoke-recompute-sync">{{ 'karaoke.recompute_sync' | translate }}</button>

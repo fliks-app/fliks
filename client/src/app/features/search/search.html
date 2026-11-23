@@ -422,7 +422,7 @@
               <button type="button" class="block w-full text-left focus-visible:outline-2" data-card-link (click)="openItem(i)">
                 <ng-container *ngTemplateOutlet="cover; context: { $implicit: i.cover, cls: 'aspect-square w-full' }" />
                 <span class="mt-2 block truncate text-sm font-medium">{{ i.title }}</span>
-                <span class="block h-5 truncate text-xs text-base-content/60">{{ i.subtitle }}</span>
+                <span class="block h-5 truncate text-sm text-base-content/60">{{ i.subtitle }}</span>
               </button>
               <app-hit-state class="absolute! bottom-14 right-1 rounded-full bg-base-100/80" [state]="i.state" [canAct]="canAdd() || canRequest()" [admin]="canAdd()" (add)="addItem(i)" />
             </div>

@@ -173,7 +173,8 @@ export class ReaderSession {
 
   /** The list button reopens the tab last browsed; search has its own button. */
   browseTab(): SidebarTab {
-    return this.tab() === 'search' ? 'contents' : this.tab();
+    const tab = this.tab() === 'search' ? 'contents' : this.tab();
+    return tab === 'contents' && !this.features().contents ? 'bookmarks' : tab;
   }
 
   openPanel(panel: ReaderPanel, tab?: SidebarTab): void {

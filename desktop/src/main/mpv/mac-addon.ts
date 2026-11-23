@@ -13,9 +13,8 @@ export type MacAddon = LibmpvAddon & NowPlayingAddon & {
   useLiveFullscreen(wid: string): void;
 };
 
-/** Resolve + require the native addon (singleton across the process). The .node
- *  addon and the dlopen'd libmpv are asarUnpack'd, so in a packaged app they
- *  live under app.asar.unpacked. */
+/** Resolve + require the native addon (singleton). The .node addon and the dlopen'd libmpv are asarUnpack'd,
+ *  so in a packaged app they live under app.asar.unpacked. */
 let macAddon: MacAddon | null = null;
 export function loadMacAddon(): MacAddon {
   if (macAddon) return macAddon;

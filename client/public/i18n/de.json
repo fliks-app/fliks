@@ -2915,6 +2915,8 @@
         "import_completed": "{{users}}, {{imported}}, aktualisiert: {{updated}}, übersprungen: {{skipped}}",
         "import_failed": "Seerr-Import fehlgeschlagen: {{error}}"
       },
+      "errors_notice_one": "{{count}} Fehler beim Import. Erste Meldungen:",
+      "errors_notice_other": "{{count}} Fehler beim Import. Erste Meldungen:",
       "unmapped_notice_one": "{{count}} Quellbenutzer konnte nicht zugeordnet werden: Ein Konto trägt bereits seinen Namen.",
       "unmapped_notice_other": "{{count}} Quellbenutzer konnten nicht zugeordnet werden: Ein Konto trägt bereits ihren Namen.",
       "unmapped_review": "Benutzer zuordnen",

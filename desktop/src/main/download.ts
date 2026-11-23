@@ -19,8 +19,8 @@ import { localFileUrl } from './protocol';
 // Offline downloads for the desktop client: fetch a media file to disk under
 // userData and hand mpv a local file:// URL on playback. Sidecar subtitle files
 // are fetched the same way (mpv can only sub-add a real path, not a blob URL).
-// The download URL carries the ?token= stream JWT. net.request raises no `certificate-error`:
-// a server whose certificate the OS rejects cannot be downloaded from, pinned or not.
+// The download URL carries the ?token= stream JWT. A pinned self-signed server is accepted by
+// the default session's certificate verify proc (index.ts).
 
 const PROGRESS_MIN_INTERVAL_MS = 400;
 

@@ -10,9 +10,8 @@ pub enum Imported {
     NameTaken,
 }
 
-/// The user recorded for `(provider, external_id)`, else a new one with the default role and its default
-/// libraries, recorded in one transaction. A name held by another account is `NameTaken`, never merged,
-/// except an account a released import created (see `earlier_import`), which is mapped now.
+/// The user recorded for `(provider, external_id)`, else a new one with the default role and libraries, in one
+/// transaction. A name held by another account is `NameTaken`, never merged, except a released import's (`earlier_import`).
 pub async fn imported_user(
     db: &PgPool,
     provider: &str,

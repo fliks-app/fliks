@@ -52,7 +52,7 @@
       <svg lucideZoomIn class="h-6 w-6 max-sm:h-5 max-sm:w-5"></svg>
     </button>
   }
-  @if (f().contents) {
+  @if (f().contents || f().bookmarks) {
     <button
       type="button"
       class="btn btn-ghost btn-circle btn-md max-sm:hidden"

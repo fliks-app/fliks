@@ -100,8 +100,7 @@ describe('the reader on a comic', () => {
     const labels = [...el.querySelectorAll('.rd-bar button')].map((b) => b.getAttribute('aria-label'));
     expect(labels).toEqual(expect.arrayContaining(['reader.back', 'reader.zoom_in', 'reader.appearance']));
     expect(labels).not.toContain('reader.search');
-    expect(labels).not.toContain('reader.add_bookmark');
-    expect(labels).not.toContain('reader.contents');
+    expect(labels).toContain('reader.add_bookmark');
     expect(el.querySelector('.rd-scrub input')).not.toBeNull();
   });
 });

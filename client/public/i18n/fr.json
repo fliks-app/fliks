@@ -2915,6 +2915,8 @@
         "import_completed": "{{users}}, {{imported}}, mises à jour : {{updated}}, ignorées : {{skipped}}",
         "import_failed": "Échec de l'import Seerr : {{error}}"
       },
+      "errors_notice_one": "{{count}} erreur pendant l'import. Premiers messages :",
+      "errors_notice_other": "{{count}} erreurs pendant l'import. Premiers messages :",
       "unmapped_notice_one": "{{count}} utilisateur source n'a pas pu être associé : un compte porte déjà son nom.",
       "unmapped_notice_other": "{{count}} utilisateurs sources n'ont pas pu être associés : un compte porte déjà leur nom.",
       "unmapped_review": "Associer les utilisateurs",

@@ -173,6 +173,23 @@ export class DataImportsSettingsComponent implements OnInit {
     this.unmappedBySource.update((all) => ({ ...all, [source]: { users, count } }));
   }
 
+  /** Importer errors per source: the messages sent with the event and the total the run counted. */
+  private readonly errorsBySource = signal<Record<string, { messages: string[]; count: number }>>({});
+  readonly importErrorCount = computed(() => Object.values(this.errorsBySource()).reduce((n, g) => n + g.count, 0));
+  readonly importErrorMessages = computed(() =>
+    Object.values(this.errorsBySource()).flatMap((g) => g.messages).slice(0, 5),
+  );
+
+  private noteErrors(source: string, event: Record<string, unknown>): void {
+    const messages = ((event['errors'] as unknown[] | undefined) ?? []).map(String);
+    const count = Number(event['errorCount'] ?? messages.length);
+    this.errorsBySource.update((all) => ({ ...all, [source]: { messages, count } }));
+  }
+
+  importErrorsNotice(): string {
+    return translatePlural(this.translate, 'settings.data_imports.errors_notice', this.importErrorCount());
+  }
+
   onUserMapped(user: UnmappedUser): void {
     const key = unmappedKey(user);
     this.unmappedBySource.update((all) =>
@@ -255,6 +272,7 @@ export class DataImportsSettingsComponent implements OnInit {
         const created = Number(event['usersCreated'] ?? 0);
         const imported = Number(event['imported'] ?? 0);
         this.noteUnmapped(`emby:${event['serverId']}`, event);
+        this.noteErrors(`emby:${event['serverId']}`, event);
         this.toast.success(
           this.translate.instant('settings.data_imports.emby.import_completed', {
             users: translatePlural(this.translate, 'settings.data_imports.users_created', users, { created }),
@@ -283,6 +301,7 @@ export class DataImportsSettingsComponent implements OnInit {
         };
         this.seerrLastSummary.set(summary);
         this.noteUnmapped('seerr', event);
+        this.noteErrors('seerr', event);
         this.toast.success(this.seerrSummaryText(summary));
       } else if (event.type === 'seerr.import.failed') {
         this.seerrImporting.set(false);
