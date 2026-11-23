@@ -27,7 +27,7 @@ pub fn probe() {
 }
 
 /// Reads below the locale and charset-conversion data only; the archive is already open on stdin.
-fn landlock() {
+fn landlock() -> bool {
     #[repr(C, packed)]
     struct PathBeneath {
         allowed: u64,
@@ -35,7 +35,7 @@ fn landlock() {
     }
     let abi = abi();
     if abi < 1 {
-        return;
+        return true;
     }
     // The kernel rejects a right it does not know: REFER from ABI 2, TRUNCATE from 3, IOCTL_DEV from 5.
     let handled = FS_V1
@@ -51,7 +51,7 @@ fn landlock() {
             0u32,
         ) as i32;
         if ruleset < 0 {
-            return;
+            return false;
         }
         for path in READABLE {
             let dir = libc::open(
@@ -73,8 +73,9 @@ fn landlock() {
                 libc::close(dir);
             }
         }
-        libc::syscall(libc::SYS_landlock_restrict_self, ruleset, 0u32);
+        let restricted = libc::syscall(libc::SYS_landlock_restrict_self, ruleset, 0u32) == 0;
         libc::close(ruleset);
+        restricted
     }
 }
 
@@ -115,6 +116,9 @@ fn seccomp() -> bool {
         libc::SYS_pidfd_send_signal,
         libc::SYS_kill,
         libc::SYS_tkill,
+        libc::SYS_rt_sigqueueinfo,
+        libc::SYS_rt_tgsigqueueinfo,
+        libc::SYS_io_uring_setup,
     ];
     let mut f = vec![
         ins(LD_ABS, 0, 0, OFF_ARCH),
@@ -152,6 +156,5 @@ pub fn enter() -> bool {
     if unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } != 0 {
         return false;
     }
-    landlock();
-    seccomp()
+    landlock() && seccomp()
 }

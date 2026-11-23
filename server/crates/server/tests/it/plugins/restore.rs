@@ -2,7 +2,7 @@
 //! Need `pg_dump`, `pg_restore` and `psql` of the server's major version on `PATH`.
 use super::harness::*;
 use crate::fakes::skip;
-use fliks_server::plugins::runtime::{HttpRequest, Principal};
+use fliks_server::plugins::runtime::{HttpRequest, Principal, State};
 use fliks_server::system::{backup, restore};
 use serde_json::Value;
 use std::{path::PathBuf, process::Command, time::Duration};
@@ -101,7 +101,11 @@ async fn restored(h: &H, s: &Scratch, name: &str) -> restore::Outcome {
         until(
             "plugin registered again",
             Duration::from_secs(60),
-            async || h.st.plugins.state_of("fliks.fixture").is_some(),
+            async || {
+                h.st.plugins
+                    .rt("fliks.fixture")
+                    .is_some_and(|r| r.state() == State::Ready)
+            },
         )
         .await;
     }

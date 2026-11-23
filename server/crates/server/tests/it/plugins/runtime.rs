@@ -666,16 +666,13 @@ async fn health_misses_and_timeouts() {
     })
     .await;
     let before = rt.restarts.load(std::sync::atomic::Ordering::SeqCst);
-    let mut states = rt.watch();
     h.set("plugin.fliks.fixture.health", "slow").await;
-    // A recreated core with no other instance runs `start` again and is `ready` at once: watch it.
-    tokio::time::timeout(
+    until(
+        "a timed-out health is a miss",
         Duration::from_secs(10),
-        states.wait_for(|s| *s == State::Degraded),
+        async || rt.state() == State::Degraded,
     )
-    .await
-    .expect("a timed-out health is a miss")
-    .unwrap();
+    .await;
     assert_eq!(
         rt.restarts.load(std::sync::atomic::Ordering::SeqCst),
         before,

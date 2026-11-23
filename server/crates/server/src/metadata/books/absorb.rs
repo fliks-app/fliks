@@ -214,6 +214,7 @@ mod tests {
     /// has no other kind's details nor aliases of a music id, and a provider's queue row names a
     /// transfer of the absorbed duplicate (the provider's own record of it dies with the media).
     const DROPPED: &[&str] = &[
+        "acquisition_attempts",
         "acquisition_queue",
         "album_details",
         "cleanup_candidates",

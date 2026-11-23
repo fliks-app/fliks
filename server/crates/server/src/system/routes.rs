@@ -64,11 +64,16 @@ pub async fn health(State(st): State<AppState>, a: Authed) -> Result<Json<Health
             0
         }
     };
+    // A failed read is unknown, not "not a superuser": no gap is reported on a guess.
     let role = if ok {
-        crate::db::role::status(db).await.unwrap_or_default()
+        crate::db::role::status(db)
+            .await
+            .map_err(|e| tracing::warn!("database role check failed: {e}"))
+            .ok()
     } else {
-        Default::default()
+        None
     };
+    let (db_superuser, db_limited, db_gaps) = role_fields(role.as_ref());
     Ok(Json(Health {
         version: env!("CARGO_PKG_VERSION"),
         uptime_seconds: st.system.started.elapsed().as_secs(),
@@ -82,10 +87,24 @@ pub async fn health(State(st): State<AppState>, a: Authed) -> Result<Json<Health
         restart_supervisor: st.system.supervisor(),
         conf_persistent: crate::jwt_secret::conf_persistent(),
         data_persistent: crate::paths::data_persistent(),
-        db_superuser: role.superuser,
-        db_limited: role.limited(),
-        db_gaps: role.gaps(),
+        db_superuser,
+        db_limited,
+        db_gaps,
     }))
+}
+
+fn role_fields(role: Option<&crate::db::role::Status>) -> (bool, bool, Vec<&'static str>) {
+    role.map_or((false, false, vec![]), |r| {
+        (r.superuser, r.limited(), r.gaps())
+    })
+}
+
+#[cfg(test)]
+mod role_fields_tests {
+    #[test]
+    fn an_unreadable_role_reports_no_gap() {
+        assert_eq!(super::role_fields(None), (false, false, vec![]));
+    }
 }
 
 /// Rule 8: respond, then shut down through the normal path and exit non-zero so the supervisor restarts us.

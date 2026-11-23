@@ -486,12 +486,12 @@ pub async fn orphan(core: &PgPool, plugin_id: &str, signer: Option<&str>) -> sql
 /// Only a superuser can revoke; any other core warns once. The revoke strips every non-superuser login
 /// of the database, so a deploy role other than the provisioning login needs its own `GRANT EXECUTE`.
 async fn revoke_advisory_locks(tx: &mut Tx, role: &str) -> sqlx::Result<()> {
-    const OPEN: &str = r"SELECT count(*) FROM pg_proc p
-         WHERE p.pronamespace = 'pg_catalog'::regnamespace
-           AND p.proname ~ '^pg_(try_)?advisory_(xact_)?lock(_shared)?$'
-           AND has_function_privilege($1, p.oid, 'EXECUTE')";
+    let open_sql = format!(
+        "SELECT count(*) FROM pg_proc p WHERE {} AND has_function_privilege($1, p.oid, 'EXECUTE')",
+        crate::db::ADVISORY_LOCK_FUNCTIONS
+    );
     static WARNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    let open: i64 = sqlx::query_scalar(OPEN)
+    let open: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(open_sql))
         .bind(role)
         .fetch_one(&mut **tx)
         .await?;
@@ -511,14 +511,13 @@ async fn revoke_advisory_locks(tx: &mut Tx, role: &str) -> sqlx::Result<()> {
         }
         return Ok(());
     }
-    sqlx::raw_sql(
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
         r"DO $$ DECLARE f regprocedure; BEGIN
-            FOR f IN SELECT p.oid::regprocedure FROM pg_proc p
-                      WHERE p.pronamespace = 'pg_catalog'::regnamespace
-                        AND p.proname ~ '^pg_(try_)?advisory_(xact_)?lock(_shared)?$'
+            FOR f IN SELECT p.oid::regprocedure FROM pg_proc p WHERE {}
             LOOP EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', f); END LOOP;
           END $$",
-    )
+        crate::db::ADVISORY_LOCK_FUNCTIONS
+    )))
     .execute(&mut **tx)
     .await?;
     Ok(())
