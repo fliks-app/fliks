@@ -21,6 +21,7 @@
           "request.delete.declined",
           "grab.started",
           "download.complete",
+          "health.issue",
           "subtitle.downloaded",
           "subtitle.upgraded",
           "subtitle.failed",

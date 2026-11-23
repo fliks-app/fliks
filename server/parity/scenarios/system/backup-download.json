@@ -24,7 +24,7 @@
         "headers": {
           "accept-ranges": "bytes",
           "cache-control": "private, no-store",
-          "content-type": "application/sql"
+          "content-type": "application/octet-stream"
         },
         "status": 200
       },

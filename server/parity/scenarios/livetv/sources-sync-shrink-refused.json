@@ -97,11 +97,10 @@
       "expect": {
         "body": {
           "added": 0,
-          "channelCount": 5,
-          "error": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
-          "ok": false,
+          "channelCount": 2,
+          "ok": true,
           "removed": 0,
-          "updated": 0
+          "updated": 2
         },
         "status": 201
       },
@@ -114,19 +113,17 @@
         "body": [
           {
             "accountStatus": null,
-            "channelCount": 5,
+            "channelCount": 2,
             "enabled": true,
             "excludeGroupsPattern": null,
             "expiresAt": null,
-            "guideUrls": [
-              "http://127.0.0.1:4961/guide.xml"
-            ],
+            "guideUrls": [],
             "id": 1,
             "includeGroupsPattern": null,
             "kind": "m3u",
             "lastAdultGuardError": null,
-            "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
-            "lastSyncStatus": "error",
+            "lastSyncError": null,
+            "lastSyncStatus": "ok",
             "maxStreams": 2,
             "maxStreamsIsManual": false,
             "name": "S",
@@ -159,12 +156,8 @@
               "name": "Movies"
             },
             {
-              "count": 2,
+              "count": 3,
               "name": "News"
-            },
-            {
-              "count": 1,
-              "name": "Sport"
             }
           ],
           "items": [
@@ -198,19 +191,17 @@
                   "referer": null,
                   "source": {
                     "accountStatus": null,
-                    "channelCount": 5,
+                    "channelCount": 2,
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": null,
-                    "guideUrls": [
-                      "http://127.0.0.1:4961/guide.xml"
-                    ],
+                    "guideUrls": [],
                     "id": 1,
                     "includeGroupsPattern": null,
                     "kind": "m3u",
                     "lastAdultGuardError": null,
-                    "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
-                    "lastSyncStatus": "error",
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
                     "maxStreams": 2,
                     "maxStreamsIsManual": false,
                     "name": "S",
@@ -259,19 +250,17 @@
                   "referer": null,
                   "source": {
                     "accountStatus": null,
-                    "channelCount": 5,
+                    "channelCount": 2,
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": null,
-                    "guideUrls": [
-                      "http://127.0.0.1:4961/guide.xml"
-                    ],
+                    "guideUrls": [],
                     "id": 1,
                     "includeGroupsPattern": null,
                     "kind": "m3u",
                     "lastAdultGuardError": null,
-                    "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
-                    "lastSyncStatus": "error",
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
                     "maxStreams": 2,
                     "maxStreamsIsManual": false,
                     "name": "S",
@@ -320,19 +309,17 @@
                   "referer": null,
                   "source": {
                     "accountStatus": null,
-                    "channelCount": 5,
+                    "channelCount": 2,
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": null,
-                    "guideUrls": [
-                      "http://127.0.0.1:4961/guide.xml"
-                    ],
+                    "guideUrls": [],
                     "id": 1,
                     "includeGroupsPattern": null,
                     "kind": "m3u",
                     "lastAdultGuardError": null,
-                    "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
-                    "lastSyncStatus": "error",
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
                     "maxStreams": 2,
                     "maxStreamsIsManual": false,
                     "name": "S",
@@ -381,19 +368,17 @@
                   "referer": null,
                   "source": {
                     "accountStatus": null,
-                    "channelCount": 5,
+                    "channelCount": 2,
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": null,
-                    "guideUrls": [
-                      "http://127.0.0.1:4961/guide.xml"
-                    ],
+                    "guideUrls": [],
                     "id": 1,
                     "includeGroupsPattern": null,
                     "kind": "m3u",
                     "lastAdultGuardError": null,
-                    "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
-                    "lastSyncStatus": "error",
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
                     "maxStreams": 2,
                     "maxStreamsIsManual": false,
                     "name": "S",
@@ -415,7 +400,7 @@
             {
               "consecutiveFailures": 0,
               "enabled": false,
-              "groupName": "Sport",
+              "groupName": "News",
               "groupNameSource": "provider",
               "guideChannelId": "two.fr",
               "guideMatchKind": null,
@@ -442,19 +427,17 @@
                   "referer": null,
                   "source": {
                     "accountStatus": null,
-                    "channelCount": 5,
+                    "channelCount": 2,
                     "enabled": true,
                     "excludeGroupsPattern": null,
                     "expiresAt": null,
-                    "guideUrls": [
-                      "http://127.0.0.1:4961/guide.xml"
-                    ],
+                    "guideUrls": [],
                     "id": 1,
                     "includeGroupsPattern": null,
                     "kind": "m3u",
                     "lastAdultGuardError": null,
-                    "lastSyncError": "refresh returned 2 live entries against 5 known: treating it as a truncated response and keeping the current lineup",
-                    "lastSyncStatus": "error",
+                    "lastSyncError": null,
+                    "lastSyncStatus": "ok",
                     "maxStreams": 2,
                     "maxStreamsIsManual": false,
                     "name": "S",

@@ -714,6 +714,8 @@ const ADDITIVE: &[&str] = &[
     "$.entries[*].channel.guideShiftMinutes",
     "$..unmapped",
     "$..unmappedCount",
+    "$[*].data.errorCount",
+    "$[*].data.errors",
     "$..lastError",
     "$..lastErrorAt",
     "$..lastSentAt",
