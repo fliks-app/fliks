@@ -45,7 +45,10 @@
         }
       </div>
       <div class="flex-1 min-w-0">
-        @if (showHeroLogo()) {
+        @if (isHomeRoute()) {
+          <!-- Home is a hero page too, with no clearlogo of its own: the Fliks logo stays, shaded to read over the art. -->
+          <img src="fliks-logo-ondark.svg" [alt]="'app.name' | translate" class="h-7 w-auto pl-2 object-contain object-left [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
+        } @else if (showHeroLogo()) {
           <!-- Hero clearlogo — kept whether the navbar is transparent (at top)
                or opaque (scrolled), so it doesn't revert to the title text. -->
           <img
@@ -55,8 +58,6 @@
             class="h-7 w-auto max-w-[50vw] object-contain object-left pl-1 [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.45))]" />
         } @else if (navbar.isHeroPage()) {
           <!-- Hero page without a clearlogo: render nothing, so it doesn't fall through to the title fallbacks below. -->
-        } @else if (isHomeRoute()) {
-          <img src="fliks-logo-ondark.svg" [alt]="'app.name' | translate" class="h-7 w-auto pl-2 object-contain object-left" />
         } @else if (navbar.mobileNavTitle()) {
           <span class="block min-w-0 pl-2 text-lg font-bold truncate" [attr.title]="navbar.mobileNavTitle()">{{
             navbar.mobileNavTitle()

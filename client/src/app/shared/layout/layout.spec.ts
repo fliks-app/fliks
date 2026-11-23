@@ -367,6 +367,11 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     expect(dockItems(root)).toEqual([]);
   });
 
+  it('shows the Fliks logo in the navbar of the home route even when home is a hero page', async () => {
+    const fixture = await createFixture({ ...ADMIN_WITH_LIBRARIES, isHeroPage: true });
+    expect(fixture.nativeElement.querySelector('nav.navbar img[src="fliks-logo-ondark.svg"]')).not.toBeNull();
+  });
+
   it('keeps the navbar and its hamburger, and the rail inside the drawer, below md', async () => {
     const fixture = await createFixture(ADMIN_WITH_LIBRARIES);
     const root: HTMLElement = fixture.nativeElement;
