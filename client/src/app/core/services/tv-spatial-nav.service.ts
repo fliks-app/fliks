@@ -560,6 +560,8 @@ export class TvSpatialNavService {
       }
       cur = this.findParentContainer(cur.el);
     }
+    // Left and right cross between the rail and the page, which the rect fallback would match at random.
+    if (topMost && (dir === 'left' || dir === 'right')) return this.bridgeRail(topMost, dir);
     // Bridge to a peer top-level container so an isolated container's edge doesn't fall through to a far-away rect match.
     if (topMost) {
       const peer = this.findPeerContainer(topMost, dir);
@@ -568,6 +570,22 @@ export class TvSpatialNavService {
       if (peer) return this.digDown(peer.el, true, activeCx);
     }
     return null;
+  }
+
+  /** The rail: Left from a page container's edge enters it on the current entry, Right from it digs into the page. */
+  private bridgeRail(from: ContainerNode, dir: 'left' | 'right'): HTMLElement | null {
+    const rail = Array.from(this.containers.values()).find((c) => c.el.hasAttribute('data-tv-nav') && isRendered(c.el));
+    if (!rail) return null;
+    if (from === rail) {
+      if (dir !== 'right') return null;
+      const pages = Array.from(this.containers.values()).filter(
+        (c) => c !== rail && !this.findParentContainer(c.el) && c.el.closest('main') && isRendered(c.el),
+      );
+      const page = pages.find((c) => c.activeChild?.isConnected) ?? pages[0];
+      return page ? this.digDown(page.el) : null;
+    }
+    if (dir !== 'left') return null;
+    return rail.el.querySelector<HTMLElement>('[aria-current="page"]') ?? this.digDown(rail.el);
   }
 
   /** Closest top-level container, vertical only: overlapping regions on one band make left/right ambiguous (rect fallback). */
@@ -584,7 +602,8 @@ export class TvSpatialNavService {
     let bestScore = Infinity;
     for (const c of this.containers.values()) {
       if (c === from || this.findParentContainer(c.el)) continue;
-      if (!isRendered(c.el)) continue;
+      // The rail sits beside the page: up and down never reach it.
+      if (c.el.hasAttribute('data-tv-nav') || !isRendered(c.el)) continue;
       const r = c.el.getBoundingClientRect();
       const cx = r.left + r.width / 2;
       const cy = r.top + r.height / 2;

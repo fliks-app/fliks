@@ -52,7 +52,5 @@ function scrollPageTo(top: number): void {
   }
 }
 
-/** Row top gap: TV clears the floating top-right dock, pointer UIs just breathe. */
-export function rowTopOffset(isTv: boolean): number {
-  return isTv ? 96 : 24;
-}
+/** Row top gap: nothing is fixed at the top of a rail platform, so rows just breathe. */
+export const ROW_TOP_OFFSET = 24;

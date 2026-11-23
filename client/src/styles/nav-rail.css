@@ -1,0 +1,157 @@
+/* Left navigation rail: icons at rest, opens as an overlay on focus or hover, always open when pinned or in the drawer.
+   Plain properties only: no `translate`/`scale`, `color-mix` or `:is`, so it holds on webOS, which gets no CSS downlevel. */
+:root {
+  --rail-w: 4.5rem;
+}
+body.tv {
+  --rail-w: 5.5rem;
+}
+
+.nav-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: var(--rail-w);
+  padding: calc(env(safe-area-inset-top, 0px) / 2 + 0.75rem) 0.75rem 0.75rem;
+  transition: width 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+.nav-rail.rail-open {
+  width: 16rem;
+}
+.nav-rail.rail-collapsed.rail-open {
+  box-shadow: 24px 0 60px rgba(0, 0, 0, 0.45);
+}
+/* Dims the page while the collapsed rail is open over it (the layout sets `rail-dim`; the drawer's `will-change` would trap a fixed child here). */
+.drawer-content::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  background: rgba(21, 25, 30, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-out;
+}
+.rail-dim > .drawer-content::after {
+  opacity: 1;
+}
+
+.rail-head,
+.rail-foot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.rail-head {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.rail-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.rail-sep {
+  height: 1px;
+  margin: 0.5rem 0.25rem;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rail-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 3rem;
+  padding: 0 0.75rem;
+  border-radius: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  font-weight: 600;
+}
+.rail-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.rail-item.rail-item-active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.rail-icon {
+  display: inline-flex;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.rail-dot {
+  position: absolute;
+  top: -0.125rem;
+  right: -0.125rem;
+}
+.nav-rail.rail-open .rail-dot {
+  display: none;
+}
+
+/* Text and controls that only exist while the rail is open. */
+.rail-label,
+.rail-reveal {
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-width 0.2s ease-out, opacity 0.15s ease-out;
+}
+.rail-label {
+  margin-left: 0;
+  text-overflow: ellipsis;
+}
+.nav-rail.rail-open .rail-label {
+  max-width: 14rem;
+  margin-left: 0.75rem;
+  opacity: 1;
+}
+.nav-rail.rail-open .rail-reveal {
+  max-width: 20rem;
+  opacity: 1;
+}
+.nav-rail.rail-open .rail-text {
+  margin-left: 0.75rem;
+}
+.rail-badge {
+  display: none;
+  margin-left: auto;
+}
+.nav-rail.rail-open .rail-badge {
+  display: inline-flex;
+}
+
+/* The user menu is only an avatar: it keeps the item's footprint without a second hover fill. */
+.rail-user {
+  padding: 0 0.125rem;
+}
+.rail-user:hover {
+  background: none;
+}
+
+/* A docked now-playing bar: the cover alone with a progress ring while collapsed, the whole bar once open. */
+.rail-bar {
+  width: 100%;
+  min-height: 3.5rem;
+}
+.rail-ring {
+  padding: 3px;
+  border-radius: 0.875rem;
+  background: conic-gradient(var(--color-base-content, #fff) calc(var(--p, 0) * 1%), rgba(255, 255, 255, 0.18) 0);
+}
+.nav-rail.rail-open .rail-ring {
+  padding: 0;
+  background: none;
+}
+.rail-bar .rail-reveal.btn {
+  margin-left: 0;
+}

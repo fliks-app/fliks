@@ -58,6 +58,8 @@ vi.mock('@capacitor/keyboard', () => ({
 interface Fixture {
   userId: number;
   isAdmin: boolean;
+  /** What `NavbarService.railMode` reports; defaults to the phone dock or the drawer. */
+  railMode?: 'none' | 'drawer' | 'collapsed' | 'expanded';
   device: { isDesktop?: boolean; isTablet?: boolean; isPhone?: boolean; isTv?: boolean; isTouch?: boolean };
   isTv: boolean;
   isNative: boolean;
@@ -176,15 +178,15 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
           navbarTransparent: () => false,
           heroLogoUrl: () => null,
           heroMenu: () => null,
-          tvBars: () => [],
+          dockedBars: () => [],
           heroTitle: () => '',
           isHeroPage: () => !!f.isHeroPage,
           showBackButton: () => false,
           mobileNavTitle: () => '',
-          mobileNavbarVisible: () => true,
-          effectiveSidebarPinned: () => false,
+          mobileNavbarVisible: () => !f.railMode || f.railMode === 'drawer' || f.railMode === 'none',
+          railMode: () => f.railMode ?? (f.isNative && f.device.isPhone ? 'none' : 'drawer'),
+          railDocked: () => f.railMode === 'collapsed' || f.railMode === 'expanded',
           sidebarPinned: () => false,
-          sidebarDocked: () => false,
           phoneDock: () => f.isNative && !!f.device.isPhone,
           toggleSidebarPinned: () => {},
           scrollAtTop: { set: () => {} },
@@ -280,12 +282,6 @@ function readItem(anchor: Element | null): CapturedItem | null {
   return { label, icon, badge, href: anchor.getAttribute('href') };
 }
 
-function sidebarItems(root: HTMLElement): CapturedItem[] {
-  return Array.from(root.querySelectorAll('aside ul.menu > li'))
-    .map((li) => readItem(li.querySelector('a')))
-    .filter((x): x is CapturedItem => x !== null);
-}
-
 function dockItems(root: HTMLElement): CapturedItem[] {
   const dock = root.querySelector('.dock');
   if (!dock) return [];
@@ -361,53 +357,23 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
   });
 
 
-  it('sidebar: admin with libraries', async () => {
+  it('docks the rail and drops the mobile navbar where the rail is a column', async () => {
+    const fixture = await createFixture({ ...ADMIN_WITH_LIBRARIES, railMode: 'collapsed' });
+    const root: HTMLElement = fixture.nativeElement;
+    expect(root.querySelector('app-nav-rail')).not.toBeNull();
+    expect(root.querySelector('nav.navbar')).toBeNull();
+    expect(root.querySelector('.chrome-bar')).not.toBeNull();
+    expect(root.querySelector('.drawer')?.classList.contains('drawer-open')).toBe(true);
+    expect(dockItems(root)).toEqual([]);
+  });
+
+  it('keeps the navbar and its hamburger, and the rail inside the drawer, below md', async () => {
     const fixture = await createFixture(ADMIN_WITH_LIBRARIES);
-    expect(sidebarItems(fixture.nativeElement)).toEqual([
-      { label: 'nav.home', icon: 'lucide-house', badge: null, href: '/' },
-      { label: 'search.title', icon: 'lucide-search', badge: null, href: '/search' },
-      { label: 'nav.my_profile', icon: 'lucide-user-round', badge: null, href: '/profile/1' },
-      { label: 'liveTv.title', icon: 'lucide-tv', badge: null, href: '/live-tv' },
-      { label: 'Movies', icon: 'lucide-library', badge: null, href: '/libraries/Movies' },
-      { label: 'Series', icon: 'lucide-library', badge: null, href: '/libraries/Series' },
-      { label: 'Anime', icon: 'lucide-swords', badge: null, href: '/libraries/Anime' },
-      { label: 'nav.playlists', icon: 'lucide-list-video', badge: null, href: '/playlists' },
-      { label: 'downloads.title', icon: 'lucide-download', badge: null, href: '/downloads' },
-      { label: 'nav.history', icon: 'lucide-rotate-ccw-clock', badge: null, href: '/history' },
-      { label: 'nav.requests', icon: 'lucide-clipboard-list', badge: '2', href: '/requests' },
-      { label: 'nav.calendar', icon: 'lucide-calendar', badge: null, href: '/calendar' },
-    ]);
-    expect(dockItems(fixture.nativeElement)).toEqual([]);
-    expect(sheetItems(fixture.nativeElement)).toEqual([]);
-  });
-
-  it('sidebar: non-admin without libraries', async () => {
-    const fixture = await createFixture(NON_ADMIN_NO_LIBRARIES);
-    expect(sidebarItems(fixture.nativeElement)).toEqual([
-      { label: 'nav.home', icon: 'lucide-house', badge: null, href: '/' },
-      { label: 'search.title', icon: 'lucide-search', badge: null, href: '/search' },
-      { label: 'nav.my_profile', icon: 'lucide-user-round', badge: null, href: '/profile/2' },
-      { label: 'liveTv.title', icon: 'lucide-tv', badge: null, href: '/live-tv' },
-      { label: 'nav.playlists', icon: 'lucide-list-video', badge: null, href: '/playlists' },
-      { label: 'downloads.title', icon: 'lucide-download', badge: null, href: '/downloads' },
-      { label: 'nav.history', icon: 'lucide-rotate-ccw-clock', badge: null, href: '/history' },
-      { label: 'nav.requests', icon: 'lucide-clipboard-list', badge: null, href: '/requests' },
-      { label: 'nav.calendar', icon: 'lucide-calendar', badge: null, href: '/calendar' },
-    ]);
-  });
-
-  it('sidebar: TV form factor hides My profile and Downloads', async () => {
-    const fixture = await createFixture(TV_FORM_FACTOR);
-    expect(sidebarItems(fixture.nativeElement)).toEqual([
-      { label: 'nav.home', icon: 'lucide-house', badge: null, href: '/' },
-      { label: 'search.title', icon: 'lucide-search', badge: null, href: '/search' },
-      { label: 'liveTv.title', icon: 'lucide-tv', badge: null, href: '/live-tv' },
-      { label: 'Movies', icon: 'lucide-library', badge: null, href: '/libraries/Movies' },
-      { label: 'nav.playlists', icon: 'lucide-list-video', badge: null, href: '/playlists' },
-      { label: 'nav.history', icon: 'lucide-rotate-ccw-clock', badge: null, href: '/history' },
-      { label: 'nav.requests', icon: 'lucide-clipboard-list', badge: null, href: '/requests' },
-      { label: 'nav.calendar', icon: 'lucide-calendar', badge: null, href: '/calendar' },
-    ]);
+    const root: HTMLElement = fixture.nativeElement;
+    expect(root.querySelector('nav.navbar')).not.toBeNull();
+    expect(root.querySelector('.chrome-bar')).toBeNull();
+    expect(root.querySelector('.drawer')?.classList.contains('drawer-open')).toBe(false);
+    expect(root.querySelector('.drawer-side app-nav-rail')).not.toBeNull();
   });
 
   it('native phone: dock primary row is Home, Library, Requests + the search FAB', async () => {
@@ -445,14 +411,13 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     ]);
   });
 
-  it('hides Live TV from the sidebar, the dock and the sheet when the user lacks livetv.read', async () => {
+  it('hides Live TV from the dock and the sheet when the user lacks livetv.read', async () => {
     const fixture = await createFixture({ ...NATIVE_PHONE, hasPermission: () => false });
     fixture.componentInstance.bottomMenuOpen.set(true);
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(sidebarItems(fixture.nativeElement).some((i) => i.label === 'liveTv.title')).toBe(false);
     expect(dockItems(fixture.nativeElement).some((i) => i.label === 'liveTv.title')).toBe(false);
     expect(sheetItems(fixture.nativeElement).some((i) => i.label === 'liveTv.title')).toBe(false);
   });
@@ -478,25 +443,11 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const inSidebar = sidebarItems(fixture.nativeElement).find((i) => i.label === 'x.weird');
     const inSheet = sheetItems(fixture.nativeElement).find((i) => i.label === 'x.weird');
-    expect(inSidebar?.icon).toBe('lucide-circle');
     expect(inSheet?.icon).toBe('lucide-circle');
   });
 
-  it('a plugin contribution with an unknown action.kind never renders — fails closed, not blank', async () => {
-    const fixture = await createFixture({
-      ...ADMIN_WITH_LIBRARIES,
-      registry: {
-        'nav.main': [
-          { id: 'fliks.acme.broken', slot: 'nav.main', weight: 150, labelKey: 'x.broken', action: { kind: 'bogus' } as never },
-        ],
-      },
-    });
-    expect(sidebarItems(fixture.nativeElement).some((i) => i.label === 'x.broken')).toBe(false);
-  });
-
-  it('a `when`-hidden plugin contribution is absent from the sidebar, the dock and the sheet alike', async () => {
+  it('a `when`-hidden plugin contribution is absent from the dock and the sheet alike', async () => {
     const fixture = await createFixture({
       ...NATIVE_PHONE,
       registry: {
@@ -518,7 +469,6 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
     fixture.detectChanges();
 
     // NATIVE_PHONE is a non-admin fixture, so the gated item must show up nowhere.
-    expect(sidebarItems(fixture.nativeElement).some((i) => i.label === 'x.admin_only')).toBe(false);
     expect(dockItems(fixture.nativeElement).some((i) => i.label === 'x.admin_only')).toBe(false);
     expect(sheetItems(fixture.nativeElement).some((i) => i.label === 'x.admin_only')).toBe(false);
   });
@@ -687,6 +637,11 @@ describe('LayoutComponent — chrome clearance', () => {
     TestBed.resetTestingModule();
     const away = (await createFixture({ ...NATIVE_PHONE, away: true })).componentInstance;
     expect(away.chromeBottomTotal()).toBe(`calc(${away.chromeBottom()} + 4.25rem)`);
+  });
+
+  it('counts no bar the rail docks', async () => {
+    const docked = (await createFixture({ ...ADMIN_WITH_LIBRARIES, railMode: 'collapsed', away: true, audio: true })).componentInstance;
+    expect(docked.chromeBottomTotal()).toBe(docked.chromeBottom());
   });
 
   it('adds the audio mini-bar to the bottom clearance while an item is loaded, on top of the cast one', async () => {

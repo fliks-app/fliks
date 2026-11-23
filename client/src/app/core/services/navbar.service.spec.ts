@@ -18,28 +18,66 @@ describe('NavbarService', () => {
     delete (window.history as unknown as { length?: number }).length;
   });
 
-  /** Never a docked sidebar on a TV: the main layout there is a 10-foot browse
-   *  surface, a permanent column steals from it, and focus would have one more
-   *  region to escape on every screen. */
-  it('never docks the sidebar on a TV, whatever the pin preference says', () => {
-    TestBed.configureTestingModule({
-      providers: [
-        provideRouter([{ path: '**', component: PageStub }]),
-        {
-          provide: DeviceService,
-          useValue: {
-            isTv: () => true,
-            isTablet: () => false,
-            isDesktop: () => false,
-          } as unknown as DeviceService,
-        },
-      ],
+  /** `railMode` per form factor and width: the one value the layout, the player bar and the page clearances read. */
+  describe('railMode', () => {
+    const realMatchMedia = window.matchMedia;
+    afterEach(() => {
+      window.matchMedia = realMatchMedia;
+      localStorage.removeItem('fliks.sidebarPinned');
     });
-    const navbar = TestBed.inject(NavbarService);
 
-    expect(navbar.sidebarPinned()).toBe(true);
-    expect(navbar.effectiveSidebarPinned()).toBe(false);
-    expect(navbar.sidebarDocked()).toBe(false);
+    const make = (form: 'tv' | 'phone' | 'tablet' | 'desktop', width: number, pinned = false) => {
+      window.matchMedia = ((q: string) => {
+        const min = Number(/min-width:\s*(\d+)px/.exec(q)?.[1] ?? 0);
+        return { matches: width >= min, addEventListener: () => {}, removeEventListener: () => {} } as unknown as MediaQueryList;
+      }) as typeof window.matchMedia;
+      if (pinned) localStorage.setItem('fliks.sidebarPinned', 'true');
+      TestBed.configureTestingModule({
+        providers: [
+          provideRouter([{ path: '**', component: PageStub }]),
+          {
+            provide: DeviceService,
+            useValue: {
+              isTv: () => form === 'tv',
+              isPhone: () => form === 'phone',
+              isTablet: () => form === 'tablet',
+              isDesktop: () => form === 'desktop',
+            } as unknown as DeviceService,
+          },
+        ],
+      });
+      return TestBed.inject(NavbarService);
+    };
+
+    it('is collapsed on a TV, whatever the pin preference says', () => {
+      expect(make('tv', 1920, true).railMode()).toBe('collapsed');
+    });
+
+    it('rests collapsed on desktop and tablet, the pin keeping it expanded at lg and up', () => {
+      expect(make('desktop', 1280).railMode()).toBe('collapsed');
+      TestBed.resetTestingModule();
+      expect(make('tablet', 1280, true).railMode()).toBe('expanded');
+    });
+
+    it('stays collapsed between md and lg even when pinned', () => {
+      expect(make('desktop', 900, true).railMode()).toBe('collapsed');
+    });
+
+    it('is a drawer below md and on a phone', () => {
+      expect(make('tablet', 600).railMode()).toBe('drawer');
+      TestBed.resetTestingModule();
+      expect(make('phone', 1000).railMode()).toBe('drawer');
+    });
+
+    it('shows the mobile navbar only where the rail is not docked', () => {
+      const docked = make('desktop', 1280);
+      expect(docked.railDocked()).toBe(true);
+      expect(docked.mobileNavbarVisible()).toBe(false);
+      TestBed.resetTestingModule();
+      const drawer = make('desktop', 600);
+      expect(drawer.railDocked()).toBe(false);
+      expect(drawer.mobileNavbarVisible()).toBe(true);
+    });
   });
 
   it('clears the mobile navbar with a hero padding only off a TV and on a hero page', () => {
@@ -48,7 +86,7 @@ describe('NavbarService', () => {
       TestBed.configureTestingModule({
         providers: [
           provideRouter([{ path: '**', component: PageStub }]),
-          { provide: DeviceService, useValue: { isTv: () => isTv, isTablet: () => false, isDesktop: () => false } as unknown as DeviceService },
+          { provide: DeviceService, useValue: { isTv: () => isTv, isPhone: () => false, isTablet: () => false, isDesktop: () => false } as unknown as DeviceService },
         ],
       });
       const navbar = TestBed.inject(NavbarService);

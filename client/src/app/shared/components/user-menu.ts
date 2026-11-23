@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, input } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { CountsApiService } from '../../core/services/api/counts-api.service';
@@ -20,6 +20,8 @@ import { icons } from '../icons';
 export class UserMenuComponent {
   protected readonly icons = icons;
 
+  /** Where the dropdown opens; the rail footer opens it beside itself. */
+  readonly placement = input<'bottom-end' | 'right-end'>('bottom-end');
   readonly auth = inject(AuthService);
   readonly tv = inject(TvService);
   protected readonly systemAttention = inject(CountsApiService).systemAttention;

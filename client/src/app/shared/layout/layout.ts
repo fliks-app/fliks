@@ -1,5 +1,4 @@
 import { fromEvent, merge, startWith } from 'rxjs';
-import { NgTemplateOutlet } from '@angular/common';
 import {
   Component,
   inject,
@@ -63,13 +62,14 @@ import { OptimizeModalService } from '../../core/services/optimize-modal.service
 import { AddToPlaylistService } from '../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../core/services/recommend.service';
 import { LucideIconComponent } from '../components/lucide-icon';
+import { NavRailComponent } from '../nav-rail/nav-rail';
 import { TvRowDirective } from '../directives/tv-row.directive';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { BackgroundService } from '../../core/services/background.service';
 import { SearchStateService } from '../../core/services/search-state.service';
 import { NavContributionsService, DOCK_PINNED_IDS, MOBILE_HIDDEN_IDS, type ResolvedNavItem } from '../../core/plugin-ui/nav-contributions.service';
 import { NavIconComponent } from './nav-icon';
-import { libraryColorVar } from '../../core/constants/library-appearance';
+import { libraryColorVar, libraryIcon, libraryUrl } from '../../core/constants/library-appearance';
 import { BottomSheetComponent } from '../components/bottom-sheet';
 import { CachedSrcDirective } from '../directives/cached-src.directive';
 import { PlaybackSession } from '../../core/services/playback/playback-session';
@@ -77,17 +77,6 @@ import { RemotePickerComponent } from '../remote-picker/remote-picker';
 import { parseDeviceLabel } from '../../core/utils/format-device-label';
 import { LucideDynamicIcon } from '@lucide/angular';
 import { icons } from '../icons';
-
-interface TvTab {
-  id: string;
-  route: string;
-  exact: boolean;
-  icon: string;
-  labelKey?: string;
-  label?: string;
-  isLibrary?: boolean;
-  color?: string;
-}
 
 /** Coalesces a burst of count-bearing SSE events (e.g. a season-pack import) into one request. */
 const SIDEBAR_COUNTS_DEBOUNCE_MS = 400;
@@ -97,7 +86,7 @@ const PAIRING_TTL_MS = 600_000;
 @Component({
   selector: 'app-layout',
   imports: [
-    CachedSrcDirective, NgTemplateOutlet,
+    CachedSrcDirective,
     RouterOutlet, RouterLink, RouterLinkActive, TranslatePipe,
     RemotePickerComponent,
     CastOverlayComponent,
@@ -116,6 +105,7 @@ const PAIRING_TTL_MS = 600_000;
     UserMenuComponent,
     LucideIconComponent,
     NavIconComponent,
+    NavRailComponent,
     BottomSheetComponent,
     TvRowDirective,
     ResolveUrlPipe, LucideDynamicIcon,
@@ -222,11 +212,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
   /** The downloads page is where an unreachable server sends you, so it doesn't repeat the warning. */
   readonly isDownloadsRoute = signal(this.router.url.split('?')[0] === '/downloads');
 
-  /** Fixed navbar's own clearance: height (0 on TV) plus safe area; 0 where the mobile navbar is hidden.
+  /** Fixed navbar's own clearance: height plus safe area; 0 where the mobile navbar is hidden.
    *  Hero-blind on purpose: `body.hero-page` (styles.css) applies synchronously, a later value lets iOS 18.7 never re-lay out a cached page. */
   private readonly navbarSpacerHeight = computed(() => {
     if (!this.navbar.mobileNavbarVisible()) return '0px';
-    if (this.tv.isTv()) return '0px';
     return 'calc(3rem + env(safe-area-inset-top, 0px))';
   });
   private readonly contentGapTop = computed(() =>
@@ -237,10 +226,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
   /** The native phone dock is daisyUI's 4rem plus the bottom safe area it pads itself with. */
   readonly dockHeight = computed(() => (this.navbar.phoneDock() ? 'calc(4rem + env(safe-area-inset-bottom, 0px))' : '0px'));
   readonly chromeBottom = computed(() => `calc(${this.dockHeight()} + 1rem)`);
-  /** `chromeBottom` plus the cast and audio mini-bars (3.5rem, borders, 0.5rem gap each) while they show: what content and sticky bars clear. */
+  /** `chromeBottom` plus the cast and audio mini-bars (3.5rem, borders, 0.5rem gap each) while they float over the page: what content and sticky bars clear. Bars docked in the rail count for nothing. */
   readonly chromeBottomTotal = computed(() => {
     // The bar of another device's session and the audio mini-player share one slot.
-    const bars = (this.surface.outputBar() ? 1 : 0) + (this.surface.bar() || this.surface.aboveAudio() ? 1 : 0);
+    const bars = this.navbar.railDocked() ? 0 : (this.surface.outputBar() ? 1 : 0) + (this.surface.bar() || this.surface.aboveAudio() ? 1 : 0);
     return bars ? `calc(${this.chromeBottom()} + ${bars * 4.25}rem)` : this.chromeBottom();
   });
 
@@ -318,36 +307,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
   readonly mainItemsAfterLibraries = this.navContrib.mainItemsAfterLibraries;
   readonly acquisitionItems = this.navContrib.acquisitionItems;
   readonly dockHome = computed(() => this.mainItemsBeforeLibraries().find((i) => i.id === 'core.home'));
-  /** TV tab row: the sidebar's order, with one tab per library between the two `nav.main` blocks. */
-  readonly tvTabs = computed<TvTab[]>(() => [
-    ...this.mainItemsBeforeLibraries().map((i) => ({ id: i.id, route: i.route, exact: i.exact, icon: i.icon, labelKey: i.labelKey })),
-    ...this.displayLibraries().map((l) => ({ id: `library:${l.id}`, route: this.libraryUrl(l), exact: false, icon: this.libraryIcon(l), label: l.name, isLibrary: true, color: this.libraryColor(l) })),
-    ...this.mainItemsAfterLibraries().map((i) => ({ id: i.id, route: i.route, exact: i.exact, icon: i.icon, labelKey: i.labelKey })),
-  ]);
-  private readonly tvTabsRow = viewChild<ElementRef<HTMLElement>>('tvTabsRow');
-  private readonly tvTabsEdges = signal({ start: true, end: true });
-  /** Fades the row's cut edges so a tab half out of view reads as scrollable. */
-  protected readonly tvTabsMask = computed(() => {
-    const { start, end } = this.tvTabsEdges();
-    return `linear-gradient(to right, ${start ? '#000' : 'transparent'} 0, #000 2.5rem, #000 calc(100% - 2.5rem), ${end ? '#000' : 'transparent'} 100%)`;
-  });
-  private readonly tvTabsObserver = effect((onCleanup) => {
-    const el = this.tvTabsRow()?.nativeElement;
-    this.tvTabs();
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => this.updateTvTabsEdges());
-    ro.observe(el);
-    const raf = requestAnimationFrame(() => this.updateTvTabsEdges());
-    onCleanup(() => {
-      ro.disconnect();
-      cancelAnimationFrame(raf);
-    });
-  });
-  protected updateTvTabsEdges(): void {
-    const el = this.tvTabsRow()?.nativeElement;
-    if (!el) return;
-    this.tvTabsEdges.set({ start: el.scrollLeft <= 1, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 1 });
-  }
+  /** The collapsed rail is open over the page, which dims. */
+  readonly railOverlaying = signal(false);
   readonly librarySheetOpen = signal(false);
   readonly isLibraryRoute = signal(this.router.url.startsWith('/libraries/'));
   /** The dock's Library cell opens the library itself when there is only one, else a sheet. */
@@ -576,14 +537,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
     return libraryColorVar(lib.color);
   }
 
-  libraryUrl(lib: LibrarySummary): string {
-    return `/libraries/${encodeURIComponent(lib.name)}`;
-  }
-
-  /** Icon key for a library: explicit icon > default 'library'. */
-  libraryIcon(lib: LibrarySummary): string {
-    return lib.icon || 'library';
-  }
+  readonly libraryUrl = libraryUrl;
+  readonly libraryIcon = libraryIcon;
 
   /** Bottom-dock search button: a same-URL navigation no-ops, so the click signals the search page via {@link SearchStateService.requestFocus}. */
   onSearchNavClick(): void {

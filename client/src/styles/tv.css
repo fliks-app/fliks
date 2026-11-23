@@ -20,8 +20,8 @@ body.tv {
 html.tv-host {
   background: #1d232a;
   scroll-behavior: smooth;
-  /* Keep scrollIntoView({block:'nearest'}) off the edges: clear the top dock (96px, as home rows snap) and leave look-ahead below. */
-  scroll-padding-top: 96px;
+  /* Keep scrollIntoView({block:'nearest'}) off the edges: leave a gap above (as home rows snap) and look-ahead below. */
+  scroll-padding-top: 1.5rem;
   scroll-padding-bottom: 20vh;
 }
 /* The Android TV keyboard covers the bottom ~45%: the focused field scrolls into the top part, with room below to get there. */

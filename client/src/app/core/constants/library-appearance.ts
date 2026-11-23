@@ -50,3 +50,13 @@ export function libraryColorVar(color: string | null | undefined): string {
   const c = color || 'primary';
   return DAISY_COLORS.includes(c) ? `var(--color-${c})` : c;
 }
+
+/** Route of a library page. */
+export function libraryUrl(lib: { name: string }): string {
+  return `/libraries/${encodeURIComponent(lib.name)}`;
+}
+
+/** Icon key for a library: explicit icon > default 'library'. */
+export function libraryIcon(lib: { icon?: string | null }): string {
+  return lib.icon || 'library';
+}

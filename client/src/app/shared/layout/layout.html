@@ -1,6 +1,6 @@
 <div class="drawer min-h-screen"
-     [class.lg:drawer-open]="navbar.sidebarDocked()"
-     [class.md:drawer-open]="device.isTablet() && navbar.effectiveSidebarPinned()"
+     [class.drawer-open]="navbar.railDocked()"
+     [class.rail-dim]="railOverlaying()"
      [style.--chrome-top]="chromeTop()"
      [style.--dock-h]="dockHeight()"
      [style.--chrome-bottom]="chromeBottom()"
@@ -10,24 +10,20 @@
     <!-- Watched by an IntersectionObserver to derive `scrollAtTop` without ever
          reading the scroll position. Absolute, so it adds no layout height. -->
     <div #topSentinel aria-hidden="true" class="absolute top-0 left-0 h-5 w-px pointer-events-none"></div>
+    @if (!navbar.railDocked()) {
     <nav
       appTvRow
-      data-tv-nav
-      class="navbar fixed left-0 right-0 z-30 transition duration-300 border-base-100/20 tv:px-[var(--page-p)] tv:static"
+      class="navbar fixed left-0 right-0 top-0 z-30 transition duration-300 border-base-100/20"
       [style.transition]="restorePending() ? 'none' : null"
-      [style.padding-top]="tv.isTv() ? 'calc(env(safe-area-inset-top, 0px) + var(--page-p) / 2)' : 'calc(env(safe-area-inset-top, 0px) + 4px)'"
-      [class.top-0]="!tv.isTv() || tv.isTizen()"
-      [class.top-4]="tv.isAndroidTv()"
-      [class.lg:hidden]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
-      [class.md:hidden]="device.isTablet() && navbar.effectiveSidebarPinned()"
+      style="padding-top: calc(env(safe-area-inset-top, 0px) + 4px)"
       [class.-translate-y-full]="navbarHidden()"
-      [class.bg-base-100/70]="!navbarTransparent() && !background.url() && !tv.isTv() && !device.reducedEffects()"
-      [class.bg-base-100/95]="!navbarTransparent() && !background.url() && !tv.isTv() && device.reducedEffects()"
+      [class.bg-base-100/70]="!navbarTransparent() && !background.url() && !device.reducedEffects()"
+      [class.bg-base-100/95]="!navbarTransparent() && !background.url() && device.reducedEffects()"
       [class.app-navbar-veil]="!navbarTransparent() && !!background.url()"
       [class.backdrop-blur-sm]="!navbarTransparent()"
-      [class.shadow-sm]="!navbarTransparent() && !background.url() && !tv.isTv()"
+      [class.shadow-sm]="!navbarTransparent() && !background.url()"
       [class.bg-transparent]="navbarTransparent()"
-      [class.border-b]="!navbarTransparent() && !tv.isTv()"
+      [class.border-b]="!navbarTransparent()"
       [class.text-white]="navbarTransparent()"
       [class.nav-hero-icons]="navbarTransparent()"
     >
@@ -41,44 +37,15 @@
             <svg [lucideIcon]="icons.ChevronLeft" class="h-5 w-5 md:h-6 md:w-6"></svg>
           </button>
         }
-        @if (!navbar.phoneDock() && !tv.isTv()) {
-          <!-- Hamburger wherever the drawer can open: everywhere but the phone dock and TV (D-pad nav). -->
+        @if (navbar.railMode() === 'drawer') {
+          <!-- Hamburger wherever the drawer can open: everywhere but the phone dock and the docked rail. -->
           <button type="button" class="btn btn-square btn-ghost" [attr.aria-label]="'nav.open_menu' | translate" (click)="sidebarToggle.click()">
             <svg [lucideIcon]="icons.Menu" class="h-5 w-5 md:h-6 md:w-6"></svg>
           </button>
         }
       </div>
       <div class="flex-1 min-w-0">
-        @if (tv.isTv()) {
-          <!-- 10-foot primary nav: the drawer never opens on a TV, so the main
-               entries live here, one ↑ away from the first rail. -->
-          <div class="flex min-w-0 items-center gap-6 pl-2">
-            <img src="fliks-logo-ondark.svg" [alt]="'app.name' | translate" class="h-7 w-auto shrink-0 object-contain" />
-            <div #tvTabsRow (scroll)="updateTvTabsEdges()" [style.mask-image]="tvTabsMask()" [style.-webkit-mask-image]="tvTabsMask()"
-                 class="scroll-ring-safe scrollbar-none ml-3 flex min-w-0 items-center gap-2 overflow-x-auto px-3 -mx-1">
-              @for (item of tvTabs(); track item.id) {
-                <a
-                  [routerLink]="item.route"
-                  routerLinkActive
-                  ariaCurrentWhenActive="page"
-                  #tab="routerLinkActive"
-                  [routerLinkActiveOptions]="{ exact: item.exact }"
-                  [state]="{ rootEntry: true }"
-                  class="btn btn-ghost h-11 shrink-0 gap-2.5 rounded-2xl px-4 text-base font-semibold"
-                  [class.bg-base-content/10]="tab.isActive"
-                  [class.text-base-content/70]="!tab.isActive"
-                >
-                  @if (item.isLibrary) {
-                    <app-lucide-icon [name]="item.icon" class="h-5 w-5" [style.color]="item.color" />
-                  } @else {
-                    <app-nav-icon [name]="item.icon" class="h-5 w-5" />
-                  }
-                  {{ item.label ?? (item.labelKey! | translate) }}
-                </a>
-              }
-            </div>
-          </div>
-        } @else if (showHeroLogo()) {
+        @if (showHeroLogo()) {
           <!-- Hero clearlogo — kept whether the navbar is transparent (at top)
                or opaque (scrolled), so it doesn't revert to the title text. -->
           <img
@@ -101,8 +68,7 @@
           }
         }
       </div>
-      <!-- TV: the now-playing bar keeps its width and the tabs scroll in what is left. -->
-      <div class="flex-none flex items-center gap-1 md:gap-1.5 tv:pl-2">
+      <div class="flex-none flex items-center gap-1 md:gap-1.5">
         @if (appUpdate.available()) {
           <button class="btn btn-ghost btn-circle" (click)="openUpdateModal()"
                   [attr.aria-label]="'update.title' | translate">
@@ -126,11 +92,8 @@
           } @else {
             <app-remote-picker [label]="formatDevice(target.userAgent, target.systemName, target.deviceName)" />
           }
-        } @else if (!device.isTv() && (castService.isAvailable() || airPlay.available() || remote.targets().length > 0)) {
+        } @else if (castService.isAvailable() || airPlay.available() || remote.targets().length > 0) {
           <app-remote-picker />
-        }
-        @for (bar of navbar.tvBars(); track bar) {
-          <ng-container [ngTemplateOutlet]="bar" />
         }
         @if (navbar.heroMenu(); as openMenu) {
           <button #heroMore type="button" class="btn btn-ghost btn-circle" [attr.aria-label]="'common.more' | translate" (click)="openMenu(heroMore)">
@@ -141,14 +104,14 @@
         }
       </div>
     </nav>
-    <!-- Desktop top-right: Cast + User -->
+    }
+    <!-- Docked rail platforms, top: back, hero logo, cast. The user menu lives in the rail footer. -->
+    @if (navbar.railDocked()) {
     <div appTvRow
          [appTvRowSnap]="true"
          [class.-translate-y-full]="navbarHidden()"
-         class="chrome-bar hidden items-center justify-between gap-1 px-[var(--page-p)] relative z-30"
-         [style.padding-top]="tv.isTv() ? 'calc(env(safe-area-inset-top, 0px) + var(--page-p) / 2)' : isNative ? 'calc(0.3rem + env(safe-area-inset-top, 1.5rem))' : '1rem'"
-         [class.lg:flex]="device.isDesktop() || (device.isTv() && navbar.effectiveSidebarPinned())"
-         [class.md:flex]="device.isTablet() && navbar.effectiveSidebarPinned()">
+         class="chrome-bar flex items-center justify-between gap-1 px-[var(--page-p)] relative z-30"
+         [style.padding-top]="tv.isTv() ? 'calc(env(safe-area-inset-top, 0px) + var(--page-p) / 2)' : isNative ? 'calc(0.3rem + env(safe-area-inset-top, 1.5rem))' : '1rem'">
       <!-- Hero back + clearlogo (left) -->
       <div class="flex items-center gap-3 min-w-0">
         @if ((navbar.isHeroPage() || navbar.showBackButton()) && canGoBack()) {
@@ -192,9 +155,9 @@
         } @else if (!device.isTv() && (castService.isAvailable() || airPlay.available() || remote.targets().length > 0)) {
           <app-remote-picker />
         }
-        <app-user-menu />
       </div>
     </div>
+    }
     <!-- clip, not hidden: `overflow-x: hidden` coerces `overflow-y` to auto,
          making <main> a scroll container and breaking sticky descendants. -->
     <main
@@ -415,97 +378,20 @@
     <app-report-problem-dialog />
   }
 
-  <!-- The gutter is always reserved: a scrollbar appearing as the menu grows would shift the page. -->
-  <div class="drawer-side z-40 [scrollbar-gutter:stable]" [class.hidden]="navbar.phoneDock()">
-    <label for="sidebar" [attr.aria-label]="'nav.close_menu' | translate" class="drawer-overlay"></label>
-    <aside class="app-chrome-side w-64 min-h-full flex flex-col"
-           [class.bg-base-100]="!background.url()"
-           [class.app-sidebar-veil]="!!background.url()"
-           [class.backdrop-blur-sm]="!!background.url()"
-           style="padding-top: calc(env(safe-area-inset-top, 0px) / 2 )">
-      <div class="p-4 border-b border-base-200 flex items-center gap-2">
-        <a routerLink="/" class="flex items-center gap-2 px-2 py-1 rounded-lg text-2xl font-bold flex-1 min-w-0">
-          <img src="fliks-icon.svg" alt="" class="h-8 w-8 shrink-0" />
-          <span class="truncate">{{ 'app.name' | translate }}</span>
-        </a>
-        @if (!networkService.isOnline()) {
-          <span class="badge badge-sm badge-warning">{{ 'downloads.offline' | translate }}</span>
-        }
-        @if (device.isTablet() || device.isTv()) {
-          <!-- Pin/unpin sidebar: tablet & TV at lg+ where the pin has an effect (desktop is always pinned, phones have no sidebar). -->
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm btn-square hidden lg:inline-flex"
-            [class.text-primary]="navbar.sidebarPinned()"
-            (click)="navbar.toggleSidebarPinned()"
-            [attr.aria-label]="(navbar.sidebarPinned() ? 'nav.unpin_sidebar' : 'nav.pin_sidebar') | translate"
-          >
-            <svg [lucideIcon]="icons.Pin" class="h-4 w-4"></svg>
-          </button>
-        }
-      </div>
-
-      <ul class="menu p-4 flex-1 gap-0.5 min-w-64">
-        @for (item of mainItemsBeforeLibraries(); track item.id) {
-          <li>
-            <a [routerLink]="item.route" routerLinkActive="menu-active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between">
-              <span class="flex items-center gap-2">
-                <app-nav-icon [name]="item.icon" class="h-5 w-5" />
-                {{ item.labelKey | translate }}
-              </span>
-              @if (item.badgeKey && badgeCountFor(item) > 0) {
-                <span class="badge badge-sm" [class]="item.badgeClass">{{ badgeCountFor(item) }}</span>
-              }
-            </a>
-          </li>
-        }
-
-        <!-- Held until the list lands: inserted under painted items, it would push them down. -->
-        @if (librariesLoaded()) {
-        <li class="menu-title text-sm mt-3">{{ 'nav.section_library' | translate }}</li>
-        @for (lib of displayLibraries(); track lib.id) {
-          <li>
-            <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" class="justify-between">
-              <span class="flex items-center gap-2">
-                <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5" />
-                {{ lib.name }}
-              </span>
-              @if (libraryCounts()[lib.id]) {
-                <span class="badge badge-sm badge-ghost">{{ libraryCounts()[lib.id] }}</span>
-              }
-            </a>
-          </li>
-        }
-        @for (item of mainItemsAfterLibraries(); track item.id) {
-          <li>
-            <a [routerLink]="item.route" routerLinkActive="menu-active" [routerLinkActiveOptions]="{ exact: item.exact }" class="justify-between">
-              <span class="flex items-center gap-2">
-                <app-nav-icon [name]="item.icon" class="h-5 w-5" />
-                {{ item.labelKey | translate }}
-              </span>
-              @if (item.badgeKey && badgeCountFor(item) > 0) {
-                <span class="badge badge-sm" [class]="item.badgeClass">{{ badgeCountFor(item) }}</span>
-              }
-            </a>
-          </li>
-        }
-        <li class="menu-title text-sm mt-3">{{ 'nav.section_downloads' | translate }}</li>
-        @for (item of acquisitionItems(); track item.id) {
-          <li>
-            <a [routerLink]="item.route" routerLinkActive="menu-active" class="justify-between">
-              <span class="flex items-center gap-2">
-                <app-nav-icon [name]="item.icon" class="h-5 w-5" />
-                {{ item.labelKey | translate }}
-              </span>
-              @if (item.badgeKey && badgeCountFor(item) > 0) {
-                <span class="badge badge-sm" [class]="item.badgeClass">{{ badgeCountFor(item) }}</span>
-              }
-            </a>
-          </li>
-        }
-        }
-      </ul>
-
+  <!-- Docked, the rail is the permanent column (the overlay grows over the page); below md and on phones it is the drawer's content. -->
+  <div class="drawer-side z-40 [scrollbar-gutter:stable]" [class.hidden]="navbar.railMode() === 'none'" [class.!overflow-visible]="navbar.railDocked()">
+    <label for="sidebar" aria-hidden="true" class="drawer-overlay"></label>
+    <aside class="relative h-full min-h-screen" [class]="navbar.railMode() === 'collapsed' ? 'w-[var(--rail-w)]' : 'w-64'">
+      @if (navbar.railMode() !== 'none') {
+        <app-nav-rail
+          [mode]="navbar.railMode() === 'collapsed' ? 'collapsed' : 'expanded'"
+          [libraries]="displayLibraries()"
+          [librariesLoaded]="librariesLoaded()"
+          [libraryCounts]="libraryCounts()"
+          [badgeCounts]="badgeCounts()"
+          (overlaying)="railOverlaying.set($event)"
+        />
+      }
     </aside>
   </div>
 </div>

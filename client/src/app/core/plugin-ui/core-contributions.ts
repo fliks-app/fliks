@@ -10,17 +10,16 @@ const not = (p: string) => `!${p}` as unknown as When[number];
 export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.home', slot: 'nav.main', weight: 100, labelKey: 'nav.home', icon: 'home', action: { kind: 'route', path: '/' } },
   { id: 'core.search', slot: 'nav.main', weight: 200, labelKey: 'search.title', icon: 'search', action: { kind: 'route', path: '/search' } },
-  { id: 'core.my_profile', slot: 'nav.main', weight: 300, labelKey: 'nav.my_profile', icon: 'user-round', when: [not('isTv')], action: { kind: 'action', actionId: 'nav.my-profile' } },
   { id: 'core.live_tv', slot: 'nav.main', weight: 900, labelKey: 'liveTv.title', icon: 'tv', when: ['hasPermission:livetv.read', 'liveTv'], action: { kind: 'route', path: '/live-tv' } },
   { id: 'core.playlists', slot: 'nav.main', weight: 2000, labelKey: 'nav.playlists', icon: 'list-video', action: { kind: 'route', path: '/playlists' } },
   { id: 'core.downloads', slot: 'nav.main', weight: 2100, labelKey: 'downloads.title', icon: 'download', when: [not('isTv')], action: { kind: 'route', path: '/downloads' } },
   { id: 'core.history', slot: 'nav.main', weight: 2200, labelKey: 'nav.history', icon: 'history', action: { kind: 'route', path: '/history' } },
 
-  { id: 'core.requests', slot: 'nav.acquisition', weight: 100, labelKey: 'nav.requests', icon: 'clipboard-list', badge: 'pendingRequests', tone: 'danger', when: ['hasPermission:requests.create'], action: { kind: 'route', path: '/requests' } },
-  { id: 'core.queue', slot: 'nav.acquisition', weight: 150, labelKey: 'acquisition_queue.queue_title', icon: 'download', when: [since('acquisitionQueue'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/queue' } },
-  { id: 'core.queue_history', slot: 'nav.acquisition', weight: 160, labelKey: 'acquisition_queue.history_title', icon: 'history', when: [since('acquisitionQueue'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/history' } },
-  { id: 'core.calendar', slot: 'nav.acquisition', weight: 300, labelKey: 'nav.calendar', icon: 'calendar', action: { kind: 'route', path: '/calendar' } },
-  { id: 'core.wanted', slot: 'nav.acquisition', weight: 350, labelKey: 'wanted.title', icon: 'target', when: ['hasPermission:media.grab'], action: { kind: 'route', path: '/wanted' } },
+  { id: 'core.requests', slot: 'nav.acquisition', weight: 100, labelKey: 'nav.requests', icon: 'clipboard-list', badge: 'pendingRequests', tone: 'danger', when: [not('isTv'), 'hasPermission:requests.create'], action: { kind: 'route', path: '/requests' } },
+  { id: 'core.queue', slot: 'nav.acquisition', weight: 150, labelKey: 'acquisition_queue.queue_title', icon: 'download', when: [not('isTv'), since('acquisitionQueue'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/queue' } },
+  { id: 'core.queue_history', slot: 'nav.acquisition', weight: 160, labelKey: 'acquisition_queue.history_title', icon: 'history', when: [not('isTv'), since('acquisitionQueue'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/history' } },
+  { id: 'core.calendar', slot: 'nav.acquisition', weight: 300, labelKey: 'nav.calendar', icon: 'calendar', when: [not('isTv')], action: { kind: 'route', path: '/calendar' } },
+  { id: 'core.wanted', slot: 'nav.acquisition', weight: 350, labelKey: 'wanted.title', icon: 'target', when: [not('isTv'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/wanted' } },
 ];
 
 /** Libraries render as their own block between the weight-300 and weight-2000 core items; where a plugin's `nav.main` weight 1000-1999 lands after them. */

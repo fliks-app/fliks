@@ -93,8 +93,13 @@ html.vt-chrome-held .dock {
 html.vt-chrome-held [data-chrome-fab] {
   view-transition-name: vt-fab;
 }
+html.vt-chrome-held .nav-rail {
+  view-transition-name: vt-rail;
+}
 html.vt-chrome-held::view-transition-group(vt-dock),
-html.vt-chrome-held::view-transition-new(vt-dock) {
+html.vt-chrome-held::view-transition-new(vt-dock),
+html.vt-chrome-held::view-transition-group(vt-rail),
+html.vt-chrome-held::view-transition-new(vt-rail) {
   z-index: 4;
   animation: none;
 }
@@ -104,6 +109,7 @@ html.vt-chrome-held::view-transition-new(vt-fab) {
   animation: none;
 }
 html.vt-chrome-held::view-transition-old(vt-dock),
+html.vt-chrome-held::view-transition-old(vt-rail),
 html.vt-chrome-held::view-transition-old(vt-fab) {
   animation: none;
   opacity: 0;

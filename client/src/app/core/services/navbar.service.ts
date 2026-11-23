@@ -4,6 +4,8 @@ import { NavigationEnd, NavigationStart, Router, Scroll } from '@angular/router'
 import { Capacitor } from '@capacitor/core';
 import { DeviceService } from './device.service';
 
+export type RailMode = 'none' | 'drawer' | 'collapsed' | 'expanded';
+
 /** Lets child pages communicate with the navbar (e.g. hero pages setting a title). */
 @Injectable({ providedIn: 'root' })
 export class NavbarService {
@@ -14,8 +16,8 @@ export class NavbarService {
   readonly heroLogoUrl = signal<string | null>(null);
   /** Opens the page's actions menu from the mobile navbar, in place of the user menu; null when the page has none. */
   readonly heroMenu = signal<((anchor: HTMLElement) => void) | null>(null);
-  /** Now-playing bars the TV navbar renders in place of the bottom of the screen, which the D-pad reaches last. */
-  readonly tvBars = signal<readonly TemplateRef<unknown>[]>([]);
+  /** Now-playing bars the rail renders in its footer in place of the bottom of the screen, which the D-pad reaches last. */
+  readonly dockedBars = signal<readonly TemplateRef<unknown>[]>([]);
   /** Whether the current page has a hero fanart. */
   readonly isHeroPage = signal(false);
   /** Non-hero pages can opt into the layout's desktop back button by setting
@@ -27,19 +29,22 @@ export class NavbarService {
   readonly scrollAtTop = signal(true);
   /** True when at least one in-app navigation has happened since entering — used to gate back buttons. */
   readonly canGoBack = signal(false);
-  /** Whether the sidebar stays pinned at lg on form factors that default to a drawer (tablet); persisted, on by default. Desktop always pins, phones never. */
+  /** Whether the rail stays expanded at lg+ (desktop and tablet); persisted, off by default. */
   readonly sidebarPinned = signal(
-    localStorage.getItem('fliks.sidebarPinned') !== 'false',
-  );
-  /** Effective pin state: off on narrow screens and always off on TV (10-foot surface); the stored preference is kept. */
-  readonly effectiveSidebarPinned = computed(
-    () => this.sidebarPinned() && this.isLargeScreen() && !this.device.isTv(),
+    localStorage.getItem('fliks.sidebarPinned') === 'true',
   );
 
-  /** Whether the layout shows the sidebar as a permanent column; keeps the form-factor list in one place. */
-  readonly sidebarDocked = computed(
-    () => this.device.isDesktop() || this.effectiveSidebarPinned(),
-  );
+  /** How the left rail shows: `none` (phone dock), `drawer` (hamburger, below md and on phones without the dock),
+   *  `collapsed` (icons; TV, md to lg) or `expanded` (lg+ when pinned). */
+  readonly railMode = computed<RailMode>(() => {
+    if (this.phoneDock()) return 'none';
+    if (this.device.isTv()) return 'collapsed';
+    if (this.device.isPhone() || !this.isMediumScreen()) return 'drawer';
+    return this.sidebarPinned() && this.isLargeScreen() ? 'expanded' : 'collapsed';
+  });
+
+  /** The rail is a permanent column (collapsed or expanded) rather than a drawer or absent. */
+  readonly railDocked = computed(() => this.railMode() === 'collapsed' || this.railMode() === 'expanded');
 
   /** Native phone bottom dock; landscape is too short for it, so the topbar hamburger takes over there. */
   readonly phoneDock = computed(
@@ -59,6 +64,8 @@ export class NavbarService {
   /** Capacitor native platform — exposed so templates can branch on it. */
   readonly isNativePlatform = Capacitor.isNativePlatform();
   private get isNative() { return this.isNativePlatform; }
+  /** True while the viewport matches Tailwind's `md` breakpoint (≥768px). */
+  private readonly isMediumScreen = signal(false);
   /** True while the viewport matches Tailwind's `lg` breakpoint (≥1024px). */
   private readonly isLargeScreen = signal(false);
   private readonly isLandscape = signal(false);
@@ -69,6 +76,9 @@ export class NavbarService {
       const mq = window.matchMedia('(min-width: 1024px)');
       this.isLargeScreen.set(mq.matches);
       mq.addEventListener('change', (e) => this.isLargeScreen.set(e.matches));
+      const md = window.matchMedia('(min-width: 768px)');
+      this.isMediumScreen.set(md.matches);
+      md.addEventListener('change', (e) => this.isMediumScreen.set(e.matches));
       const landscape = window.matchMedia('(orientation: landscape)');
       this.isLandscape.set(landscape.matches);
       landscape.addEventListener('change', (e) => this.isLandscape.set(e.matches));
@@ -195,14 +205,8 @@ export class NavbarService {
     }
   }
 
-  /** True when the top mobile navbar is rendered; hidden on tablet when the sidebar is pinned, so back-button pages must mirror that. */
-  readonly mobileNavbarVisible = computed(() => {
-    // Mirror the layout's navbar visibility: hidden at lg+ on desktop, and on tablet only when the sidebar is pinned.
-    if (this.isLargeScreen() && this.device.isDesktop()) return false;
-    // One test now that the pin itself rules out a TV: naming the form factors
-    // twice let the two drift apart.
-    return !this.effectiveSidebarPinned();
-  });
+  /** True when the top mobile navbar is rendered: wherever the rail is not a permanent column. */
+  readonly mobileNavbarVisible = computed(() => !this.railDocked());
 
   /** Top padding that clears the mobile navbar for a desktop-layout hero; null when no navbar overlaps it. */
   readonly heroPaddingTop = computed(() =>
