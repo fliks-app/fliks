@@ -890,6 +890,21 @@ async fn users_public_modes(pool: PgPool) {
     assert_eq!(picker(&c, "100.100.1.1", None).await, roster);
     mode("hidden").await;
     assert_eq!(picker(&c, "192.168.1.20", None).await, json!([]));
+    let user_picker = || async {
+        let req = Request::builder()
+            .uri("/api/auth/oidc")
+            .body(Body::empty())
+            .unwrap();
+        let res = c.app.clone().oneshot(req).await.unwrap();
+        let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice::<Value>(&bytes).unwrap()["userPicker"].clone()
+    };
+    assert_eq!(user_picker().await, json!(true));
+    mode("never").await;
+    assert_eq!(picker(&c, "192.168.1.20", None).await, json!([]));
+    assert_eq!(user_picker().await, json!(false));
 }
 
 fn auth_header(b: &Value) -> String {

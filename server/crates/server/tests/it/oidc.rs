@@ -1730,7 +1730,7 @@ async fn auto_launch_names_an_enabled_provider(pool: PgPool) {
     let (_, _, none) = c.call("GET", "/api/auth/oidc", None, None).await;
     assert_eq!(
         none,
-        json!({"providers": [], "autoLaunch": null, "passwordLogin": "everyone", "origin": PUBLIC})
+        json!({"providers": [], "autoLaunch": null, "passwordLogin": "everyone", "userPicker": true, "origin": PUBLIC})
     );
     let a = c.provider(json!({"name": "A"})).await;
     let off = c.provider(json!({"name": "Off", "enabled": false})).await;

@@ -209,6 +209,7 @@ export class AuthService {
     oidcPlatform() && !this.tv.isTv() ? this._oidc().providers : [],
   );
   readonly passwordLogin = computed(() => this._oidc().passwordLogin);
+  readonly userPicker = computed(() => this._oidc().userPicker !== false);
   /** The page was reached through another host name than `public_url`: a link started here could not come back to it. */
   readonly ssoOtherOrigin = computed(() => {
     const origin = this._oidc().origin;

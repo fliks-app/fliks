@@ -566,7 +566,7 @@ pub(crate) async fn me(State(st): State<AppState>, a: Authed) -> Result<Json<Saf
     Ok(Json(safe_user(&st, a.user, a.role).await))
 }
 
-/// Picker roster visibility: `everyone` (default), `lan` or `hidden` (setting `users_public_mode`).
+/// Picker roster visibility: `everyone` (default), `lan`, `hidden` or `never` (setting `users_public_mode`).
 #[utoipa::path(get, path = "/api/auth/users-public", responses((status = 200)))]
 pub(crate) async fn users_public(
     State(st): State<AppState>,
@@ -575,7 +575,7 @@ pub(crate) async fn users_public(
 ) -> Result<Json<Value>, AppError> {
     let mode = crate::settings::text(&st.db, "users_public_mode").await?;
     let shown = match mode.as_deref() {
-        Some("hidden") => false,
+        Some("hidden" | "never") => false,
         Some("lan") => {
             is_lan(
                 &st,

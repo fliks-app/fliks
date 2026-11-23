@@ -1,13 +1,13 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
 import { of } from 'rxjs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AuthService } from '../../core/services/auth.service';
 import { SelectUserComponent } from './select-user';
 
-function open(passwordLogin: 'everyone' | 'admins') {
+function open(passwordLogin: 'everyone' | 'admins', userPicker = true) {
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
@@ -23,6 +23,7 @@ function open(passwordLogin: 'everyone' | 'admins') {
           resumableSessions: signal([]),
           ssoProviders: signal([{ id: 3, name: 'Authentik' }]),
           passwordLogin: signal(passwordLogin),
+          userPicker: signal(userPicker),
           oidcBusy: signal(false),
           oidcInfo: async () => undefined,
           oidcAutoLaunch: () => false,
@@ -58,4 +59,15 @@ describe('SelectUserComponent sheet', () => {
       else expect(sso).toBeGreaterThan(1);
     });
   }
+});
+
+describe('SelectUserComponent picker setting', () => {
+  it('goes to the login form when the admin turned the picker off', async () => {
+    const { fixture } = open('everyone', false);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    await new Promise((r) => setTimeout(r));
+    expect(navigate).toHaveBeenCalledWith(['/login'], expect.objectContaining({ replaceUrl: true }));
+  });
 });

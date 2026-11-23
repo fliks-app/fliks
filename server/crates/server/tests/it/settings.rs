@@ -739,6 +739,7 @@ async fn users_public_mode_accepts_only_known_values(pool: PgPool) {
     for (v, want) in [
         ("lan", 200),
         ("hidden", 200),
+        ("never", 200),
         ("everyone", 200),
         ("nobody", 400),
     ] {

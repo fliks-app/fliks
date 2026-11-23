@@ -82,6 +82,7 @@ pub(crate) struct Info {
     providers: Vec<Button>,
     auto_launch: Option<i32>,
     password_login: &'static str,
+    user_picker: bool,
     origin: String,
 }
 
@@ -97,6 +98,10 @@ pub(crate) async fn info(State(st): State<AppState>) -> Result<Json<Info>, AppEr
         .and_then(|v| v.trim().parse().ok())
         .filter(|id| providers.iter().any(|p| p.id == *id));
     let admins = db::password_login_admins_only(&st.db).await?;
+    let user_picker = crate::settings::text(&st.db, "users_public_mode")
+        .await?
+        .as_deref()
+        != Some("never");
     let origin = crate::settings::public_url(&st.db)
         .await?
         .map(|u| origin_of(&u))
@@ -111,6 +116,7 @@ pub(crate) async fn info(State(st): State<AppState>) -> Result<Json<Info>, AppEr
             .collect(),
         auto_launch: auto,
         password_login: if admins { "admins" } else { "everyone" },
+        user_picker,
         origin,
     }))
 }
