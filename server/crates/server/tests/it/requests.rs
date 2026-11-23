@@ -1137,6 +1137,23 @@ async fn a_request_status_change_reaches_the_requester_and_the_managers_only(poo
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_request_change_skips_managers_who_cannot_read_its_library(pool: PgPool) {
+    let c = ctx(pool).await;
+    let seen: Arc<Seen> = Arc::default();
+    let sink = seen.clone();
+    c.st.hub
+        .register_users_hook(move |ev, users| sink.lock_clean().push((ev.clone(), users.to_vec())));
+    let validator: i32 = sqlx::query_scalar("SELECT id FROM users WHERE username = 'validator'")
+        .fetch_one(&c.st.db)
+        .await
+        .unwrap();
+    let (_, a) = call(&c, "POST", "/api/requests", &c.user, series(92, json!([1]))).await;
+    let f = frames(&seen);
+    assert_eq!(f.len(), 1, "{a}");
+    assert!(!f[0].2.contains(&validator), "{:?}", f[0].2);
+}
+
+#[sqlx::test(migrations = false)]
 async fn approve_rolls_back_on_an_import_error(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, a) = call(&c, "POST", "/api/requests", &c.user, movie(81)).await;

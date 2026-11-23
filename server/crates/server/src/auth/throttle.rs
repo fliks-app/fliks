@@ -70,6 +70,16 @@ impl LoginThrottle {
         ok
     }
 
+    /// Counts one use of `who` against `max` per window, with no address budget: for a limit per
+    /// account rather than per client.
+    pub fn attempt_key(&self, who: &str, max: u32) -> bool {
+        Self::bump(
+            &mut self.fails.lock_clean(),
+            (String::new(), who.into()),
+            max,
+        )
+    }
+
     fn bump(m: &mut HashMap<Key, (u32, Instant)>, k: Key, max: u32) -> bool {
         if !m.contains_key(&k) && m.len() >= MAX_KEYS {
             m.retain(|_, (_, since)| since.elapsed() < WINDOW);

@@ -4327,6 +4327,27 @@ async fn a_playing_party_is_stored_at_its_current_position_and_boots_paused_ther
 }
 
 #[sqlx::test(migrations = false)]
+async fn storing_positions_waits_for_a_mutation_in_flight(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = c.user("alice", true).await;
+    let id = party_with(&c, &a, vec![]).await as i32;
+    c.st.parties
+        .act(id, |l| {
+            l.playback.as_mut().unwrap().state = fliks_domain::party::State::Playing;
+            ((), vec![])
+        })
+        .unwrap();
+    let held = party::hold(&c.st, id).await;
+    let st = c.st.clone();
+    let task = tokio::spawn(async move { party::persist_positions(&st).await });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let read = || sqlx::query_scalar::<_, f64>("SELECT position FROM watch_parties WHERE id = $1");
+    assert_eq!(read().bind(id).fetch_one(&c.pool).await.unwrap(), 0.0);
+    drop(held);
+    task.await.unwrap();
+}
+
+#[sqlx::test(migrations = false)]
 async fn a_deleted_file_is_unpinned_from_the_party_row_and_its_machine(pool: PgPool) {
     let c = ctx(pool).await;
     let (_, a) = c.user("alice", true).await;

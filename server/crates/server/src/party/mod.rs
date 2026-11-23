@@ -15,7 +15,7 @@ pub use karaoke_ws::{__path_karaoke_ws, Relay, karaoke_ws};
 pub use programme::{__path_add_items, __path_remove_item, add_items, remove_item};
 pub use proposals::*;
 pub use registry::{
-    Parties, boot, clear_files, end_owned, end_playing, end_playing_items, persist_positions,
+    Parties, boot, clear_files, end_owned, end_playing, end_playing_items, hold, persist_positions,
     spawn, sweep, tick,
 };
 pub use routes::*;

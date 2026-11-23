@@ -172,15 +172,24 @@ impl Parties {
         self.inner().notified.remove(&id);
     }
 
-    /// The parties that play right now, with their position at `now`.
-    pub fn positions(&self, now: i64) -> Vec<(i32, f64)> {
+    /// The party's position at `now` while it plays.
+    pub fn playing_position(&self, id: i32, now: i64) -> Option<f64> {
         let g = self.inner();
-        g.live
+        let p = g.live.get(&id)?.playback.as_ref()?;
+        (p.state == State::Playing).then(|| p.position_at(now))
+    }
+
+    /// The parties that may play right now.
+    fn playing_ids(&self) -> Vec<i32> {
+        self.inner()
+            .live
             .iter()
-            .filter_map(|(id, l)| {
-                let p = l.playback.as_ref()?;
-                (p.state == State::Playing).then(|| (*id, p.position_at(now)))
+            .filter(|(_, l)| {
+                l.playback
+                    .as_ref()
+                    .is_some_and(|p| p.state == State::Playing)
             })
+            .map(|(id, _)| *id)
             .collect()
     }
 
@@ -745,12 +754,15 @@ pub async fn end_playing_items(st: &AppState, items: &[i32]) -> sqlx::Result<()>
 
 /// Rule 10: stores where the playing parties are, so a restart resumes close to there.
 pub async fn persist_positions(st: &AppState) {
-    let positions = st.parties.positions(now_ms());
-    if positions.is_empty() {
-        return;
-    }
-    if let Err(e) = db::persist_positions(&st.db, &positions).await {
-        tracing::warn!(error = %e, "party positions not saved");
+    for id in st.parties.playing_ids() {
+        // Under the gate, so a concurrent seek or item change is not overwritten by an older position.
+        let _held = hold(st, id).await;
+        let Some(position) = st.parties.playing_position(id, now_ms()) else {
+            continue;
+        };
+        if let Err(e) = db::persist_positions(&st.db, &[(id, position)]).await {
+            tracing::warn!(error = %e, "party positions not saved");
+        }
     }
 }
 

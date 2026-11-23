@@ -275,12 +275,14 @@ pub async fn ingest(
     } else {
         (vec![], HashSet::new())
     };
+    let new_ids: Vec<i32> = out.imported.iter().map(|i| i.file_id).collect();
+    let held = held_by_other_files(st, media.id, &new_ids).await;
     let episodes: Vec<EpisodeRef> = out
         .imported
         .iter()
         .filter_map(|i| Some((i.season_number?, i.episode_number?, i.episode_end)))
         .flat_map(|(s, e, end)| (e..=end.unwrap_or(e).max(e)).map(move |n| (s, n)))
-        .filter(|k| !replaced.contains(k))
+        .filter(|k| !replaced.contains(k) && !held.contains(k))
         .map(|(s, e)| EpisodeRef {
             season_number: i64::from(s),
             episode_number: i64::from(e),
@@ -1072,6 +1074,30 @@ pub async fn season_episodes(
     )
     .fetch_all(db)
     .await
+}
+
+/// `(season, episode)` still held by a file of `media` outside `files`: not new when `files` land on them.
+pub async fn held_by_other_files(st: &AppState, media: i32, files: &[i32]) -> HashSet<(i32, i32)> {
+    let rows: sqlx::Result<Vec<(i32, i32, Option<i32>)>> = sqlx::query_as(
+        r#"SELECT DISTINCT s."number", e."number", e."endNumber"
+           FROM media_files mf JOIN media_file_items fi ON fi."mediaFileId" = mf.id
+           JOIN items e ON e.id = fi."episodeId" JOIN item_groups s ON s.id = e."groupId"
+           WHERE mf."mediaId" = $1 AND mf.id <> ALL($2)"#,
+    )
+    .bind(media)
+    .bind(files)
+    .fetch_all(&st.db)
+    .await;
+    match rows {
+        Ok(rows) => rows
+            .into_iter()
+            .flat_map(|(s, e, end)| (e..=end.unwrap_or(e).max(e)).map(move |n| (s, n)))
+            .collect(),
+        Err(e) => {
+            tracing::warn!("held episodes lookup failed: {e}");
+            HashSet::new()
+        }
+    }
 }
 
 struct Old {

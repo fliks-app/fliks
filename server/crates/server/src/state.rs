@@ -39,6 +39,8 @@ pub struct AppState {
     pub login_throttle: Arc<crate::auth::LoginThrottle>,
     /// Wrong pairing codes per approver, apart from login so no username can collide with its key.
     pub pairing_throttle: Arc<crate::auth::LoginThrottle>,
+    /// Problem reports created per user, apart from login so no username can collide with its key.
+    pub problem_throttle: Arc<crate::auth::LoginThrottle>,
     /// OpenID Connect caches and outbound network; a test harness swaps the network.
     pub oidc: Arc<crate::auth::oidc::Oidc>,
     pub sse_tickets: Arc<crate::events::Tickets>,
@@ -101,6 +103,7 @@ impl AppState {
             karaoke: Arc::default(),
             login_throttle: Arc::default(),
             pairing_throttle: Arc::default(),
+            problem_throttle: Arc::default(),
             oidc: Arc::default(),
             sse_tickets: Arc::default(),
             kobo_store: crate::kobo::STORE.into(),

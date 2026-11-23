@@ -661,3 +661,37 @@ async fn a_dropped_item_keeps_the_report_for_a_manager(pool: PgPool) {
         (Value::Null, json!(2), json!(4))
     );
 }
+
+#[sqlx::test(migrations = false)]
+async fn another_episode_does_not_resolve_a_file_pinned_without_item(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, a) = report(&c, &c.rep, 11, json!({"kind": "video", "mediaFileId": 2})).await;
+    let a = a["id"].as_i64().unwrap();
+    let h = problems::open_system(&c.pool, 3).await.unwrap().unwrap() as i64;
+    sqlx::raw_sql(
+        r#"DELETE FROM media_files WHERE id IN (2, 3);
+           INSERT INTO media_files (id, "mediaId", "folderId", "relativePath", size, quality) VALUES (30, 11, 1, 's/e9.mkv', 100, 'q');"#,
+    )
+    .execute(&c.pool)
+    .await
+    .unwrap();
+    problems::auto_resolve(&c.st, Some(11)).await.unwrap();
+    assert!(!resolved(&c, a).await && !resolved(&c, h).await);
+}
+
+#[sqlx::test(migrations = false)]
+async fn create_and_withdraw_loop_is_throttled(pool: PgPool) {
+    let c = ctx(pool).await;
+    let mut last = 0;
+    for _ in 0..12 {
+        let (s, row) = report(&c, &c.rep, 10, json!({"kind": "video"})).await;
+        last = s;
+        if s != 201 {
+            break;
+        }
+        let id = row["id"].as_i64().unwrap();
+        let (s, _) = call(&c, "DELETE", &format!("/api/problems/{id}"), &c.rep, None).await;
+        assert!(s < 300);
+    }
+    assert_eq!(last, 429);
+}

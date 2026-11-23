@@ -160,39 +160,22 @@ pub async fn pending_delete_exists(db: &PgPool, t: &TitleKey) -> sqlx::Result<bo
     .await
 }
 
-/// ADD requests of a user and type that still count against the quota (rule 13).
-pub async fn quota_count(
+/// `createdAt` of the ADD requests of a user and type that still count against the quota (rule 13), oldest first.
+pub async fn quota_window(
     db: impl PgExecutor<'_>,
     user_id: i32,
     media_type: MediaKind,
     since: chrono::DateTime<chrono::Utc>,
-) -> sqlx::Result<i64> {
-    sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!" FROM requests WHERE "userId" = $1 AND "mediaType" = $2
-        AND kind = 'add' AND status IN ('pending', 'approved') AND "createdAt" >= $3"#,
-        user_id,
-        media_type.as_str(),
-        since
-    )
-    .fetch_one(db)
-    .await
-}
-
-/// Oldest `createdAt` among the requests `quota_count` counts: when the window frees a slot.
-pub async fn quota_oldest(
-    db: impl PgExecutor<'_>,
-    user_id: i32,
-    media_type: MediaKind,
-    since: chrono::DateTime<chrono::Utc>,
-) -> sqlx::Result<Option<chrono::DateTime<chrono::Utc>>> {
+) -> sqlx::Result<Vec<chrono::DateTime<chrono::Utc>>> {
     sqlx::query_scalar(
-        r#"SELECT min("createdAt") FROM requests WHERE "userId" = $1 AND "mediaType" = $2
-        AND kind = 'add' AND status IN ('pending', 'approved') AND "createdAt" >= $3"#,
+        r#"SELECT "createdAt" FROM requests WHERE "userId" = $1 AND "mediaType" = $2
+        AND kind = 'add' AND status IN ('pending', 'approved') AND "createdAt" >= $3
+        ORDER BY "createdAt""#,
     )
     .bind(user_id)
     .bind(media_type.as_str())
     .bind(since)
-    .fetch_one(db)
+    .fetch_all(db)
     .await
 }
 
