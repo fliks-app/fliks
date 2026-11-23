@@ -661,6 +661,23 @@ async fn file_info_routes_read_a_stream_token_bound_to_that_file_only(pool: PgPo
 }
 
 #[sqlx::test(migrations = false)]
+async fn a_download_token_is_refused_by_the_routes_the_host_serves(pool: PgPool) {
+    let c = ctx(pool, true).await;
+    let sid = session::new(&c.st, c.user).await;
+    let token =
+        c.st.jwt
+            .sign_download(c.user, "admin", sid, c.file as u32)
+            .unwrap()
+            .token;
+    for uri in [
+        format!("/api/stream/{}/keyframes", c.file),
+        "/api/stream/info/hw-accel".to_owned(),
+    ] {
+        assert_eq!(call(&c, "GET", &uri, &token, None).await.0, 401, "{uri}");
+    }
+}
+
+#[sqlx::test(migrations = false)]
 async fn keyframes_come_sorted_from_a_matching_scan_only(pool: PgPool) {
     let c = ctx(pool, true).await;
     let uri = format!("/api/stream/{}/keyframes", c.file);

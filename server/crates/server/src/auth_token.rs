@@ -8,6 +8,9 @@ use std::collections::HashSet;
 /// Cast tokens live a fixed 4 h (`auth.md` rule 5): one item's whole LOAD, since the receiver bakes the token into its URLs.
 pub const CAST_TTL_SECS: u64 = 4 * 3600;
 
+/// A download token outlives its queue: a transfer paused, or waiting for Wi-Fi, resumes with the URL it was queued with.
+pub const DOWNLOAD_TTL_SECS: u64 = 7 * 86_400;
+
 /// A live token is minted once and never refreshed by released clients, so it keeps the former 12 h.
 const LIVE_TTL_SECS: u64 = 12 * 3600;
 
@@ -16,6 +19,8 @@ const LIVE_TTL_SECS: u64 = 12 * 3600;
 #[serde(rename_all = "lowercase")]
 pub enum TokenScope {
     Stream,
+    /// Opens the stream and download purposes of its one file on the engine data plane, nothing else.
+    Download,
     #[serde(other)]
     Other,
 }
@@ -170,6 +175,26 @@ impl Jwt {
             username,
             Some(TokenScope::Stream),
             self.stream_ttl_secs,
+            Bound {
+                mf: Some(media_file_id),
+                ..Bound::session(sid)
+            },
+        )
+    }
+
+    /// A download credential: file-bound, on the login session (so a sign-out ends it), with a days-long TTL.
+    pub fn sign_download(
+        &self,
+        user_id: i32,
+        username: &str,
+        sid: i32,
+        media_file_id: u32,
+    ) -> Result<Signed, AppError> {
+        self.sign(
+            user_id,
+            username,
+            Some(TokenScope::Download),
+            DOWNLOAD_TTL_SECS,
             Bound {
                 mf: Some(media_file_id),
                 ..Bound::session(sid)
@@ -494,6 +519,19 @@ mod tests {
         assert_eq!(c.exp - Utc::now().timestamp(), CAST_TTL_SECS as i64);
         assert_eq!(j.verify(&c.token).unwrap().sid, Some(2));
         assert_eq!(j.verify(&c.token).unwrap().mf, Some(9));
+    }
+
+    #[test]
+    fn a_download_token_is_scoped_file_bound_and_lives_days() {
+        let j = jwt();
+        let t = j.sign_download(1, "a", 2, 42).unwrap();
+        let c = j.verify(&t.token).unwrap();
+        assert_eq!(
+            (c.scope, c.mf, c.sid),
+            (Some(TokenScope::Download), Some(42), Some(2))
+        );
+        assert_eq!(t.exp - Utc::now().timestamp(), DOWNLOAD_TTL_SECS as i64);
+        assert!(c.may_travel_in_url("/api/auth/me"));
     }
 
     #[test]

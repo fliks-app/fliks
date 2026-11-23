@@ -158,6 +158,7 @@ pub fn lifetime(env: impl Fn(&str) -> Option<String>) -> LifetimeConfig {
             d.live_session_gc_interval_ms,
         ),
         session_revive_ttl_ms: int("STREAM_SESSION_REVIVE_TTL_MS", d.session_revive_ttl_ms),
+        pinned_revive_ttl_ms: int("STREAM_PINNED_REVIVE_TTL_MS", d.pinned_revive_ttl_ms),
         cache_gc_interval_ms: int("TRANSCODE_CACHE_GC_INTERVAL_MS", d.cache_gc_interval_ms),
         ..d
     }
@@ -481,12 +482,15 @@ mod tests {
             ("STREAM_LIVE_SESSION_TTL_MS", " 45000ms"),
             ("STREAM_LIVE_SESSION_GC_INTERVAL_MS", "0"),
             ("STREAM_SESSION_REVIVE_TTL_MS", "-5"),
+            ("STREAM_PINNED_REVIVE_TTL_MS", "3600000"),
             ("STREAM_MAX_SESSIONS_PER_USER", "3"),
             ("TRANSCODE_CACHE_GC_INTERVAL_MS", "7"),
         ]));
         assert_eq!(l.live_session_ttl_ms, 45_000);
         assert_eq!(l.live_session_gc_interval_ms, d.live_session_gc_interval_ms);
         assert_eq!(l.session_revive_ttl_ms, d.session_revive_ttl_ms);
+        assert_eq!(l.pinned_revive_ttl_ms, 3_600_000);
+        assert_eq!(d.pinned_revive_ttl_ms, 24 * 3_600_000);
         assert_eq!(l.max_sessions_per_owner, d.max_sessions_per_owner);
         assert_eq!(l.cache_gc_interval_ms, 7);
         for bad in ["abc", "0", "-5", "99999999999"] {

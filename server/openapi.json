@@ -124,6 +124,17 @@
         }
       }
     },
+    "/api/auth/download-token": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "download_token",
+        "responses": {
+          "201": {}
+        }
+      }
+    },
     "/api/auth/login": {
       "post": {
         "tags": [

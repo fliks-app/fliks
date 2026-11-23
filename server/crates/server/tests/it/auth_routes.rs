@@ -292,6 +292,47 @@ async fn me_stream_scope_is_rejected_and_tokens(pool: PgPool) {
             .mf,
         None
     );
+    let post = |token: &str, body: Option<serde_json::Value>| {
+        let (c, token) = (&c, format!("Bearer {token}"));
+        async move {
+            call(
+                c,
+                "POST",
+                "/api/auth/download-token",
+                &[("authorization", &token)],
+                body,
+            )
+            .await
+        }
+    };
+    let (s, _, _) = post(&stream[7..], Some(json!({"mediaFileId": 42}))).await;
+    assert_eq!(s, 401, "a stream token cannot mint a download token");
+    let (s, _, _) = post(&h[7..], None).await;
+    assert_eq!(s, 400, "a download token names its file");
+    let (s, _, t) = post(&h[7..], Some(json!({"mediaFileId": 42}))).await;
+    assert_eq!(s, 201);
+    let token = t["downloadToken"].as_str().unwrap();
+    let claims = c.st.jwt.verify(token).unwrap();
+    assert_eq!(
+        (claims.scope, claims.mf, claims.sub),
+        (
+            Some(fliks_server::auth_token::TokenScope::Download),
+            Some(42),
+            id
+        )
+    );
+    let days = t["expiresAt"].as_i64().unwrap() / 1000 - chrono::Utc::now().timestamp();
+    assert!((6 * 86_400..=7 * 86_400).contains(&days));
+    let download = format!("Bearer {token}");
+    for (m, p) in [
+        ("GET", "/api/auth/me"),
+        ("POST", "/api/auth/stream-token"),
+        ("POST", "/api/auth/cast-info"),
+        ("POST", "/api/auth/download-token"),
+    ] {
+        let (s, _, _) = call(&c, m, p, &[("authorization", &download)], None).await;
+        assert_eq!(s, 401, "a download token is refused on {p}");
+    }
     for body in [None, Some(json!({}))] {
         let (s, _, i) = call(
             &c,

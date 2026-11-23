@@ -291,7 +291,7 @@ impl Authed {
     }
 }
 
-/// Like `Authed` but also accepts `scope: 'stream'` tokens: only for routes that deliver media.
+/// Like `Authed` but also accepts `scope: 'stream'` tokens (never a download one): only for routes that deliver media.
 #[derive(Debug, Clone)]
 pub struct StreamAuthed(pub Authed);
 
@@ -434,7 +434,11 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, AppError> {
-        required(parts, state).await.map(Self)
+        let a = required(parts, state).await?;
+        if a.scope == Some(TokenScope::Download) {
+            return Err(unauthorized());
+        }
+        Ok(Self(a))
     }
 }
 
