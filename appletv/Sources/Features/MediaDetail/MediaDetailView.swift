@@ -124,69 +124,31 @@ struct MediaDetailView: View {
                     }
                 }
 
-                Button(action: { Task { await toggleFavorite() } }) {
-                    Image(systemName: liked ? "heart.fill" : "heart")
-                        .foregroundStyle(liked ? Color.red : Color.primary)
-                }
-                .buttonStyle(.bordered)
-                .accessibilityLabel(liked ? tr("media_detail.unfavorite") : tr("media_detail.favorite"))
+                IconAction(systemImage: liked ? "heart.fill" : "heart",
+                           label: liked ? tr("media_detail.unfavorite") : tr("media_detail.favorite"),
+                           tint: liked ? .red : nil) { Task { await toggleFavorite() } }
 
-                Button(action: { Task { await toggleWatched(media) } }) {
-                    Image(systemName: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
-                }
-                .buttonStyle(.bordered)
-                .accessibilityLabel(watchedLabel(media))
+                IconAction(systemImage: isWatched ? "checkmark.circle.fill" : "checkmark.circle",
+                           label: watchedLabel(media)) { Task { await toggleWatched(media) } }
 
                 if let target, party.canCreate {
-                    Button(action: {
+                    IconAction(systemImage: "person.2.fill", label: tr("party.watch_together")) {
                         party.openCreate(PartyCreateTarget(name: media.title, mediaId: mediaId,
                                                            mediaFileId: target.mediaFileId, episodeId: target.episodeId))
-                    }) {
-                        Label(tr("party.watch_together"), systemImage: "person.2.fill")
                     }
-                    .buttonStyle(.bordered)
                 }
 
-                Button(action: { playlistPicker.open(mediaId: mediaId) }) {
-                    Label(tr("playlists.add_to_short"), systemImage: "text.badge.plus")
+                IconAction(systemImage: "text.badge.plus", label: tr("playlists.add_to_playlist_title")) {
+                    playlistPicker.open(mediaId: mediaId)
                 }
-                .buttonStyle(.bordered)
             }
+            .fixedSize()
         }
         .focusSection()
     }
 
-    private struct PlayTarget {
-        let mediaFileId: Int
-        let episodeId: Int?
-        let resume: Bool
-    }
-
-    /// Movie: the file with no episodeId. Series: the resume target if any,
-    /// else the first episode with a file, season order. ponytail: skips the
-    /// "first unwatched episode" tier (needs per-episode watched state, not
-    /// loaded here) — add it if the plain header target reads wrong once
-    /// watched-tracking lands on this screen.
     private func playTarget(_ media: Media) -> PlayTarget? {
-        guard media.type.isPlayable else { return nil }
-        if !media.type.hasChildren {
-            guard let fileId = resumeInfo?.mediaFileId ?? media.files?.first(where: { $0.episodeId == nil })?.id else {
-                return nil
-            }
-            let position = resumeInfo?.positionSeconds ?? 0
-            return PlayTarget(mediaFileId: fileId, episodeId: nil, resume: position > 0)
-        }
-        if let info = resumeInfo, let episodeId = info.episodeId {
-            return PlayTarget(mediaFileId: info.mediaFileId, episodeId: episodeId, resume: info.positionSeconds > 0)
-        }
-        for season in (media.seasons ?? []).sorted(by: { $0.seasonNumber < $1.seasonNumber }) {
-            for ep in season.episodes.sorted(by: { $0.episodeNumber < $1.episodeNumber }) where ep.hasFile {
-                if let file = media.files?.first(where: { $0.episodeId == ep.id }) {
-                    return PlayTarget(mediaFileId: file.id, episodeId: ep.id, resume: false)
-                }
-            }
-        }
-        return nil
+        PlayTarget.of(media, resume: resumeInfo, watchedEpisodes: watched.watchedEpisodes[mediaId] ?? [])
     }
 
     @ViewBuilder
@@ -204,9 +166,8 @@ struct MediaDetailView: View {
     }
 
     private func seasonButton(_ season: Season) -> some View {
-        SeasonButton(label: Self.seasonLabel(season), active: activeSeasonId == season.id) {
-            activeSeasonId = season.id
-        }
+        Button(Self.seasonLabel(season)) { activeSeasonId = season.id }
+            .selectableButtonStyle(activeSeasonId == season.id)
     }
 
     static func seasonLabel(_ season: Season) -> String {
@@ -247,33 +208,6 @@ struct MediaDetailView: View {
         if let c = try? await castTask { cast = c }
         if let r = try? await resumeTask { resumeInfo = r }
         if let l = try? await likeTask { liked = l.media }
-    }
-
-    /// Selection has to survive losing focus, so the season keeps its own fill
-    /// instead of relying on the system focus decoration.
-    private struct SeasonButton: View {
-        let label: String
-        let active: Bool
-        var action: () -> Void
-        @FocusState private var focused: Bool
-
-        var body: some View {
-            Button(action: action) {
-                Text(label)
-                    .font(.callout.weight(active ? .semibold : .regular))
-                    .foregroundStyle(active ? Color.black : Color.white)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 26)
-            }
-            .buttonStyle(FlatButtonStyle())
-            .background(RoundedRectangle(cornerRadius: 14)
-                .fill(active ? Color.white : Color.white.opacity(0.16)))
-            .overlay(RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(.white, lineWidth: focused ? 4 : 0))
-            .scaleEffect(focused ? 1.06 : 1)
-            .focused($focused)
-            .animation(.easeOut(duration: 0.15), value: focused)
-        }
     }
 
     private func watchedLabel(_ media: Media) -> String {

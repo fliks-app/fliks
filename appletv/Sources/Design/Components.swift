@@ -119,7 +119,7 @@ struct MediaCard: View {
             // A card with no artwork (a playlist with no posters, a request
             // without a poster) keeps the current backdrop rather than
             // flashing the bare black root.
-            if pushesBackdrop, let path = backdropPath ?? imagePath { backdrop.url = path }
+            if pushesBackdrop { backdrop.follow(backdropPath ?? imagePath) }
         }
     }
 }
@@ -341,10 +341,28 @@ struct SkeletonRail: View {
     }
 }
 
-/// No system focus decoration — for controls that draw their own.
-struct FlatButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.opacity(configuration.isPressed ? 0.7 : 1)
+/// A secondary action as a round icon button, as in the Apple TV app: only the primary actions carry a label,
+/// so an action row never squeezes its labels onto two lines.
+struct IconAction: View {
+    let systemImage: String
+    let label: String
+    var tint: Color?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage).foregroundStyle(tint.map(AnyShapeStyle.init) ?? AnyShapeStyle(.primary))
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.circle)
+        .accessibilityLabel(label)
+    }
+}
+
+extension View {
+    /// The native bordered button; a selected one keeps the app-colour fill once focus moves on.
+    @ViewBuilder func selectableButtonStyle(_ selected: Bool) -> some View {
+        if selected { buttonStyle(.borderedProminent).tint(Color.fliks(nil)) } else { buttonStyle(.bordered) }
     }
 }
 

@@ -7,6 +7,7 @@ enum Route: Hashable {
     case login(username: String?)
 
     // Main shell: its root content is Home, so there is no route for it.
+    case libraries
     case library(id: Int)
     case mediaDetail(id: Int)
     case episodeDetail(mediaId: Int, episodeId: Int)

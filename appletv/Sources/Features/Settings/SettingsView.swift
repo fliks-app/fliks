@@ -20,6 +20,8 @@ struct SettingsView: View {
             // without clipping the first one gets its top shaved off.
             .contentMargins(.vertical, 28, for: .scrollContent)
             .scrollClipDisabled()
+            // Aligned with the title; a List left at its own margins runs under the navigation rail.
+            .padding(.horizontal, 60)
         }
     }
 }

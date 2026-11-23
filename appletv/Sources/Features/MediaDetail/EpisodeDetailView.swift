@@ -126,28 +126,21 @@ struct EpisodeDetailView: View {
                             .buttonStyle(.bordered)
                         }
                     }
-                    Button {
+                    IconAction(systemImage: isWatched ? "checkmark.circle.fill" : "checkmark.circle",
+                               label: isWatched ? tr("media_card.mark_unwatched") : tr("media_card.mark_watched")) {
                         Task { await watched.toggle(mediaId: mediaId, episodeId: episode.id) }
-                    } label: {
-                        Image(systemName: isWatched ? "checkmark.circle.fill" : "checkmark.circle")
                     }
-                    .buttonStyle(.bordered)
-                    .accessibilityLabel(isWatched ? tr("media_card.mark_unwatched") : tr("media_card.mark_watched"))
                     if let fileId, party.canCreate {
-                        Button {
-                            party.openCreate(PartyCreateTarget(name: media.title, mediaId: mediaId, mediaFileId: fileId, episodeId: episode.id))
-                        } label: {
-                            Label(tr("party.watch_together"), systemImage: "person.2.fill")
+                        IconAction(systemImage: "person.2.fill", label: tr("party.watch_together")) {
+                            party.openCreate(PartyCreateTarget(name: media.title, mediaId: mediaId, mediaFileId: fileId,
+                                                               episodeId: episode.id))
                         }
-                        .buttonStyle(.bordered)
                     }
-                    Button {
+                    IconAction(systemImage: "text.badge.plus", label: tr("playlists.add_to_playlist_title")) {
                         playlistPicker.open(mediaId: mediaId, episodeId: episode.id)
-                    } label: {
-                        Label(tr("playlists.add_to_short"), systemImage: "text.badge.plus")
                     }
-                    .buttonStyle(.bordered)
                 }
+                .fixedSize()
                 .padding(.top, 8)
             }
             .frame(maxWidth: .infinity, alignment: .leading)

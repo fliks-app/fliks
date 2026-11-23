@@ -209,14 +209,9 @@ struct RoundButton: View {
     let action: () -> Void
 
     var body: some View {
-        Group {
-            if filled {
-                button.buttonStyle(.borderedProminent).tint(Color.fliks(nil))
-            } else {
-                button.buttonStyle(.bordered)
-            }
-        }
-        .buttonBorderShape(.circle)
+        button
+            .selectableButtonStyle(filled)
+            .buttonBorderShape(.circle)
         .accessibilityLabel(label)
     }
 

@@ -414,6 +414,15 @@ struct ContinueWatchingItem: Codable, Identifiable {
     var id: String { "\(mediaId)-\(episodeId ?? 0)" }
 }
 
+/// GET /api/home/featured: the hero carousel picks.
+struct FeaturedItem: Codable, Identifiable {
+    let media: Media
+    var id: Int { media.id }
+
+    /// Older servers have no carousel.
+    @MainActor static var supported: Bool { ServerVersion.shared.supports("7.2.0") }
+}
+
 struct RecommendationItem: Codable, Identifiable {
     struct MediaSummary: Codable, Hashable {
         let id: Int

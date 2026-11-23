@@ -66,9 +66,13 @@ struct HomeRow: View {
     var onSelectLibrary: (Int) -> Void
     var onSelectPlaylist: (Int) -> Void
     var onSelectParty: (Int) -> Void
+    /// The carousel's titles leave the recommendations row so the two never repeat.
+    var featuredIds: Set<Int> = []
 
     var body: some View {
         switch section.type {
+        case .heroCarousel:
+            EmptyView() // drawn full-bleed above the rows by HomeView
         case .watchParties:
             WatchPartiesRow(onSelect: onSelectParty)
         case .receivedRecommendations:
@@ -80,7 +84,7 @@ struct HomeRow: View {
         case .continueWatching:
             ContinueWatchingRow(onSelect: onSelectMedia, onSelectEpisode: onSelectEpisode)
         case .recommendations:
-            RecommendationsRow(onSelect: onSelectMedia)
+            RecommendationsRow(onSelect: onSelectMedia, excluded: featuredIds)
         case .likes:
             LikesRow(onSelect: onSelectMedia)
         case .recentlyAdded:
@@ -159,7 +163,7 @@ private struct LibrariesRow: View {
     }
 }
 
-private struct LibraryTile: View {
+struct LibraryTile: View {
     let library: Library
     var onSelect: () -> Void
     @FocusState private var focused: Bool
@@ -226,12 +230,13 @@ private struct ContinueWatchingRow: View {
 
 private struct RecommendationsRow: View {
     var onSelect: (Int) -> Void
+    var excluded: Set<Int>
     @Environment(Backdrop.self) private var backdrop
     @Environment(HomeRefresh.self) private var refresh
     @State private var state: ZoneState<RecommendationItem> = .loading
 
     var body: some View {
-        ZoneRow(title: tr("home.recommendations"), state: state, onRetry: { Task { await load() } }) { rec in
+        ZoneRow(title: tr("home.recommendations"), state: shown, onRetry: { Task { await load() } }) { rec in
             MediaCard(imagePath: rec.media.posterUrl, title: rec.media.title,
                       subtitle: rec.media.year.map(String.init), backdropPath: rec.media.fanartUrl,
                       mediaId: rec.media.id, missing: !rec.media.available) {
@@ -241,12 +246,19 @@ private struct RecommendationsRow: View {
         .task(id: refresh.tick) { await load() }
     }
 
+    private var shown: ZoneState<RecommendationItem> {
+        guard case let .loaded(items) = state else { return state }
+        return .loaded(items.filter { !excluded.contains($0.media.id) })
+    }
+
     private func load() async {
         await revalidateZone("recommendations", apply: { next in
             state = next
             backdrop.seed(next.items.first?.media.fanartUrl)
         }) {
-            let items: [RecommendationItem] = try await APIClient.shared.list("/api/playback/recommendations")
+            // The server default is 15: the carousel's 4 on top keep the row's length.
+            let items: [RecommendationItem] = try await APIClient.shared.list("/api/playback/recommendations",
+                                                                               query: ["limit": "19"])
             return items.filter(\.media.type.isPlayable)
         }
     }
