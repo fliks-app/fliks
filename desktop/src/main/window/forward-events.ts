@@ -1,7 +1,7 @@
-import { appendLog, redactUrls } from '../log-file';
-import { setPlaybackKeepAwake, keepAwakeForState } from '../power';
-import type { PlayerBackend } from '../mpv/player-backend';
-import type { DesktopEvent } from '../../shared/contract';
+import { appendLog, redactUrls } from '../log-file.ts';
+import { setPlaybackKeepAwake, keepAwakeForState } from '../power.ts';
+import type { PlayerBackend } from '../mpv/player-backend.ts';
+import type { DesktopEvent } from '../../shared/contract.ts';
 
 /** Reshape a backend's events onto the `DesktopEvent` channel, log the diagnostic ones and drive keep-awake. */
 export function forwardPlayerEvents(

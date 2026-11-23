@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -138,8 +139,12 @@ struct GlState {
   int fboW = 0;
   int fboH = 0;
 
+  // Two full-size copies of the page bitmap: UploadUi writes uiBuf[uiWrite], the render thread
+  // uploads the other one without the lock. uiStale is where the write copy trails the other.
   std::mutex uiMutex;
-  std::vector<uint8_t> uiPending;
+  std::shared_ptr<std::vector<uint8_t>> uiBuf[2];
+  int uiWrite = 0;
+  int uiSx0 = 0, uiSy0 = 0, uiSx1 = 0, uiSy1 = 0;
   int uiW = 0;
   int uiH = 0;
   bool uiDirty = false;
@@ -150,6 +155,9 @@ struct GlState {
   mpv_render_context* mpvGl = nullptr;
   double duration = 0;
   std::atomic<bool> paused{false};
+  std::atomic<bool> coreIdle{false};  // mpv not rendering frames (seek/buffer/idle)
+  std::atomic<bool> idleActive{true};  // no file loaded: core-idle then says nothing about buffering
+  std::atomic<bool> wakePending{false};  // a wake event is queued for the render thread
 };
 
 GlState g_state;
@@ -297,7 +305,16 @@ void InitGl(GlState* s) {
 }
 
 void* GetProc(void*, const char* name) { return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name)); }
-void OnMpvUpdate(void*) { /* continuous render loop polls rc_update */ }
+// Wakes the render thread's SDL_WaitEventTimeout; safe from any thread, one queued event at a time.
+void WakeRender() {
+  if (g_state.wakePending.exchange(true)) return;
+  SDL_Event e{};
+  e.type = SDL_EVENT_USER;
+  if (!SDL_PushEvent(&e)) g_state.wakePending.store(false);
+}
+
+// mpv forbids calling its API from this callback (render.h): wake the render thread, which calls rc_update.
+void OnMpvUpdate(void*) { WakeRender(); }
 
 void MpvRenderInit(GlState* s) {
   if (!s->mpv) return;
@@ -474,14 +491,30 @@ void RenderThreadMain(GlState* s) {
   SDL_MouseButtonFlags barButtons = 0, pageButtons = 0;
   bool onPage = false;
 
+  // What the last swapped frame was drawn with; a frame is composited only when one of these moves.
+  struct ChromeKey {
+    int w, pageH, barPx;
+    float zoom;
+    int hover, pressed;
+    bool maximized, fullscreen;
+    bool operator==(const ChromeKey& o) const {
+      return w == o.w && pageH == o.pageH && barPx == o.barPx && zoom == o.zoom && hover == o.hover &&
+             pressed == o.pressed && maximized == o.maximized && fullscreen == o.fullscreen;
+    }
+  };
+  ChromeKey lastKey{};
+  bool forceDraw = true;
+  constexpr Sint32 kIdleWaitMs = 100;  // bound on a missed wake; the wait itself is woken by events
+
   while (s->run.load(std::memory_order_acquire)) {
+    SDL_Event ev;
+    bool haveEvent = SDL_WaitEventTimeout(&ev, kIdleWaitMs);
     const Chrome c = ChromeOf(s->window);
     const float density = SDL_GetWindowPixelDensity(s->window);
     // Window units → pixels of the page, which starts under the title bar.
     auto px = [&](float x) { return static_cast<int>(std::lround(x * density)); };
     auto py = [&](float y) { return static_cast<int>(std::lround((y - c.bar) * density)); };
-    SDL_Event ev;
-    while (SDL_PollEvent(&ev)) {
+    while (haveEvent) {
       switch (ev.type) {
         case SDL_EVENT_QUIT:
           close();
@@ -577,13 +610,22 @@ void RenderThreadMain(GlState* s) {
           emitInput("{\"kind\":\"text\",\"text\":\"" + esc + "\"}");
           break;
         }
+        case SDL_EVENT_WINDOW_EXPOSED:
+        case SDL_EVENT_WINDOW_SHOWN:
+        case SDL_EVENT_WINDOW_RESTORED:
+          forceDraw = true;
+          break;
         default:
           break;
       }
+      haveEvent = SDL_PollEvent(&ev);
     }
+    // Cleared after the drain, which also consumes wake events, and before any state is read below.
+    s->wakePending.store(false);
     if (s->raiseRequest.exchange(false, std::memory_order_acq_rel)) {
       if (hidden) SDL_ShowWindow(s->window);
       hidden = false;
+      forceDraw = true;
       SDL_RaiseWindow(s->window);
     }
     if (s->hideRequest.exchange(false, std::memory_order_acq_rel) && !hidden) {
@@ -592,10 +634,7 @@ void RenderThreadMain(GlState* s) {
       emitActive(false);
     }
     // Nothing is drawn for a window nobody sees.
-    if (hidden) {
-      SDL_Delay(100);
-      continue;
-    }
+    if (hidden) continue;
     int fs = s->fsRequest.exchange(-1, std::memory_order_acq_rel);
     if (fs >= 0) SDL_SetWindowFullscreen(s->window, fs == 1);
     // The page's CSS cursor only covers the offscreen bitmap; the pointer the
@@ -625,9 +664,11 @@ void RenderThreadMain(GlState* s) {
     }
     const bool fboRealloc = EnsureVideoFbo(s, w, pageH);
 
+    bool frame = fboRealloc;
     if (s->mpvGl) {
       uint64_t flags = M::rc_update(s->mpvGl);
       if ((flags & MPV_RENDER_UPDATE_FRAME) || fboRealloc) {
+        frame = true;
         mpv_opengl_fbo fbo{static_cast<int>(s->videoFbo), w, pageH, 0};
         mpv_render_param rp[] = {
             {MPV_RENDER_PARAM_OPENGL_FBO, &fbo},
@@ -637,28 +678,46 @@ void RenderThreadMain(GlState* s) {
       }
     }
 
+    // The lock covers taking the dirty copy and swapping the two; the GL upload runs without it.
+    std::shared_ptr<std::vector<uint8_t>> src;
+    bool resized = false;
+    int uploadW = 0, dx0 = 0, dy0 = 0, dx1 = 0, dy1 = 0, uiW;
     {
       std::lock_guard<std::mutex> lk(s->uiMutex);
-      if (s->uiDirty && !s->uiPending.empty()) {
-        glBindTexture(GL_TEXTURE_2D, s->uiTex);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-        if (s->uiResized) {
-          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, s->uiW, s->uiH, 0, GL_RGBA,
-                       GL_UNSIGNED_BYTE, s->uiPending.data());
-          s->uiResized = false;
-        } else {
-          glPixelStorei(GL_UNPACK_ROW_LENGTH, s->uiW);
-          glPixelStorei(GL_UNPACK_SKIP_PIXELS, s->uiDx0);
-          glPixelStorei(GL_UNPACK_SKIP_ROWS, s->uiDy0);
-          glTexSubImage2D(GL_TEXTURE_2D, 0, s->uiDx0, s->uiDy0, s->uiDx1 - s->uiDx0,
-                          s->uiDy1 - s->uiDy0, GL_RGBA, GL_UNSIGNED_BYTE, s->uiPending.data());
-          glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-          glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
-          glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-        }
+      uiW = s->uiW;
+      if (s->uiDirty && s->uiBuf[s->uiWrite] && !s->uiBuf[s->uiWrite]->empty()) {
+        src = s->uiBuf[s->uiWrite];
+        resized = s->uiResized;
+        uploadW = s->uiW;
+        dx0 = s->uiDx0; dy0 = s->uiDy0; dx1 = s->uiDx1; dy1 = s->uiDy1;
+        s->uiSx0 = dx0; s->uiSy0 = dy0; s->uiSx1 = dx1; s->uiSy1 = dy1;
+        s->uiWrite = 1 - s->uiWrite;
         s->uiDirty = false;
+        s->uiResized = false;
       }
     }
+    if (src) {
+      glBindTexture(GL_TEXTURE_2D, s->uiTex);
+      glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+      if (resized) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, uploadW, static_cast<GLsizei>(src->size() / 4 / uploadW), 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, src->data());
+      } else {
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, uploadW);
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, dx0);
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, dy0);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, dx0, dy0, dx1 - dx0, dy1 - dy0, GL_RGBA, GL_UNSIGNED_BYTE,
+                        src->data());
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+      }
+    }
+
+    const ChromeKey key{w, pageH, barPx, zoom, hover, pressed, c.maximized, c.fullscreen};
+    if (!frame && !src && !forceDraw && key == lastKey) continue;
+    lastKey = key;
+    forceDraw = false;
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, w, h);
@@ -667,7 +726,7 @@ void RenderThreadMain(GlState* s) {
     glViewport(0, 0, w, pageH);
     glDisable(GL_BLEND);
     DrawTex(s, s->videoTex, /*flipY=*/1.0f, /*bgra=*/0);  // mpv render-API FBO is top-down
-    if (s->uiW > 0) {
+    if (uiW > 0) {
       glEnable(GL_BLEND);
       glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
       DrawTex(s, s->uiTex, /*flipY=*/1.0f, /*bgra=*/1);
@@ -701,6 +760,52 @@ void RenderThreadMain(GlState* s) {
 
 void Emit(const std::string& json) {
   if (g_tsfnReady.load()) g_tsfn.BlockingCall(new std::string(json));
+}
+
+// Quoted JSON string; bytes >= 0x80 pass through as UTF-8.
+std::string JsonString(const std::string& in) {
+  std::string out = "\"";
+  for (unsigned char ch : in) {
+    switch (ch) {
+      case '"': out += "\\\""; break;
+      case '\\': out += "\\\\"; break;
+      case '\n': out += "\\n"; break;
+      case '\r': out += "\\r"; break;
+      case '\t': out += "\\t"; break;
+      default:
+        if (ch < 0x20) {
+          char u[8];
+          snprintf(u, sizeof(u), "\\u%04x", ch);
+          out += u;
+        } else {
+          out += static_cast<char>(ch);
+        }
+    }
+  }
+  return out + "\"";
+}
+
+// Warn and worse, filtered here: the requested mpv level stays verbose for stderr.
+void EmitLog(const mpv_event_log_message* m) {
+  if (!m->level || !m->prefix || !m->text) return;
+  if (std::strcmp(m->level, "fatal") && std::strcmp(m->level, "error") && std::strcmp(m->level, "warn")) return;
+  std::string text = m->text;
+  const char* ws = " \t\r\n";
+  const size_t b = text.find_first_not_of(ws);
+  text = b == std::string::npos ? "" : text.substr(b, text.find_last_not_of(ws) - b + 1);
+  Emit("{\"type\":\"log\",\"level\":" + JsonString(m->level) + ",\"prefix\":" + JsonString(m->prefix) +
+       ",\"text\":" + JsonString(text) + "}");
+}
+
+// core-idle (mpv not rendering frames) is what tells buffering from playing while not user-paused.
+void EmitPlaybackState(GlState* s) {
+  if (s->idleActive.load()) return;
+  if (s->paused.load())
+    Emit("{\"type\":\"stateChanged\",\"state\":\"paused\"}");
+  else if (s->coreIdle.load())
+    Emit("{\"type\":\"stateChanged\",\"state\":\"buffering\"}");
+  else
+    Emit("{\"type\":\"stateChanged\",\"state\":\"playing\"}");
 }
 
 // The seekbar position is read here, off the Electron main thread, at ~4 Hz while playing.
@@ -737,23 +842,32 @@ void EventThreadMain(GlState* s) {
           if (!p) break;
           // track-list is observed with MPV_FORMAT_NONE: no data to guard on.
           if (std::strcmp(p->name, "track-list") == 0) {
-            Emit("{\"type\":\"tracksChanged\"}");
+            char* tl = M::get_property_string(s->mpv, "track-list");
+            Emit(std::string("{\"type\":\"tracksChanged\",\"tracks\":") + (tl ? tl : "[]") + "}");
+            if (tl) M::mpv_free(tl);
             break;
           }
           if (!p->data) break;
           if (std::strcmp(p->name, "duration") == 0 && p->format == MPV_FORMAT_DOUBLE) {
             s->duration = *static_cast<double*>(p->data);
           } else if (std::strcmp(p->name, "pause") == 0 && p->format == MPV_FORMAT_FLAG) {
-            int paused = *static_cast<int*>(p->data);
-            s->paused.store(paused != 0);
-            Emit(std::string("{\"type\":\"stateChanged\",\"state\":\"") +
-                 (paused ? "paused" : "playing") + "\"}");
+            s->paused.store(*static_cast<int*>(p->data) != 0);
+            EmitPlaybackState(s);
+          } else if (std::strcmp(p->name, "core-idle") == 0 && p->format == MPV_FORMAT_FLAG) {
+            s->coreIdle.store(*static_cast<int*>(p->data) != 0);
+            EmitPlaybackState(s);
+          } else if (std::strcmp(p->name, "idle-active") == 0 && p->format == MPV_FORMAT_FLAG) {
+            s->idleActive.store(*static_cast<int*>(p->data) != 0);
+            EmitPlaybackState(s);
           }
           break;
         }
         case MPV_EVENT_LOG_MESSAGE: {
           auto* m = static_cast<mpv_event_log_message*>(ev->data);
-          if (m) fprintf(stderr, "[mpv] %s: %s", m->prefix, m->text);
+          if (m) {
+            fprintf(stderr, "[mpv] %s: %s", m->prefix, m->text);
+            EmitLog(m);
+          }
           break;
         }
         case MPV_EVENT_PLAYBACK_RESTART:
@@ -765,7 +879,7 @@ void EventThreadMain(GlState* s) {
           if (e && e->reason == MPV_END_FILE_REASON_EOF)
             Emit("{\"type\":\"stateChanged\",\"state\":\"ended\"}");
           else if (e && e->reason == MPV_END_FILE_REASON_ERROR)
-            Emit("{\"type\":\"error\",\"message\":\"end-file error\"}");
+            Emit("{\"type\":\"error\",\"message\":" + JsonString(M::error_string(e->error)) + "}");
           break;
         }
         case MPV_EVENT_COMMAND_REPLY:
@@ -811,6 +925,8 @@ Napi::Value Start(const Napi::CallbackInfo& info) {
     M::observe_property(g_state.mpv, 2, "duration", MPV_FORMAT_DOUBLE);
     M::observe_property(g_state.mpv, 3, "pause", MPV_FORMAT_FLAG);
     M::observe_property(g_state.mpv, 4, "track-list", MPV_FORMAT_NONE);
+    M::observe_property(g_state.mpv, 5, "core-idle", MPV_FORMAT_FLAG);
+    M::observe_property(g_state.mpv, 6, "idle-active", MPV_FORMAT_FLAG);
     // Default to verbose so the ffmpeg HLS demuxer logs every segment URL it
     // opens and the HTTP status it gets back (diagnosing transcode/seg-0
     // failures). Override with FLIKS_MPV_LOGLEVEL (warn / info / v / debug).
@@ -952,6 +1068,7 @@ Napi::Value SetProperty(const Napi::CallbackInfo& info) {
 Napi::Value SetFullscreen(const Napi::CallbackInfo& info) {
   bool on = info.Length() > 0 && info[0].ToBoolean().Value();
   g_state.fsRequest.store(on ? 1 : 0, std::memory_order_release);
+  WakeRender();
   return info.Env().Undefined();
 }
 
@@ -961,23 +1078,27 @@ Napi::Value IsFullscreen(const Napi::CallbackInfo& info) {
 
 Napi::Value Raise(const Napi::CallbackInfo& info) {
   g_state.raiseRequest.store(true, std::memory_order_release);
+  WakeRender();
   return info.Env().Undefined();
 }
 
 Napi::Value Hide(const Napi::CallbackInfo& info) {
   g_state.hideRequest.store(true, std::memory_order_release);
+  WakeRender();
   return info.Env().Undefined();
 }
 
 Napi::Value SetCursorShape(const Napi::CallbackInfo& info) {
   int shape = info.Length() > 0 ? info[0].ToNumber().Int32Value() : 0;
   g_state.cursorShape.store(shape, std::memory_order_release);
+  WakeRender();
   return info.Env().Undefined();
 }
 
 Napi::Value SetCursorVisible(const Napi::CallbackInfo& info) {
   bool on = info.Length() > 0 && info[0].ToBoolean().Value();
   g_state.cursorRequest.store(on ? 1 : 0, std::memory_order_release);
+  WakeRender();
   return info.Env().Undefined();
 }
 
@@ -997,34 +1118,51 @@ Napi::Value UploadUi(const Napi::CallbackInfo& info) {
   if (buf.Length() < static_cast<size_t>(w) * h * 4) return env.Undefined();
   {
     std::lock_guard<std::mutex> lk(g_state.uiMutex);
-    if (fw != g_state.uiW || fh != g_state.uiH) {
-      g_state.uiPending.assign(static_cast<size_t>(fw) * fh * 4, 0);
-      g_state.uiW = fw;
-      g_state.uiH = fh;
-      g_state.uiResized = true;
-      g_state.uiDirty = false;
+    auto& st = g_state;
+    if (fw != st.uiW || fh != st.uiH) {
+      // New buffers: the render thread may still be reading the old ones through its own reference.
+      const size_t n = static_cast<size_t>(fw) * fh * 4;
+      st.uiBuf[0] = std::make_shared<std::vector<uint8_t>>(n, 0);
+      st.uiBuf[1] = std::make_shared<std::vector<uint8_t>>(n, 0);
+      st.uiSx0 = st.uiSy0 = st.uiSx1 = st.uiSy1 = 0;
+      st.uiW = fw;
+      st.uiH = fh;
+      st.uiResized = true;
+      st.uiDirty = false;
+    }
+    auto& back = *st.uiBuf[st.uiWrite];
+    if (st.uiSx1 > st.uiSx0 && st.uiSy1 > st.uiSy0) {
+      // Catch the write copy up on what the last upload took from the other one.
+      const auto& front = *st.uiBuf[1 - st.uiWrite];
+      for (int r = st.uiSy0; r < st.uiSy1; r++) {
+        const size_t o = (static_cast<size_t>(r) * fw + st.uiSx0) * 4;
+        memcpy(back.data() + o, front.data() + o, static_cast<size_t>(st.uiSx1 - st.uiSx0) * 4);
+      }
+      st.uiSx0 = st.uiSy0 = st.uiSx1 = st.uiSy1 = 0;
     }
     for (int r = 0; r < h; r++)
-      memcpy(g_state.uiPending.data() + (static_cast<size_t>(y + r) * fw + x) * 4,
+      memcpy(back.data() + (static_cast<size_t>(y + r) * fw + x) * 4,
              buf.Data() + static_cast<size_t>(r) * w * 4, static_cast<size_t>(w) * 4);
-    if (g_state.uiDirty) {
-      g_state.uiDx0 = std::min(g_state.uiDx0, x);
-      g_state.uiDy0 = std::min(g_state.uiDy0, y);
-      g_state.uiDx1 = std::max(g_state.uiDx1, x + w);
-      g_state.uiDy1 = std::max(g_state.uiDy1, y + h);
+    if (st.uiDirty) {
+      st.uiDx0 = std::min(st.uiDx0, x);
+      st.uiDy0 = std::min(st.uiDy0, y);
+      st.uiDx1 = std::max(st.uiDx1, x + w);
+      st.uiDy1 = std::max(st.uiDy1, y + h);
     } else {
-      g_state.uiDx0 = x;
-      g_state.uiDy0 = y;
-      g_state.uiDx1 = x + w;
-      g_state.uiDy1 = y + h;
+      st.uiDx0 = x;
+      st.uiDy0 = y;
+      st.uiDx1 = x + w;
+      st.uiDy1 = y + h;
     }
-    g_state.uiDirty = true;
+    st.uiDirty = true;
   }
+  WakeRender();
   return env.Undefined();
 }
 
 Napi::Value Stop(const Napi::CallbackInfo& info) {
   g_state.run.store(false);
+  WakeRender();
   if (g_state.eventThread.joinable()) g_state.eventThread.join();
   if (g_state.renderThread.joinable()) g_state.renderThread.join();
   if (g_tsfnReady.exchange(false)) g_tsfn.Release();

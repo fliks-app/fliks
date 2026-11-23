@@ -108,7 +108,6 @@ export interface DesktopPlayerCapabilities {
 
 /** main → renderer event envelope, sent on the single IPC.event channel. */
 export type DesktopEvent =
-  | { type: 'ready' }
   | { type: 'stateChanged'; payload: { state: DesktopPlayerState } }
   | { type: 'timeUpdate'; payload: DesktopPositionInfo }
   | {
@@ -118,6 +117,8 @@ export type DesktopEvent =
   | { type: 'firstFrame' }
   /** The window entered or left native full screen, however it got there (menu, green button, the page). */
   | { type: 'fullscreenChanged'; payload: { fullscreen: boolean } }
+  /** The window was hidden (closed to the tray or the dock) with playback possibly running: the page saves and pauses. */
+  | { type: 'windowHidden' }
   /** An OS media control (scrubber) asks the page to seek to `position` seconds. */
   | { type: 'seekRequest'; payload: { position: number } }
   | {

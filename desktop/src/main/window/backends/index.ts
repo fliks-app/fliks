@@ -5,7 +5,7 @@ export type { EmbedBackend } from './types';
 
 /**
  * Windows-only: the subprocess mpv (`--wid`) embed backend. macOS embeds
- * in-process libmpv directly (`MacMpvPlayer`, never via this interface); Linux
+ * in-process libmpv directly (`LibmpvAddonPlayer`, never via this interface); Linux
  * uses its own native compositor addon and never reaches `PlayerSession`.
  */
 export function createEmbedBackend(): EmbedBackend {

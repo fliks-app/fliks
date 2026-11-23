@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { CAST_IPC } from '../../shared/contract';
 import type {
   DesktopCastDevice,
@@ -6,6 +6,9 @@ import type {
   DesktopCastLoadOptions,
   DesktopCastTextTrackStyle,
 } from '../../shared/contract';
+import { bool, handle, none, num, str } from '../ipc-handle';
+import { appendLog, redactUrls } from '../log-file';
+import { parseLoadOptions, parseTextTrackStyle } from './validate';
 import { CastDiscovery, type DiscoveredDevice } from './mdns';
 import {
   initializeResult,
@@ -119,6 +122,7 @@ class CastSender {
       await Promise.race([this.rejoin(record), timeout]);
     } catch (e) {
       console.warn('[cast] session not resumed:', (e as Error).message);
+      appendLog(redactUrls(`[cast] session not resumed: ${(e as Error).message}`));
       this.teardown();
       this.forget();
     } finally {
@@ -431,37 +435,36 @@ class CastSender {
 
 export function registerCastIpc(): void {
   const sender = new CastSender();
-  ipcMain.handle(CAST_IPC.initialize, (_e, appId: string) => sender.initialize(appId));
-  ipcMain.handle(CAST_IPC.setResumeState, (_e, state: unknown) => sender.setResumeState(state));
-  ipcMain.handle(CAST_IPC.isConnected, () => ({ connected: sender.isConnected() }));
-  ipcMain.handle(CAST_IPC.getDevices, () => {
+  handle(CAST_IPC.initialize, (a): [string] => [str(a[0], 200)], (appId) => sender.initialize(appId));
+  // The state is the renderer's own opaque blob, handed back to it on resume.
+  handle(CAST_IPC.setResumeState, (a): [unknown] => [a[0]], (state) => sender.setResumeState(state));
+  handle(CAST_IPC.isConnected, none, () => ({ connected: sender.isConnected() }));
+  handle(CAST_IPC.getDevices, none, () => {
     sender.refresh();
     return sender.listDevices();
   });
-  ipcMain.handle(CAST_IPC.selectDevice, (_e, id: string) => sender.select(id));
+  handle(CAST_IPC.selectDevice, (a): [string] => [str(a[0], 200)], (id) => sender.select(id));
   // Desktop has no OS-level route picker to open — the app's own picker lists
   // the discovered devices — so end the caller's "connecting" state at once.
-  ipcMain.handle(CAST_IPC.requestSession, () =>
-    broadcast({ name: 'castPickerDismissed', detail: {} }),
+  handle(CAST_IPC.requestSession, none, () => broadcast({ name: 'castPickerDismissed', detail: {} }));
+  handle(CAST_IPC.load, (a): [DesktopCastLoadOptions] => [parseLoadOptions(a[0])], (opts) => sender.load(opts));
+  handle(CAST_IPC.play, none, () => sender.play());
+  handle(CAST_IPC.pause, none, () => sender.pause());
+  handle(CAST_IPC.seek, (a): [number] => [num(a[0])], (time) => sender.seek(time));
+  handle(CAST_IPC.stop, none, () => sender.stop());
+  handle(CAST_IPC.disconnect, none, () => sender.disconnect());
+  handle(CAST_IPC.setVolume, (a): [number] => [num(a[0])], (level) => sender.setVolume(level));
+  handle(CAST_IPC.setMuted, (a): [boolean] => [bool(a[0])], (muted) => sender.setMuted(muted));
+  handle(
+    CAST_IPC.sendMessage,
+    (a): [string, string] => [str(a[0], 200), str(a[1], 65536)],
+    (namespace, message) => sender.sendMessage(namespace, message),
   );
-  ipcMain.handle(CAST_IPC.load, (_e, opts: DesktopCastLoadOptions) => sender.load(opts));
-  ipcMain.handle(CAST_IPC.play, () => sender.play());
-  ipcMain.handle(CAST_IPC.pause, () => sender.pause());
-  ipcMain.handle(CAST_IPC.seek, (_e, time: number) => sender.seek(time));
-  ipcMain.handle(CAST_IPC.stop, () => sender.stop());
-  ipcMain.handle(CAST_IPC.disconnect, () => sender.disconnect());
-  ipcMain.handle(CAST_IPC.setVolume, (_e, level: number) => sender.setVolume(level));
-  ipcMain.handle(CAST_IPC.setMuted, (_e, muted: boolean) => sender.setMuted(muted));
-  ipcMain.handle(CAST_IPC.sendMessage, (_e, namespace: string, message: string) =>
-    sender.sendMessage(namespace, message),
+  handle(CAST_IPC.setActiveSubtitle, (a): [number] => [num(a[0])], (trackId) => sender.setActiveSubtitle(trackId));
+  handle(CAST_IPC.setTextTrackStyle, (a): [DesktopCastTextTrackStyle] => [parseTextTrackStyle(a[0])], (style) => sender.setTextTrackStyle(style));
+  handle(
+    CAST_IPC.setActiveAudioLanguage,
+    (a): [string, string] => [str(a[0], 100), str(a[1], 1000)],
+    (language, name) => ({ success: sender.setActiveAudioLanguage(language, name) }),
   );
-  ipcMain.handle(CAST_IPC.setActiveSubtitle, (_e, trackId: number) =>
-    sender.setActiveSubtitle(trackId),
-  );
-  ipcMain.handle(CAST_IPC.setTextTrackStyle, (_e, style: DesktopCastTextTrackStyle) =>
-    sender.setTextTrackStyle(style),
-  );
-  ipcMain.handle(CAST_IPC.setActiveAudioLanguage, (_e, language: string, name: string) => ({
-    success: sender.setActiveAudioLanguage(language, name),
-  }));
 }

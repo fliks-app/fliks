@@ -30,7 +30,7 @@ export type PlayerBackendEvents = {
 /**
  * The control surface a platform player must expose to `PlayerSession` /
  * `ipc.ts`. Both the cross-platform JSON-IPC subprocess player (`MpvPlayer`,
- * Windows) and the in-process libmpv player (`MacMpvPlayer`, macOS) implement
+ * Windows) and the in-process libmpv player (`LibmpvAddonPlayer`, macOS and Linux) implement
  * it, so the session and the renderer IPC stay OS-agnostic.
  *
  * It is a {@link TypedEmitter} of {@link PlayerBackendEvents}, so subscribers get

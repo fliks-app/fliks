@@ -1,9 +1,10 @@
 import dbus, { defineInterface, Variant } from 'dbus-native';
+import { app } from 'electron';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { appendLog, redactUrls } from './log-file';
 import type { NowPlayingAddon, NowPlayingNative } from './now-playing';
 
 type NowPlayingInfo = Parameters<NowPlayingNative['setNowPlaying']>[0];
@@ -49,6 +50,7 @@ export class Mpris implements NowPlayingAddon {
   private elapsed = 0;
   private pushedAt = Date.now();
   private artFile: string | null = null;
+  private artDirReady = false;
 
   onRemoteCommand(cb: (name: string, position?: number) => void): void {
     this.onCommand = cb;
@@ -64,7 +66,10 @@ export class Mpris implements NowPlayingAddon {
 
   /** Pushes are ordered: the bus is asynchronous and a stale publish must not follow a clear. */
   private enqueue(op: () => Promise<void>): void {
-    this.queue = this.queue.then(op).catch((e) => console.error('[mpris] unavailable', e));
+    this.queue = this.queue.then(op).catch((e) => {
+      console.error('[mpris] unavailable', e);
+      appendLog(redactUrls(`[mpris] unavailable: ${(e as Error)?.message ?? e}`));
+    });
   }
 
   private async publish(info: NowPlayingInfo): Promise<void> {
@@ -98,12 +103,23 @@ export class Mpris implements NowPlayingAddon {
 
   /** The desktop fetches the artwork itself: hand it a file named by its content. */
   private writeArtwork(bytes: Buffer): void {
-    const file = path.join(os.tmpdir(), `fliks-artwork-${createHash('sha1').update(bytes).digest('hex')}`);
+    const file = path.join(this.artworkDir(), createHash('sha1').update(bytes).digest('hex'));
     if (file !== this.artFile) {
       fs.writeFileSync(file, bytes);
       this.dropArtwork();
       this.artFile = file;
     }
+  }
+
+  /** Under userData, not the shared tmp dir; the first use of a run clears what a crash left. */
+  private artworkDir(): string {
+    const dir = path.join(app.getPath('userData'), 'mpris-artwork');
+    if (!this.artDirReady) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      this.artDirReady = true;
+    }
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
   }
 
   private dropArtwork(): void {
@@ -158,7 +174,10 @@ export class Mpris implements NowPlayingAddon {
     if (this.owned) return;
     if (!this.bus) {
       this.bus = dbus.sessionBus();
-      this.bus.on('error', (e: Error) => console.error('[mpris] bus error', e.message));
+      this.bus.on('error', (e: Error) => {
+        console.error('[mpris] bus error', e.message);
+        appendLog(redactUrls(`[mpris] bus error: ${e.message}`));
+      });
     }
     this.player = this.createPlayer();
     await this.bus.export(OBJECT_PATH, createRoot());

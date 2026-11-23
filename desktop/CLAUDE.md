@@ -19,11 +19,11 @@ it is NOT the menu-bar server host under `macos/`.
      addon.cc`, libmpv render API, self-compositing SDL/GL window); its
      property/event plumbing (`time-pos`, `demuxer-cache-time`,
      `paused-for-cache`, `timeUpdate`, `stateChanged`) lives in addon.cc + the
-     `LinuxCompositorPlayer` (`src/main/mpv/linux-compositor-player.ts`, a `PlayerBackend`).
+     `LibmpvAddonPlayer` (`src/main/mpv/libmpv-addon-player.ts`, a `PlayerBackend`, shared with macOS).
   2. **Windows** — `MpvPlayer` (`src/main/mpv/mpv-player.ts`) spawns an mpv
      **subprocess** embedded via `--wid` into a child HWND, controlled over
      JSON-IPC. **NOT used on Linux or macOS.**
-  3. **macOS** — `MacMpvPlayer` (`src/main/mpv/mac-mpv-player.ts`) wraps the
+  3. **macOS**: `LibmpvAddonPlayer` (the same class as on Linux; `src/main/mpv/mac-addon.ts` loads the addon) wraps the
      **in-process** libmpv addon `native/player_mac/addon.mm`, which renders into
      a `CAMetalLayer` (render API, `vo=libmpv`, `hwdec=videotoolbox`,
      EDR/HDR-capable). mpv's subprocess `--wid` doesn't embed on macOS (0.41
@@ -39,8 +39,10 @@ it is NOT the menu-bar server host under `macos/`.
      before either redraws. A resize never waits for the video: its layer scales
      the last frame until mpv renders one at the new size.
 
-  `PlayerSession.createPlayer()` picks #2/#3 by platform; both implement
-  `PlayerBackend` (`src/main/mpv/player-backend.ts`). All three share
+  `PlayerSession.createPlayer()` picks #2/#3 by platform (Linux builds its backend in `index.ts`); all
+  implement `PlayerBackend` (`src/main/mpv/player-backend.ts`), and `PlayerHost` (`window/player-host.ts`)
+  owns the backend of all three: its start (`whenReady`, which the player IPC awaits), the Windows mpv respawn
+  and the teardown order. All three share
   `src/main/mpv/subtitle-style.ts` (`mpvSubtitleProps`), `tracks.ts`
   (`parseTracks`), `load-options.ts` (the file-local `loadfile` options: `sid=no`,
   `alang`, `start`) and `first-frame-gate.ts` (`load()` resolves on first frame).
@@ -189,7 +191,7 @@ rebuilding; the addon is reloaded fresh on each Electron start.
 `.pkg` under `media.fliks.app` with the MAS Electron binary, the sandbox entitlements in
 `build/entitlements.mas*.plist` and the provisioning profile at `build/embedded.provisionprofile`
 (gitignored; CI writes it from `MAS_PROVISIONING_PROFILE_BASE64`). libmpv ships in
-`Contents/Frameworks` there (`process.mas` in `mac-mpv-player.ts`), and `process.mas` turns the
+`Contents/Frameworks` there (`process.mas` in `mac-addon.ts`), and `process.mas` turns the
 in-app updater off (`updater.ts` reports `storeManaged`). The `mas` leg of `desktop-release.yml`
 validates the package against App Store Connect on every run and uploads it on a stable `v*` tag
 when the repository variable `MAS_ENABLED` is `true`.

@@ -129,7 +129,7 @@ mas:
   entitlementsInherit: build/entitlements.mas.inherit.plist
   # Written from a secret by the release job; gitignored.
   provisioningProfile: build/embedded.provisionprofile
-  # Mach-O outside Contents/Frameworks risks a TN2206 rejection: libmpv moves there (mac-mpv-player.ts).
+  # Mach-O outside Contents/Frameworks risks a TN2206 rejection: libmpv moves there (mac-addon.ts).
   extraFiles:
     - from: native/vendor/libmpv.dylib
       to: Frameworks/libmpv.dylib

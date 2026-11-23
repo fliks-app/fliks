@@ -1,219 +1,28 @@
-import type { OidcPages } from '../services/oidc';
+import type { FliksDesktopApi } from '@fliks/desktop-contract';
 
 // Bridge to the Electron shell's embedded mpv player on `window.fliksDesktop`, consumed by DesktopEngine like NativePlayer.
-// Types mirror desktop/src/shared/contract.ts (separate build workspaces), so the shape is duplicated here.
-
-export interface DesktopAudioTrack {
-  id: string;
-  language: string;
-  label: string;
-  selected: boolean;
-}
-
-export interface DesktopSubtitleTrack {
-  id: string;
-  language: string;
-  label: string;
-  forced: boolean;
-  selected: boolean;
-  /** Bitmap codec (PGS / VobSub / DVB): mpv renders it itself, there is no text. */
-  image: boolean;
-  /** True for a sidecar added with `sub-add`, false for a track of the media. */
-  external: boolean;
-  /** What a sidecar was loaded from (the `sub-add` URL); null otherwise. */
-  source: string | null;
-  /** Container stream index of an embedded track (`ff-index`); null when mpv reports none. */
-  ffIndex: number | null;
-}
-
-/** Playback-quality properties read from mpv; null = not reportable right now. */
-export interface DesktopQoe {
-  droppedFrames: number | null;
-  decodedFrames: number | null;
-  bandwidthBps: number | null;
-  bufferAheadS: number | null;
-  variantBitrate: number | null;
-  width: number | null;
-  height: number | null;
-  videoCodec: string | null;
-  decoderName: string | null;
-  hwDecoder: boolean | null;
-}
-
-export interface DesktopLoadOptions {
-  url: string;
-  startTime?: number;
-  /** Open paused on the first frame instead of autoplaying. */
-  startPaused?: boolean;
-  headers?: Record<string, string>;
-  /** Preferred audio language (mpv `alang`) so the player keeps the chosen
-   *  language across seeks/reloads instead of reverting to the manifest default. */
-  audioLanguage?: string;
-  /** Black-bar rectangle in mpv `video-crop` syntax (`WxH+x+y`); the VO crops
-   *  after decode, keeping hardware decoding. Absent clears any previous crop. */
-  videoCrop?: string;
-}
-
-export interface DesktopSubtitleStyle {
-  fontScale: number;
-  foregroundColor: string;
-  backgroundColor: string;
-  edgeType?: string;
-  bottomMarginPercent: number;
-  /** Inset of top-aligned cues ({\an8}); bottomMarginPercent covers the rest. */
-  topMarginPercent?: number;
-}
-
-export interface DesktopPositionInfo {
-  position: number;
-  duration: number;
-  buffered: number;
-}
-
-/** Native host identity. `systemName` = OS name+version ("macOS 26");
- *  `deviceName` = the user-assigned computer name ("MacBook de Clément"). */
-export interface DesktopSystemInfo {
-  systemName: string;
-  deviceName: string;
-}
-
-/** `canReshapeDolbyVision` is true only when Windows mpv runs gpu-next (reshapes the
- *  profile 5/8 RPU); plain `--vo=gpu` and macOS/Linux play only the profile 7 base layer. */
-export interface DesktopPlayerCapabilities {
-  canReshapeDolbyVision: boolean;
-  /** mpv's decoder codec names and lavf demuxer names; absent on a shell that could not ask mpv, or an older one. */
-  decoders?: string[];
-  demuxers?: string[];
-}
-
-export type DesktopPlayerState = 'idle' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
-
-export type DesktopEvent =
-  | { type: 'ready' }
-  | { type: 'stateChanged'; payload: { state: DesktopPlayerState } }
-  | { type: 'timeUpdate'; payload: DesktopPositionInfo }
-  | {
-      type: 'tracksChanged';
-      payload: { audioTracks: DesktopAudioTrack[]; subtitleTracks: DesktopSubtitleTrack[] };
-    }
-  | { type: 'firstFrame' }
-  /** The window entered or left native full screen, however it got there. */
-  | { type: 'fullscreenChanged'; payload: { fullscreen: boolean } }
-  /** An OS media control (scrubber) asks the page to seek to `position` seconds. */
-  | { type: 'seekRequest'; payload: { position: number } }
-  | { type: 'error'; payload: { code: number; message: string; detail?: string } };
-
-/** An action of a notification, as `PushAction`. */
-export interface DesktopNotificationAction {
-  id: string;
-  title: string;
-  kind: 'open' | 'call';
-  url?: string;
-  token?: string;
-}
-
-/** What the shell shows as an OS notification; `image` is a path on `serverUrl` (a public route) that the shell resolves. */
-export interface DesktopNotification {
-  id: string;
-  title: string;
-  body: string;
-  image?: string;
-  tag?: string;
-  url: string;
-  serverUrl: string;
-  user: number;
-  actions: DesktopNotificationAction[];
-}
-
-/** A click on a notification, or on one of its actions. */
-export interface DesktopNotificationClick {
-  url: string;
-  serverUrl: string;
-  user: number;
-  action?: DesktopNotificationAction;
-}
-
-export interface DesktopNotifyPrefs {
-  /** Closing the window leaves the app running. */
-  /** OS notifications while the window is not active; on until the user turns it off. */
-  notifications: boolean;
-  background: boolean;
-  startAtLogin: boolean;
-}
-
-/** Whether the OS shows Fliks' notifications: `blocked` in its settings, `unavailable` without a notification service. */
-export type DesktopNotifyStatus = 'allowed' | 'blocked' | 'unavailable';
-
-export interface FliksDesktopApi {
-  runtime: 'electron';
-  load(opts: DesktopLoadOptions): Promise<void>;
-  play(): Promise<void>;
-  pause(): Promise<void>;
-  seek(position: number): Promise<void>;
-  stop(): Promise<void>;
-  setPlaybackRate(rate: number): Promise<void>;
-  setVolume(volume: number): Promise<void>;
-  setMuted(muted: boolean): Promise<void>;
-  getPosition(): Promise<DesktopPositionInfo>;
-  /** Absent on a desktop build that predates QoE telemetry. */
-  getQoe?(): Promise<DesktopQoe | null>;
-  getAudioTracks(): Promise<DesktopAudioTrack[]>;
-  selectAudioTrack(id: string): Promise<void>;
-  getSubtitleTracks(): Promise<DesktopSubtitleTrack[]>;
-  selectSubtitleTrack(id: string | null): Promise<void>;
-  /** Load a sidecar subtitle file (mpv `sub-add`). Idempotent per URL: mpv
-   *  reuses an already-loaded track for the same URL instead of duplicating. */
-  subAdd(url: string, label: string, language: string): Promise<void>;
-  setSubtitleStyle(style: DesktopSubtitleStyle): Promise<void>;
-  /** Crop the video to fill the window (mpv `panscan`) instead of letterboxing. */
-  setFillScreen(fill: boolean): Promise<void>;
-  /** Show or hide the pointer over the native window; on Linux the visible
-   *  surface is the compositor's, so the page's CSS cursor never reaches it. */
-  setCursorVisible(visible: boolean): Promise<void>;
-  /** Silences audio inside the ranges (content seconds); [] clears. Absent on older shells. */
-  setMuteRanges?(ranges: { start: number; end: number }[]): Promise<void>;
-  setFullscreen(enabled: boolean): Promise<void>;
-  /** Absent on a shell that predates the fullscreen event. */
-  isFullscreen?(): Promise<boolean>;
-  /** Describes the playback to the OS media widgets; null withdraws it. */
-  setMediaSession(meta: { title: string; artist?: string; artworkUrl?: string } | null): Promise<void>;
-  /** Native host OS identity (e.g. { systemName: "macOS 26" }). */
-  getSystemInfo(): Promise<DesktopSystemInfo>;
-  /** Opens an ICS in the OS default calendar app. Absent on older shells. */
-  openCalendarEvent?(ics: string, fileName: string): Promise<void>;
-  getPlayerCapabilities(): Promise<DesktopPlayerCapabilities>;
-  /** The server the page talks to: the shell accepts an invalid TLS certificate from this host only. Absent on older shells. */
-  setServerUrl?(url: string): Promise<void>;
-  /** Loopback listener for the OIDC redirect; `pages` is what the browser tab shows. Absent on older shells. */
-  oidcListen?(pages: OidcPages): Promise<{ id: number; port: number }>;
-  /** The redirect's query string once it carries `state`; null on timeout or when listener `id` was cancelled or replaced. */
-  oidcWait?(id: number, state: string): Promise<string | null>;
-  oidcCancel?(id: number): Promise<void>;
-  on(handler: (event: DesktopEvent) => void): () => void;
-  /** OS notification; absent on a shell without notification support. */
-  notify?(n: DesktopNotification): Promise<void>;
-  onNotificationClick?(handler: (e: DesktopNotificationClick) => void): () => void;
-  setBadge?(count: number): Promise<void>;
-  getNotifyPrefs?(): Promise<DesktopNotifyPrefs>;
-  /** Resolves with what took effect: `background` stays off where the shell has no tray to come back from. */
-  setNotifyPrefs?(patch: Partial<DesktopNotifyPrefs>): Promise<DesktopNotifyPrefs>;
-  /** The shell's own strings (tray menu, badge), in the UI language. */
-  setNotifyLabels?(labels: { open: string; quit: string; notifications: string }): Promise<void>;
-  /** The application menu's strings (macOS), in the UI language. */
-  setMenuLabels?(labels: Record<string, string>): Promise<void>;
-  /** Read again on each call: the user may have changed it in the OS meanwhile. */
-  getNotifyStatus?(): Promise<DesktopNotifyStatus>;
-  openNotifySettings?(): Promise<void>;
-  /** Whether the window is visible and focused: notifications are shown by the OS only when it is not. */
-  windowActive?(): Promise<boolean>;
-  onWindowActive?(handler: (active: boolean) => void): () => void;
-}
-
-declare global {
-  interface Window {
-    fliksDesktop?: FliksDesktopApi;
-  }
-}
+// The types are desktop/src/shared/contract.ts's, the single definition shared with the shell.
+export type {
+  DesktopAudioTrack,
+  DesktopEvent,
+  DesktopLoadOptions,
+  DesktopMediaMetadata,
+  DesktopMuteRange,
+  DesktopNotification,
+  DesktopNotificationAction,
+  DesktopNotificationClick,
+  DesktopNotifyLabels,
+  DesktopNotifyPrefs,
+  DesktopNotifyStatus,
+  DesktopPlayerCapabilities,
+  DesktopPlayerState,
+  DesktopPositionInfo,
+  DesktopQoe,
+  DesktopSubtitleStyle,
+  DesktopSubtitleTrack,
+  DesktopSystemInfo,
+  FliksDesktopApi,
+} from '@fliks/desktop-contract';
 
 /** The desktop bridge, or null when not running in the Electron shell. */
 export function desktopBridgeOrNull(): FliksDesktopApi | null {

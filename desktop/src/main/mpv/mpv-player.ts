@@ -25,6 +25,7 @@ import { mpvLoadFileOptions } from './load-options';
 import { mpvSubtitleProps } from './subtitle-style';
 import { mapTrackList, type MpvTrack } from './tracks';
 import { QoeReader } from './qoe';
+import { MpvErrorLog } from './error-log';
 import { isPrematureEof } from './eof-guard';
 import { TypedEmitter } from './typed-emitter';
 import type { PlayerBackend, PlayerBackendEvents } from './player-backend';
@@ -37,7 +38,6 @@ const COMMAND_TIMEOUT_MS = 30_000;
 /** Grace for mpv to reply to `quit` before the socket/process are torn down. */
 const QUIT_GRACE_MS = 500;
 /** Ring size for buffered error/fatal log lines attached to an error event. */
-const MAX_ERROR_LOG_LINES = 12;
 /** Monotonic per-process counter for the IPC socket/pipe name, so two players
  *  created within the same millisecond can't collide on the path. */
 let instanceSeq = 0;
@@ -115,20 +115,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
   /** Bumped by load/stop/destroy; a load with a stale id skips its remaining
    *  IPC writes, so a stop can't be overtaken by a trailing loadfile. */
   private loadGen = 0;
-  /** error/fatal mpv log lines seen since the current playback attempt began.
-   *  Cleared on `load()`, on `stop()`, and on every successful `playback-restart`
-   *  so a resolved failure (a recovered 404, a failed sidecar sub-add) can't be
-   *  attached to a later, unrelated error. mpv's `end-file` error carries only
-   *  the generic `MPV_ERROR_*` string ("loading failed"); the real cause (TLS
-   *  verify, HTTP status, unsupported codec) is in these log lines, so we
-   *  buffer them and attach them to the error event. */
-  private errorLog: string[] = [];
-  /** Set when a buffered error/fatal log line carries mpv's own transport
-   *  failure signature — log prefix exactly `curl`/`tls`, or a "Failed to open"
-   *  message. Reset alongside `errorLog`. Deliberately strict: a bare `stream`
-   *  prefix or any other line must not set this, or a genuine decode failure
-   *  (e.g. Dolby Vision) would misreport as a transport fault. */
-  private sawTransportError = false;
+  private readonly errorLog = new MpvErrorLog();
 
   constructor(opts: MpvPlayerOptions) {
     super();
@@ -180,7 +167,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
         this.emit('error', {
           code: code ?? -1,
           message: `mpv exited unexpectedly (code ${code ?? 'null'}${signal ? `, signal ${signal}` : ''})`,
-          detail: this.errorLog.join(' | ') || undefined,
+          detail: this.errorLog.payload('').detail,
         });
       }
     });
@@ -236,7 +223,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
         this.sock = sock;
         sock.on('data', (chunk: Buffer) => this.onData(chunk));
         sock.on('error', (e) => {
-          this.emit('error', this.errorPayload(String(e)));
+          this.emit('error', this.errorLog.payload(String(e)));
           this.rejectAllPending(`mpv socket error: ${e}`);
         });
         sock.on('close', () => {
@@ -281,32 +268,21 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
         break;
       case 'log-message': {
         const line = `${msg.prefix ? `${msg.prefix}: ` : ''}${msg.text ?? ''}`.trim();
-        if (msg.level === 'error' || msg.level === 'fatal') {
-          this.errorLog.push(line);
-          if (this.errorLog.length > MAX_ERROR_LOG_LINES) this.errorLog.shift();
-          if (
-            msg.prefix === 'curl' ||
-            msg.prefix === 'tls' ||
-            (msg.text ?? '').includes('Failed to open')
-          ) {
-            this.sawTransportError = true;
-          }
-        }
+        this.errorLog.record(msg.level ?? '', msg.prefix, msg.text);
         this.emit('log', `[${msg.level}] ${line}`);
         break;
       }
       case 'playback-restart':
         // A frame is playing again: whatever errorLog held was either resolved
         // or belongs to the segment/seek that just succeeded.
-        this.errorLog = [];
-        this.sawTransportError = false;
+        this.errorLog.reset();
         this.sawPlaybackRestart = true;
         this.maybeEmitFirstFrame();
         break;
       case 'end-file':
         if (msg.reason === 'eof') this.emit('stateChanged', { state: 'ended' });
         else if (msg.reason === 'error')
-          this.emit('error', this.errorPayload(msg.file_error ?? 'end-file error'));
+          this.emit('error', this.errorLog.payload(msg.file_error ?? 'end-file error'));
         break;
       default:
         break;
@@ -352,9 +328,9 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
         if (data === true && !this.sawEof) {
           this.sawEof = true;
           const premature =
-            this.duration > 0 ? isPrematureEof(this.duration, this.lastPosition) : this.errorLog.length > 0;
+            this.duration > 0 ? isPrematureEof(this.duration, this.lastPosition) : this.errorLog.any;
           if (premature) {
-            this.emit('error', this.errorPayload('playback stopped before end of stream'));
+            this.emit('error', this.errorLog.payload('playback stopped before end of stream'));
           } else {
             this.emit('stateChanged', { state: 'ended' });
           }
@@ -392,20 +368,6 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     if (this.sawFirstFrame || !this.sawPlaybackRestart || !this.sawVoConfigured) return;
     this.sawFirstFrame = true;
     this.emit('firstFrame');
-  }
-
-  /** Builds the shared `error` event payload from the buffered mpv log —
-   *  the single place the three error-emitting sites read `errorLog` and
-   *  `sawTransportError`, so the transport classification can't drift between
-   *  them. `code` follows MediaError semantics: 2 (MEDIA_ERR_NETWORK) when
-   *  this attempt's buffered log matched mpv's own transport signature,
-   *  else -1 (no MediaError equivalent — decode/format/unknown). */
-  private errorPayload(message: string): { code: number; message: string; detail?: string } {
-    return {
-      code: this.sawTransportError ? 2 : -1,
-      message,
-      detail: this.errorLog.join(' | ') || undefined,
-    };
   }
 
   private async setupObservers(): Promise<void> {
@@ -479,8 +441,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     this.duration = 0;
     this.cacheEnd = 0;
     this.lastPosition = 0;
-    this.errorLog = [];
-    this.sawTransportError = false;
+    this.errorLog.reset();
     const gen = ++this.loadGen;
     // Reset the reused player first so the new open's probe can't read atop the
     // previous file's buffered stream.
@@ -558,8 +519,7 @@ export class MpvPlayer extends TypedEmitter<PlayerBackendEvents> implements Play
     this.duration = 0;
     this.cacheEnd = 0;
     this.lastPosition = 0;
-    this.errorLog = [];
-    this.sawTransportError = false;
+    this.errorLog.reset();
     const { commands } = muteFilterCommands([], this.muteFilterCount);
     this.muteFilterCount = 0;
     for (const cmd of commands) void this.command(cmd).catch(() => {});

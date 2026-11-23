@@ -31,18 +31,35 @@ export function fromAppPage(e: IpcMainInvokeEvent): boolean {
   return !!frame && frame === e.sender.mainFrame && frame.url.startsWith(APP_URL);
 }
 
+/** A malformed escape (a stray `%`) is a bad request, not a throw. */
+function decode(s: string): string | null {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return null;
+  }
+}
+
+/** Whether `file` (already resolved) is the web root or lies under it. */
+export function isInside(root: string, file: string): boolean {
+  return file === root || file.startsWith(root + path.sep);
+}
+
 /** `resolveLocal` maps a downloaded file's name to its path, or null. */
 export function registerAppProtocol(webDir: string, resolveLocal: (name: string) => string | null): void {
   const root = path.resolve(webDir);
   protocol.handle(APP_SCHEME, async (request) => {
     const { pathname } = new URL(request.url);
     if (pathname.startsWith(`/${LOCAL_PREFIX}`)) {
-      const file = resolveLocal(decodeURIComponent(pathname.slice(LOCAL_PREFIX.length + 1)));
+      const name = decode(pathname.slice(LOCAL_PREFIX.length + 1));
+      const file = name === null ? null : resolveLocal(name);
       if (!file) return new Response('not found', { status: 404 });
       // The headers carry the Range of a seek.
       return net.fetch(pathToFileURL(file).toString(), { headers: request.headers });
     }
-    const rel = decodeURIComponent(pathname).replace(/^\/+/, '');
+    const decoded = decode(pathname);
+    if (decoded === null) return new Response('bad request', { status: 400 });
+    const rel = decoded.replace(/^\/+/, '');
     let filePath = path.join(root, rel);
 
     // SPA fallback: a route (no file extension) → index.html.
@@ -51,7 +68,7 @@ export function registerAppProtocol(webDir: string, resolveLocal: (name: string)
     }
 
     // Block path traversal outside the web root.
-    if (!filePath.startsWith(root)) {
+    if (!isInside(root, filePath)) {
       return new Response('forbidden', { status: 403 });
     }
     if (!fs.existsSync(filePath)) {

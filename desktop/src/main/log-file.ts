@@ -1,11 +1,14 @@
 import { app, type WebContents } from 'electron';
-import { appendFileSync, mkdirSync, statSync, truncateSync } from 'node:fs';
+import { appendFileSync, closeSync, mkdirSync, openSync, readSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Above this, the file is truncated once at startup (no rotation). */
+/** Above this the file is cut down to its last `KEEP_LOG_BYTES` (no rotation). */
 const MAX_LOG_BYTES = 5 * 1024 * 1024;
+const KEEP_LOG_BYTES = 1024 * 1024;
+/** The size is checked on the first write of a run, then every this many writes. */
+const CHECK_EVERY = 200;
 
-let truncated = false;
+let writes = 0;
 
 function logPath(): string {
   const dir = app.getPath('logs');
@@ -13,15 +16,29 @@ function logPath(): string {
   return join(dir, 'desktop.log');
 }
 
+/** Keeps the last `keep` bytes of `p`, from the start of a line, once it is over `max`. */
+export function trimLog(p: string, max: number, keep: number): void {
+  const size = statSync(p).size;
+  if (size <= max) return;
+  const tail = Buffer.alloc(Math.min(keep, size));
+  const fd = openSync(p, 'r');
+  try {
+    readSync(fd, tail, 0, tail.length, size - tail.length);
+  } finally {
+    closeSync(fd);
+  }
+  const nl = tail.indexOf(10);
+  writeFileSync(p, nl === -1 ? tail : tail.subarray(nl + 1));
+}
+
 /** Append one timestamped line to the desktop log file — the only retrievable
  *  diagnostic on a packaged build (no console). */
 export function appendLog(line: string): void {
   try {
     const p = logPath();
-    if (!truncated) {
-      truncated = true;
+    if (writes++ % CHECK_EVERY === 0) {
       try {
-        if (statSync(p).size > MAX_LOG_BYTES) truncateSync(p, 0);
+        trimLog(p, MAX_LOG_BYTES, KEEP_LOG_BYTES);
       } catch {
         /* no existing file yet */
       }

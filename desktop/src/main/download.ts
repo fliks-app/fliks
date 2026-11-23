@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, net } from 'electron';
+import { app, BrowserWindow, net, type ClientRequest, type IncomingMessage } from 'electron';
 import { createWriteStream, existsSync, promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -9,7 +9,10 @@ import {
   type DesktopDownloadRequest,
   type DesktopDownloadStatus,
 } from '../shared/contract';
+import { httpUrl, parseDownloadRequest, parseManifest, resolveExt } from './download-parse';
 import { mirrorHls } from './hls-mirror';
+import { handle, none, str } from './ipc-handle';
+import { appendLog, redactUrls } from './log-file';
 import { localFileUrl } from './protocol';
 
 // Offline downloads for the desktop client: fetch a media file to disk under
@@ -39,26 +42,57 @@ function safe(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_') || '_';
 }
 
-let manifest: Manifest | null = null;
+let manifestLoad: Promise<Manifest> | null = null;
 /** id → abort: tears down the in-flight single-file request + its write stream. */
 const active = new Map<string, () => void>();
-const hlsActive = new Map<string, { cancelled: boolean; paused?: boolean; abort?: () => void; done?: Promise<void> }>();
+interface HlsControl { cancelled: boolean; paused?: boolean; abort?: () => void; done?: Promise<void> }
+const hlsActive = new Map<string, HlsControl>();
 
-async function loadManifest(): Promise<Manifest> {
-  if (manifest) return manifest;
-  try {
-    manifest = JSON.parse(await fsp.readFile(manifestPath(), 'utf8')) as Manifest;
-  } catch {
-    manifest = {};
-  }
-  return manifest;
+function logError(what: string, e: unknown): void {
+  appendLog(redactUrls(`[download] ${what}: ${(e as Error)?.message ?? e}`));
 }
-async function saveManifest(): Promise<void> {
-  await fsp.mkdir(baseDir(), { recursive: true });
-  // Write-then-rename so a concurrent finish can't observe a truncated file.
-  const tmp = `${manifestPath()}.tmp`;
-  await fsp.writeFile(tmp, JSON.stringify(manifest ?? {}));
-  await fsp.rename(tmp, manifestPath());
+
+function loadManifest(): Promise<Manifest> {
+  manifestLoad ??= readManifest();
+  return manifestLoad;
+}
+async function readManifest(): Promise<Manifest> {
+  let text: string;
+  try {
+    text = await fsp.readFile(manifestPath(), 'utf8');
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') logError('manifest unreadable', e);
+    return {};
+  }
+  try {
+    return parseManifest(text);
+  } catch (e) {
+    // Keep the bytes: the next save would otherwise replace them with an empty manifest.
+    const aside = `${manifestPath()}.corrupt-${Date.now()}`;
+    await fsp.rename(manifestPath(), aside).catch(() => {});
+    logError(`manifest unparsable, moved to ${path.basename(aside)}`, e);
+    return {};
+  }
+}
+
+let saving: Promise<void> = Promise.resolve();
+let tmpSeq = 0;
+/** Saves run one after the other, each writing the manifest as it is when its turn comes. */
+function saveManifest(): Promise<void> {
+  const run = async (): Promise<void> => {
+    await fsp.mkdir(baseDir(), { recursive: true });
+    // Write-then-rename so a reader can't observe a truncated file.
+    const tmp = `${manifestPath()}.${++tmpSeq}.tmp`;
+    try {
+      await fsp.writeFile(tmp, JSON.stringify(await loadManifest()));
+      await fsp.rename(tmp, manifestPath());
+    } catch (e) {
+      await fsp.rm(tmp, { force: true }).catch(() => {});
+      throw e;
+    }
+  };
+  saving = saving.then(run, run);
+  return saving;
 }
 
 function broadcast(status: DesktopDownloadStatus): void {
@@ -67,69 +101,82 @@ function broadcast(status: DesktopDownloadStatus): void {
   }
 }
 
-/** Extension for the on-disk file, from Content-Disposition then Content-Type. */
-function resolveExt(headers: Record<string, string | string[]>): string {
-  const cd = headers['content-disposition'];
-  const disp = Array.isArray(cd) ? cd[0] : cd;
-  if (disp) {
-    const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disp);
-    const ext = m ? path.extname(decodeURIComponent(m[1].trim())) : '';
-    if (ext) return ext;
-  }
-  const ct = headers['content-type'];
-  const type = (Array.isArray(ct) ? ct[0] : ct)?.split(';')[0].trim();
-  const map: Record<string, string> = {
-    'video/x-matroska': '.mkv',
-    'video/mp4': '.mp4',
-    'video/quicktime': '.mov',
-    'video/x-msvideo': '.avi',
-    'video/mp2t': '.ts',
-    'video/webm': '.webm',
-  };
-  return (type && map[type]) || '.bin';
-}
-
 function cleanup(tmpPath: string): void {
   fsp.rm(tmpPath, { force: true }).catch(() => {});
 }
 
+/** Registers the id synchronously, so a second `start` during the awaits below is a no-op. */
 async function start(req: DesktopDownloadRequest): Promise<void> {
-  const m = await loadManifest();
-  const done = m[req.id];
-  if (done?.complete && existsSync(done.path)) {
-    broadcast({ id: req.id, state: 'done', item: done });
-    return;
-  }
   if (active.has(req.id) || hlsActive.has(req.id)) return; // already downloading
 
-  await fsp.mkdir(baseDir(), { recursive: true });
-
   // A .m3u8 source is a transcoded stream — mirror the HLS bundle to disk.
-  if (/\.m3u8(\?|$)/i.test(req.url)) {
-    await startHls(req);
+  const hls = /\.m3u8(\?|$)/i.test(req.url);
+  const file: FileTask = { stopped: false, request: null, out: null };
+  let finish = (): void => {};
+  const control: HlsControl = { cancelled: false, done: new Promise<void>((r) => (finish = r)) };
+  if (hls) hlsActive.set(req.id, control);
+  else active.set(req.id, () => abortFile(file));
+  const release = (): void => {
+    if (hls) {
+      hlsActive.delete(req.id);
+      finish();
+    } else active.delete(req.id);
+  };
+
+  try {
+    const done = (await loadManifest())[req.id];
+    if (done?.complete && existsSync(done.path)) {
+      release();
+      broadcast({ id: req.id, state: 'done', item: done });
+      return;
+    }
+    await fsp.mkdir(baseDir(), { recursive: true });
+  } catch (e) {
+    release();
+    logError('start failed', e);
+    broadcast({ id: req.id, state: 'error', message: (e as Error).message });
     return;
   }
+  if (hls) await startHls(req, control, release);
+  else await startFile(req, file);
+}
 
+interface FileTask {
+  stopped: boolean;
+  request: ClientRequest | null;
+  out: ReturnType<typeof createWriteStream> | null;
+}
+
+/** Abort the request AND destroy the write stream (aborting the net request
+ *  doesn't necessarily surface as a body 'error'); the caller owns the .part. */
+function abortFile(task: FileTask): void {
+  task.stopped = true;
+  try {
+    task.request?.abort();
+  } catch {
+    /* already ended */
+  }
+  task.out?.destroy();
+}
+
+async function startFile(req: DesktopDownloadRequest, task: FileTask): Promise<void> {
   const tmpPath = path.join(baseDir(), `${safe(req.id)}.part`);
   // A leftover .part from a pause or crash is resumed with a Range request.
   const offset = await fsp.stat(tmpPath).then((s) => s.size, () => 0);
+  if (task.stopped) return;
   const request = net.request({ url: req.url, method: 'GET' });
+  task.request = request;
   if (offset > 0) request.setHeader('Range', `bytes=${offset}-`);
-  let out: ReturnType<typeof createWriteStream> | null = null;
-  let stopped = false;
-  // Abort the request AND destroy the write stream (aborting the net request
-  // doesn't necessarily surface as a body 'error'); the caller owns the .part.
-  active.set(req.id, () => {
-    stopped = true;
-    try {
-      request.abort();
-    } catch {
-      /* already ended */
-    }
-    out?.destroy();
-  });
 
-  request.on('response', (res) => {
+  const fail = (message: string, e?: unknown): void => {
+    if (task.stopped) return;
+    active.delete(req.id);
+    task.out?.destroy();
+    if (e) logError('transfer failed', e);
+    broadcast({ id: req.id, state: 'error', message });
+  };
+
+  const onResponse = (res: IncomingMessage): void => {
     // Electron's net IncomingMessage is a Readable at runtime; its types omit
     // the stream methods, so read status/headers off `res` and stream via `body`.
     const body = res as unknown as Readable;
@@ -159,17 +206,11 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
     const ext = resolveExt(headers);
     const finalPath = path.join(baseDir(), `${safe(req.id)}${ext}`);
     const w = createWriteStream(tmpPath, { flags: resumed ? 'a' : 'w' });
-    out = w;
+    task.out = w;
     let received = resumed ? offset : 0;
     let lastEmit = 0;
 
-    const fail = (message: string): void => {
-      if (stopped) return;
-      active.delete(req.id);
-      w.destroy();
-      broadcast({ id: req.id, state: 'error', message });
-    };
-    w.on('error', (e) => fail(e.message));
+    w.on('error', (e) => fail(e.message, e));
 
     body.on('data', (chunk: Buffer) => {
       received += chunk.length;
@@ -181,7 +222,7 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
       }
     });
     w.on('drain', () => body.resume());
-    body.on('error', (e: Error) => fail(e.message));
+    body.on('error', (e: Error) => fail(e.message, e));
     body.on('end', () => {
       w.end(async () => {
         try {
@@ -199,14 +240,24 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
           active.delete(req.id);
           broadcast({ id: req.id, state: 'done', item });
         } catch (e) {
-          fail((e as Error).message);
+          fail((e as Error).message, e);
         }
       });
     });
+  };
+
+  // A throw in the handler would otherwise leave the id in `active` with no event to the page.
+  request.on('response', (res) => {
+    try {
+      onResponse(res);
+    } catch (e) {
+      fail((e as Error).message, e);
+    }
   });
   request.on('error', (e) => {
-    if (stopped) return;
+    if (task.stopped) return;
     active.delete(req.id);
+    logError('request failed', e);
     broadcast({ id: req.id, state: 'error', message: e.message });
   });
   request.end();
@@ -214,16 +265,11 @@ async function start(req: DesktopDownloadRequest): Promise<void> {
 
 /** Mirror a transcoded HLS stream to a per-id directory; the manifest points at
  *  the local master.m3u8 so playback loads it via mpv (file://). */
-async function startHls(req: DesktopDownloadRequest): Promise<void> {
+async function startHls(req: DesktopDownloadRequest, control: HlsControl, release: () => void): Promise<void> {
   const destDir = path.join(baseDir(), safe(req.id));
-  let finish!: () => void;
-  const control: { cancelled: boolean; paused?: boolean; abort?: () => void; done?: Promise<void> } = {
-    cancelled: false,
-    done: new Promise<void>((r) => (finish = r)),
-  };
-  hlsActive.set(req.id, control);
   let lastEmit = 0;
   try {
+    if (control.cancelled) throw new Error('cancelled');
     const masterPath = await mirrorHls({
       masterUrl: req.url,
       quality: req.quality,
@@ -258,11 +304,11 @@ async function startHls(req: DesktopDownloadRequest): Promise<void> {
       await fsp.rm(destDir, { recursive: true, force: true }).catch(() => {});
     }
     if (!control.cancelled) {
+      logError('hls mirror failed', e);
       broadcast({ id: req.id, state: 'error', message: (e as Error).message });
     }
   } finally {
-    hlsActive.delete(req.id);
-    finish();
+    release();
   }
 }
 
@@ -370,7 +416,6 @@ async function deleteFile(key: string): Promise<void> {
   await fsp.rm(path.join(filesDir(), safe(key)), { force: true }).catch(() => {});
 }
 
-/** Wire the renderer→main download channels. Registered once on app ready. */
 async function freeSpace(): Promise<{ freeBytes: number; totalBytes: number }> {
   const dir = baseDir();
   await fsp.mkdir(dir, { recursive: true });
@@ -378,15 +423,17 @@ async function freeSpace(): Promise<{ freeBytes: number; totalBytes: number }> {
   return { freeBytes: st.bavail * st.bsize, totalBytes: st.blocks * st.bsize };
 }
 
+/** Wire the renderer→main download channels. Registered once on app ready. */
 export function registerDownloadIpc(): void {
-  ipcMain.handle(DOWNLOAD_IPC.start, (_e, req: DesktopDownloadRequest) => start(req));
-  ipcMain.handle(DOWNLOAD_IPC.pause, (_e, id: string) => pause(id));
-  ipcMain.handle(DOWNLOAD_IPC.cancel, (_e, id: string) => cancel(id));
-  ipcMain.handle(DOWNLOAD_IPC.remove, (_e, id: string) => remove(id));
-  ipcMain.handle(DOWNLOAD_IPC.list, async () => Object.values(await loadManifest()));
-  ipcMain.handle(DOWNLOAD_IPC.getLocalUrl, (_e, id: string) => getLocalUrl(id));
-  ipcMain.handle(DOWNLOAD_IPC.saveFile, (_e, key: string, url: string) => saveFile(key, url));
-  ipcMain.handle(DOWNLOAD_IPC.fileUrl, (_e, key: string) => fileUrl(key));
-  ipcMain.handle(DOWNLOAD_IPC.deleteFile, (_e, key: string) => deleteFile(key));
-  ipcMain.handle(DOWNLOAD_IPC.freeSpace, () => freeSpace());
+  const id = (a: unknown[]): [string] => [str(a[0], 200)];
+  handle(DOWNLOAD_IPC.start, (a): [DesktopDownloadRequest] => [parseDownloadRequest(a[0])], (req) => start(req));
+  handle(DOWNLOAD_IPC.pause, id, (i) => pause(i));
+  handle(DOWNLOAD_IPC.cancel, id, (i) => cancel(i));
+  handle(DOWNLOAD_IPC.remove, id, (i) => remove(i));
+  handle(DOWNLOAD_IPC.list, none, async () => Object.values(await loadManifest()));
+  handle(DOWNLOAD_IPC.getLocalUrl, id, (i) => getLocalUrl(i));
+  handle(DOWNLOAD_IPC.saveFile, (a): [string, string] => [str(a[0], 200), httpUrl(a[1])], (key, url) => saveFile(key, url));
+  handle(DOWNLOAD_IPC.fileUrl, id, (key) => fileUrl(key));
+  handle(DOWNLOAD_IPC.deleteFile, id, (key) => deleteFile(key));
+  handle(DOWNLOAD_IPC.freeSpace, none, () => freeSpace());
 }

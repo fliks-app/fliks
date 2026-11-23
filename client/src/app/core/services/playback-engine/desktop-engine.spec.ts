@@ -323,3 +323,19 @@ describe('DesktopEngine getQoeSample', () => {
     expect(await new DesktopEngine().getQoeSample()).toBeNull();
   });
 });
+
+describe('DesktopEngine window events', () => {
+  afterEach(() => {
+    delete (window as any).fliksDesktop;
+  });
+
+  it('tells the player when the shell hides the window', async () => {
+    const bridge = installBridge();
+    const engine = new DesktopEngine();
+    await engine.init(document.createElement('div'));
+    const hidden = vi.fn();
+    engine.on('windowHidden', hidden);
+    bridge.emit({ type: 'windowHidden' });
+    expect(hidden).toHaveBeenCalledTimes(1);
+  });
+});
