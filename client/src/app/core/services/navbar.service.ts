@@ -51,6 +51,12 @@ export class NavbarService {
   /** The rail is a permanent column (collapsed or expanded) rather than a drawer or absent. */
   readonly railDocked = computed(() => this.railMode() === 'collapsed' || this.railMode() === 'expanded');
 
+  /** The docked rail's column width, as a CSS length; 0 when the rail is a drawer or absent. */
+  readonly railWidth = computed(() => {
+    const mode = this.railMode();
+    return mode === 'collapsed' ? 'var(--rail-w)' : mode === 'expanded' ? '16rem' : '0px';
+  });
+
   /** Native phone bottom dock; landscape is too short for it, so the topbar hamburger takes over there. */
   readonly phoneDock = computed(
     () => this.isNativePlatform && this.device.isPhone() && !this.isLandscape(),
