@@ -4,7 +4,7 @@
 <dict>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)media.fliks.app.push</string>
+		<string>$(AppIdentifierPrefix)$(FLIKS_APP_ID).push</string>
 	</array>
 </dict>
 </plist>
