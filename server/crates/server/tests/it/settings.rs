@@ -678,8 +678,8 @@ async fn data_import_marker_is_backfilled_from_completed_imports(pool: PgPool) {
             "SELECT EXISTS(SELECT 1 FROM app_settings WHERE key = 'data_import_done')",
         )
     };
-    let backfill =
-        include_str!("../../../../migrations/1789000001370_backfill-data-import-marker.sql");
+    let migration = include_str!("../../../../migrations/1789000001090_audit-2026-11-21.sql");
+    let backfill = &migration[migration.find("-- The setup checklist reads").unwrap()..];
     sqlx::query("INSERT INTO commands (name, status) VALUES ('ImportSeerrRequests', 'failed')")
         .execute(&pool)
         .await
