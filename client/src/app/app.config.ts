@@ -51,6 +51,7 @@ import { translateBrowserLoaderFactory } from './utils/translate-loader';
 import { PluginUiRegistryService } from './core/plugin-ui/plugin-ui-registry.service';
 import { PluginI18nService } from './core/plugin-ui/plugin-i18n.service';
 import { ImageCacheService } from './core/services/image-cache.service';
+import { MyLibrariesService } from './core/services/my-libraries.service';
 import {
   classUntilDone,
   clearStalePosterStamps,
@@ -88,7 +89,8 @@ export function loadPersistedState(): Promise<unknown> {
   const pluginUi = inject(PluginUiRegistryService);
   const pluginI18n = inject(PluginI18nService);
   const imageCache = inject(ImageCacheService);
-  return Promise.all([serverConfig.load(), sessions.load(), imageCache.warm()])
+  const libraries = inject(MyLibrariesService);
+  return Promise.all([serverConfig.load(), sessions.load(), imageCache.warm(), libraries.restore()])
     .then(() => void auth.loadPersistedSession())
     .then(() => pluginUi.boot())
     .then(() => pluginI18n.init())

@@ -24,6 +24,10 @@ body.tv {
 .nav-rail.rail-collapsed.rail-open {
   box-shadow: 24px 0 60px rgba(0, 0, 0, 0.45);
 }
+/* Docked, the rail is part of the page: no fade-in at boot or on rotation. */
+.drawer-open > .drawer-side {
+  transition: none;
+}
 /* Dims the page while the collapsed rail is open over it (the layout sets `rail-dim`; the drawer's `will-change` would trap a fixed child here). */
 .drawer-content::after {
   content: '';
