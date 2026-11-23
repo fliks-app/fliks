@@ -40,7 +40,7 @@
        paired with. -->
   <tizen:content-security-policy>
     default-src 'self';
-    script-src 'self' 'unsafe-eval';
+    script-src 'self';
     style-src 'self' 'unsafe-inline';
     img-src * data: blob:;
     media-src * blob:;
