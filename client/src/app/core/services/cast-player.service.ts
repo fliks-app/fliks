@@ -1,4 +1,4 @@
-import { Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
+import { DestroyRef, Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { CastService, type CastResumeState } from './cast.service';
 import { SessionSyncService } from './session-sync.service';
@@ -181,6 +181,7 @@ const fromOtherLoad = (q: ReceiverSample, sid: string | null) => !!q.sid && q.si
 export class CastPlayerService {
   readonly cast = inject(CastService);
   private readonly injector = inject(Injector);
+  private readonly _destroyed = inject(DestroyRef).onDestroy(() => (this.destroyed = true));
   private readonly sessionSync = inject(SessionSyncService);
   private readonly castSettings = inject(CastSettingsService);
   private readonly streamingApi = inject(StreamingApiService);
@@ -627,12 +628,12 @@ export class CastPlayerService {
   errorPosition = 0;
 
   private recovery: RecoveryController | null = null;
-  private recoveryLoad: Promise<RecoveryController> | null = null;
+  private recoveryLoad: Promise<RecoveryController | null> | null = null;
 
   /** Loaded on first use: the controller belongs to the lazy player chunk, not the initial one. */
-  private controller(): Promise<RecoveryController> {
+  private controller(): Promise<RecoveryController | null> {
     return (this.recoveryLoad ??= import('../../features/player/cast-recovery').then(
-      (m) => (this.recovery = m.castRecovery(this, this.injector)),
+      (m) => (this.destroyed ? null : (this.recovery = m.castRecovery(this, this.injector))),
     ));
   }
 

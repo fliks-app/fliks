@@ -58,9 +58,6 @@ export function castRecovery(s: CastPlayerService, injector: Injector): Recovery
     },
     { injector },
   );
-  injector.get(DestroyRef).onDestroy(() => {
-    s.destroyed = true;
-    recovery.dispose();
-  });
+  injector.get(DestroyRef).onDestroy(() => recovery.dispose());
   return recovery;
 }
