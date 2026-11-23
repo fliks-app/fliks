@@ -262,6 +262,7 @@ export class TvSpatialNavService {
 
     // Text inputs keep left/right for the caret until it hits the end, then escape; up/down escape immediately.
     // Range inputs are excluded (arrows adjust the value).
+    let caretEscapes = false;
     if (isInputWithNativeArrows && inputType !== 'range' && (dir === 'left' || dir === 'right')) {
       const input = active as HTMLInputElement;
       const value = input.value ?? '';
@@ -273,6 +274,7 @@ export class TvSpatialNavService {
       if (dir === 'left' && !atStart) return;
       if (dir === 'right' && !atEnd) return;
       // Caret at boundary → fall through to spatial nav.
+      caretEscapes = true;
     }
     // Native <select> would cycle its value on arrows; block it and reserve arrows for spatial nav.
     if (tag === 'SELECT') {
@@ -280,7 +282,8 @@ export class TvSpatialNavService {
     }
     // Sliders own left/right; up/down bubble to the focus tree so focus can't get trapped on the seekbar.
     if (active?.matches('[role="slider"], [data-tv-skip-spatial], [data-tv-skip-spatial] *')) {
-      if (dir === 'left' || dir === 'right') return;
+      // A text field marked this way still hands the arrow on once its caret sits at the edge.
+      if ((dir === 'left' || dir === 'right') && !caretEscapes) return;
       // Unless the slider binds vertical itself (seekbar with chapters while the seek OSD is up).
       if (active.matches('[data-tv-own-vertical]')) return;
     }
@@ -590,7 +593,9 @@ export class TvSpatialNavService {
           while (nextIdx >= 0 && nextIdx < children.length && sharesBand(children[nextIdx].getBoundingClientRect(), from, horizontal)) {
             nextIdx += step;
           }
-          if (cur.isWrapping && children.length > 0) {
+          // A looping row still lets Left out of its first child when a rail sits at the screen's left edge.
+          const leavesToRail = dir === 'left' && idx === 0 && !!this.rail();
+          if (cur.isWrapping && children.length > 0 && !leavesToRail) {
             nextIdx = (nextIdx + children.length) % children.length;
           }
           if (nextIdx >= 0 && nextIdx < children.length) {

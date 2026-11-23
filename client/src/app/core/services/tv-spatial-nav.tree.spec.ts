@@ -3,8 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TvSpatialNavService } from './tv-spatial-nav.service';
 
 type Nav = {
-  registerContainer(el: HTMLElement, o: { orientation: 'vertical' | 'horizontal' }): void;
+  registerContainer(el: HTMLElement, o: { orientation: 'vertical' | 'horizontal'; isWrapping?: boolean }): void;
   findNeighbor(dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null;
+  onKey(e: KeyboardEvent): void;
   performMove(dir: 'left' | 'right' | 'up' | 'down', crossZones: boolean): void;
   findNeighborInTree(active: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null;
 };
@@ -158,5 +159,40 @@ describe('TvSpatialNavService tree', () => {
     nav.performMove('up', true);
     expect(scrollBy).not.toHaveBeenCalled();
     scrollBy.mockRestore();
+  });
+
+  it('leaves a text field marked skip-spatial for the rail once its caret is at the left edge', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const { library, page } = railAndPage(nav);
+    const input = page.appendChild(document.createElement('input'));
+    input.setAttribute('data-tv-skip-spatial', '');
+    Object.defineProperty(input, 'offsetParent', { get: () => document.body });
+    at(input, 500, 200);
+    input.value = 'abc';
+    input.focus();
+    input.setSelectionRange(2, 2);
+    nav.onKey(new KeyboardEvent('keydown', { key: 'ArrowLeft', cancelable: true }));
+    expect(document.activeElement).toBe(input);
+    input.setSelectionRange(0, 0);
+    nav.onKey(new KeyboardEvent('keydown', { key: 'ArrowLeft', cancelable: true }));
+    expect(document.activeElement).toBe(library);
+  });
+
+  it('lets Left leave a looping row from its first child for the rail', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const { library, page } = railAndPage(nav);
+    const loop = page.appendChild(box(document.createElement('div'), 200, 40));
+    nav.registerContainer(loop, { orientation: 'horizontal', isWrapping: true });
+    const a = loop.appendChild(document.createElement('button'));
+    const b = loop.appendChild(document.createElement('button'));
+    for (const el of [a, b]) Object.defineProperty(el, 'offsetParent', { get: () => document.body });
+    at(a, 500, 200);
+    at(b, 650, 200);
+    a.focus();
+    expect(nav.findNeighbor('left')).toBe(library);
+    b.focus();
+    expect(nav.findNeighbor('left')).toBe(a);
+    // Right from the last child still loops.
+    expect(nav.findNeighbor('right')).toBe(a);
   });
 });
