@@ -94,7 +94,7 @@ fn advisory_functions() -> String {
 
 /// Plugin roles of this database, and the 4.x `plugin_<id>` roles a registration may adopt: the ones
 /// whose schema of the same name is here (the role names are cluster-wide, other databases have theirs).
-const PLUGIN_ROLES: &str = r"SELECT r.rolname FROM pg_roles r
+const PLUGIN_ROLES: &str = r"SELECT r.oid, r.rolname FROM pg_roles r
    WHERE (r.rolname LIKE 'plugin\_%' AND EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = r.rolname))
       OR r.rolname LIKE 'fp\_' || (SELECT lpad(to_hex(oid::bigint), 8, '0') FROM pg_database
                                     WHERE datname = current_database()) || '\_%'";
@@ -236,6 +236,7 @@ impl Status {
 }
 
 pub async fn status<'c>(e: impl sqlx::PgExecutor<'c>) -> sqlx::Result<Status> {
+    // Membership is read from the catalog snapshot, not looked up by role name: a role dropped meanwhile is no error.
     let sql = format!(
         r"SELECT r.rolsuper, {version}, r.rolcreaterole,
        has_database_privilege(current_user, current_database(), 'CREATE')
@@ -248,7 +249,7 @@ pub async fn status<'c>(e: impl sqlx::PgExecutor<'c>) -> sqlx::Result<Status> {
                                 OR NOT has_function_privilege(current_user, p.oid, 'EXECUTE'))
                    FROM pg_proc p WHERE {advisory}), false),
        (SELECT count(*) FROM ({plugin_roles}) pr
-         WHERE NOT pg_has_role(current_user, pr.rolname, 'MEMBER'))
+         WHERE NOT EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.roleid = pr.oid AND m.member = r.oid))
   FROM pg_roles r WHERE r.rolname = current_user",
         version = crate::db::SERVER_VERSION_SQL,
         advisory = crate::db::ADVISORY_LOCK_FUNCTIONS,
