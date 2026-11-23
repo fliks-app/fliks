@@ -6,7 +6,7 @@
 ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:1.30.0@sha256:583f1e14f30bd8ec8dcc8c571ffab34a077011e84570baa3ecad58f049f0fbb2
 
 # --- Stage 1: Build client ---
-FROM node:24.22.0-alpine AS client-build
+FROM node:26.13.1-alpine AS client-build
 WORKDIR /app
 COPY client/package.json client/package-lock.json ./
 RUN npm ci
@@ -23,7 +23,7 @@ RUN node /tmp/precompress-client.mjs dist/client/browser
 # --- Stage 2: Build fliks-server (Rust) ---
 # Dependencies build in their own layer, keyed on the manifests: CI's layer cache keeps it,
 # while a BuildKit cache mount is lost with the runner.
-FROM lukemathwalker/cargo-chef:0.1.78-rust-1.99.0-bookworm AS server-chef
+FROM lukemathwalker/cargo-chef:0.1.78-rust-1.100.0-bookworm AS server-chef
 WORKDIR /server
 # libarchive2-sys builds libarchive with cmake, generates its bindings with libclang and links these libraries.
 RUN apt-get update && apt-get install -y --no-install-recommends cmake libclang-dev liblz4-dev libacl1-dev \

@@ -2,7 +2,7 @@
 
 Drives two headless Chromium instances (separate profiles, debugging ports 9333 and 9334) against a running
 dev stack (`docker-compose.dev.example.yml`, UI on :4500) and checks the account session: option off, strip,
-"play here", transfer, parked and resume, audio queue control, kind scope. Node 24, no dependency.
+"play here", transfer, parked and resume, audio queue control, kind scope. Node 26, no dependency.
 
 ```bash
 FLIKS_E2E_MEDIA_ID=12 FLIKS_E2E_FILE_ID=34 FLIKS_E2E_TRACK_IDS=101,102,103 node scripts/e2e-session/run.mjs
