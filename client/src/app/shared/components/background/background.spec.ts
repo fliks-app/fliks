@@ -29,7 +29,7 @@ describe('BackgroundComponent', () => {
     expect(used).toEqual([{ url: '/fanart.jpg', blur: false }]);
   });
 
-  it('lets a hero claim through at the top of the page only', async () => {
+  it('shades a hero claim continuously from the scroll position, never leaving the veil off', () => {
     const hero = signal<'full' | 'compact' | null>('full');
     TestBed.configureTestingModule({
       providers: [
@@ -39,14 +39,23 @@ describe('BackgroundComponent', () => {
       ],
     });
     const fixture = TestBed.createComponent(BackgroundComponent);
-    const el = fixture.nativeElement as HTMLElement;
-    fixture.detectChanges();
-    expect(el.querySelector('.app-bg-hero-veil-on')).not.toBeNull();
-    expect(el.querySelector('.app-bg-veil-off')).not.toBeNull();
-    vi.spyOn(window, 'scrollY', 'get').mockReturnValue(5000);
-    window.dispatchEvent(new Event('scroll'));
-    fixture.detectChanges();
-    expect(el.querySelector('.app-bg-hero-veil-on')).toBeNull();
-    expect(el.querySelector('.app-bg-veil-off')).toBeNull();
+    const veil = fixture.nativeElement as HTMLElement;
+    const bottomAlpha = () => {
+      fixture.detectChanges();
+      const bg = veil.querySelector<HTMLElement>('.app-bg-veil')!.style.background;
+      return Number(/rgba\(29, 35, 42, ([\d.]+)\) \d+%, rgba\(29, 35, 42, ([\d.]+)\) \d+%\)/.exec(bg)?.[1]);
+    };
+    const scrollTo = (y: number) => {
+      vi.spyOn(window, 'scrollY', 'get').mockReturnValue(y);
+      window.dispatchEvent(new Event('scroll'));
+    };
+    expect(bottomAlpha()).toBe(0);
+    scrollTo(window.innerHeight * 0.1);
+    expect(bottomAlpha()).toBeGreaterThan(0.4);
+    expect(bottomAlpha()).toBeLessThan(0.5);
+    scrollTo(5000);
+    expect(bottomAlpha()).toBeCloseTo(0.95, 2);
+    hero.set(null);
+    expect(bottomAlpha()).toBeNaN();
   });
 });

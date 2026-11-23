@@ -20,9 +20,23 @@ interface Layer {
 })
 export class BackgroundComponent {
   protected readonly bg = inject(BackgroundService);
-  /** A hero claim lets the picture through only near the top of the page; scrolled past a fifth of the viewport, the ambient veil takes over again. */
-  protected readonly heroShown = computed(() => !!this.bg.hero() && !this.scrolled());
-  private readonly scrolled = signal(false);
+  /** 0 at the top of the page, 1 once scrolled two fifths of the viewport: a hero claim's veil follows it continuously, so no frame is left without a veil. */
+  private readonly progress = signal(0);
+  /** The veil of a hero claim as one background, its alphas interpolated from the hero look to the ambient one; null for the ambient CSS veil. */
+  protected readonly heroVeil = computed(() => {
+    const hero = this.bg.hero();
+    if (!hero) return null;
+    const p = this.progress();
+    const [from, to] = hero === 'compact' ? [12, 45] : [35, 72];
+    const rgba = (a: number) => `rgba(29, 35, 42, ${a.toFixed(3)})`;
+    // The vertical layer reaches the ambient alpha by half way, so the stacked layers never let more picture through than either end.
+    const q = Math.min(1, 2 * p);
+    const side = (a: number) => rgba(a * (1 - p));
+    return (
+      `linear-gradient(to bottom, ${rgba(0.95 * q)} ${from}%, ${rgba(0.95)} ${to}%), ` +
+      `linear-gradient(to right, ${side(0.92)} 0%, ${side(0.8)} 40%, ${side(0.35)} 65%, ${side(0.08)} 90%, ${side(0)} 100%)`
+    );
+  });
 
   /** Reduced effects swap images without the crossfade and draw the cover fallback unblurred. */
   readonly reduced = inject(DeviceService).reducedEffects();
@@ -38,7 +52,7 @@ export class BackgroundComponent {
   constructor() {
     effect((onCleanup) => {
       if (!this.bg.hero()) return;
-      const read = () => this.scrolled.set(window.scrollY > window.innerHeight * 0.2);
+      const read = () => this.progress.set(Math.min(1, Math.max(0, window.scrollY / (window.innerHeight * 0.4))));
       read();
       window.addEventListener('scroll', read, { passive: true });
       onCleanup(() => window.removeEventListener('scroll', read));
