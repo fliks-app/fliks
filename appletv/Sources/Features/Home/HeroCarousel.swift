@@ -51,12 +51,12 @@ struct HeroCarousel: View {
         .task(id: current?.id) { await resolveTarget() }
     }
 
+    /// Fades out to transparent, not to a colour: the page's ambient backdrop shows through, with no seam.
     private var picture: some View {
-        let base = Color(red: 29 / 255, green: 35 / 255, blue: 42 / 255)
-        return CrossfadeImage(url: ImageURL.build(current?.fanartUrl, size: .full))
-            .overlay(LinearGradient(colors: [base.opacity(0.9), base.opacity(0.3), .clear],
+        CrossfadeImage(url: ImageURL.build(current?.fanartUrl, size: .full))
+            .overlay(LinearGradient(colors: [.black.opacity(0.7), .black.opacity(0.2), .clear],
                                     startPoint: .leading, endPoint: .trailing))
-            .overlay(LinearGradient(colors: [.clear, base], startPoint: .center, endPoint: .bottom))
+            .mask(LinearGradient(colors: [.black, .black, .clear], startPoint: .top, endPoint: .bottom))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .ignoresSafeArea()
