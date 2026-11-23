@@ -1,7 +1,4 @@
-<div class="mb-6">
-  <h1 class="text-2xl font-bold">{{ (isHistory ? 'acquisition_queue.history_title' : 'acquisition_queue.queue_title') | translate }}</h1>
-  <p class="text-sm text-base-content/60 mt-1">{{ (isHistory ? 'acquisition_queue.history_subtitle' : 'acquisition_queue.queue_subtitle') | translate }}</p>
-</div>
+<p class="text-sm text-base-content/60 mb-4">{{ (isHistory ? 'acquisition_queue.history_subtitle' : 'acquisition_queue.queue_subtitle') | translate }}</p>
 @if (fixedParams()['mediaId']) {
   <div class="mb-4">
     <span class="badge badge-outline h-auto gap-1 py-1 text-sm" data-testid="media-filter">

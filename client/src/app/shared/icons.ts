@@ -1,5 +1,6 @@
 // Icon data only (no per-icon component): templates feed it to <svg [lucideIcon]>. Add an icon here before using it.
 import {
+  LucideActivity,
   LucideAirplay,
   LucideAlertCircle,
   LucideArrowDown,
@@ -187,6 +188,7 @@ import {
 const named = <T extends Record<string, { name?: string }>>(data: T) => data as { [K in keyof T]: T[K] & { name: string } };
 
 export const icons = named({
+  Activity: LucideActivity,
   Airplay: LucideAirplay,
   AlertCircle: LucideAlertCircle,
   ArrowDown: LucideArrowDown,

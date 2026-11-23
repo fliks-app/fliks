@@ -6040,9 +6040,10 @@
     "settings": "Ajustes del karaoke"
   },
   "acquisition_queue": {
-    "queue_title": "Cola",
+    "page_title": "Actividad",
+    "tab_queue": "Cola",
     "queue_subtitle": "Transferencias en curso, de todos los proveedores de descarga.",
-    "history_title": "Historial de la cola",
+    "tab_history": "Historial",
     "history_subtitle": "Transferencias terminadas, fallidas y retiradas.",
     "state_queued": "En cola",
     "state_active": "Descargando",

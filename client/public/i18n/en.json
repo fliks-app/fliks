@@ -6040,9 +6040,10 @@
     }
   },
   "acquisition_queue": {
-    "queue_title": "Queue",
+    "page_title": "Activity",
+    "tab_queue": "Queue",
     "queue_subtitle": "Transfers in progress, across every download provider.",
-    "history_title": "Queue history",
+    "tab_history": "History",
     "history_subtitle": "Finished, failed and removed transfers.",
     "state_queued": "Queued",
     "state_active": "Downloading",

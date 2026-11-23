@@ -6040,9 +6040,10 @@
     "settings": "Karaoke-Einstellungen"
   },
   "acquisition_queue": {
-    "queue_title": "Warteschlange",
+    "page_title": "Aktivität",
+    "tab_queue": "Warteschlange",
     "queue_subtitle": "Laufende Übertragungen aller Download-Anbieter.",
-    "history_title": "Warteschlangenverlauf",
+    "tab_history": "Verlauf",
     "history_subtitle": "Abgeschlossene, fehlgeschlagene und entfernte Übertragungen.",
     "state_queued": "In der Warteschlange",
     "state_active": "Wird heruntergeladen",

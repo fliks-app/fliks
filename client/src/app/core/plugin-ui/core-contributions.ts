@@ -16,10 +16,8 @@ export const CORE_NAV_CONTRIBUTIONS: readonly UiContribution[] = [
   { id: 'core.history', slot: 'nav.main', weight: 2200, labelKey: 'nav.history', icon: 'history', action: { kind: 'route', path: '/history' } },
 
   { id: 'core.requests', slot: 'nav.acquisition', weight: 100, labelKey: 'nav.requests', icon: 'clipboard-list', badge: 'pendingRequests', tone: 'danger', when: [not('isTv'), 'hasPermission:requests.create'], action: { kind: 'route', path: '/requests' } },
-  { id: 'core.queue', slot: 'nav.acquisition', weight: 150, labelKey: 'acquisition_queue.queue_title', icon: 'download', when: [not('isTv'), since('acquisitionQueue'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/queue' } },
-  { id: 'core.queue_history', slot: 'nav.acquisition', weight: 160, labelKey: 'acquisition_queue.history_title', icon: 'history', when: [not('isTv'), since('acquisitionQueue'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition/history' } },
+  { id: 'core.activity', slot: 'nav.acquisition', weight: 150, labelKey: 'acquisition_queue.page_title', icon: 'activity', when: [not('isTv'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/acquisition' } },
   { id: 'core.calendar', slot: 'nav.acquisition', weight: 300, labelKey: 'nav.calendar', icon: 'calendar', when: [not('isTv')], action: { kind: 'route', path: '/calendar' } },
-  { id: 'core.wanted', slot: 'nav.acquisition', weight: 350, labelKey: 'wanted.title', icon: 'target', when: [not('isTv'), 'hasPermission:media.grab'], action: { kind: 'route', path: '/wanted' } },
 ];
 
 /** Libraries render as their own block between the weight-300 and weight-2000 core items; where a plugin's `nav.main` weight 1000-1999 lands after them. */
