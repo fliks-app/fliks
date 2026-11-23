@@ -156,37 +156,8 @@ struct MediaDetailView: View {
         .focusSection()
     }
 
-    private struct PlayTarget {
-        let mediaFileId: Int
-        let episodeId: Int?
-        let resume: Bool
-    }
-
-    /// Movie: the file with no episodeId. Series: the resume target if any,
-    /// else the first episode with a file, season order. ponytail: skips the
-    /// "first unwatched episode" tier (needs per-episode watched state, not
-    /// loaded here) — add it if the plain header target reads wrong once
-    /// watched-tracking lands on this screen.
     private func playTarget(_ media: Media) -> PlayTarget? {
-        guard media.type.isPlayable else { return nil }
-        if !media.type.hasChildren {
-            guard let fileId = resumeInfo?.mediaFileId ?? media.files?.first(where: { $0.episodeId == nil })?.id else {
-                return nil
-            }
-            let position = resumeInfo?.positionSeconds ?? 0
-            return PlayTarget(mediaFileId: fileId, episodeId: nil, resume: position > 0)
-        }
-        if let info = resumeInfo, let episodeId = info.episodeId {
-            return PlayTarget(mediaFileId: info.mediaFileId, episodeId: episodeId, resume: info.positionSeconds > 0)
-        }
-        for season in (media.seasons ?? []).sorted(by: { $0.seasonNumber < $1.seasonNumber }) {
-            for ep in season.episodes.sorted(by: { $0.episodeNumber < $1.episodeNumber }) where ep.hasFile {
-                if let file = media.files?.first(where: { $0.episodeId == ep.id }) {
-                    return PlayTarget(mediaFileId: file.id, episodeId: ep.id, resume: false)
-                }
-            }
-        }
-        return nil
+        PlayTarget.of(media, resume: resumeInfo, watchedEpisodes: watched.watchedEpisodes[mediaId] ?? [])
     }
 
     @ViewBuilder

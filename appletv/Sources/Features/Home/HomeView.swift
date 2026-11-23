@@ -19,6 +19,7 @@ struct HomeView: View {
     var onSelectLibrary: (Int) -> Void
     var onSelectPlaylist: (Int) -> Void
     var onSelectParty: (Int) -> Void
+    var onPlay: (_ mediaFileId: Int, _ mediaId: Int, _ episodeId: Int?) -> Void
 
     @Environment(AuthService.self) private var auth
     @Environment(HomeSettingsStore.self) private var homeSettings
@@ -36,26 +37,53 @@ struct HomeView: View {
                              partiesSupported: party.partiesSupported)
     }
 
+    @State private var featured: ZoneState<FeaturedItem> = .loading
+
+    private var heroVisible: Bool {
+        FeaturedItem.supported && sections.contains { $0.type == .heroCarousel && $0.visible }
+    }
+
+    /// Holds its place until the picks answer; an empty answer gives the place back.
+    private var heroShown: Bool {
+        guard heroVisible else { return false }
+        if case .loading = featured { return true }
+        return !featured.items.isEmpty
+    }
+
     private var partiesShown: Bool { sections.contains { $0.type == .watchParties && $0.visible } }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 44) {
-                ForEach(sections.filter(\.visible)) { section in
-                    HomeRow(
-                        section: section,
-                        librariesState: libraries.visibleState,
-                        onRetryLibraries: { Task { await libraries.load() } },
-                        onSelectMedia: onSelectMedia,
-                        onSelectEpisode: onSelectEpisode,
-                        onSelectLibrary: onSelectLibrary,
-                        onSelectPlaylist: onSelectPlaylist,
-                        onSelectParty: onSelectParty
-                    )
+            VStack(alignment: .leading, spacing: 0) {
+                if heroShown {
+                    HeroCarousel(items: featured.items.map(\.media), onPlay: onPlay,
+                                 onDetails: { onSelectMedia($0.id) })
                 }
+                LazyVStack(alignment: .leading, spacing: 44) {
+                    ForEach(sections.filter(\.visible)) { section in
+                        HomeRow(
+                            section: section,
+                            librariesState: libraries.visibleState,
+                            onRetryLibraries: { Task { await libraries.load() } },
+                            onSelectMedia: onSelectMedia,
+                            onSelectEpisode: onSelectEpisode,
+                            onSelectLibrary: onSelectLibrary,
+                            onSelectPlaylist: onSelectPlaylist,
+                            onSelectParty: onSelectParty,
+                            featuredIds: heroShown ? Set(featured.items.map(\.id)) : []
+                        )
+                    }
+                }
+                .padding(.horizontal, 60)
+                .padding(.vertical, heroShown ? 24 : 48)
             }
-            .padding(.horizontal, 60)
-            .padding(.vertical, 48)
+        }
+        .ignoresSafeArea(edges: heroShown ? .top : [])
+        .task(id: "\(refresh.tick)-\(heroVisible)") {
+            guard heroVisible else { return }
+            await revalidateZone("featured", apply: { featured = $0 }) {
+                try await APIClient.shared.list("/api/home/featured")
+            }
         }
         .task(id: refresh.tick) { await libraries.load() }
         .task { await ServerVersion.shared.refresh() }

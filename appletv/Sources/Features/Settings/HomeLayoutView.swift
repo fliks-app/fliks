@@ -136,6 +136,7 @@ struct HomeLayoutView: View {
 
     private func label(for row: ResolvedHomeSection) -> String {
         switch row.type {
+        case .heroCarousel: tr("home_settings.section.hero_carousel")
         case .watchParties: tr("party.rail_title")
         case .libraries: tr("home.libraries")
         case .continueWatching: tr("home.continue_watching")

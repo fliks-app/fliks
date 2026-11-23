@@ -4,7 +4,7 @@ import SwiftUI
 /// signs straight back in; anything else opens a sheet offering quick connect
 /// (recommended, code-less) or password sign-in.
 struct SelectUserView: View {
-    @Binding var path: NavigationPath
+    @Binding var path: [Route]
     @Environment(ServerStore.self) private var server
     @Environment(AuthService.self) private var auth
 

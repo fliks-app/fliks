@@ -18,7 +18,12 @@ struct RootView: View {
     @State private var party = PartyService.shared
     @State private var remote = RemoteControlService.shared
     @State private var toasts = NotificationToastService.shared
-    @State private var path = NavigationPath()
+    @State private var path: [Route] = []
+    @FocusState private var railFocus: String?
+    /// Off while focus is handed to the page: a focusable rail would win the focus engine's pick.
+    @State private var railEnabled = false
+    @Namespace private var shell
+    @Environment(\.resetFocus) private var resetFocus
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -58,17 +63,17 @@ struct RootView: View {
                 RemoteControlService.shared.onLoadRequested = { mediaFileId, mediaId, episodeId, startAt, startPaused, tracks in
                     // Same "reset then push" the auth-state transition above uses -
                     // a remote `load` always replaces whatever is on screen.
-                    path = NavigationPath()
+                    path = []
                     path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
                                               episodeId: episodeId, startAt: startAt, startPaused: startPaused,
                                               launch: tracks))
                 }
                 RemoteControlService.shared.onOpenMusic = {
-                    path = NavigationPath()
+                    path = []
                     path.append(Route.nowPlaying)
                 }
                 party.onOpenLobby = { _ in path.append(Route.partyLobby) }
-                party.onGoHome = { path = NavigationPath() }
+                party.onGoHome = { path = [] }
                 party.onOpenMusic = {
                     MusicPartyDriver.shared.attach()
                     if !MusicPlayer.shared.nowPlayingOpen { path.append(Route.nowPlaying) }
@@ -98,7 +103,7 @@ struct RootView: View {
                 // an onboarding route behind, and signing in must not carry
                 // one of those routes into the main shell's stack.
                 if newState == .signedOut || newState == .signedIn {
-                    path = NavigationPath()
+                    path = []
                 }
             }
             .onChange(of: path.count) { _, count in
@@ -119,6 +124,29 @@ struct RootView: View {
             .environment(playlistPicker)
             .environment(party)
             .id(locale.lang)
+    }
+
+    /// The player and the music screen take the whole screen.
+    private var railShown: Bool {
+        switch path.last {
+        case .player, .nowPlaying: false
+        default: true
+        }
+    }
+
+    /// Back to the page item focus came from, else to the page's default.
+    private func leaveRail() {
+        Task { await handFocusToPage() }
+    }
+
+    /// Focus goes to the page's default item; the rail is disabled meanwhile, or it would win that pick.
+    private func handFocusToPage(after delay: Duration = .zero) async {
+        railEnabled = false
+        // A page the rail just opened needs its push to land first.
+        if delay > .zero { try? await Task.sleep(for: delay) }
+        resetFocus(in: shell)
+        try? await Task.sleep(for: .milliseconds(400))
+        railEnabled = true
     }
 
     /// Inactive (Siri, system overlays) keeps the stream: only a background stops it.
@@ -144,92 +172,111 @@ struct RootView: View {
                 .controlSize(.large)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if auth.state == .signedIn {
-            NavigationStack(path: $path) {
-                HStack(spacing: 0) {
-                    Sidebar(path: $path)
-                        .frame(width: 380)
-                        .focusSection()
+            ZStack(alignment: .leading) {
+                NavigationStack(path: $path) {
                     HomeView(
                         onSelectMedia: { path.append(Route.mediaDetail(id: $0)) },
                         onSelectEpisode: { path.append(Route.episodeDetail(mediaId: $0, episodeId: $1)) },
                         onSelectLibrary: { path.append(Route.library(id: $0)) },
                         onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) },
-                        onSelectParty: { path.append(Route.partyDetail(id: $0)) }
+                        onSelectParty: { path.append(Route.partyDetail(id: $0)) },
+                        onPlay: { path.append(Route.player(mediaFileId: $0, mediaId: $1, episodeId: $2, startAt: nil)) }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .focusSection()
-                }
-                .ignoresSafeArea(edges: .horizontal)
-                // Backdrop as a background (not a ZStack sibling) so a loading/
-                // changing image can never resize the shell.
-                .background { BackdropView(backdrop: backdrop).ignoresSafeArea() }
-                .navigationDestination(for: Route.self) { route in
-                    Group {
-                    switch route {
-                    case let .library(id):
-                        LibraryView(libraryId: id, onSelectMedia: { path.append(Route.forMedia($0, $1)) },
-                                    onSelectArtist: { path.append(Route.artist(id: $0)) })
-                    case let .mediaDetail(id):
-                        MediaDetailView(
-                            mediaId: id,
-                            onPlay: { mediaFileId, episodeId, startAt in
-                                path.append(Route.player(mediaFileId: mediaFileId, mediaId: id,
-                                                          episodeId: episodeId, startAt: startAt))
-                            },
-                            onSelectEpisode: { path.append(Route.episodeDetail(mediaId: id, episodeId: $0)) },
-                            onAlbum: {
-                                if !path.isEmpty { path.removeLast() }
-                                path.append(Route.album(id: id))
-                            }
-                        )
-                    case let .episodeDetail(mediaId, episodeId):
-                        EpisodeDetailView(
-                            mediaId: mediaId,
-                            episodeId: episodeId,
-                            onPlay: { mediaFileId, epId, startAt in
-                                path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
-                                                          episodeId: epId, startAt: startAt))
-                            },
-                            onSelectEpisode: { path.append(Route.episodeDetail(mediaId: mediaId, episodeId: $0)) }
-                        )
-                    case let .album(id):
-                        AlbumView(mediaId: id, onSelectArtist: { path.append(Route.artist(id: $0)) })
-                    case let .artist(id):
-                        ArtistView(personId: id, onSelectAlbum: { path.append(Route.album(id: $0)) })
-                    case .nowPlaying:
-                        NowPlayingView(onClose: { if !path.isEmpty { path.removeLast() } },
-                                       onSelectAlbum: { path.append(Route.album(id: $0)) },
+                    // Back on Home shows the rail first, then leaves the app (the system's own Back from the rail).
+                    .onExitCommand(perform: railFocus == nil ? { railFocus = "home" } : nil)
+                    // Backdrop as a background (not a ZStack sibling) so a loading/
+                    // changing image can never resize the shell.
+                    .background { BackdropView(backdrop: backdrop).ignoresSafeArea() }
+                    .navigationDestination(for: Route.self) { route in
+                        Group {
+                        switch route {
+                        case let .library(id):
+                            LibraryView(libraryId: id, onSelectMedia: { path.append(Route.forMedia($0, $1)) },
+                                        onSelectArtist: { path.append(Route.artist(id: $0)) },
+                                        onPlay: { path.append(Route.player(mediaFileId: $0, mediaId: $1, episodeId: $2,
+                                                                           startAt: nil)) })
+                        case let .mediaDetail(id):
+                            MediaDetailView(
+                                mediaId: id,
+                                onPlay: { mediaFileId, episodeId, startAt in
+                                    path.append(Route.player(mediaFileId: mediaFileId, mediaId: id,
+                                                              episodeId: episodeId, startAt: startAt))
+                                },
+                                onSelectEpisode: { path.append(Route.episodeDetail(mediaId: id, episodeId: $0)) },
+                                onAlbum: {
+                                    if !path.isEmpty { path.removeLast() }
+                                    path.append(Route.album(id: id))
+                                }
+                            )
+                        case let .episodeDetail(mediaId, episodeId):
+                            EpisodeDetailView(
+                                mediaId: mediaId,
+                                episodeId: episodeId,
+                                onPlay: { mediaFileId, epId, startAt in
+                                    path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
+                                                              episodeId: epId, startAt: startAt))
+                                },
+                                onSelectEpisode: { path.append(Route.episodeDetail(mediaId: mediaId, episodeId: $0)) }
+                            )
+                        case let .album(id):
+                            AlbumView(mediaId: id, onSelectArtist: { path.append(Route.artist(id: $0)) })
+                        case let .artist(id):
+                            ArtistView(personId: id, onSelectAlbum: { path.append(Route.album(id: $0)) })
+                        case .nowPlaying:
+                            NowPlayingView(onClose: { if !path.isEmpty { path.removeLast() } },
+                                           onSelectAlbum: { path.append(Route.album(id: $0)) },
+                                           onSelectArtist: { path.append(Route.artist(id: $0)) })
+                        case let .player(mediaFileId, mediaId, episodeId, startAt, startPaused, launch):
+                            PlayerView(
+                                mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: startAt,
+                                startPaused: startPaused, launch: launch,
+                                onExit: { if !path.isEmpty { path.removeLast() } }
+                            )
+                            .onAppear { MusicPlayer.shared.stop() }
+                        case .search:
+                            SearchView(onSelectMedia: { path.append(Route.forMedia($0, $1)) },
                                        onSelectArtist: { path.append(Route.artist(id: $0)) })
-                    case let .player(mediaFileId, mediaId, episodeId, startAt, startPaused, launch):
-                        PlayerView(
-                            mediaFileId: mediaFileId, mediaId: mediaId, episodeId: episodeId, startAt: startAt,
-                            startPaused: startPaused, launch: launch,
-                            onExit: { if !path.isEmpty { path.removeLast() } }
-                        )
-                        .onAppear { MusicPlayer.shared.stop() }
-                    case .search:
-                        SearchView(onSelectMedia: { path.append(Route.forMedia($0, $1)) },
-                                   onSelectArtist: { path.append(Route.artist(id: $0)) })
-                    case .playlists:
-                        PlaylistsView(onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) })
-                    case let .playlistDetail(id):
-                        PlaylistDetailView(playlistId: id, onPlay: { mediaFileId, mediaId, episodeId, startAt in
-                            path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
-                                                      episodeId: episodeId, startAt: startAt))
-                        })
-                    case .partyLobby:
-                        PartyLobbyView()
-                    case let .partyDetail(id):
-                        PartyDetailView(partyId: id)
-                    case .settings:
-                        SettingsView()
-                    default:
-                        EmptyView() // onboarding routes never belong in the signed-in stack
+                        case .playlists:
+                            PlaylistsView(onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) })
+                        case let .playlistDetail(id):
+                            PlaylistDetailView(playlistId: id, onPlay: { mediaFileId, mediaId, episodeId, startAt in
+                                path.append(Route.player(mediaFileId: mediaFileId, mediaId: mediaId,
+                                                          episodeId: episodeId, startAt: startAt))
+                            })
+                        case .partyLobby:
+                            PartyLobbyView()
+                        case let .partyDetail(id):
+                            PartyDetailView(partyId: id)
+                        case .settings:
+                            SettingsView()
+                        default:
+                            EmptyView() // onboarding routes never belong in the signed-in stack
+                        }
+                        }
+                        .shellBackdrop()
                     }
-                    }
-                    .shellBackdrop()
+                }
+                // Added to the system's leading inset, which already covers part of the rail.
+                .safeAreaPadding(.leading, railShown ? NavRail.collapsedWidth - 60 : 0)
+                .focusSection()
+                .overlay {
+                    // The open rail dims the page; the page never reflows under it.
+                    Color.black.opacity(railFocus == nil ? 0 : 0.35).ignoresSafeArea().allowsHitTesting(false)
+                }
+                if railShown {
+                    NavRail(path: $path, focus: $railFocus,
+                            onPage: { Task { await handFocusToPage(after: .milliseconds(500)) } })
+                        .disabled(!railEnabled)
+                        // The open rail covers the page's left edge, so Right never finds it on its own.
+                        .onMoveCommand { if $0 == .right { leaveRail() } }
+                        // Back from an open rail returns to the page, except on Home where it leaves the app.
+                        .onExitCommand(perform: path.isEmpty ? nil : leaveRail)
                 }
             }
+            .focusScope(shell)
+            .animation(.easeOut(duration: 0.2), value: railFocus == nil)
+            .task { await handFocusToPage() }
         } else {
             NavigationStack(path: $path) {
                 SelectUserView(path: $path)
@@ -245,118 +292,5 @@ struct RootView: View {
                     }
             }
         }
-    }
-}
-
-/// App shell sidebar: search, one entry per accessible library, playlists,
-/// settings, and the account row (sign-out). `.focusSection()` (applied by
-/// the caller) keeps D-pad moves clean between here and the content pane.
-struct Sidebar: View {
-    @Binding var path: NavigationPath
-    @Environment(AuthService.self) private var auth
-    @Environment(LibraryStore.self) private var libraryStore
-    @FocusState private var focused: String?
-    @State private var accountActions = false
-    @State private var music = MusicPlayer.shared
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image("FliksLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 52)
-                .padding(.leading, 16)
-                .padding(.bottom, 24)
-
-            SidebarRow(label: tr("sidebar.search"), systemImage: "magnifyingglass", focusID: "search", focused: $focused) {
-                path.append(Route.search)
-            }
-
-            if !libraryStore.visible.isEmpty {
-                Text(tr("home.libraries"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 14)
-                    .padding(.bottom, 2)
-                ForEach(libraryStore.visible) { lib in
-                    SidebarRow(label: lib.name, systemImage: lib.symbol, focusID: "lib:\(lib.id)",
-                               indent: true, focused: $focused) {
-                        path.append(Route.library(id: lib.id))
-                    }
-                }
-            }
-
-            SidebarRow(label: tr("sidebar.playlists"), systemImage: "list.and.film", focusID: "playlists", focused: $focused) {
-                path.append(Route.playlists)
-            }
-
-            if let track = music.current {
-                SidebarRow(label: tr("sidebar.now_playing"), systemImage: music.isPlaying ? "waveform" : "music.note",
-                           focusID: "nowPlaying", focused: $focused) {
-                    if !MusicPlayer.shared.nowPlayingOpen { path.append(Route.nowPlaying) }
-                }
-                .accessibilityHint(track.title)
-            }
-
-            Spacer()
-
-            SidebarRow(label: tr("common.settings"), systemImage: "gearshape", focusID: "settings", focused: $focused) {
-                path.append(Route.settings)
-            }
-
-            SidebarRow(label: auth.currentUser?.username ?? "", systemImage: "person.crop.circle.fill",
-                       focusID: "account", focused: $focused) {
-                accountActions = true
-            }
-            .confirmationDialog(auth.currentUser?.username ?? "", isPresented: $accountActions,
-                                titleVisibility: .visible) {
-                Button(tr("sidebar.switch_user")) { auth.switchUser() }
-                Button(tr("root.sign_out"), role: .destructive) { Task { await auth.logout() } }
-                Button(tr("common.cancel"), role: .cancel) {}
-            }
-        }
-        .padding(.leading, 44)
-        .padding(.trailing, 12)
-        .padding(.top, 40)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .animation(.easeInOut(duration: 0.15), value: focused)
-        .task { await libraryStore.load() }
-    }
-}
-
-/// A flat, focusable sidebar row: focus = white pill + black text, no system
-/// button lift — every row shares the exact same size in all three states
-/// (plain / selected-adjacent / focused).
-private struct SidebarRow: View {
-    let label: String
-    let systemImage: String
-    let focusID: String
-    var indent = false
-    var focused: FocusState<String?>.Binding
-    var action: () -> Void
-
-    private var isFocused: Bool { focused.wrappedValue == focusID }
-
-    var body: some View {
-        Button(action: action) {
-            Label(label, systemImage: systemImage)
-                .font(.body)
-                .foregroundStyle(isFocused ? Color.black : Color.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 12)
-                .padding(.horizontal, 16)
-                .padding(.leading, indent ? 18 : 0)
-        }
-        .buttonStyle(SidebarButtonStyle())
-        .background(RoundedRectangle(cornerRadius: 12).fill(isFocused ? Color.white : Color.clear))
-        .scaleEffect(isFocused ? 1.05 : 1.0)
-        .focused(focused, equals: focusID)
-    }
-}
-
-private struct SidebarButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.opacity(configuration.isPressed ? 0.7 : 1)
     }
 }

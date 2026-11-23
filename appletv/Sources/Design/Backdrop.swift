@@ -55,7 +55,7 @@ private struct ShellBackdrop: ViewModifier {
 /// place. Two layers rather than one fading view — a single view dropping to
 /// `nil` between sources would expose the black root, and a symmetric
 /// cross-dissolve would dim at the halfway point.
-private struct CrossfadeImage: View {
+struct CrossfadeImage: View {
     let url: String?
     var blurRadius: CGFloat = 0
     var duration: Double = 0.6

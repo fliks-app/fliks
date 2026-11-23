@@ -19,6 +19,7 @@ struct HomeSettings: Codable {
 }
 
 enum HomeSectionType: String {
+    case heroCarousel = "hero-carousel"
     case watchParties = "watch-parties"
     case receivedRecommendations = "received-recommendations"
     case libraries
@@ -51,11 +52,12 @@ struct ResolvedHomeSection: Identifiable {
     private static let storageKey = "home.settings"
     private static let libraryRecentPrefix = "library-recent:"
     private static let builtinOrder = [
-        "watch-parties", "received-recommendations", "libraries", "continue-watching",
+        "hero-carousel", "watch-parties", "received-recommendations", "libraries", "continue-watching",
         "recommendations", "likes", "recently-added", "playlists", "coming-soon",
     ]
     private static let defaultSettings = HomeSettings(
-        order: builtinOrder.map { HomeSectionPref(key: $0, visible: true) },
+        // The sidebar lists the libraries: their zone shows once a layout asks for it.
+        order: builtinOrder.map { HomeSectionPref(key: $0, visible: $0 != "libraries") },
         recentlyAddedMode: .file
     )
 
@@ -119,6 +121,11 @@ struct ResolvedHomeSection: Identifiable {
         if partiesSupported, !seen.contains("watch-parties") {
             merged.insert(HomeSectionPref(key: "watch-parties", visible: true), at: 0)
             seen.insert("watch-parties")
+        }
+        // The carousel is pinned first, saved layout or not.
+        if !seen.contains("hero-carousel") {
+            merged.insert(HomeSectionPref(key: "hero-carousel", visible: true), at: 0)
+            seen.insert("hero-carousel")
         }
         for key in builtins where !seen.contains(key) {
             merged.append(HomeSectionPref(key: key, visible: true))

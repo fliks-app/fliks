@@ -7,6 +7,7 @@ struct LibraryView: View {
     let libraryId: Int
     var onSelectMedia: (Int, MediaKind) -> Void
     var onSelectArtist: (Int) -> Void
+    var onPlay: (_ mediaFileId: Int, _ mediaId: Int, _ episodeId: Int?) -> Void
 
     private enum LoadState {
         case loading
@@ -24,6 +25,7 @@ struct LibraryView: View {
     @State private var sortBy = "title"
     @State private var sortOrder = "ASC"
     @State private var typeFilter: MediaKind?
+    @State private var featured: [Media] = []
     @Environment(LibraryStore.self) private var libraries
     @Environment(Backdrop.self) private var backdrop
 
@@ -39,20 +41,36 @@ struct LibraryView: View {
                                  onSelectAlbum: { onSelectMedia($0, .album) }, onSelectArtist: onSelectArtist)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        header
-                        content(for: state)
+                    VStack(alignment: .leading, spacing: 0) {
+                        if let library, !featured.isEmpty {
+                            HeroCarousel(items: featured, label: library.name, onPlay: onPlay,
+                                         onDetails: { onSelectMedia($0.id, $0.type) })
+                        }
+                        VStack(alignment: .leading, spacing: 24) {
+                            header
+                            content(for: state)
+                        }
+                        .padding(.horizontal, 60)
+                        .padding(.vertical, featured.isEmpty ? 48 : 24)
                     }
-                    .padding(.horizontal, 60)
-                    .padding(.vertical, 48)
                 }
+                .ignoresSafeArea(edges: featured.isEmpty ? [] : .top)
             }
         }
         .task {
             await libraries.load()
             guard !isMusic else { return }
+            async let picks = Self.featured(libraryId)
             await load(reset: true)
+            featured = await picks
         }
+    }
+
+    private static func featured(_ libraryId: Int) async -> [Media] {
+        guard FeaturedItem.supported else { return [] }
+        let picks: [FeaturedItem]? = try? await APIClient.shared.list("/api/home/featured",
+                                                                     query: ["libraryId": String(libraryId)])
+        return (picks ?? []).map(\.media)
     }
 
     @ViewBuilder
