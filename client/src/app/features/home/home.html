@@ -323,25 +323,29 @@
     </app-horizontal-scroller>
   }
 
-  @if (showPartyEmpty()) {
-    <section appTvRow class="flex flex-col items-start gap-3">
-      <h2 class="text-lg font-bold">{{ 'party.rail_title' | translate }}</h2>
-      <p class="text-base-content/70">{{ 'party.rail_empty' | translate }}</p>
-      <button type="button" class="btn btn-primary btn-sm" (click)="newParty()">{{ 'party.new_party' | translate }}</button>
-    </section>
-  }
-
-  <!-- Compact box (icon beside text) up through tablet portrait; stacked box
+  <!-- Compact boxes (icon beside text) up through tablet portrait; stacked boxes side by side
        only on desktop / tablet landscape (lg+). -->
-  <a routerLink="/app-settings/home"
-     data-home-focus="customize"
-     class="flex items-center gap-3 lg:block w-full lg:max-w-md rounded-2xl bg-base-content/5 hover:bg-base-content/10 focus-visible:bg-base-content/10 p-4 lg:p-6 transition-colors">
-    <app-lucide-icon name="layout-grid" class="h-6 w-6 lg:h-7 lg:w-7 shrink-0 text-base-content/70" />
-    <div class="min-w-0">
-      <h2 class="lg:mt-4 text-base lg:text-lg font-semibold">{{ 'home.customize' | translate }}</h2>
-      <p class="mt-0.5 lg:mt-1 text-sm text-base-content/60">{{ 'home.customize_hint' | translate }}</p>
-    </div>
-  </a>
+  <section appTvRow class="flex flex-col lg:flex-row gap-3">
+    @if (showPartyEmpty()) {
+      <button type="button" data-home-focus="new-party" (click)="newParty()"
+              class="flex items-center gap-3 lg:block w-full lg:max-w-md text-left rounded-2xl bg-base-content/5 hover:bg-base-content/10 focus-visible:bg-base-content/10 p-4 lg:p-6 transition-colors">
+        <app-lucide-icon name="users" class="h-6 w-6 lg:h-7 lg:w-7 shrink-0 text-base-content/70" />
+        <div class="min-w-0">
+          <h2 class="lg:mt-4 text-base lg:text-lg font-semibold">{{ 'party.watch_together' | translate }}</h2>
+          <p class="mt-0.5 lg:mt-1 text-sm text-base-content/60">{{ 'party.rail_empty' | translate }}</p>
+        </div>
+      </button>
+    }
+    <a routerLink="/app-settings/home"
+       data-home-focus="customize"
+       class="flex items-center gap-3 lg:block w-full lg:max-w-md rounded-2xl bg-base-content/5 hover:bg-base-content/10 focus-visible:bg-base-content/10 p-4 lg:p-6 transition-colors">
+      <app-lucide-icon name="layout-grid" class="h-6 w-6 lg:h-7 lg:w-7 shrink-0 text-base-content/70" />
+      <div class="min-w-0">
+        <h2 class="lg:mt-4 text-base lg:text-lg font-semibold">{{ 'home.customize' | translate }}</h2>
+        <p class="mt-0.5 lg:mt-1 text-sm text-base-content/60">{{ 'home.customize_hint' | translate }}</p>
+      </div>
+    </a>
+  </section>
 
 </div>
 </div>

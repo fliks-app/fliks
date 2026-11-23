@@ -6,8 +6,14 @@ import UIKit
 /// resolves it once, at `.full` size.
 @Observable final class Backdrop {
     var url: String?
-    /// The hero carousel on screen owns the picture: `scroll` runs from 0 at rest to 1 once scrolled past it.
-    private(set) var hero: (owner: UUID, scroll: Double)?
+    /// The hero carousel on screen owns the picture.
+    private(set) var hero: UUID?
+}
+
+/// The hero's scroll on the page it sits on, from 0 at rest to 1 once scrolled past: each page veils its own backdrop.
+struct HeroScrollKey: PreferenceKey {
+    static let defaultValue: Double? = nil
+    static func reduce(value: inout Double?, nextValue: () -> Double?) { value = value ?? nextValue() }
 }
 
 extension Backdrop {
@@ -24,19 +30,20 @@ extension Backdrop {
         url = path
     }
 
-    func claimHero(_ owner: UUID, url path: String?, scroll: Double) {
+    func claimHero(_ owner: UUID, url path: String?) {
         if let path { url = path }
-        hero = (owner, scroll)
+        hero = owner
     }
 
     /// The page leaving can disappear after the next one claimed: only the owner lets go.
     func releaseHero(_ owner: UUID) {
-        if hero?.owner == owner { hero = nil }
+        if hero == owner { hero = nil }
     }
 }
 
 struct BackdropView: View {
     let backdrop: Backdrop
+    var heroScroll: Double?
 
     var body: some View {
         // Same stack as the web client's page background: the fanart unblurred
@@ -46,17 +53,20 @@ struct BackdropView: View {
             // Clamp so a changing image never resizes the root layout.
             CrossfadeImage(url: ImageURL.build(backdrop.url, size: .full))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if let hero = backdrop.hero { Self.heroVeil(hero.scroll) } else { Self.base.opacity(Self.ambient) }
+            // One veil whose stops move: swapping two views cross-fades them and the fanart shows through halfway.
+            Self.heroVeil(heroScroll ?? 1)
             Color.fliks("primary").opacity(0.15)
         }
-        .animation(.easeInOut(duration: 0.6), value: backdrop.hero == nil)
+        .animation(.easeInOut(duration: 0.6), value: heroScroll == nil)
+        // Fades as one layer in a push: faded layer by layer, the veil thins over the fanart.
+        .drawingGroup()
         .ignoresSafeArea()
     }
 
     private static let base = Color(red: 29 / 255, green: 35 / 255, blue: 42 / 255)
     private static let ambient = 0.95
 
-    /// The web client's hero veil: light at the top and right, solid behind the text, the ambient veil once scrolled.
+    /// The web client's hero veil: light at the top and right, solid behind the text, the ambient veil from 1 on.
     private static func heroVeil(_ scroll: Double) -> some View {
         let v = ambient * min(1, 2 * scroll)
         // Each side stop lets through a linear mix of the hero and ambient amounts, so a scroll never brightens.
@@ -82,7 +92,7 @@ private struct ShellBackdrop: ViewModifier {
     @Environment(Backdrop.self) private var backdrop
 
     func body(content: Content) -> some View {
-        content.background { BackdropView(backdrop: backdrop).ignoresSafeArea() }
+        content.backgroundPreferenceValue(HeroScrollKey.self) { BackdropView(backdrop: backdrop, heroScroll: $0).ignoresSafeArea() }
     }
 }
 
@@ -106,6 +116,12 @@ struct CrossfadeImage: View {
     /// Bumped by every transition so a completion that belongs to a superseded
     /// one can't promote its image.
     @State private var generation = 0
+
+    /// A new page's backdrop starts on the picture already on screen instead of fading it in again.
+    init(url: String?) {
+        self.url = url
+        _base = State(initialValue: url.flatMap(URL.init(string:)).flatMap { ImageCache.memory.object(forKey: $0 as NSURL) })
+    }
 
     var body: some View {
         GeometryReader { geo in

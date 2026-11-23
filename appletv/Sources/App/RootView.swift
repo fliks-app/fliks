@@ -180,14 +180,17 @@ struct RootView: View {
                         onSelectLibrary: { path.append(Route.library(id: $0)) },
                         onSelectPlaylist: { path.append(Route.playlistDetail(id: $0)) },
                         onSelectParty: { path.append(Route.partyDetail(id: $0)) },
-                        onPlay: { path.append(Route.player(mediaFileId: $0, mediaId: $1, episodeId: $2, startAt: nil)) }
+                        onPlay: { path.append(Route.player(mediaFileId: $0, mediaId: $1, episodeId: $2, startAt: nil)) },
+                        onCustomize: { path.append(Route.homeLayout) }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // Back on Home shows the rail first, then leaves the app (the system's own Back from the rail).
                     .onExitCommand(perform: railFocus == nil ? { railFocus = "home" } : nil)
                     // Backdrop as a background (not a ZStack sibling) so a loading/
                     // changing image can never resize the shell.
-                    .background { BackdropView(backdrop: backdrop).ignoresSafeArea() }
+                    .backgroundPreferenceValue(HeroScrollKey.self) {
+                        BackdropView(backdrop: backdrop, heroScroll: $0).ignoresSafeArea()
+                    }
                     .navigationDestination(for: Route.self) { route in
                         Group {
                         switch route {
@@ -252,6 +255,8 @@ struct RootView: View {
                             PartyDetailView(partyId: id)
                         case .settings:
                             SettingsView()
+                        case .homeLayout:
+                            HomeLayoutView()
                         default:
                             EmptyView() // onboarding routes never belong in the signed-in stack
                         }

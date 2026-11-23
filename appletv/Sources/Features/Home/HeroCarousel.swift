@@ -45,16 +45,16 @@ struct HeroCarousel: View {
         .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .bottomLeading)
         .background {
             GeometryReader { geo in
-                Color.clear.onChange(of: geo.frame(in: .global).minY) { _, y in
+                Color.clear.onChange(of: geo.frame(in: .global).minY, initial: true) { _, y in
                     // Two fifths of the screen past its top, the backdrop has its ambient look back.
                     scroll = min(1, max(0, -y / 432))
-                    claim()
                 }
             }
         }
         .onAppear(perform: claim)
         .onChange(of: current?.id) { claim() }
         .onDisappear { backdrop.releaseHero(owner) }
+        .preference(key: HeroScrollKey.self, value: scroll)
         .focusSection()
         .task(id: "\(index)-\(running)") {
             guard running else { return }
@@ -66,7 +66,7 @@ struct HeroCarousel: View {
     }
 
     private func claim() {
-        backdrop.claimHero(owner, url: current?.fanartUrl, scroll: scroll)
+        backdrop.claimHero(owner, url: current?.fanartUrl)
     }
 
     private func slide(_ m: Media) -> some View {

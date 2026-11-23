@@ -20,6 +20,7 @@ enum Route: Hashable {
     case partyLobby
     case partyDetail(id: Int)
     case settings
+    case homeLayout
 
     // `episodeId` is nil for a movie; `startAt` is an explicit start in seconds
     // (0 = from start, nil = the server resumes); `startPaused` and `launch` carry a remote handoff's pause and track picks.
