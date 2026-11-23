@@ -156,6 +156,7 @@ Audience legend: B = broadcast to every connection; U(x) = connections of user x
 | 36a | `session.changed` | U(account), no household hook | `{epoch: number|null, itemId: number|null, state: string|null, ownerTargetId: string|null}` (`session.md` rule 15) |
 | 36c | `likes.changed` | U(account), no household hook | `{mediaId: number, seasonId?: number, itemId?: number, liked: boolean}` (`social.md` rule 60) |
 | 36b | `session.superseded` | C (the previous owner's connection, or its polled queue) | `{sessionId: string, byDeviceName: string|null, epoch: number}` (`session.md` rule 15) |
+| 36d | `stream.reload` | C (the connection playing `sessionId`, else every connection of its user: clients filter on the sid) | `{sessionId: string}`: the engine fell back from hardware encoding and the session's playlists now name another init; the player reloads at its position |
 | 37 | `social.followed` / `social.follow_request` | U(target user) | `{userId: number, username: string, avatar: string|null}` |
 | 38 | `social.follow_accepted` | U(requester) | `{userId, username, avatar: string|null}` |
 | 39 | `social.content_recommended` | U(recipient) | `{userId, username, avatar: string|null, mediaTitle: string}` |

@@ -26,6 +26,7 @@ function setup() {
     onTogglePlay: vi.fn(),
     onSeek: vi.fn(),
     savePosition: vi.fn(async () => {}),
+    reloadStream: vi.fn(),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -41,7 +42,7 @@ function setup() {
   });
   const controller = TestBed.inject(RemoteController);
   controller.attach(host);
-  return { controller, output, remoteService, host, session };
+  return { controller, output, remoteService, host, session, sse: TestBed.inject(SseService) as unknown as ReturnType<typeof sseStub> };
 }
 
 describe('RemoteController track and quality commands', () => {
@@ -89,5 +90,17 @@ describe('RemoteController track and quality commands', () => {
     expect(remoteService.markApplied).toHaveBeenCalledWith('s');
     expect(host.savePosition).toHaveBeenCalledWith(true);
     expect(session.stop).toHaveBeenCalled();
+  });
+});
+
+describe('RemoteController stream.reload', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('reloads the stream of its own session only', () => {
+    const { host, sse } = setup();
+    sse.deliver({ type: 'stream.reload', sessionId: 'other' });
+    expect(host.reloadStream).not.toHaveBeenCalled();
+    sse.deliver({ type: 'stream.reload', sessionId: 'sid' });
+    expect(host.reloadStream).toHaveBeenCalledTimes(1);
   });
 });

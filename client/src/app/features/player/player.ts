@@ -714,6 +714,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     onTogglePlay: () => this.onTogglePlay(),
     onSeek: (t) => this.onSeek(t),
     savePosition: (force) => this.savePosition(force),
+    reloadStream: () => {
+      if (!this.elsewhere()) void this.reloadStream();
+    },
   }), null);
   protected readonly party = inject(PartyService);
   protected readonly reactions = inject(ReactionsService);

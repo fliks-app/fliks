@@ -15,6 +15,8 @@ import { PlaybackSession } from './playback/playback-session';
 import { PlayerSettingsService } from './player-settings.service';
 import { ServerConfigService } from './server-config.service';
 import { SessionSyncService, type SessionPlayer } from './session-sync.service';
+import { SseService } from './sse.service';
+import { sseStub } from '../../testing/sse.stub';
 import { ToastService } from './toast.service';
 import { TrackManagerService, type SubtitleOption } from './track-manager.service';
 
@@ -127,6 +129,7 @@ function setup(over: { autoSelect?: (subs: SubtitleOption[]) => SubtitleOption |
       { provide: TrackManagerService, useValue: trackManager },
       { provide: MediaService, useValue: mediaService },
       { provide: ToastService, useValue: { error: vi.fn() } },
+      { provide: SseService, useValue: sseStub() },
       { provide: SessionSyncService, useValue: { registerPlayer: (p: SessionPlayer) => (players.push(p), () => {}), handleSuperseded: vi.fn() } },
     ],
   });

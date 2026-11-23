@@ -70,5 +70,6 @@
   {"payload":{"detail":"d","outcome":"grabbed","scope":{"family":"video","groupId":null,"itemId":null,"mediaId":1}},"type":"acquisition.grab-best"},
   {"payload":{"pluginId":"p","rows":[{"id":1}]},"type":"acquisition.queue"},
   {"payload":{"pluginId":"p"},"type":"acquisition.sources"},
-  {"kind":"add","requestId":1,"status":"approved","type":"request.changed"}
+  {"kind":"add","requestId":1,"status":"approved","type":"request.changed"},
+  {"sessionId":"s","type":"stream.reload"}
 ]

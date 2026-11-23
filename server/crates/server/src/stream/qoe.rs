@@ -1,8 +1,8 @@
 //! The one consumer of the engine feed for QoE: served segments, rung and hardware changes, and the
 //! running-job count behind `serverLoad.activeTranscodes` (`qoe.md` rule 35). Presence stays in `presence::feed`.
-use super::system::served_rung;
+use super::system::{emit_to_player, served_rung};
 use crate::sync::MutexExt;
-use crate::{engine::Feed, qoe::SessionRef, state::AppState};
+use crate::{engine::Feed, events::SseEvent, qoe::SessionRef, state::AppState};
 use fliks_domain::qoe::read_cmcd_raw;
 use fliks_engine_core::{
     api::{EngineEvent, JobState, SessionKind, SessionSnapshot},
@@ -136,6 +136,20 @@ fn observe(st: &AppState, jobs: &Jobs, ev: &EngineEvent, segment_s: f64) {
                 hw.as_ref().and_then(|v| v.as_str()).unwrap_or(""),
             );
         }
+        EngineEvent::HwFallback {
+            session_id: Some(session_id),
+            ..
+        } => {
+            if let Some(live) = st.presence.peek(session_id) {
+                emit_to_player(
+                    st,
+                    &live,
+                    SseEvent::StreamReload {
+                        session_id: session_id.clone(),
+                    },
+                );
+            }
+        }
         EngineEvent::SegmentServed {
             session_id,
             waited_ms,
@@ -165,6 +179,90 @@ fn observe(st: &AppState, jobs: &Jobs, ev: &EngineEvent, segment_s: f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn playing(sid: &str, user: Option<i32>) -> crate::presence::LiveSession {
+        use crate::events::event::PlayState;
+        crate::presence::LiveSession {
+            session_id: sid.into(),
+            user_id: user,
+            username: None,
+            media_file_id: 1,
+            media_title: None,
+            media_type: Some("movie".into()),
+            poster_url: None,
+            fanart_url: None,
+            profile_hash: None,
+            quality: None,
+            qualities: None,
+            attributed_user_id: None,
+            autoplay_blocked: false,
+            has_next: false,
+            kind: SessionKind::Transcode,
+            device_label: None,
+            system_name: None,
+            app_version: None,
+            sse_connection_id: None,
+            owner: None,
+            started_at: 0.0,
+            last_beat: 0.0,
+            position: 0.0,
+            state: PlayState::Playing,
+            episode_label: None,
+            item_id: None,
+            media_id: None,
+            episode_id: None,
+            duration: None,
+            supports_volume: None,
+            subtitle_id: None,
+            audio_track_index: None,
+            subtitle_track_index: None,
+            volume: None,
+            muted: None,
+            playback_rate: 1.0,
+            stem_mode: None,
+            vocal_level: None,
+            pitch: None,
+            stems_available: None,
+            queue: None,
+            audio_plan: None,
+            source_fps: None,
+            bitrate_by_quality: None,
+            hdr_ladder: false,
+            transcode_reasons: vec![],
+            client_tonemap: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_hardware_fallback_tells_the_session_owner_to_reload() {
+        use crate::events::event::Bus;
+        let pool = sqlx::PgPool::connect_lazy("postgres://unused@localhost/unused").unwrap();
+        let st = AppState::new(
+            pool,
+            crate::config::Config::from_lookup(|_| None),
+            "0123456789abcdef0123456789abcdef",
+        );
+        st.presence.create(playing("s1", Some(3)));
+        let mut bus = st.hub.subscribe();
+        let fallback = |sid: Option<&str>| -> EngineEvent {
+            serde_json::from_value(serde_json::json!({
+                "type": "HwFallback", "jobKey": "k", "sessionId": sid,
+                "from": "vaapi", "to": "none", "stderrTail": []
+            }))
+            .unwrap()
+        };
+        let jobs = Jobs::default();
+        for ev in [fallback(None), fallback(Some("other"))] {
+            observe(&st, &jobs, &ev, DEFAULT_SEGMENT_S);
+        }
+        assert!(bus.try_recv().is_err(), "no session, no frame");
+        observe(&st, &jobs, &fallback(Some("s1")), DEFAULT_SEGMENT_S);
+        let got = bus.try_recv().expect("a frame");
+        assert!(
+            matches!(&*got, Bus::Sse(SseEvent::StreamReload { session_id }) if session_id == "s1"),
+            "{got:?}"
+        );
+    }
 
     #[test]
     fn a_resynced_run_ends_on_the_engines_own_job_key() {

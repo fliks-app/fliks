@@ -13,6 +13,8 @@ export interface RemoteHost {
   duration(): number;
   onTogglePlay(): void;
   onSeek(time: number): void;
+  /** Reloads this device's own stream at its position; a no-op while the session plays elsewhere. */
+  reloadStream(): void;
   savePosition(force: boolean): Promise<void>;
 }
 
@@ -29,6 +31,7 @@ export class RemoteController {
   private host!: RemoteHost;
   private sub: Subscription | null = null;
   private adminSub: Subscription | null = null;
+  private reloadSub: Subscription | null = null;
 
   /** Admin message overlay, rendered inside the player container so it stays visible in
    *  browser fullscreen (the global toast layer sits outside the fullscreened element). */
@@ -41,11 +44,17 @@ export class RemoteController {
     this.host = host;
     this.sub = this.remoteService.validated.subscribe((cmd) => void this.applyRemoteCommand(cmd));
     this.adminSub = this.sseService.on('player.command').subscribe((event) => this.onAdminCommand(event));
+    // A hardware fallback moved the session's init: a player that fetched the old one reloads.
+    this.reloadSub = this.sseService.on('stream.reload').subscribe((e) => {
+      const sid = this.host.activeSessionId();
+      if (sid && e['sessionId'] === sid) this.host.reloadStream();
+    });
   }
 
   dispose(): void {
     this.sub?.unsubscribe();
     this.adminSub?.unsubscribe();
+    this.reloadSub?.unsubscribe();
     if (this.adminMessageTimer) clearTimeout(this.adminMessageTimer);
   }
 

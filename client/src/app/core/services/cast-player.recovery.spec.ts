@@ -17,6 +17,8 @@ import { CastService } from './cast.service';
 import { CastPlayerService } from './cast-player.service';
 import { NetworkService } from './network.service';
 import { SessionSyncService } from './session-sync.service';
+import { SseService } from './sse.service';
+import { sseStub } from '../../testing/sse.stub';
 import { ToastService } from './toast.service';
 
 type Priv = { reloadCastStream: (...a: unknown[]) => Promise<string>; qoeReporter: unknown; controller: () => Promise<unknown> };
@@ -54,6 +56,7 @@ async function setup() {
       { provide: TrackManagerService, useValue: {} },
       { provide: NowPlayingMetadataService, useValue: {} },
       { provide: QoeReporter, useValue: { record: vi.fn() } },
+      { provide: SseService, useValue: sseStub() },
       { provide: SessionSyncService, useValue: { registerPlayer: () => () => {} } },
     ],
   });
