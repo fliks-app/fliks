@@ -26,6 +26,8 @@ export class BackgroundService {
   private readonly ambient = signal<string | null>(null);
   private ambientAt = 0;
   private rolling = false;
+  /** Bumped by every claim, so a consumer can tell a claim made after some moment from one made before it. */
+  readonly claims = signal(0);
 
   private readonly currentPath = computed(() => {
     const nav = this.router.lastSuccessfulNavigation();
@@ -48,7 +50,9 @@ export class BackgroundService {
 
   /** Declare the media page's fanart; `null` means not known yet, and holds. */
   set(owner: object, url: string | null, opts?: { blur?: boolean; hero?: HeroVeil }): void {
-    if (url) this.claim.set({ owner, url, blur: !!opts?.blur, hero: opts?.hero ?? null });
+    if (!url) return;
+    this.claim.set({ owner, url, blur: !!opts?.blur, hero: opts?.hero ?? null });
+    this.claims.update((n) => n + 1);
   }
 
   release(owner: object): void {

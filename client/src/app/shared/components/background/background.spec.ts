@@ -19,7 +19,7 @@ describe('BackgroundComponent', () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: Router, useValue: { events: new Subject() } },
-        { provide: BackgroundService, useValue: { url, blur, hero } },
+        { provide: BackgroundService, useValue: { url, blur, hero, claims: signal(0) } },
         { provide: DeviceService, useValue: { isTv: () => false, reducedEffects: () => false } },
       ],
     });
@@ -36,7 +36,7 @@ describe('BackgroundComponent', () => {
   });
 
   it('shades a hero claim continuously from the scroll position, never leaving the veil off', () => {
-    const { fixture, hero, events } = hero$();
+    const { fixture, hero, events, claims } = hero$();
     const bottomAlpha = () => {
       fixture.detectChanges();
       const bg = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('.app-bg-veil')!.style.background;
@@ -56,8 +56,14 @@ describe('BackgroundComponent', () => {
     expect(bottomAlpha()).toBeCloseTo(0.95, 2);
     scrollTo(0);
     events.next(new NavigationStart(1, '/x'));
-    expect(bottomAlpha()).toBeCloseTo(0.95, 2);
+    fixture.detectChanges();
+    expect(bottomAlpha()).toBeNaN();
     events.next(new NavigationEnd(1, '/x', '/x'));
+    vi.advanceTimersByTime(50);
+    expect(bottomAlpha()).toBeNaN();
+    claims.update((n) => n + 1);
+    fixture.detectChanges();
+    vi.advanceTimersByTime(50);
     expect(bottomAlpha()).toBe(0);
     hero.set(null);
     fixture.detectChanges();
@@ -69,13 +75,14 @@ describe('BackgroundComponent', () => {
 function hero$() {
   const hero = signal<'full' | 'compact' | null>('full');
   const events = new Subject<unknown>();
+  const claims = signal(0);
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
       { provide: Router, useValue: { events } },
-      { provide: BackgroundService, useValue: { url: signal('/f.jpg'), blur: signal(false), hero } },
+      { provide: BackgroundService, useValue: { url: signal('/f.jpg'), blur: signal(false), hero, claims } },
       { provide: DeviceService, useValue: { isTv: () => false, reducedEffects: () => true } },
     ],
   });
-  return { fixture: TestBed.createComponent(BackgroundComponent), hero, events };
+  return { fixture: TestBed.createComponent(BackgroundComponent), hero, events, claims };
 }

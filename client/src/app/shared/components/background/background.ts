@@ -1,5 +1,5 @@
 import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
-import { NavigationCancel, NavigationEnd, NavigationError, NavigationStart, Router } from '@angular/router';
+import { NavigationCancel, NavigationError, NavigationStart, Router } from '@angular/router';
 import { DeviceService } from '../../../core/services/device.service';
 import { BackgroundService } from '../../../core/services/background.service';
 import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
@@ -24,11 +24,11 @@ export class BackgroundComponent {
   private readonly router = inject(Router);
   /** 0 at the top of the page, 1 once scrolled two fifths of the viewport. */
   private readonly scroll = signal(0);
-  /** A navigation resets the scroll to the top before the leaving page lets go of its claim: held at 1 meanwhile, or the picture would show through a light veil. */
-  private readonly navigating = signal(false);
-  /** How much of the hero look is applied, 0 to 1: it follows the claim over a short tween, so a claim released or swapped never jumps the veil. */
+  /** How much of the hero look is applied, 0 to 1. It rises over the length of the image crossfade, so the light veil only reveals the picture as it fades in, and drops at once: a navigation resets the scroll to the top, which would draw the hero look for the frames a falling tween takes. */
   private readonly mix = signal(0);
   private readonly veiled = computed(() => this.mix() > 0);
+  /** `claims` when the navigation started: the leaving page's hero claim outlives the route change by a few frames and must not bring the hero look back. */
+  private readonly heldAt = signal(-1);
   private variant: 'full' | 'compact' = 'full';
   private tween = 0;
 
@@ -36,7 +36,7 @@ export class BackgroundComponent {
   protected readonly heroVeil = computed(() => {
     const m = this.mix();
     if (m === 0) return null;
-    const p = 1 - m * (1 - (this.navigating() ? 1 : this.scroll()));
+    const p = 1 - m * (1 - this.scroll());
     const [from, to] = this.variant === 'compact' ? [12, 45] : [35, 72];
     const rgba = (a: number) => `rgba(29, 35, 42, ${a.toFixed(3)})`;
     // The vertical layer reaches the ambient alpha by half way, so the stacked layers never let more picture through than either end.
@@ -63,12 +63,16 @@ export class BackgroundComponent {
     effect((onCleanup) => {
       const hero = this.bg.hero();
       if (hero) this.variant = hero;
-      const target = hero ? 1 : 0;
+      const target = hero && this.bg.claims() !== this.heldAt() ? 1 : 0;
       const from = untracked(() => this.mix());
       if (from === target) return;
+      if (target === 0) {
+        this.mix.set(0);
+        return;
+      }
       const start = performance.now();
       const step = (now: number) => {
-        const t = this.reduced ? 1 : Math.min(1, (now - start) / 300);
+        const t = this.reduced ? 1 : Math.min(1, (now - start) / 1500);
         this.mix.set(from + (target - from) * t);
         if (t < 1) this.tween = requestAnimationFrame(step);
       };
@@ -83,8 +87,12 @@ export class BackgroundComponent {
       onCleanup(() => window.removeEventListener('scroll', read));
     });
     const sub = this.router.events.subscribe((e) => {
-      if (e instanceof NavigationStart) this.navigating.set(true);
-      else if (e instanceof NavigationEnd || e instanceof NavigationCancel || e instanceof NavigationError) this.navigating.set(false);
+      if (e instanceof NavigationStart) {
+        this.heldAt.set(untracked(() => this.bg.claims()));
+      } else if (e instanceof NavigationCancel || e instanceof NavigationError) {
+        // The page stays: its claim is still the current one.
+        this.heldAt.set(-1);
+      }
     });
     inject(DestroyRef).onDestroy(() => sub.unsubscribe());
     let last: Layer = { url: null, blur: false };
