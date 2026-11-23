@@ -38,11 +38,11 @@
             <div appTvRow class="flex flex-wrap items-center gap-2 mt-5">
               @if (opensDetail()) {
                 <a [routerLink]="detailLink()" data-home-focus="hero:primary" class="btn btn-primary">
-                  <svg lucideInfo class="size-5"></svg>{{ 'hero_carousel.details' | translate }}
+                  <svg [lucideIcon]="icons.Info" class="size-5"></svg>{{ 'hero_carousel.details' | translate }}
                 </a>
               } @else {
                 <button type="button" data-home-focus="hero:primary" class="btn btn-primary" (click)="play(s)">
-                  <svg lucidePlay class="size-5" fill="currentColor"></svg>{{ 'hero_carousel.play' | translate }}
+                  <svg [lucideIcon]="icons.Play" class="size-5" fill="currentColor"></svg>{{ 'hero_carousel.play' | translate }}
                 </button>
                 <a [routerLink]="detailLink()" class="btn btn-ghost">{{ 'hero_carousel.details' | translate }}</a>
               }

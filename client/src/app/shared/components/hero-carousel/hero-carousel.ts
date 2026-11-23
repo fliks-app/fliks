@@ -11,13 +11,14 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { TvRowDirective } from '../../directives/tv-row.directive';
 import { heroDesktopLayout } from '../hero-base/hero-base';
 import { HeroMetaRowComponent } from '../hero-base/hero-meta-row';
-import { LucideInfo, LucidePlay } from '@lucide/angular';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
 
 /** A few featured titles, one at a time: backdrop through the global background, text swapped with the keyframes in the stylesheet. */
 @Component({
   selector: 'app-hero-carousel',
-  imports: [RouterLink, TranslatePipe, ResolveUrlPipe, TvRowDirective, HeroMetaRowComponent, LucideInfo, LucidePlay, MobileFanartHeroComponent],
+  imports: [RouterLink, TranslatePipe, ResolveUrlPipe, TvRowDirective, HeroMetaRowComponent, LucideDynamicIcon, MobileFanartHeroComponent],
   templateUrl: './hero-carousel.html',
   styleUrl: './hero-carousel.css',
   host: {
@@ -32,6 +33,8 @@ import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
   },
 })
 export class HeroCarouselComponent {
+  protected readonly icons = icons;
+
   readonly items = input.required<Media[]>();
   readonly autoAdvanceMs = input(7000);
   readonly height = input<'full' | 'compact'>('full');
