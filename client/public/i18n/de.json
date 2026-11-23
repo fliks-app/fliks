@@ -6289,8 +6289,6 @@
     "label": "Empfohlene Titel",
     "play": "Abspielen",
     "details": "Details",
-    "go_to": "Titel {{n}} anzeigen",
-    "pause": "Karussell anhalten",
-    "resume": "Karussell fortsetzen"
+    "go_to": "Titel {{n}} anzeigen"
   }
 }

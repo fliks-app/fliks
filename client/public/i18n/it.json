@@ -6289,8 +6289,6 @@
     "label": "Titoli in evidenza",
     "play": "Riproduci",
     "details": "Dettagli",
-    "go_to": "Mostra il titolo {{n}}",
-    "pause": "Metti in pausa il carosello",
-    "resume": "Riprendi il carosello"
+    "go_to": "Mostra il titolo {{n}}"
   }
 }

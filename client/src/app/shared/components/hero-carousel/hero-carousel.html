@@ -64,14 +64,6 @@
             (focus)="go($index)"
           ></button>
         }
-        <button
-          type="button"
-          class="btn btn-ghost btn-circle btn-sm tv:hidden"
-          [attr.aria-label]="(userPaused() ? 'hero_carousel.resume' : 'hero_carousel.pause') | translate"
-          (click)="userPaused.set(!userPaused())"
-        >
-          @if (userPaused()) { <svg lucidePlay class="size-4" fill="currentColor"></svg> } @else { <svg lucidePause class="size-4" fill="currentColor"></svg> }
-        </button>
       </div>
     }
   </section>

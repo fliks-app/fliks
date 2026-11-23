@@ -6289,8 +6289,6 @@
     "label": "Featured titles",
     "play": "Play",
     "details": "Details",
-    "go_to": "Show title {{n}}",
-    "pause": "Pause the carousel",
-    "resume": "Resume the carousel"
+    "go_to": "Show title {{n}}"
   }
 }

@@ -6289,8 +6289,6 @@
     "label": "Titres à la une",
     "play": "Lecture",
     "details": "Détails",
-    "go_to": "Afficher le titre {{n}}",
-    "pause": "Mettre le carrousel en pause",
-    "resume": "Relancer le carrousel"
+    "go_to": "Afficher le titre {{n}}"
   }
 }

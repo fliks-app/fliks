@@ -11,13 +11,13 @@ import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
 import { TvRowDirective } from '../../directives/tv-row.directive';
 import { heroDesktopLayout } from '../hero-base/hero-base';
 import { HeroMetaRowComponent } from '../hero-base/hero-meta-row';
-import { LucideInfo, LucidePause, LucidePlay } from '@lucide/angular';
+import { LucideInfo, LucidePlay } from '@lucide/angular';
 import { MobileFanartHeroComponent } from '../mobile-fanart-hero';
 
 /** A few featured titles, one at a time: backdrop through the global background, text swapped with the keyframes in the stylesheet. */
 @Component({
   selector: 'app-hero-carousel',
-  imports: [RouterLink, TranslatePipe, ResolveUrlPipe, TvRowDirective, HeroMetaRowComponent, LucideInfo, LucidePause, LucidePlay, MobileFanartHeroComponent],
+  imports: [RouterLink, TranslatePipe, ResolveUrlPipe, TvRowDirective, HeroMetaRowComponent, LucideInfo, LucidePlay, MobileFanartHeroComponent],
   templateUrl: './hero-carousel.html',
   styleUrl: './hero-carousel.css',
   host: {
@@ -47,7 +47,6 @@ export class HeroCarouselComponent {
   protected readonly hovered = signal(false);
   protected readonly focused = signal(false);
   protected readonly hidden = signal(document.hidden);
-  protected readonly userPaused = signal(false);
   protected touchX = 0;
   /** The cached route is off screen: the timer stops and the global chrome is handed back. */
   private readonly parked = keepRouteFresh({
@@ -66,7 +65,7 @@ export class HeroCarouselComponent {
   });
   protected readonly running = computed(
     () =>
-      !this.reducedMotion && !this.userPaused() && !this.hovered() && !this.focused() && !this.hidden() && !this.parked() && this.items().length > 1,
+      !this.reducedMotion && !this.hovered() && !this.focused() && !this.hidden() && !this.parked() && this.items().length > 1,
   );
   protected readonly metaParts = computed(() => {
     const m = this.current();
