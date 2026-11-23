@@ -679,7 +679,9 @@ async fn data_import_marker_is_backfilled_from_completed_imports(pool: PgPool) {
         )
     };
     let migration = include_str!("../../../../migrations/1789000001090_audit-2026-11-21.sql");
-    let backfill = &migration[migration.find("-- The setup checklist reads").unwrap()..];
+    let start = migration.find("-- The setup checklist reads").unwrap();
+    let backfill = &migration[start..]
+        [..migration[start..].find("DO NOTHING;").unwrap() + "DO NOTHING;".len()];
     sqlx::query("INSERT INTO commands (name, status) VALUES ('ImportSeerrRequests', 'failed')")
         .execute(&pool)
         .await

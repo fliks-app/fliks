@@ -268,7 +268,7 @@ async fn accounts_differing_by_case_are_one_warning_that_links_to_the_users(pool
     };
     assert!(case(&call(&c, "GET", "/api/system/checks").await.1).is_none());
 
-    sqlx::query(r#"INSERT INTO users (username) VALUES ('Rob'), ('rob')"#)
+    sqlx::query(r#"INSERT INTO users (id, username) VALUES (91, 'Rob'), (92, 'rob')"#)
         .execute(&pool)
         .await
         .unwrap();

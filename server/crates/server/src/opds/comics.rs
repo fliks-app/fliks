@@ -47,7 +47,7 @@ pub async fn volumes(
   (SELECT count(*) FROM comic_issues ci JOIN items i ON i.id = ci."itemId"
      JOIN editions e ON e.id = i."editionId" AND e.family = 'image'
      JOIN media_files f ON f.id = comic_part(i.id, $3)
-    WHERE i."mediaId" = m.id))
+    WHERE i."mediaId" = m.id)
 FROM media m WHERE m.id = ANY($1) AND m.type = 'comic' AND m."libraryId" = ANY($2)"#,
     )
     .bind(ids)

@@ -396,15 +396,8 @@ async fn permissions_follow_role_admin_flag_and_missing_role(pool: PgPool) {
     let plain = user(&pool, "plain", Some(r#"["media.read"]"#), false, true).await;
     let norole = user(&pool, "norole", None, false, true).await;
     let admin = user(&pool, "admin", Some("[]"), true, true).await;
-    let broken = user(&pool, "broken", Some("not json"), false, true).await;
     let app = app(&st);
-    for (id, want) in [
-        (manager, 200),
-        (plain, 403),
-        (norole, 403),
-        (admin, 200),
-        (broken, 403),
-    ] {
+    for (id, want) in [(manager, 200), (plain, 403), (norole, 403), (admin, 200)] {
         let t = session::token(&st, id, "x").await;
         let (s, body) = get_with(&app, "/users", &[("authorization", &bearer(&t))]).await;
         assert_eq!(s, want, "user {id}");

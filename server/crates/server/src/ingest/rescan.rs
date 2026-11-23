@@ -1050,8 +1050,8 @@ pub async fn ensure_season_and_episode(
         n.episode_end.map(|e| e as i32),
     );
     let mut c = db.acquire().await?;
-    let (sid, mut created) = items::ensure_group(&mut *c, media, season, season > 0).await?;
-    let mut ep = episode_slot(&mut *c, sid, episode).await?;
+    let (sid, mut created) = items::ensure_group(&mut c, media, season, season > 0).await?;
+    let mut ep = episode_slot(&mut c, sid, episode).await?;
     if ep.is_none() {
         let edition = items::video_edition(&mut *c, media).await?;
         created |= sqlx::query!(
@@ -1067,7 +1067,7 @@ pub async fn ensure_season_and_episode(
         .await?
         .rows_affected()
             > 0;
-        ep = episode_slot(&mut *c, sid, episode).await?;
+        ep = episode_slot(&mut c, sid, episode).await?;
     }
     let (id, cur) = ep.ok_or(sqlx::Error::RowNotFound)?;
     if end.is_some() && cur != end {
@@ -1079,7 +1079,7 @@ pub async fn ensure_season_and_episode(
         .execute(&mut *c)
         .await?;
     }
-    items::cover_ranges(&mut *c, media).await?;
+    items::cover_ranges(&mut c, media).await?;
     Ok((id, created))
 }
 

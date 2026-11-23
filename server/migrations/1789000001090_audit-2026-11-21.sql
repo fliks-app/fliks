@@ -376,8 +376,6 @@ DELETE FROM "recommendation_dismissals" d
     OR NOT EXISTS (SELECT 1 FROM "media" m WHERE m."id" = d."mediaId");
 DELETE FROM "pairing_requests" p
  WHERE p."userId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = p."userId");
-DELETE FROM "oidc_logins" l
- WHERE l."expectUserId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "users" u WHERE u."id" = l."expectUserId");
 DELETE FROM "book_merges" b WHERE NOT EXISTS (SELECT 1 FROM "library_folders" f WHERE f."id" = b."folderId");
 
 ALTER TABLE "pairing_requests" DISABLE TRIGGER set_updated_at;
@@ -414,8 +412,6 @@ ALTER TABLE "recommendation_dismissals"
 ALTER TABLE "pairing_requests"
   ADD CONSTRAINT "FK_pairing_requests_user" FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE,
   ADD CONSTRAINT "FK_pairing_requests_approved_by" FOREIGN KEY ("approvedByUserId") REFERENCES "users" ("id") ON DELETE SET NULL;
-ALTER TABLE "oidc_logins"
-  ADD CONSTRAINT "FK_oidc_logins_expect_user" FOREIGN KEY ("expectUserId") REFERENCES "users" ("id") ON DELETE CASCADE;
 ALTER TABLE "book_merges"
   ADD CONSTRAINT "FK_book_merges_folder" FOREIGN KEY ("folderId") REFERENCES "library_folders" ("id") ON DELETE CASCADE;
 
@@ -463,7 +459,6 @@ ALTER TABLE "items" DROP COLUMN "searchVector";
 -- The cascades of the new keys and the dedupe lookups of closed queue rows.
 CREATE INDEX "IDX_recommendation_dismissals_mediaId" ON "recommendation_dismissals" ("mediaId");
 CREATE INDEX "IDX_pairing_requests_approvedByUserId" ON "pairing_requests" ("approvedByUserId");
-CREATE INDEX "IDX_oidc_logins_expectUserId" ON "oidc_logins" ("expectUserId");
 CREATE INDEX "IDX_book_merges_folderId" ON "book_merges" ("folderId");
 CREATE INDEX "IDX_acquisition_queue_closed_ref" ON "acquisition_queue" ("pluginId", "ref", "id" DESC) WHERE "finishedAt" IS NOT NULL;
 

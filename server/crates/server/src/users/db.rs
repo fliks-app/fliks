@@ -283,7 +283,7 @@ pub async fn names_differing_by_case(db: &PgPool) -> Result<Vec<String>, sqlx::E
     sqlx::query_scalar!(
         r#"SELECT username AS "username!" FROM users
            WHERE lower(username) IN (SELECT lower(username) FROM users GROUP BY 1 HAVING count(*) > 1)
-           ORDER BY lower(username), username"#
+           ORDER BY lower(username), username COLLATE "C""#
     )
     .fetch_all(db)
     .await

@@ -577,7 +577,7 @@ impl Ctx {
                 .unwrap();
         }
         let id: i32 = sqlx::query_scalar(
-            r#"INSERT INTO roles (name, permissions, "isDefault") VALUES ($1, $2, $3) RETURNING id"#,
+            r#"INSERT INTO roles (name, permissions, "isDefault") VALUES ($1, $2::jsonb, $3) RETURNING id"#,
         )
         .bind(name)
         .bind(perms)

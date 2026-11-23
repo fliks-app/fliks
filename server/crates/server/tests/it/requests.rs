@@ -188,7 +188,7 @@ async fn ctx_with_key(pool: PgPool, tmdb_key: bool) -> Ctx {
         ),
     ] {
         let role: i32 = sqlx::query_scalar(
-            "INSERT INTO roles (name, permissions) VALUES ($1, $2) RETURNING id",
+            "INSERT INTO roles (name, permissions) VALUES ($1, $2::jsonb) RETURNING id",
         )
         .bind(name)
         .bind(perms)
