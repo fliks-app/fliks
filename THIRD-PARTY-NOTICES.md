@@ -171,8 +171,7 @@ license applies to the ported logic:
 ## Mobile apps (Android and iOS)
 
 The store apps wrap the web client with Capacitor and add the native components below. The npm
-packages inside the web client are listed in `3rdpartylicenses.txt`, shipped next to this file and
-linked from Settings.
+packages inside the web client are listed in `3rdpartylicenses.txt`, shipped next to this file.
 
 | Component | License | Source | Use |
 |---|---|---|---|
