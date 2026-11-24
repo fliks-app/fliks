@@ -53,7 +53,7 @@ A `process` manifest additionally requires these seven keys — reference `fk-pl
   |---|---|
   | `media:read` | `media.acquisitionContext`, `media.resolve`, `media.exists`, `media.resolveOrCreate` (it tells which titles exist), and, because both answer with media identity for the whole library, `acquisition.candidates` and `releases.match` |
   | `media:create` | `media.resolveOrCreate` (with `media:read`): adds a title to a library when none holds it. The import runs the request hooks, so it also adopts and approves the pending requests for that title. An update that newly declares it waits for an admin. |
-  | `acquisition:candidates` | `acquisition.candidates`, `releases.match`, `acquisition.sourcesSet`, `acquisition.inFlight`, `queue.set` |
+  | `acquisition:candidates` | `acquisition.candidates`, `releases.match`, `acquisition.sourcesSet`, `acquisition.inFlight`, `acquisition.request`, `queue.set` |
   | `releases:score` | `releases.score` |
   | `ingest:write` | `library.ingest` |
   | `events:emit` | `events.publish`, `notifications.dispatch`, `events.emitOwn`, `counts.set` |
@@ -131,7 +131,7 @@ the `search` route of every provider with a source for the kind, as the system (
 answer is the whole list, no streaming), ranks the releases across providers by the core's own score
 and POSTs the `grab` route of the best one's provider with the release's fields. A `search` called
 that way answers the releases the provider would grab, best first; the core drops any with a
-rejection. A provider's own feed sync stays its own and checks `acquisition.inFlight` first.
+rejection. A provider's feed sync does not grab by itself: it asks the core with `acquisition.request` (`{mediaId, family?, unit?}` per ask) for the targets the feed names, and the core searches, ranks and grabs under its claim.
 
 The core owns the queue and the history; a provider only runs transfers. It reports them with
 `queue.set` (scope `acquisition:candidates`), its **full** list of transfers at each change and at

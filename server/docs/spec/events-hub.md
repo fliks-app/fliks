@@ -193,7 +193,7 @@ Row 37 is two wire types and row 2 (`ping`) and row 40 are not in the `SseEvent`
 | `media.season.monitored.changed` | `{mediaId: number, seasonNumber: number, monitored: boolean}` |
 | `media.removed` | `{mediaId: number, externalIds: ExternalId[], mediaType: string}` |
 | `media.files.imported` | `{mediaId: number, family: 'video'|'audio'|'text'|'image', seasonNumber?: number, episodeNumber?: number, episodes?: {seasonNumber: number, episodeNumber: number}[], source: 'download'|'disk'}` |
-| `media.acquisition.requested` | `{mediaIds: number[], reason: string}` (starts the core's acquisition sweep of those media, `plugins.md` rule 66; `reason` `media-added` after a direct add, `feed` after a plugin's `acquisition.request`) |
+| `media.acquisition.requested` | `{mediaIds: number[], reason: string}` (starts the core's acquisition sweep of those media, `plugins.md` rule 66; `reason` `media-added` after a direct add) |
 | `acquisition.grabbed` | `{mediaId: number, family: 'video'|'audio'|'text'|'image', seasonNumber?: number, episodeNumber?: number}` |
 | `acquisition.imported` | `{mediaId: number, family: 'video'|'audio'|'text'|'image', seasonNumber?: number, episodeNumber?: number}` (a provider reported the import, `plugins.md` rule 33; the request lifecycle reads it) |
 | `request.created` | `{requestId: number, mediaType: string, externalIds: ExternalId[], userId: number|null, kind: string, seasons: number[]|null}` |

@@ -68,6 +68,17 @@ async fn grabbed(h: &H, id: &str, media: i32) -> Option<Value> {
     v.map(|v| serde_json::from_str(&v).unwrap())
 }
 
+/// The fixture's `searched` setting: the items it was searched for, `-` for a work.
+async fn searched(h: &H, id: &str) -> String {
+    let key = format!("plugin.{id}.searched");
+    sqlx::query_scalar("SELECT value FROM app_settings WHERE key = $1")
+        .bind(key)
+        .fetch_optional(&h.st.db)
+        .await
+        .unwrap()
+        .unwrap_or_default()
+}
+
 async fn attempt(h: &H, media: i32) -> (String, i32, i32, Value, Option<String>) {
     sqlx::query_as::<_, (String, i32, i32, sqlx::types::Json<Value>, Option<String>)>(
         r#"SELECT outcome, found, eligible, rejections, "nextAt"::text FROM acquisition_attempts WHERE "mediaId" = $1"#,
@@ -268,6 +279,7 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
         q.extend_from_slice(extra);
         q
     };
+    h.set(&format!("plugin.{A}.searched"), "").await;
     let r = call_ok(&h, A, "request", &ask(&[("repeat", "3")])).await;
     assert_eq!(r["ok"], Value::Null, "{r}");
     until("the request's grab", Duration::from_secs(10), async || {
@@ -276,6 +288,7 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
     .await;
     tokio::time::sleep(Duration::from_millis(500)).await;
     assert_eq!(grabbed(&h, A, 1).await.unwrap()["sourceTitle"], "a");
+    assert_eq!(searched(&h, A).await, "-;", "one search for the three asks");
 
     // An ask for a family or a unit the media's target is not asks for nothing.
     forget(&h).await;
@@ -297,15 +310,19 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
 
     // An ask made while a sweep holds the claim waits for it, then grabs once.
     forget(&h).await;
+    h.set(&format!("plugin.{A}.searched"), "").await;
     let claim = h.st.plugins.sweeps.claims.lock(1).await;
     call_ok(&h, A, "request", &ask(&[])).await;
     tokio::time::sleep(Duration::from_millis(800)).await;
     assert!(grabbed(&h, A, 1).await.is_none());
+    assert_eq!(searched(&h, A).await, "", "no search under a held claim");
     drop(claim);
     until("the held ask's grab", Duration::from_secs(10), async || {
         grabbed(&h, A, 1).await.is_some()
     })
     .await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(searched(&h, A).await, "-;");
 
     // No asks, more than a page of them, or a fractional video unit are refused.
     for extra in [
@@ -317,6 +334,114 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
         assert_eq!(r["error"], "ERR_VALIDATION", "{r}");
     }
 
+    h.finish().await;
+    s.finish().await;
+}
+
+/// A series of three missing episodes behind one item-level provider.
+async fn series(tag: &str) -> Option<(H, Scratch, Vec<i32>)> {
+    let (mut m, w) = fixture()?;
+    let s = Scratch::create(tag).await?;
+    let h = harness(&s, tag, |_| {}).await;
+    allow_unsigned(&h).await;
+    m["routes"].as_array_mut().unwrap().extend([
+        json!({"method": "GET", "path": "/search/:id/items/:itemId", "policy": "read:Settings"}),
+        json!({"method": "POST", "path": "/grab/:id/items/:itemId", "policy": "read:Settings"}),
+    ]);
+    let pair = json!({"search": "/search/:id/items/:itemId", "grab": "/grab/:id/items/:itemId"});
+    m["ui"]["releasePicker"] = json!({"series": {"item": pair}});
+    let r = h.install(&pack(&m, "0.1.0", &w, None)).await;
+    assert_eq!(r["status"], "active", "{r}");
+    call(&h, A, "sources", &[("ids", "s"), ("kinds", "series")]).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'Shows', '["series"]');
+           INSERT INTO library_folders ("libraryId", path) VALUES (1, '/nonexistent/s');
+           INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (1, 'P', 18, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items;
+           INSERT INTO media (id, title, type, "libraryId", "folderName", year, monitored, status)
+             VALUES (3, 'Some Show', 'series', 1, 'show', 2008, true, 'released');
+           INSERT INTO wants ("mediaId", family, "qualityProfileId") VALUES (3, 'video', 1);
+           INSERT INTO editions ("mediaId", family) VALUES (3, 'video');
+           INSERT INTO item_groups ("mediaId", "number", monitored) VALUES (3, 1, true);
+           INSERT INTO items ("mediaId", "editionId", "groupId", "number", monitored, "airDate")
+             SELECT 3, (SELECT id FROM editions WHERE "mediaId" = 3), (SELECT id FROM item_groups WHERE "mediaId" = 3), n, true, '2020-01-0' || n
+             FROM generate_series(1, 3) n;"#,
+    )
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    let items = sqlx::query_scalar(r#"SELECT id FROM items WHERE "mediaId" = 3 ORDER BY "number""#)
+        .fetch_all(&s.pool)
+        .await
+        .unwrap();
+    Some((h, s, items))
+}
+
+async fn item_grabbed(h: &H, media: i32, item: i32) -> bool {
+    grabbed(h, A, media).await.is_none() && {
+        let key = format!("plugin.{A}.grabbed.{media}.{item}");
+        sqlx::query_scalar::<_, String>("SELECT value FROM app_settings WHERE key = $1")
+            .bind(key)
+            .fetch_optional(&h.st.db)
+            .await
+            .unwrap()
+            .is_some()
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_unit_ask_searches_and_grabs_only_that_episode() {
+    let Some((h, s, items)) = series("sweep_unit").await else {
+        return;
+    };
+    offer(&h, A, json!([release("a", 3)])).await;
+    let r = call_ok(
+        &h,
+        A,
+        "request",
+        &[("media", "3"), ("group", "1"), ("number", "2")],
+    )
+    .await;
+    assert_eq!(r["ok"], Value::Null, "{r}");
+    until("the episode's grab", Duration::from_secs(10), async || {
+        item_grabbed(&h, 3, items[1]).await
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(searched(&h, A).await, format!("{};", items[1]));
+    assert!(!item_grabbed(&h, 3, items[0]).await && !item_grabbed(&h, 3, items[2]).await);
+    h.finish().await;
+    s.finish().await;
+}
+
+/// A provider cooling answers 503: the target is asked again at the instant, and only that target.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_cooling_unit_ask_is_asked_again_for_its_own_target() {
+    let Some((h, s, items)) = series("sweep_cooling").await else {
+        return;
+    };
+    offer(&h, A, json!([release("a", 3)])).await;
+    let at = chrono::Utc::now() + chrono::Duration::seconds(2);
+    h.set(&format!("plugin.{A}.cooling"), &at.to_rfc3339())
+        .await;
+    call_ok(
+        &h,
+        A,
+        "request",
+        &[("media", "3"), ("group", "1"), ("number", "2")],
+    )
+    .await;
+    until("the first search", Duration::from_secs(10), async || {
+        !searched(&h, A).await.is_empty()
+    })
+    .await;
+    h.set(&format!("plugin.{A}.cooling"), "").await;
+    until("the episode's grab", Duration::from_secs(15), async || {
+        item_grabbed(&h, 3, items[1]).await
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let two = format!("{0};{0};", items[1]);
+    assert_eq!(searched(&h, A).await, two, "the wake keeps its scope");
     h.finish().await;
     s.finish().await;
 }

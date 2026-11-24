@@ -159,18 +159,31 @@ fn echo(req: &Request) -> Result<Response, String> {
     ok(json!({ "method": req.method, "body": body, "query": query }))
 }
 
-/// A release picker's `search`: the releases set in the `releases` setting, as JSON.
-fn search(_: &Request) -> Result<Response, String> {
+/// A release picker's `search`: the releases set in the `releases` setting, as JSON; the item it
+/// was asked for is appended to `searched`, and `cooling` (an RFC 3339 instant) makes it answer 503.
+fn search(req: &Request) -> Result<Response, String> {
+    let item = req.param("itemId").unwrap_or_else(|| "-".into());
+    let seen = mode("searched");
+    host::config_set("searched", Some(&format!("{seen}{item};"))).map_err(|e| e.message)?;
+    let until = mode("cooling");
+    if !until.is_empty() {
+        let body = json!({ "error": { "cooldownUntil": until } });
+        return Ok(Response::json(503, &body));
+    }
     ok(serde_json::from_str::<Json>(&mode("releases")).unwrap_or(json!([])))
 }
 
-/// A release picker's `grab`: keeps the request body in the `grabbed.<id>` setting.
+/// A release picker's `grab`: keeps the request body in the `grabbed.<id>` setting (`.<item>` for an
+/// item); a media grab puts the whole media in flight, an item's does not.
 fn grab(req: &Request) -> Result<Response, String> {
     let body = String::from_utf8_lossy(&req.body).into_owned();
-    let key = format!("grabbed.{}", req.param("id").unwrap_or_default());
+    let mut key = format!("grabbed.{}", req.param("id").unwrap_or_default());
+    let item = req.param("itemId");
+    if let Some(item) = &item {
+        key = format!("{key}.{item}");
+    }
     host::config_set(&key, Some(&body)).map_err(|e| e.message)?;
-    // Like a real provider, a grab puts the media in flight.
-    if let Some(media_id) = req.param("id").and_then(|v| v.parse().ok()) {
+    if let Some(media_id) = req.param("id").and_then(|v| v.parse().ok()).filter(|_| item.is_none()) {
         host_result(host::events_publish(&[t::AcquisitionEvent::Grabbed(
             t::Grabbed {
                 media_id,
@@ -228,6 +241,8 @@ static ROUTES: LazyLock<Router> = LazyLock::new(|| {
         .route("GET", "/config", config)
         .route("GET", "/search/:id", search)
         .route("POST", "/grab/:id", grab)
+        .route("GET", "/search/:id/items/:itemId", search)
+        .route("POST", "/grab/:id/items/:itemId", grab)
         .route("POST", "/qaction/:name", qaction)
         .route("GET", "/test/*rest", test_route)
         .route("POST", "/test/*rest", test_route)

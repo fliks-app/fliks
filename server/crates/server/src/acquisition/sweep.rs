@@ -40,35 +40,53 @@ pub enum Scope {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pick {
     family: Option<t::Family>,
-    /// Group, number and trimmed lowercase label.
-    unit: Option<(Option<u32>, Option<f64>, Option<String>)>,
+    unit: Option<UnitKey>,
+}
+
+/// A unit's group, number (as bits: `f64` is not `Eq`) and comic label parts.
+#[derive(Clone, Debug, PartialEq)]
+struct UnitKey {
+    group: Option<u32>,
+    number: Option<u64>,
+    label: (String, Option<String>),
+}
+
+impl UnitKey {
+    fn of(u: &t::UnitRef) -> Self {
+        Self {
+            group: u.group,
+            number: u.number.map(f64::to_bits),
+            label: super::comic::label_parts(u.label.as_deref()),
+        }
+    }
 }
 
 impl Pick {
     pub fn of(family: Option<t::Family>, unit: Option<&t::UnitRef>) -> Self {
         Self {
             family,
-            unit: unit.map(|u| {
-                let label = u.label.as_deref().map(|l| l.trim().to_lowercase());
-                (u.group, u.number, label)
-            }),
+            unit: unit.map(UnitKey::of),
         }
+    }
+
+    /// The one target `tg` is.
+    fn target(tg: &t::Target) -> Self {
+        Self::of(Some(tg.family), tg.scope.first().map(|u| &u.ref_))
     }
 
     fn admits(&self, tg: &t::Target) -> bool {
         if self.family.is_some_and(|f| f != tg.family) {
             return false;
         }
-        let Some((group, number, label)) = &self.unit else {
+        let Some(want) = &self.unit else {
             return true;
         };
-        let Some(r) = tg.scope.first().map(|u| &u.ref_) else {
+        let Some(r) = tg.scope.first().map(|u| UnitKey::of(&u.ref_)) else {
             return false;
         };
         // The label is a comic issue's printed one: a video unit has none.
-        let same_label = tg.family == t::Family::Video
-            || *label == r.label.as_deref().map(|l| l.trim().to_lowercase());
-        r.group == *group && r.number == *number && same_label
+        let same_label = tg.family == t::Family::Video || want.label == r.label;
+        want.group == r.group && want.number == r.number && same_label
     }
 }
 
@@ -76,10 +94,11 @@ impl Scope {
     /// A request naming no family and no unit is the whole media.
     pub fn of(picks: Vec<Pick>) -> Self {
         if picks.iter().any(|p| p.family.is_none() && p.unit.is_none()) {
-            Self::All
-        } else {
-            Self::Only(picks)
+            return Self::All;
         }
+        let mut only = Self::Only(vec![]);
+        only.merge(Self::Only(picks));
+        only
     }
 
     fn merge(&mut self, other: Scope) {
@@ -146,8 +165,8 @@ pub struct Sweeps {
     pub claims: KeyedLocks<i32>,
     slots: Mutex<HashMap<String, Arc<Semaphore>>>,
     queue: Mutex<Queue>,
-    /// The instant a cooling media is asked again, by media: one timer per instant.
-    wakes: Mutex<HashMap<u32, DateTime<Utc>>>,
+    /// The targets of a media asked again at an instant: one timer per media and instant.
+    wakes: Mutex<HashMap<(u32, DateTime<Utc>), Scope>>,
 }
 
 impl Sweeps {
@@ -419,31 +438,29 @@ impl Plugins {
         )
         .await;
         if let Outcome::Cooling(at) = out {
-            self.wake_at(tg.media_id, *at);
+            self.wake_at(tg, *at);
         }
     }
 
-    /// Asks `media` again at `at` (capped), once per instant.
-    fn wake_at(&self, media: u32, at: DateTime<Utc>) {
+    /// Asks the target `tg` again at `at` (capped), once per media and instant.
+    fn wake_at(&self, tg: &t::Target, at: DateTime<Utc>) {
         let Some(app) = self.app() else { return };
-        let at = at.min(Utc::now() + MAX_COOLDOWN);
-        if self.sweeps.wakes.lock_clean().insert(media, at) == Some(at) {
-            return;
-        }
+        let (media, at) = (tg.media_id, at.min(Utc::now() + MAX_COOLDOWN));
+        let scope = Scope::Only(vec![Pick::target(tg)]);
+        match self.sweeps.wakes.lock_clean().entry((media, at)) {
+            std::collections::hash_map::Entry::Occupied(mut o) => {
+                o.get_mut().merge(scope);
+                return;
+            }
+            std::collections::hash_map::Entry::Vacant(v) => v.insert(scope),
+        };
         let delay = (at - Utc::now()).to_std().unwrap_or_default();
         let (me, st) = (app.plugins.clone(), app.clone());
         tokio::spawn(async move {
             tokio::time::sleep(delay).await;
-            let due = {
-                let mut wakes = me.sweeps.wakes.lock_clean();
-                let due = wakes.get(&media) == Some(&at);
-                if due {
-                    wakes.remove(&media);
-                }
-                due
-            };
-            if due {
-                me.enqueue(&st, vec![(media, 0, Scope::All)]);
+            let due = me.sweeps.wakes.lock_clean().remove(&(media, at));
+            if let Some(scope) = due {
+                me.enqueue(&st, vec![(media, 0, scope)]);
             }
         });
     }
