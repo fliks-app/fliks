@@ -2,11 +2,7 @@
 use super::db::{Disk, not_found};
 use crate::http::AppError;
 use sqlx::PgConnection;
-use std::{
-    io,
-    path::{Component, Path, PathBuf},
-    time::Duration,
-};
+use std::{io, path::Path, time::Duration};
 
 /// Strips bidi marks and zero-width characters, then trims like JS `trim()` (Rust also trims U+0085).
 pub fn sanitize(raw: &str) -> String {
@@ -145,17 +141,9 @@ fn io_text(e: &io::Error) -> String {
 
 /// The input without `.`, `..`, doubled or trailing separators, never touching the disk.
 pub fn normalize(path: &str) -> String {
-    let mut out = PathBuf::new();
-    for c in Path::new(path).components() {
-        match c {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                out.pop();
-            }
-            c => out.push(c),
-        }
-    }
-    out.to_string_lossy().into_owned()
+    fliks_domain::media::path::fold(Path::new(path))
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Boot check: warns for every pair of folders of different libraries that name one directory

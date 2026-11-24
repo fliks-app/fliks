@@ -1,6 +1,6 @@
 //! Sidecar names and the lexical path helpers (`subtitle-path.util.ts`, `media-path.util.ts`).
 use crate::js::{is_ws, rx};
-use crate::media::path::lexical as resolve;
+use crate::media::path::lexical;
 use std::path::Path;
 
 /// `en`, `en.forced` or `en.hi`; forced wins when both flags are set.
@@ -30,8 +30,8 @@ pub fn resolve_subtitle_absolute_path(root: &str, stored: &str) -> Option<String
     if stored.is_empty() || root.is_empty() {
         return None;
     }
-    let root = resolve(Path::new(root))?;
-    let abs = resolve(&root.join(stored))?;
+    let root = lexical(Path::new(root))?;
+    let abs = lexical(&root.join(stored))?;
     // `root + sep`: under a filesystem root (`/`, `C:\`) only the root itself matches.
     (abs == root || (root.parent().is_some() && abs.starts_with(&root)))
         .then(|| abs.to_string_lossy().into_owned())
@@ -39,8 +39,8 @@ pub fn resolve_subtitle_absolute_path(root: &str, stored: &str) -> Option<String
 
 /// `file` relative to `root` with `/` separators; `None` when it is the root or outside it.
 pub fn relative_path_under_root(root: &str, file: &str) -> Option<String> {
-    let root = resolve(Path::new(root.trim_matches(is_ws)))?;
-    let abs = resolve(Path::new(file))?;
+    let root = lexical(Path::new(root.trim_matches(is_ws)))?;
+    let abs = lexical(Path::new(file))?;
     let rel = abs
         .strip_prefix(&root)
         .ok()?

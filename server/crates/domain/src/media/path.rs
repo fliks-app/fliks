@@ -1,8 +1,11 @@
 //! `Media.path` (rule 30): Node's `path.join` / `path.resolve` on POSIX.
 use std::path::{Component, Path, PathBuf};
 
-/// `path.normalize`.
+/// `path.normalize`; a Windows drive or UNC path keeps its own form.
 pub fn normalize(path: &str) -> String {
+    if let Some(Component::Prefix(_)) = Path::new(path).components().next() {
+        return fold(Path::new(path)).to_string_lossy().into_owned();
+    }
     if path.is_empty() {
         return ".".into();
     }
@@ -48,9 +51,11 @@ pub fn join(a: &str, b: &str) -> String {
 
 /// Lexical `path.resolve` of a rooted host path (`/x`, `C:\x`, UNC): `.` and `..` collapsed.
 pub fn lexical(p: &Path) -> Option<PathBuf> {
-    if !p.has_root() {
-        return None;
-    }
+    p.has_root().then(|| fold(p))
+}
+
+/// `p` with `.` dropped and `..` folded, never touching the disk.
+pub fn fold(p: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for c in p.components() {
         match c {
@@ -61,7 +66,7 @@ pub fn lexical(p: &Path) -> Option<PathBuf> {
             c => out.push(c),
         }
     }
-    Some(out)
+    out
 }
 
 /// `path.resolve(p)` against `cwd`; a Windows drive or UNC path keeps its own form.
@@ -110,5 +115,9 @@ mod tests {
         assert_eq!(resolve(r"C:\Users\m", "/"), r"C:\Users\m");
         assert_eq!(resolve(r"C:\m/a/../b/", "/"), r"C:\m\b");
         assert_eq!(resolve("//nas/share/m", "/"), r"//nas/share\m");
+        assert_eq!(
+            join(r"//nas/share\m", "Movie/a.mkv"),
+            r"//nas/share\m\Movie\a.mkv"
+        );
     }
 }
