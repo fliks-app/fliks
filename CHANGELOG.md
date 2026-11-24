@@ -1,5 +1,15 @@
 # Changelog
 
+## [7.2.1](https://github.com/fliks-app/fliks/compare/v7.2.0...v7.2.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **docker:** build fliks-server on the engine's Ubuntu 26.04 base ([#3027](https://github.com/fliks-app/fliks/issues/3027)) ([ec309e2](https://github.com/fliks-app/fliks/commit/ec309e29f03b17911ff94151535d6894aaede794))
+* **paths:** handle Windows drive and UNC paths in the server ([#3028](https://github.com/fliks-app/fliks/issues/3028)) ([dfef58d](https://github.com/fliks-app/fliks/commit/dfef58d031d26fcf76fbed075a8edb0cf634eb2e))
+* **player-bar:** keep the play toggle visible on the floating bar ([#3034](https://github.com/fliks-app/fliks/issues/3034)) ([01f1230](https://github.com/fliks-app/fliks/commit/01f1230e5f227ff20cd463960a0264a40d455f8b))
+* **plugins:** a provider's feed asks the core to acquire instead of grabbing ([#3029](https://github.com/fliks-app/fliks/issues/3029)) ([295fc9a](https://github.com/fliks-app/fliks/commit/295fc9a50476bebae7b6d85d0f0515aab0acf885))
+
 ## [7.2.0](https://github.com/fliks-app/fliks/compare/v7.1.0...v7.2.0) (2026-11-24)
 
 
