@@ -1486,8 +1486,13 @@
     "downloads_title": "Transferências",
     "downloads_see_all": "Ver tudo",
     "monitored_partial": "Parcialmente monitorizada",
-    "monitor_all_seasons": "Monitorizar todas as temporadas",
-    "follow_new_seasons": "Seguir as novas temporadas"
+    "monitoring": "Monitorização",
+    "monitoring_custom": "Monitorização personalizada",
+    "monitor_series_all": "Série inteira",
+    "monitor_series_future": "Só temporadas novas",
+    "monitor_series_none": "Nenhuma",
+    "monitor_episode": "Monitorizar o episódio",
+    "unmonitor_episode": "Deixar de monitorizar o episódio"
   },
   "requests": {
     "title": "Pedidos",

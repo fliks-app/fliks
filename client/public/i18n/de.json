@@ -1486,8 +1486,13 @@
     "downloads_title": "Downloads",
     "downloads_see_all": "Alle anzeigen",
     "monitored_partial": "Teilweise überwacht",
-    "monitor_all_seasons": "Alle Staffeln überwachen",
-    "follow_new_seasons": "Neue Staffeln verfolgen"
+    "monitoring": "Überwachung",
+    "monitoring_custom": "Eigene Überwachung",
+    "monitor_series_all": "Ganze Serie",
+    "monitor_series_future": "Nur neue Staffeln",
+    "monitor_series_none": "Keine",
+    "monitor_episode": "Folge überwachen",
+    "unmonitor_episode": "Folge nicht mehr überwachen"
   },
   "requests": {
     "title": "Anfragen",

@@ -297,8 +297,9 @@ export abstract class VideoWorkBase {
   /** The entries that act on the whole title. */
   protected titleActions(): MediaActionHandlers {
     return {
-      'media.stop-monitoring': () => void this.host.setMonitored(false),
-      'media.toggle-follow-new-seasons': () => void this.host.setFollowNewSeasons(!this.media().monitorNewSeasons),
+      'media.monitor-series-all': () => void this.host.setMonitored(true),
+      'media.monitor-series-future': () => void this.host.setMonitored(false).then(() => this.host.setFollowNewSeasons(true)),
+      'media.monitor-series-none': () => void this.host.setMonitored(false),
       'media.edit-profiles': () => this.host.openProfiles(),
       'media.edit-library': () => this.host.openLibrary(),
       'media.delete': () => void this.host.deleteMedia(),

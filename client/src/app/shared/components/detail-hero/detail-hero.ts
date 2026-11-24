@@ -728,8 +728,8 @@ export class DetailHeroComponent {
     'core.watch_together': () => this.partyApi.canCreate(),
     'core.download': () => !this.download() || this.download()?.status === 'ready',
     'core.download_series': () => !this.episodeId() && this.files().length > 0,
-    'core.stop_monitoring': () => this.monitoring() === 'partial' && !this.episodeId(),
-    'core.follow_new_seasons': () => this.followNewSeasons() != null && !this.episodeId(),
+    'core.toggle_monitored': () => this.mediaType() !== 'series' || !!this.episodeId(),
+    'core.monitoring_group': () => !this.episodeId(),
     'core.auto_download_group': () => this.autoDownload.enabled && !this.episodeId(),
     'core.request_media': () => {
       const needsFile = !kindOf(this.mediaType()).hasSeasons || !!this.episodeId();
@@ -799,15 +799,24 @@ export class DetailHeroComponent {
 
   readonly menuItems = computed<ResolvedMediaAction[]>(() => this.actionsMenu.rows().map((r) => ({ ...r, handler: r.run })));
 
+  /** The series menu preset the seasons and the new-season policy match; null when set season by season. */
+  private readonly seriesPreset = computed(() => {
+    const follow = this.followNewSeasons();
+    if (this.monitoring() === 'all' && follow) return 'all';
+    if (this.monitoring() === 'none') return follow ? 'future' : 'none';
+    return null;
+  });
+
   /** A few rows swap their label by live state (watched, monitored), cosmetic and so kept out of the static contribution. */
   displayLabelKey(item: ResolvedMediaAction): string {
     if (item.actionId === 'media.toggle-series-watched') {
       return this.watched() ? 'media_detail.mark_series_unwatched' : 'media_detail.mark_series_watched';
     }
     if (item.actionId === 'media.toggle-monitored') {
-      if (this.monitoring() === 'partial') return 'media_detail.monitor_all_seasons';
+      if (this.episodeId()) return this.monitored() ? 'media_detail.unmonitor_episode' : 'media_detail.monitor_episode';
       return this.monitored() ? 'media_detail.unmonitor' : 'media_detail.monitor';
     }
+    if (item.id === 'core.monitoring_group' && !this.seriesPreset()) return 'media_detail.monitoring_custom';
     if (item.actionId === 'media.toggle-watched') {
       return this.watched() ? 'media_card.mark_unwatched' : 'media_card.mark_watched';
     }
@@ -824,10 +833,9 @@ export class DetailHeroComponent {
   displayIcon(item: ResolvedMediaAction): string {
     const keep = this.autoKeepOf(item);
     if (keep !== null) return keep === (this.autoDownload.seriesKeep(this.mediaId()) ?? 0) ? 'check' : item.icon;
-    if (item.actionId === 'media.toggle-follow-new-seasons') return this.followNewSeasons() ? 'check' : item.icon;
-    if (item.actionId === 'media.toggle-monitored') {
-      return this.monitored() && this.monitoring() !== 'partial' ? 'eye-off' : 'eye';
-    }
+    const preset = item.actionId?.match(/^media\.monitor-series-(\w+)$/)?.[1];
+    if (preset) return preset === this.seriesPreset() ? 'check' : item.icon;
+    if (item.actionId === 'media.toggle-monitored') return this.monitored() ? 'eye-off' : 'eye';
     if (item.actionId === 'media.toggle-watched') {
       return this.watched() ? 'eye-off' : 'eye';
     }
@@ -874,7 +882,7 @@ export class DetailHeroComponent {
 
   /** Disabled state, per actionId - the ids not listed are never disabled. */
   isItemDisabled(item: ResolvedMediaAction): boolean {
-    if (['media.toggle-monitored', 'media.stop-monitoring', 'media.toggle-follow-new-seasons'].includes(item.actionId ?? '')) return this.monitoredLoading();
+    if (item.actionId === 'media.toggle-monitored' || item.actionId?.startsWith('media.monitor-series-')) return this.monitoredLoading();
     if (item.actionId === 'media.delete') return this.deleteLoading();
     return this.actionsMenu.isDisabled(item.actionId);
   }
