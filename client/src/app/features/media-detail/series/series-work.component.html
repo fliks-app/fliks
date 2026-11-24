@@ -100,7 +100,7 @@
     />
   }
 
-  @if (episodeView.episodeActiveFile(); as sf) {
+  @if (fileInfoReady() && episodeView.episodeActiveFile(); as sf) {
     <app-media-file-info
       [file]="sf"
       [mediaPath]="m.library?.path ?? null"

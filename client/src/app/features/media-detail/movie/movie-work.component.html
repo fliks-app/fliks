@@ -76,7 +76,7 @@
   />
 }
 
-@if (activeFile(); as af) {
+@if (fileInfoReady() && activeFile(); as af) {
   <app-media-file-info
     [file]="af"
     [mediaPath]="m.library?.path ?? null"

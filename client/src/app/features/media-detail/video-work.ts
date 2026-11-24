@@ -22,6 +22,8 @@ import { DownloadQualityModalComponent } from '../../shared/components/download-
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { SubtitlesModalComponent } from '../../shared/components/subtitles-modal/subtitles-modal';
 import { lazyModal } from '../../shared/utils/lazy-modal';
+import { afterViewTransition, viewTransitionEnded } from '../../shared/utils/view-transition';
+import { NavbarService } from '../../core/services/navbar.service';
 import type { TrackingScope } from '../../shared/components/tracking-status-modal/tracking-status-modal';
 import { libraryCast } from './components/media-cast/media-cast.component';
 import { WatchedController } from './watched-controller';
@@ -149,8 +151,8 @@ export abstract class VideoWorkBase {
     if (this.host.fullLoaded() && !this.identified()) return;
     this.paintThenRefresh((opts) =>
       Promise.all([
-        this.mediaService.getCast(id, opts).then((c) => this.mediaId() === id && this.cast.set(c)),
-        this.mediaService.getCrew(id, opts).then((c) => this.mediaId() === id && this.crew.set(c)),
+        this.mediaService.getCast(id, opts).then(afterViewTransition).then((c) => this.mediaId() === id && this.cast.set(c)),
+        this.mediaService.getCrew(id, opts).then(afterViewTransition).then((c) => this.mediaId() === id && this.crew.set(c)),
       ]),
     );
     this.loadRelated(id);
@@ -236,6 +238,8 @@ export abstract class VideoWorkBase {
   protected readonly hero = viewChild(DetailHeroComponent);
   protected readonly subtitleSection = viewChild(SubtitlesModalComponent);
   protected readonly subtitlesOpener = lazyModal(() => this.subtitleSection());
+  /** The file details sit below the fold: built once the opening transition ends, at once on a return that restores into them. */
+  protected readonly fileInfoReady = viewTransitionEnded(inject(NavbarService).navigatedBack());
 
   protected openSubtitles(): void {
     this.subtitlesOpener.open((m) => m.show());
