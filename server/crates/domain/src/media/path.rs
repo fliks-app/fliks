@@ -45,9 +45,9 @@ pub fn join(a: &str, b: &str) -> String {
     }
 }
 
-/// `path.resolve(p)` against `cwd`.
+/// `path.resolve(p)` against `cwd`; a path absolute for the host (`C:\`, UNC) is kept as is.
 pub fn resolve(p: &str, cwd: &str) -> String {
-    let full = if p.starts_with('/') {
+    let full = if p.starts_with('/') || std::path::Path::new(p).is_absolute() {
         p.to_owned()
     } else {
         format!("{cwd}/{p}")
@@ -78,5 +78,12 @@ mod tests {
         assert_eq!(join("/media//movies", "a/../b"), "/media/movies/b");
         assert_eq!(media_path(Some("/m/"), Some("")), Some("/m/".into()));
         assert_eq!(resolve("a/b", "/srv"), "/srv/a/b");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_keeps_a_windows_absolute_path() {
+        assert_eq!(resolve(r"C:\Users\m", "/"), r"C:\Users\m");
+        assert_eq!(resolve(r"C:\m/a/../b/", "/"), r"C:\m/b");
     }
 }
