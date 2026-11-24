@@ -132,6 +132,13 @@ export class MediaDetailSeasonsComponent {
     );
   });
 
+  /** Keeps the card the rail centres on built from the first pass. */
+  protected readonly centerIndex = computed(() => {
+    const id = this.centerTarget();
+    return id == null ? null : this.filteredEpisodes().findIndex((e) => e.id === id);
+  });
+  protected readonly episodeKey = (ep: Episode) => ep.id;
+
   readonly selectSeason = output<number>();
   readonly episodesHasFileOnlyChange = output<boolean>();
   readonly toggleSeasonMonitored = output<Season>();

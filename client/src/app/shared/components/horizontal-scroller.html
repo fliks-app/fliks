@@ -29,7 +29,16 @@
     data-scroller
     class="flex gap-2 lg:gap-4 tv:gap-6 overflow-x-auto scrollbar-none [scroll-behavior:smooth] py-5 -my-5 px-4 -mx-4 scroll-px-16"
   >
-    <ng-content />
+    @if (items() && itemTemplate(); as tpl) {
+      @for (item of builtItems(); track trackBy()(item); let i = $index) {
+        <ng-container *ngTemplateOutlet="tpl; context: { $implicit: item, index: i }" />
+      }
+      @if (tailPx() > 0) {
+        <div data-spacer aria-hidden="true" class="shrink-0" [style.width.px]="tailPx()"></div>
+      }
+    } @else {
+      <ng-content />
+    }
   </div>
 
   @if (!atEnd()) {

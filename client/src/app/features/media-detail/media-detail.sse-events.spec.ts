@@ -64,7 +64,7 @@ function createHarness() {
         },
       },
       { provide: Router, useValue: { navigate: vi.fn(), getCurrentNavigation: () => null } },
-      { provide: MediaService, useValue: { getOne: vi.fn(async () => MOVIE) } },
+      { provide: MediaService, useValue: { knownNow: () => undefined, getOne: vi.fn(async () => MOVIE) } },
       { provide: MediaDetailReleasePickerService, useValue: {} },
       { provide: AuthService, useValue: { hasPermission: () => false } },
       { provide: ProfilesService, useValue: {} },

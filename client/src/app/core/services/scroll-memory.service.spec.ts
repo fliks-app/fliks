@@ -37,10 +37,15 @@ describe('ScrollMemoryService', () => {
     });
   });
 
-  afterEach(() => TestBed.resetTestingModule());
-
   const service = () => TestBed.inject(ScrollMemoryService);
   const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+
+  // A forward entry holds the top from the next frame: let it land in its own test.
+  afterEach(async () => {
+    await nextFrame();
+    await nextFrame();
+    TestBed.resetTestingModule();
+  });
 
   it('saves the offset a page is left at and restores it on the way back', async () => {
     const s = service();
@@ -163,6 +168,19 @@ describe('ScrollMemoryService', () => {
     events.next(new Scroll(reset, null, null, 'after-transition'));
     await nextFrame();
     expect(offset).toBe(0);
+  });
+
+  it('drops a top hold whose page was left before its frame', async () => {
+    service();
+    offset = 640;
+    events.next(new NavigationStart(1, '/movies/1'));
+    events.next(new Scroll({} as never, null, null));
+    await Promise.resolve();
+    events.next(new NavigationStart(2, '/movies/2'));
+    await nextFrame();
+    await nextFrame();
+
+    expect(writes).not.toContain(0);
   });
 
   it('leaves a navigation that asks for no scroll alone', async () => {

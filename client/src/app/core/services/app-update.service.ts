@@ -6,7 +6,7 @@ import { DeviceService } from './device.service';
 import { AuthService } from './auth.service';
 import { ServerVersionService } from './server-version.service';
 import { compareVersions } from '../utils/semver';
-import { whenIdle } from './sse.service';
+import { whenIdle } from '../utils/when-idle';
 import {
   desktopUpdaterOrNull,
   type DesktopUpdateStatus,

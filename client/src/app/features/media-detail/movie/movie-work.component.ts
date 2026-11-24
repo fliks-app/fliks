@@ -18,6 +18,7 @@ import { MediaCastComponent } from '../components/media-cast/media-cast.componen
 import { VideoWorkBase } from '../video-work';
 import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
 import { MediaDownloadsComponent } from '../components/media-downloads/media-downloads.component';
+import { afterViewTransition } from '../../../shared/utils/view-transition';
 
 /** The page of a movie, rendered by the media detail shell for the `movie` kind. */
 @Component({
@@ -48,6 +49,7 @@ export class MovieWorkComponent extends VideoWorkBase {
     inject(LikesApiService),
   );
   protected readonly similar = signal<RelatedMedia[]>([]);
+  protected readonly movieKey = (item: { id: number }) => item.id;
   protected readonly collection = signal<MediaCollection | null>(null);
 
   protected override onTitleChange(): void {
@@ -58,8 +60,8 @@ export class MovieWorkComponent extends VideoWorkBase {
   protected override loadRelated(id: number): void {
     this.paintThenRefresh((opts) =>
       Promise.all([
-        this.mediaService.getSimilar(id, opts).then((s) => this.media().id === id && this.similar.set(s)),
-        this.mediaService.getCollection(id, opts).then((c) => this.media().id === id && this.collection.set(c)),
+        this.mediaService.getSimilar(id, opts).then(afterViewTransition).then((s) => this.media().id === id && this.similar.set(s)),
+        this.mediaService.getCollection(id, opts).then(afterViewTransition).then((c) => this.media().id === id && this.collection.set(c)),
       ]),
     );
   }

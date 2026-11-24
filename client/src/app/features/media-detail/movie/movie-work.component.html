@@ -65,16 +65,18 @@
 
 <app-media-cast [cast]="castMembers()" />
 
-<app-subtitles-modal
-  [mediaId]="m.id"
-  [selectedFileId]="activeFileId()"
-  [streamSubtitles]="activeFile()?.streamInfo?.subtitles"
-  [canManage]="canManageSubtitles()"
-  [languageProfileId]="m.languageProfile?.id ?? null"
-  [parked]="host.parked()"
-/>
+@if (subtitlesOpener.built()) {
+  <app-subtitles-modal
+    [mediaId]="m.id"
+    [selectedFileId]="activeFileId()"
+    [streamSubtitles]="activeFile()?.streamInfo?.subtitles"
+    [canManage]="canManageSubtitles()"
+    [languageProfileId]="m.languageProfile?.id ?? null"
+    [parked]="host.parked()"
+  />
+}
 
-@if (activeFile(); as af) {
+@if (fileInfoReady() && activeFile(); as af) {
   <app-media-file-info
     [file]="af"
     [mediaPath]="m.library?.path ?? null"
@@ -88,12 +90,16 @@
   />
 }
 
-<app-download-quality-modal #downloadModal [progress]="activeDownloadProgress()" (download)="onDownload($event)" (remove)="onRemoveDownload()" />
-<app-download-detail-modal #downloadDetailModal [progress]="activeDownload()" />
+@if (downloadOpener.built()) {
+  <app-download-quality-modal #downloadModal [progress]="activeDownloadProgress()" (download)="onDownload($event)" (remove)="onRemoveDownload()" />
+}
+@if (downloadDetailOpener.built()) {
+  <app-download-detail-modal #downloadDetailModal [progress]="activeDownload()" />
+}
 
 <ng-template #movieRow let-items let-activeId="activeId">
-  <app-horizontal-scroller>
-    @for (item of items; track item.id) {
+  <app-horizontal-scroller [items]="items" [trackBy]="movieKey">
+    <ng-template let-item>
       <app-media-card
         class="shrink-0 w-28 sm:w-32 lg:w-40"
         [aspect]="'portrait'"
@@ -106,6 +112,6 @@
         [highlighted]="item.id === activeId"
         [link]="['/movies', '' + item.id]"
       />
-    }
+    </ng-template>
   </app-horizontal-scroller>
 </ng-template>

@@ -87,18 +87,20 @@
 
   <app-media-cast [cast]="castMembers()" />
 
-  <app-subtitles-modal
-    [mediaId]="m.id"
-    [episodeId]="ep.id"
-    [selectedFileId]="episodeView.episodeActiveFileId()"
-    [streamSubtitles]="episodeView.episodeActiveFile()?.streamInfo?.subtitles"
-    [canManage]="canManageSubtitles()"
-    [searchDisabled]="!ep.hasFile"
-    [languageProfileId]="m.languageProfile?.id ?? null"
-    [parked]="host.parked()"
-  />
+  @if (subtitlesOpener.built()) {
+    <app-subtitles-modal
+      [mediaId]="m.id"
+      [episodeId]="ep.id"
+      [selectedFileId]="episodeView.episodeActiveFileId()"
+      [streamSubtitles]="episodeView.episodeActiveFile()?.streamInfo?.subtitles"
+      [canManage]="canManageSubtitles()"
+      [searchDisabled]="!ep.hasFile"
+      [languageProfileId]="m.languageProfile?.id ?? null"
+      [parked]="host.parked()"
+    />
+  }
 
-  @if (episodeView.episodeActiveFile(); as sf) {
+  @if (fileInfoReady() && episodeView.episodeActiveFile(); as sf) {
     <app-media-file-info
       [file]="sf"
       [mediaPath]="m.library?.path ?? null"
@@ -205,5 +207,9 @@
   <app-media-cast [cast]="castMembers()" />
 }
 
-<app-download-quality-modal #downloadModal [progress]="activeDownloadProgress()" (download)="onDownload($event)" (remove)="onRemoveDownload()" />
-<app-download-detail-modal #downloadDetailModal [progress]="activeDownload()" />
+@if (downloadOpener.built()) {
+  <app-download-quality-modal #downloadModal [progress]="activeDownloadProgress()" (download)="onDownload($event)" (remove)="onRemoveDownload()" />
+}
+@if (downloadDetailOpener.built()) {
+  <app-download-detail-modal #downloadDetailModal [progress]="activeDownload()" />
+}

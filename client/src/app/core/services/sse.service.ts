@@ -19,17 +19,11 @@ import { AppResumeService } from './app-resume.service';
 import { SystemInfoService } from './system-info.service';
 import { currentTargetId } from './remote-target-id';
 import { holdTabNonce } from './tab-nonce';
+import { whenIdle } from '../utils/when-idle';
 import type {
   PartyAnchor, PartyItem, PartyMember, PartyMessage, PartyPlayState, PartyProposal, PartySignalKind, PartySwitches, PartyUser,
 } from './api/party-api.service';
 
-/** Runs work the first paint must not wait on. Safari has no `requestIdleCallback`; the timeout keeps a busy thread from starving it. */
-export function whenIdle(run: () => void): void {
-  const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void })
-    .requestIdleCallback;
-  if (ric) ric(run, { timeout: 2000 });
-  else setTimeout(run, 500);
-}
 
 /** A brief Wi-Fi handoff or the resume-reconnect race shouldn't flash a banner. */
 const UNREACHABLE_DEBOUNCE_MS = 5000;

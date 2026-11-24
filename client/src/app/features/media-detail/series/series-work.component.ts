@@ -303,6 +303,10 @@ export class SeriesWorkComponent extends VideoWorkBase {
 
   // ── Playback state ──
 
+  protected override landedPlaybackState(id: number): TitlePlaybackState | null {
+    return this.streamingApi.landedPlaybackState(id, true);
+  }
+
   protected override async fetchPlaybackState(id: number): Promise<TitlePlaybackState> {
     const [resume, watchedIds, progress] = await Promise.all([
       this.streamingApi.getMediaResumeInfo(id).catch(() => null),
@@ -438,7 +442,7 @@ export class SeriesWorkComponent extends VideoWorkBase {
     const [target] = this.downloadTargets([{ ...season, episodes: [episode] }]);
     if (!target) return;
     this.pendingDownloads = [{ ...target, watched: false }];
-    void this.downloadModal()?.open(target.mediaFileId!);
+    this.downloadOpener.open((m) => void m.open(target.mediaFileId!));
   }
 
 }

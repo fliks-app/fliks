@@ -13,6 +13,13 @@ import { SERVER_SINCE, ServerVersionService } from './core/services/server-versi
 import { ProfileContextService } from './features/profile/profile-context.service';
 import { loadPlayer } from './features/player/load-player';
 
+const mediaDetailPage = () => import('./features/media-detail/media-detail').then((m) => m.MediaDetailComponent);
+const movieWorkPage = () => import('./features/media-detail/movie/movie-work.component').then((m) => m.MovieWorkComponent);
+const seriesWorkPage = () => import('./features/media-detail/series/series-work.component').then((m) => m.SeriesWorkComponent);
+
+/** Loads the movie and series pages ahead of the first open, which otherwise fetches and compiles ~25 chunks before its transition. */
+export const preloadVideoDetailPages = () => Promise.all([mediaDetailPage(), movieWorkPage(), seriesWorkPage()]);
+
 export const routes: Routes = [
   {
     path: 'setup',
@@ -238,28 +245,19 @@ export const routes: Routes = [
       },
       {
         path: 'books/:id',
-        loadComponent: () =>
-          import('./features/media-detail/media-detail').then(
-            (m) => m.MediaDetailComponent,
-          ),
+        loadComponent: mediaDetailPage,
         data: { kind: 'book', reuse: true },
         resolve: { page: () => import('./features/media-detail/book/book-work.component').then((m) => m.BookWorkComponent) },
       },
       {
         path: 'comics/:id',
-        loadComponent: () =>
-          import('./features/media-detail/media-detail').then(
-            (m) => m.MediaDetailComponent,
-          ),
+        loadComponent: mediaDetailPage,
         data: { kind: 'comic', reuse: true },
         resolve: { page: () => import('./features/media-detail/comic/comic-volume.component').then((m) => m.ComicVolumeComponent) },
       },
       {
         path: 'albums/:id',
-        loadComponent: () =>
-          import('./features/media-detail/media-detail').then(
-            (m) => m.MediaDetailComponent,
-          ),
+        loadComponent: mediaDetailPage,
         data: { kind: 'album', reuse: true },
         resolve: { page: () => import('./features/media-detail/album/album-page.component').then((m) => m.AlbumPageComponent) },
       },
@@ -304,31 +302,22 @@ export const routes: Routes = [
       },
       {
         path: 'movies/:id',
-        loadComponent: () =>
-          import('./features/media-detail/media-detail').then(
-            (m) => m.MediaDetailComponent,
-          ),
+        loadComponent: mediaDetailPage,
         data: { kind: 'movie', reuse: true },
-        resolve: { page: () => import('./features/media-detail/movie/movie-work.component').then((m) => m.MovieWorkComponent) },
+        resolve: { page: movieWorkPage },
       },
       {
         path: 'series/:id',
-        loadComponent: () =>
-          import('./features/media-detail/media-detail').then(
-            (m) => m.MediaDetailComponent,
-          ),
+        loadComponent: mediaDetailPage,
         data: { kind: 'series', reuse: true },
-        resolve: { page: () => import('./features/media-detail/series/series-work.component').then((m) => m.SeriesWorkComponent) },
+        resolve: { page: seriesWorkPage },
       },
       {
         path: 'series/:id/episode/:episodeId',
-        loadComponent: () =>
-          import('./features/media-detail/media-detail').then(
-            (m) => m.MediaDetailComponent,
-          ),
+        loadComponent: mediaDetailPage,
         // Switching episodes only moves a param; the component reads params itself, so it keeps its instance.
         data: { kind: 'series', reuse: true, reuseOnParamChange: true },
-        resolve: { page: () => import('./features/media-detail/series/series-work.component').then((m) => m.SeriesWorkComponent) },
+        resolve: { page: seriesWorkPage },
       },
       {
         path: 'requests',

@@ -278,6 +278,9 @@ export interface ContinueWatchingItem {
 /** The server picks the hero carousel's titles; an older one has no carousel at all. */
 export const featuredSupported = (version: Pick<ServerVersionService, 'supports'>) => version.supports(SERVER_SINCE.featured);
 
+/** A warm-up its page never claimed (a touch that scrolled) is dropped. */
+const WARM_TTL_MS = 5000;
+
 @Injectable({ providedIn: 'root' })
 export class StreamingApiService {
   private readonly http = inject(HttpClient);
@@ -648,24 +651,56 @@ export class StreamingApiService {
     if (r.replaces) void this.stopSession(r.replaces).catch(() => {});
   }
 
+  /** Playback reads a card's touch started, handed once to the page it opens: a later reload reads afresh. */
+  private readonly warmed = new Map<string, { read: Promise<unknown>; landed?: { value: unknown } }>();
+
+  private warmedOr<T>(url: string): Promise<T> {
+    const warm = this.warmed.get(url);
+    if (warm) {
+      this.warmed.delete(url);
+      return warm.read as Promise<T>;
+    }
+    return firstValueFrom(this.http.get<T>(url));
+  }
+
+  private static playbackUrls(mediaId: number, series: boolean): string[] {
+    const base = `/api/playback/media/${mediaId}`;
+    return series ? [base, `${base}/watched-episodes`, `${base}/episode-progress`] : [base];
+  }
+
+  /** The warmed reads, once all have landed, taken without waiting; null while one is in flight. */
+  landedPlaybackState(mediaId: number, series: boolean): { resume: MediaResumeInfo | null; watchedIds?: number[]; progress?: Record<number, number> } | null {
+    const urls = StreamingApiService.playbackUrls(mediaId, series);
+    const landed = urls.map((url) => this.warmed.get(url)?.landed);
+    if (landed.some((l) => !l)) return null;
+    urls.forEach((url) => this.warmed.delete(url));
+    const [resume, watchedIds, progress] = landed.map((l) => l!.value);
+    return series
+      ? { resume: resume as MediaResumeInfo | null, watchedIds: watchedIds as number[], progress: progress as Record<number, number> }
+      : { resume: resume as MediaResumeInfo | null };
+  }
+
+  /** Starts what a detail page reads first, so it lands before the page's view transition captures it. */
+  warmPlaybackState(mediaId: number, series: boolean): void {
+    for (const url of StreamingApiService.playbackUrls(mediaId, series)) {
+      if (this.warmed.has(url)) continue;
+      const entry: { read: Promise<unknown>; landed?: { value: unknown } } = { read: firstValueFrom(this.http.get(url)) };
+      entry.read.then((value) => (entry.landed = { value }), () => undefined);
+      this.warmed.set(url, entry);
+      setTimeout(() => this.warmed.get(url) === entry && this.warmed.delete(url), WARM_TTL_MS);
+    }
+  }
+
   getWatchedEpisodeIds(mediaId: number) {
-    return firstValueFrom(
-      this.http.get<number[]>(`/api/playback/media/${mediaId}/watched-episodes`),
-    );
+    return this.warmedOr<number[]>(`/api/playback/media/${mediaId}/watched-episodes`);
   }
 
   getEpisodeProgress(mediaId: number) {
-    return firstValueFrom(
-      this.http.get<Record<number, number>>(
-        `/api/playback/media/${mediaId}/episode-progress`,
-      ),
-    );
+    return this.warmedOr<Record<number, number>>(`/api/playback/media/${mediaId}/episode-progress`);
   }
 
   getMediaResumeInfo(mediaId: number) {
-    return firstValueFrom(
-      this.http.get<MediaResumeInfo | null>(`/api/playback/media/${mediaId}`),
-    );
+    return this.warmedOr<MediaResumeInfo | null>(`/api/playback/media/${mediaId}`);
   }
 
   getPlaybackState(mediaId: number, episodeId?: number, itemId?: number, opts?: { silent?: boolean }) {

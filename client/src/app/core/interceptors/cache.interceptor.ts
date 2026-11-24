@@ -226,6 +226,11 @@ function prune(conn: IDBDatabase): void {
 }
 
 /** Wipe the IDB store, closing our connection first so `deleteDatabase` isn't blocked by it; never waits on an open, and bounded so it never gates a login spinner. */
+/** What a `known` read would serve, without waiting: a body that just landed, for a page's first render. */
+export function knownBodyNow<T>(url: string): T | undefined {
+  return (memos.get(url)?.body ?? pendingWrites.get(url)?.body) as T | undefined;
+}
+
 /** The last known body of a cached GET, without the network: what a boot paint restores. */
 export async function cachedBody<T>(url: string): Promise<T | null> {
   const entry = await getCached(url);
@@ -259,6 +264,9 @@ export function clearRequestCache(): Promise<void> {
 }
 
 async function getCached(url: string): Promise<CacheEntry | null> {
+  // The memo holds the latest body and stamp (a same-ETag answer only re-stamps it); IndexedDB would answer too late to paint.
+  const memo = memos.get(url);
+  if (memo) return { url, body: memo.body, timestamp: memo.at, etag: memo.etag };
   const pending = pendingWrites.get(url);
   if (pending) return pending;
   try {
@@ -425,9 +433,9 @@ export const cacheInterceptor: HttpInterceptorFn = (req, next) => {
     const etag = event.headers.get('ETag') ?? undefined;
     const memo = etag ? memos.get(url) : undefined;
     if (memo && memo.etag === etag && !isInvalidated({ url, body: null, timestamp: memo.at })) {
-      // Re-stamp the entry: its TTL restarts at every confirmed revalidation.
+      // Same body: only the memo takes the new stamp. Rewriting IndexedDB cloned a whole library list (~130 ms on a tablet)
+      // for a timestamp; after a restart the older one just means a background revalidation.
       if (generation === cacheGeneration) remember(url, etag!, memo.body, sentAt);
-      putCacheWhenIdle(url, memo.body, sentAt, generation, etag);
       return event.clone({ body: memo.body });
     }
     if (etag && generation === cacheGeneration) remember(url, etag, event.body, sentAt);

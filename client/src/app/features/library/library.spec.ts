@@ -354,6 +354,23 @@ describe('LibraryComponent — page scroll', () => {
     ).toBe(`translateY(${offset}px)`);
   });
 
+  it('keeps the range held through the trip when it already holds the row, so no row is rebuilt', () => {
+    const offset = 520 * 50;
+    const { component, attached$, detached$, navigatedBack } = createHarness(offset);
+    navigatedBack.set(true);
+    component.libraryName.set('films');
+    component.list.setItems(manyRows(), (m) => m.title);
+    const viewport = attachViewport(component);
+    viewport.elementRef.nativeElement.querySelector<HTMLElement>('.cdk-virtual-scroll-content-wrapper')!.style.transform =
+      `translateY(${47 * component.rowHeight()}px)`;
+
+    detached$.next(OWN_KEY);
+    attached$.next(OWN_KEY);
+
+    expect(viewport.setRenderedRange).not.toHaveBeenCalled();
+    expect(viewport.setRenderedContentOffset).not.toHaveBeenCalled();
+  });
+
   it("keeps the active letter through the restore's own scroll event", async () => {
     const { component, attached$, detached$, navigatedBack } = createHarness();
     navigatedBack.set(true);

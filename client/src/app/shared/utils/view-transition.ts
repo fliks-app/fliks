@@ -1,3 +1,4 @@
+import { signal, type Signal } from '@angular/core';
 import { KIND_REGISTRY, MEDIA_KINDS } from '../../core/media-kinds';
 
 /** Poster morph between a media card and the media page. The stamp must outlive the click (snapshot on next tick, read again on back), so it is only replaced,
@@ -206,6 +207,18 @@ export function viewTransitionAnimating(): boolean {
  *  starts a transition of its own, which skips the one on screen. */
 export function viewTransitionDone(): Promise<void> {
   return running;
+}
+
+/** True once the running transition has ended, or from the start when `now`. */
+export function viewTransitionEnded(now = false): Signal<boolean> {
+  const ended = signal(now);
+  if (!now) void running.then(() => ended.set(true));
+  return ended.asReadonly();
+}
+
+/** Hands a value on once the running transition ends: a section filled under the morph froze it. */
+export function afterViewTransition<T>(value: T): Promise<T> {
+  return running.then(() => value);
 }
 
 /** Count of running transitions per class: a superseded one cleans up after the new one named itself, so each takes back only its own. */

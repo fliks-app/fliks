@@ -151,6 +151,10 @@ const NATURAL_ORDER_BY_SORT: Record<string, SortOrder> = {
   progress: 'DESC',
 };
 
+/** The longest the grid ignores the window after a return; the first user gesture ends it sooner. */
+const GRID_HOLD_MS = 1000;
+const GRID_HOLD_INPUT = ['touchstart', 'wheel', 'keydown'] as const;
+
 @Component({
   selector: 'app-library',
   imports: [
@@ -229,6 +233,7 @@ export class LibraryComponent implements OnInit, OnDestroy {
         // scroll event must not recompute it off the row it lands on.
         this.holdLetter();
         this.renderRangeForRememberedOffset();
+        this.holdGridUntilRestored();
       }
     },
     onDetach: () => {
@@ -238,6 +243,27 @@ export class LibraryComponent implements OnInit, OnDestroy {
       this.unbindLetterScroll();
     },
   });
+
+  /** Past the attach, until the window is back at the grid's offset: following the interim offset rebuilt every row twice. */
+  private readonly restoring = signal(false);
+  protected readonly gridFrozen = computed(() => this.detached() || this.restoring());
+
+  private holdGridUntilRestored(): void {
+    const key = this.scrollMemoryKey();
+    const offset = key ? this.scrollMemory.remembered(key) : undefined;
+    if (!offset) return;
+    this.restoring.set(true);
+    const onScroll = () => Math.abs(window.scrollY - offset) < 2 && release();
+    const timer = setTimeout(() => release(), GRID_HOLD_MS);
+    const release = () => {
+      clearTimeout(timer);
+      window.removeEventListener('scroll', onScroll);
+      for (const ev of GRID_HOLD_INPUT) window.removeEventListener(ev, release);
+      this.restoring.set(false);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    for (const ev of GRID_HOLD_INPUT) window.addEventListener(ev, release, { passive: true });
+  }
 
   private queryParamSub?: Subscription;
   /** Set while a state-driven `syncQueryParams` writes the URL, so the `queryParamMap` subscription ignores the round-trip. */
@@ -527,14 +553,18 @@ export class LibraryComponent implements OnInit, OnDestroy {
       Math.floor(Math.max(0, offset - this.rowsOffset()) / this.rowHeight()),
       Math.max(0, rows - span),
     ));
+    const wrapper = vp.elementRef.nativeElement.querySelector<HTMLElement>(
+      '.cdk-virtual-scroll-content-wrapper',
+    );
+    // The range held through the trip, drawn at its own offset, already has these rows: re-ranging rebuilds them all.
+    const drawnAt = Number(/translateY\(([\d.]+)px\)/.exec(wrapper?.style.transform ?? '')?.[1] ?? NaN);
+    const covers = first >= range.start && first + Math.ceil(window.innerHeight / this.rowHeight()) <= range.end;
+    if (covers && Math.abs(drawnAt - range.start * this.rowHeight()) < 1) return;
     const top = first * this.rowHeight();
     if (first !== range.start) vp.setRenderedRange({ start: first, end: first + span });
     vp.setRenderedContentOffset(top);
     // The rows only sit where that offset says once CDK's own pass writes their
     // wrapper transform, and a poster morph is captured before it.
-    const wrapper = vp.elementRef.nativeElement.querySelector<HTMLElement>(
-      '.cdk-virtual-scroll-content-wrapper',
-    );
     if (wrapper) wrapper.style.transform = `translateY(${top}px)`;
   }
   /** The offset lives in the shared memory, whose sticky restore lands after
