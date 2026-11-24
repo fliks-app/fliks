@@ -26,7 +26,7 @@
   </button>
   <!-- D-pad: the whole bar is one focus stop; the remote's play key covers the toggle. -->
   @if (playing() !== null && !dpad) {
-    <button type="button" class="rail-reveal btn btn-ghost btn-circle" data-morph="toggle" [attr.aria-label]="(playing() ? 'player.pause' : 'player.play') | translate" (click)="toggled.emit()">
+    <button type="button" class="btn btn-ghost btn-circle" [class.rail-reveal]="docked()" data-morph="toggle" [attr.aria-label]="(playing() ? 'player.pause' : 'player.play') | translate" (click)="toggled.emit()">
       @if (playing()) {
         <svg [lucideIcon]="icons.Pause" class="h-5 w-5"></svg>
       } @else {
