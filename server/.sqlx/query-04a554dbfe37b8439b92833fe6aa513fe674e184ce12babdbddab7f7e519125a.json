@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media_files SET \"osdbHash\" = $2, \"osdbBytesize\" = $3 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "04a554dbfe37b8439b92833fe6aa513fe674e184ce12babdbddab7f7e519125a"
+}

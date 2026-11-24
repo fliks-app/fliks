@@ -7,7 +7,7 @@ use crate::{
     state::AppState,
 };
 use fliks_domain::media::kind::MediaKind;
-use fliks_engine_core::api::{JobPriority, MediaInfo};
+use fliks_engine_core::api::{JobPriority, MediaInfo, VideoStreamInfo};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::Mutex,
@@ -18,11 +18,12 @@ use tokio::sync::Notify;
 const QUEUE_PARENT: &str = "PostImportEnrichQueue";
 const KIND: &str = "PostImportEnrich";
 pub const SETTLE: Duration = Duration::from_secs(60);
-const IDLE_CEILING: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Default)]
 struct Q {
     tasks: VecDeque<i32>,
+    /// Rescan and recovery backlog: runs only while `tasks` is empty.
+    bulk: VecDeque<i32>,
     known: HashSet<i32>,
     active: bool,
     running: Option<i32>,
@@ -30,11 +31,22 @@ struct Q {
     done: u64,
 }
 
+impl Q {
+    /// The next file and whether it comes from the bulk lane.
+    fn pop(&mut self) -> Option<(i32, bool)> {
+        match self.tasks.pop_front() {
+            Some(id) => Some((id, false)),
+            None => self.bulk.pop_front().map(|id| (id, true)),
+        }
+    }
+}
+
 /// FIFO, one task at a time, an id queued or running is not queued again.
 #[derive(Default)]
 pub struct Queue {
     q: Mutex<Q>,
-    idle: Notify,
+    /// Pinged at each task end.
+    ended: Notify,
 }
 
 fn progress(st: &AppState, done: u64, total: u64, subject: Option<Subject>) {
@@ -53,6 +65,16 @@ impl Queue {
     }
 
     pub async fn enqueue(&self, st: &AppState, file_id: i32) {
+        self.push(st, file_id, false).await;
+    }
+
+    pub async fn enqueue_bulk(&self, st: &AppState, ids: &[i32]) {
+        for &id in ids {
+            self.push(st, id, true).await;
+        }
+    }
+
+    async fn push(&self, st: &AppState, file_id: i32, bulk: bool) {
         if self.lock().known.contains(&file_id) {
             return;
         }
@@ -63,7 +85,11 @@ impl Queue {
             if !q.known.insert(file_id) {
                 return;
             }
-            q.tasks.push_back(file_id);
+            if bulk {
+                q.bulk.push_back(file_id);
+            } else {
+                q.tasks.push_back(file_id);
+            }
             q.total += 1;
             let start = !q.active;
             q.active = true;
@@ -93,13 +119,14 @@ impl Queue {
 
     pub fn is_idle(&self) -> bool {
         let q = self.lock();
-        !q.active && q.tasks.is_empty()
+        !q.active && q.tasks.is_empty() && q.bulk.is_empty()
     }
 
-    pub async fn when_idle(&self) {
+    /// Returns once none of `ids` is queued or running.
+    async fn wait_for(&self, ids: &[i32]) {
         loop {
-            let n = self.idle.notified();
-            if self.is_idle() {
+            let n = self.ended.notified();
+            if !ids.iter().any(|id| self.lock().known.contains(id)) {
                 return;
             }
             n.await;
@@ -111,10 +138,10 @@ impl Queue {
         loop {
             let next = {
                 let mut q = self.lock();
-                match q.tasks.pop_front() {
-                    Some(id) => {
+                match q.pop() {
+                    Some((id, bulk)) => {
                         q.running = Some(id);
-                        Some((id, q.done, q.total))
+                        Some((id, bulk, q.done, q.total))
                     }
                     None => {
                         st.hub.activity().remove(QUEUE_PARENT);
@@ -123,8 +150,7 @@ impl Queue {
                     }
                 }
             };
-            let Some((id, done, total)) = next else {
-                self.idle.notify_waiters();
+            let Some((id, bulk, done, total)) = next else {
                 return;
             };
             let key = format!("{KIND}:{id}");
@@ -141,7 +167,7 @@ impl Queue {
                 .as_ref()
                 .is_some_and(|s| s.media_type.is_some_and(super::registers));
             progress(st, done, total, subject);
-            match enrich(st, id).await {
+            match enrich(st, id, bulk).await {
                 Ok(()) => mark_enriched(st, id).await,
                 Err(e) => tracing::warn!("Post-import enrich of file #{id} failed: {e}"),
             }
@@ -166,6 +192,7 @@ impl Queue {
                 q.done += 1;
                 (q.done, q.total)
             };
+            self.ended.notify_waiters();
             if done < total {
                 st.hub.activity().upsert_running(
                     QUEUE_PARENT,
@@ -196,7 +223,7 @@ impl Queue {
                 q.known.remove(&id);
                 q.done += 1;
             }
-            let more = !q.tasks.is_empty();
+            let more = !q.tasks.is_empty() || !q.bulk.is_empty();
             if !more {
                 *q = Q::default();
             }
@@ -206,12 +233,12 @@ impl Queue {
             tracing::error!("Post-import enrich of file #{id} panicked");
             st.hub.activity().remove(&format!("{KIND}:{id}"));
         }
+        self.ended.notify_waiters();
         if more {
             let st = st.clone();
             tokio::spawn(async move { st.ingest.queue.drain(&st).await });
         } else {
             st.hub.activity().remove(QUEUE_PARENT);
-            self.idle.notify_waiters();
         }
     }
 }
@@ -259,8 +286,8 @@ pub async fn file_path(
 }
 
 /// `finalizeImportedFile` (rule 50): crop and the OpenSubtitles hash from one engine probe, then
-/// the source scan while the new bytes are still in the page cache.
-async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
+/// the source scan while the new bytes are still in the page cache (not for the bulk backlog).
+async fn enrich(st: &AppState, id: i32, bulk: bool) -> Result<(), String> {
     let Some((path, info)) = file_path(st, id).await.map_err(|e| e.to_string())? else {
         return Err("no contained path".into());
     };
@@ -281,33 +308,50 @@ async fn enrich(st: &AppState, id: i32) -> Result<(), String> {
     if super::books::classify(&name).is_some() || super::music::is_music_file(&name) {
         return Ok(());
     }
-    let probed = super::probe_hashed(
-        st,
-        &path,
-        info.as_ref().is_some_and(|i| !i.video.is_empty()),
-    )
-    .await?;
-    let info = info.map(|mut i| {
-        if let (Some(v), Some(p)) = (i.video.first_mut(), probed.info.video.first()) {
-            v.crop = p.crop.clone();
-        }
-        i
-    });
+    let video = info.as_ref().is_some_and(|i| !i.video.is_empty());
+    let probed = super::probe_hashed(st, &path, video).await?;
     let (hash, size) = probed.moviehash.unzip();
     sqlx::query!(
-        r#"UPDATE media_files SET "streamInfo" = COALESCE($2, "streamInfo"), "osdbHash" = $3, "osdbBytesize" = $4 WHERE id = $1"#,
+        r#"UPDATE media_files SET "osdbHash" = $2, "osdbBytesize" = $3 WHERE id = $1"#,
         id,
-        info.as_ref()
-            .map(serde_json::to_value)
-            .transpose()
-            .map_err(|e| e.to_string())?,
         hash,
         size
     )
     .execute(&st.db)
     .await
     .map_err(|e| e.to_string())?;
-    crate::stream::spawn_scan(st, id, path, info);
+    let Some(mut info) = info.filter(|_| video) else {
+        return Ok(());
+    };
+    let p = probed.info.video.first();
+    store_crop(&st.db, id, p).await.map_err(|e| e.to_string())?;
+    info.video[0].crop = p.and_then(|v| v.crop.clone());
+    info.video[0].crop_stable = p.and_then(|v| v.crop_stable);
+    if !bulk {
+        crate::stream::spawn_scan(st, id, path, Some(info));
+    }
+    Ok(())
+}
+
+/// Writes only `video[0].crop` and `cropStable` (absent when unknown, as serialised): the rest may have moved.
+pub(super) async fn store_crop(
+    db: &sqlx::PgPool,
+    id: i32,
+    probed: Option<&VideoStreamInfo>,
+) -> sqlx::Result<()> {
+    let crop = serde_json::json!(probed.and_then(|v| v.crop.as_ref()));
+    let stable = serde_json::json!(probed.and_then(|v| v.crop_stable));
+    sqlx::query!(
+        r#"UPDATE media_files SET "streamInfo" = jsonb_set("streamInfo", '{video,0}',
+             ("streamInfo"->'video'->0) - 'crop' - 'cropStable'
+               || jsonb_strip_nulls(jsonb_build_object('crop', $2::jsonb, 'cropStable', $3::jsonb)))
+           WHERE id = $1 AND jsonb_array_length("streamInfo"->'video') > 0"#,
+        id,
+        crop,
+        stable
+    )
+    .execute(db)
+    .await?;
     Ok(())
 }
 
@@ -325,17 +369,14 @@ async fn mark_enriched(st: &AppState, id: i32) {
 
 /// Files imported within the last `RECOVER_DAYS` days past the sweep's reach are left alone.
 const RECOVER_DAYS: i32 = 7;
-const RECOVER_FILES: i64 = 1000;
-const RECOVER_MEDIA: i64 = 500;
 
 /// The files to enrich and the media to settle again, oldest first.
 async fn pending(db: &sqlx::PgPool) -> Result<(Vec<i32>, Vec<i32>), sqlx::Error> {
     let files = sqlx::query_scalar!(
         r#"SELECT id FROM media_files
            WHERE "enrichedAt" IS NULL AND "createdAt" > now() - make_interval(days => $1)
-           ORDER BY id LIMIT $2"#,
-        RECOVER_DAYS,
-        RECOVER_FILES
+           ORDER BY id"#,
+        RECOVER_DAYS
     )
     .fetch_all(db)
     .await?;
@@ -344,9 +385,8 @@ async fn pending(db: &sqlx::PgPool) -> Result<(Vec<i32>, Vec<i32>), sqlx::Error>
              SELECT 1 FROM media_files f WHERE f."mediaId" = m.id
                AND f."createdAt" > now() - make_interval(days => $1)
                AND f."createdAt" > COALESCE(m."settledAt", '-infinity'))
-           ORDER BY m.id LIMIT $2"#,
-        RECOVER_DAYS,
-        RECOVER_MEDIA
+           ORDER BY m.id"#,
+        RECOVER_DAYS
     )
     .fetch_all(db)
     .await?;
@@ -363,7 +403,7 @@ pub async fn recover_when_engine_ready(st: &AppState) {
 }
 
 /// Replays the work a restart lost: the files without `enrichedAt` and the media with a file newer
-/// than their `settledAt`, bounded by age and count. Runs at boot and on the daily prune tick.
+/// than their `settledAt`, bounded by age. Runs at boot and on the daily prune tick.
 pub async fn recover(st: &AppState) {
     let (files, media) = match pending(&st.db).await {
         Ok(p) => p,
@@ -376,9 +416,7 @@ pub async fn recover(st: &AppState) {
             media.len()
         );
     }
-    for id in files {
-        st.ingest.queue.enqueue(st, id).await;
-    }
+    st.ingest.queue.enqueue_bulk(st, &files).await;
     for id in media {
         st.ingest.settle.schedule(st, id);
     }
@@ -443,7 +481,15 @@ pub(crate) async fn starts_now(st: &AppState, file_id: i32) -> bool {
 }
 
 async fn settled(st: &AppState, media_id: i32) {
-    let _ = tokio::time::timeout(IDLE_CEILING, st.ingest.queue.when_idle()).await;
+    // Optimize plans freeze the crop: wait for this media's own enrich, however long the backlog.
+    let files = sqlx::query_scalar!(
+        r#"SELECT id FROM media_files WHERE "mediaId" = $1"#,
+        media_id
+    )
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    st.ingest.queue.wait_for(&files).await;
     let began = sqlx::query_scalar!(r#"SELECT now() AS "now!""#)
         .fetch_one(&st.db)
         .await;
@@ -600,6 +646,36 @@ mod tests {
         assert_eq!(q.tasks, [2]);
         assert_eq!(q.known, HashSet::from([2]));
         assert_eq!((q.running, q.active, q.done), (None, true, 1));
+    }
+
+    #[test]
+    fn an_import_overtakes_the_bulk_backlog() {
+        let mut q = Q::default();
+        q.bulk.extend([1, 2]);
+        q.tasks.push_back(3);
+        assert_eq!(q.pop(), Some((3, false)));
+        assert_eq!(q.pop(), Some((1, true)));
+    }
+
+    #[tokio::test]
+    async fn a_wait_ends_when_its_files_leave_the_queue() {
+        let queue = std::sync::Arc::new(Queue::default());
+        queue.lock().known.extend([1, 2]);
+        let w = tokio::spawn({
+            let queue = queue.clone();
+            async move { queue.wait_for(&[2, 9]).await }
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        queue.lock().known.remove(&1);
+        queue.ended.notify_waiters();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(!w.is_finished(), "file 2 is still queued");
+        queue.lock().known.remove(&2);
+        queue.ended.notify_waiters();
+        tokio::time::timeout(Duration::from_secs(1), w)
+            .await
+            .unwrap()
+            .unwrap();
     }
 
     #[sqlx::test(migrations = false)]

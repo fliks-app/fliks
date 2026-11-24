@@ -66,6 +66,13 @@
     },
     {
       "as": "admin",
+      "wait": "idle",
+      "expect": {
+        "status": 200
+      }
+    },
+    {
+      "as": "admin",
       "expect": {
         "body": {
           "addedById": null,

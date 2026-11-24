@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE media_files SET \"streamInfo\" = jsonb_set(\"streamInfo\", '{video,0}',\n             (\"streamInfo\"->'video'->0) - 'crop' - 'cropStable'\n               || jsonb_strip_nulls(jsonb_build_object('crop', $2::jsonb, 'cropStable', $3::jsonb)))\n           WHERE id = $1 AND jsonb_array_length(\"streamInfo\"->'video') > 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Jsonb",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dffb385ec0f1199acb54ee0aa5e9acb98ea66d45a876a7bf59bbfd6e45a2665b"
+}

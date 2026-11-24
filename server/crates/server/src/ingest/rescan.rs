@@ -199,6 +199,7 @@ pub async fn rescan_files(
     let mut c = Counts::default();
     let mut slots_created = false;
     let mut touched: Vec<Touched> = vec![];
+    let mut added: Vec<i32> = vec![];
     let mut slots = Slots::default();
     if media.has_seasons() {
         slots = Slots::load(&st.db, media_id).await?;
@@ -265,7 +266,17 @@ pub async fn rescan_files(
                 return book_pass(st, &m, &base, &kept, &disk, &linked, force, &mut c).await;
             }
             refresh_existing(st, &m, &base, &kept, &slots, force, &mut c, &mut touched).await?;
-            add_new(st, &m, &disk, &linked, &slots, &mut c, &mut touched).await
+            add_new(
+                st,
+                &m,
+                &disk,
+                &linked,
+                &slots,
+                &mut c,
+                &mut touched,
+                &mut added,
+            )
+            .await
         }
         .await;
         if applied.is_err() {
@@ -284,6 +295,11 @@ pub async fn rescan_files(
     // An interrupted walk proves nothing about the sidecars on disk.
     if !super::registers(media.media_type) {
         reconcile_subtitles(st, media_id, &mut c, &touched, complete).await;
+    }
+    // After the sidecars are registered: the enrich's subtitle search must see them.
+    if !added.is_empty() {
+        st.ingest.queue.enqueue_bulk(st, &added).await;
+        st.ingest.settle.schedule(st, media_id);
     }
     applied?;
     tracing::info!(
@@ -602,11 +618,12 @@ pub async fn refresh_content(
     if let Some(old) = &stored.info
         && !change.content_changed
     {
-        if let (Some(crop), Some(v)) = (
-            old.video.first().and_then(|v| v.crop.clone()),
+        if let (Some(o), Some(v)) = (
+            old.video.first().filter(|v| v.crop.is_some()),
             info.video.first_mut(),
         ) {
-            v.crop = Some(crop);
+            v.crop = o.crop.clone();
+            v.crop_stable = o.crop_stable;
         }
         if old.timestamp_break_seconds.is_some() {
             info.timestamp_break_seconds = old.timestamp_break_seconds;
@@ -642,6 +659,7 @@ pub async fn refresh_content(
     Ok(info)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn add_new(
     st: &AppState,
     media: &MediaRow,
@@ -650,6 +668,7 @@ async fn add_new(
     slots: &Slots,
     c: &mut Counts,
     touched: &mut Vec<Touched>,
+    added: &mut Vec<i32>,
 ) -> Result<(), AppError> {
     let media_id = media.id;
     let Some(folder_id) = media.folder.as_ref().map(|f| f.id) else {
@@ -680,7 +699,7 @@ async fn add_new(
                 },
             }
         }
-        let Ok(p) = probe(st, abs, true)
+        let Ok(p) = probe(st, abs, false)
             .await
             .inspect_err(|e| tracing::error!("Rescan[media #{media_id}] new file \"{rel}\": {e}"))
         else {
@@ -729,6 +748,7 @@ async fn add_new(
     };
     let mut links = vec![];
     for (id, rel) in inserted {
+        added.push(id);
         let (ep, last, info) = by_rel
             .get(rel.as_str())
             .map_or((None, None, None), |&(e, l, i)| (e, l, Some(i.clone())));
@@ -1391,22 +1411,9 @@ async fn analyze_files(
             );
             continue;
         }
-        if o.crop
-            && let Some(mut info) = info.clone()
-            && !info.video.is_empty()
-        {
+        if o.crop && info.as_ref().is_some_and(|i| !i.video.is_empty()) {
             match probe(st, &abs, true).await {
-                Ok(p) => {
-                    info.video[0].crop = p.info.video.first().and_then(|v| v.crop.clone());
-                    sqlx::query!(
-                        r#"UPDATE media_files SET "streamInfo" = $2 WHERE id = $1"#,
-                        id,
-                        serde_json::to_value(&info)
-                            .map_err(|e| AppError::internal(e.to_string()))?
-                    )
-                    .execute(&st.db)
-                    .await?;
-                }
+                Ok(p) => super::post_import::store_crop(&st.db, id, p.info.video.first()).await?,
                 Err(e) => {
                     tracing::warn!("analyzeMedia[#{media_id}]: crop of file #{id} failed: {e}")
                 }
