@@ -32,7 +32,8 @@ pub fn resolve_subtitle_absolute_path(root: &str, stored: &str) -> Option<String
     }
     let root = resolve(Path::new(root))?;
     let abs = resolve(&root.join(stored))?;
-    abs.starts_with(&root)
+    // `root + sep`: under a filesystem root (`/`, `C:\`) only the root itself matches.
+    (abs == root || (root.parent().is_some() && abs.starts_with(&root)))
         .then(|| abs.to_string_lossy().into_owned())
 }
 
@@ -60,6 +61,7 @@ mod tests {
         let abs = resolve_subtitle_absolute_path(l, "Movie/a.en.srt");
         assert_eq!(abs.as_deref(), Some(r"C:\Fliks\medias\Movie\a.en.srt"));
         assert_eq!(resolve_subtitle_absolute_path(l, "../x.srt"), None);
+        assert_eq!(resolve_subtitle_absolute_path(r"C:\", "a.srt"), None);
         let rel = relative_path_under_root(l, r"C:\Fliks\medias\Movie\a.en.srt");
         assert_eq!(rel.as_deref(), Some("Movie/a.en.srt"));
         assert_eq!(relative_path_under_root(l, r"D:\Movie\a.srt"), None);
