@@ -48,7 +48,7 @@
             </a>
           </li>
         }
-        @if (more()) {
+        @if (overflow().length) {
           <li>
             <button #plus type="button" class="rail-item w-full" [class.rail-item-active]="plusCurrent()"
                     [attr.aria-current]="plusCurrent() ? 'page' : null" aria-haspopup="menu"
@@ -59,7 +59,7 @@
             </button>
             <app-popover-menu [open]="plusOpen()" [anchor]="plus" placement="right-start" [heading]="'home.libraries' | translate" (closed)="plusOpen.set(false)">
               <ul class="menu rail-menu w-full p-0 gap-0.5">
-                @for (lib of libraries(); track lib.id) {
+                @for (lib of overflow(); track lib.id) {
                   <li>
                     <a [routerLink]="libraryUrl(lib)" routerLinkActive="menu-active" [state]="{ rootEntry: true }" (click)="plusOpen.set(false)">
                       <app-lucide-icon [name]="libraryIcon(lib)" class="h-5 w-5 flex-none" [style.color]="libraryColor(lib)" />
