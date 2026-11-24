@@ -65,6 +65,9 @@
       }
     },
     {
+      "wait": "idle"
+    },
+    {
       "as": "admin",
       "expect": {
         "body": {
