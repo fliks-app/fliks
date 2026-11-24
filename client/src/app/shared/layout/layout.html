@@ -1,10 +1,6 @@
 <div class="drawer min-h-screen"
      [class.drawer-open]="navbar.railDocked()"
-     [class.rail-dim]="railOverlaying()"
-     [style.--chrome-top]="chromeTop()"
-     [style.--dock-h]="dockHeight()"
-     [style.--chrome-bottom]="chromeBottom()"
-     [style.--chrome-bottom-total]="chromeBottomTotal()">
+     [class.rail-dim]="railOverlaying()">
   <input #sidebarToggle id="sidebar" type="checkbox" class="drawer-toggle" tabindex="-1" aria-hidden="true" />
   <div class="drawer-content flex flex-col relative">
     @if (!navbar.railDocked()) {

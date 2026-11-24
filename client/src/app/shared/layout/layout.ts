@@ -231,6 +231,19 @@ export class LayoutComponent implements OnInit, OnDestroy {
     return bars ? `calc(${this.chromeBottom()} + ${bars * 4.25}rem)` : this.chromeBottom();
   });
 
+  /** On the root so the toasts and other top-level overlays outside the layout clear the same chrome. */
+  private readonly chromeVars = (() => {
+    const root = document.documentElement.style;
+    const vars = {
+      '--chrome-top': this.chromeTop,
+      '--dock-h': this.dockHeight,
+      '--chrome-bottom': this.chromeBottom,
+      '--chrome-bottom-total': this.chromeBottomTotal,
+    };
+    inject(DestroyRef).onDestroy(() => Object.keys(vars).forEach((k) => root.removeProperty(k)));
+    return effect(() => Object.entries(vars).forEach(([k, v]) => root.setProperty(k, v())));
+  })();
+
   // Android status bar icons: the app is dark-only, so light=false always.
   private readonly statusBarEffect = Capacitor.isNativePlatform() ? effect(() => {
     // Read the signal so the effect re-runs when transparency flips, in case
