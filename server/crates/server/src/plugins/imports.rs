@@ -6,9 +6,11 @@ use super::runtime::fliks::plugin::{db, host, log, notify, types as t};
 use super::runtime::{Ctx, HostError};
 use super::scheduled;
 use super::units;
+use crate::acquisition::sweep::{Pick, Scope};
 use crate::events::SseEvent;
 use crate::state::AppState;
 use fliks_domain::media::family::Family;
+use fliks_domain::media::kind::MediaKind;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Instant;
@@ -509,6 +511,55 @@ impl host::Host for Ctx {
                     ids.push("core".to_owned());
                 }
                 Ok(ids)
+            }
+        )
+    }
+
+    async fn acquisition_request(&mut self, asks: Vec<t::AcquisitionAsk>) -> Result<(), HostError> {
+        let app = self.app();
+        call!(
+            self,
+            "acquisition.request",
+            ["acquisition:candidates"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                if asks.is_empty() || asks.len() > 200 {
+                    return Err(host_err(
+                        "ERR_VALIDATION",
+                        "asks must hold 1 to 200 entries",
+                    ));
+                }
+                let ids: Vec<i32> = asks.iter().map(|a| a.media_id as i32).collect();
+                let kinds: std::collections::HashMap<i32, String> =
+                    sqlx::query_as(r#"SELECT id, type FROM media WHERE id = ANY($1)"#)
+                        .bind(&ids)
+                        .fetch_all(&app.db)
+                        .await
+                        .map_err(db_err)?
+                        .into_iter()
+                        .collect();
+                let mut picks: std::collections::BTreeMap<u32, Vec<Pick>> = Default::default();
+                for a in &asks {
+                    // An unknown media has no target to ask for.
+                    let Some(kind) = kinds
+                        .get(&(a.media_id as i32))
+                        .and_then(|k| MediaKind::parse(k))
+                    else {
+                        continue;
+                    };
+                    let pick = Pick::of(kind.families()[0].into(), a.family, a.unit.as_ref())?;
+                    let p = picks.entry(a.media_id).or_default();
+                    if !p.contains(&pick) {
+                        p.push(pick);
+                    }
+                }
+                let scoped = picks
+                    .into_iter()
+                    .map(|(m, p)| (m, Scope::Only(p)))
+                    .collect();
+                app.plugins.request_scoped(&app, scoped);
+                Ok(())
             }
         )
     }

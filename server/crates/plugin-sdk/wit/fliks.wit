@@ -39,6 +39,10 @@ interface types {
     label: option<string>,
     absolute: option<f64>,
   }
+  /// What an `acquisition-request` asks for: the targets of `media-id` in `family` (none: any) whose unit is `unit`,
+  /// read as the media's kind reads it (none: the whole work, never a series' episodes or a comic's issues).
+  /// Since fliks 7.2.1.
+  record acquisition-ask { media-id: u32, family: option<family>, unit: option<unit-ref> }
   /// A track of a list, by its ISRC or its MusicBrainz recording id.
   variant recording-ref { isrc(string), mbid(string) }
   /// A track wanted on its album: the album's media and the track's item.
@@ -248,7 +252,7 @@ interface host {
   use types.{
     target, candidates-query, candidates-page, release-title, release-match,
     candidate-release, scored-release, resolve-query, resolved-media, ingest-request,
-    ingest-result, acquisition-event, audience, family, unit-ref, host-error,
+    ingest-result, acquisition-event, acquisition-ask, audience, family, unit-ref, host-error,
     json, kind, external-id, recording-ref, wanted-track, source, queue-entry,
   };
 
@@ -302,6 +306,11 @@ interface host {
   /// The other plugins with a download in flight that covers `unit` of the media (none: any download of it);
   /// needs `acquisition:candidates`.
   acquisition-in-flight: func(media-id: u32, unit: option<unit-ref>) -> result<list<string>, host-error>;
+
+  /// Asks the core to run its acquisition sweep over the targets `asks` name, as it does on a request: one claim,
+  /// the core's ranking and quality rules apply and the core grabs. Returns once queued; needs `acquisition:candidates`.
+  /// Since fliks 7.2.1.
+  acquisition-request: func(asks: list<acquisition-ask>) -> result<_, host-error>;
 
   deadline-remaining-ms: func() -> u64;
 

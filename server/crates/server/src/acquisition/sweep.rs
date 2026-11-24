@@ -3,15 +3,16 @@
 use super::attempts::{self, Tally};
 use super::{self as acquisition, picker};
 use crate::ingest::KeyedLocks;
+use crate::plugins::imports::host_err;
 use crate::plugins::runtime::fliks::plugin::types as t;
-use crate::plugins::runtime::{CallError, State};
-use crate::plugins::{HttpRequest, Plugins, Principal, events};
+use crate::plugins::runtime::{CallError, HostError, State};
+use crate::plugins::{HttpRequest, Plugins, Principal, events, units};
 use crate::state::AppState;
 use crate::sync::MutexExt;
 use chrono::{DateTime, Utc};
 use fliks_domain::release::parsing::attributes::parse_revision;
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -27,23 +28,137 @@ const RETRIES: u8 = 5;
 /// A cooldown further away than this is not waited for: the hourly tick covers the rest.
 const MAX_COOLDOWN: chrono::Duration = chrono::Duration::hours(24);
 
-/// Media waiting for a request sweep, with the retries each has had.
+/// The targets of a media a request names (`plugins.md` rule 66).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum Scope {
+    /// Every wanted target.
+    #[default]
+    All,
+    Only(Vec<Pick>),
+}
+
+/// A unit as the core reads it: a video season and episode, or a comic issue's kind and number.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Unit {
+    Video(Option<u32>, Option<u32>),
+    Issue(String, String),
+}
+
+impl Unit {
+    /// `unit` read in the grammar of `family`; none is the whole work, and only video and comics have units.
+    fn of(family: t::Family, unit: Option<&t::UnitRef>) -> Result<Option<Self>, HostError> {
+        let Some(u) = unit else { return Ok(None) };
+        Ok(Some(match family {
+            t::Family::Video => {
+                let (group, number) = units::video(Some(u))?;
+                Self::Video(group, number)
+            }
+            t::Family::Image => {
+                let issue = super::comic::expected(u)?;
+                Self::Issue(issue.kind, issue.number)
+            }
+            _ => {
+                return Err(host_err(
+                    "ERR_VALIDATION",
+                    "only a video or comic ask has a unit",
+                ));
+            }
+        }))
+    }
+}
+
+/// A request for the targets of one family (none: any) whose unit is the ask's.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pick {
+    family: Option<t::Family>,
+    unit: Option<Unit>,
+}
+
+impl Pick {
+    /// `read` is the family whose grammar the media's units follow, whatever family the ask names.
+    pub fn of(
+        read: t::Family,
+        family: Option<t::Family>,
+        unit: Option<&t::UnitRef>,
+    ) -> Result<Self, HostError> {
+        Ok(Self {
+            family,
+            unit: Unit::of(read, unit)?,
+        })
+    }
+
+    /// No unit names the whole-work target only, never a series' episodes or a comic's issues.
+    fn admits(&self, tg: &t::Target) -> bool {
+        self.family.is_none_or(|f| f == tg.family)
+            && Unit::of(tg.family, tg.scope.first().map(|u| &u.ref_)).is_ok_and(|u| u == self.unit)
+    }
+}
+
+impl Scope {
+    /// The one target `tg` is; a unit the core does not read (a track) leaves its whole media.
+    fn target(tg: &t::Target) -> Self {
+        match Unit::of(tg.family, tg.scope.first().map(|u| &u.ref_)) {
+            Ok(unit) => Self::Only(vec![Pick {
+                family: Some(tg.family),
+                unit,
+            }]),
+            Err(_) => Self::All,
+        }
+    }
+
+    fn merge(&mut self, other: Scope) {
+        match (&mut *self, other) {
+            (Scope::All, _) => {}
+            (s, Scope::All) => *s = Scope::All,
+            (Scope::Only(a), Scope::Only(b)) => {
+                for p in b {
+                    if !a.contains(&p) {
+                        a.push(p);
+                    }
+                }
+            }
+        }
+    }
+
+    fn admits(&self, tg: &t::Target) -> bool {
+        match self {
+            Scope::All => true,
+            Scope::Only(picks) => picks.iter().any(|p| p.admits(tg)),
+        }
+    }
+}
+
+/// A media waiting for a request sweep: the retries it has had and what it was asked for.
+struct Entry {
+    retries: u8,
+    scope: Scope,
+}
+
+/// Media waiting for a request sweep.
 #[derive(Default)]
 struct Queue {
-    pending: BTreeMap<u32, u8>,
+    pending: BTreeMap<u32, Entry>,
     running: bool,
 }
 
 impl Queue {
-    fn add(&mut self, media: u32, retries: u8) {
-        let n = self.pending.entry(media).or_insert(retries);
-        *n = (*n).min(retries);
+    fn add(&mut self, media: u32, retries: u8, scope: Scope) {
+        match self.pending.entry(media) {
+            std::collections::btree_map::Entry::Vacant(v) => {
+                v.insert(Entry { retries, scope });
+            }
+            std::collections::btree_map::Entry::Occupied(mut o) => {
+                let e = o.get_mut();
+                e.retries = e.retries.min(retries);
+                e.scope.merge(scope);
+            }
+        }
     }
 
-    fn take(&mut self, n: usize) -> Vec<(u32, u8)> {
+    fn take(&mut self, n: usize) -> Vec<(u32, Entry)> {
         let ids: Vec<u32> = self.pending.keys().copied().take(n).collect();
         ids.into_iter()
-            .filter_map(|m| self.pending.remove(&m).map(|r| (m, r)))
+            .filter_map(|m| self.pending.remove(&m).map(|e| (m, e)))
             .collect()
     }
 }
@@ -55,8 +170,8 @@ pub struct Sweeps {
     pub claims: KeyedLocks<i32>,
     slots: Mutex<HashMap<String, Arc<Semaphore>>>,
     queue: Mutex<Queue>,
-    /// The instant a cooling media is asked again, by media: one timer per instant.
-    wakes: Mutex<HashMap<u32, DateTime<Utc>>>,
+    /// The targets of a media asked again at an instant: one timer per media and instant.
+    wakes: Mutex<HashMap<(u32, DateTime<Utc>), Scope>>,
 }
 
 impl Sweeps {
@@ -328,31 +443,29 @@ impl Plugins {
         )
         .await;
         if let Outcome::Cooling(at) = out {
-            self.wake_at(tg.media_id, *at);
+            self.wake_at(tg, *at);
         }
     }
 
-    /// Asks `media` again at `at` (capped), once per instant.
-    fn wake_at(&self, media: u32, at: DateTime<Utc>) {
+    /// Asks the target `tg` again at `at` (capped), once per media and instant.
+    fn wake_at(&self, tg: &t::Target, at: DateTime<Utc>) {
         let Some(app) = self.app() else { return };
-        let at = at.min(Utc::now() + MAX_COOLDOWN);
-        if self.sweeps.wakes.lock_clean().insert(media, at) == Some(at) {
-            return;
-        }
+        let (media, at) = (tg.media_id, at.min(Utc::now() + MAX_COOLDOWN));
+        let scope = Scope::target(tg);
+        match self.sweeps.wakes.lock_clean().entry((media, at)) {
+            std::collections::hash_map::Entry::Occupied(mut o) => {
+                o.get_mut().merge(scope);
+                return;
+            }
+            std::collections::hash_map::Entry::Vacant(v) => v.insert(scope),
+        };
         let delay = (at - Utc::now()).to_std().unwrap_or_default();
         let (me, st) = (app.plugins.clone(), app.clone());
         tokio::spawn(async move {
             tokio::time::sleep(delay).await;
-            let due = {
-                let mut wakes = me.sweeps.wakes.lock_clean();
-                let due = wakes.get(&media) == Some(&at);
-                if due {
-                    wakes.remove(&media);
-                }
-                due
-            };
-            if due {
-                me.enqueue(&st, vec![(media, 0)]);
+            let due = me.sweeps.wakes.lock_clean().remove(&(media, at));
+            if let Some(scope) = due {
+                me.enqueue(&st, vec![(media, 0, scope)]);
             }
         });
     }
@@ -490,17 +603,25 @@ impl Plugins {
         }
     }
 
-    /// One pass over the wanted targets of `media` (all of them when `None`): the number grabbed, and the
-    /// media to ask again because a provider was busy or a check failed.
-    async fn pass(&self, st: &AppState, media: Option<Vec<u32>>) -> (usize, BTreeSet<u32>) {
+    /// One pass over the wanted targets `media` names, each within its scope (every target when `None`): the
+    /// number grabbed, and the media to ask again, with their scope, because a provider was busy or a check failed.
+    async fn pass(
+        &self,
+        st: &AppState,
+        media: Option<Vec<(u32, Scope)>>,
+    ) -> (usize, BTreeMap<u32, Scope>) {
         let today = chrono::Local::now().date_naive();
         let (mut grabbed, mut checked, mut cursor) = (0, 0, None);
-        let mut again = BTreeSet::new();
+        let mut again = BTreeMap::new();
+        let ids = media
+            .as_ref()
+            .map(|m| m.iter().map(|(id, _)| *id).collect::<Vec<_>>());
+        let scopes: HashMap<u32, Scope> = media.into_iter().flatten().collect();
         loop {
             let q = t::CandidatesQuery {
                 kind: None,
                 family: None,
-                media_ids: media.clone(),
+                media_ids: ids.clone(),
                 available_on: today.to_string(),
                 limit: PAGE,
                 cursor: cursor.take(),
@@ -516,11 +637,15 @@ impl Plugins {
                 if st.jobs.is_restoring() {
                     return (grabbed, again);
                 }
+                let scope = scopes.get(&tg.media_id).cloned().unwrap_or_default();
+                if !scope.admits(tg) {
+                    continue;
+                }
                 checked += 1;
                 match self.acquire(tg, false).await {
                     Outcome::Grabbed(_) => grabbed += 1,
                     Outcome::Busy | Outcome::Error(_) => {
-                        again.insert(tg.media_id);
+                        again.insert(tg.media_id, scope);
                     }
                     _ => {}
                 }
@@ -536,16 +661,17 @@ impl Plugins {
 
     /// A pass over the targets of `media` (all when `None`); what it could not settle is asked again later.
     pub async fn sweep(self: &Arc<Self>, st: &AppState, media: Option<Vec<u32>>) -> usize {
+        let media = media.map(|m| m.into_iter().map(|id| (id, Scope::All)).collect());
         let (grabbed, again) = self.pass(st, media).await;
-        self.retry_later(st, again.into_iter().map(|m| (m, 0)));
+        self.retry_later(st, again.into_iter().map(|(m, s)| (m, 0, s)));
         grabbed
     }
 
     /// Asks again after `RETRY_DELAY` for the media that have retries left.
-    fn retry_later(self: &Arc<Self>, st: &AppState, media: impl Iterator<Item = (u32, u8)>) {
-        let due: Vec<(u32, u8)> = media
-            .filter(|(_, n)| *n < RETRIES)
-            .map(|(m, n)| (m, n + 1))
+    fn retry_later(self: &Arc<Self>, st: &AppState, media: impl Iterator<Item = (u32, u8, Scope)>) {
+        let due: Vec<(u32, u8, Scope)> = media
+            .filter(|(_, n, _)| *n < RETRIES)
+            .map(|(m, n, s)| (m, n + 1, s))
             .collect();
         if due.is_empty() {
             return;
@@ -557,16 +683,21 @@ impl Plugins {
         });
     }
 
-    /// A request for `media`: queued with the others, swept in batches by one worker.
+    /// A request for every target of `media`: queued with the others, swept in batches by one worker.
     pub fn request_sweep(self: &Arc<Self>, st: &AppState, media: Vec<u32>) {
-        self.enqueue(st, media.into_iter().map(|m| (m, 0)).collect());
+        self.request_scoped(st, media.into_iter().map(|m| (m, Scope::All)).collect());
     }
 
-    fn enqueue(self: &Arc<Self>, st: &AppState, items: Vec<(u32, u8)>) {
+    /// A request for the targets each media names, queued like `request_sweep`.
+    pub fn request_scoped(self: &Arc<Self>, st: &AppState, asks: Vec<(u32, Scope)>) {
+        self.enqueue(st, asks.into_iter().map(|(m, s)| (m, 0, s)).collect());
+    }
+
+    fn enqueue(self: &Arc<Self>, st: &AppState, items: Vec<(u32, u8, Scope)>) {
         let start = {
             let mut q = self.sweeps.queue.lock_clean();
-            for (m, n) in items {
-                q.add(m, n);
+            for (m, n, s) in items {
+                q.add(m, n, s);
             }
             !q.pending.is_empty() && !std::mem::replace(&mut q.running, true)
         };
@@ -591,15 +722,14 @@ impl Plugins {
                 }
                 batch
             };
-            let (_, again) = self
-                .pass(&st, Some(batch.iter().map(|(m, _)| *m).collect()))
-                .await;
-            let tried: HashMap<u32, u8> = batch.into_iter().collect();
+            let tried: HashMap<u32, u8> = batch.iter().map(|(m, e)| (*m, e.retries)).collect();
+            let asks = batch.into_iter().map(|(m, e)| (m, e.scope)).collect();
+            let (_, again) = self.pass(&st, Some(asks)).await;
             self.retry_later(
                 &st,
                 again
                     .into_iter()
-                    .map(|m| (m, tried.get(&m).copied().unwrap_or(0))),
+                    .map(|(m, s)| (m, tried.get(&m).copied().unwrap_or(0), s)),
             );
         }
     }
@@ -672,6 +802,135 @@ mod tests {
         assert!(t.failed.is_empty() && t.cooling == Some(at));
         note_failure(&mut t, "p", &RouteError::Busy);
         assert_eq!(t.failed, ["p"]);
+    }
+
+    fn unit_ref(group: Option<u32>, number: Option<f64>, label: Option<&str>) -> t::UnitRef {
+        t::UnitRef {
+            group,
+            number,
+            end_number: None,
+            label: label.map(str::to_owned),
+            absolute: None,
+        }
+    }
+
+    fn target(family: t::Family, unit: Option<t::UnitRef>) -> t::Target {
+        t::Target {
+            media_id: 7,
+            kind: "series".into(),
+            family,
+            language: None,
+            title: "t".into(),
+            original_title: None,
+            alternative_titles: vec![],
+            creators: vec![],
+            year: None,
+            runtime_minutes: None,
+            external_ids: vec![],
+            edition_ids: vec![],
+            library_id: 1,
+            want: None,
+            expected_titles: vec![],
+            search_title: "t".into(),
+            scope: unit
+                .map(|ref_| t::Unit {
+                    ref_,
+                    group_id: None,
+                    item_id: None,
+                    title: None,
+                    air_date: None,
+                    unit_count: None,
+                    isrc: None,
+                    duration_ms: None,
+                })
+                .into_iter()
+                .collect(),
+            search_units: vec![],
+        }
+    }
+
+    #[test]
+    fn a_scope_admits_the_targets_its_asks_name() {
+        use t::Family::{Audio, Image, Text, Video};
+        let ep = |g, n| target(Video, Some(unit_ref(Some(g), Some(n), None)));
+        let only = |read, f, u: Option<t::UnitRef>| {
+            Scope::Only(vec![Pick::of(read, f, u.as_ref()).unwrap()])
+        };
+        // The family the ask names does not change how its unit reads.
+        let two = only(Video, None, Some(unit_ref(Some(1), Some(2.0), None)));
+        let u = unit_ref(Some(1), Some(2.0), None);
+        let image = Pick::of(Video, Some(Image), Some(&u)).unwrap();
+        assert_eq!(image.unit, Some(Unit::Video(Some(1), Some(2))));
+        assert!(two.admits(&ep(1, 2.0)));
+        assert!(!two.admits(&ep(1, 3.0)) && !two.admits(&ep(2, 2.0)));
+        // A season ask is the season's own target, not its episodes.
+        let season = only(Video, None, Some(unit_ref(Some(1), None, None)));
+        assert!(!season.admits(&ep(1, 2.0)));
+        assert!(season.admits(&target(Video, Some(unit_ref(Some(1), None, None)))));
+        // No unit is the whole work: a movie or a book, never a series' episodes or seasons.
+        let whole = only(Video, None, None);
+        assert!(whole.admits(&target(Video, None)));
+        assert!(!whole.admits(&ep(1, 2.0)) && !season.admits(&target(Video, None)));
+        assert!(only(Text, Some(Text), None).admits(&target(Text, None)));
+        assert!(!only(Text, Some(Audio), None).admits(&target(Text, None)));
+        // A comic issue reads as `comic::expected` does: the kind word and the number.
+        let issue = |l: &str| target(Image, Some(unit_ref(None, Some(1.0), Some(l))));
+        let annual = only(
+            Image,
+            None,
+            Some(unit_ref(None, Some(1.0), Some(" ANNUAL 1"))),
+        );
+        assert!(annual.admits(&issue("annual 1")) && !annual.admits(&issue("1")));
+        assert!(!only(Image, None, None).admits(&issue("1")));
+        assert!(Scope::All.admits(&ep(9, 9.0)));
+    }
+
+    #[test]
+    fn an_ask_unit_is_read_by_the_media_grammar() {
+        let ask = |read, u| Pick::of(read, None, Some(&u)).map(|_| ());
+        // Fractional, NaN or absolute video numbers, a comic label that is not its number.
+        for (read, u) in [
+            (t::Family::Video, unit_ref(Some(1), Some(1.5), None)),
+            (t::Family::Video, unit_ref(Some(1), Some(f64::NAN), None)),
+            (t::Family::Image, unit_ref(None, Some(f64::NAN), None)),
+            (t::Family::Image, unit_ref(None, Some(2.0), Some("3"))),
+            (t::Family::Text, unit_ref(None, Some(1.0), None)),
+        ] {
+            assert_eq!(ask(read, u).unwrap_err().code, "ERR_VALIDATION");
+        }
+        // Equal asks are one pick, so a repeated ask never grows the queue entry.
+        let a = Pick::of(
+            t::Family::Video,
+            None,
+            Some(&unit_ref(Some(1), Some(2.0), None)),
+        );
+        let mut s = Scope::Only(vec![a.clone().unwrap()]);
+        s.merge(Scope::Only(vec![a.unwrap()]));
+        assert!(matches!(s, Scope::Only(p) if p.len() == 1));
+    }
+
+    #[test]
+    fn the_queue_unions_scopes_and_keeps_the_fewest_retries() {
+        let pick = |n| {
+            Pick::of(
+                t::Family::Video,
+                None,
+                Some(&unit_ref(Some(1), Some(n), None)),
+            )
+            .unwrap()
+        };
+        let (a, b) = (pick(1.0), pick(2.0));
+        let mut q = Queue::default();
+        q.add(7, 3, Scope::Only(vec![a.clone()]));
+        q.add(7, 1, Scope::Only(vec![a.clone(), b.clone()]));
+        q.add(8, 0, Scope::All);
+        q.add(8, 2, Scope::Only(vec![a.clone()]));
+        let mut got = q.take(10);
+        got.sort_by_key(|(m, _)| *m);
+        assert_eq!(got[0].1.retries, 1);
+        assert_eq!(got[0].1.scope, Scope::Only(vec![a, b]));
+        assert_eq!((got[1].1.retries, &got[1].1.scope), (0, &Scope::All));
+        assert!(q.pending.is_empty());
     }
 
     fn rel(title: &str, rank: i64, cf: i64) -> Value {
@@ -823,13 +1082,16 @@ mod tests {
     fn requests_coalesce_and_drain_in_batches() {
         let mut q = Queue::default();
         for m in [3, 1, 2, 1] {
-            q.add(m, 0);
+            q.add(m, 0, Scope::All);
         }
-        q.add(2, 4);
+        q.add(2, 4, Scope::All);
         assert_eq!(q.pending.len(), 3, "a media asked twice waits once");
-        assert_eq!(q.take(2), [(1, 0), (2, 0)], "the fewest retries win");
-        assert_eq!(q.take(2), [(3, 0)]);
-        assert!(q.take(2).is_empty());
+        let take = |q: &mut Queue| -> Vec<(u32, u8)> {
+            q.take(2).into_iter().map(|(m, e)| (m, e.retries)).collect()
+        };
+        assert_eq!(take(&mut q), [(1, 0), (2, 0)], "the fewest retries win");
+        assert_eq!(take(&mut q), [(3, 0)]);
+        assert!(take(&mut q).is_empty());
     }
 
     #[tokio::test]
