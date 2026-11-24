@@ -236,6 +236,23 @@ impl ImageStore {
             .insert(plugin.to_owned(), (bundled, hosts));
     }
 
+    /// The listed hosts as CSP sources, sorted: the client shows unstored artwork from its source URL.
+    pub fn csp_sources(&self) -> Vec<String> {
+        let all = self.plugin_hosts.read_clean();
+        let mut out: Vec<String> = all
+            .values()
+            .flat_map(|(bundled, hs)| {
+                hs.iter().flat_map(move |h| {
+                    let sub = bundled.then(|| format!("https://*.{h}"));
+                    std::iter::once(format!("https://{h}")).chain(sub)
+                })
+            })
+            .collect();
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
     fn listed(&self, host: &str) -> bool {
         let sub = |h: &String| {
             host.strip_suffix(h.as_str())
