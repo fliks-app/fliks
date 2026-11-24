@@ -848,6 +848,19 @@ async fn relink_in_place_is_contained(pool: PgPool) {
         (201, json!(1), json!(true)),
         "{b}"
     );
+    let m = b["mediaId"].as_i64().unwrap() as i32;
+    let stamped: bool = sqlx::query_scalar(
+        r#"SELECT "mtimeMs" IS NOT NULL AND "probeVersion" IS NOT NULL FROM media_files"#,
+    )
+    .fetch_one(&c.st.db)
+    .await
+    .unwrap();
+    assert!(stamped, "a relinked row is stamped like a rescanned one");
+    assert_eq!(
+        rescan(&c, m).await.unwrap().updated,
+        0,
+        "so the next rescan does not probe it again"
+    );
     let (s, b) = call(
         &c,
         "POST",
