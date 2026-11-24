@@ -33,24 +33,26 @@
                   }
                 </span>
               </span>
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs btn-square"
-                [disabled]="i === 0"
-                (click)="moveLibrary(i, -1)"
-                [attr.aria-label]="'home_settings.move_up' | translate"
-              >
-                <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
-              </button>
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs btn-square"
-                [disabled]="last"
-                (click)="moveLibrary(i, 1)"
-                [attr.aria-label]="'home_settings.move_down' | translate"
-              >
-                <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
-              </button>
+              @if (tv.isTv()) {
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs btn-square"
+                  [disabled]="i === 0"
+                  (click)="moveLibrary(i, -1)"
+                  [attr.aria-label]="'home_settings.move_up' | translate"
+                >
+                  <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs btn-square"
+                  [disabled]="last"
+                  (click)="moveLibrary(i, 1)"
+                  [attr.aria-label]="'home_settings.move_down' | translate"
+                >
+                  <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
+                </button>
+              }
               <button
                 type="button"
                 class="btn btn-ghost btn-sm btn-square"
@@ -131,24 +133,26 @@
               {{ builtinLabel(section) | translate }}
             }
           </span>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs btn-square"
-            [disabled]="i === 0"
-            (click)="move(i, -1)"
-            [attr.aria-label]="'home_settings.move_up' | translate"
-          >
-            <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs btn-square"
-            [disabled]="last"
-            (click)="move(i, 1)"
-            [attr.aria-label]="'home_settings.move_down' | translate"
-          >
-            <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
-          </button>
+          @if (tv.isTv()) {
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square"
+              [disabled]="i === 0"
+              (click)="move(i, -1)"
+              [attr.aria-label]="'home_settings.move_up' | translate"
+            >
+              <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs btn-square"
+              [disabled]="last"
+              (click)="move(i, 1)"
+              [attr.aria-label]="'home_settings.move_down' | translate"
+            >
+              <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
+            </button>
+          }
           <input
             type="checkbox"
             class="toggle toggle-primary toggle-sm ml-1"
