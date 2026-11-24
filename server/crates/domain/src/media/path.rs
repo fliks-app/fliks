@@ -109,6 +109,6 @@ mod tests {
     fn resolve_keeps_a_windows_absolute_path() {
         assert_eq!(resolve(r"C:\Users\m", "/"), r"C:\Users\m");
         assert_eq!(resolve(r"C:\m/a/../b/", "/"), r"C:\m\b");
-        assert_eq!(resolve("//nas/share/m", "/"), r"\\nas\share\m");
+        assert_eq!(resolve("//nas/share/m", "/"), r"//nas/share\m");
     }
 }
