@@ -13,6 +13,7 @@ import { LibrariesApiService, LibrarySummary } from '../../core/services/api/lib
 import { NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
+import { lazyModal } from '../../shared/utils/lazy-modal';
 import { MarkersApiService } from '../../core/services/api/markers-api.service';
 import { RequestsService } from '../../core/services/api/requests.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
@@ -179,7 +180,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
       return;
     }
     this.loadedId = id;
-    void this.loadMedia(id);
+    untracked(() => void this.loadMedia(id));
   });
 
   /** Retarget scroll memory to the page the params describe and request its offset on return.
@@ -268,6 +269,8 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
   readonly releasesModal = viewChild<ReleasesModalComponent>('releasesModal');
   readonly profilesModal = viewChild(MediaDetailProfilesModalComponent);
   readonly libraryDialog = viewChild(MediaLibraryDialogComponent);
+  protected readonly profilesOpener = lazyModal(() => this.profilesModal());
+  protected readonly libraryOpener = lazyModal(() => this.libraryDialog());
 
   private readonly scrollMemory = inject(ScrollMemoryService);
 
@@ -375,7 +378,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     try {
       // Paint whatever the cache holds, stale or not; the forced pass below brings it up to date.
       const freshSince = Date.now();
-      const m = await this.mediaService.getOne(id, { known: true });
+      const m = this.mediaService.knownNow(id) ?? (await this.mediaService.getOne(id, { known: true }));
       if (this.loadedId !== id) return;
       if (m.type !== kind) {
         void this.router.navigate(mediaDetailLink(m.type, m.id));
@@ -497,11 +500,11 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
   openProfiles() {
     this.profilesOk.set('');
     this.profilesErr.set('');
-    this.profilesModal()?.showModal();
+    this.profilesOpener.open((m) => m.showModal());
   }
 
   openLibrary() {
-    this.libraryDialog()?.open();
+    this.libraryOpener.open((m) => m.open());
   }
 
   openAnalyze() {

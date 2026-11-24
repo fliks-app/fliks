@@ -226,6 +226,11 @@ function prune(conn: IDBDatabase): void {
 }
 
 /** Wipe the IDB store, closing our connection first so `deleteDatabase` isn't blocked by it; never waits on an open, and bounded so it never gates a login spinner. */
+/** What a `known` read would serve, without waiting: a body that just landed, for a page's first render. */
+export function knownBodyNow<T>(url: string): T | undefined {
+  return (pendingWrites.get(url)?.body ?? memos.get(url)?.body) as T | undefined;
+}
+
 /** The last known body of a cached GET, without the network: what a boot paint restores. */
 export async function cachedBody<T>(url: string): Promise<T | null> {
   const entry = await getCached(url);
@@ -261,6 +266,9 @@ export function clearRequestCache(): Promise<void> {
 async function getCached(url: string): Promise<CacheEntry | null> {
   const pending = pendingWrites.get(url);
   if (pending) return pending;
+  // A body fetched moments ago (a card's warm-up on touch) paints before the transition captures; IndexedDB answers too late.
+  const memo = memos.get(url);
+  if (memo) return { url, body: memo.body, timestamp: memo.at, etag: memo.etag };
   try {
     const db = await openDb();
     return new Promise((resolve) => {

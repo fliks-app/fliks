@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { MediaCardComponent } from './media-card';
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
+import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { Media, MediaService } from '../../../core/services/api/media.service';
 import { AddToPlaylistService } from '../../../core/services/add-to-playlist.service';
 import { RecommendService } from '../../../core/services/recommend.service';
@@ -70,6 +71,7 @@ async function createFixture(
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
       { provide: TvService, useValue: { isTv: () => !!role.isTv } },
+      { provide: StreamingApiService, useValue: { warmPlaybackState: vi.fn() } },
       {
         provide: AuthService,
         useValue: {
@@ -401,6 +403,7 @@ describe('MediaCardComponent — card action handlers do what their row promises
       figure.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
       vi.advanceTimersByTime(400);
       expect(getOne).toHaveBeenCalledWith(7);
+      expect(TestBed.inject(StreamingApiService).warmPlaybackState).toHaveBeenCalledWith(7, false);
     } finally {
       vi.useRealTimers();
     }

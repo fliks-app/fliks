@@ -48,6 +48,7 @@ export class MovieWorkComponent extends VideoWorkBase {
     inject(LikesApiService),
   );
   protected readonly similar = signal<RelatedMedia[]>([]);
+  protected readonly movieKey = (item: { id: number }) => item.id;
   protected readonly collection = signal<MediaCollection | null>(null);
 
   protected override onTitleChange(): void {

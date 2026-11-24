@@ -3,7 +3,7 @@ import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type { Family } from '../../enums/family.enum';
 import { MediaType } from '../../enums/media-type.enum';
-import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
+import { CacheRead, cacheHeaders, knownBodyNow } from '../../interceptors/cache.interceptor';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { abortable } from '../../utils/abortable';
 import { saveFile } from '../../plugins/save-file.plugin';
@@ -422,6 +422,11 @@ export class MediaService {
   }
 
   /** `silent`: the caller reports a failure itself. */
+  /** The media a touch's warm-up already brought in, for a page that must render it before its transition captures. */
+  knownNow(id: number): Media | undefined {
+    return knownBodyNow<Media>(`/api/media/${id}`);
+  }
+
   getOne(id: number, opts: CacheRead & { silent?: boolean } = {}) {
     const headers = cacheHeaders(opts);
     return firstValueFrom(

@@ -61,7 +61,7 @@ function createFixture() {
       },
       // Never resolves: the page stays on its first pass, so every scroll call
       // in the assertions is the param pass's own.
-      { provide: MediaService, useValue: { getOne: vi.fn(() => new Promise(() => {})) } },
+      { provide: MediaService, useValue: { knownNow: () => undefined, getOne: vi.fn(() => new Promise(() => {})) } },
       { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u } },
       { provide: MediaDetailReleasePickerService, useValue: {} },
       { provide: AuthService, useValue: { hasPermission: () => false } },

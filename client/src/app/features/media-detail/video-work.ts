@@ -21,6 +21,7 @@ import { DetailHeroComponent, type DetailHeroBadge } from '../../shared/componen
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { SubtitlesModalComponent } from '../../shared/components/subtitles-modal/subtitles-modal';
+import { lazyModal } from '../../shared/utils/lazy-modal';
 import type { TrackingScope } from '../../shared/components/tracking-status-modal/tracking-status-modal';
 import { libraryCast } from './components/media-cast/media-cast.component';
 import { WatchedController } from './watched-controller';
@@ -190,11 +191,19 @@ export abstract class VideoWorkBase {
   });
 
   /** The playback state read with the route id; applied, then dropped, once the full media is in. */
-  private playback: { id: number; state: Promise<TitlePlaybackState> } | null = null;
+  private playback: { id: number; state: Promise<TitlePlaybackState>; landed: TitlePlaybackState | null } | null = null;
 
   private playbackFor(id: number): Promise<TitlePlaybackState> {
-    if (this.playback?.id !== id) this.playback = { id, state: this.fetchPlaybackState(id) };
+    if (this.playback?.id !== id) {
+      const landed = this.landedPlaybackState(id);
+      this.playback = { id, state: landed ? Promise.resolve(landed) : this.fetchPlaybackState(id), landed };
+    }
     return this.playback.state;
+  }
+
+  /** What a card's touch already read, so the first render carries it instead of a later pass mid-transition. */
+  protected landedPlaybackState(id: number): TitlePlaybackState | null {
+    return this.streamingApi.landedPlaybackState(id, false);
   }
 
   /** Kept off the render path; `fresh` reads it again when the page returns on screen. */
@@ -202,7 +211,7 @@ export abstract class VideoWorkBase {
     const id = this.mediaId();
     if (fresh) this.playback = null;
     const pending = this.playbackFor(id);
-    const state = await pending;
+    const state = this.playback?.landed ?? (await pending);
     if (this.playback?.state === pending) this.playback = null;
     if (this.mediaId() === id) this.applyPlaybackState(this.media(), state);
   }
@@ -226,9 +235,10 @@ export abstract class VideoWorkBase {
   // ── Hero, subtitles, tracking ──
   protected readonly hero = viewChild(DetailHeroComponent);
   protected readonly subtitleSection = viewChild(SubtitlesModalComponent);
+  protected readonly subtitlesOpener = lazyModal(() => this.subtitleSection());
 
   protected openSubtitles(): void {
-    this.subtitleSection()?.show();
+    this.subtitlesOpener.open((m) => m.show());
   }
 
   protected reloadSubtitles(): void {
@@ -335,6 +345,8 @@ export abstract class VideoWorkBase {
 
   protected readonly downloadModal = viewChild<DownloadQualityModalComponent>('downloadModal');
   protected readonly downloadDetailModal = viewChild<DownloadDetailModalComponent>('downloadDetailModal');
+  protected readonly downloadOpener = lazyModal(() => this.downloadModal());
+  protected readonly downloadDetailOpener = lazyModal(() => this.downloadDetailModal());
 
   /** The file the download button acts on. */
   protected downloadFileId(): number | null {
@@ -365,18 +377,18 @@ export abstract class VideoWorkBase {
     if (!targets.length) return;
     this.pendingDownloads = targets;
     const unwatched = targets.filter((t) => !t.watched).length;
-    void this.downloadModal()?.openBatch(targets[0].mediaFileId!, { all: targets.length, unwatched });
+    this.downloadOpener.open((m) => void m.openBatch(targets[0].mediaFileId!, { all: targets.length, unwatched }));
   }
 
   protected openDownloadModal(): void {
     this.pendingDownloads = null;
     const fileId = this.downloadFileId();
     const task = this.fileDownload();
-    if (fileId) this.downloadModal()?.open(fileId, task?.quality ?? null);
+    if (fileId) this.downloadOpener.open((m) => void m.open(fileId, task?.quality ?? null));
   }
 
   protected openDownloadDetailModal(): void {
-    this.downloadDetailModal()?.open();
+    this.downloadDetailOpener.open((m) => m.open());
   }
 
   protected async onRemoveDownload(): Promise<void> {

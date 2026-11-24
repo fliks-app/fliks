@@ -58,7 +58,7 @@ function createFixture(media: Promise<unknown> = new Promise(() => {})) {
         },
       },
       { provide: Router, useValue: { navigate: vi.fn(), getCurrentNavigation: () => ({ trigger: 'imperative' }), events: EMPTY } },
-      { provide: MediaService, useValue: { getOne: vi.fn(() => media) } },
+      { provide: MediaService, useValue: { knownNow: () => undefined, getOne: vi.fn(() => media) } },
       { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u } },
       { provide: MediaDetailReleasePickerService, useValue: {} },
       { provide: AuthService, useValue: { hasPermission: () => false } },

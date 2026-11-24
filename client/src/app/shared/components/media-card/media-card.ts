@@ -1,4 +1,4 @@
-import { Component, booleanAttribute, DestroyRef, ElementRef, InjectionToken, input, output, computed, inject, linkedSignal, viewChild } from '@angular/core';
+import { Component, booleanAttribute, DestroyRef, ElementRef, InjectionToken, Injector, input, output, computed, inject, linkedSignal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -10,6 +10,7 @@ import { Media } from '../../../core/services/api/media.service';
 import type { BookListInfo } from '../../../core/services/api/books.models';
 import { computeMediaBarStatus } from '../../utils/media-status.util';
 import { MediaService } from '../../../core/services/api/media.service';
+import { StreamingApiService } from '../../../core/services/api/streaming-api.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { IdentifyModalService } from '../../../core/services/identify-modal.service';
 import { TrackingModalService } from '../../../core/services/tracking-modal.service';
@@ -97,6 +98,7 @@ export class MediaCardComponent {
   private readonly cardActionsService = inject(CardActionsService);
   private readonly addToPlaylist = inject(AddToPlaylistService);
   private readonly mediaApi = inject(MediaService);
+  private readonly injector = inject(Injector);
   private readonly toast = inject(ToastService);
   private readonly identifyModal = inject(IdentifyModalService);
   private readonly trackingModal = inject(TrackingModalService);
@@ -411,9 +413,12 @@ export class MediaCardComponent {
   /** Starts the detail page's media read on touch, so the page joins it instead of waiting for the click. */
   protected warmDetail(): void {
     const link = this._link();
-    if (!link || this.clickIntent() === 'play' || !kindFromSegment(link[0].slice(1))) return;
+    const kind = link && kindFromSegment(link[0].slice(1));
+    if (!link || this.clickIntent() === 'play' || !kind) return;
     const id = Number(link[1]);
-    if (id > 0) void this.mediaApi.getOne(id).catch(() => undefined);
+    if (!(id > 0)) return;
+    void this.mediaApi.getOne(id).catch(() => undefined);
+    if (kind === 'movie' || kind === 'series') this.injector.get(StreamingApiService).warmPlaybackState(id, kind === 'series');
   }
 
   private focusWarm: ReturnType<typeof setTimeout> | undefined;

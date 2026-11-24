@@ -43,21 +43,25 @@
 
     <!-- Modals every kind shares -->
     <div>
-      <app-media-detail-profiles-modal
-        [profilesOptionsLoading]="profilesOptionsLoading()"
-        [draftQualityProfileId]="draftQualityProfileId()"
-        [draftLanguageProfileId]="draftLanguageProfileId()"
-        [qualityProfileOptions]="qualityProfileOptions()"
-        [languageProfileOptions]="languageProfileOptions()"
-        [profilesOk]="profilesOk()"
-        [profilesErr]="profilesErr()"
-        [profilesSaveLoading]="profilesSaveLoading()"
-        (draftQualityProfileIdChange)="draftQualityProfileId.set($event)"
-        (draftLanguageProfileIdChange)="draftLanguageProfileId.set($event)"
-        (save)="saveProfiles()"
-      />
+      @if (profilesOpener.built()) {
+        <app-media-detail-profiles-modal
+          [profilesOptionsLoading]="profilesOptionsLoading()"
+          [draftQualityProfileId]="draftQualityProfileId()"
+          [draftLanguageProfileId]="draftLanguageProfileId()"
+          [qualityProfileOptions]="qualityProfileOptions()"
+          [languageProfileOptions]="languageProfileOptions()"
+          [profilesOk]="profilesOk()"
+          [profilesErr]="profilesErr()"
+          [profilesSaveLoading]="profilesSaveLoading()"
+          (draftQualityProfileIdChange)="draftQualityProfileId.set($event)"
+          (draftLanguageProfileIdChange)="draftLanguageProfileId.set($event)"
+          (save)="saveProfiles()"
+        />
+      }
 
-      <app-media-library-dialog [media]="m" (updated)="onLibrarySaved($event)" />
+      @if (libraryOpener.built()) {
+        <app-media-library-dialog [media]="m" (updated)="onLibrarySaved($event)" />
+      }
     </div>
   }
 

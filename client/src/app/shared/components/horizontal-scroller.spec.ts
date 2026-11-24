@@ -76,17 +76,17 @@ describe('HorizontalScrollerComponent', () => {
 /** A long rail built every card at once: on a tablet, 28 episode cards held the main thread ~350 ms. */
 describe('builtCount', () => {
   it('builds a first pass, capped by the list', () => {
-    expect(builtCount(28, 0, null, null)).toBe(8);
+    expect(builtCount(28, 0, null, null)).toBe(5);
     expect(builtCount(5, 0, null, null)).toBe(5);
   });
 
   it('builds past the anchor so the rail can centre on it', () => {
     expect(builtCount(28, 0, 20, null)).toBe(24);
-    expect(builtCount(28, 0, -1, null)).toBe(8);
+    expect(builtCount(28, 0, -1, null)).toBe(5);
   });
 
   it('builds past the right edge as the rail scrolls', () => {
-    expect(builtCount(28, 8, null, 9)).toBe(13);
+    expect(builtCount(28, 5, null, 9)).toBe(13);
   });
 
   it('never drops built cards, which could hold the focus', () => {
@@ -115,7 +115,7 @@ describe('HorizontalScrollerComponent items mode', () => {
   }
 
   it('builds the first cards only', () => {
-    expect(render(null)).toEqual(['0', '1', '2', '3', '4', '5', '6', '7']);
+    expect(render(null)).toEqual(['0', '1', '2', '3', '4']);
   });
 
   it('builds up to the anchor', () => {

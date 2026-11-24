@@ -26,8 +26,8 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { ROW_TOP_OFFSET, snapRowOnFocus } from '../../core/utils/focus-snap.util';
 import { RAIL_RESTORED_ATTR } from '../utils/center-rail';
 
-/** Cards built before the rail is measured; enough to fill a tablet-wide row. */
-const FIRST_PASS = 8;
+/** Cards built before the rail is measured: a tablet-wide row of episode cards; the next ones come with its first layout. */
+const FIRST_PASS = 5;
 /** Cards built past the right edge, so a D-pad or Tab step always lands on a built card. */
 const OVERSCAN = 3;
 

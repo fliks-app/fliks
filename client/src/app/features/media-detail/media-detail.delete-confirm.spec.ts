@@ -69,7 +69,7 @@ function createHarness(downloadManager: object = {}) {
         },
       },
       { provide: Router, useValue: { navigate: vi.fn(), getCurrentNavigation: () => null } },
-      { provide: MediaService, useValue: { getOne: vi.fn(async () => baseMovie), delete: vi.fn() } },
+      { provide: MediaService, useValue: { knownNow: () => undefined, getOne: vi.fn(async () => baseMovie), delete: vi.fn() } },
       { provide: MediaDetailReleasePickerService, useValue: {} },
       { provide: AuthService, useValue: { hasPermission: () => false } },
       { provide: ProfilesService, useValue: {} },
