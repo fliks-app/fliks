@@ -4508,10 +4508,11 @@
     "reset": "Reset",
     "reset_confirm_title": "Reset sections",
     "reset_confirm": "Reset the order and visibility of the home sections to their defaults?",
-    "libraries_settings": "Library order and visibility",
-    "libraries_modal_title": "Libraries",
-    "libraries_modal_hint": "Drag to reorder the libraries, and hide the ones you don't want to see on the home page and in the menu.",
-    "toggle_library_visible": "Show or hide the library"
+    "libraries_title": "Libraries",
+    "libraries_hint": "Drag to reorder the libraries, and hide the ones you don't want to see on the home page and in the menu.",
+    "hide_library": "Hide library",
+    "show_library": "Show library",
+    "hidden_libraries": "Hidden ({{count}})"
   },
   "update": {
     "title": "Update available",

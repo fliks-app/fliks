@@ -4508,10 +4508,11 @@
     "reset": "Réinitialiser",
     "reset_confirm_title": "Réinitialiser les zones",
     "reset_confirm": "Remettre l'ordre et la visibilité des zones de l'accueil par défaut ?",
-    "libraries_settings": "Ordre et visibilité des bibliothèques",
-    "libraries_modal_title": "Bibliothèques",
-    "libraries_modal_hint": "Glissez pour réordonner les bibliothèques, et masquez celles que vous ne voulez pas voir sur l'accueil et dans le menu.",
-    "toggle_library_visible": "Afficher ou masquer la bibliothèque"
+    "libraries_title": "Bibliothèques",
+    "libraries_hint": "Glissez pour réordonner les bibliothèques, et masquez celles que vous ne voulez pas voir sur l'accueil et dans le menu.",
+    "hide_library": "Masquer la bibliothèque",
+    "show_library": "Afficher la bibliothèque",
+    "hidden_libraries": "Masquées ({{count}})"
   },
   "update": {
     "title": "Mise à jour disponible",

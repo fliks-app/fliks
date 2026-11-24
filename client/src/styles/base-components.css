@@ -644,15 +644,19 @@ html.tv-host .toggle-primary[aria-checked='true'] {
   }
 }
 
+/* The dragged copy leaves its card for <body>: an opaque surface keeps it readable over the page. */
+.cdk-drag-preview {
+  background-color: var(--color-base-200);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+}
+
 /* The drop slot keeps the row's exact height, so the bottom sheet does not grow while dragging. */
 .queue-row.cdk-drag-placeholder {
   opacity: 0;
 }
 
-/* The queue row being dragged: opaque and as wide as the list. */
 .queue-row.cdk-drag-preview {
   background-color: var(--color-base-300);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
 }
 
 /* Elements that appear or leave when the player's view changes (queue edit mode, lyrics): the checkbox opens its slot, the rest fades. */

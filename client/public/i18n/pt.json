@@ -4508,10 +4508,11 @@
     "reset": "Repor",
     "reset_confirm_title": "Repor as zonas",
     "reset_confirm": "Repor a ordem e a visibilidade das zonas do início para os valores predefinidos?",
-    "libraries_settings": "Ordem e visibilidade das bibliotecas",
-    "libraries_modal_title": "Bibliotecas",
-    "libraries_modal_hint": "Arraste para reordenar as bibliotecas, e oculte as que não quer ver no início e no menu.",
-    "toggle_library_visible": "Mostrar ou ocultar a biblioteca"
+    "libraries_title": "Bibliotecas",
+    "libraries_hint": "Arraste para reordenar as bibliotecas, e oculte as que não quer ver no início e no menu.",
+    "hide_library": "Ocultar a biblioteca",
+    "show_library": "Mostrar a biblioteca",
+    "hidden_libraries": "Ocultas ({{count}})"
   },
   "update": {
     "title": "Atualização disponível",
