@@ -39,8 +39,8 @@ interface types {
     label: option<string>,
     absolute: option<f64>,
   }
-  /// What an `acquisition-request` asks for: the targets of `media-id` in `family` (none: any) that are `unit`
-  /// (none: the whole media). A video unit is whole numbers, as `acquisition-in-flight` reads it.
+  /// What an `acquisition-request` asks for: the targets of `media-id` in `family` (none: any) whose unit is `unit`,
+  /// read as the media's kind reads it (none: the whole work, never a series' episodes or a comic's issues).
   /// Since fliks 7.2.1.
   record acquisition-ask { media-id: u32, family: option<family>, unit: option<unit-ref> }
   /// A track of a list, by its ISRC or its MusicBrainz recording id.

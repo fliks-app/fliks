@@ -183,7 +183,11 @@ fn grab(req: &Request) -> Result<Response, String> {
         key = format!("{key}.{item}");
     }
     host::config_set(&key, Some(&body)).map_err(|e| e.message)?;
-    if let Some(media_id) = req.param("id").and_then(|v| v.parse().ok()).filter(|_| item.is_none()) {
+    if let Some(media_id) = req
+        .param("id")
+        .and_then(|v| v.parse().ok())
+        .filter(|_| item.is_none())
+    {
         host_result(host::events_publish(&[t::AcquisitionEvent::Grabbed(
             t::Grabbed {
                 media_id,

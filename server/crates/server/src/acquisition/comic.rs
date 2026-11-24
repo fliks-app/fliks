@@ -88,21 +88,6 @@ impl IssueRow {
     }
 }
 
-/// The kind word (`annual`, `special`, else `issue`, lowercase) and the printed number of a comic
-/// unit's label, spacing squeezed; an empty label prints nothing.
-pub(super) fn label_parts(label: Option<&str>) -> (String, Option<String>) {
-    let l = label.map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "));
-    match l.as_deref().filter(|l| !l.is_empty()) {
-        None => ("issue".to_owned(), None),
-        Some(l) => match l.split_once(' ') {
-            Some((k, n)) if matches!(k.to_lowercase().as_str(), "annual" | "special") => {
-                (k.to_lowercase(), Some(n.to_lowercase()))
-            }
-            _ => ("issue".to_owned(), Some(l.to_lowercase())),
-        },
-    }
-}
-
 /// The issue a comic unit names: a `number`, led in its `label` by `annual` or `special` (any case);
 /// no group, and a label whose number is not `number` names nothing.
 pub(super) fn expected(u: &t::UnitRef) -> Result<ExpectedIssue, HostError> {
@@ -114,8 +99,16 @@ pub(super) fn expected(u: &t::UnitRef) -> Result<ExpectedIssue, HostError> {
         .number
         .and_then(|n| canonical(&n.to_string()))
         .ok_or_else(|| bad("needs a number of the issue grammar"))?;
-    let (kind, printed) = label_parts(u.label.as_deref());
-    if printed.is_some_and(|p| canonical(&p).as_deref() != Some(number.as_str())) {
+    let (kind, printed) = match u.label.as_deref().map(str::trim) {
+        None | Some("") => ("issue".to_owned(), None),
+        Some(l) => match l.split_once(' ') {
+            Some((k, n)) if matches!(k.to_lowercase().as_str(), "annual" | "special") => {
+                (k.to_lowercase(), Some(n))
+            }
+            _ => ("issue".to_owned(), Some(l)),
+        },
+    };
+    if printed.is_some_and(|p| canonical(p).as_deref() != Some(number.as_str())) {
         return Err(bad("has a label that is not its number"));
     }
     Ok(ExpectedIssue {

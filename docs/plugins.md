@@ -131,7 +131,9 @@ the `search` route of every provider with a source for the kind, as the system (
 answer is the whole list, no streaming), ranks the releases across providers by the core's own score
 and POSTs the `grab` route of the best one's provider with the release's fields. A `search` called
 that way answers the releases the provider would grab, best first; the core drops any with a
-rejection. A provider's feed sync does not grab by itself: it asks the core with `acquisition.request` (`{mediaId, family?, unit?}` per ask) for the targets the feed names, and the core searches, ranks and grabs under its claim.
+rejection. A provider's feed sync never grabs: it names what the feed brought with
+`acquisition.request` (a media, and the episode or issue when the item names one), and the core
+sweeps those targets alone, under the same claim and ranking.
 
 The core owns the queue and the history; a provider only runs transfers. It reports them with
 `queue.set` (scope `acquisition:candidates`), its **full** list of transfers at each change and at

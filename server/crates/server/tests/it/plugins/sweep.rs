@@ -1,9 +1,12 @@
 //! Core-driven acquisition (`plugins.md` rule 68) through two fixture providers.
 use super::harness::*;
 use fliks_server::acquisition;
-use fliks_server::acquisition::sweep::Outcome;
+use fliks_server::acquisition::sweep::{Outcome, Pick, Scope};
 use fliks_server::events::DomainEvent;
-use fliks_server::plugins::runtime::fliks::plugin::types::{CandidatesQuery, Target};
+use fliks_server::plugins::runtime::HostConfig;
+use fliks_server::plugins::runtime::fliks::plugin::types::{
+    CandidatesQuery, Family, Target, UnitRef,
+};
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -308,27 +311,39 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
     )
     .await;
 
-    // An ask made while a sweep holds the claim waits for it, then grabs once.
+    // An ask made while a sweep holds the claim searches nothing until it drops; the asks that
+    // came meanwhile coalesce into one more pass. Nothing is offered, so no grab hides a pass.
     forget(&h).await;
+    offer(&h, A, json!([])).await;
     h.set(&format!("plugin.{A}.searched"), "").await;
     let claim = h.st.plugins.sweeps.claims.lock(1).await;
     call_ok(&h, A, "request", &ask(&[])).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    for _ in 0..3 {
+        call_ok(&h, A, "request", &ask(&[])).await;
+    }
     tokio::time::sleep(Duration::from_millis(800)).await;
-    assert!(grabbed(&h, A, 1).await.is_none());
     assert_eq!(searched(&h, A).await, "", "no search under a held claim");
     drop(claim);
-    until("the held ask's grab", Duration::from_secs(10), async || {
-        grabbed(&h, A, 1).await.is_some()
-    })
+    until(
+        "the held asks' passes",
+        Duration::from_secs(10),
+        async || searched(&h, A).await.len() >= 4,
+    )
     .await;
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    assert_eq!(searched(&h, A).await, "-;");
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(
+        searched(&h, A).await,
+        "-;-;",
+        "the asks during the claim make one pass"
+    );
 
-    // No asks, more than a page of them, or a fractional video unit are refused.
+    // No asks, more than a page of them, or a fractional video unit (family named or not) are refused.
     for extra in [
         &[("repeat", "0")][..],
         &[("repeat", "201")],
         &[("family", "video"), ("group", "1"), ("number", "1.5")],
+        &[("group", "1"), ("number", "1.5")],
     ] {
         let r = call_ok(&h, A, "request", &ask(extra)).await;
         assert_eq!(r["error"], "ERR_VALIDATION", "{r}");
@@ -339,10 +354,13 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
 }
 
 /// A series of three missing episodes behind one item-level provider.
-async fn series(tag: &str) -> Option<(H, Scratch, Vec<i32>)> {
+async fn series(
+    tag: &str,
+    tune: impl Fn(&mut HostConfig) + Send + Sync + 'static,
+) -> Option<(H, Scratch, Vec<i32>)> {
     let (mut m, w) = fixture()?;
     let s = Scratch::create(tag).await?;
-    let h = harness(&s, tag, |_| {}).await;
+    let h = harness(&s, tag, tune).await;
     allow_unsigned(&h).await;
     m["routes"].as_array_mut().unwrap().extend([
         json!({"method": "GET", "path": "/search/:id/items/:itemId", "policy": "read:Settings"}),
@@ -363,7 +381,7 @@ async fn series(tag: &str) -> Option<(H, Scratch, Vec<i32>)> {
            INSERT INTO editions ("mediaId", family) VALUES (3, 'video');
            INSERT INTO item_groups ("mediaId", "number", monitored) VALUES (3, 1, true);
            INSERT INTO items ("mediaId", "editionId", "groupId", "number", monitored, "airDate")
-             SELECT 3, (SELECT id FROM editions WHERE "mediaId" = 3), (SELECT id FROM item_groups WHERE "mediaId" = 3), n, true, '2020-01-0' || n
+             SELECT 3, (SELECT id FROM editions WHERE "mediaId" = 3), (SELECT id FROM item_groups WHERE "mediaId" = 3), n, true, ('2020-01-0' || n)::date
              FROM generate_series(1, 3) n;"#,
     )
     .execute(&s.pool)
@@ -390,7 +408,7 @@ async fn item_grabbed(h: &H, media: i32, item: i32) -> bool {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_unit_ask_searches_and_grabs_only_that_episode() {
-    let Some((h, s, items)) = series("sweep_unit").await else {
+    let Some((h, s, items)) = series("sweep_unit", |_| {}).await else {
         return;
     };
     offer(&h, A, json!([release("a", 3)])).await;
@@ -416,7 +434,7 @@ async fn a_unit_ask_searches_and_grabs_only_that_episode() {
 /// A provider cooling answers 503: the target is asked again at the instant, and only that target.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_cooling_unit_ask_is_asked_again_for_its_own_target() {
-    let Some((h, s, items)) = series("sweep_cooling").await else {
+    let Some((h, s, items)) = series("sweep_cooling", |_| {}).await else {
         return;
     };
     offer(&h, A, json!([release("a", 3)])).await;
@@ -442,6 +460,59 @@ async fn a_cooling_unit_ask_is_asked_again_for_its_own_target() {
     tokio::time::sleep(Duration::from_millis(500)).await;
     let two = format!("{0};{0};", items[1]);
     assert_eq!(searched(&h, A).await, two, "the wake keeps its scope");
+    h.finish().await;
+    s.finish().await;
+}
+
+/// A busy provider: the retry asks for the episode again, never the media's other targets.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_busy_unit_ask_is_retried_for_its_own_target() {
+    // One instance and no queue: a search while another call runs finds the provider busy.
+    let Some((h, s, items)) = series("sweep_busy", |c| {
+        c.http_max = 1;
+        c.http_queue = 0;
+    })
+    .await
+    else {
+        return;
+    };
+    offer(&h, A, json!([release("a", 3)])).await;
+    let rt = h.st.plugins.rt(A).unwrap();
+    let spin = tokio::spawn(async move {
+        let req = fliks_server::plugins::HttpRequest {
+            method: "GET".into(),
+            path: "/test/spin".into(),
+            query: vec![("s".into(), "3".into())],
+            body: vec![],
+            principal: fliks_server::plugins::Principal::Delegated(1),
+        };
+        rt.http(req, false).await
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let ep2 = UnitRef {
+        group: Some(1),
+        number: Some(2.0),
+        end_number: None,
+        label: None,
+        absolute: None,
+    };
+    let pick = Pick::of(Family::Video, None, Some(&ep2)).unwrap();
+    h.st.plugins
+        .request_scoped(&h.st, vec![(3, Scope::Only(vec![pick]))]);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(
+        searched(&h, A).await,
+        "",
+        "the busy search never reached the provider"
+    );
+    spin.await.unwrap().unwrap();
+    until("the retry's grab", Duration::from_secs(60), async || {
+        item_grabbed(&h, 3, items[1]).await
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert_eq!(searched(&h, A).await, format!("{};", items[1]));
+    assert!(!item_grabbed(&h, 3, items[0]).await && !item_grabbed(&h, 3, items[2]).await);
     h.finish().await;
     s.finish().await;
 }

@@ -3,9 +3,10 @@
 use super::attempts::{self, Tally};
 use super::{self as acquisition, picker};
 use crate::ingest::KeyedLocks;
+use crate::plugins::imports::host_err;
 use crate::plugins::runtime::fliks::plugin::types as t;
-use crate::plugins::runtime::{CallError, State};
-use crate::plugins::{HttpRequest, Plugins, Principal, events};
+use crate::plugins::runtime::{CallError, HostError, State};
+use crate::plugins::{HttpRequest, Plugins, Principal, events, units};
 use crate::state::AppState;
 use crate::sync::MutexExt;
 use chrono::{DateTime, Utc};
@@ -36,69 +37,73 @@ pub enum Scope {
     Only(Vec<Pick>),
 }
 
-/// A request for the targets of one family and unit; none is any.
+/// A unit as the core reads it: a video season and episode, or a comic issue's kind and number.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Unit {
+    Video(Option<u32>, Option<u32>),
+    Issue(String, String),
+}
+
+impl Unit {
+    /// `unit` read in the grammar of `family`; none is the whole work, and only video and comics have units.
+    fn of(family: t::Family, unit: Option<&t::UnitRef>) -> Result<Option<Self>, HostError> {
+        let Some(u) = unit else { return Ok(None) };
+        Ok(Some(match family {
+            t::Family::Video => {
+                let (group, number) = units::video(Some(u))?;
+                Self::Video(group, number)
+            }
+            t::Family::Image => {
+                let issue = super::comic::expected(u)?;
+                Self::Issue(issue.kind, issue.number)
+            }
+            _ => {
+                return Err(host_err(
+                    "ERR_VALIDATION",
+                    "only a video or comic ask has a unit",
+                ));
+            }
+        }))
+    }
+}
+
+/// A request for the targets of one family (none: any) whose unit is the ask's.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pick {
     family: Option<t::Family>,
-    unit: Option<UnitKey>,
-}
-
-/// A unit's group, number (as bits: `f64` is not `Eq`) and comic label parts.
-#[derive(Clone, Debug, PartialEq)]
-struct UnitKey {
-    group: Option<u32>,
-    number: Option<u64>,
-    label: (String, Option<String>),
-}
-
-impl UnitKey {
-    fn of(u: &t::UnitRef) -> Self {
-        Self {
-            group: u.group,
-            number: u.number.map(f64::to_bits),
-            label: super::comic::label_parts(u.label.as_deref()),
-        }
-    }
+    unit: Option<Unit>,
 }
 
 impl Pick {
-    pub fn of(family: Option<t::Family>, unit: Option<&t::UnitRef>) -> Self {
-        Self {
+    /// `read` is the family whose grammar the media's units follow, whatever family the ask names.
+    pub fn of(
+        read: t::Family,
+        family: Option<t::Family>,
+        unit: Option<&t::UnitRef>,
+    ) -> Result<Self, HostError> {
+        Ok(Self {
             family,
-            unit: unit.map(UnitKey::of),
-        }
+            unit: Unit::of(read, unit)?,
+        })
     }
 
-    /// The one target `tg` is.
-    fn target(tg: &t::Target) -> Self {
-        Self::of(Some(tg.family), tg.scope.first().map(|u| &u.ref_))
-    }
-
+    /// No unit names the whole-work target only, never a series' episodes or a comic's issues.
     fn admits(&self, tg: &t::Target) -> bool {
-        if self.family.is_some_and(|f| f != tg.family) {
-            return false;
-        }
-        let Some(want) = &self.unit else {
-            return true;
-        };
-        let Some(r) = tg.scope.first().map(|u| UnitKey::of(&u.ref_)) else {
-            return false;
-        };
-        // The label is a comic issue's printed one: a video unit has none.
-        let same_label = tg.family == t::Family::Video || want.label == r.label;
-        want.group == r.group && want.number == r.number && same_label
+        self.family.is_none_or(|f| f == tg.family)
+            && Unit::of(tg.family, tg.scope.first().map(|u| &u.ref_)).is_ok_and(|u| u == self.unit)
     }
 }
 
 impl Scope {
-    /// A request naming no family and no unit is the whole media.
-    pub fn of(picks: Vec<Pick>) -> Self {
-        if picks.iter().any(|p| p.family.is_none() && p.unit.is_none()) {
-            return Self::All;
+    /// The one target `tg` is; a unit the core does not read (a track) leaves its whole media.
+    fn target(tg: &t::Target) -> Self {
+        match Unit::of(tg.family, tg.scope.first().map(|u| &u.ref_)) {
+            Ok(unit) => Self::Only(vec![Pick {
+                family: Some(tg.family),
+                unit,
+            }]),
+            Err(_) => Self::All,
         }
-        let mut only = Self::Only(vec![]);
-        only.merge(Self::Only(picks));
-        only
     }
 
     fn merge(&mut self, other: Scope) {
@@ -446,7 +451,7 @@ impl Plugins {
     fn wake_at(&self, tg: &t::Target, at: DateTime<Utc>) {
         let Some(app) = self.app() else { return };
         let (media, at) = (tg.media_id, at.min(Utc::now() + MAX_COOLDOWN));
-        let scope = Scope::Only(vec![Pick::target(tg)]);
+        let scope = Scope::target(tg);
         match self.sweeps.wakes.lock_clean().entry((media, at)) {
             std::collections::hash_map::Entry::Occupied(mut o) => {
                 o.get_mut().merge(scope);
@@ -846,50 +851,75 @@ mod tests {
 
     #[test]
     fn a_scope_admits_the_targets_its_asks_name() {
-        let ep = |g, n| target(t::Family::Video, Some(unit_ref(Some(g), Some(n), None)));
-        let only = |f, u: Option<t::UnitRef>| Scope::Only(vec![Pick::of(f, u.as_ref())]);
-        let two = only(None, Some(unit_ref(Some(1), Some(2.0), None)));
+        use t::Family::{Audio, Image, Text, Video};
+        let ep = |g, n| target(Video, Some(unit_ref(Some(g), Some(n), None)));
+        let only = |read, f, u: Option<t::UnitRef>| {
+            Scope::Only(vec![Pick::of(read, f, u.as_ref()).unwrap()])
+        };
+        // The family the ask names does not change how its unit reads.
+        let two = only(Video, None, Some(unit_ref(Some(1), Some(2.0), None)));
+        let u = unit_ref(Some(1), Some(2.0), None);
+        let image = Pick::of(Video, Some(Image), Some(&u)).unwrap();
+        assert_eq!(image.unit, Some(Unit::Video(Some(1), Some(2))));
         assert!(two.admits(&ep(1, 2.0)));
         assert!(!two.admits(&ep(1, 3.0)) && !two.admits(&ep(2, 2.0)));
         // A season ask is the season's own target, not its episodes.
-        let season = only(None, Some(unit_ref(Some(1), None, None)));
+        let season = only(Video, None, Some(unit_ref(Some(1), None, None)));
         assert!(!season.admits(&ep(1, 2.0)));
-        assert!(season.admits(&target(
-            t::Family::Video,
-            Some(unit_ref(Some(1), None, None))
-        )));
-        // No unit: every target of the family.
-        let video = only(Some(t::Family::Video), None);
-        assert!(video.admits(&ep(1, 2.0)) && video.admits(&target(t::Family::Video, None)));
-        assert!(!only(Some(t::Family::Audio), None).admits(&ep(1, 2.0)));
-        // A comic issue's label is compared trimmed and lowercase; a video unit has none.
-        let issue = |l| {
-            target(
-                t::Family::Image,
-                Some(unit_ref(Some(1), Some(1.0), Some(l))),
-            )
-        };
-        let one_a = only(None, Some(unit_ref(Some(1), Some(1.0), Some(" 1A "))));
-        assert!(one_a.admits(&issue("1a")) && !one_a.admits(&issue("1b")));
-        // A target with no unit is admitted only by an ask with no unit.
-        assert!(!two.admits(&target(t::Family::Video, None)));
+        assert!(season.admits(&target(Video, Some(unit_ref(Some(1), None, None)))));
+        // No unit is the whole work: a movie or a book, never a series' episodes or seasons.
+        let whole = only(Video, None, None);
+        assert!(whole.admits(&target(Video, None)));
+        assert!(!whole.admits(&ep(1, 2.0)) && !season.admits(&target(Video, None)));
+        assert!(only(Text, Some(Text), None).admits(&target(Text, None)));
+        assert!(!only(Text, Some(Audio), None).admits(&target(Text, None)));
+        // A comic issue reads as `comic::expected` does: the kind word and the number.
+        let issue = |l: &str| target(Image, Some(unit_ref(None, Some(1.0), Some(l))));
+        let annual = only(
+            Image,
+            None,
+            Some(unit_ref(None, Some(1.0), Some(" ANNUAL 1"))),
+        );
+        assert!(annual.admits(&issue("annual 1")) && !annual.admits(&issue("1")));
+        assert!(!only(Image, None, None).admits(&issue("1")));
         assert!(Scope::All.admits(&ep(9, 9.0)));
     }
 
     #[test]
-    fn an_ask_for_the_whole_media_absorbs_the_others() {
-        let video = Pick::of(Some(t::Family::Video), None);
-        assert_eq!(
-            Scope::of(vec![video.clone()]),
-            Scope::Only(vec![video.clone()])
+    fn an_ask_unit_is_read_by_the_media_grammar() {
+        let ask = |read, u| Pick::of(read, None, Some(&u)).map(|_| ());
+        // Fractional, NaN or absolute video numbers, a comic label that is not its number.
+        for (read, u) in [
+            (t::Family::Video, unit_ref(Some(1), Some(1.5), None)),
+            (t::Family::Video, unit_ref(Some(1), Some(f64::NAN), None)),
+            (t::Family::Image, unit_ref(None, Some(f64::NAN), None)),
+            (t::Family::Image, unit_ref(None, Some(2.0), Some("3"))),
+            (t::Family::Text, unit_ref(None, Some(1.0), None)),
+        ] {
+            assert_eq!(ask(read, u).unwrap_err().code, "ERR_VALIDATION");
+        }
+        // Equal asks are one pick, so a repeated ask never grows the queue entry.
+        let a = Pick::of(
+            t::Family::Video,
+            None,
+            Some(&unit_ref(Some(1), Some(2.0), None)),
         );
-        assert_eq!(Scope::of(vec![video, Pick::of(None, None)]), Scope::All);
+        let mut s = Scope::Only(vec![a.clone().unwrap()]);
+        s.merge(Scope::Only(vec![a.unwrap()]));
+        assert!(matches!(s, Scope::Only(p) if p.len() == 1));
     }
 
     #[test]
     fn the_queue_unions_scopes_and_keeps_the_fewest_retries() {
-        let a = Pick::of(None, Some(&unit_ref(Some(1), Some(1.0), None)));
-        let b = Pick::of(None, Some(&unit_ref(Some(1), Some(2.0), None)));
+        let pick = |n| {
+            Pick::of(
+                t::Family::Video,
+                None,
+                Some(&unit_ref(Some(1), Some(n), None)),
+            )
+            .unwrap()
+        };
+        let (a, b) = (pick(1.0), pick(2.0));
         let mut q = Queue::default();
         q.add(7, 3, Scope::Only(vec![a.clone()]));
         q.add(7, 1, Scope::Only(vec![a.clone(), b.clone()]));
