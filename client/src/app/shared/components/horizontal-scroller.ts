@@ -1,16 +1,21 @@
 import {
   afterNextRender,
   Component,
+  computed,
+  contentChild,
   DestroyRef,
   HostListener,
   inject,
   input,
+  linkedSignal,
   signal,
+  TemplateRef,
   viewChild,
   ElementRef,
   AfterViewInit,
   OnDestroy,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, NavigationStart, Router } from '@angular/router';
 import { LucideDynamicIcon } from '@lucide/angular';
@@ -21,13 +26,26 @@ import { NavbarService } from '../../core/services/navbar.service';
 import { ROW_TOP_OFFSET, snapRowOnFocus } from '../../core/utils/focus-snap.util';
 import { RAIL_RESTORED_ATTR } from '../utils/center-rail';
 
+/** Cards built before the rail is measured; enough to fill a tablet-wide row. */
+const FIRST_PASS = 8;
+/** Cards built past the right edge, so a D-pad or Tab step always lands on a built card. */
+const OVERSCAN = 3;
+
+/** The number of cards to build: past the anchor and past the right edge, never fewer than already built. */
+export function builtCount(total: number, built: number, anchor: number | null, lastVisible: number | null): number {
+  let n = Math.max(built, FIRST_PASS);
+  if (anchor != null && anchor >= 0) n = Math.max(n, anchor + 1 + OVERSCAN);
+  if (lastVisible != null) n = Math.max(n, lastVisible + 1 + OVERSCAN);
+  return Math.min(n, total);
+}
+
 @Component({
   selector: 'app-horizontal-scroller',
-  imports: [TvRowDirective, LucideDynamicIcon],
+  imports: [TvRowDirective, LucideDynamicIcon, NgTemplateOutlet],
   templateUrl: './horizontal-scroller.html',
   styleUrl: './horizontal-scroller.css',
 })
-export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
+export class HorizontalScrollerComponent<T = unknown> implements AfterViewInit, OnDestroy {
   protected readonly icons = icons;
 
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -36,6 +54,26 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   readonly title = input('');
+  /** With items, cards are built from the projected `<ng-template let-item>` as the rail nears them; built ones stay. */
+  readonly items = input<readonly T[] | null>(null);
+  readonly trackBy = input<(item: T) => unknown>((item) => item);
+  /** Index built from the first pass, for a rail centred on it. */
+  readonly anchorIndex = input<number | null>(null);
+  protected readonly itemTemplate = contentChild<TemplateRef<{ $implicit: T; index: number }>>(TemplateRef);
+  private readonly built = linkedSignal<{ items: readonly T[] | null; anchor: number | null }, number>({
+    source: () => ({ items: this.items(), anchor: this.anchorIndex() }),
+    computation: (src, prev) =>
+      builtCount(src.items?.length ?? 0, prev?.source.items === src.items ? prev.value : 0, src.anchor, null),
+  });
+  protected readonly builtItems = computed(() => this.items()?.slice(0, this.built()) ?? []);
+  /** Card pitch and gap, read once laid out; the tail spacer keeps the rail as wide as if every card were built. */
+  private readonly stride = signal(0);
+  private gapPx = 0;
+  private firstLeft = 0;
+  protected readonly tailPx = computed(() => {
+    const rest = (this.items()?.length ?? 0) - this.built();
+    return rest > 0 && this.stride() > 0 ? rest * this.stride() - this.gapPx : 0;
+  });
   readonly atStart = signal(true);
   readonly atEnd = signal(false);
   /** Arrows show only within {@link EDGE_ZONE_PX} of an edge, so they don't cover the middle cards. */
@@ -57,7 +95,10 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
       const scroller = this.scrollerEl()?.nativeElement;
       const wrap = this.wrapEl()?.nativeElement;
       if (!scroller || !wrap) return;
-      const onScroll = () => this.updateArrows();
+      const onScroll = () => {
+        this.updateArrows();
+        this.grow(scroller);
+      };
       const onMove = (e: MouseEvent) => this.onPointerMove(e);
       const onLeave = () => this.onPointerLeave();
       scroller.addEventListener('scroll', onScroll, { passive: true });
@@ -80,7 +121,10 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
     // The observer's first callback lands after layout; a read here would force one.
     const el = this.scrollerEl()?.nativeElement;
     if (el) {
-      this.resizeObserver = new ResizeObserver(() => this.updateArrows());
+      this.resizeObserver = new ResizeObserver(() => {
+        this.updateArrows();
+        this.grow(el);
+      });
       this.resizeObserver.observe(el);
     }
     // Reuse routes reattach this row without re-running ngAfterViewInit, resetting scrollLeft and leaving atStart/atEnd stale; recompute next frame.
@@ -112,6 +156,22 @@ export class HorizontalScrollerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.resizeObserver?.disconnect();
+  }
+
+  /** Builds the cards the viewport is about to show; reads layout only from scroll and resize callbacks, where it is clean. */
+  private grow(el: HTMLElement) {
+    const total = this.items()?.length ?? 0;
+    if (!total || !el.isConnected) return;
+    if (!this.stride()) {
+      const [a, b] = el.querySelectorAll<HTMLElement>(':scope > :not([data-spacer])');
+      if (!a || !b) return;
+      this.firstLeft = a.offsetLeft;
+      this.gapPx = parseFloat(getComputedStyle(el).columnGap) || 0;
+      this.stride.set(b.offsetLeft - a.offsetLeft);
+    }
+    const lastVisible = Math.floor((el.scrollLeft + el.clientWidth - this.firstLeft) / this.stride());
+    const next = builtCount(total, this.built(), this.anchorIndex(), lastVisible);
+    if (next > this.built()) this.built.set(next);
   }
 
   updateArrows() {

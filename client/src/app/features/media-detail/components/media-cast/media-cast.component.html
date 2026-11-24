@@ -1,7 +1,7 @@
 @if (cast().length) {
   <app-detail-section [heading]="headingKey() | translate" [persistKey]="persistKey()">
-    <app-horizontal-scroller>
-      @for (c of cast(); track c.key) {
+    <app-horizontal-scroller [items]="cast()" [trackBy]="castKey">
+      <ng-template let-c>
         <ng-template #card>
           <div class="avatar">
             <div
@@ -37,7 +37,7 @@
             <ng-container *ngTemplateOutlet="card" />
           </div>
         }
-      }
+      </ng-template>
     </app-horizontal-scroller>
   </app-detail-section>
 }

@@ -35,6 +35,7 @@ export const providerCast = (cast: MetadataCredit[]): CastMember[] =>
 })
 export class MediaCastComponent {
   readonly cast = input.required<CastMember[]>();
+  protected readonly castKey = (c: CastMember) => c.key;
   readonly headingKey = input('media_detail.cast');
   readonly persistKey = input('cast');
 

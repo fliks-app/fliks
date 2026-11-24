@@ -454,8 +454,8 @@
     } @else if (filteredEpisodes().length > 0) {
       <!-- Same top rule and inset as the list so toggling views doesn't shift the block; only where the toggle exists. -->
       <ng-template #episodeRow>
-        <app-horizontal-scroller>
-        @for (ep of filteredEpisodes(); track ep.id) {
+        <app-horizontal-scroller [items]="filteredEpisodes()" [trackBy]="episodeKey" [anchorIndex]="centerIndex()">
+        <ng-template let-ep>
           <app-media-card [aspect]="'landscape'"
             [posterMorph]="episodeMorph()"
             [id]="'episode-' + ep.id"
@@ -482,7 +482,7 @@
             (played)="playEpisode(ep)"
             (watchedToggled)="toggleEpisodeWatched.emit({ episode: ep, watched: $event })"
           />
-        }
+        </ng-template>
         </app-horizontal-scroller>
       </ng-template>
 
