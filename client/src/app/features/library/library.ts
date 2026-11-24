@@ -319,7 +319,12 @@ export class LibraryComponent implements OnInit, OnDestroy {
     const id = this.library()?.id;
     if (!id) return;
     const list = await this.streamingApi.getFeatured({ ...opts, libraryId: id }).catch(() => null);
-    if (!list || this.library()?.id !== id) return;
+    if (this.library()?.id !== id) return;
+    // A failed network read gives the place back too, or an unreachable server holds it forever.
+    if (!list) {
+      if (opts.force) this.featuredOf.set(id);
+      return;
+    }
     this.featured.set(list.map((f) => f.media));
     this.featuredOf.set(id);
   }
