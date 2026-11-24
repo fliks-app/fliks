@@ -218,6 +218,7 @@
           class="input input-bordered h-11 w-full pl-9"
           [placeholder]="'reader.search_placeholder' | translate"
           [attr.aria-label]="'reader.search' | translate"
+          enterkeyhint="search"
           (keydown.enter)="query.emit(text($event))"
         />
       </label>
