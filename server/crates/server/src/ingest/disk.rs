@@ -43,8 +43,8 @@ use fliks_domain::{
         limiter::Priority,
     },
     naming::{
-        self, EpisodeNumbers, is_special_file, parse_episode_numbers, validate_folder_name,
-        validate_folder_path,
+        self, EpisodeNumbers, episode_numbers_explicit, is_special_file, parse_episode_numbers,
+        validate_folder_name, validate_folder_path,
     },
     release::parsing::quality::parse_release_quality,
 };
@@ -307,7 +307,21 @@ async fn scan_under(
         }
         let name = file_name(abs);
         let abs_s = abs.to_string_lossy().into_owned();
-        let (nums, rel, series) = episode_of(root_p, abs);
+        let (nums, rel, named, explicit) = episode_of(root_p, abs);
+        let segs: Vec<&str> = rel.split('/').collect();
+        let folder = if segs.len() > 1 {
+            segs[0].to_owned()
+        } else {
+            String::new()
+        };
+        // Rule 63: the library's kinds decide first; a root file needs explicit numbering.
+        let series = types.contains(&MediaKind::Series)
+            && if folder.is_empty() && types.contains(&MediaKind::Movie) {
+                explicit
+            } else {
+                named
+            };
+        let nums = nums.filter(|_| series);
         let media_type = if series {
             MediaKind::Series
         } else {
@@ -317,16 +331,11 @@ async fn scan_under(
             tracing::info!("OrphanScan: {abs_s} skipped, the library takes no {media_type:?}");
             continue;
         }
-        let q = parse_release_quality(&name).quality;
-        let segs: Vec<&str> = rel.split('/').collect();
-        let folder = if segs.len() > 1 {
-            segs[0].to_owned()
-        } else {
-            String::new()
-        };
         if series && folder.is_empty() {
+            tracing::info!("OrphanScan: {abs_s} skipped, an episode needs a series folder");
             continue;
         }
+        let q = parse_release_quality(&name).quality;
         orphan_count += 1;
         let entry = FileEntry {
             file_path: abs_s.clone(),
@@ -418,12 +427,14 @@ async fn scan_under(
     }
 }
 
-/// Rule 63: the numbers of a file and whether it belongs to a series, read under the scan root.
-fn episode_of(root: &Path, abs: &Path) -> (Option<EpisodeNumbers>, String, bool) {
-    let nums = parse_episode_numbers(&file_name(abs), Some(&abs.to_string_lossy()));
+/// Rule 63: a file's numbers, its path under the scan root, whether its name reads as an episode
+/// and whether explicit numbering says so.
+fn episode_of(root: &Path, abs: &Path) -> (Option<EpisodeNumbers>, String, bool, bool) {
+    let parsed = episode_numbers_explicit(&file_name(abs), Some(&abs.to_string_lossy()));
     let rel = fsx::rel_under(root, abs).unwrap_or_default();
-    let series = nums.is_some() || is_special_file(&rel);
-    (nums, rel, series)
+    let named = parsed.is_some() || is_special_file(&rel);
+    let explicit = parsed.is_some_and(|(_, e)| e);
+    (parsed.map(|(n, _)| n), rel, named, explicit)
 }
 
 /// Rule 72a: the files the scan groups under `root/folder` as one series, walked again.
@@ -444,7 +455,7 @@ async fn series_files(
     all.into_iter()
         .filter(|p| !linked.contains_key(p))
         .filter_map(|abs| {
-            let (nums, _, series) = episode_of(&root, &abs);
+            let (nums, _, series, _) = episode_of(&root, &abs);
             series.then(|| RelinkFile {
                 path: abs.to_string_lossy().into_owned(),
                 season: nums.and_then(|x| n(x.season)),

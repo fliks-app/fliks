@@ -418,14 +418,21 @@ fn numbered_special() -> &'static fancy_regex::Regex {
     rx!(fancy i r"(?:^|[^a-zA-Z0-9])(?:specials?|ova|oav|ovd|sp|ncop|nced)[ ._-]*(\d{1,2})(?![0-9])")
 }
 
+/// Resolution and video codec tokens, whose digits would read as episode numbers.
+fn strip_release_tokens(s: &str) -> std::borrow::Cow<'_, str> {
+    rx!(i r"(?:480|540|576|720|1080|1440|2160)[iIpP]|[xXhH][^a-zA-Z0-9]?26[456]|848x480|1280x720|1920x1080|3840x2160|4096x2160")
+        .replace_all(s, "")
+}
+
 /// A `Specials` / `Season 00` folder, a marker, a `.5` interstitial or `SxxE00` numbering.
 pub fn is_special_file(path_or_name: &str) -> bool {
-    let fm = |r: &fancy_regex::Regex| r.is_match(path_or_name).unwrap_or(false);
-    rx!(i r"(?:^|[\\/])(?:specials?|(?:season|saison)[ ._-]*0+)(?:[\\/])").is_match(path_or_name)
+    let s = &*strip_release_tokens(path_or_name);
+    let fm = |r: &fancy_regex::Regex| r.is_match(s).unwrap_or(false);
+    rx!(i r"(?:^|[\\/])(?:specials?|(?:season|saison)[ ._-]*0+)(?:[\\/])").is_match(s)
         || rx!(i r"(?:^|[^a-zA-Z0-9])(?:specials?|ova|oav|ovd|ncop|nced)(?:[^a-zA-Z0-9]|$)")
-            .is_match(path_or_name)
+            .is_match(s)
         || fm(numbered_special())
-        || rx!(r"(?:^|[^0-9])\d{1,3}\.5(?:[^0-9]|$)").is_match(path_or_name)
+        || fm(rx!(fancy r"(?:^|[\\/]| - )\d{1,3}\.5(?![0-9]|\.[0-9])"))
         || fm(rx!(fancy r"(?:[Ss](\d{1,2})[ ._-]*[Ee]|(\d{1,2})[xX])0+(?![0-9])"))
 }
 
@@ -525,14 +532,24 @@ pub fn parse_episode_numbers(
     source_title: &str,
     file_path: Option<&str>,
 ) -> Option<EpisodeNumbers> {
+    episode_numbers_explicit(source_title, file_path).map(|(n, _)| n)
+}
+
+/// [`parse_episode_numbers`], and whether a pattern stating the numbers outright gave them.
+pub fn episode_numbers_explicit(
+    source_title: &str,
+    file_path: Option<&str>,
+) -> Option<(EpisodeNumbers, bool)> {
+    let source_title = &*strip_release_tokens(source_title);
     if let Ok(Some(m)) = numbered_special().captures(source_title) {
         let episode: i64 = m[1].parse().expect("1-2 digits");
         if episode >= 1 {
-            return Some(EpisodeNumbers {
+            let n = EpisodeNumbers {
                 season: 0,
                 episode,
                 episode_end: None,
-            });
+            };
+            return Some((n, false));
         }
     }
     let special = is_special_file(file_path.unwrap_or(source_title));
@@ -560,11 +577,12 @@ pub fn parse_episode_numbers(
             .and_then(|g| g.as_str().parse::<i64>().ok())
             .filter(|end| *end > episode);
         let season = p.season.map_or(1, |i| m[i].parse().expect("1-2 digits"));
-        return Some(EpisodeNumbers {
+        let n = EpisodeNumbers {
             season,
             episode,
             episode_end,
-        });
+        };
+        return Some((n, p.explicit));
     }
     None
 }
