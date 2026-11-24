@@ -163,12 +163,14 @@ body.tv .app-navbar-veil {
   background-color: transparent;
 }
 /* Reduced effects drop the backdrop blur, so the fill alone keeps the menu text readable. */
-body.reduced-effects .app-sidebar-veil,
+body.tv .app-sidebar-veil,
 body.reduced-effects:not(.tv) .app-navbar-veil {
   background-color: rgba(29, 35, 42, 0.9);
 }
-/* One switch for every backdrop-blur utility on TV and low-memory devices. */
-body.reduced-effects [class*='backdrop-blur'] {
+/* One switch for every backdrop-blur utility on TV and low-memory devices; the docked sidebar keeps
+   its blur off TV, as it only re-blurs when the fanart changes. */
+body.tv [class*='backdrop-blur'],
+body.reduced-effects [class*='backdrop-blur']:not(.app-sidebar-veil) {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
