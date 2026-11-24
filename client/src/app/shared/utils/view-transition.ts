@@ -7,14 +7,16 @@ import { KIND_REGISTRY, MEDIA_KINDS } from '../../core/media-kinds';
 export const CARD_OVERLAY_NAME = 'media-card-overlay';
 /** Marks what this module stamped: a hero's own style-bound name is unchanged so Angular won't rewrite it, and clearing by inline style would lose it in the route cache. */
 const STAMPED = 'data-poster-stamped';
-/** Held by reference: on the way back the stamped title sits in a page the route cache has detached. */
+/** Held by reference: on the way back the stamped card and title sit in a page the route cache has detached. */
+let stamped: HTMLElement[] = [];
 let heroTitle: HTMLElement | null = null;
 
 export function clearPosterStamps(): void {
-  document.querySelectorAll<HTMLElement>(`[${STAMPED}]`).forEach((el) => {
+  stamped.forEach((el) => {
     el.style.viewTransitionName = '';
     el.removeAttribute(STAMPED);
   });
+  stamped = [];
   clearHeroTitle();
 }
 
@@ -49,7 +51,7 @@ export function backdropFollowsTransition(): boolean {
 
 /** Whether a card armed a morph for the navigation being started. */
 export function hasPosterStamp(): boolean {
-  return !!document.querySelector(`[${STAMPED}]`);
+  return stamped.length > 0;
 }
 
 export function stampPoster(
@@ -75,11 +77,13 @@ export function stampPosterNamed(
   clearPosterStamps();
   img.style.viewTransitionName = name;
   img.setAttribute(STAMPED, '');
+  stamped.push(img);
   // The morphing poster is painted above the page snapshot, so the card's own
   // badges only reappear when the animation ends unless they are lifted too.
   if (overlay) {
     overlay.style.viewTransitionName = CARD_OVERLAY_NAME;
     overlay.setAttribute(STAMPED, '');
+    stamped.push(overlay);
   }
 }
 

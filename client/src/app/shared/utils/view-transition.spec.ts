@@ -5,6 +5,7 @@ import {
   clearStalePosterStamps,
   dashboardTrip,
   enteringPosterPage,
+  hasPosterStamp,
   leavingPosterPage,
   markViewTransition,
   stampPoster,
@@ -81,6 +82,17 @@ describe('view-transition poster stamps', () => {
 
     clearPosterStamps();
     expect(hero.style.viewTransitionName).toBe('media-poster-7');
+    expect(card.style.viewTransitionName).toBe('');
+  });
+
+  it('keeps and clears a stamp whose page the route cache detached', () => {
+    const card = img();
+    stampPoster(card, 7, 125);
+    card.remove();
+
+    expect(hasPosterStamp()).toBe(true);
+    clearPosterStamps();
+    expect(hasPosterStamp()).toBe(false);
     expect(card.style.viewTransitionName).toBe('');
   });
 
