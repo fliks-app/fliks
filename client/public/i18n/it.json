@@ -4510,9 +4510,8 @@
     "reset": "Reimposta",
     "reset_confirm_title": "Reimposta le sezioni",
     "reset_confirm": "Ripristinare l'ordine e la visibilità predefiniti delle sezioni della home?",
-    "libraries_settings": "Ordine e visibilità delle librerie",
-    "libraries_modal_title": "Librerie",
-    "libraries_modal_hint": "Trascina per riordinare le librerie, e nascondi quelle che non vuoi vedere nella home e nel menu.",
+    "libraries_title": "Librerie",
+    "libraries_hint": "Trascina per riordinare le librerie, e nascondi quelle che non vuoi vedere nella home e nel menu.",
     "toggle_library_visible": "Mostra o nascondi la libreria"
   },
   "update": {

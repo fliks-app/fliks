@@ -4510,9 +4510,8 @@
     "reset": "Restablecer",
     "reset_confirm_title": "Restablecer las zonas",
     "reset_confirm": "¿Restablecer el orden y la visibilidad de las zonas del inicio a los valores por defecto?",
-    "libraries_settings": "Orden y visibilidad de las bibliotecas",
-    "libraries_modal_title": "Bibliotecas",
-    "libraries_modal_hint": "Arrastre para reordenar las bibliotecas, y oculte las que no quiera ver en el inicio y en el menú.",
+    "libraries_title": "Bibliotecas",
+    "libraries_hint": "Arrastre para reordenar las bibliotecas, y oculte las que no quiera ver en el inicio y en el menú.",
     "toggle_library_visible": "Mostrar u ocultar la biblioteca"
   },
   "update": {

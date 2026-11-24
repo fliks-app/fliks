@@ -4510,9 +4510,8 @@
     "reset": "Zurücksetzen",
     "reset_confirm_title": "Bereiche zurücksetzen",
     "reset_confirm": "Reihenfolge und Sichtbarkeit der Startseiten-Bereiche auf die Standardwerte zurücksetzen?",
-    "libraries_settings": "Reihenfolge und Sichtbarkeit der Bibliotheken",
-    "libraries_modal_title": "Bibliotheken",
-    "libraries_modal_hint": "Ziehen Sie zum Neuanordnen der Bibliotheken und blenden Sie jene aus, die Sie nicht auf der Startseite und im Menü sehen möchten.",
+    "libraries_title": "Bibliotheken",
+    "libraries_hint": "Ziehen Sie zum Neuanordnen der Bibliotheken und blenden Sie jene aus, die Sie nicht auf der Startseite und im Menü sehen möchten.",
     "toggle_library_visible": "Bibliothek anzeigen oder ausblenden"
   },
   "update": {

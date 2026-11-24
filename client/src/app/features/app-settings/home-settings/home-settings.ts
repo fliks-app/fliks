@@ -1,9 +1,7 @@
 import {
   Component,
-  ElementRef,
   inject,
   signal,
-  viewChild,
   OnInit,
 } from '@angular/core';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -31,16 +29,10 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { DisplaySettingsService } from '../../../core/services/display-settings.service';
 import { SelectFieldComponent } from '../../../shared/components/forms/select-field/select-field';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
-import { ModalHeaderComponent } from '../../../shared/components/modal-header';
-import { ModalFooterComponent } from '../../../shared/components/modal-footer';
-import { ModalComponent } from '../../../shared/components/modal';
 
 @Component({
   selector: 'app-home-settings',
   imports: [
-    ModalComponent,
-    ModalFooterComponent,
-    ModalHeaderComponent,
     TranslatePipe,
     FormsModule,
     CdkDropList,
@@ -72,12 +64,8 @@ export class HomeSettingsPageComponent implements OnInit {
   /** Cached so reset/rebuild can re-resolve without refetching libraries. */
   private libs: { id: number; name: string }[] = [];
 
-  // --- Library order + visibility modal ---
-  private readonly libraryDialog = viewChild<string, ElementRef<HTMLDialogElement>>('libraryDialog', { read: ElementRef });
-  /** Working copy edited in the modal: every accessible library in the user's
-   *  order, each flagged hidden. Persisted only on save. */
+  /** Every accessible library in the user's order, each flagged hidden. */
   readonly libraryRows = signal<{ id: number; name: string; hidden: boolean }[]>([]);
-  readonly librarySaving = signal(false);
 
   private readonly BUILTIN_LABELS: Record<string, string> = {
     'hero-carousel': 'home_settings.section.hero_carousel',
@@ -105,6 +93,7 @@ export class HomeSettingsPageComponent implements OnInit {
       /* error handled by global interceptor */
     }
     this.rebuild();
+    this.libraryRows.set(this.libraryPrefs.ordered(this.libs));
   }
 
   private get requestsAllowed(): boolean {
@@ -162,20 +151,10 @@ export class HomeSettingsPageComponent implements OnInit {
     this.persist();
   }
 
-  /** Open the library order + visibility modal, seeded from saved prefs. */
-  openLibraryReorder() {
-    this.libraryRows.set(this.libraryPrefs.ordered(this.libs));
-    this.libraryDialog()?.nativeElement.showModal();
-  }
-
-  closeLibraryReorder() {
-    this.libraryDialog()?.nativeElement.close();
-  }
-
   dropLibrary(event: CdkDragDrop<unknown[]>) {
     const next = [...this.libraryRows()];
     moveItemInArray(next, event.previousIndex, event.currentIndex);
-    this.libraryRows.set(next);
+    this.saveLibraries(next);
   }
 
   /** Reorder via arrows (TV remote / keyboard path). */
@@ -184,28 +163,25 @@ export class HomeSettingsPageComponent implements OnInit {
     const target = index + delta;
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
-    this.libraryRows.set(next);
+    this.saveLibraries(next);
   }
 
   toggleLibraryHidden(index: number) {
     const next = [...this.libraryRows()];
     next[index] = { ...next[index], hidden: !next[index].hidden };
-    this.libraryRows.set(next);
+    this.saveLibraries(next);
   }
 
-  async saveLibraryOrder() {
-    this.librarySaving.set(true);
+  private async saveLibraries(rows: { id: number; name: string; hidden: boolean }[]) {
+    this.libraryRows.set(rows);
     try {
-      const rows = this.libraryRows();
       await this.libraryPrefs.save(
         rows.map((r) => r.id),
         rows.filter((r) => r.hidden).map((r) => r.id),
       );
-      this.closeLibraryReorder();
     } catch {
-      /* error toast handled by global interceptor */
-    } finally {
-      this.librarySaving.set(false);
+      // Error toast comes from the global interceptor; show what the server kept.
+      this.libraryRows.set(this.libraryPrefs.ordered(this.libs));
     }
   }
 
