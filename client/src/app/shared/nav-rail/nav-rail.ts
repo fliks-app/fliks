@@ -60,7 +60,7 @@ export class NavRailComponent {
   protected readonly acquisition = this.contrib.acquisitionItems;
 
   protected readonly shown = computed(() => this.libraries().slice(0, RAIL_LIBRARIES));
-  protected readonly more = computed(() => this.libraries().length > RAIL_LIBRARIES);
+  protected readonly overflow = computed(() => this.libraries().slice(RAIL_LIBRARIES));
 
   private readonly url = toSignal(
     this.router.events.pipe(
@@ -70,9 +70,7 @@ export class NavRailComponent {
     { initialValue: this.router.url },
   );
   /** The current page is a library the rail only lists under "Plus". */
-  protected readonly plusCurrent = computed(() =>
-    this.libraries().slice(RAIL_LIBRARIES).some((l) => this.isCurrent(l)),
-  );
+  protected readonly plusCurrent = computed(() => this.overflow().some((l) => this.isCurrent(l)));
 
   protected readonly plusOpen = signal(false);
   private readonly hovered = signal(false);
