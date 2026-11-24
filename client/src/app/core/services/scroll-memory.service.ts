@@ -20,6 +20,8 @@ export class ScrollMemoryService {
   private readonly navbar = inject(NavbarService);
   /** False between NavigationStart and the router's own scroll. */
   private routerScrolled = true;
+  /** Bumped per navigation, so a deferred hold never acts on the page after it. */
+  private navigation = 0;
   private queued: (() => void)[] = [];
   private settledUrl = '';
   /** The navigation only changed the query on the same path: a page's tabs, filters or month, which keep the offset. */
@@ -38,6 +40,7 @@ export class ScrollMemoryService {
       if (event instanceof NavigationSkipped) this.inPage = false;
       // Save scroll position BEFORE navigation starts (scroll is still intact)
       if (event instanceof NavigationStart) {
+        this.navigation++;
         if (this.currentKey) this.positions.set(this.currentKey, this.pageScroller.offset());
         this.routerScrolled = false;
       }
@@ -91,7 +94,9 @@ export class ScrollMemoryService {
   /** Holds a forward entry at the top: a WKWebView still sizing the document drops the router's single scroll, and the taller page's offset clamps to the footer.
    * Two passes (sticky, plus a listener for a later off-thread clamp), ending on a zero read and on the first user gesture respectively. */
   private enterAtTop(): void {
-    this.stick(0);
+    // Read on the next frame, still before a view transition captures: a read now forced a layout the rest of the render redid.
+    const navigation = this.navigation;
+    requestAnimationFrame(() => navigation === this.navigation && this.stick(0));
 
     const deadline = performance.now() + TOP_HOLD_MS;
     const done = () => {
