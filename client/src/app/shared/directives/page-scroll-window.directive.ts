@@ -8,7 +8,7 @@ import { filter, Observable } from 'rxjs';
   providers: [{ provide: VIRTUAL_SCROLLABLE, useExisting: forwardRef(() => PageScrollWindowDirective) }],
 })
 export class PageScrollWindowDirective extends CdkVirtualScrollableWindow {
-  /** The page's `keepRouteFresh` signal, read per event: a detached view never gets its inputs refreshed. */
+  /** True while the grid must not follow the window (a parked page), read per event: a detached view never gets its inputs refreshed. */
   readonly pageScrollWindow = input.required<Signal<boolean>>();
 
   override elementScrolled(): Observable<Event> {
