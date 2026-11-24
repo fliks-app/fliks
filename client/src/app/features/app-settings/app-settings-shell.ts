@@ -1,5 +1,4 @@
 import { Component, computed, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
 import { TranslatePipe } from '@ngx-translate/core';
 import { SettingsDrawerComponent, type SettingsNavItem } from '../../shared/components/settings-drawer/settings-drawer';
 import { icons } from '../../shared/icons';
@@ -17,7 +16,7 @@ const item = (id: string, icon: SettingsNavItem['icon']): SettingsNavItem => ({
 
 @Component({
   selector: 'app-app-settings-shell',
-  imports: [RouterLink, TranslatePipe, SettingsDrawerComponent],
+  imports: [TranslatePipe, SettingsDrawerComponent],
   templateUrl: './app-settings-shell.html',
 })
 export class AppSettingsShellComponent {

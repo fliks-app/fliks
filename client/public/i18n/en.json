@@ -419,8 +419,6 @@
       "notifications": "Notifications"
     },
     "version": "Version {{version}}",
-    "licenses": "Open-source licenses",
-    "licenses_unavailable": "The licenses could not be loaded.",
     "notifications": {
       "device_title": "This device",
       "device": "System notifications on this device",

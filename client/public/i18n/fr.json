@@ -419,8 +419,6 @@
       "notifications": "Notifications"
     },
     "version": "Version {{version}}",
-    "licenses": "Licences open source",
-    "licenses_unavailable": "Impossible de charger les licences.",
     "notifications": {
       "device_title": "Cet appareil",
       "device": "Notifications système sur cet appareil",
