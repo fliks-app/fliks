@@ -436,6 +436,14 @@ async fn run(c: &Ctx, c_old: &Ctx, pool: &PgPool, old_pool: &PgPool, role: &str,
         json!({"filename": name}),
     )
     .await;
+    if fliks_server::db::server_version(pool).await.unwrap() < 170_000 {
+        // Every restore below is refused there: a_server_before_17_refuses_a_restore_untouched.
+        assert_eq!(
+            (s, json_of(&b)["key"].clone()),
+            (400, json!("system.restore_needs_pg17"))
+        );
+        return;
+    }
     assert_eq!(
         (s, json_of(&b)),
         (201, json!({"pluginsNotRestored": [], "restarting": false}))

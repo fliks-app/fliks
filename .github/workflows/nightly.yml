@@ -121,7 +121,6 @@ jobs:
           POSTGRES_USER: fliks
           POSTGRES_PASSWORD: fliks
           POSTGRES_DB: fliks
-          POSTGRES_INITDB_ARGS: -c max_connections=500 -c fsync=off -c synchronous_commit=off -c full_page_writes=off
         ports:
           - 5432:5432
         options: >-
@@ -141,6 +140,16 @@ jobs:
       FLIKS_TEST_WASM_DIR: ${{ github.workspace }}/nextest-archive
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # initdb -c only exists from 16: the settings go through ALTER SYSTEM and a restart.
+      - name: Tune postgres
+        env:
+          PG: ${{ job.services.postgres.id }}
+        run: |
+          for set in 'max_connections = 500' 'fsync = off' 'synchronous_commit = off' 'full_page_writes = off'; do
+            docker exec "$PG" psql -U fliks -d postgres -qc "ALTER SYSTEM SET $set"
+          done
+          docker restart "$PG" >/dev/null
+          until docker exec "$PG" pg_isready -U fliks -q; do sleep 1; done
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: nextest-archive

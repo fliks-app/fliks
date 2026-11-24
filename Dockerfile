@@ -21,25 +21,8 @@ RUN npm run build
 COPY scripts/precompress-client.mjs /tmp/precompress-client.mjs
 RUN node /tmp/precompress-client.mjs dist/client/browser
 
-# --- Stage 2: Build fliks-server (Rust) ---
-# Dependencies build in their own layer, keyed on the manifests: CI's layer cache keeps it,
-# while a BuildKit cache mount is lost with the runner.
-FROM lukemathwalker/cargo-chef:0.1.78-rust-1.100.0-bookworm AS server-chef
-WORKDIR /server
-# libarchive2-sys builds libarchive with cmake, generates its bindings with libclang and links these libraries.
-RUN apt-get update && apt-get install -y --no-install-recommends cmake libclang-dev liblz4-dev libacl1-dev \
-  && rm -rf /var/lib/apt/lists/*
-
-FROM server-chef AS server-plan
-COPY server/ .
-RUN cargo chef prepare --recipe-path recipe.json
-
-FROM server-chef AS server-build
-COPY --from=server-plan /server/recipe.json .
-RUN cargo chef cook --release --locked -p fliks-server --recipe-path recipe.json
-COPY server/ .
-RUN SQLX_OFFLINE=true cargo build --release --locked -p fliks-server \
-    && cp target/release/fliks-server /usr/local/bin/fliks-server
+# --- Stage 2: Rust toolchain, copied onto the runtime base to build fliks-server ---
+FROM lukemathwalker/cargo-chef:0.1.78-rust-1.100.0-bookworm AS rust-toolchain
 
 # --- Stage 3: Production runtime ---
 # The engine image (ffmpeg, subtitle and OCR tools) plus the PostgreSQL client tools of backup and restore.
@@ -50,14 +33,39 @@ ENTRYPOINT []
 # server newer than itself, which is every supported deployment.
 # The shared libraries libarchive (built into fliks-server) links, whatever the engine image ships.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
-    zlib1g libbz2-1.0 liblzma5 libzstd1 liblz4-1 libxml2 libssl3t64 libacl1 \
+    zlib1g libbz2-1.0 liblzma5 libzstd1 liblz4-1 libxml2-16 libssl3t64 libacl1 \
   && wget -q -O /usr/share/keyrings/pgdg.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-  && echo "deb [signed-by=/usr/share/keyrings/pgdg.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+  && echo "deb [signed-by=/usr/share/keyrings/pgdg.asc] http://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
   && apt-get update \
   && apt-get install -y --no-install-recommends postgresql-client-18 \
   && apt-get purge -y wget \
   && apt-get autoremove -y \
   && rm -rf /var/lib/apt/lists/*
+
+# fliks-server builds on the runtime's own distro: libarchive links its shared libraries by soname.
+FROM runtime-base AS server-chef
+ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
+COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
+COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
+# libarchive2-sys builds libarchive with cmake, generates its bindings with libclang and links these libraries.
+# curl: build.rs fetches the bundled provider plugins.
+RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-dev pkg-config libssl-dev \
+    cmake make libclang-dev liblz4-dev libacl1-dev libxml2-dev libbz2-dev liblzma-dev libzstd-dev zlib1g-dev \
+  && rm -rf /var/lib/apt/lists/*
+WORKDIR /server
+
+# Dependencies build in their own layer, keyed on the manifests: CI's layer cache keeps it,
+# while a BuildKit cache mount is lost with the runner.
+FROM server-chef AS server-plan
+COPY server/ .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM server-chef AS server-build
+COPY --from=server-plan /server/recipe.json .
+RUN cargo chef cook --release --locked -p fliks-server --recipe-path recipe.json
+COPY server/ .
+RUN SQLX_OFFLINE=true cargo build --release --locked -p fliks-server \
+    && cp target/release/fliks-server /usr/local/bin/fliks-server
 
 # Dev stage for the engine compose service: the engine image + a Rust toolchain, the
 # engine checkout is bind-mounted and rebuilt by cargo-watch.
@@ -71,15 +79,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-
 
 # Dev stage for the server compose service: a Rust toolchain on the runtime base (pg_dump for the
 # pre-migration backup), sources bind-mounted and rebuilt by cargo-watch.
-FROM runtime-base AS server-dev
+FROM server-chef AS server-dev
 ENTRYPOINT []
-ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
-RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-dev pkg-config libssl-dev \
-    cmake make libclang-dev liblz4-dev libacl1-dev libxml2-dev libbz2-dev liblzma-dev libzstd-dev zlib1g-dev \
-  && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
-  && cargo install cargo-watch --locked \
+WORKDIR /
+RUN cargo install cargo-watch --locked \
   && cargo install sqlx-cli --locked --no-default-features --features rustls,postgres \
-  && rm -rf /var/lib/apt/lists/* "$CARGO_HOME/registry" \
+  && rm -rf "$CARGO_HOME/registry" \
   && mkdir -p "$CARGO_HOME/registry" /cargo-target \
   && chmod -R a+rwX "$CARGO_HOME" /cargo-target
 
