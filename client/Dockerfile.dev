@@ -4,5 +4,6 @@
 FROM node:26-bookworm-slim
 WORKDIR /src
 COPY package.json package-lock.json ./
+COPY scripts/patch-daisyui.mjs scripts/
 RUN npm ci
 WORKDIR /src/client

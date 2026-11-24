@@ -9,6 +9,7 @@ ARG ENGINE_IMAGE=ghcr.io/fliks-app/engine:1.30.2@sha256:b3a2f0ad12ec0d1d5b33d5da
 FROM node:26.13.1-alpine AS client-build
 WORKDIR /app
 COPY client/package.json client/package-lock.json ./
+COPY client/scripts/patch-daisyui.mjs scripts/
 RUN npm ci
 COPY client/ .
 # The client imports the shell's IPC types (tsconfig path `@fliks/desktop-contract`, `../desktop` from /app).
