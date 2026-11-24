@@ -297,9 +297,13 @@ html.vt-player-close app-party-page img {
    fit to its width and top-aligned; keyed parts fly above it, the scrim fades below it. */
 html.vt-morph::view-transition-group(.morph),
 html.vt-morph::view-transition-group(.morph-part),
-html.vt-morph::view-transition-group(.morph-scrim) {
+html.vt-morph::view-transition-group(.morph-scrim),
+html.vt-morph::view-transition-group(.morph-shift) {
   animation-duration: 400ms;
   animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+html.vt-morph::view-transition-group(.morph-shift) {
+  z-index: 0;
 }
 html.vt-morph::view-transition-group(.morph-scrim) {
   z-index: 1;

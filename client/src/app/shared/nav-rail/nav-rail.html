@@ -99,7 +99,7 @@
   </nav>
 
   <div class="rail-foot">
-    <div role="separator" class="rail-sep"></div>
+    <div role="separator" class="rail-sep" data-morph-shift="rail-foot"></div>
     @for (bar of navbar.dockedBars(); track bar) {
       <ng-container [ngTemplateOutlet]="bar" />
     }

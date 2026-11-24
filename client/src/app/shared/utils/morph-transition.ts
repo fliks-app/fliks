@@ -4,6 +4,8 @@ import { classUntilDone, markViewTransition } from './view-transition';
 const PART_ATTR = 'data-morph';
 /** Blocks that keep their identity across a relayout. */
 const BLOCK_ATTR = 'data-relayout';
+/** Elements outside the morph that its layout change moves, e.g. a divider a docked bar pushes up. */
+const SHIFT_ATTR = 'data-morph-shift';
 
 export interface Morph {
   /** The element on screen now, e.g. the trigger a dialog opens out of. */
@@ -39,6 +41,9 @@ export function morph({ from, update, scrim }: Morph): void {
   }
   const token = begin();
   if (scrim) name(scrim, 'vt-morph-scrim', 'morph-scrim');
+  const shift = () =>
+    document.querySelectorAll<HTMLElement>(`[${SHIFT_ATTR}]`).forEach((el) => name(el, `vt-morph-shift-${el.getAttribute(SHIFT_ATTR)}`, 'morph-shift'));
+  shift();
   const leaving = tag(from, 'from');
   const keys = new Set(leaving.map((el) => el.getAttribute(PART_ATTR)));
   run(token, 'vt-morph', async () => {
@@ -48,6 +53,7 @@ export function morph({ from, update, scrim }: Morph): void {
     if (from !== to && from.isConnected) hide(from);
     [scrim, to].forEach((el) => el && settleAnimations(el));
     if (to) tag(to, 'to', keys);
+    shift();
   });
 }
 
