@@ -575,12 +575,9 @@ export class MediaService {
     return firstValueFrom(this.http.patch<Media>(`/api/media/${id}/profiles`, body));
   }
 
-  toggleMonitored(id: number, monitored: boolean) {
-    return firstValueFrom(this.http.put<Media>(`/api/media/${id}`, { monitored }));
-  }
-
-  setMonitorNewSeasons(id: number, monitorNewSeasons: boolean) {
-    return firstValueFrom(this.http.put<Media>(`/api/media/${id}`, { monitorNewSeasons }));
+  /** `monitorNewSeasons` of a series overrides the policy `monitored` would otherwise set. */
+  toggleMonitored(id: number, monitored: boolean, monitorNewSeasons?: boolean) {
+    return firstValueFrom(this.http.put<Media>(`/api/media/${id}`, { monitored, monitorNewSeasons }));
   }
 
   getCalendar(start: string, end: string, monitoredOnly = false, requestedByMe = false, opts: CacheRead = {}) {

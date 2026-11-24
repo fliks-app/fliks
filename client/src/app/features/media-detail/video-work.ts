@@ -298,7 +298,7 @@ export abstract class VideoWorkBase {
   protected titleActions(): MediaActionHandlers {
     return {
       'media.monitor-series-all': () => void this.host.setMonitored(true),
-      'media.monitor-series-future': () => void this.host.setMonitored(false).then(() => this.host.setFollowNewSeasons(true)),
+      'media.monitor-series-future': () => void this.host.setMonitored(false, true),
       'media.monitor-series-none': () => void this.host.setMonitored(false),
       'media.edit-profiles': () => this.host.openProfiles(),
       'media.edit-library': () => this.host.openLibrary(),

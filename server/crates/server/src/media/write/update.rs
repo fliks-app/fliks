@@ -392,6 +392,11 @@ pub async fn update(
             .execute(&mut *tx)
             .await?;
     }
+    let change = match monitored {
+        Some(m) => Some(apply_media_monitored(&mut tx, &[id], m).await?),
+        None => None,
+    };
+    // After `monitored`, which resets the policy: `{monitored: false, monitorNewSeasons: true}` keeps following.
     if let Some(f) = follow.flatten() {
         sqlx::query!(
             r#"UPDATE media SET "monitorNewSeasons" = $2 WHERE id = $1 AND "monitorNewSeasons" IS DISTINCT FROM $2"#,
@@ -401,10 +406,6 @@ pub async fn update(
         .execute(&mut *tx)
         .await?;
     }
-    let change = match monitored {
-        Some(m) => Some(apply_media_monitored(&mut tx, &[id], m).await?),
-        None => None,
-    };
     tx.commit().await?;
     if let Some(c) = change {
         c.announce(&st).await;
