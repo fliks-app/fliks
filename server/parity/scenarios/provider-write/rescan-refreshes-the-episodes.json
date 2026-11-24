@@ -65,7 +65,11 @@
       }
     },
     {
-      "wait": "idle"
+      "as": "admin",
+      "wait": "idle",
+      "expect": {
+        "status": 200
+      }
     },
     {
       "as": "admin",

@@ -333,7 +333,7 @@ async fn enrich(st: &AppState, id: i32, bulk: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// Writes only `video[0].crop` and `cropStable`: the rest of `streamInfo` may have moved during the probe.
+/// Writes only `video[0].crop` and `cropStable` (absent when unknown, as serialised): the rest may have moved.
 pub(super) async fn store_crop(
     db: &sqlx::PgPool,
     id: i32,
@@ -342,8 +342,9 @@ pub(super) async fn store_crop(
     let crop = serde_json::json!(probed.and_then(|v| v.crop.as_ref()));
     let stable = serde_json::json!(probed.and_then(|v| v.crop_stable));
     sqlx::query!(
-        r#"UPDATE media_files SET "streamInfo" =
-             jsonb_set(jsonb_set("streamInfo", '{video,0,crop}', $2::jsonb), '{video,0,cropStable}', $3::jsonb)
+        r#"UPDATE media_files SET "streamInfo" = jsonb_set("streamInfo", '{video,0}',
+             ("streamInfo"->'video'->0) - 'crop' - 'cropStable'
+               || jsonb_strip_nulls(jsonb_build_object('crop', $2::jsonb, 'cropStable', $3::jsonb)))
            WHERE id = $1 AND jsonb_array_length("streamInfo"->'video') > 0"#,
         id,
         crop,
