@@ -15,6 +15,7 @@ import { ScrollMemoryService } from '../../../core/services/scroll-memory.servic
 import { MediaStartService } from '../../../core/services/media-start.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { HeroCarouselComponent } from './hero-carousel';
+import { ServerVersionService } from '../../../core/services/server-version.service';
 
 const item = (id: number, type: string): Media =>
   ({ id, type, title: `T${id}`, year: 2020, runtime: 90, rating: 7, genres: ['Drama'], overview: 'o', fanartUrl: `/f${id}.jpg`, logoUrl: null, files: [{ id }] }) as unknown as Media;
@@ -39,6 +40,7 @@ function setup(tv = true, items?: Media[]) {
   };
   TestBed.configureTestingModule({
     providers: [
+      { provide: ServerVersionService, useValue: { supports: () => true } },
       provideZonelessChangeDetection(),
       provideRouter([]),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),

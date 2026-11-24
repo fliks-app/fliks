@@ -5,6 +5,7 @@ import { BackgroundService } from '../../../core/services/background.service';
 import { DeviceService } from '../../../core/services/device.service';
 import { NavbarService } from '../../../core/services/navbar.service';
 import { BackgroundComponent } from './background';
+import { ServerVersionService } from '../../../core/services/server-version.service';
 
 describe('BackgroundComponent', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -16,6 +17,7 @@ describe('BackgroundComponent', () => {
     const hero = signal(false);
     TestBed.configureTestingModule({
       providers: [
+        { provide: ServerVersionService, useValue: { supports: () => true } },
         provideZonelessChangeDetection(),
         { provide: BackgroundService, useValue: { url, blur, hero } },
         { provide: DeviceService, useValue: { isTv: () => false, reducedEffects: () => false } },
@@ -69,6 +71,7 @@ function hero$() {
   const hero = signal(true);
   TestBed.configureTestingModule({
     providers: [
+      { provide: ServerVersionService, useValue: { supports: () => true } },
       provideZonelessChangeDetection(),
       { provide: BackgroundService, useValue: { url: signal('/f.jpg'), blur: signal(false), hero } },
       { provide: DeviceService, useValue: { isTv: () => false, reducedEffects: () => true } },
