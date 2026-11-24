@@ -6,6 +6,7 @@ use super::runtime::fliks::plugin::{db, host, log, notify, types as t};
 use super::runtime::{Ctx, HostError};
 use super::scheduled;
 use super::units;
+use crate::acquisition::sweep::{Pick, Scope};
 use crate::events::SseEvent;
 use crate::state::AppState;
 use fliks_domain::media::family::Family;
@@ -509,6 +510,38 @@ impl host::Host for Ctx {
                     ids.push("core".to_owned());
                 }
                 Ok(ids)
+            }
+        )
+    }
+
+    async fn acquisition_request(&mut self, asks: Vec<t::AcquisitionAsk>) -> Result<(), HostError> {
+        let app = self.app();
+        call!(
+            self,
+            "acquisition.request",
+            ["acquisition:candidates"],
+            HOST_CALL,
+            async {
+                let app = app?;
+                if asks.is_empty() || asks.len() > 200 {
+                    return Err(host_err(
+                        "ERR_VALIDATION",
+                        "asks must hold 1 to 200 entries",
+                    ));
+                }
+                let mut picks: std::collections::BTreeMap<u32, Vec<Pick>> = Default::default();
+                for a in &asks {
+                    if a.family == Some(t::Family::Video) {
+                        units::video(a.unit.as_ref())?;
+                    }
+                    picks
+                        .entry(a.media_id)
+                        .or_default()
+                        .push(Pick::of(a.family, a.unit.as_ref()));
+                }
+                let scoped = picks.into_iter().map(|(m, p)| (m, Scope::of(p))).collect();
+                app.plugins.request_scoped(&app, scoped);
+                Ok(())
             }
         )
     }

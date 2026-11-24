@@ -35,6 +35,19 @@ async fn call(h: &H, id: &str, route: &str, q: &[(&str, &str)]) {
     rt.http(req, false).await.unwrap();
 }
 
+/// The fixture's `/test/<route>` answer as JSON.
+async fn call_ok(h: &H, id: &str, route: &str, q: &[(&str, &str)]) -> Value {
+    let rt = h.st.plugins.rt(id).unwrap();
+    let req = fliks_server::plugins::HttpRequest {
+        method: "GET".into(),
+        path: format!("/test/{route}"),
+        query: q.iter().map(|(k, v)| ((*k).into(), (*v).into())).collect(),
+        body: vec![],
+        principal: fliks_server::plugins::Principal::Delegated(1),
+    };
+    serde_json::from_slice(&rt.http(req, false).await.unwrap().body).unwrap()
+}
+
 fn release(title: &str, rank: i64) -> Value {
     json!({"title": title, "downloadUrl": format!("http://x/{title}"), "rank": rank, "customFormatScore": 0,
            "allowed": true, "rejections": [], "sourceId": 1})
@@ -245,6 +258,64 @@ async fn the_core_ranks_every_provider_and_grabs_at_the_best() {
     .await;
     tokio::time::sleep(Duration::from_millis(500)).await;
     assert!(grabbed(&h, A, 1).await.is_none() && grabbed(&h, B, 1).await.is_none());
+
+    // A plugin's `acquisition.request` ends in one grab; the asks of a media coalesce.
+    forget(&h).await;
+    offer(&h, A, json!([release("a", 3)])).await;
+    offer(&h, B, json!([])).await;
+    let ask = |extra: &[(&'static str, &'static str)]| {
+        let mut q = vec![("media", "1")];
+        q.extend_from_slice(extra);
+        q
+    };
+    let r = call_ok(&h, A, "request", &ask(&[("repeat", "3")])).await;
+    assert_eq!(r["ok"], Value::Null, "{r}");
+    until("the request's grab", Duration::from_secs(10), async || {
+        grabbed(&h, A, 1).await.is_some()
+    })
+    .await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(grabbed(&h, A, 1).await.unwrap()["sourceTitle"], "a");
+
+    // An ask for a family or a unit the media's target is not asks for nothing.
+    forget(&h).await;
+    for extra in [
+        &[("family", "image")][..],
+        &[("group", "1"), ("number", "2")],
+    ] {
+        call_ok(&h, A, "request", &ask(extra)).await;
+    }
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert!(grabbed(&h, A, 1).await.is_none());
+    call_ok(&h, A, "request", &ask(&[("family", "video")])).await;
+    until(
+        "the video ask's grab",
+        Duration::from_secs(10),
+        async || grabbed(&h, A, 1).await.is_some(),
+    )
+    .await;
+
+    // An ask made while a sweep holds the claim waits for it, then grabs once.
+    forget(&h).await;
+    let claim = h.st.plugins.sweeps.claims.lock(1).await;
+    call_ok(&h, A, "request", &ask(&[])).await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(grabbed(&h, A, 1).await.is_none());
+    drop(claim);
+    until("the held ask's grab", Duration::from_secs(10), async || {
+        grabbed(&h, A, 1).await.is_some()
+    })
+    .await;
+
+    // No asks, more than a page of them, or a fractional video unit are refused.
+    for extra in [
+        &[("repeat", "0")][..],
+        &[("repeat", "201")],
+        &[("family", "video"), ("group", "1"), ("number", "1.5")],
+    ] {
+        let r = call_ok(&h, A, "request", &ask(extra)).await;
+        assert_eq!(r["error"], "ERR_VALIDATION", "{r}");
+    }
 
     h.finish().await;
     s.finish().await;

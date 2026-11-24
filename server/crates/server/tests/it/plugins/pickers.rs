@@ -141,3 +141,29 @@ async fn a_provider_publishes_sources_and_reads_in_flight() {
     h.finish().await;
     s.finish().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn acquisition_request_needs_the_candidates_scope() {
+    let Some((mut m, w)) = fixture() else { return };
+    let Some(s) = Scratch::create("request_denied").await else {
+        return;
+    };
+    let h = harness(&s, "request_denied", |_| {}).await;
+    allow_unsigned(&h).await;
+    m["scopes"] = json!(["config:rw"]);
+    assert_eq!(
+        h.install(&pack(&m, "0.1.0", &w, None)).await["status"],
+        "active"
+    );
+    let r = call(&h, "request", &[("media", "1")]).await;
+    assert_eq!(r["error"], "ERR_DENIED", "{r}");
+    assert!(
+        r["message"]
+            .as_str()
+            .unwrap()
+            .contains("acquisition:candidates"),
+        "{r}"
+    );
+    h.finish().await;
+    s.finish().await;
+}

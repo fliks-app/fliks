@@ -499,6 +499,27 @@ fn test_route(req: &Request) -> Result<Response, String> {
                 unit.as_ref(),
             ))
         }
+        "request" => {
+            let n = |k: &str| req.query(k).and_then(|v| v.parse::<u32>().ok());
+            let unit = n("group").map(|group| t::UnitRef {
+                group: Some(group),
+                number: req.query("number").and_then(|v| v.parse().ok()),
+                end_number: None,
+                label: req.query("label").map(str::to_owned),
+                absolute: None,
+            });
+            let ask = t::AcquisitionAsk {
+                media_id: n("media").unwrap_or(1),
+                family: match req.query("family") {
+                    Some("video") => Some(t::Family::Video),
+                    Some("image") => Some(t::Family::Image),
+                    _ => None,
+                },
+                unit,
+            };
+            let asks = vec![ask; n("repeat").unwrap_or(1) as usize];
+            host_result(host::acquisition_request(&asks))
+        }
         "failed" => host_result(host::events_publish(&[t::AcquisitionEvent::Failed(
             t::Failed {
                 media_id: req.query("media").and_then(|v| v.parse().ok()).unwrap_or(1),
