@@ -18,6 +18,7 @@ import localePt from '@angular/common/locales/pt';
 import { Capacitor } from '@capacitor/core';
 import { provideServiceWorker } from '@angular/service-worker';
 import {
+  NavigationEnd,
   provideRouter,
   Router,
   RouteReuseStrategy,
@@ -32,7 +33,8 @@ import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 
 // CLDR data for every shipped UI language so Date/Decimal/Currency pipes honour the active locale.
 [localeEn, localeFr, localeEs, localeDe, localeIt, localePt].forEach(registerLocaleData);
-import { routes } from './app.routes';
+import { preloadVideoDetailPages, routes } from './app.routes';
+import { whenIdle } from './core/services/sse.service';
 import { resolveInitialLocale, DEFAULT_LOCALE } from './core/constants/app-locale';
 import { serverUrlInterceptor } from './core/interceptors/server-url.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';
@@ -114,6 +116,13 @@ export const appConfig: ApplicationConfig = {
     // Instantiated at launch so a notification tap is handled on any page.
     provideAppInitializer(() => void inject(PushService)),
     provideAppInitializer(() => void inject(ShellLanguageService)),
+    provideAppInitializer(() => {
+      const nav = inject(Router).events.subscribe((e) => {
+        if (!(e instanceof NavigationEnd)) return;
+        nav.unsubscribe();
+        whenIdle(() => void preloadVideoDetailPages());
+      });
+    }),
     { provide: LOCALE_ID, useFactory: resolveInitialLocale },
     provideRouter(
       routes,
