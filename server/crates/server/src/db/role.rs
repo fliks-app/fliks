@@ -133,7 +133,12 @@ BEGIN
   END IF;
   -- A managed server's admin is not a superuser: it must be able to give objects to the role.
   IF NOT (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
-    IF v >= 160000 THEN GRANT {ident} TO CURRENT_USER WITH SET TRUE; ELSE GRANT {ident} TO CURRENT_USER; END IF;
+    -- Dynamic: PL/pgSQL parses static statements up front, and 15 has no WITH SET.
+    IF v >= 160000 THEN
+      EXECUTE format('GRANT %I TO CURRENT_USER WITH SET TRUE', {app});
+    ELSE
+      GRANT {ident} TO CURRENT_USER;
+    END IF;
   END IF;
   EXECUTE format('GRANT CONNECT, CREATE, TEMPORARY ON DATABASE %I TO {ident}', current_database());
   FOR rec IN {advisory} LOOP
