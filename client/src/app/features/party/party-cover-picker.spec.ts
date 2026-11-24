@@ -5,12 +5,14 @@ import { describe, expect, it } from 'vitest';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { AuthService } from '../../core/services/auth.service';
 import { AUTO_COVER, PartyCoverPickerComponent, coverChange, coverChoice, coverValid, draftFromCover, type CoverOption } from './party-cover-picker';
+import { ServerVersionService } from '../../core/services/server-version.service';
 
 const options: CoverOption[] = [1, 2, 3, 4, 5].map((id) => ({ mediaId: id, episodeId: null, title: `T${id}`, posterUrl: `/p${id}` }));
 
 function setup() {
   TestBed.configureTestingModule({
     providers: [
+      { provide: ServerVersionService, useValue: { supports: () => true } },
       provideZonelessChangeDetection(),
       provideTranslateService(),
       { provide: ServerConfigService, useValue: { isNative: false, resolveUrl: (u: string) => u } },

@@ -21,6 +21,7 @@ import { SessionSyncService } from './session-sync.service';
 import { SseService } from './sse.service';
 import { sseStub } from '../../testing/sse.stub';
 import { ToastService } from './toast.service';
+import { ServerVersionService } from './server-version.service';
 
 type Priv = { reloadCastStream: (...a: unknown[]) => Promise<string>; qoeReporter: unknown; controller: () => Promise<unknown> };
 
@@ -42,6 +43,7 @@ async function setup() {
   const toast = { error: vi.fn() };
   TestBed.configureTestingModule({
     providers: [
+      { provide: ServerVersionService, useValue: { supports: () => true } },
       provideZonelessChangeDetection(),
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
       { provide: CastService, useValue: cast },

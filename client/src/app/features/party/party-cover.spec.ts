@@ -5,6 +5,7 @@ import type { PartyCover, PartyItem } from '../../core/services/api/party-api.se
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PartyCoverComponent } from './party-cover';
+import { ServerVersionService } from '../../core/services/server-version.service';
 
 const item = (mediaId: number, episodeId: number | null = null) =>
   ({ mediaId, episodeId, posterUrl: `/p${mediaId}`, stillUrl: `/s${mediaId}`, fanartUrl: null }) as PartyItem;
@@ -12,6 +13,7 @@ const item = (mediaId: number, episodeId: number | null = null) =>
 function render(cover: PartyCover, head: PartyItem | null = null) {
   TestBed.configureTestingModule({
     providers: [
+      { provide: ServerVersionService, useValue: { supports: () => true } },
       provideZonelessChangeDetection(),
       { provide: ServerConfigService, useValue: { isNative: false, resolveUrl: (u: string) => u } },
       { provide: AuthService, useValue: { playbackToken: null } },
