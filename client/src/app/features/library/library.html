@@ -19,8 +19,9 @@
   }
 
   <!-- The carousel sets the space under it; the page's own blocks keep their gap.
-       At least a screen tall, so a shorter view never clamps the scroll and drags the tabs down. -->
-  <div class="flex flex-col gap-4 min-h-[calc(100dvh-var(--chrome-top,0px)-var(--chrome-bottom-total,0px))]">
+       Under a carousel, at least a screen tall, so a shorter view never clamps the scroll and drags the tabs down. -->
+  <div class="flex flex-col gap-4"
+       [style.min-height]="showCarousel() ? 'calc(100dvh - var(--chrome-top, 0px) - var(--chrome-bottom-total, 0px))' : null">
   @if (!showCarousel() && !navbar.mobileNavbarVisible()) {
     <h1 class="text-2xl font-bold">{{ libraryName() }}</h1>
   }
@@ -426,7 +427,9 @@
         <!-- Alphabet beside the grid (sort=title ASC only), so it never rises above the first cards; sticky, it follows the scroll
              centred in the screen. The column keeps the letters' own height, so a grid shorter than the screen still holds them. -->
         @if (sortBy() === 'title' && sortOrder() === 'ASC') {
-          <aside class="flex-none w-5 min-h-[33.75rem]">
+          <aside class="relative flex-none w-5 min-h-[33.75rem]">
+            <!-- Out of flow, so the screen-tall nav never stretches a short grid's row. -->
+            <div class="absolute inset-0">
             <nav data-alpha-index class="sticky top-[var(--chrome-top,0px)] h-[calc(100vh-var(--chrome-top,0px)-var(--chrome-bottom-total,0px))] max-h-full flex flex-col items-center justify-center select-none">
               @for (letter of alphabet; track letter) {
                 <button
@@ -444,6 +447,7 @@
                 </button>
               }
             </nav>
+            </div>
           </aside>
         }
       </div>
