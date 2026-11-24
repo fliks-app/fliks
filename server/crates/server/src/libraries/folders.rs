@@ -52,7 +52,8 @@ pub fn reserved(path: &str) -> bool {
 
 fn reserved_beside(path: &str, transcode: Option<&Path>) -> bool {
     let p = Path::new(path);
-    p.components().all(|c| matches!(c, Component::RootDir))
+    p.components()
+        .all(|c| matches!(c, Component::RootDir | Component::Prefix(_)))
         || [crate::paths::data_dir(), crate::paths::cache_dir()]
             .into_iter()
             .chain(transcode)

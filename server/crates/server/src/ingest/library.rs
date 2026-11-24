@@ -467,17 +467,30 @@ async fn linked_to_other(db: &sqlx::PgPool, media: i32, src: &Path) -> Result<Op
 
 /// `(index, count)` of each source file within its version (`book-ingest.md` rule 8).
 fn book_parts(files: &[File]) -> std::collections::HashMap<PathBuf, (usize, usize)> {
-    let paths: Vec<String> = files
-        .iter()
-        .map(|f| f.path.to_string_lossy().trim_start_matches('/').to_owned())
-        .collect();
+    use std::path::Component;
+    // `group_whole` reads `/`-separated keys; the drive prefix stays so two drives never collide.
+    let key = |p: &Path| {
+        p.components()
+            .filter_map(|c| match c {
+                Component::Prefix(x) => Some(x.as_os_str().to_string_lossy()),
+                Component::Normal(x) => Some(x.to_string_lossy()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("/")
+    };
+    let by_key: std::collections::HashMap<String, &PathBuf> =
+        files.iter().map(|f| (key(&f.path), &f.path)).collect();
+    let paths: Vec<String> = files.iter().map(|f| key(&f.path)).collect();
     let mut out = std::collections::HashMap::new();
     for v in books::group::group_whole(&paths)
         .into_iter()
         .flat_map(|w| w.versions)
     {
         for (i, p) in v.files.iter().enumerate() {
-            out.insert(PathBuf::from(format!("/{p}")), (i, v.files.len()));
+            if let Some(&path) = by_key.get(p) {
+                out.insert(path.clone(), (i, v.files.len()));
+            }
         }
     }
     out

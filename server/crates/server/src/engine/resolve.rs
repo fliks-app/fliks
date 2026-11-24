@@ -28,7 +28,7 @@ use fliks_engine_core::{
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use subtle::ConstantTimeEq;
 
 const TTL_S: f64 = 60.0;
@@ -675,17 +675,7 @@ async fn check_library(
 
 /// `path.resolve(base, rel)` without touching the disk: `rel` wins when absolute, `.` and `..` fold.
 pub(crate) fn lexical_resolve(base: &Path, rel: &str) -> PathBuf {
-    let mut out = PathBuf::new();
-    for c in base.join(rel).components() {
-        match c {
-            Component::ParentDir => {
-                out.pop();
-            }
-            Component::CurDir => {}
-            c => out.push(c),
-        }
-    }
-    out
+    fliks_domain::media::path::fold(&base.join(rel))
 }
 
 #[cfg(test)]

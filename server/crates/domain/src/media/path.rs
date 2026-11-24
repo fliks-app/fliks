@@ -1,7 +1,11 @@
 //! `Media.path` (rule 30): Node's `path.join` / `path.resolve` on POSIX.
+use std::path::{Component, Path, PathBuf};
 
-/// `path.normalize`.
+/// `path.normalize`; a Windows drive or UNC path keeps its own form.
 pub fn normalize(path: &str) -> String {
+    if let Some(Component::Prefix(_)) = Path::new(path).components().next() {
+        return fold(Path::new(path)).to_string_lossy().into_owned();
+    }
     if path.is_empty() {
         return ".".into();
     }
@@ -45,8 +49,33 @@ pub fn join(a: &str, b: &str) -> String {
     }
 }
 
-/// `path.resolve(p)` against `cwd`.
+/// Lexical `path.resolve` of a rooted host path (`/x`, `C:\x`, UNC): `.` and `..` collapsed.
+pub fn lexical(p: &Path) -> Option<PathBuf> {
+    p.has_root().then(|| fold(p))
+}
+
+/// `p` with `.` dropped and `..` folded, never touching the disk.
+pub fn fold(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// `path.resolve(p)` against `cwd`; a Windows drive or UNC path keeps its own form.
 pub fn resolve(p: &str, cwd: &str) -> String {
+    if let Some(Component::Prefix(_)) = Path::new(p).components().next()
+        && let Some(abs) = lexical(Path::new(p))
+    {
+        return abs.to_string_lossy().into_owned();
+    }
     let full = if p.starts_with('/') {
         p.to_owned()
     } else {
@@ -78,5 +107,17 @@ mod tests {
         assert_eq!(join("/media//movies", "a/../b"), "/media/movies/b");
         assert_eq!(media_path(Some("/m/"), Some("")), Some("/m/".into()));
         assert_eq!(resolve("a/b", "/srv"), "/srv/a/b");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_keeps_a_windows_absolute_path() {
+        assert_eq!(resolve(r"C:\Users\m", "/"), r"C:\Users\m");
+        assert_eq!(resolve(r"C:\m/a/../b/", "/"), r"C:\m\b");
+        assert_eq!(resolve("//nas/share/m", "/"), r"//nas/share\m");
+        assert_eq!(
+            join(r"//nas/share\m", "Movie/a.mkv"),
+            r"//nas/share\m\Movie\a.mkv"
+        );
     }
 }
