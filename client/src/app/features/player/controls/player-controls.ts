@@ -116,6 +116,7 @@ const NO_TIME = signal(0).asReadonly();
       '--bar-pr: calc(max(var(--ctrl-px), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)); ' +
       '--bar-pb: calc(max(var(--ctrl-pb), var(--safe-bottom)) + var(--ctrl-inset, 0px))',
     '[style.--strip-h]': "dock() && !seekOsd() ? '3rem' : null",
+    '[style.--bar-h.px]': 'barHeight()',
   },
 })
 export class PlayerControlsComponent {
@@ -138,7 +139,14 @@ export class PlayerControlsComponent {
   );
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => clearTimeout(this.surfaceClickTimer));
+    this.destroyRef.onDestroy(() => clearTimeout(this.surfaceClickTimer));
+    // The floating cues lift by the bar's real height, which varies with layout and the seek OSD.
+    afterNextRender(() => {
+      const bar = this.bottomBar().nativeElement;
+      const ro = new ResizeObserver(() => this.barHeight.set(bar.offsetHeight));
+      ro.observe(bar);
+      this.destroyRef.onDestroy(() => ro.disconnect());
+    });
     // Mirrors the open dropdown into the dismissable stack so the Capacitor hardware Back (intercepted in app.ts) closes it first.
     effect((onCleanup) => {
       if (!this.openDropdown()) return;
@@ -500,6 +508,9 @@ export class PlayerControlsComponent {
   readonly activeSheet = signal<PanelName | null>(null);
 
   readonly seekbar = viewChild(SeekbarComponent);
+  private readonly bottomBar = viewChild.required<ElementRef<HTMLElement>>('bottomBar');
+  private readonly destroyRef = inject(DestroyRef);
+  protected readonly barHeight = signal<number | null>(null);
 
   /** Desktop/TV play-pause button — focused on TV every time the controls
    *  bar reappears, so the next D-pad center triggers play/pause. */

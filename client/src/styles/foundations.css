@@ -442,22 +442,15 @@ html.native-player-active app-background {
   animation: player-controls-reveal 200ms ease-out;
 }
 
-/* The cue sits low while the controls are hidden and lifts clear of the
-   controls bar when it comes up, mirroring the subtitle shift. */
+/* The cue rests just above the bar's bottom inset and lifts over the measured controls (--bar-h, its
+   3rem gradient padding excluded) when they come up, mirroring the subtitle shift. */
 .player-floating-cue {
-  --cue-bottom: 5rem;
-  right: calc(
-    max(var(--ctrl-px, 1rem), env(safe-area-inset-right)) + 0.25rem + var(--ctrl-inset, 0px)
-  );
-  bottom: max(var(--cue-bottom), calc(var(--cue-bottom) + env(safe-area-inset-bottom)));
+  right: var(--bar-pr);
+  bottom: calc(var(--bar-pb) + 2rem);
   transition: bottom 200ms ease;
 }
 .player-floating-cue.controls-visible {
-  --cue-bottom: 10.5rem;
-}
-/* Middle rung: the seek OSD is a fraction of the full bar's height. */
-.player-floating-cue.controls-seek {
-  --cue-bottom: 7rem;
+  bottom: calc(var(--bar-h, 13.5rem) - 2.25rem);
 }
 
 /* One global reduced-motion switch; TV keeps its focus lift, and spinners keep turning so a wait still reads as one. */

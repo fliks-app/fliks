@@ -149,6 +149,7 @@
 <!-- ===== BOTTOM SECTION ===== -->
 <!-- z-40 keeps the mobile big buttons (z-50) tappable; z-[55] while scrubbing so the sprite preview clears them. -->
 <div
+  #bottomBar
   class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300 pt-12"
   [class]="seekDragging() ? 'z-[55]' : 'z-40'"
   style="padding-left: var(--bar-pl); padding-right: var(--bar-pr); padding-bottom: calc(var(--bar-pb) + var(--strip-h, 0px));"
@@ -321,7 +322,6 @@
     type="button"
     class="btn btn-primary absolute z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
     [class.controls-visible]="visible()"
-    [class.controls-seek]="visible() && seekOsd()"
     (click)="skipIntro.emit()"
     (focus)="cueFocused.set(true)"
     (blur)="cueFocused.set(false)"
@@ -345,7 +345,6 @@
     type="button"
     class="btn btn-primary absolute z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
     [class.controls-visible]="visible()"
-    [class.controls-seek]="visible() && seekOsd()"
     (click)="skipPreRoll.emit()"
   >
     <span class="relative flex items-center gap-2">
@@ -362,7 +361,6 @@
     type="button"
     class="btn btn-primary absolute z-50 shadow-lg overflow-hidden rounded-lg player-floating-cue"
     [class.controls-visible]="visible()"
-    [class.controls-seek]="visible() && seekOsd()"
     (click)="next.emit()"
     (focus)="cueFocused.set(true)"
     (blur)="cueFocused.set(false)"
