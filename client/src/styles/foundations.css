@@ -288,10 +288,16 @@ html.native-player-active app-background {
   .animate-pulse.aspect-2\/3::before,
   app-hero-poster div.aspect-2\/3::before,
   app-wanted .aspect-2\/3::before,
-  app-collection-detail .aspect-\[2\/3\]::before {
+  app-collection-detail .aspect-\[2\/3\]::before,
+  app-media-detail-seasons .aspect-\[2\/3\]::before {
     content: '';
     display: block;
     padding-bottom: 150%;
+  }
+  /* The season thumb is a grid: the ratio box and its placeholder icon share one cell. */
+  app-media-detail-seasons .aspect-\[2\/3\]::before,
+  app-media-detail-seasons .aspect-\[2\/3\] > svg {
+    grid-area: 1 / 1;
   }
   app-media-card figure.aspect-video::before,
   .animate-pulse .aspect-video::before,
