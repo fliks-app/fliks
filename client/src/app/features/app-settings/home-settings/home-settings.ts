@@ -1,5 +1,6 @@
 import {
   Component,
+  computed,
   inject,
   signal,
   OnInit,
@@ -10,6 +11,7 @@ import {
   CdkDropList,
   CdkDrag,
   CdkDragHandle,
+  CdkDragPlaceholder,
   CdkDragDrop,
   moveItemInArray,
 } from '@angular/cdk/drag-drop';
@@ -21,7 +23,13 @@ import {
   ResolvedHomeSection,
   RecentlyAddedMode,
 } from '../../../core/services/home-settings.service';
-import { LibrariesApiService } from '../../../core/services/api/libraries-api.service';
+import {
+  LibrariesApiService,
+  LibrarySummary,
+} from '../../../core/services/api/libraries-api.service';
+import { KIND_REGISTRY } from '../../../core/media-kinds';
+import { libraryColorVar, libraryIcon } from '../../../core/constants/library-appearance';
+import { LucideIconComponent } from '../../../shared/components/lucide-icon';
 import { LibraryPrefsService } from '../../../core/services/library-prefs.service';
 import { TvService } from '../../../core/services/tv.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -39,8 +47,10 @@ import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-fi
     DropListSettleDirective,
     CdkDrag,
     CdkDragHandle,
+    CdkDragPlaceholder,
     SelectFieldComponent,
     ToggleFieldComponent, LucideDynamicIcon,
+    LucideIconComponent,
   ],
   templateUrl: './home-settings.html',
 })
@@ -62,10 +72,15 @@ export class HomeSettingsPageComponent implements OnInit {
   readonly onlyMyRequests = signal(false);
 
   /** Cached so reset/rebuild can re-resolve without refetching libraries. */
-  private libs: { id: number; name: string }[] = [];
+  private libs: LibrarySummary[] = [];
 
   /** Every accessible library in the user's order, each flagged hidden. */
-  readonly libraryRows = signal<{ id: number; name: string; hidden: boolean }[]>([]);
+  readonly libraryRows = signal<LibraryRow[]>([]);
+  readonly visibleLibraries = computed(() => this.libraryRows().filter((l) => !l.hidden));
+  readonly hiddenLibraries = computed(() => this.libraryRows().filter((l) => l.hidden));
+  protected readonly libraryIcon = libraryIcon;
+  protected readonly libraryColor = (lib: LibrarySummary) => libraryColorVar(lib.color);
+  protected readonly kindRegistry = KIND_REGISTRY;
 
   private readonly BUILTIN_LABELS: Record<string, string> = {
     'hero-carousel': 'home_settings.section.hero_carousel',
@@ -85,10 +100,7 @@ export class HomeSettingsPageComponent implements OnInit {
     this.mode.set(this.home.settings().recentlyAddedMode);
     this.onlyMyRequests.set(this.displaySettings.get().onlyMyRequests);
     try {
-      this.libs = (await this.librariesApi.listMine()).map((l) => ({
-        id: l.id,
-        name: l.name,
-      }));
+      this.libs = await this.librariesApi.listMine();
     } catch {
       /* error handled by global interceptor */
     }
@@ -151,28 +163,25 @@ export class HomeSettingsPageComponent implements OnInit {
     this.persist();
   }
 
+  /** Reorders the visible libraries; hidden ones keep their place after them. */
   dropLibrary(event: CdkDragDrop<unknown[]>) {
-    const next = [...this.libraryRows()];
-    moveItemInArray(next, event.previousIndex, event.currentIndex);
-    this.saveLibraries(next);
+    const visible = [...this.visibleLibraries()];
+    moveItemInArray(visible, event.previousIndex, event.currentIndex);
+    this.saveLibraries([...visible, ...this.hiddenLibraries()]);
   }
 
   /** Reorder via arrows (TV remote / keyboard path). */
   moveLibrary(index: number, delta: number) {
-    const next = [...this.libraryRows()];
     const target = index + delta;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target], next[index]];
-    this.saveLibraries(next);
+    if (target < 0 || target >= this.visibleLibraries().length) return;
+    this.dropLibrary({ previousIndex: index, currentIndex: target } as CdkDragDrop<unknown[]>);
   }
 
-  toggleLibraryHidden(index: number) {
-    const next = [...this.libraryRows()];
-    next[index] = { ...next[index], hidden: !next[index].hidden };
-    this.saveLibraries(next);
+  setLibraryHidden(id: number, hidden: boolean) {
+    this.saveLibraries(this.libraryRows().map((l) => (l.id === id ? { ...l, hidden } : l)));
   }
 
-  private async saveLibraries(rows: { id: number; name: string; hidden: boolean }[]) {
+  private async saveLibraries(rows: LibraryRow[]) {
     this.libraryRows.set(rows);
     try {
       await this.libraryPrefs.save(
@@ -195,3 +204,5 @@ export class HomeSettingsPageComponent implements OnInit {
     this.displaySettings.save({ onlyMyRequests: value });
   }
 }
+
+type LibraryRow = LibrarySummary & { hidden: boolean };

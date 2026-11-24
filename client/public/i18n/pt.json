@@ -4512,7 +4512,9 @@
     "reset_confirm": "Repor a ordem e a visibilidade das zonas do início para os valores predefinidos?",
     "libraries_title": "Bibliotecas",
     "libraries_hint": "Arraste para reordenar as bibliotecas, e oculte as que não quer ver no início e no menu.",
-    "toggle_library_visible": "Mostrar ou ocultar a biblioteca"
+    "hide_library": "Ocultar a biblioteca",
+    "show_library": "Mostrar a biblioteca",
+    "hidden_libraries": "Ocultas ({{count}})"
   },
   "update": {
     "title": "Atualização disponível",

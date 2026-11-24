@@ -4512,7 +4512,9 @@
     "reset_confirm": "Ripristinare l'ordine e la visibilità predefiniti delle sezioni della home?",
     "libraries_title": "Librerie",
     "libraries_hint": "Trascina per riordinare le librerie, e nascondi quelle che non vuoi vedere nella home e nel menu.",
-    "toggle_library_visible": "Mostra o nascondi la libreria"
+    "hide_library": "Nascondi la libreria",
+    "show_library": "Mostra la libreria",
+    "hidden_libraries": "Nascoste ({{count}})"
   },
   "update": {
     "title": "Aggiornamento disponibile",
