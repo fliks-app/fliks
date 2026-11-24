@@ -571,7 +571,7 @@ export class TvSpatialNavService {
 
   private findNeighborInTree(active: HTMLElement, dir: 'left' | 'right' | 'up' | 'down'): HTMLElement | null {
     const activeRect = active.getBoundingClientRect();
-    const activeCx = activeRect.left + activeRect.width / 2;
+    const activeSpan = { left: activeRect.left, right: activeRect.right };
     let cur = this.findParentContainer(active);
     let topMost: ContainerNode | null = null;
     while (cur) {
@@ -606,7 +606,7 @@ export class TvSpatialNavService {
           }
           if (nextIdx >= 0 && nextIdx < children.length) {
             // Vertical steps land under the item being left; horizontal steps take the literal sibling.
-            return this.digDown(children[nextIdx], !horizontal, horizontal ? undefined : activeCx);
+            return this.digDown(children[nextIdx], !horizontal, horizontal ? undefined : activeSpan);
           }
         }
       }
@@ -619,7 +619,7 @@ export class TvSpatialNavService {
       const peer = this.findPeerContainer(topMost, dir);
       // Peer bridging only ever fires for up/down (see findPeerContainer), so
       // entering the peer region keeps the column the user was on.
-      if (peer) return this.digDown(peer.el, true, activeCx);
+      if (peer) return this.digDown(peer.el, true, activeSpan);
     }
     return null;
   }
@@ -703,7 +703,7 @@ export class TvSpatialNavService {
 
   /** Resolve a child to a leaf: the child marked `aria-current` (the active dot, the page shown), else remembered activeChild,
    *  `autofocus` descendant, then first child; `preferFirst` skips memory and autofocus, never the current child. */
-  private digDown(el: HTMLElement, preferFirst = false, alignCx?: number): HTMLElement | null {
+  private digDown(el: HTMLElement, preferFirst = false, align?: { left: number; right: number }): HTMLElement | null {
     const c = this.containers.get(el);
     if (!c) return el; // it's a leaf focusable
     const current = this.getNavigableChildren(c).find((ch) => {
@@ -711,7 +711,7 @@ export class TvSpatialNavService {
       return !!v && v !== 'false';
     });
     if (current) {
-      const dug = this.digDown(current, preferFirst, alignCx);
+      const dug = this.digDown(current, preferFirst, align);
       if (dug) return dug;
     }
     if (!preferFirst && c.activeChild && c.el.contains(c.activeChild) && isFocusCandidate(c.activeChild)) {
@@ -723,18 +723,19 @@ export class TvSpatialNavService {
     }
     let children = this.getNavigableChildren(c);
     // Entering a row from above or below: its autofocus item (a hero's Play) if it has one, else
-    // the children nearest the column the user was on, so focus lands under the card it came from.
-    if (alignCx !== undefined && c.orientation === 'horizontal') {
+    // the children under the item the user left, leftmost first: a wide item's centre is no column.
+    if (align !== undefined && c.orientation === 'horizontal') {
       const auto = c.el.querySelector<HTMLElement>('[autofocus]');
       if (auto && isFocusCandidate(auto)) return auto;
       const distance = (child: HTMLElement) => {
         const r = child.getBoundingClientRect();
-        return Math.abs(r.left + r.width / 2 - alignCx);
+        const cx = r.left + r.width / 2;
+        return Math.max(0, align.left - cx, cx - align.right);
       };
       children = [...children].sort((a, b) => distance(a) - distance(b));
     }
     for (const child of children) {
-      const dug = this.digDown(child, preferFirst, alignCx);
+      const dug = this.digDown(child, preferFirst, align);
       if (dug) return dug;
     }
     return null;

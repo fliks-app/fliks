@@ -101,6 +101,27 @@ describe('TvSpatialNavService tree', () => {
     el.getBoundingClientRect = () => ({ left, top, width: 100, height: 40, right: left + 100, bottom: top + 40, x: left, y: top, toJSON: () => ({}) });
   };
 
+  it('enters a row below a wide item on its leftmost card, below a card on the card under it', () => {
+    const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
+    const section = document.body.appendChild(document.createElement('div'));
+    nav.registerContainer(section, { orientation: 'vertical' });
+    const season = row(0);
+    const cards = box(document.createElement('div'), 100, 40);
+    const [c0, , c2] = [0, 110, 220].map((left) => {
+      const c = box(document.createElement('button'), 100, 40);
+      at(c, left, 100);
+      return cards.appendChild(c);
+    });
+    const above = box(document.createElement('div'), 200, 40);
+    const a2 = above.appendChild(box(document.createElement('button'), 200, 40));
+    at(a2, 220, 200);
+    section.append(season.row, cards, above);
+    for (const r of [season.row, cards, above]) nav.registerContainer(r, { orientation: 'horizontal' });
+
+    expect(nav.findNeighborInTree(season.button, 'down')).toBe(c0);
+    expect(nav.findNeighborInTree(a2, 'up')).toBe(c2);
+  });
+
   it('returns to the card the user left with Right from the rail', () => {
     const nav = TestBed.inject(TvSpatialNavService) as unknown as Nav;
     const { library, second } = railAndPage(nav);
