@@ -1,6 +1,6 @@
 import { Injectable, Injector, effect, inject, untracked } from '@angular/core';
 import { RemoteNotification, type RemoteNotificationAction } from '../plugins/remote-notification.plugin';
-import { imageUrlWithSize } from '../pipes/resolve-url.pipe';
+import { ImageUrls } from '../pipes/resolve-url.pipe';
 import { DeviceService } from './device.service';
 import { LikesApiService } from './api/likes-api.service';
 import { NotificationLike } from './notification-like';
@@ -8,7 +8,6 @@ import { mediaSessionText } from './playback/now-playing-metadata.service';
 import { PlaybackSession } from './playback/playback-session';
 import { RemotePlaybackTarget } from './remote-playback-target';
 import { RemoteService } from './remote.service';
-import { ServerConfigService } from './server-config.service';
 
 /** Mirrors the remote target this phone observes (selected or the account session's owner) into an Android media notification / the iOS lock screen and applies its controls.
  *  Position is read untracked (native extrapolates it); Cast keeps the Cast SDK's notification, which Play Services would duplicate. */
@@ -18,7 +17,7 @@ export class RemoteNotificationService {
   private readonly remote = inject(RemoteService);
   private readonly target = inject(RemotePlaybackTarget);
   private readonly session = inject(PlaybackSession);
-  private readonly serverConfig = inject(ServerConfigService);
+  private readonly images = inject(ImageUrls);
   private readonly injector = inject(Injector);
   private readonly like = new NotificationLike(inject(LikesApiService));
 
@@ -56,7 +55,7 @@ export class RemoteNotificationService {
       const art = meta.fanartUrl ?? meta.posterUrl;
       void RemoteNotification.update({
         ...mediaSessionText(meta),
-        artworkUrl: art ? this.serverConfig.resolveUrl(imageUrlWithSize(art, 'medium')) : undefined,
+        artworkUrl: art ? this.images.resolve(art, 'medium') : undefined,
         playing: !t.uiPaused(),
         buffering: t.buffering(),
         position: untracked(t.position),

@@ -68,7 +68,7 @@
               @if (ep.stillUrl) {
                 <img
                   appImgFadeIn
-                  [src]="ep.stillUrl"
+                  [src]="ep.stillUrl | resolveUrl: 'medium'"
                   [alt]="ep.title"
                   class="w-full h-full object-cover"
                   loading="lazy"

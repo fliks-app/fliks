@@ -1,5 +1,6 @@
 //! Download, resize and cache artwork (`docs/spec/image-store.md`); the write side of `GET /api/images/*`.
 use super::paths::{Kind, Size, Target, Variant};
+use super::remote::{self, Art};
 use crate::ingest::KeyedLocks;
 use crate::net::guard::{self, Net};
 use crate::plugins::outbound::Override;
@@ -41,6 +42,8 @@ pub struct ImageStore {
     net: Semaphore,
     cpu: Semaphore,
     keys: KeyedLocks<String>,
+    remote_cache: remote::Cache,
+    remote_net: Semaphore,
 }
 
 #[derive(Deserialize)]
@@ -236,23 +239,6 @@ impl ImageStore {
             .insert(plugin.to_owned(), (bundled, hosts));
     }
 
-    /// The listed hosts as CSP sources, sorted: the client shows unstored artwork from its source URL.
-    pub fn csp_sources(&self) -> Vec<String> {
-        let all = self.plugin_hosts.read_clean();
-        let mut out: Vec<String> = all
-            .values()
-            .flat_map(|(bundled, hs)| {
-                hs.iter().flat_map(move |h| {
-                    let sub = bundled.then(|| format!("https://*.{h}"));
-                    std::iter::once(format!("https://{h}")).chain(sub)
-                })
-            })
-            .collect();
-        out.sort_unstable();
-        out.dedup();
-        out
-    }
-
     fn listed(&self, host: &str) -> bool {
         let sub = |h: &String| {
             host.strip_suffix(h.as_str())
@@ -272,6 +258,8 @@ impl ImageStore {
             net: Semaphore::new(NETWORK_SLOTS),
             cpu: Semaphore::new(1),
             keys: KeyedLocks::default(),
+            remote_cache: remote::Cache::default(),
+            remote_net: Semaphore::new(remote::NETWORK_SLOTS),
         }
     }
 
@@ -488,6 +476,56 @@ impl ImageStore {
             tracing::warn!("image {shown}: could not be stored");
         }
         stored
+    }
+
+    /// Provider artwork for `GET /api/images/remote` (`images.md` rules 20-23); `None` is a 404.
+    pub async fn remote(&self, url: &str, size: Size) -> Option<Arc<Art>> {
+        let parsed = reqwest::Url::parse(url).ok()?;
+        if url.len() > remote::MAX_URL_LEN || !self.listed(parsed.host_str()?) {
+            tracing::debug!("remote image {}: host not allowed", redacted(url));
+            return None;
+        }
+        let key = format!("{size:?} {url}");
+        if let Some(hit) = self.remote_cache.get(&key) {
+            return Some(hit);
+        }
+        let _held = self.keys.lock(format!("remote {key}")).await;
+        if let Some(hit) = self.remote_cache.get(&key) {
+            return Some(hit);
+        }
+        let tmdb = remote::tmdb_sized(url, size);
+        let fetched = {
+            let _slot = self.remote_net.acquire().await.ok()?;
+            self.download(tmdb.as_deref().unwrap_or(url), false).await
+        };
+        let bytes = fetched
+            .map_err(|e| tracing::warn!("remote image {}: {e}", redacted(url)))
+            .ok()?;
+        let Some((format, w, _)) = probe(&bytes) else {
+            tracing::warn!("remote image {}: not a decodable image", redacted(url));
+            return None;
+        };
+        let png = format == ImageFormat::Png;
+        let art = match remote::width(size).filter(|px| tmdb.is_none() && w > *px) {
+            Some(px) => {
+                let out = tokio::task::spawn_blocking(move || resized_all(&bytes, &[px], png))
+                    .await
+                    .ok()?
+                    .pop()??;
+                let mime = if png { "image/png" } else { "image/jpeg" };
+                Art {
+                    bytes: out.into(),
+                    mime,
+                }
+            }
+            None => Art {
+                mime: remote::mime(format),
+                bytes: bytes.into(),
+            },
+        };
+        let art = Arc::new(art);
+        self.remote_cache.put(key, art.clone());
+        Some(art)
     }
 
     /// `/api/images/...?v=<hash>`, or `None` when nothing could be stored.
@@ -1203,6 +1241,43 @@ mod tests {
             let err = s.download(url, true).await.unwrap_err();
             assert!(err.starts_with("address refused"), "{url}: {err}");
         }
+    }
+
+    #[tokio::test]
+    async fn remote_art_is_sized_cached_and_bound_to_listed_hosts() {
+        let f = fx().await;
+        let width = |a: &Art| image::load_from_memory(&a.bytes).unwrap().width();
+        let big = f.serve("big.jpg", jpeg(1000, 1500));
+        let thumb = f.store.remote(&big, Size::Thumb).await.unwrap();
+        assert_eq!((thumb.mime, width(&thumb)), ("image/jpeg", 342));
+        f.store.remote(&big, Size::Thumb).await.unwrap();
+        assert_eq!(f.hits(), 1);
+        let full = f.store.remote(&big, Size::Full).await.unwrap();
+        assert_eq!(&full.bytes[..], &jpeg(1000, 1500)[..]);
+
+        let small = f.serve("small.jpg", jpeg(200, 300));
+        let a = f.store.remote(&small, Size::Medium).await.unwrap();
+        assert_eq!(&a.bytes[..], &jpeg(200, 300)[..]);
+        let logo = f.serve("logo.png", png_rgba(1000, 400));
+        let a = f.store.remote(&logo, Size::Medium).await.unwrap();
+        assert_eq!((a.mime, width(&a)), ("image/png", 780));
+
+        let tmdb = format!("http://image.tmdb.org:{}/t/p/w500/big.jpg", f.port());
+        let a = f.store.remote(&tmdb, Size::Thumb).await.unwrap();
+        assert_eq!(width(&a), 1000);
+        assert!(
+            f.mock
+                .seen
+                .lock_clean()
+                .iter()
+                .any(|p| p == "/t/p/w342/big.jpg")
+        );
+
+        let hits = f.hits();
+        assert!(f.bare(&[]).remote(&big, Size::Thumb).await.is_none());
+        assert_eq!(f.hits(), hits);
+        let junk = f.serve("junk.jpg", b"not an image".to_vec());
+        assert!(f.store.remote(&junk, Size::Full).await.is_none());
     }
 
     #[tokio::test]

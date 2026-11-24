@@ -8,39 +8,47 @@ import { imageUrlWithSize, withAuthedImageToken } from './resolve-url.pipe';
  */
 describe('imageUrlWithSize', () => {
   it('VERDICT: keeps the version and adds the size as a second parameter', () => {
-    expect(imageUrlWithSize('/api/images/media/795/poster?v=1a2b3c4d', 'thumb')).toBe(
+    expect(imageUrlWithSize('/api/images/media/795/poster?v=1a2b3c4d', 'thumb', false)).toBe(
       '/api/images/media/795/poster?v=1a2b3c4d&size=thumb',
     );
   });
 
   it('starts the query string when the URL has none', () => {
-    expect(imageUrlWithSize('/api/images/media/795/poster', 'medium')).toBe(
+    expect(imageUrlWithSize('/api/images/media/795/poster', 'medium', false)).toBe(
       '/api/images/media/795/poster?size=medium',
     );
   });
 
-  it('leaves a remote URL alone', () => {
+  it('sends provider artwork through the server proxy at the asked size', () => {
+    const remote = 'https://covers.example.org/b/id/1-L.jpg?a=1&b=2';
+    expect(imageUrlWithSize(remote, 'thumb', true)).toBe(
+      `/api/images/remote?url=${encodeURIComponent(remote)}&size=thumb`,
+    );
+    expect(imageUrlWithSize('/api/images/media/795/poster', 'thumb', true)).toBe('/api/images/media/795/poster?size=thumb');
+  });
+
+  it('leaves a remote URL alone for a server without the proxy', () => {
     const remote = 'https://image.tmdb.org/t/p/w500/x.jpg';
-    expect(imageUrlWithSize(remote, 'thumb')).toBe(remote);
+    expect(imageUrlWithSize(remote, 'thumb', false)).toBe(remote);
   });
 
   it('picks a TMDB width for an original backdrop, keeping original for full', () => {
     const backdrop = 'https://image.tmdb.org/t/p/original/x.jpg';
-    expect(imageUrlWithSize(backdrop, 'medium')).toBe('https://image.tmdb.org/t/p/w1280/x.jpg');
-    expect(imageUrlWithSize(backdrop, 'full')).toBe(backdrop);
+    expect(imageUrlWithSize(backdrop, 'medium', false)).toBe('https://image.tmdb.org/t/p/w1280/x.jpg');
+    expect(imageUrlWithSize(backdrop, 'full', false)).toBe(backdrop);
   });
 
   it('sizes a TMDB thumb by the pixel ratio', () => {
     const backdrop = 'https://image.tmdb.org/t/p/original/x.jpg';
     vi.stubGlobal('devicePixelRatio', 1.5);
-    expect(imageUrlWithSize(backdrop, 'thumb')).toBe('https://image.tmdb.org/t/p/w342/x.jpg');
+    expect(imageUrlWithSize(backdrop, 'thumb', false)).toBe('https://image.tmdb.org/t/p/w342/x.jpg');
     vi.stubGlobal('devicePixelRatio', 2);
-    expect(imageUrlWithSize(backdrop, 'thumb')).toBe('https://image.tmdb.org/t/p/w500/x.jpg');
+    expect(imageUrlWithSize(backdrop, 'thumb', false)).toBe('https://image.tmdb.org/t/p/w500/x.jpg');
     vi.unstubAllGlobals();
   });
 
   it('also appends the size to a Live TV channel logo URL', () => {
-    expect(imageUrlWithSize('/api/livetv/channels/12/logo', 'thumb')).toBe(
+    expect(imageUrlWithSize('/api/livetv/channels/12/logo', 'thumb', false)).toBe(
       '/api/livetv/channels/12/logo?size=thumb',
     );
   });

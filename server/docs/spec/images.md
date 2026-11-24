@@ -1,17 +1,18 @@
 # Spec: images (serving only)
 
-Scope: the two `/api/images/*` serving routes. They are public, with no auth extractor. 404 bodies and `Cache-Control: no-store` on 4xx/5xx = `bootstrap.md` rule 7.
+Scope: the `/api/images/*` serving routes: two for stored images, one proxy for provider artwork (section E). They are public, with no auth extractor. 404 bodies and `Cache-Control: no-store` on 4xx/5xx = `bootstrap.md` rule 7.
 
 **Out of scope:** the image store (download, resize, store, delete, the TMDB size map, the `.src.json` sidecars, the `?v=<sha1[0..8]>` cache-busting hash) and every caller that writes images (persons, media import/metadata, requests, live TV logos), see `image-store.md`. Avatar upload/delete is `users.md`. Live TV channel logos are `/api/livetv/channels/:id/logo`, not these routes.
 
 ## Routes
 
-2 routes, no guard and no policy: anonymous callers, cookie, Bearer and `scope:'stream'` tokens are all ignored, never 401/403. The 3-segment route is matched first; both are plain `GET`.
+3 routes, no guard and no policy: anonymous callers, cookie, Bearer and `scope:'stream'` tokens are all ignored, never 401/403. The 3-segment route is matched first; both are plain `GET`.
 
 | Method path | Auth (extractor + policy) | Request (fields, constraints) | Response (fields, types, nesting) | Errors (status, message/code) | Side effects |
 |---|---|---|---|---|---|
 | `GET /api/images/:type/:id` | none (public) | path `type` (rule 2), `id` (rule 3); query `size` (rule 4) | 200, the image file bytes (rule 8), `Cache-Control` of rule 8, `X-Image-Size-Served` when downgraded (rule 6) | 404 bare body (rule 9) | none (read-only) |
 | `GET /api/images/:type/:id/:variant` | none (public) | as above plus path `variant` (rule 5) | as above | 404 bare body | none |
+| `GET /api/images/remote` | none (public) | query `url` (rule 20), `size` (rule 4) | 200, the artwork bytes (rules 21-22) | 404 bare body (rule 20) | an outbound fetch (rule 23) |
 
 ## Rules
 
@@ -56,6 +57,14 @@ Scope: the two `/api/images/*` serving routes. They are public, with no auth ext
 16. For every type except `request`, `id` must match `^(0|[1-9][0-9]*)$` (and fit the integer range, else 404); `007`, `0x7`, `7.0`, `+7`, ` 7 ` and `7e0` answer 404 (rule 3 keeps its `request` regex). Clients only emit canonical integers.
 17. The weak ETag is derived from the file mtime in seconds, like the other static routes. `Last-Modified`, `Accept-Ranges`, 304 and 206/416 handling as rule 8.
 18. Single `data_dir()`: image serving and avatar upload/delete (`users.md` rules 32-33) both call the one shared `data_dir()` (rule 12), so a first-candidate write-probe failure resolves identically for both.
+
+### E. Provider artwork proxy
+
+19. `GET /api/images/remote` serves artwork a provider names that the image store has not stored (search hits, previews, cast lists, add pages): browsers, TVs and Cast devices load every image from the server, never from a provider, so the SPA's `img-src` is `'self' data: blob:`. Clients rewrite an absolute `http(s)` artwork URL to `/api/images/remote?url=<percent-encoded URL>&size=<size>` (client `imageUrlWithSize`, tvOS `ImageURL.build`).
+20. `url` is required, read once (a repeated key is a 404), at most 2048 characters, an `http` or `https` URL whose host is in the `imageHosts` of a registered provider (with its subdomains for a bundled plugin, `provider-plugins.md` rule 9). It is fetched with the image store's guard (`image-store.md`: every hop's host listed, vetted addresses, at most 3 redirects, 15 s, 20 MiB). A URL that fails these checks, an upstream error or bytes that are not a JPEG, PNG, WebP or GIF answer the bare 404 of rule 9.
+21. A TMDB URL (`image.tmdb.org/t/p/<s>/<file>`) is fetched at `w342` for `thumb`, `w780` for `medium` and `original` for `full`, and served as fetched. Any other URL is fetched as is; for `thumb` and `medium` an image wider than 342 or 780 px is scaled to that width (a PNG stays a PNG with its alpha, anything else becomes a JPEG), a narrower one is served as fetched, and `full` is always the fetched bytes.
+22. 200 headers: `Content-Type` of the served format (`image/jpeg`, `image/png`, `image/webp`, `image/gif`), `Cache-Control: public, max-age=604800`, `X-Content-Type-Options: nosniff`. No `ETag`, no range support.
+23. Answers are kept in memory keyed by `(size, url)`, at most 64 MiB in total, the oldest evicted first; concurrent requests for one key share one fetch. Nothing is written to disk: a title that enters the library gets its stored copy from the image store. Fetches run at most 4 at a time, apart from the store's download slots, so a page of results never waits on a library scan.
 
 ## SQL
 

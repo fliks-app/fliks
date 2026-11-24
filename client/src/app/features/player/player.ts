@@ -74,7 +74,7 @@ import { directPlayMime } from '../../core/services/device-capabilities/direct-p
 import { isTizenAvplayAvailable } from '../../core/services/playback-engine/tizen-avplay';
 import type { NativeSidecarSubtitle } from '../../core/plugins/native-player.plugin';
 import { PlayerScreen } from './player-screen';
-import { imageUrlWithSize } from '../../core/pipes/resolve-url.pipe';
+import { ImageSize, ImageUrls } from '../../core/pipes/resolve-url.pipe';
 import { PlayerStateService } from '../../core/services/player-state.service';
 import { subtitleManifestRank } from '../../core/utils/subtitle-tracks';
 import { TrackManagerService, SubtitleOption, type LaunchTracks, launchPickFor, streamIndexForTrack, trackForStreamIndex } from '../../core/services/track-manager.service';
@@ -296,6 +296,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     if (this.pipWired()) Pip.setAutoEnter({ enabled: this.session.isLocal() }).catch(() => {});
   });
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly images = inject(ImageUrls);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly navHistory = inject(NavigationHistoryService);
   private readonly navbar = inject(NavbarService);
@@ -311,8 +312,9 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     untracked(() => {
       const { title, artist } = mediaSessionText(meta);
       const artwork: MediaImage[] = [];
-      if (meta.posterUrl) artwork.push({ src: this.serverConfig.resolveUrl(meta.posterUrl), sizes: '300x450', type: 'image/jpeg' });
-      if (meta.fanartUrl) artwork.push({ src: this.serverConfig.resolveUrl(meta.fanartUrl), sizes: '1280x720', type: 'image/jpeg' });
+      const art = (url: string) => this.images.resolve(url, 'medium');
+      if (meta.posterUrl) artwork.push({ src: art(meta.posterUrl), sizes: '300x450', type: 'image/jpeg' });
+      if (meta.fanartUrl) artwork.push({ src: art(meta.fanartUrl), sizes: '1280x720', type: 'image/jpeg' });
       if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title, artist, artwork });
       void window.fliksDesktop?.setMediaSession({ title, artist, artworkUrl: artwork[0]?.src });
     });
@@ -913,15 +915,16 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   protected readonly nowPlaying = signal<NowPlayingMetadata>(NO_NOW_PLAYING);
   readonly mediaTitle = computed(() => this.nowPlaying().title);
   readonly episodeTitle = computed(() => this.nowPlaying().episodeLabel);
-  readonly fanartUrl = computed(() => {
-    const url = this.nowPlaying().backdropUrl;
-    return url ? this.serverConfig.resolveUrl(url) : null;
-  });
+  readonly fanartUrl = computed(() => this.backdrop(this.nowPlaying().backdropUrl, 'full'));
   /** The route's own backdrop, else the one of what another output plays. */
   protected readonly backdropUrl = computed(() => {
     const url = this.session.nowPlaying()?.backdropUrl;
-    return this.fanartUrl() ?? (url ? this.serverConfig.resolveUrl(url) : null);
+    return this.fanartUrl() ?? this.backdrop(url, 'full');
   });
+
+  private backdrop(url: string | null | undefined, size: ImageSize): string | null {
+    return url ? this.images.resolve(url, size) : null;
+  }
 
   /** Shows `meta`; a backdrop it lacks keeps the one already painted. */
   private showNowPlaying(meta: NowPlayingMetadata): void {
@@ -940,15 +943,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
   /** The backdrop fades in once decoded, not on insertion. */
   protected readonly backdropLoaded = signal<string | null>(null);
 
-  /** Low-quality `fanartUrl` for the backdrop LQIP layer; only our `/api/images/...` URLs support
-   *  `?size=thumb`. */
-  readonly fanartThumbUrl = computed(() => {
-    const url = this.fanartUrl();
-    if (!url) return null;
-    if (!url.includes('/api/images/')) return url;
-    const sep = url.includes('?') ? '&' : '?';
-    return `${url}${sep}size=thumb`;
-  });
+  /** Low-quality `fanartUrl` for the backdrop LQIP layer. */
+  readonly fanartThumbUrl = computed(() => this.backdrop(this.nowPlaying().backdropUrl, 'thumb'));
   protected readonly loader = new PlayerLoader({
     stopSession: (sid) => void this.streamingApi.stopSession(sid).catch(() => {}),
     canReplace: () => this.authService.hasServerFeature('sessionReplaces'),
@@ -1728,7 +1724,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
           const art = this.media?.fanartUrl || this.media?.posterUrl;
           return {
             ...mediaSessionText(this.nowPlaying()),
-            artworkUrl: art ? this.serverConfig.resolveUrl(imageUrlWithSize(art, 'medium')) : undefined,
+            artworkUrl: art ? this.images.resolve(art, 'medium') : undefined,
           };
         };
         engine.onNext = () => void this.queueCtl.advance();

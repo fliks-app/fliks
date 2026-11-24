@@ -1018,6 +1018,18 @@
         }
       }
     },
+    "/api/images/remote": {
+      "get": {
+        "tags": [
+          "images"
+        ],
+        "summary": "Provider artwork the store has not stored (`images.md` section E).",
+        "operationId": "proxied",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/images/{kind}/{id}": {
       "get": {
         "tags": [

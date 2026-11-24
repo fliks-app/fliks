@@ -11,10 +11,12 @@ use crate::{
 use axum::{
     Router,
     body::Body,
-    extract::{Path, RawQuery, Request},
+    extract::{Path, RawQuery, Request, State},
     http::{
         HeaderValue, StatusCode,
-        header::{CACHE_CONTROL, ETAG, IF_NONE_MATCH, LAST_MODIFIED},
+        header::{
+            CACHE_CONTROL, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LAST_MODIFIED, X_CONTENT_TYPE_OPTIONS,
+        },
     },
     response::{IntoResponse, Response},
     routing::get,
@@ -24,6 +26,7 @@ use tower::ServiceExt;
 use tower_http::services::ServeFile;
 
 pub mod paths;
+pub mod remote;
 pub mod store;
 pub mod upload;
 
@@ -31,6 +34,7 @@ pub use store::ImageStore;
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/api/images/remote", get(proxied))
         .route("/api/images/{kind}/{id}", get(without_variant))
         .route("/api/images/{kind}/{id}/{variant}", get(with_variant))
 }
@@ -55,6 +59,33 @@ pub async fn with_variant(
     req: Request,
 ) -> Result<Response, AppError> {
     serve(&kind, &id, Some(&variant), q.as_deref(), req).await
+}
+
+/// Provider artwork the store has not stored (`images.md` section E).
+#[utoipa::path(get, path = "/api/images/remote", responses((status = 200)))]
+pub async fn proxied(
+    State(st): State<AppState>,
+    RawQuery(q): RawQuery,
+) -> Result<Response, AppError> {
+    let q = q.unwrap_or_default();
+    let mut urls = url::form_urlencoded::parse(q.as_bytes())
+        .filter(|(k, _)| k == "url")
+        .map(|(_, v)| v);
+    let (Some(u), None) = (urls.next(), urls.next()) else {
+        return Err(not_found());
+    };
+    let size = match size_of(Some(&q)) {
+        "thumb" => Size::Thumb,
+        "medium" => Size::Medium,
+        _ => Size::Full,
+    };
+    let art = st.images.remote(&u, size).await.ok_or_else(not_found)?;
+    let headers = [
+        (CONTENT_TYPE, art.mime),
+        (CACHE_CONTROL, "public, max-age=604800"),
+        (X_CONTENT_TYPE_OPTIONS, "nosniff"),
+    ];
+    Ok((headers, art.bytes.clone()).into_response())
 }
 
 /// `thumb` / `medium` only when `size` appears exactly once; anything else is `full`.
