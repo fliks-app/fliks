@@ -236,8 +236,10 @@ async fn relink_in_place(
             source: ImportSource::Disk,
         });
     }
+    if !l.file_ids.is_empty() {
+        st.ingest.settle.schedule(st, media.id);
+    }
     if !l.added.is_empty() {
-        queue_registered(st, media.id, &l.added).await;
         crate::media_servers::dispatch_detached(st, "library.rescan");
     }
     Ok(linked + l.file_ids.len() as i64)

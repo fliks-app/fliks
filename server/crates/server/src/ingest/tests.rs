@@ -705,7 +705,14 @@ async fn rescan_probes_only_what_changed(pool: PgPool) {
     touch(&lib.join("A/A.mkv"), b"a");
     let a = media(&c, l, "A", "movie").await;
     file_row(&c, a, "A.mkv").await;
-    let probes = |c: &Ctx| c.fake.seen("POST", "/v1/probe").len();
+    // The rescan's own probes: the queue's crop probe of a first-probed row is not one.
+    let probes = |c: &Ctx| {
+        c.fake
+            .seen("POST", "/v1/probe")
+            .iter()
+            .filter(|p| p.body["crop"] == false)
+            .count()
+    };
     let first = rescan(&c, a).await.unwrap();
     assert_eq!(
         (first.updated, probes(&c), scans(&c, 0).await),
@@ -786,6 +793,41 @@ async fn rescan_adds_without_a_crop_and_the_queue_stores_it(pool: PgPool) {
             row.1
         ),
         (&json!(800), &json!(true), &json!("h264"), true)
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_file_the_engine_cannot_probe_is_kept_and_probed_by_the_next_rescan(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c.dir.join("movies");
+    let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+    touch(&lib.join("A/A.1080p.mkv"), b"a");
+    c.fake
+        .script("POST", "/v1/probe", vec![status(503), ok(probe_ok())]);
+    let a = media(&c, l, "A", "movie").await;
+    assert_eq!(rescan(&c, a).await.unwrap().added, 1);
+    let row = || {
+        sqlx::query_as::<_, (bool, bool, String, bool)>(
+            r#"SELECT "streamInfo" IS NULL, "probeVersion" IS NULL, quality, "enrichedAt" IS NULL
+               FROM media_files"#,
+        )
+        .fetch_one(&c.st.db)
+    };
+    let (no_info, unstamped, quality, _) = row().await.unwrap();
+    assert!(no_info && unstamped, "kept, unstamped, not queued");
+    assert!(quality.contains("1080p"), "named quality: {quality}");
+    assert!(c.st.ingest.queue.is_idle());
+    assert_eq!(rescan(&c, a).await.unwrap().updated, 1);
+    for _ in 0..100 {
+        if c.st.ingest.queue.is_idle() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let (no_info, unstamped, _, unenriched) = row().await.unwrap();
+    assert!(
+        !no_info && !unstamped && !unenriched,
+        "the first probe stamps it and queues its post-import work"
     );
 }
 

@@ -3,7 +3,7 @@ use super::{
     MediaRow, books, comics, fsx, is_video,
     library::{self, caller_nums, file_name},
     load_media, music, naming_formats, record,
-    rescan::{Slots, link_in_place, queue_registered, resolve_episodes},
+    rescan::{Slots, link_in_place, resolve_episodes},
     transfer::{Method, split_ext},
 };
 use crate::sync::MutexExt;

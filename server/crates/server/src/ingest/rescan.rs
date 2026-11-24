@@ -20,7 +20,7 @@ use fliks_domain::{
     },
     metadata::limiter::Priority,
     naming::{EpisodeNumbers, match_special_by_title, parse_episode_numbers},
-    release::parsing::quality_from_resolution::quality_from_resolution,
+    release::parsing::quality::parse_release_quality,
 };
 use fliks_engine_core::api::{JobKind, JobPriority, JobRequest, MediaInfo, MediaRef};
 use serde::Deserialize;
@@ -263,7 +263,18 @@ pub async fn rescan_files(
             if super::registers(media.media_type) {
                 return book_pass(st, &m, &base, &kept, &disk, &linked, force, &mut c).await;
             }
-            refresh_existing(st, &m, &base, &kept, &slots, force, &mut c, &mut touched).await?;
+            refresh_existing(
+                st,
+                &m,
+                &base,
+                &kept,
+                &slots,
+                force,
+                &mut c,
+                &mut touched,
+                &mut added,
+            )
+            .await?;
             slots_created |= add_new(
                 st,
                 &m,
@@ -501,6 +512,7 @@ async fn refresh_existing(
     force: bool,
     c: &mut Counts,
     touched: &mut Vec<Touched>,
+    added: &mut Vec<i32>,
 ) -> Result<(), AppError> {
     let media_id = media.id;
     let mut links: Vec<Link> = vec![];
@@ -576,6 +588,10 @@ async fn refresh_existing(
             continue;
         };
         c.updated += 1;
+        // A row registered while the engine could not probe it gets its post-import work now.
+        if r.info.is_none() {
+            added.push(r.id);
+        }
         touched.push((r.id, episode_id, Some(info)));
     }
     items::attach(&st.db, media_id, &links).await?;
@@ -680,7 +696,9 @@ async fn add_new(
             nums: None,
         })
         .collect();
-    let r = register_on_disk(st, media, slots, files).await?;
+    let mut r = Registered::default();
+    // The rows are stored even when the link fails: the tail still queues them.
+    let done = register_on_disk(st, media, slots, files, &mut r).await;
     for (abs, why) in &r.rejected {
         tracing::warn!(
             "Rescan[media #{}]: \"{}\" skipped: {why}",
@@ -689,9 +707,9 @@ async fn add_new(
         );
     }
     c.added += r.added.len() as i64;
-    added.extend(r.added.iter().map(|t| t.0));
+    added.extend(r.probed());
     touched.extend(r.added);
-    Ok(r.created)
+    done.map(|()| r.created)
 }
 
 /// A video file to register where it lies, with the caller's episode numbers if it gave some.
@@ -704,21 +722,29 @@ pub(crate) struct OnDisk {
 
 #[derive(Default)]
 struct Registered {
+    /// Every row inserted, with its probe when it had one.
     added: Vec<Touched>,
     created: bool,
     rejected: Vec<(PathBuf, String)>,
 }
 
-/// Rules 44 and 52: probe without the crop, insert stamped rows and link them to their episodes.
-/// The caller hands the ids to `queue_registered` once its own steps are done.
+impl Registered {
+    /// The rows the post-import queue can enrich: a row without a probe waits for the next rescan.
+    fn probed(&self) -> impl Iterator<Item = i32> + '_ {
+        self.added.iter().filter(|t| t.2.is_some()).map(|t| t.0)
+    }
+}
+
+/// Rules 44, 49 and 52: probe without the crop, insert the rows (stamped when probed) and link them
+/// to their episodes. The caller hands `probed()` to `queue_registered` once its own steps are done.
 async fn register_on_disk(
     st: &AppState,
     media: &MediaRow,
     slots: &mut Slots,
     files: Vec<OnDisk>,
-) -> Result<Registered, AppError> {
+    r: &mut Registered,
+) -> Result<(), AppError> {
     let media_id = media.id;
-    let mut r = Registered::default();
     let eps = if media.has_seasons() {
         let paths: Vec<_> = files.iter().map(|f| (f.abs.as_path(), f.nums)).collect();
         let (eps, created) = resolve_episodes(st, slots, media_id, &paths).await?;
@@ -737,32 +763,40 @@ async fn register_on_disk(
             r.rejected.push((f.abs, "not readable".into()));
             continue;
         };
-        let p = match probe(st, &f.abs, false).await {
-            Ok(p) => p,
-            Err(e) => {
-                r.rejected.push((f.abs, format!("probe failed: {e}")));
-                continue;
-            }
-        };
         let name = file_name(&f.abs);
-        let quality = p
-            .quality(&name)
-            .unwrap_or_else(|| quality_from_resolution(&name, None, None));
+        let named = || parse_release_quality(&name).quality.name.to_owned();
+        // An engine that cannot probe now leaves an unstamped row, which the next rescan probes.
+        let p = probe(st, &f.abs, false)
+            .await
+            .inspect_err(|e| tracing::warn!("Register[media #{media_id}] \"{name}\": {e}"))
+            .ok();
+        let (quality, info, mtime, stamp) = match &p {
+            Some(p) => (
+                p.quality(&name).unwrap_or_else(named),
+                Some(serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?),
+                mtime_ms(&meta),
+                Some(PROBE_VERSION),
+            ),
+            None => (named(), None, None, None),
+        };
         fresh.push(NewRow {
             folder_id: f.folder_id,
             rel: f.rel,
+            abs: f.abs,
             episode_id,
             last,
             size: meta.len() as i64,
             quality,
-            info: serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?,
-            probed: p.info,
-            mtime: mtime_ms(&meta),
+            info,
+            probed: p.map(|p| p.info),
+            mtime,
+            stamp,
         });
     }
     if fresh.is_empty() {
-        return Ok(r);
+        return Ok(());
     }
+    let mut failed: HashMap<(i32, &str), String> = HashMap::new();
     let inserted = match insert_rows(&st.db, media_id, &fresh).await {
         Ok(rows) => rows,
         Err(e) => {
@@ -774,25 +808,29 @@ async fn register_on_disk(
             for n in &fresh {
                 match insert_rows(&st.db, media_id, std::slice::from_ref(n)).await {
                     Ok(r) => rows.extend(r),
-                    Err(e) => tracing::error!(
-                        "Register[media #{media_id}]: failed to add \"{}\": {e}",
-                        n.rel
-                    ),
+                    Err(e) => {
+                        failed.insert((n.folder_id, n.rel.as_str()), format!("insert failed: {e}"));
+                    }
                 }
             }
             rows
         }
     };
-    let by_key: HashMap<(i32, &str), &NewRow> = fresh
+    let ids: HashMap<(i32, &str), i32> = inserted
         .iter()
-        .map(|n| ((n.folder_id, n.rel.as_str()), n))
+        .map(|(id, folder, rel)| ((*folder, rel.as_str()), *id))
         .collect();
     let mut links = vec![];
-    for (id, folder, rel) in inserted {
-        let Some(n) = by_key.get(&(folder, rel.as_str())) else {
+    for n in &fresh {
+        let key = (n.folder_id, n.rel.as_str());
+        let Some(&id) = ids.get(&key) else {
+            let why = failed
+                .remove(&key)
+                .unwrap_or_else(|| "already registered".into());
+            r.rejected.push((n.abs.clone(), why));
             continue;
         };
-        r.added.push((id, n.episode_id, Some(n.probed.clone())));
+        r.added.push((id, n.episode_id, n.probed.clone()));
         links.push(Link {
             file: id,
             owner: n.episode_id,
@@ -800,11 +838,11 @@ async fn register_on_disk(
         });
     }
     items::attach(&st.db, media_id, &links).await?;
-    Ok(r)
+    Ok(())
 }
 
 /// Registered files go to the bulk lane of the post-import queue and the media settles after them.
-pub(crate) async fn queue_registered(st: &AppState, media_id: i32, ids: &[i32]) {
+async fn queue_registered(st: &AppState, media_id: i32, ids: &[i32]) {
     if !ids.is_empty() {
         st.ingest.queue.enqueue_bulk(st, ids).await;
         st.ingest.settle.schedule(st, media_id);
@@ -819,9 +857,9 @@ async fn insert_rows(
     let rows = sqlx::query!(
         r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality, "streamInfo",
              "mtimeMs", "probeVersion")
-           SELECT $1, v.folder, v.rel, v.size, v.quality, v.info, v.mtime, $7
-           FROM UNNEST($2::int[], $3::text[], $4::bigint[], $5::text[], $6::jsonb[], $8::bigint[])
-             AS v(folder, rel, size, quality, info, mtime)
+           SELECT $1, v.folder, v.rel, v.size, v.quality, v.info, v.mtime, v.stamp
+           FROM UNNEST($2::int[], $3::text[], $4::bigint[], $5::text[], $6::jsonb[], $7::bigint[], $8::int[])
+             AS v(folder, rel, size, quality, info, mtime, stamp)
            ON CONFLICT ("folderId", "relativePath") DO NOTHING
            RETURNING id, "folderId" AS folder, "relativePath" AS rel"#,
         media_id,
@@ -829,9 +867,9 @@ async fn insert_rows(
         &fresh.iter().map(|n| n.rel.clone()).collect::<Vec<_>>(),
         &fresh.iter().map(|n| n.size).collect::<Vec<_>>(),
         &fresh.iter().map(|n| n.quality.clone()).collect::<Vec<_>>(),
-        &fresh.iter().map(|n| n.info.clone()).collect::<Vec<_>>(),
-        PROBE_VERSION,
-        &fresh.iter().map(|n| n.mtime).collect::<Vec<_>>() as &[Option<i64>]
+        &fresh.iter().map(|n| n.info.clone()).collect::<Vec<_>>() as &[Option<serde_json::Value>],
+        &fresh.iter().map(|n| n.mtime).collect::<Vec<_>>() as &[Option<i64>],
+        &fresh.iter().map(|n| n.stamp).collect::<Vec<_>>() as &[Option<i32>]
     )
     .fetch_all(db)
     .await?;
@@ -844,13 +882,15 @@ type Touched = (i32, Option<i32>, Option<MediaInfo>);
 struct NewRow {
     folder_id: i32,
     rel: String,
+    abs: PathBuf,
     episode_id: Option<i32>,
     last: Option<i32>,
     size: i64,
     quality: String,
-    info: serde_json::Value,
-    probed: MediaInfo,
+    info: Option<serde_json::Value>,
+    probed: Option<MediaInfo>,
     mtime: Option<i64>,
+    stamp: Option<i32>,
 }
 
 /// The media's seasons and episodes, loaded once so a batch of files resolves in memory.
@@ -1026,6 +1066,11 @@ async fn reconcile_subtitles(
         c.subtitle_removed_duplicates = dupes as i64;
         crate::subtitles::sidecars::discover_external(st, media_id).await;
     }
+    store_embedded(st, media_id, touched).await;
+}
+
+/// The embedded subtitle rows of each file, from its probe when it has one.
+async fn store_embedded(st: &AppState, media_id: i32, touched: &[Touched]) {
     for (file, episode, info) in touched {
         match info {
             Some(info) => {
@@ -1128,7 +1173,6 @@ pub struct Located {
     pub folder: crate::libraries::Folder,
     pub rel: String,
     pub real: PathBuf,
-    pub size: u64,
 }
 
 /// The folder of the media's library that contains `abs` and the path of the file in it.
@@ -1165,7 +1209,7 @@ pub async fn locate_in_place(
     if roots.is_empty() {
         return outside();
     }
-    let Ok((real, meta)) = fsx::regular_source(abs) else {
+    let Ok((real, _)) = fsx::regular_source(abs) else {
         return Ok(Err("not a regular file".into()));
     };
     let mut hit = None;
@@ -1191,16 +1235,11 @@ pub async fn locate_in_place(
             "a title with no folder can only own files at the library root".into(),
         ));
     }
-    Ok(Ok(Located {
-        folder,
-        rel,
-        real,
-        size: meta.len(),
-    }))
+    Ok(Ok(Located { folder, rel, real }))
 }
 
-/// `linkExistingFileInPlace` (rules 52-53) for a batch; the caller holds the media's lock and
-/// queues `added` (`queue_registered`).
+/// `linkExistingFileInPlace` (rules 52-53) for a batch, its new rows queued like a rescan's; the
+/// caller holds the media's lock.
 pub async fn link_in_place(
     st: &AppState,
     _guard: &OwnedMutexGuard<()>,
@@ -1245,7 +1284,8 @@ pub async fn link_in_place(
     } else {
         Slots::default()
     };
-    let r = register_on_disk(st, media, &mut slots, fresh).await?;
+    let mut r = Registered::default();
+    let done = register_on_disk(st, media, &mut slots, fresh, &mut r).await;
     out.errors.extend(
         r.rejected
             .iter()
@@ -1254,7 +1294,13 @@ pub async fn link_in_place(
     out.created = r.created;
     out.added = r.added.iter().map(|t| t.0).collect();
     out.file_ids.extend(&out.added);
-    Ok(out)
+    // As a rescan does: sidecars and embedded tracks first, so the queue's subtitle search sees them.
+    if !r.added.is_empty() {
+        crate::subtitles::sidecars::discover_external(st, media.id).await;
+        store_embedded(st, media.id, &r.added).await;
+        queue_registered(st, media.id, &r.probed().collect::<Vec<_>>()).await;
+    }
+    done.map(|()| out)
 }
 
 /// `AnalyzeMediaDto`: only the string `'true'` and the boolean `true` are true.
