@@ -751,7 +751,7 @@
 				INFOPLIST_FILE = FliksNotificationService/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 7.1.0; /* x-release-please-version */
+				MARKETING_VERSION = 7.2.0; /* x-release-please-version */
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FLIKS_APP_ID).NotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -886,7 +886,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 7.1.0; /* x-release-please-version */
+				MARKETING_VERSION = 7.2.0; /* x-release-please-version */
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FLIKS_APP_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -909,7 +909,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 7.1.0; /* x-release-please-version */
+				MARKETING_VERSION = 7.2.0; /* x-release-please-version */
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FLIKS_APP_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
@@ -929,7 +929,7 @@
 				INFOPLIST_FILE = FliksDownloadWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 7.1.0; /* x-release-please-version */
+				MARKETING_VERSION = 7.2.0; /* x-release-please-version */
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FLIKS_APP_ID).DownloadWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -951,7 +951,7 @@
 				INFOPLIST_FILE = FliksNotificationService/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 7.1.0; /* x-release-please-version */
+				MARKETING_VERSION = 7.2.0; /* x-release-please-version */
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FLIKS_APP_ID).NotificationService";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -974,7 +974,7 @@
 				INFOPLIST_FILE = FliksDownloadWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 7.1.0; /* x-release-please-version */
+				MARKETING_VERSION = 7.2.0; /* x-release-please-version */
 				PRODUCT_BUNDLE_IDENTIFIER = "$(FLIKS_APP_ID).DownloadWidget";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
