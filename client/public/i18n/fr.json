@@ -1486,8 +1486,13 @@
     "downloads_title": "Téléchargements",
     "downloads_see_all": "Tout voir",
     "monitored_partial": "Partiellement surveillée",
-    "monitor_all_seasons": "Surveiller toutes les saisons",
-    "follow_new_seasons": "Suivre les nouvelles saisons"
+    "monitoring": "Surveillance",
+    "monitoring_custom": "Surveillance personnalisée",
+    "monitor_series_all": "Toute la série",
+    "monitor_series_future": "Nouvelles saisons uniquement",
+    "monitor_series_none": "Aucune",
+    "monitor_episode": "Surveiller l'épisode",
+    "unmonitor_episode": "Ne plus surveiller l'épisode"
   },
   "requests": {
     "approve_album": "Approuver l'album entier",

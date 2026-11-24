@@ -1486,8 +1486,13 @@
     "downloads_title": "Descargas",
     "downloads_see_all": "Ver todo",
     "monitored_partial": "Parcialmente vigilada",
-    "monitor_all_seasons": "Vigilar todas las temporadas",
-    "follow_new_seasons": "Seguir las nuevas temporadas"
+    "monitoring": "Vigilancia",
+    "monitoring_custom": "Vigilancia personalizada",
+    "monitor_series_all": "Toda la serie",
+    "monitor_series_future": "Solo temporadas nuevas",
+    "monitor_series_none": "Ninguna",
+    "monitor_episode": "Vigilar el episodio",
+    "unmonitor_episode": "Dejar de vigilar el episodio"
   },
   "requests": {
     "title": "Solicitudes",

@@ -1486,8 +1486,13 @@
     "downloads_title": "Downloads",
     "downloads_see_all": "See all",
     "monitored_partial": "Partially monitored",
-    "monitor_all_seasons": "Monitor all seasons",
-    "follow_new_seasons": "Follow new seasons"
+    "monitoring": "Monitoring",
+    "monitoring_custom": "Custom monitoring",
+    "monitor_series_all": "Whole series",
+    "monitor_series_future": "New seasons only",
+    "monitor_series_none": "None",
+    "monitor_episode": "Monitor episode",
+    "unmonitor_episode": "Stop monitoring episode"
   },
   "requests": {
     "approve_album": "Approve the whole album",

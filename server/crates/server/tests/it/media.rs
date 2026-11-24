@@ -353,6 +353,24 @@ async fn put_sets_clears_and_scopes_the_external_ids(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
+async fn put_unmonitors_the_seasons_and_keeps_following_new_ones(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO media (id, title, type, "libraryId") VALUES (5, 'Show', 'series', 1);
+           INSERT INTO item_groups ("mediaId", "number", monitored) VALUES (5, 1, true), (5, 2, true);"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let body = json!({"monitored": false, "monitorNewSeasons": true});
+    let (s, m) = c.send("PUT", &c.admin, "/api/media/5", Some(body)).await;
+    assert_eq!(
+        (s, &m["monitoring"], &m["monitorNewSeasons"]),
+        (200, &json!("none"), &json!(true))
+    );
+}
+
+#[sqlx::test(migrations = false)]
 async fn removing_a_media_removes_its_external_ids(pool: PgPool) {
     let c = ctx(pool.clone()).await;
     c.send("PUT", &c.admin, "/api/media/4", Some(json!({"tmdbId": 9})))

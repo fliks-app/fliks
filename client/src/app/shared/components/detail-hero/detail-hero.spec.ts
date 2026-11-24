@@ -74,8 +74,9 @@ const TITLE_ACTIONS = {
   'media.open-tracking': noop,
   'media.request': noop,
   'media.toggle-monitored': noop,
-  'media.stop-monitoring': noop,
-  'media.toggle-follow-new-seasons': noop,
+  'media.monitor-series-all': noop,
+  'media.monitor-series-future': noop,
+  'media.monitor-series-none': noop,
   'media.edit-profiles': noop,
   'media.edit-library': noop,
   'media.delete': noop,
@@ -345,10 +346,10 @@ describe('DetailHeroComponent - media.actions permission matrix', () => {
       'media_detail.identify',
       'media_detail.refresh_metadata',
       'tracking.menu_item',
+      'media_detail.unmonitor',
       'media_detail.analyze',
       'media_detail.edit_profiles',
       'media_detail.edit_library',
-      'media_detail.unmonitor',
       'media_detail.delete_from_library',
     ]);
   });
@@ -364,10 +365,12 @@ describe('DetailHeroComponent - media.actions permission matrix', () => {
       'media_detail.identify',
       'media_detail.refresh_metadata',
       'tracking.menu_item',
+      'media_detail.monitor_series_all',
+      'media_detail.monitor_series_future',
+      'media_detail.monitor_series_none',
       'media_detail.analyze',
       'media_detail.edit_profiles',
       'media_detail.edit_library',
-      'media_detail.unmonitor',
       'media_detail.delete_from_library',
     ]);
   });
@@ -521,6 +524,8 @@ describe('DetailHeroComponent - destructive-item styling and ephemeral guards', 
     // The entries the page binds per episode still show.
     expect(shown).toContain('media_detail.refresh_metadata');
     expect(shown).toContain('media_detail.analyze');
+    expect(shown).toContain('media_detail.unmonitor_episode');
+    expect(shown).not.toContain('media_detail.monitor_series_all');
   });
 
   it('an episode-level header lists Download and Edit subtitles once, not twice', async () => {
@@ -1149,22 +1154,28 @@ describe('detail hero: series monitoring', () => {
   const base = { mediaType: 'series' as const, selectedFileId: null, monitored: true, qualityProfileName: 'HD-1080p' };
   beforeEach(() => TestBed.resetTestingModule());
 
-  it('offers both monitor-all-seasons and stop-monitoring when partially monitored', async () => {
-    const shown = labels(await createFixture(OWNER, { ...base, monitoring: 'partial', followNewSeasons: true }));
-    expect(shown).toContain('media_detail.monitor_all_seasons');
-    expect(shown).toContain('media_detail.unmonitor');
-    expect(shown).not.toContain('media_detail.monitor');
+  function presetRows(fixture: ComponentFixture<DetailHeroComponent>) {
+    const group = menuActions(fixture).find((a) => a.children?.some((c) => c.labelKey === 'media_detail.monitor_series_all'));
+    return { label: group?.labelKey, checked: group?.children?.filter((c) => c.icon === 'check').map((c) => c.labelKey) };
+  }
+
+  it('groups the series presets under one submenu, without the title-wide toggle', async () => {
+    const fixture = await createFixture(OWNER, { ...base, monitoring: 'all', followNewSeasons: true });
+    expect(labels(fixture)).not.toContain('media_detail.unmonitor');
+    expect(presetRows(fixture)).toEqual({ label: 'media_detail.monitoring', checked: ['media_detail.monitor_series_all'] });
   });
 
-  it('offers only stop-monitoring when fully monitored', async () => {
-    const shown = labels(await createFixture(OWNER, { ...base, monitoring: 'all', followNewSeasons: true }));
-    expect(shown.filter((l) => l === 'media_detail.unmonitor').length).toBe(1);
-    expect(shown).not.toContain('media_detail.monitor_all_seasons');
+  it('checks the preset the seasons and the new-season policy match', async () => {
+    const future = await createFixture(OWNER, { ...base, monitored: false, monitoring: 'none', followNewSeasons: true });
+    expect(presetRows(future).checked).toEqual(['media_detail.monitor_series_future']);
+    const none = await createFixture(OWNER, { ...base, monitored: false, monitoring: 'none', followNewSeasons: false });
+    expect(presetRows(none).checked).toEqual(['media_detail.monitor_series_none']);
   });
 
-  it('shows the follow-new-seasons row only when the server reports the policy', async () => {
-    expect(labels(await createFixture(OWNER, { ...base, monitoring: 'none', followNewSeasons: false }))).toContain('media_detail.follow_new_seasons');
-    expect(labels(await createFixture(OWNER, base))).not.toContain('media_detail.follow_new_seasons');
+  it('labels the submenu custom and checks nothing when set season by season', async () => {
+    for (const state of [{ monitoring: 'partial' as const, followNewSeasons: true }, { monitoring: 'all' as const, followNewSeasons: false }]) {
+      expect(presetRows(await createFixture(OWNER, { ...base, ...state }))).toEqual({ label: 'media_detail.monitoring_custom', checked: [] });
+    }
   });
 
   it('shows the partial chip on a desktop layout', async () => {
