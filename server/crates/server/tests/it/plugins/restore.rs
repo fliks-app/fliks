@@ -36,6 +36,11 @@ async fn script(h: &H, sql: &str, name: &str) {
 async fn install(tag: &str) -> Option<(Scratch, H)> {
     let (m, w) = fixture()?;
     let s = Scratch::create(tag).await?;
+    // Below 17 a restore is refused: a_server_before_17_refuses_a_restore_untouched covers it.
+    if fliks_server::db::server_version(&s.pool).await.unwrap() < 170_000 {
+        s.finish().await;
+        return None;
+    }
     let h = harness(&s, tag, |_| {}).await;
     allow_unsigned(&h).await;
     assert_eq!(
