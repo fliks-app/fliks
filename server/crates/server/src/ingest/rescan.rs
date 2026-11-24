@@ -1,7 +1,7 @@
 //! `MediaRescanService` (`ingest.md` rules 38-54): disk walk, row reconcile, analyze, link in place.
 use super::{
     MediaRow, drop_thumbnails, fsx,
-    library::{Ep, file_name, season_episodes},
+    library::{Ep, file_name},
     load_media, probe, probe_with,
 };
 use crate::{
@@ -20,9 +20,7 @@ use fliks_domain::{
     },
     metadata::limiter::Priority,
     naming::{EpisodeNumbers, match_special_by_title, parse_episode_numbers},
-    release::parsing::{
-        quality::parse_release_quality, quality_from_resolution::quality_from_resolution,
-    },
+    release::parsing::quality::parse_release_quality,
 };
 use fliks_engine_core::api::{JobKind, JobPriority, JobRequest, MediaInfo, MediaRef};
 use serde::Deserialize;
@@ -265,18 +263,30 @@ pub async fn rescan_files(
             if super::registers(media.media_type) {
                 return book_pass(st, &m, &base, &kept, &disk, &linked, force, &mut c).await;
             }
-            refresh_existing(st, &m, &base, &kept, &slots, force, &mut c, &mut touched).await?;
-            add_new(
+            refresh_existing(
                 st,
                 &m,
-                &disk,
-                &linked,
+                &base,
+                &kept,
                 &slots,
+                force,
                 &mut c,
                 &mut touched,
                 &mut added,
             )
-            .await
+            .await?;
+            slots_created |= add_new(
+                st,
+                &m,
+                &disk,
+                &linked,
+                &mut slots,
+                &mut c,
+                &mut touched,
+                &mut added,
+            )
+            .await?;
+            Ok(())
         }
         .await;
         if applied.is_err() {
@@ -297,10 +307,7 @@ pub async fn rescan_files(
         reconcile_subtitles(st, media_id, &mut c, &touched, complete).await;
     }
     // After the sidecars are registered: the enrich's subtitle search must see them.
-    if !added.is_empty() {
-        st.ingest.queue.enqueue_bulk(st, &added).await;
-        st.ingest.settle.schedule(st, media_id);
-    }
+    queue_registered(st, media_id, &added).await;
     applied?;
     tracing::info!(
         "Rescan: media #{media_id} done (added {}, removed {}, updated {})",
@@ -505,6 +512,7 @@ async fn refresh_existing(
     force: bool,
     c: &mut Counts,
     touched: &mut Vec<Touched>,
+    added: &mut Vec<i32>,
 ) -> Result<(), AppError> {
     let media_id = media.id;
     let mut links: Vec<Link> = vec![];
@@ -580,6 +588,10 @@ async fn refresh_existing(
             continue;
         };
         c.updated += 1;
+        // A row registered while the engine could not probe it gets its post-import work now.
+        if r.info.is_none() {
+            added.push(r.id);
+        }
         touched.push((r.id, episode_id, Some(info)));
     }
     items::attach(&st.db, media_id, &links).await?;
@@ -659,163 +671,238 @@ pub async fn refresh_content(
     Ok(info)
 }
 
+/// Rule 44: the files of this folder pass no row holds yet; returns whether a slot was created.
 #[allow(clippy::too_many_arguments)]
 async fn add_new(
     st: &AppState,
     media: &MediaRow,
     disk: &[(String, PathBuf)],
     linked: &HashSet<String>,
-    slots: &Slots,
+    slots: &mut Slots,
     c: &mut Counts,
     touched: &mut Vec<Touched>,
     added: &mut Vec<i32>,
+) -> Result<bool, AppError> {
+    let Some(folder_id) = media.folder.as_ref().map(|f| f.id) else {
+        return Ok(false);
+    };
+    let files = disk
+        .iter()
+        .filter(|(r, _)| !linked.contains(r))
+        .map(|(rel, abs)| OnDisk {
+            folder_id,
+            rel: rel.clone(),
+            abs: abs.clone(),
+            nums: None,
+        })
+        .collect();
+    let mut r = Registered::default();
+    // The rows are stored even when the link fails: the tail still queues them.
+    let done = register_on_disk(st, media, slots, files, &mut r).await;
+    for (abs, why) in &r.rejected {
+        tracing::warn!(
+            "Rescan[media #{}]: \"{}\" skipped: {why}",
+            media.id,
+            file_name(abs)
+        );
+    }
+    c.added += r.added.len() as i64;
+    added.extend(r.probed());
+    touched.extend(r.added);
+    done.map(|()| r.created)
+}
+
+/// A video file to register where it lies, with the caller's episode numbers if it gave some.
+pub(crate) struct OnDisk {
+    pub folder_id: i32,
+    pub rel: String,
+    pub abs: PathBuf,
+    pub nums: Option<EpisodeNumbers>,
+}
+
+#[derive(Default)]
+struct Registered {
+    /// Every row inserted, with its probe when it had one.
+    added: Vec<Touched>,
+    created: bool,
+    rejected: Vec<(PathBuf, String)>,
+}
+
+impl Registered {
+    /// The rows the post-import queue can enrich: a row without a probe waits for the next rescan.
+    fn probed(&self) -> impl Iterator<Item = i32> + '_ {
+        self.added.iter().filter(|t| t.2.is_some()).map(|t| t.0)
+    }
+}
+
+/// Rules 44, 49 and 52: probe without the crop, insert the rows (stamped when probed) and link them
+/// to their episodes. The caller hands `probed()` to `queue_registered` once its own steps are done.
+async fn register_on_disk(
+    st: &AppState,
+    media: &MediaRow,
+    slots: &mut Slots,
+    files: Vec<OnDisk>,
+    r: &mut Registered,
 ) -> Result<(), AppError> {
     let media_id = media.id;
-    let Some(folder_id) = media.folder.as_ref().map(|f| f.id) else {
-        return Ok(());
+    let eps = if media.has_seasons() {
+        let paths: Vec<_> = files.iter().map(|f| (f.abs.as_path(), f.nums)).collect();
+        let (eps, created) = resolve_episodes(st, slots, media_id, &paths).await?;
+        r.created = created;
+        eps
+    } else {
+        vec![Some((None, None)); files.len()]
     };
     let mut fresh: Vec<NewRow> = vec![];
-    for (rel, abs) in disk.iter().filter(|(r, _)| !linked.contains(r)) {
-        let Ok(meta) = tokio::fs::metadata(abs).await else {
+    for (f, ep) in files.into_iter().zip(eps) {
+        let Some((episode_id, last)) = ep else {
+            r.rejected.push((f.abs, "no SxxEyy pattern found".into()));
             continue;
         };
-        let name = file_name(abs);
-        let mut episode_id = None;
-        let mut last = None;
-        if media.has_seasons() {
-            match parse_episode_numbers(&name, Some(&abs.to_string_lossy())) {
-                Some(n) => {
-                    episode_id = slots.episode(n);
-                    last = n.episode_end.map(|e| e as i32);
-                }
-                None => match slots.special(&name) {
-                    Some(ep) => episode_id = Some(ep.id),
-                    None => {
-                        tracing::warn!(
-                            "Rescan[media #{media_id}]: \"{name}\" has no SxxEyy pattern (skipped, alien file in series folder)"
-                        );
-                        continue;
-                    }
-                },
-            }
-        }
-        let Ok(p) = probe(st, abs, false)
+        let Ok(meta) = tokio::fs::metadata(&f.abs).await else {
+            r.rejected.push((f.abs, "not readable".into()));
+            continue;
+        };
+        let name = file_name(&f.abs);
+        let named = || parse_release_quality(&name).quality.name.to_owned();
+        // An engine that cannot probe now leaves an unstamped row, which the next rescan probes.
+        let p = probe(st, &f.abs, false)
             .await
-            .inspect_err(|e| tracing::error!("Rescan[media #{media_id}] new file \"{rel}\": {e}"))
-        else {
-            continue;
+            .inspect_err(|e| tracing::warn!("Register[media #{media_id}] \"{name}\": {e}"))
+            .ok();
+        let (quality, info, mtime, stamp) = match &p {
+            Some(p) => (
+                p.quality(&name).unwrap_or_else(named),
+                Some(serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?),
+                mtime_ms(&meta),
+                Some(PROBE_VERSION),
+            ),
+            None => (named(), None, None, None),
         };
-        let quality = p
-            .quality(&name)
-            .unwrap_or_else(|| quality_from_resolution(&name, None, None));
         fresh.push(NewRow {
-            rel: rel.clone(),
+            folder_id: f.folder_id,
+            rel: f.rel,
+            abs: f.abs,
             episode_id,
             last,
             size: meta.len() as i64,
             quality,
-            info: serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?,
-            probed: p.info,
-            mtime: mtime_ms(&meta),
+            info,
+            probed: p.map(|p| p.info),
+            mtime,
+            stamp,
         });
     }
     if fresh.is_empty() {
         return Ok(());
     }
-    let by_rel: HashMap<&str, (Option<i32>, Option<i32>, &MediaInfo)> = fresh
-        .iter()
-        .map(|n| (n.rel.as_str(), (n.episode_id, n.last, &n.probed)))
-        .collect();
-    let inserted = match insert_rows(&st.db, media_id, folder_id, &fresh).await {
+    let mut failed: HashMap<(i32, &str), String> = HashMap::new();
+    let inserted = match insert_rows(&st.db, media_id, &fresh).await {
         Ok(rows) => rows,
         Err(e) => {
             tracing::error!(
-                "Rescan[media #{media_id}]: batch insert of {} files failed, retrying one by one: {e}",
+                "Register[media #{media_id}]: batch insert of {} files failed, retrying one by one: {e}",
                 fresh.len()
             );
             let mut rows = vec![];
             for n in &fresh {
-                match insert_rows(&st.db, media_id, folder_id, std::slice::from_ref(n)).await {
+                match insert_rows(&st.db, media_id, std::slice::from_ref(n)).await {
                     Ok(r) => rows.extend(r),
-                    Err(e) => tracing::error!(
-                        "Rescan[media #{media_id}]: failed to add \"{}\": {e}",
-                        n.rel
-                    ),
+                    Err(e) => {
+                        failed.insert((n.folder_id, n.rel.as_str()), format!("insert failed: {e}"));
+                    }
                 }
             }
             rows
         }
     };
+    let ids: HashMap<(i32, &str), i32> = inserted
+        .iter()
+        .map(|(id, folder, rel)| ((*folder, rel.as_str()), *id))
+        .collect();
     let mut links = vec![];
-    for (id, rel) in inserted {
-        added.push(id);
-        let (ep, last, info) = by_rel
-            .get(rel.as_str())
-            .map_or((None, None, None), |&(e, l, i)| (e, l, Some(i.clone())));
-        touched.push((id, ep, info));
-        c.added += 1;
+    for n in &fresh {
+        let key = (n.folder_id, n.rel.as_str());
+        let Some(&id) = ids.get(&key) else {
+            let why = failed
+                .remove(&key)
+                .unwrap_or_else(|| "already registered".into());
+            r.rejected.push((n.abs.clone(), why));
+            continue;
+        };
+        r.added.push((id, n.episode_id, n.probed.clone()));
         links.push(Link {
             file: id,
-            owner: ep,
-            last,
+            owner: n.episode_id,
+            last: n.last,
         });
     }
     items::attach(&st.db, media_id, &links).await?;
     Ok(())
 }
 
+/// Registered files go to the bulk lane of the post-import queue and the media settles after them.
+async fn queue_registered(st: &AppState, media_id: i32, ids: &[i32]) {
+    if !ids.is_empty() {
+        st.ingest.queue.enqueue_bulk(st, ids).await;
+        st.ingest.settle.schedule(st, media_id);
+    }
+}
+
 async fn insert_rows(
     db: &sqlx::PgPool,
     media_id: i32,
-    folder_id: i32,
     fresh: &[NewRow],
-) -> Result<Vec<(i32, String)>, sqlx::Error> {
+) -> Result<Vec<(i32, i32, String)>, sqlx::Error> {
     let rows = sqlx::query!(
         r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality, "streamInfo",
              "mtimeMs", "probeVersion")
-           SELECT $1, $8, v.rel, v.size, v.quality, v.info, v.mtime, $7
-           FROM UNNEST($2::text[], $3::bigint[], $4::text[], $5::jsonb[], $6::bigint[])
-             AS v(rel, size, quality, info, mtime)
+           SELECT $1, v.folder, v.rel, v.size, v.quality, v.info, v.mtime, v.stamp
+           FROM UNNEST($2::int[], $3::text[], $4::bigint[], $5::text[], $6::jsonb[], $7::bigint[], $8::int[])
+             AS v(folder, rel, size, quality, info, mtime, stamp)
            ON CONFLICT ("folderId", "relativePath") DO NOTHING
-           RETURNING id, "relativePath" AS rel"#,
+           RETURNING id, "folderId" AS folder, "relativePath" AS rel"#,
         media_id,
+        &fresh.iter().map(|n| n.folder_id).collect::<Vec<_>>(),
         &fresh.iter().map(|n| n.rel.clone()).collect::<Vec<_>>(),
         &fresh.iter().map(|n| n.size).collect::<Vec<_>>(),
         &fresh.iter().map(|n| n.quality.clone()).collect::<Vec<_>>(),
-        &fresh.iter().map(|n| n.info.clone()).collect::<Vec<_>>(),
+        &fresh.iter().map(|n| n.info.clone()).collect::<Vec<_>>() as &[Option<serde_json::Value>],
         &fresh.iter().map(|n| n.mtime).collect::<Vec<_>>() as &[Option<i64>],
-        PROBE_VERSION,
-        folder_id
+        &fresh.iter().map(|n| n.stamp).collect::<Vec<_>>() as &[Option<i32>]
     )
     .fetch_all(db)
     .await?;
-    Ok(rows.into_iter().map(|r| (r.id, r.rel)).collect())
+    Ok(rows.into_iter().map(|r| (r.id, r.folder, r.rel)).collect())
 }
 
 /// A file the pass added, re-probed or relinked, with its probe unless it was only relinked.
 type Touched = (i32, Option<i32>, Option<MediaInfo>);
 
 struct NewRow {
+    folder_id: i32,
     rel: String,
+    abs: PathBuf,
     episode_id: Option<i32>,
     last: Option<i32>,
     size: i64,
     quality: String,
-    info: serde_json::Value,
-    probed: MediaInfo,
+    info: Option<serde_json::Value>,
+    probed: Option<MediaInfo>,
     mtime: Option<i64>,
+    stamp: Option<i32>,
 }
 
-/// The media's seasons and episodes, loaded once so a rescan resolves every file in memory.
+/// The media's seasons and episodes, loaded once so a batch of files resolves in memory.
 #[derive(Default)]
-struct Slots {
+pub(crate) struct Slots {
     seasons: HashMap<i32, i32>,
     episodes: HashMap<(i32, i32), (i32, Option<i32>)>,
     specials: Vec<Ep>,
 }
 
 impl Slots {
-    async fn load(db: &sqlx::PgPool, media: i32) -> Result<Self, sqlx::Error> {
+    pub(crate) async fn load(db: &sqlx::PgPool, media: i32) -> Result<Self, sqlx::Error> {
         let rows = sqlx::query!(
             r#"SELECT s.id AS season_id, s."number" AS season, e.id AS "ep_id?",
                       e."number" AS "ep?", e."endNumber" AS end, e.title,
@@ -979,6 +1066,11 @@ async fn reconcile_subtitles(
         c.subtitle_removed_duplicates = dupes as i64;
         crate::subtitles::sidecars::discover_external(st, media_id).await;
     }
+    store_embedded(st, media_id, touched).await;
+}
+
+/// The embedded subtitle rows of each file, from its probe when it has one.
+async fn store_embedded(st: &AppState, media_id: i32, touched: &[Touched]) {
     for (file, episode, info) in touched {
         match info {
             Some(info) => {
@@ -1037,132 +1129,43 @@ fn wanted_numbers(
     rows.chain(new).collect()
 }
 
-/// Season 0 episode whose title the file name contains.
-pub async fn match_special(
-    db: &sqlx::PgPool,
-    media: i32,
-    file_name: &str,
-) -> Result<Option<Ep>, sqlx::Error> {
-    let specials = season_episodes(db, media, 0).await?;
-    Ok(match_special_by_title(file_name, &specials).map(|i| specials[i].clone()))
-}
-
-/// The episode `number` of a group and its end number.
-async fn episode_slot(
-    c: &mut sqlx::PgConnection,
-    group: i32,
-    number: i32,
-) -> Result<Option<(i32, Option<i32>)>, sqlx::Error> {
-    Ok(sqlx::query!(
-        r#"SELECT id, "endNumber" AS end FROM items WHERE "groupId" = $1 AND "number" = $2"#,
-        group,
-        number
-    )
-    .fetch_optional(&mut *c)
-    .await?
-    .map(|e| (e.id, e.end)))
-}
-
-/// Rule 45: `(episode id, created)`; a missing season or episode is created.
-pub async fn ensure_season_and_episode(
+/// Rule 45 for a batch: each file's episode `(id, end)` from the caller's numbers or its name, else
+/// a season-0 title match, `None` when neither. Missing slots are created first; returns whether any was.
+pub(crate) async fn resolve_episodes(
     st: &AppState,
+    slots: &mut Slots,
     media: i32,
-    n: EpisodeNumbers,
-) -> Result<(i32, bool), sqlx::Error> {
-    let (season, episode, end) = (
-        n.season as i32,
-        n.episode as i32,
-        n.episode_end.map(|e| e as i32),
-    );
-    let mut c = st.db.acquire().await?;
-    let before = crate::media::service::media_flag(&mut *c, media).await?;
-    let (sid, mut created) = items::ensure_group(&mut c, media, season).await?;
-    if created {
-        crate::media::service::announce_flip(st, media, before).await?;
-    }
-    let mut ep = episode_slot(&mut c, sid, episode).await?;
-    if ep.is_none() {
-        let edition = items::video_edition(&mut *c, media).await?;
-        created |= sqlx::query!(
-            r#"INSERT INTO items ("groupId", "mediaId", "editionId", "number", "endNumber", monitored)
-               SELECT $1, $2, $3, $4, $5, monitored FROM item_groups WHERE id = $1
-               ON CONFLICT ("groupId", "number") DO NOTHING"#,
-            sid,
-            media,
-            edition,
-            episode,
-            end
-        )
-        .execute(&mut *c)
-        .await?
-        .rows_affected()
-            > 0;
-        ep = episode_slot(&mut c, sid, episode).await?;
-    }
-    let (id, cur) = ep.ok_or(sqlx::Error::RowNotFound)?;
-    if end.is_some() && cur != end {
-        sqlx::query!(
-            r#"UPDATE items SET "endNumber" = $2 WHERE id = $1"#,
-            id,
-            end
-        )
-        .execute(&mut *c)
-        .await?;
-    }
-    items::cover_ranges(&mut c, media).await?;
-    Ok((id, created))
+    files: &[(&Path, Option<EpisodeNumbers>)],
+) -> Result<(Vec<Option<(Option<i32>, Option<i32>)>>, bool), sqlx::Error> {
+    let nums: Vec<Option<EpisodeNumbers>> = files
+        .iter()
+        .map(|(p, n)| {
+            n.or_else(|| parse_episode_numbers(&file_name(p), Some(&p.to_string_lossy())))
+        })
+        .collect();
+    let wanted: Vec<EpisodeNumbers> = nums.iter().flatten().copied().collect();
+    let created = !wanted.is_empty() && slots.ensure(st, media, &wanted).await?;
+    let eps = files
+        .iter()
+        .zip(nums)
+        .map(|((p, _), n)| match n {
+            Some(n) => slots
+                .episode(n)
+                .map(|id| (Some(id), n.episode_end.map(|e| e as i32))),
+            None => slots.special(&file_name(p)).map(|ep| (Some(ep.id), None)),
+        })
+        .collect();
+    Ok((eps, created))
 }
 
-/// `enrichMediaFileFromDisk` (rule 49): probe, row update, queue.
-pub async fn enrich_from_disk(st: &AppState, file_id: i32) -> Result<(), AppError> {
-    let Some((abs, old)) = super::post_import::file_path(st, file_id).await? else {
-        tracing::warn!("enrich: file #{file_id} has no contained path");
-        return Ok(());
-    };
-    let Ok(meta) = tokio::fs::metadata(&abs).await else {
-        tracing::warn!(
-            "enrich: file #{file_id} missing on disk \"{}\"",
-            abs.display()
-        );
-        return Ok(());
-    };
-    // `probeAndResolve` failing leaves the provisional row as it is.
-    let mut p = match probe(st, &abs, false).await {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::error!("enrich: probe of file #{file_id} failed: {e}");
-            return Ok(());
-        }
-    };
-    if let Some(t) = old.and_then(|o| o.timestamp_break_seconds) {
-        p.info.timestamp_break_seconds = Some(t);
-    }
-    let quality = p.quality(&file_name(&abs));
-    sqlx::query!(
-        r#"UPDATE media_files SET size = $2, quality = COALESCE($3, quality), "streamInfo" = $4 WHERE id = $1"#,
-        file_id,
-        meta.len() as i64,
-        quality,
-        serde_json::to_value(&p.info).map_err(|e| AppError::internal(e.to_string()))?
-    )
-    .execute(&st.db)
-    .await?;
-    st.ingest.queue.enqueue(st, file_id).await;
-    let m = sqlx::query!(
-        r#"SELECT m.id FROM media_files f JOIN media m ON m.id = f."mediaId" WHERE f.id = $1"#,
-        file_id
-    )
-    .fetch_one(&st.db)
-    .await?;
-    if load_media(&st.db, m.id).await?.is_some() {
-        crate::media_servers::dispatch_detached(st, "library.rescan");
-    }
-    Ok(())
-}
-
+#[derive(Default)]
 pub struct Linked {
-    pub file_id: i32,
+    /// Every file now linked to the media, the ones it already held included.
+    pub file_ids: Vec<i32>,
+    /// The rows this call inserted.
+    pub added: Vec<i32>,
     pub created: bool,
+    pub errors: Vec<String>,
 }
 
 /// Where a file lies inside one of the media's folders (`ingest.md` rules 52-53).
@@ -1170,7 +1173,6 @@ pub struct Located {
     pub folder: crate::libraries::Folder,
     pub rel: String,
     pub real: PathBuf,
-    pub size: u64,
 }
 
 /// The folder of the media's library that contains `abs` and the path of the file in it.
@@ -1207,7 +1209,7 @@ pub async fn locate_in_place(
     if roots.is_empty() {
         return outside();
     }
-    let Ok((real, meta)) = fsx::regular_source(abs) else {
+    let Ok((real, _)) = fsx::regular_source(abs) else {
         return Ok(Err("not a regular file".into()));
     };
     let mut hit = None;
@@ -1233,87 +1235,72 @@ pub async fn locate_in_place(
             "a title with no folder can only own files at the library root".into(),
         ));
     }
-    Ok(Ok(Located {
-        folder,
-        rel,
-        real,
-        size: meta.len(),
-    }))
+    Ok(Ok(Located { folder, rel, real }))
 }
 
-/// `linkExistingFileInPlace` (rules 52-53); the caller holds the media's lock.
+/// `linkExistingFileInPlace` (rules 52-53) for a batch, its new rows queued like a rescan's; the
+/// caller holds the media's lock.
 pub async fn link_in_place(
     st: &AppState,
     _guard: &OwnedMutexGuard<()>,
     media: &MediaRow,
-    abs: &Path,
-    nums: Option<EpisodeNumbers>,
-) -> Result<Result<Linked, String>, AppError> {
-    let Located {
-        folder,
-        rel,
-        real,
-        size,
-    } = match locate_in_place(st, media, abs).await? {
-        Ok(l) => l,
-        Err(e) => return Ok(Err(e)),
-    };
-    if let Some(held) = sqlx::query!(
-        r#"SELECT id, "mediaId" AS media_id FROM media_files WHERE "folderId" = $1 AND "relativePath" = $2"#,
-        folder.id,
-        rel
-    )
-    .fetch_optional(&st.db)
-    .await?
-    {
-        if held.media_id != media.id {
-            return Ok(Err("file already linked to another media".into()));
-        }
-        return Ok(Ok(Linked {
-            file_id: held.id,
-            created: false,
-        }));
-    }
-    let name = file_name(&real);
-    let mut episode_id = None;
-    let mut last = None;
-    let mut created = false;
-    if media.has_seasons() {
-        match nums.or_else(|| parse_episode_numbers(&name, Some(&real.to_string_lossy()))) {
-            None => match match_special(&st.db, media.id, &name).await? {
-                Some(ep) => episode_id = Some(ep.id),
-                None => return Ok(Err("no SxxEyy pattern found".into())),
-            },
-            Some(n) => {
-                let (ep, c) = ensure_season_and_episode(st, media.id, n).await?;
-                episode_id = Some(ep);
-                last = n.episode_end.map(|e| e as i32);
-                created = c;
+    files: &[(PathBuf, Option<EpisodeNumbers>)],
+) -> Result<Linked, AppError> {
+    let mut out = Linked::default();
+    let mut fresh = vec![];
+    for (abs, nums) in files {
+        let l = match locate_in_place(st, media, abs).await? {
+            Ok(l) => l,
+            Err(e) => {
+                out.errors.push(format!("{}: {e}", file_name(abs)));
+                continue;
             }
+        };
+        if let Some(held) = sqlx::query!(
+            r#"SELECT id, "mediaId" AS media_id FROM media_files WHERE "folderId" = $1 AND "relativePath" = $2"#,
+            l.folder.id,
+            l.rel
+        )
+        .fetch_optional(&st.db)
+        .await?
+        {
+            if held.media_id == media.id {
+                out.file_ids.push(held.id);
+            } else {
+                out.errors
+                    .push(format!("{}: file already linked to another media", file_name(abs)));
+            }
+            continue;
         }
+        fresh.push(OnDisk {
+            folder_id: l.folder.id,
+            rel: l.rel,
+            abs: l.real,
+            nums: *nums,
+        });
     }
-    let id = sqlx::query_scalar!(
-        r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality)
-           VALUES ($1, $2, $3, $4, $5) RETURNING id"#,
-        media.id,
-        folder.id,
-        rel,
-        size as i64,
-        parse_release_quality(&name).quality.name
-    )
-    .fetch_one(&st.db)
-    .await?;
-    let link = Link {
-        file: id,
-        owner: episode_id,
-        last,
+    let mut slots = if media.has_seasons() {
+        Slots::load(&st.db, media.id).await?
+    } else {
+        Slots::default()
     };
-    items::attach(&st.db, media.id, &[link]).await?;
-    enrich_from_disk(st, id).await?;
-    Ok(Ok(Linked {
-        file_id: id,
-        created,
-    }))
+    let mut r = Registered::default();
+    let done = register_on_disk(st, media, &mut slots, fresh, &mut r).await;
+    out.errors.extend(
+        r.rejected
+            .iter()
+            .map(|(abs, why)| format!("{}: {why}", file_name(abs))),
+    );
+    out.created = r.created;
+    out.added = r.added.iter().map(|t| t.0).collect();
+    out.file_ids.extend(&out.added);
+    // As a rescan does: sidecars and embedded tracks first, so the queue's subtitle search sees them.
+    if !r.added.is_empty() {
+        crate::subtitles::sidecars::discover_external(st, media.id).await;
+        store_embedded(st, media.id, &r.added).await;
+        queue_registered(st, media.id, &r.probed().collect::<Vec<_>>()).await;
+    }
+    done.map(|()| out)
 }
 
 /// `AnalyzeMediaDto`: only the string `'true'` and the boolean `true` are true.

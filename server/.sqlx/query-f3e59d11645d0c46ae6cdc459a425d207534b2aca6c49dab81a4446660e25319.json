@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO media_files (\"mediaId\", \"folderId\", \"relativePath\", size, quality, \"streamInfo\",\n             \"mtimeMs\", \"probeVersion\")\n           SELECT $1, v.folder, v.rel, v.size, v.quality, v.info, v.mtime, v.stamp\n           FROM UNNEST($2::int[], $3::text[], $4::bigint[], $5::text[], $6::jsonb[], $7::bigint[], $8::int[])\n             AS v(folder, rel, size, quality, info, mtime, stamp)\n           ON CONFLICT (\"folderId\", \"relativePath\") DO NOTHING\n           RETURNING id, \"folderId\" AS folder, \"relativePath\" AS rel",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "folder",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "folderId"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "rel",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "media_files",
+            "name": "relativePath"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4Array",
+        "TextArray",
+        "Int8Array",
+        "TextArray",
+        "JsonbArray",
+        "Int8Array",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f3e59d11645d0c46ae6cdc459a425d207534b2aca6c49dab81a4446660e25319"
+}

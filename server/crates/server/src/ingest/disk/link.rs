@@ -71,36 +71,40 @@ async fn relink_moved(
     slot: &mut bool,
 ) -> Result<(i64, i64), AppError> {
     let (mut linked, mut present) = (0i64, 0i64);
-    let mut entries = vec![];
+    let mut kept = vec![];
     for f in &d.files {
-        let name = file_name(Path::new(&f.path));
         // An in-place reorganize moves files that are already in this library, nothing else.
         if d.transfer.is_none()
             && !fsx::Root::open(lib.root_of(d.folder_id))
                 .is_ok_and(|r| dunce::canonicalize(&f.path).is_ok_and(|p| r.contains(&p, false)))
         {
-            errors.push(format!("{name}: file outside the library root"));
+            errors.push(format!(
+                "{}: file outside the library root",
+                file_name(Path::new(&f.path))
+            ));
             continue;
         }
-        let mut episode_id = None;
-        if media.has_seasons() {
-            match caller_nums(f.season, f.episode, f.end)
-                .or_else(|| parse_episode_numbers(&name, Some(&f.path)))
-            {
-                None => match match_special(&st.db, media.id, &name).await? {
-                    Some(ep) => episode_id = Some(ep.id),
-                    None => {
-                        errors.push(format!("{name}: no SxxEyy pattern found"));
-                        continue;
-                    }
-                },
-                Some(n) => {
-                    let (ep, c) = ensure_season_and_episode(st, media.id, n).await?;
-                    episode_id = Some(ep);
-                    *slot |= c;
-                }
-            }
-        }
+        kept.push(f);
+    }
+    let eps = if media.has_seasons() {
+        let mut slots = Slots::load(&st.db, media.id).await?;
+        let paths: Vec<_> = kept
+            .iter()
+            .map(|f| (Path::new(&f.path), caller_nums(f.season, f.episode, f.end)))
+            .collect();
+        let (eps, created) = resolve_episodes(st, &mut slots, media.id, &paths).await?;
+        *slot |= created;
+        eps
+    } else {
+        vec![Some((None, None)); kept.len()]
+    };
+    let mut entries = vec![];
+    for (f, ep) in kept.into_iter().zip(eps) {
+        let name = file_name(Path::new(&f.path));
+        let Some((episode_id, _)) = ep else {
+            errors.push(format!("{name}: no SxxEyy pattern found"));
+            continue;
+        };
         entries.push((
             f.path.clone(),
             episode_id,
@@ -209,33 +213,36 @@ async fn relink_in_place(
         }
         return Ok(linked);
     }
-    let mut file_ids = vec![];
-    for f in &d.files {
-        let abs = PathBuf::from(resolve(&f.path, "/"));
-        let nums = caller_nums(f.season, f.episode, f.end);
-        match link_in_place(st, guard, &current, &abs, nums).await? {
-            Err(e) => errors.push(format!("{}: {e}", file_name(&abs))),
-            Ok(l) => {
-                linked += 1;
-                file_ids.push(l.file_id);
-                *slot |= l.created;
-                st.ingest.queue.enqueue(st, l.file_id).await;
-            }
-        }
-    }
-    if linked > 0 {
+    let files: Vec<_> = d
+        .files
+        .iter()
+        .map(|f| {
+            (
+                PathBuf::from(resolve(&f.path, "/")),
+                caller_nums(f.season, f.episode, f.end),
+            )
+        })
+        .collect();
+    let l = link_in_place(st, guard, &current, &files).await?;
+    errors.extend(l.errors);
+    *slot |= l.created;
+    if !l.file_ids.is_empty() {
         st.hub.emit_domain(DomainEvent::MediaFilesImported {
             media_id: i64::from(media.id),
             family: Family::Video,
             season_number: None,
             episode_number: None,
-            episodes: episodes_of_files(st, media.id, &file_ids).await,
+            episodes: episodes_of_files(st, media.id, &l.file_ids).await,
             source: ImportSource::Disk,
         });
+    }
+    if !l.file_ids.is_empty() {
         st.ingest.settle.schedule(st, media.id);
     }
-
-    Ok(linked)
+    if !l.added.is_empty() {
+        crate::media_servers::dispatch_detached(st, "library.rescan");
+    }
+    Ok(linked + l.file_ids.len() as i64)
 }
 
 /// The episodes the given files hold that no other file of the media holds; a lookup failure is logged and yields none.

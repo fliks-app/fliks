@@ -3,7 +3,7 @@ use super::{
     MediaRow, books, comics, fsx, is_video,
     library::{self, caller_nums, file_name},
     load_media, music, naming_formats, record,
-    rescan::{ensure_season_and_episode, link_in_place, match_special},
+    rescan::{Slots, link_in_place, resolve_episodes},
     transfer::{Method, split_ext},
 };
 use crate::sync::MutexExt;
@@ -43,8 +43,8 @@ use fliks_domain::{
         limiter::Priority,
     },
     naming::{
-        self, EpisodeNumbers, episode_numbers_explicit, is_special_file, parse_episode_numbers,
-        validate_folder_name, validate_folder_path,
+        self, EpisodeNumbers, episode_numbers_explicit, is_special_file, validate_folder_name,
+        validate_folder_path,
     },
     release::parsing::quality::parse_release_quality,
 };
