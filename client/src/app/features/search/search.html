@@ -131,7 +131,7 @@
                 <ng-container *ngTemplateOutlet="skeletonScroller" />
               </div>
             }
-            <div class="flex flex-col gap-6">
+            <div class="flex flex-col gap-6" [class.stagger-children]="discoverEnter()">
               @if (state.discoveryTrending().length) {
                 <app-horizontal-scroller [title]="'search.discover_trending' | translate" class="block">
                   <div scrollerActions class="join">

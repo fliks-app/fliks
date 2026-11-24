@@ -510,11 +510,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (cold) {
       this.skeletonFadingOut.set(true);
       this.loadingFirstPass.set(false);
-      // Long enough for the last zone's staggered fade to have finished.
+      // Long enough for the last zone's staggered fade and its cards' entrance to have finished.
       setTimeout(() => {
         this.skeletonFadingOut.set(false);
         this.coldStart.set(false);
-      }, 1200);
+      }, 1500);
     }
     this.captureLayout();
     // App-open SWR: pass 1 rendered from cache; force a network refresh that overwrites signals in place.

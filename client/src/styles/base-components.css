@@ -89,16 +89,42 @@ app-mosaic-card button:focus-visible .mosaic-art + div {
   }
 }
 .stagger-children > * {
-  animation: fade-in 320ms ease-out backwards;
+  animation: fade-in 320ms ease-out var(--stagger, 0ms) backwards;
 }
-.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
-.stagger-children > *:nth-child(2) { animation-delay: 80ms; }
-.stagger-children > *:nth-child(3) { animation-delay: 160ms; }
-.stagger-children > *:nth-child(4) { animation-delay: 240ms; }
-.stagger-children > *:nth-child(5) { animation-delay: 320ms; }
-.stagger-children > *:nth-child(6) { animation-delay: 400ms; }
-.stagger-children > *:nth-child(7) { animation-delay: 480ms; }
-.stagger-children > *:nth-child(n + 8) { animation-delay: 560ms; }
+.stagger-children > :nth-child(2) { --stagger: 80ms; }
+.stagger-children > :nth-child(3) { --stagger: 160ms; }
+.stagger-children > :nth-child(4) { --stagger: 240ms; }
+.stagger-children > :nth-child(5) { --stagger: 320ms; }
+.stagger-children > :nth-child(6) { --stagger: 400ms; }
+.stagger-children > :nth-child(7) { --stagger: 480ms; }
+.stagger-children > :nth-child(n + 8) { --stagger: 560ms; }
+
+/* A rail's cards follow its row in with the hero's text entrance; `backwards`, so the focus lift owns transform once done. */
+@keyframes card-in {
+  from { opacity: 0; transform: translateX(var(--card-in-x, 40px)); filter: blur(var(--card-in-blur, 10px)); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes card-in-flat {
+  from { opacity: 0; transform: translateX(var(--card-in-x, 40px)); }
+  to { opacity: 1; transform: none; }
+}
+/* Quieter than the hero: a rail holds many cards moving at once. */
+.stagger-children [data-scroller] > * {
+  --card-in-x: 16px;
+  --card-in-blur: 4px;
+  animation: card-in 480ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--stagger, 0ms) + var(--card, 0ms)) backwards;
+}
+.stagger-children [data-scroller] > :nth-child(2) { --card: 30ms; }
+.stagger-children [data-scroller] > :nth-child(3) { --card: 60ms; }
+.stagger-children [data-scroller] > :nth-child(4) { --card: 90ms; }
+.stagger-children [data-scroller] > :nth-child(5) { --card: 120ms; }
+.stagger-children [data-scroller] > :nth-child(6) { --card: 150ms; }
+.stagger-children [data-scroller] > :nth-child(7) { --card: 180ms; }
+.stagger-children [data-scroller] > :nth-child(n + 8) { --card: 210ms; }
+body.reduced-effects .stagger-children [data-scroller] > * { animation-name: card-in-flat; }
+@media (prefers-reduced-motion: reduce) {
+  .stagger-children [data-scroller] > * { animation-name: fade-in; }
+}
 
 @keyframes fade-out {
   to {

@@ -1,31 +1,23 @@
 /* Text swap, variant "Sobre": the outgoing text leaves left, the incoming one starts when it is gone.
    Only transform and filter, never individual translate/scale, so webOS (no CSS downlevel) keeps it.
-   Swap a variant by editing the two keyframes and the durations below. */
+   The incoming keyframes (`card-in`) are global: the home rails' cards enter the same way. */
 
 .hc-out {
   animation: hc-out 320ms cubic-bezier(0.55, 0, 1, 0.45) both;
 }
 .hc-slide .hc-item {
-  animation: hc-in 560ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--hc-delay, 320ms) + var(--i) * 60ms) both;
+  animation: card-in 560ms cubic-bezier(0.16, 1, 0.3, 1) calc(var(--hc-delay, 320ms) + var(--i) * 60ms) both;
 }
 
 @keyframes hc-out {
   to { opacity: 0; transform: translateX(-24px); filter: blur(8px); }
 }
-@keyframes hc-in {
-  from { opacity: 0; transform: translateX(40px); filter: blur(10px); }
-  to { opacity: 1; transform: none; filter: blur(0); }
-}
 
 /* TV and low-memory devices: no filter until the Q80B is measured. */
 :host-context(body.reduced-effects) .hc-out { animation-name: hc-out-flat; }
-:host-context(body.reduced-effects) .hc-slide .hc-item { animation-name: hc-in-flat; }
+:host-context(body.reduced-effects) .hc-slide .hc-item { animation-name: card-in-flat; }
 @keyframes hc-out-flat {
   to { opacity: 0; transform: translateX(-24px); }
-}
-@keyframes hc-in-flat {
-  from { opacity: 0; transform: translateX(40px); }
-  to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

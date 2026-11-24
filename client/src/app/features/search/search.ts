@@ -115,6 +115,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly filterSheet = viewChild<string, ElementRef<HTMLDialogElement>>('filterSheet', { read: ElementRef });
   private lastDiscoveryKey = '';
+  /** The discovery rows stagger in on their first load only; `reuse: true` keeps this instance. */
+  readonly discoverEnter = signal(true);
   /** Load discovery rows whenever the empty state is showing, keyed on the
    *  video kind + external-search toggle so a change of either refreshes them. */
   private readonly discoveryEffect = effect(() => {
@@ -419,6 +421,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       this.state.discoverySuggestions.set(unseen(suggestions));
     } finally {
       this.state.discoveryLoading.set(false);
+      if (this.discoverEnter()) setTimeout(() => this.discoverEnter.set(false), 1500);
     }
   }
 
