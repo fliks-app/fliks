@@ -421,11 +421,11 @@ fn package_is_deterministic_and_verifies() {
     let dev = vec![("dev".to_owned(), key.verifying_key().to_bytes())];
     // The template's range is the host tests' core, below the `Since fliks` of what the fixture imports.
     let err = build::verify(&a, dev.clone(), build::MAX_WASM).unwrap_err();
-    assert!(err.contains("starts below 7.2.0"), "{err}");
+    assert!(err.contains("starts below 7.2.1"), "{err}");
     let mut wasm = std::fs::read(c.wasm_path()).unwrap();
-    assert!(build::check_floor(&wasm, ">=7.1.0 <8.0.0").is_err());
+    assert!(build::check_floor(&wasm, ">=7.2.0 <8.0.0").is_err());
     let mut t = c.template().unwrap();
-    t["fliks"] = json!(">=7.2.0 <8.0.0");
+    t["fliks"] = json!(">=7.2.1 <8.0.0");
     let logo = std::fs::read(std::path::Path::new(DIR).join("logo.svg")).unwrap();
     let logo = Some(("logo.svg", logo.as_slice()));
     let pack = |key| {
