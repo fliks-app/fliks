@@ -554,6 +554,7 @@ pub fn router(
     cast_dir: PathBuf,
     cors_origin: Option<String>,
 ) -> Router {
+    let images = state.images.clone();
     let local = system::router()
         .merge(api().with_state(state))
         .route(crate::http::csp::REPORT_PATH, crate::http::csp::route())
@@ -562,7 +563,7 @@ pub fn router(
         .route("/api/{*rest}", any(unowned))
         .nest("/api/emoji", static_files::emoji(cast_dir.join("emoji")))
         .method_not_allowed_fallback(unowned)
-        .fallback_service(static_files::router(client_dir));
+        .fallback_service(static_files::router(client_dir, images));
     let exempt: layers::Exempt =
         |p| crate::plugins::routes::reads_own_body(p) || crate::ingest::disk::reads_own_body(p);
     layers::apply(local, cors_origin, BODY_LIMIT_BYTES, exempt)
