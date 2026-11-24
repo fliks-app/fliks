@@ -1,4 +1,5 @@
 //! `Media.path` (rule 30): Node's `path.join` / `path.resolve` on POSIX.
+use std::path::{Component, Path, PathBuf};
 
 /// `path.normalize`.
 pub fn normalize(path: &str) -> String {
@@ -45,9 +46,32 @@ pub fn join(a: &str, b: &str) -> String {
     }
 }
 
-/// `path.resolve(p)` against `cwd`; a path absolute for the host (`C:\`, UNC) is kept as is.
+/// Lexical `path.resolve` of a rooted host path (`/x`, `C:\x`, UNC): `.` and `..` collapsed.
+pub fn lexical(p: &Path) -> Option<PathBuf> {
+    if !p.has_root() {
+        return None;
+    }
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            c => out.push(c),
+        }
+    }
+    Some(out)
+}
+
+/// `path.resolve(p)` against `cwd`; a Windows drive or UNC path keeps its own form.
 pub fn resolve(p: &str, cwd: &str) -> String {
-    let full = if p.starts_with('/') || std::path::Path::new(p).is_absolute() {
+    if let Some(Component::Prefix(_)) = Path::new(p).components().next()
+        && let Some(abs) = lexical(Path::new(p))
+    {
+        return abs.to_string_lossy().into_owned();
+    }
+    let full = if p.starts_with('/') {
         p.to_owned()
     } else {
         format!("{cwd}/{p}")
@@ -84,6 +108,7 @@ mod tests {
     #[test]
     fn resolve_keeps_a_windows_absolute_path() {
         assert_eq!(resolve(r"C:\Users\m", "/"), r"C:\Users\m");
-        assert_eq!(resolve(r"C:\m/a/../b/", "/"), r"C:\m/b");
+        assert_eq!(resolve(r"C:\m/a/../b/", "/"), r"C:\m\b");
+        assert_eq!(resolve("//nas/share/m", "/"), r"\\nas\share\m");
     }
 }
