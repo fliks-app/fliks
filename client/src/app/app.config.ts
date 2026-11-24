@@ -34,7 +34,7 @@ import { provideTranslateService, TranslateLoader } from '@ngx-translate/core';
 // CLDR data for every shipped UI language so Date/Decimal/Currency pipes honour the active locale.
 [localeEn, localeFr, localeEs, localeDe, localeIt, localePt].forEach(registerLocaleData);
 import { preloadVideoDetailPages, routes } from './app.routes';
-import { whenIdle } from './core/services/sse.service';
+import { whenIdle } from './core/utils/when-idle';
 import { resolveInitialLocale, DEFAULT_LOCALE } from './core/constants/app-locale';
 import { serverUrlInterceptor } from './core/interceptors/server-url.interceptor';
 import { credentialsInterceptor } from './core/interceptors/credentials.interceptor';

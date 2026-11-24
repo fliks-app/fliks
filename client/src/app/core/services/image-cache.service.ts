@@ -2,6 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { DeviceService } from './device.service';
 import { NetworkService } from './network.service';
+import { whenIdle } from '../utils/when-idle';
+import { viewTransitionDone } from '../../shared/utils/view-transition';
 
 /** Lazy-loaded Filesystem reference — the plugin doesn't exist on web. */
 let _fs: typeof import('@capacitor/filesystem') | null = null;
@@ -109,7 +111,21 @@ export class ImageCacheService {
     if (!this.network.isOnline()) return;
     this.inFlight.add(key);
     this.queue.push(remoteUrl);
-    this.pump();
+    this.schedulePump();
+  }
+
+  private pumpScheduled = false;
+
+  /** Copies wait out the view transition and an idle period: base64 and the native bridge took ~100 ms of a page opening. */
+  private schedulePump(): void {
+    if (this.pumpScheduled) return;
+    this.pumpScheduled = true;
+    void viewTransitionDone().then(() =>
+      whenIdle(() => {
+        this.pumpScheduled = false;
+        this.pump();
+      }),
+    );
   }
 
   /** Fetch and write now, bypassing the queue. Used to guarantee the artwork of
