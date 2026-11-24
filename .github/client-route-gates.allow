@@ -20,3 +20,6 @@
 /api/system/checks/run
 # 404 falls back to the session token in AuthService.mintDownloadToken.
 /api/auth/download-token
+# Cache-key prefixes in cache.interceptor.ts, which sends no request of its own.
+/api/home
+/api/home/featured
