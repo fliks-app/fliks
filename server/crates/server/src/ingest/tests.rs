@@ -705,12 +705,12 @@ async fn rescan_probes_only_what_changed(pool: PgPool) {
     touch(&lib.join("A/A.mkv"), b"a");
     let a = media(&c, l, "A", "movie").await;
     file_row(&c, a, "A.mkv").await;
-    // The rescan's own probes: the queue's crop probe of a first-probed row is not one.
+    // The rescan's re-probe: the hash without the crop, unlike the queue's probes.
     let probes = |c: &Ctx| {
         c.fake
             .seen("POST", "/v1/probe")
             .iter()
-            .filter(|p| p.body["crop"] == false)
+            .filter(|p| p.body["crop"] == false && p.body["moviehash"] == true)
             .count()
     };
     let first = rescan(&c, a).await.unwrap();
