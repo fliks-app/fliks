@@ -19,10 +19,9 @@ import { formatSubtitleLabel, offlineCropOf } from '../utils/player.utils';
 import { AppSettingsService } from './app-settings.service';
 import { DownloadSettingsService } from './download-settings.service';
 import { ImageCacheService } from './image-cache.service';
-import { ServerConfigService } from './server-config.service';
 import { NetworkService } from './network.service';
 import { PushService } from './push.service';
-import { imageUrlWithSize, type ImageSize } from '../pipes/resolve-url.pipe';
+import { type ImageSize, ImageUrls } from '../pipes/resolve-url.pipe';
 import {
   desktopDownloaderOrNull,
   type DesktopDownloadStatus,
@@ -105,7 +104,7 @@ export class DownloadManagerService {
   /** Injected here so the native queue is capped from app start, before any
    *  download can be requested. */
   private readonly downloadSettings = inject(DownloadSettingsService);
-  private readonly serverConfig = inject(ServerConfigService);
+  private readonly images = inject(ImageUrls);
   private readonly network = inject(NetworkService);
   private readonly push = inject(PushService);
 
@@ -867,7 +866,7 @@ export class DownloadManagerService {
     ];
     for (const [url, size] of wanted) {
       if (!url) continue;
-      void this.imageCache.prefetch(this.serverConfig.resolveUrl(imageUrlWithSize(url, size)));
+      void this.imageCache.prefetch(this.images.resolve(url, size));
     }
   }
 

@@ -20,6 +20,7 @@ import { DownloadSettingsService } from './download-settings.service';
 import { ImageCacheService } from './image-cache.service';
 import { ServerConfigService } from './server-config.service';
 import { NetworkService } from './network.service';
+import { ImageUrls } from '../pipes/resolve-url.pipe';
 
 const text: BookDownloadTarget = {
   mediaId: 3, itemId: 30, family: 'text', format: 'epub', fileIds: [300], title: 'Book', posterUrl: null,
@@ -69,6 +70,7 @@ function setup(initial: DownloadTask[] = [], opts: { wifiOnly?: boolean; connect
       { provide: ImageCacheService, useValue: { prefetch: () => Promise.resolve() } },
       { provide: DownloadSettingsService, useValue: { maxConcurrent: () => 3, wifiOnly: () => !!opts.wifiOnly } },
       { provide: ServerConfigService, useValue: { isNative: false, resolveUrl: (u: string) => u } },
+      { provide: ImageUrls, useValue: { resolve: (u: string) => u } },
       { provide: NetworkService, useValue: { isOnline: () => true, connectionType: () => opts.connection ?? 'unknown' } },
       { provide: PushService, useValue: { askInContext: vi.fn() } },
     ],

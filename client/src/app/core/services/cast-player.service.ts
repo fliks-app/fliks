@@ -25,7 +25,6 @@ import {
 import { ENGINE_TRAITS, EngineKind } from './engine-traits';
 import { NetworkService } from './network.service';
 import type { RecoveryController } from '../../features/player/recovery-controller';
-import { ServerConfigService } from './server-config.service';
 import { SseService } from './sse.service';
 import { formatAudioParts, formatAudioLabel, parseAudioIndex, playbackModeOf, SpriteMetadata, type PlaybackMode, type TimeMarker } from '../utils/player.utils';
 import {
@@ -40,6 +39,7 @@ import { CastPlaybackTarget } from './cast-playback-target';
 import { NO_TIMELINE, type PlaybackTimeline } from './playback/playback-output';
 import { PlaybackSession } from './playback/playback-session';
 import { ToastService } from './toast.service';
+import { ImageUrls } from '../pipes/resolve-url.pipe';
 
 export interface CastSubtitleOption {
   id: string;
@@ -200,7 +200,7 @@ export class CastPlayerService {
   private readonly appSettings = inject(AppSettingsService);
   private readonly authService = inject(AuthService);
   private readonly sse = inject(SseService);
-  private readonly serverConfig = inject(ServerConfigService);
+  private readonly images = inject(ImageUrls);
   private readonly nowPlaying = inject(NowPlayingMetadataService);
   private readonly playerSettings = inject(PlayerSettingsService);
   private readonly trackManager = inject(TrackManagerService);
@@ -780,7 +780,7 @@ export class CastPlayerService {
 
     const meta = await this.nowPlaying.load({ mediaId: this.mediaId(), episodeId: this.episodeId() }).catch(() => NO_NOW_PLAYING);
     const art = meta.fanartUrl ?? meta.posterUrl;
-    const posterUrl = art ? this.serverConfig.resolveUrl(art) : undefined;
+    const posterUrl = art ? this.images.resolve(art, 'full') : undefined;
     const load = () => this.cast.loadMedia({
       url: castUrl,
       contentType,

@@ -1,27 +1,25 @@
 //! Content-Security-Policy on the SPA document, and the endpoint that logs violations.
-use crate::images::ImageStore;
 use crate::sync::MutexExt;
 use axum::body::Bytes;
-use axum::extract::{DefaultBodyLimit, Request, State};
+use axum::extract::{DefaultBodyLimit, Request};
 use axum::http::header::CONTENT_TYPE;
 use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::{MethodRouter, post};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const HEADER: HeaderName = HeaderName::from_static("content-security-policy");
 pub const REPORT_PATH: &str = "/api/csp-report";
 
 /// What the client loads: the Cast sender (gstatic, over the page's own scheme: it loads its
-/// framework with a protocol-relative URL), provider artwork, the YouTube trailer frame and the
+/// framework with a protocol-relative URL), the YouTube trailer frame and the
 /// reader's blob chapter frames, styles and fonts (never blob scripts).
-const BEFORE_IMG_HOSTS: &str = "default-src 'self'; \
+const POLICY: &str = "default-src 'self'; \
 script-src 'self' www.gstatic.com chrome-extension://pkedcjkdefgpdelpbcmbmeomcjbeemfm; \
 style-src 'self' 'unsafe-inline' blob:; \
-img-src 'self' data: blob:";
-const AFTER_IMG_HOSTS: &str = "; \
+img-src 'self' data: blob:; \
 media-src 'self' blob:; \
 font-src 'self' data: blob:; \
 connect-src 'self'; \
@@ -34,23 +32,13 @@ form-action 'self'; \
 frame-ancestors 'self'; \
 report-uri /api/csp-report";
 
-/// `img-src` lists the provider plugins' `imageHosts`, read per document so a plugin change applies at once.
-fn policy(img_hosts: &[String]) -> String {
-    let mut p = BEFORE_IMG_HOSTS.to_owned();
-    for h in img_hosts {
-        p.push(' ');
-        p.push_str(h);
-    }
-    p + AFTER_IMG_HOSTS
-}
-
 const MAX_REPORT_BYTES: usize = 8 * 1024;
 const MAX_LOGGED_CHARS: usize = 1024;
 const WINDOW: Duration = Duration::from_secs(60);
 const MAX_PER_WINDOW: u32 = 30;
 
 /// Adds the policy to HTML responses only.
-pub async fn on_html(State(images): State<Arc<ImageStore>>, req: Request, next: Next) -> Response {
+pub async fn on_html(req: Request, next: Next) -> Response {
     let mut res = next.run(req).await;
     let html = res
         .headers()
@@ -58,10 +46,8 @@ pub async fn on_html(State(images): State<Arc<ImageStore>>, req: Request, next: 
         .and_then(|v| v.to_str().ok())
         .is_some_and(|ct| ct.starts_with("text/html"));
     if html {
-        let p = policy(&images.csp_sources());
-        // Manifest validation limits host names to `[a-z0-9.-]`.
-        let v = HeaderValue::try_from(p).expect("host names are header-safe");
-        res.headers_mut().insert(HEADER, v);
+        res.headers_mut()
+            .insert(HEADER, HeaderValue::from_static(POLICY));
     }
     res
 }
@@ -103,7 +89,7 @@ mod tests {
     use axum::Router;
     use axum::body::Body;
     use axum::http::Request;
-    use axum::middleware::from_fn_with_state;
+    use axum::middleware::from_fn;
     use tower::ServiceExt;
 
     #[test]
@@ -116,14 +102,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn policy_on_html_only_with_the_provider_image_hosts() {
-        let images = Arc::new(ImageStore::new());
-        images.allow_hosts("a", vec!["covers.example.org".into()], true);
-        images.allow_hosts(
-            "b",
-            vec!["img.example.net".into(), "covers.example.org".into()],
-            false,
-        );
+    async fn policy_on_html_only() {
         let app = Router::new()
             .route(
                 "/",
@@ -135,22 +114,13 @@ mod tests {
                 "/a.js",
                 axum::routing::get(|| async { ([(CONTENT_TYPE, "text/javascript")], "x") }),
             )
-            .layer(from_fn_with_state(images.clone(), on_html));
-        let csp = |app: Router| async move {
-            let res = app
-                .oneshot(Request::get("/").body(Body::empty()).unwrap())
-                .await
-                .unwrap();
-            res.headers()[HEADER].to_str().unwrap().to_owned()
-        };
-        assert!(csp(app.clone()).await.contains(
-            "img-src 'self' data: blob: https://*.covers.example.org https://covers.example.org \
-             https://img.example.net; media-src"
-        ));
-        images.forget_hosts("a");
-        images.forget_hosts("b");
-        assert_eq!(csp(app.clone()).await, policy(&[]));
-        assert!(policy(&[]).contains("img-src 'self' data: blob:; media-src"));
+            .layer(from_fn(on_html));
+        let html = app
+            .clone()
+            .oneshot(Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(html.headers()[HEADER], POLICY);
         let js = app
             .oneshot(Request::get("/a.js").body(Body::empty()).unwrap())
             .await

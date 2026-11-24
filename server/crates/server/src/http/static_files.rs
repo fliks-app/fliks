@@ -1,10 +1,8 @@
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
 use super::csp;
 use super::error::AppError;
-use crate::images::ImageStore;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::Request;
@@ -12,7 +10,7 @@ use axum::http::header::{
     CACHE_CONTROL, CONTENT_LENGTH, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LAST_MODIFIED, VARY,
 };
 use axum::http::{HeaderValue, StatusCode};
-use axum::middleware::{Next, from_fn, from_fn_with_state};
+use axum::middleware::{Next, from_fn};
 use axum::response::{IntoResponse, Response};
 use tower_http::services::{ServeDir, ServeFile};
 
@@ -157,7 +155,7 @@ pub fn emoji(dir: PathBuf) -> Router {
 }
 
 /// The SPA at `/` (with `index.html` fallback) only when a client dir is set.
-pub fn router(client_dir: Option<PathBuf>, images: Arc<ImageStore>) -> Router {
+pub fn router(client_dir: Option<PathBuf>) -> Router {
     let mut r = Router::new();
     if let Some(dir) = client_dir {
         // `.br` / `.gz` siblings exist only in the Docker image; a missing one serves the plain file.
@@ -171,7 +169,7 @@ pub fn router(client_dir: Option<PathBuf>, images: Arc<ImageStore>) -> Router {
         r = r.fallback_service(
             Router::new()
                 .fallback_service(spa)
-                .layer(from_fn_with_state(images, csp::on_html)),
+                .layer(from_fn(csp::on_html)),
         );
     }
     r.layer(from_fn(validators)).layer(from_fn(cannot_404))
@@ -221,7 +219,7 @@ mod tests {
     #[tokio::test]
     async fn serves_files_spa_emoji_and_cannot_404() {
         let (c, k) = dirs("serve");
-        let r = router(Some(c), Arc::new(ImageStore::new()));
+        let r = router(Some(c));
         let file = get(&r, "/app.js", None).await;
         assert_eq!(file.status(), 200);
         assert_eq!(file.headers()[CACHE_CONTROL], "no-cache");
@@ -254,7 +252,7 @@ mod tests {
     #[tokio::test]
     async fn csp_on_the_spa_document_alone() {
         let (c, _) = dirs("csp");
-        let r = router(Some(c), Arc::new(ImageStore::new()));
+        let r = router(Some(c));
         const H: &str = "content-security-policy";
         assert!(get(&r, "/", None).await.headers().contains_key(H));
         assert!(get(&r, "/some/route", None).await.headers().contains_key(H));
@@ -263,7 +261,7 @@ mod tests {
 
     #[tokio::test]
     async fn without_client_dir_everything_is_a_404() {
-        let r = router(None, Arc::new(ImageStore::new()));
+        let r = router(None);
         let miss = get(&r, "/cast/receiver.html", None).await;
         assert_eq!(miss.status(), 404);
         assert!(text(miss).await.contains("Cannot GET /cast/receiver.html"));
@@ -272,7 +270,7 @@ mod tests {
     #[tokio::test]
     async fn conditional_get_304() {
         let (c, _) = dirs("etag");
-        let r = router(Some(c), Arc::new(ImageStore::new()));
+        let r = router(Some(c));
         let etag = get(&r, "/app.js", None).await.headers()[ETAG]
             .to_str()
             .unwrap()
@@ -289,7 +287,7 @@ mod tests {
     async fn hashed_build_files_are_immutable() {
         let (c, _) = dirs("hashed");
         std::fs::write(c.join("chunk-DJYWGWGQ.js"), "y=2").unwrap();
-        let r = router(Some(c), Arc::new(ImageStore::new()));
+        let r = router(Some(c));
         let cc = |res: Response| res.headers()[CACHE_CONTROL].to_str().unwrap().to_owned();
         assert_eq!(
             cc(get(&r, "/chunk-DJYWGWGQ.js", None).await),
@@ -306,7 +304,7 @@ mod tests {
     async fn serves_a_precompressed_sibling() {
         let (c, _) = dirs("br");
         std::fs::write(c.join("app.js.br"), "brotli").unwrap();
-        let r = router(Some(c), Arc::new(ImageStore::new()));
+        let r = router(Some(c));
         let br = get(&r, "/app.js", Some(("accept-encoding", "br"))).await;
         assert_eq!(br.headers()["content-encoding"], "br");
         assert_eq!(br.headers()["vary"], "accept-encoding");

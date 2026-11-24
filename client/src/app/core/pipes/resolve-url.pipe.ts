@@ -1,6 +1,7 @@
-import { Pipe, PipeTransform, inject } from '@angular/core';
+import { Injectable, Pipe, PipeTransform, inject } from '@angular/core';
 import { ServerConfigService } from '../services/server-config.service';
 import { AuthService } from '../services/auth.service';
+import { SERVER_SINCE, ServerVersionService } from '../services/server-version.service';
 
 export type ImageSize = 'thumb' | 'medium' | 'full';
 
@@ -20,9 +21,10 @@ function tmdbWidth(size: ImageSize): string {
   return TMDB_WIDTH[size];
 }
 
-/** Append the pre-generated variant to a local image URL, or pick TMDB's own
- *  size. Other remote URLs (manual override) are left untouched. */
-export function imageUrlWithSize(url: string, size: ImageSize): string {
+/** Append the pre-generated variant to a local image URL. Provider artwork goes through the server's
+ *  proxy when `proxy` (server `images.md` section E), else straight to the provider. */
+export function imageUrlWithSize(url: string, size: ImageSize, proxy: boolean): string {
+  if (proxy && /^https?:\/\//i.test(url)) return `/api/images/remote?url=${encodeURIComponent(url)}&size=${size}`;
   if (TMDB_ORIGINAL.test(url)) return url.replace(TMDB_ORIGINAL, `$1${tmdbWidth(size)}/`);
   if (!url.startsWith('/api/images/') && !url.startsWith(LIVETV_LOGO_PATH)) return url;
   const sep = url.includes('?') ? '&' : '?';
@@ -36,18 +38,30 @@ export function withAuthedImageToken(url: string, token: string | null): string 
   return `${url}${sep}token=${encodeURIComponent(token)}`;
 }
 
-/** Resolves a relative URL against the server base; a local size (thumb / medium / full) appends `?size=…` ONLY for `/api/images/...` URLs, remote URLs stay untouched. */
+/** Resolves an image URL against the server base at `size` (`full` by default), see `imageUrlWithSize`. */
 @Pipe({ name: 'resolveUrl' })
 export class ResolveUrlPipe implements PipeTransform {
   private readonly config = inject(ServerConfigService);
   private readonly auth = inject(AuthService);
+  private readonly version = inject(ServerVersionService);
 
   transform(url: string | null | undefined, size?: ImageSize): string | null {
     if (!url) return null;
-    let resolved = size ? imageUrlWithSize(url, size) : url;
+    let resolved = imageUrlWithSize(url, size ?? 'full', this.version.supports(SERVER_SINCE.remoteImages));
     // Web already carries the auth cookie same-origin; only a native/TV client
     // needs the token riding in the query.
     if (this.config.isNative) resolved = withAuthedImageToken(resolved, this.auth.playbackToken);
     return this.config.resolveUrl(resolved);
+  }
+}
+
+/** Image URLs against the connected server, for code that hands artwork to a sink outside a template. */
+@Injectable({ providedIn: 'root' })
+export class ImageUrls {
+  private readonly config = inject(ServerConfigService);
+  private readonly version = inject(ServerVersionService);
+
+  resolve(url: string, size: ImageSize): string {
+    return this.config.resolveUrl(imageUrlWithSize(url, size, this.version.supports(SERVER_SINCE.remoteImages)));
   }
 }

@@ -36,6 +36,7 @@ import type { LocalPlayer, MusicHandoff, MusicSnapshot } from '../playback/playb
 import { MusicCastOutput, type MusicAdoption } from './music-cast-output';
 import { MusicQueue, type MusicTrackRequest, type Repeat } from './music-queue';
 import { PREAMP_STEPS, REPLAY_GAINS, replayGainFactor, type ReplayGainMode } from './replay-gain';
+import { ImageUrls } from '../../pipes/resolve-url.pipe';
 import {
   chapterAt,
   chaptersFromParts,
@@ -103,6 +104,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   private readonly mediaService = inject(MediaService);
   private readonly bookQueue = inject(PlaybackQueueService);
   private readonly serverConfig = inject(ServerConfigService);
+  private readonly images = inject(ImageUrls);
   private readonly storage = inject(StorageScopeService);
   private readonly downloads = inject(DownloadCacheService);
   private readonly store = inject(OfflineBookStoreService);
@@ -1796,7 +1798,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   private setupMediaSession(req: AudioRequest): void {
     if (this.nativeAudio || !('mediaSession' in navigator)) return;
     const ms = navigator.mediaSession;
-    const art = req.coverUrl ? new URL(this.serverConfig.resolveUrl(req.coverUrl), document.baseURI).href : null;
+    const art = req.coverUrl ? new URL(this.images.resolve(req.coverUrl, 'medium'), document.baseURI).href : null;
     ms.metadata = new MediaMetadata({
       title: req.title,
       artist: req.artist ?? '',
@@ -1921,7 +1923,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
       title: req.title,
       artist: req.artist,
       album: req.album,
-      artworkUrl: req.coverUrl ? new URL(this.serverConfig.resolveUrl(req.coverUrl), document.baseURI).href : null,
+      artworkUrl: req.coverUrl ? new URL(this.images.resolve(req.coverUrl, 'medium'), document.baseURI).href : null,
       book: this.info
         ? {
             mediaId: req.mediaId,

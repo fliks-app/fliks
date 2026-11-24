@@ -4,7 +4,6 @@ import { AuthService } from '../auth.service';
 import { CastPlayerService } from '../cast-player.service';
 import { CastService, castMixUrl, type CastMediaInfo, type CastMixSource } from '../cast.service';
 import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
-import { ServerConfigService } from '../server-config.service';
 import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import { ToastService } from '../toast.service';
 import { StreamingApiService, type PlaybackInfoResponse } from '../api/streaming-api.service';
@@ -12,6 +11,7 @@ import type { StemKind } from '../api/karaoke.models';
 import type { MusicTrackRequest, Repeat } from './music-queue';
 import type { MusicHandoff, MusicSnapshot } from '../playback/playback-output';
 import type { StemMode } from './stem-mix';
+import { ImageUrls } from '../../pipes/resolve-url.pipe';
 
 export type ResumeQueue = { itemIds: number[]; index: number; shuffle: boolean; repeat: Repeat };
 
@@ -76,7 +76,7 @@ export class MusicCastOutput {
   private readonly castPlayer = inject(CastPlayerService);
   private readonly streaming = inject(StreamingApiService);
   private readonly auth = inject(AuthService);
-  private readonly serverConfig = inject(ServerConfigService);
+  private readonly images = inject(ImageUrls);
   private readonly serverVersion = inject(ServerVersionService);
   private readonly nowPlaying = inject(NowPlayingMetadataService);
   private readonly translate = inject(TranslateService);
@@ -417,7 +417,7 @@ export class MusicCastOutput {
         contentType,
         title: t.title,
         subtitle: t.artists,
-        posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
+        posterUrl: t.coverUrl ? this.images.resolve(t.coverUrl, 'medium') : undefined,
         mediaId: t.mediaId,
         itemId: t.itemId,
         stem,
@@ -470,7 +470,7 @@ export class MusicCastOutput {
       contentType,
       title: t.title,
       subtitle: t.artists,
-      posterUrl: t.coverUrl ? this.serverConfig.resolveUrl(t.coverUrl) : undefined,
+      posterUrl: t.coverUrl ? this.images.resolve(t.coverUrl, 'medium') : undefined,
       mediaId: t.mediaId,
       itemId: t.itemId,
       mediaFileId: pi.mediaFileId,

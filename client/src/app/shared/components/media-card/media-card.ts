@@ -4,7 +4,7 @@ import { NgClass, DecimalPipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { LucideDynamicIcon } from '@lucide/angular';
 import { icons } from '../../icons';
-import { ResolveUrlPipe } from '../../../core/pipes/resolve-url.pipe';
+import { ResolveUrlPipe, ImageUrls } from '../../../core/pipes/resolve-url.pipe';
 import { MediaType } from '../../../core/enums/media-type.enum';
 import { Media } from '../../../core/services/api/media.service';
 import type { BookListInfo } from '../../../core/services/api/books.models';
@@ -18,7 +18,6 @@ import { CardActionsDirective } from '../../directives/card-actions.directive';
 import { SpoilerDirective } from '../../directives/spoiler.directive';
 import { clearPosterStamps, previewPosterName, stampPoster, stampPosterNamed } from '../../utils/view-transition';
 import { armPageSlide } from '../../utils/page-slide';
-import { ServerConfigService } from '../../../core/services/server-config.service';
 import { PosterMosaicComponent } from '../poster-mosaic/poster-mosaic';
 import { imageUrlWithSize } from '../../../core/pipes/resolve-url.pipe';
 import { CardAction, CardActionsService } from '../../../core/services/card-actions.service';
@@ -397,7 +396,8 @@ export class MediaCardComponent {
     else armPageSlide();
   }
 
-  private readonly serverConfig = inject(ServerConfigService);
+
+  private readonly images = inject(ImageUrls);
 
   /** Decodes the destination artwork during the click: the transition captures before its images decode and would fly the poster. */
   private prefetchHeroArtwork() {
@@ -439,7 +439,7 @@ export class MediaCardComponent {
     if (!url) return;
     const img = new Image();
     img.decoding = 'async';
-    img.src = this.serverConfig.resolveUrl(imageUrlWithSize(url, 'medium'));
+    img.src = this.images.resolve(url, 'medium');
   }
 
   protected flagPosterForTransition(): void {
