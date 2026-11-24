@@ -78,9 +78,6 @@ pub async fn rescan(
                         updated: c.updated,
                     });
                 }
-                if c.added > 0 {
-                    st2.ingest.settle.schedule(&st2, id);
-                }
                 post_import::scan_sources(&st2, id).await;
             }
             Err(e) => {

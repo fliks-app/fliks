@@ -367,7 +367,7 @@ async fn reprobe(st: &AppState, id: i32, path: &Path) {
         let before = Stat::of(path).await.map_err(|e| e.to_string())?;
         let probed = st
             .engine
-            .probe(&path.to_string_lossy(), true, false, false)
+            .probe(&path.to_string_lossy(), false, false, false)
             .await;
         let fresh = match probed {
             Ok(p) if p.ok => p.info.ok_or("probe answered without info")?,
@@ -399,6 +399,10 @@ async fn reprobe(st: &AppState, id: i32, path: &Path) {
             return Ok(());
         }
         let mut fresh = fresh;
+        if let (Some(o), Some(v)) = (stored.video.first(), fresh.video.first_mut()) {
+            v.crop = o.crop.clone();
+            v.crop_stable = o.crop_stable;
+        }
         if let Some(Some(b)) = stored.timestamp_break_seconds {
             fresh.timestamp_break_seconds = Some(Some(b));
         }

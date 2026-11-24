@@ -744,10 +744,48 @@ async fn rescan_detects_embedded_subtitles_after_an_interrupted_walk(pool: PgPoo
     let r = rescan(&c, a).await;
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
     assert_eq!(r.unwrap().added, 1);
+    let probe = &c.fake.seen("POST", "/v1/probe")[0];
     assert_eq!(
-        c.fake.seen("POST", "/v1/probe").len(),
-        1,
+        probe.body["crop"], false,
         "the probe feeds the embedded detection although the walk was incomplete"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn rescan_adds_without_a_crop_and_the_queue_stores_it(pool: PgPool) {
+    let c = ctx(pool).await;
+    let lib = c.dir.join("movies");
+    let l = library(&c, "M", &lib, r#"["movie"]"#).await;
+    touch(&lib.join("A/A.mkv"), b"a");
+    let mut cropped = probe_ok();
+    cropped["info"]["video"][0]["crop"] = json!({"width": 1920, "height": 800, "x": 0, "y": 140});
+    cropped["info"]["video"][0]["cropStable"] = json!(true);
+    c.fake
+        .script("POST", "/v1/probe", vec![ok(probe_ok()), ok(cropped)]);
+    let a = media(&c, l, "A", "movie").await;
+    assert_eq!(rescan(&c, a).await.unwrap().added, 1);
+    assert_eq!(c.fake.seen("POST", "/v1/probe")[0].body["crop"], false);
+    for _ in 0..100 {
+        if c.st.ingest.queue.is_idle() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let row: (Value, bool) = sqlx::query_as(
+        r#"SELECT "streamInfo"->'video'->0, "enrichedAt" IS NOT NULL FROM media_files WHERE "mediaId" = $1"#,
+    )
+    .bind(a)
+    .fetch_one(&c.st.db)
+    .await
+    .unwrap();
+    assert_eq!(
+        (
+            &row.0["crop"]["height"],
+            &row.0["cropStable"],
+            &row.0["codec"],
+            row.1
+        ),
+        (&json!(800), &json!(true), &json!("h264"), true)
     );
 }
 
