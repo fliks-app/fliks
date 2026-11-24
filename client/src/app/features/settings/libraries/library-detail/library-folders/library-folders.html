@@ -8,17 +8,19 @@
       @for (folder of folders(); track folder.id; let i = $index; let last = $last) {
         <div
           cdkDrag
-          [cdkDragDisabled]="busy() || editId() !== null"
+          [cdkDragDisabled]="tv.isTv() || busy() || editId() !== null"
           class="flex items-center gap-2 rounded-lg border border-base-200 bg-base-200/40 px-3 py-2"
         >
-          <button
-            type="button"
-            cdkDragHandle
-            class="cursor-grab text-base-content/60 hover:text-base-content/70"
-            [attr.aria-label]="'settings.libraries.folder_drag' | translate"
-          >
-            <svg [lucideIcon]="icons.GripVertical" class="h-4 w-4"></svg>
-          </button>
+          @if (!tv.isTv()) {
+            <button
+              type="button"
+              cdkDragHandle
+              class="cursor-grab text-base-content/60 hover:text-base-content/70"
+              [attr.aria-label]="'settings.libraries.folder_drag' | translate"
+            >
+              <svg [lucideIcon]="icons.GripVertical" class="h-4 w-4"></svg>
+            </button>
+          }
 
           @if (editId() === folder.id) {
             <input
@@ -62,24 +64,26 @@
               </p>
             </div>
 
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs btn-square"
-              [disabled]="busy() || i === 0"
-              (click)="reorder(i, i - 1)"
-              [attr.aria-label]="'settings.libraries.folder_move_up' | translate"
-            >
-              <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
-            </button>
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs btn-square"
-              [disabled]="busy() || last"
-              (click)="reorder(i, i + 1)"
-              [attr.aria-label]="'settings.libraries.folder_move_down' | translate"
-            >
-              <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
-            </button>
+            @if (tv.isTv()) {
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs btn-square"
+                [disabled]="busy() || i === 0"
+                (click)="reorder(i, i - 1)"
+                [attr.aria-label]="'settings.libraries.folder_move_up' | translate"
+              >
+                <svg [lucideIcon]="icons.ArrowUp" class="h-4 w-4"></svg>
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs btn-square"
+                [disabled]="busy() || last"
+                (click)="reorder(i, i + 1)"
+                [attr.aria-label]="'settings.libraries.folder_move_down' | translate"
+              >
+                <svg [lucideIcon]="icons.ArrowDown" class="h-4 w-4"></svg>
+              </button>
+            }
             <button
               type="button"
               class="btn btn-ghost btn-xs btn-square"

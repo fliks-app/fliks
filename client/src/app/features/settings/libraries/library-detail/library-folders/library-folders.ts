@@ -17,6 +17,7 @@ import {
 import { ConfirmationService } from '../../../../../core/services/confirmation.service';
 import { FolderPickerService } from '../../../../../core/services/folder-picker.service';
 import { ToastService } from '../../../../../core/services/toast.service';
+import { TvService } from '../../../../../core/services/tv.service';
 import { formatBytes } from '../../../../../core/utils/format-bytes';
 import { serverMessage } from '../../../../../core/utils/server-message';
 import { ModalHeaderComponent } from '../../../../../shared/components/modal-header';
@@ -52,6 +53,7 @@ export class LibraryFoldersComponent {
   private readonly toast = inject(ToastService);
   private readonly translate = inject(TranslateService);
   readonly state = inject(LibraryDetailState);
+  readonly tv = inject(TvService);
 
   private readonly inUseDialog = viewChild<string, ElementRef<HTMLDialogElement>>('inUseDialog', { read: ElementRef });
 
