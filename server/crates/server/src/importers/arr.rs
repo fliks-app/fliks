@@ -2,6 +2,7 @@
 use super::{db, dto, fetch, subtitles};
 use crate::{
     http::{AppError, auth::Authed},
+    ingest::fsx,
     outbound::{ITEM_TIMEOUT, LIST_TIMEOUT, TEST_TIMEOUT, base_url, error_text},
     state::AppState,
 };
@@ -12,15 +13,12 @@ use fliks_domain::{
         Mapped, PathMapping, RemoteItem, apply_path_mapping, extname, language_from_name,
         map_remote_items, parse_language_from_path, resolve_cutoff, suggest_local_library_id,
     },
-    media::{
-        kind::MediaKind,
-        path::{join, normalize},
-    },
+    media::kind::MediaKind,
     metadata::limiter::Priority,
     naming::validate_folder_name,
 };
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 type Res<T> = Result<T, AppError>;
 
@@ -645,12 +643,12 @@ async fn sonarr_subtitles(
 }
 
 /// The subtitle files next to a video: same stem, or the stem followed by `.` or a space.
-fn sidecars(dir: &str, video: &str) -> Vec<String> {
+fn sidecars(dir: &Path, video: &str) -> Vec<String> {
     let stem = |n: &str| {
         n.rsplit_once('.')
             .map_or(n.to_lowercase(), |(s, _)| s.to_lowercase())
     };
-    let video_stem = stem(video.rsplit('/').next().unwrap_or(video));
+    let video_stem = stem(video);
     let Ok(entries) = std::fs::read_dir(dir) else {
         return vec![];
     };
@@ -682,19 +680,26 @@ async fn sonarr_series_subtitles(
     };
     let mut count = 0;
     for file in db::series_files(&st.db, local.id).await.map_err(db_err)? {
-        let root = file.folder_path.clone();
-        let video = join(&root, &file.relative_path);
-        let dir = video.rsplit_once('/').map_or(".", |(d, _)| d).to_owned();
+        let (Some(root), Some(video)) = (
+            fsx::locate(&file.folder_path, ""),
+            fsx::locate(&file.folder_path, &file.relative_path),
+        ) else {
+            continue;
+        };
+        let (Some(dir), Some(video)) = (video.parent(), video.file_name()) else {
+            continue;
+        };
+        let (dir, video) = (dir.to_path_buf(), video.to_string_lossy().into_owned());
         let names = {
-            let (dir, video) = (dir.clone(), video.clone());
+            let dir = dir.clone();
             tokio::task::spawn_blocking(move || sidecars(&dir, &video))
                 .await
                 .map_err(|e| e.to_string())?
         };
         for name in names {
-            let abs = normalize(&format!("{dir}/{name}"));
-            let Some(rel) = abs.strip_prefix(&format!("{}/", root.trim_end_matches('/'))) else {
-                tracing::error!(path = %abs, "sidecar outside the media folder");
+            let abs = dir.join(&name);
+            let Some(rel) = fsx::rel_under(&root, &abs) else {
+                tracing::error!(path = %abs.display(), "sidecar outside the media folder");
                 continue;
             };
             let language = parse_language_from_path(&name);
@@ -707,7 +712,7 @@ async fn sonarr_series_subtitles(
                     episode_id: file.episode_id,
                     provider: "sonarr",
                     language: &language,
-                    relative_path: &rel.replace('\\', "/"),
+                    relative_path: &rel,
                 },
             )
             .await
@@ -748,10 +753,7 @@ mod tests {
         ] {
             std::fs::write(dir.join(n), "").unwrap();
         }
-        let got = sidecars(
-            dir.to_str().unwrap(),
-            &format!("{}/Show.S01E01.mkv", dir.display()),
-        );
+        let got = sidecars(&dir, "Show.S01E01.mkv");
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(
             got,
