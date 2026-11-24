@@ -48,7 +48,8 @@ ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/ca
 COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
 COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
 # libarchive2-sys builds libarchive with cmake, generates its bindings with libclang and links these libraries.
-RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev pkg-config libssl-dev \
+# curl: build.rs fetches the bundled provider plugins.
+RUN apt-get update && apt-get install -y --no-install-recommends curl gcc libc6-dev pkg-config libssl-dev \
     cmake make libclang-dev liblz4-dev libacl1-dev libxml2-dev libbz2-dev liblzma-dev libzstd-dev zlib1g-dev \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /server
