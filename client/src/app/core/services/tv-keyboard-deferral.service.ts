@@ -20,6 +20,8 @@ export class TvKeyboardDeferralService {
 
     const defer = (e: FocusEvent) => this.hold(e.target as HTMLElement | null);
     const release = (e: Event) => this.release(e.target as HTMLElement | null);
+    // webOS still sends that press's keypress, whose default submits the form and closes the keyboard just raised.
+    let swallowKeypress = false;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Enter') return;
       // That press meant "let me type", so it must not also reach the form and
@@ -27,8 +29,16 @@ export class TvKeyboardDeferralService {
       if (this.release(e.target as HTMLElement | null)) {
         e.preventDefault();
         e.stopPropagation();
+        swallowKeypress = true;
       }
     };
+    const onKeypress = (e: KeyboardEvent) => {
+      if (!swallowKeypress || e.key !== 'Enter') return;
+      swallowKeypress = false;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const onKeyup = () => (swallowKeypress = false);
 
     // Android TV's keyboard overlays the WebView without shrinking it (MainActivity's `ime` reports height 0).
     const onIme = (e: Event) => {
@@ -40,11 +50,15 @@ export class TvKeyboardDeferralService {
     document.addEventListener('focusin', defer, true);
     document.addEventListener('click', release, true);
     document.addEventListener('keydown', onKey, true);
+    document.addEventListener('keypress', onKeypress, true);
+    document.addEventListener('keyup', onKeyup, true);
     addEventListener('ime', onIme);
     this.destroyRef.onDestroy(() => {
       document.removeEventListener('focusin', defer, true);
       document.removeEventListener('click', release, true);
       document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('keypress', onKeypress, true);
+      document.removeEventListener('keyup', onKeyup, true);
       removeEventListener('ime', onIme);
     });
   }
