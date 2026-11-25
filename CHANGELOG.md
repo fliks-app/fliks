@@ -1,6 +1,6 @@
 # Changelog
 
-## [7.2.1](https://github.com/fliks-app/fliks/compare/v7.2.0...v7.2.1) (2026-11-24)
+## [7.2.1](https://github.com/fliks-app/fliks/compare/v7.2.0...v7.2.1) (2026-11-25)
 
 
 ### Bug Fixes
