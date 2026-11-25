@@ -31,6 +31,8 @@ export interface QueueHost {
   setBackdropUrl(url: string): void;
   /** Switches the open engine to another file; false when the switch did not run to its end. */
   reloadForEpisode(mediaFileId: number, mediaId: number, episodeId: number | undefined): Promise<boolean>;
+  /** Leaves the player for the page that opened it. */
+  close(): void;
 }
 
 /** What plays next: the playback queue (playlist or series), the notification controls,
@@ -109,13 +111,17 @@ export class QueueController {
     }
   }
 
-  /** Advances at the natural end of a stream. Never while an error card is up: a mid-stream
-   *  failure must not be mistaken for an end and skip the item. */
+  /** Advances at the natural end of a stream, or closes the player when nothing follows. Never while an error
+   *  card is up: a mid-stream failure must not be mistaken for an end and skip the item. */
   autoAdvance(): void {
     if (!this.state.ended()) return;
     if (this.state.error()) return;
+    if (!this.upNext()) {
+      // A pre-roll chains to the main item, a party's server picks what plays next, and a switch in flight ends on its own.
+      if (!this.advancing && !this.host.preRollActive() && !this.session.partyActive()) untracked(() => this.host.close());
+      return;
+    }
     if (!this.autoplayEnabled()) return;
-    if (!this.upNext()) return;
     void this.advance(true);
   }
 
@@ -199,6 +205,7 @@ export class QueueController {
         if (skipped > 0) {
           this.toast.error(this.translate.instant('player.next_unavailable'));
         }
+        if (auto) this.host.close();
         return;
       }
 
