@@ -2220,6 +2220,7 @@ describe('PlayerComponent startup', () => {
 
     expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
     expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
+    expect(TestBed.inject(MediaService).getFileOwner).not.toHaveBeenCalled();
   });
 
   it('loads the media of a bare /watch/<fileId> link from its file', async () => {
@@ -2232,9 +2233,42 @@ describe('PlayerComponent startup', () => {
 
     await h.component.ngAfterViewInit();
 
+    expect(media.getFileOwner).toHaveBeenCalledTimes(1);
     expect(media.getFileOwner).toHaveBeenCalledWith(MAIN_FILE_ID);
+    expect(media.getOne).toHaveBeenCalledTimes(1);
     expect(media.getOne).toHaveBeenCalledWith(MEDIA_ID, { silent: true });
     expect((h.component as any).nowPlaying().title).toBe(MOVIE.title);
+  });
+
+  it('takes the episode of a bare link from its file', async () => {
+    const h = await createHarness();
+    TestBed.inject(MediaService).getFileOwner = vi.fn(async () => ({ mediaId: MEDIA_ID, episodeId: 5 }));
+    h.component.createShakaEngine = async () => {
+      h.component.engine = h.engine;
+    };
+
+    await h.component.ngAfterViewInit();
+
+    expect((h.component as any).episodeId).toBe(5);
+  });
+
+  it('starts no launch when the player is left during the bare-link lookup', async () => {
+    const h = await createHarness();
+    const media = TestBed.inject(MediaService);
+    let answer!: (v: { mediaId: number; episodeId: number | null }) => void;
+    media.getFileOwner = vi.fn(() => new Promise<{ mediaId: number; episodeId: number | null }>((r) => (answer = r)));
+    h.component.createShakaEngine = async () => {
+      h.component.engine = h.engine;
+    };
+
+    const launch = h.component.ngAfterViewInit();
+    await vi.waitFor(() => expect(media.getFileOwner).toHaveBeenCalled());
+    h.component.onBack();
+    answer({ mediaId: MEDIA_ID, episodeId: null });
+    await launch;
+
+    expect(media.getOne).not.toHaveBeenCalled();
+    expect(h.streamingApi.getPlaybackInfo).not.toHaveBeenCalled();
   });
 
   it('opens the first load paused when the route was launched paused', async () => {
@@ -3763,7 +3797,7 @@ describe('PlayerComponent review fixes', () => {
     await h.component.adoptOutputItem({ fileId: 2, mediaId: MEDIA_ID, episodeId: 5 });
 
     expect(h.component.mediaFileId).toBe(2);
-    expect(h.component.episodeId).toBe(5);
+    expect((h.component as any).episodeId).toBe(5);
     expect(h.component.itemAdopted).toBe(true);
     expect(h.router.navigate).toHaveBeenCalledWith(['/watch', 2], {
       queryParams: expect.objectContaining({ mediaId: MEDIA_ID, episodeId: 5 }),

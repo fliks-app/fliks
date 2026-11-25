@@ -85,6 +85,7 @@ export class PlayerLoader {
   private landed = false;
   /** Handed to another output: nothing loads here until a launch or resume brings the player back. */
   private released = false;
+  private left = false;
   private kill: (() => void) | undefined;
 
   readonly info = this.committed.asReadonly();
@@ -120,6 +121,12 @@ export class PlayerLoader {
     this.drop();
     this.dropCarried();
     this.released = true;
+    this.left = true;
+  }
+
+  /** The view was left: no launch may start after it. */
+  aborted(): boolean {
+    return this.left;
   }
 
   /** Another output plays and this device may come back: the running op ends, the session stays. */

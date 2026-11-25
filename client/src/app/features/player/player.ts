@@ -1242,7 +1242,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     // A bookmarked or typed /watch/<fileId> names no media.
     if (!this.mediaId) {
       const owner = await this.mediaService.getFileOwner(this.mediaFileId).catch(() => null);
-      if (this.destroyed) return;
+      if (this.destroyed || this.loader.aborted()) return;
       if (owner) this.setItem({ mediaId: owner.mediaId, episodeId: owner.episodeId ?? undefined });
     }
     if (this.session.isLocal()) {
