@@ -176,6 +176,7 @@ async function createFixture(f: Fixture): Promise<ComponentFixture<LayoutCompone
         provide: NavbarService,
         useValue: {
           canGoBack: () => false,
+          showPage: () => {},
           navbarTransparent: () => false,
           heroLogoUrl: () => null,
           heroMenu: () => null,

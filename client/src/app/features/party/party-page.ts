@@ -36,7 +36,7 @@ import { DropdownMenuComponent } from '../../shared/components/dropdown-menu';
 import { BackgroundService } from '../../core/services/background.service';
 import { DeviceService } from '../../core/services/device.service';
 import { PushService } from '../../core/services/push.service';
-import { NavbarService } from '../../core/services/navbar.service';
+import { HeroPage, NavbarService } from '../../core/services/navbar.service';
 import { TvService } from '../../core/services/tv.service';
 import { MD_BREAKPOINT_QUERY, mediaQuerySignal } from '../../core/utils/viewport';
 import { MobileFanartHeroComponent } from '../../shared/components/mobile-fanart-hero';
@@ -64,7 +64,7 @@ const isNoConnection = (e: unknown) => e instanceof HttpErrorResponse && (e.erro
   ],
   templateUrl: './party-page.html',
 })
-export class PartyPageComponent implements OnInit, OnDestroy {
+export class PartyPageComponent implements OnInit, OnDestroy, HeroPage {
   /** Holds the page's hero picture, which keeps the phone bar clear while it is under it. */
   private readonly heroHost: Element = inject(ElementRef).nativeElement;
   protected readonly icons = icons;
@@ -110,6 +110,10 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   /** The service copy while joined (it follows the events), else the page's own load. */
   protected readonly view = computed(() => (this.party.party()?.id === this.id ? this.party.party() : this.loaded()));
   protected readonly head = computed<PartySummaryDto | null>(() => this.view() ?? this.seed());
+  readonly heroChrome = computed(() => {
+    const h = this.gone() ? null : this.head();
+    return h ? { host: this.heroHost, title: h.name, logoUrl: this.media()?.logoUrl ?? null } : null;
+  });
   private readonly fanart = computed(() => {
     const item = this.head()?.item;
     return item ? pickFanart({ ...item, id: item.mediaId }) : null;
@@ -213,11 +217,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
       if ((e.type === 'party.updated' || e.type === 'party.settings') && e.partyId === this.id && !this.joined()) void this.load();
     });
     this.party.closed.pipe(takeUntilDestroyed()).subscribe(() => void this.router.navigateByUrl('/'));
-    effect(() => {
-      const h = this.gone() ? null : this.head();
-      if (h) this.navbar.enterHeroPage(this, { host: this.heroHost, title: h.name, logoUrl: this.media()?.logoUrl ?? null });
-      else this.navbar.leaveHeroPage(this);
-    });
     effect(() => this.background.set(this, this.fanart()));
     // The film can change under the page (the host's pick, a snapshot): its details follow.
     effect(() => {
@@ -239,7 +238,6 @@ export class PartyPageComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.navbar.leaveHeroPage(this);
     this.background.release(this);
     if (this.party.lobby() && this.party.party()?.id === this.id) void this.party.leave();
   }

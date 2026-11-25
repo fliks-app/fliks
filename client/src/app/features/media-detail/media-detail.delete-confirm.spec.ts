@@ -74,7 +74,7 @@ function createHarness(downloadManager: object = {}) {
       { provide: AuthService, useValue: { hasPermission: () => false } },
       { provide: ProfilesService, useValue: {} },
       { provide: LibrariesApiService, useValue: {} },
-      { provide: NavbarService, useValue: { enterHeroPage: vi.fn(), leaveHeroPage: vi.fn() } },
+      { provide: NavbarService, useValue: {} },
       { provide: BackgroundService, useValue: background },
       { provide: ConfirmationService, useValue: { confirm } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },

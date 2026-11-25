@@ -482,6 +482,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.navbar.showPage(null);
     if (this.scrollRaf !== null) cancelAnimationFrame(this.scrollRaf);
     if (this.isNative) {
       Keyboard.removeAllListeners();

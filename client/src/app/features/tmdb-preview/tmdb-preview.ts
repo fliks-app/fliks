@@ -1,8 +1,8 @@
-import { Component, OnDestroy, OnInit, Type, forwardRef, inject, ElementRef } from '@angular/core';
+import { Component, OnDestroy, Type, computed, forwardRef, inject, signal, ElementRef } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { BackgroundService } from '../../core/services/background.service';
-import { NavbarService } from '../../core/services/navbar.service';
+import { HeroPage } from '../../core/services/navbar.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { TvSectionDirective } from '../../shared/directives/tv-section.directive';
 import { PREVIEW_HOST, type PreviewHost, type PreviewSeed } from './preview-host';
@@ -15,11 +15,10 @@ import { PREVIEW_HOST, type PreviewHost, type PreviewSeed } from './preview-host
   templateUrl: './tmdb-preview.html',
   providers: [{ provide: PREVIEW_HOST, useExisting: forwardRef(() => TmdbPreviewComponent) }],
 })
-export class TmdbPreviewComponent implements PreviewHost, OnInit, OnDestroy {
+export class TmdbPreviewComponent implements PreviewHost, OnDestroy, HeroPage {
   /** Holds the page's hero picture, which keeps the phone bar clear while it is under it. */
   private readonly heroHost: Element = inject(ElementRef).nativeElement;
   private readonly route = inject(ActivatedRoute);
-  private readonly navbar = inject(NavbarService);
   private readonly backgroundService = inject(BackgroundService);
 
   /** The body of the kind, loaded by the route's resolver before this component activates. */
@@ -38,18 +37,16 @@ export class TmdbPreviewComponent implements PreviewHost, OnInit, OnDestroy {
     return seed?.externalId === this.externalId ? seed : null;
   })();
 
-  ngOnInit() {
-    // Hero chrome from the first frame, so the skeleton sits where the page will.
-    this.navbar.enterHeroPage(this, { host: this.heroHost, title: this.seed?.title ?? '' });
-  }
+  /** Hero chrome from the first frame, so the skeleton sits where the page will. */
+  private readonly centre = signal<{ title: string; logoUrl?: string | null }>({ title: this.seed?.title ?? '' });
+  readonly heroChrome = computed(() => ({ host: this.heroHost, ...this.centre() }));
 
   ngOnDestroy() {
     this.backgroundService.release(this);
-    this.navbar.leaveHeroPage(this);
   }
 
   setTitle(title: string, logoUrl?: string | null) {
-    this.navbar.enterHeroPage(this, { host: this.heroHost, title, logoUrl });
+    this.centre.set({ title, logoUrl });
   }
 
   setBackground(url: string | null, opts?: { blur?: boolean }) {

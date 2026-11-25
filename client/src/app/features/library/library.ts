@@ -53,7 +53,7 @@ import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
 import { HeroCarouselComponent } from '../../shared/components/hero-carousel/hero-carousel';
 import { TvRowDirective } from '../../shared/directives/tv-row.directive';
-import { NavbarService } from '../../core/services/navbar.service';
+import { HeroPage, NavbarService } from '../../core/services/navbar.service';
 import type { CacheRead } from '../../core/interceptors/cache.interceptor';
 import { LucideIconComponent } from '../../shared/components/lucide-icon';
 import { libraryColorVar, libraryIcon } from '../../core/constants/library-appearance';
@@ -187,7 +187,7 @@ const GRID_HOLD_INPUT = ['touchstart', 'wheel', 'keydown'] as const;
   ],
   templateUrl: './library.html',
 })
-export class LibraryComponent implements OnInit, OnDestroy {
+export class LibraryComponent implements OnInit, OnDestroy, HeroPage {
   protected readonly icons = icons;
 
   private readonly mediaService = inject(MediaService);
@@ -225,7 +225,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
     },
     scrollKey: () => this.scrollMemoryKey(),
     onAttach: () => {
-      this.claimHeroChrome();
       this.bindLetterScroll();
       if (!this.navbar.navigatedBack()) this.enterAtTop();
       else {
@@ -237,7 +236,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
       }
     },
     onDetach: () => {
-      this.navbar.leaveHeroPage(this);
       // The window keeps scrolling for the pages that follow, and a detached
       // page listening to it recomputes its letter off their offset.
       this.unbindLetterScroll();
@@ -299,15 +297,9 @@ export class LibraryComponent implements OnInit, OnDestroy {
 
   /** Wherever the top bar shows, the carousel picture runs under it: the page is a hero page. */
   private readonly heroHost: Element = inject(ElementRef).nativeElement;
-  private readonly heroChrome = effect(() => {
-    if (this.detached()) return;
-    this.claimHeroChrome();
-  });
-
-  private claimHeroChrome(): void {
-    if (this.showCarousel() && this.navbar.mobileNavbarVisible()) this.navbar.enterHeroPage(this, { host: this.heroHost });
-    else this.navbar.leaveHeroPage(this);
-  }
+  readonly heroChrome = computed(() =>
+    this.showCarousel() && this.navbar.mobileNavbarVisible() ? { host: this.heroHost } : null,
+  );
 
   private readonly barName = effect(() => {
     if (this.detached()) return;
@@ -792,7 +784,6 @@ export class LibraryComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.navbar.leaveHeroPage(this);
     this.list.destroy();
     if (this.onResize) window.removeEventListener('resize', this.onResize);
     const scrollKey = this.scrollMemoryKey();

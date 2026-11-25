@@ -1,11 +1,31 @@
 import { TestBed } from '@angular/core/testing';
-import { Component, inject as ngInject } from '@angular/core';
-import { provideRouter, Router, UrlTree } from '@angular/router';
-import { NavbarService } from './navbar.service';
+import { Component, ElementRef, inject as ngInject, signal } from '@angular/core';
+import { NavigationEnd, provideRouter, Router, RouteReuseStrategy, RouterOutlet, UrlTree } from '@angular/router';
+import { filter, take } from 'rxjs';
+import { HeroChrome, HeroPage, NavbarService } from './navbar.service';
 import { DeviceService } from './device.service';
+import { CachingReuseStrategy } from './route-reuse.strategy';
 
 @Component({ template: '' })
 class PageStub {}
+
+@Component({ template: '' })
+class HeroPageStub implements HeroPage {
+  readonly heroChrome = signal<HeroChrome | null>({ host: ngInject(ElementRef).nativeElement });
+}
+
+/** The layout's outlet wiring. */
+@Component({
+  imports: [RouterOutlet],
+  template: '<router-outlet (activate)="navbar.showPage($event)" (attach)="navbar.showPage($event)" />',
+})
+class OutletHost {
+  readonly navbar = ngInject(NavbarService);
+}
+
+const heroPage = (chrome: Partial<HeroChrome> = {}) => ({
+  heroChrome: signal<HeroChrome | null>({ host: document.createElement('div'), ...chrome }),
+});
 
 /** `TestBed` mocks the platform location, so the router never reaches the real
  *  session history that NavbarService falls back to: state it per test. */
@@ -88,12 +108,12 @@ describe('NavbarService', () => {
         ],
       });
       const navbar = TestBed.inject(NavbarService);
-      navbar.isHeroPage.set(true);
+      navbar.showPage(heroPage());
       return navbar;
     };
     const phone = make(false);
     expect(phone.heroPaddingTop()).toContain('3rem');
-    phone.isHeroPage.set(false);
+    phone.showPage(null);
     expect(phone.heroPaddingTop()).toBeNull();
     expect(make(true).heroPaddingTop()).toBeNull();
   });
@@ -123,19 +143,46 @@ describe('NavbarService', () => {
     expect(navbar.canGoBack()).toBe(false);
   });
 
-  it('lets only the owner of the hero chrome hand it back', () => {
+  it('reads the hero chrome off the page shown, and follows its changes', () => {
     TestBed.configureTestingModule({ providers: [provideRouter([])] });
     const navbar = TestBed.inject(NavbarService);
-    const leaving = {};
-    const arriving = {};
-    navbar.enterHeroPage(leaving, { brand: true });
-    navbar.enterHeroPage(arriving, { title: 'T' });
-    navbar.leaveHeroPage(leaving);
-    expect(navbar.isHeroPage()).toBe(true);
-    expect([navbar.heroTitle(), navbar.heroBrand()]).toEqual(['T', false]);
-    navbar.leaveHeroPage(arriving);
+    const page = heroPage({ title: 'T' });
+    navbar.showPage(page);
+    expect([navbar.isHeroPage(), navbar.heroTitle(), navbar.heroBrand()]).toEqual([true, 'T', false]);
+    expect(document.body.classList.contains('hero-page')).toBe(true);
+    page.heroChrome.set(null);
+    TestBed.tick();
     expect(navbar.isHeroPage()).toBe(false);
     expect(document.body.classList.contains('hero-page')).toBe(false);
+    navbar.showPage({});
+    expect(navbar.isHeroPage()).toBe(false);
+  });
+
+  it('sets the hero class as the outlet inserts a cached hero page, before NavigationEnd', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: '', pathMatch: 'full', component: HeroPageStub, data: { reuse: true } },
+          { path: 'b', component: PageStub },
+        ]),
+        { provide: RouteReuseStrategy, useClass: CachingReuseStrategy },
+        { provide: DeviceService, useValue: { isTv: () => false, isPhone: () => false, isTablet: () => false, isDesktop: () => true, reducedEffects: () => false } as unknown as DeviceService },
+      ],
+    });
+    const fixture = TestBed.createComponent(OutletHost);
+    fixture.detectChanges();
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
+    await router.navigateByUrl('/b');
+    expect(document.body.classList.contains('hero-page')).toBe(false);
+    let atEnd: boolean | undefined;
+    router.events.pipe(filter((e) => e instanceof NavigationEnd), take(1)).subscribe(() => {
+      atEnd = document.body.classList.contains('hero-page');
+    });
+    await router.navigateByUrl('/');
+    expect(atEnd).toBe(true);
+    fixture.destroy();
+    TestBed.inject(NavbarService).showPage(null);
   });
 
   it('keeps the page title through a hero claim and gives a returning path its own back', async () => {
@@ -144,7 +191,7 @@ describe('NavbarService', () => {
     const router = TestBed.inject(Router);
     await router.navigateByUrl('/a');
     navbar.setPageTitle('A', { name: 'film' });
-    navbar.enterHeroPage({}, {});
+    navbar.showPage(heroPage());
     expect([navbar.pageTitle(), navbar.pageIcon()]).toEqual(['A', { name: 'film' }]);
     await router.navigateByUrl('/b');
     expect(navbar.pageTitle()).toBe('');
@@ -165,14 +212,14 @@ describe('NavbarService', () => {
     const host = document.createElement('div');
     host.innerHTML = '<div data-hero-picture></div>';
     document.body.append(host);
-    const page = {};
-    navbar.enterHeroPage(page, { host });
+    navbar.showPage(heroPage({ host }));
+    TestBed.tick();
     expect(observed[0]).toBe(host.firstElementChild);
     fire(false);
     expect(navbar.heroUnderBar()).toBe(false);
     fire(true);
     expect(navbar.heroUnderBar()).toBe(true);
-    navbar.leaveHeroPage(page);
+    navbar.showPage(null);
     host.remove();
     vi.unstubAllGlobals();
   });

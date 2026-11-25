@@ -1,25 +1,44 @@
 import { Location } from '@angular/common';
-import { Injectable, TemplateRef, computed, inject, signal } from '@angular/core';
+import { Injectable, Signal, TemplateRef, computed, effect, inject, signal, untracked } from '@angular/core';
 import { NavigationEnd, NavigationStart, Router, Scroll } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import { DeviceService } from './device.service';
 
 export type RailMode = 'none' | 'drawer' | 'collapsed' | 'expanded';
 
+/** The chrome a hero page asks of the bars: transparent phone navbar, white icons, its own centre. */
+export interface HeroChrome {
+  /** The page element holding its `[data-hero-picture]`: the bar stays clear while that picture is under it. */
+  host: Element;
+  title?: string;
+  logoUrl?: string | null;
+  /** The centre is the brand logo (home), not a title's clearlogo. */
+  brand?: boolean;
+  /** Opens the page's actions menu from the mobile navbar, in place of the user menu. */
+  menu?: ((anchor: HTMLElement) => void) | null;
+}
+
+/** A routed page that runs a hero under the bars while its `heroChrome` is set. */
+export interface HeroPage {
+  readonly heroChrome: Signal<HeroChrome | null>;
+}
+
 /** Lets child pages communicate with the navbar (e.g. hero pages setting a title). */
 @Injectable({ providedIn: 'root' })
 export class NavbarService {
+  /** The page the layout's outlet shows; the hero chrome is read off it and nowhere else. */
+  private readonly page = signal<HeroPage | null>(null);
+  private readonly hero = computed(() => this.page()?.heroChrome() ?? null);
   /** When set, the navbar shows this title instead of "Fliks" on scroll. */
-  readonly heroTitle = signal('');
-  /** Clearlogo for the current hero page, shown in the topbar / back row in
-   *  place of the title text. Null when the page has no logo. */
-  readonly heroLogoUrl = signal<string | null>(null);
-  /** Opens the page's actions menu from the mobile navbar, in place of the user menu; null when the page has none. */
-  readonly heroMenu = signal<((anchor: HTMLElement) => void) | null>(null);
+  readonly heroTitle = computed(() => this.hero()?.title ?? '');
+  /** Clearlogo for the current hero page, shown in the topbar / back row in place of the title text. */
+  readonly heroLogoUrl = computed(() => this.hero()?.logoUrl ?? null);
+  readonly heroMenu = computed(() => this.hero()?.menu ?? null);
+  readonly heroBrand = computed(() => !!this.hero()?.brand);
   /** Now-playing bars the rail renders in its footer in place of the bottom of the screen, which the D-pad reaches last. */
   readonly dockedBars = signal<readonly TemplateRef<unknown>[]>([]);
   /** Whether the current page has a hero fanart. */
-  readonly isHeroPage = signal(false);
+  readonly isHeroPage = computed(() => !!this.hero());
   /** Non-hero pages can opt into the layout's desktop back button by setting
    *  this, without taking on the hero styling. */
   readonly showBackButton = signal(false);
@@ -235,37 +254,24 @@ export class NavbarService {
     () => this.mobileNavbarVisible() && this.isHeroPage() && this.heroUnderBar(),
   );
 
-  /** The page that holds the hero chrome: only it can hand it back, so a leaving page never clears its successor's claim. */
-  private heroOwner: object | null = null;
-  /** The hero's centre is the brand logo (home), not a title's clearlogo. */
-  readonly heroBrand = signal(false);
-
   private heroHost: Element | null = null;
   private heroWatch: { io?: IntersectionObserver; mo?: MutationObserver } = {};
 
-  /** Claim the hero chrome for `owner` (transparent navbar, white icons); the centre shows the hero's logo or brand, else the page title.
-   *  `host` is the page element holding its `[data-hero-picture]`: the bar stays clear while that picture is under it. */
-  enterHeroPage(owner: object, centre: { title?: string; logoUrl?: string | null; brand?: boolean; host?: Element } = {}) {
-    this.heroOwner = owner;
-    if (centre.host !== this.heroHost) this.watchHero(centre.host ?? null);
-    document.body.classList.add('hero-page');
-    this.isHeroPage.set(true);
-    this.heroTitle.set(centre.title ?? '');
-    this.heroLogoUrl.set(centre.logoUrl ?? null);
-    this.heroBrand.set(!!centre.brand);
+  /** Called by the layout's outlet as it inserts a page, before any other code can lay that page out:
+   *  iOS 18.7 never re-lays out a cached page first laid out without `body.hero-page`. */
+  showPage(page: unknown): void {
+    this.page.set(typeof page === 'object' && page !== null && 'heroChrome' in page ? (page as HeroPage) : null);
+    document.body.classList.toggle('hero-page', this.isHeroPage());
   }
 
-  leaveHeroPage(owner: object) {
-    if (this.heroOwner !== owner) return;
-    this.heroOwner = null;
-    this.watchHero(null);
-    document.body.classList.remove('hero-page');
-    this.isHeroPage.set(false);
-    this.heroTitle.set('');
-    this.heroLogoUrl.set(null);
-    this.heroBrand.set(false);
-    this.heroMenu.set(null);
-  }
+  /** Follows the page's own hero changes (carousel shown, another episode's picture). */
+  private readonly heroSync = effect(() => {
+    const host = this.hero()?.host ?? null;
+    untracked(() => {
+      document.body.classList.toggle('hero-page', !!host);
+      if (host !== this.heroHost) this.watchHero(host);
+    });
+  });
 
   /** One observer on the claimed page's picture, offset by the bar's height; it waits for the picture when the page draws it late. */
   private watchHero(host: Element | null): void {

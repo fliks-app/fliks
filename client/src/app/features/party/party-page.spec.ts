@@ -68,7 +68,7 @@ describe('PartyPageComponent film selection', () => {
           useValue: stub({ ...service, closed: new Subject(), startSkipped: new Subject(), lobby: () => lobby(), isHost: () => true, me: () => null, members: () => [], enter, leave: vi.fn(), applySnapshot: vi.fn() }),
         },
         { provide: VoiceService, useValue: stub({ speaking: () => [] }) },
-        { provide: NavbarService, useValue: stub({ enterHeroPage() {}, leaveHeroPage() {} }) },
+        { provide: NavbarService, useValue: stub({}) },
         { provide: TvService, useValue: {} },
         { provide: BackgroundService, useValue: stub({ set() {}, release() {} }) },
         { provide: DeviceService, useValue: stub({ isTv: () => false }) },
