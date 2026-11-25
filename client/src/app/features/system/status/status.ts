@@ -21,7 +21,7 @@ import { subjectEpisodeLine, subjectEpisodeLink, subjectMediaLink } from '../../
 
 export interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
 interface ServiceStatus { name: string; ok: boolean; message?: string; }
-interface HealthReport { version: string; uptimeSeconds: number; database: ServiceStatus; installedPlugins: number; runningPlugins: number; restartSupervisor: string | null; confPersistent?: boolean; dataPersistent?: boolean; dbSuperuser?: boolean; dbLimited?: boolean; dbGaps?: string[]; }
+interface HealthReport { version: string; uptimeSeconds: number; database: ServiceStatus; installedPlugins: number; runningPlugins: number; restartSupervisor: string | null; confPersistent?: boolean; dataPersistent?: boolean; dbSuperuser?: boolean; dbLimited?: boolean; dbGaps?: string[]; lanUrls?: string[]; }
 /** Trimmed to what the manual-trigger button list needs. */
 interface SchedulerJob { name: string; triggerable: boolean; labelKey: string; }
 /** One row of the Activity table: running or queued work, from `ActivityRegistryService`. */

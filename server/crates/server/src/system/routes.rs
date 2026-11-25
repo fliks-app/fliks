@@ -49,6 +49,8 @@ pub struct Health {
     db_superuser: bool,
     db_limited: bool,
     db_gaps: Vec<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    lan_urls: Vec<String>,
 }
 
 #[utoipa::path(get, path = "/api/system/health", responses((status = 200)))]
@@ -90,7 +92,51 @@ pub async fn health(State(st): State<AppState>, a: Authed) -> Result<Json<Health
         db_superuser,
         db_limited,
         db_gaps,
+        lan_urls: lan_urls(st.cfg.public_port.unwrap_or(st.cfg.port)),
     }))
+}
+
+/// Native installs serve the LAN themselves; a container's own address reaches nobody.
+fn lan_urls(port: u16) -> Vec<String> {
+    if !cfg!(any(target_os = "macos", windows)) {
+        return vec![];
+    }
+    let ips = if_addrs::get_if_addrs().unwrap_or_default();
+    private_urls(ips.iter().map(|i| i.ip()), port)
+}
+
+fn private_urls(ips: impl Iterator<Item = std::net::IpAddr>, port: u16) -> Vec<String> {
+    let mut v4: Vec<_> = ips
+        .filter_map(|ip| match ip {
+            std::net::IpAddr::V4(v4) if v4.is_private() => Some(v4),
+            _ => None,
+        })
+        .collect();
+    v4.sort();
+    v4.dedup();
+    v4.into_iter()
+        .map(|ip| format!("http://{ip}:{port}"))
+        .collect()
+}
+
+#[cfg(test)]
+mod lan_urls_tests {
+    #[test]
+    fn keeps_private_ipv4_only() {
+        let ips = [
+            "127.0.0.1",
+            "169.254.1.2",
+            "192.168.1.20",
+            "::1",
+            "8.8.8.8",
+            "10.0.0.5",
+            "192.168.1.20",
+        ];
+        assert_eq!(
+            super::private_urls(ips.iter().map(|s| s.parse().unwrap()), 3000),
+            ["http://10.0.0.5:3000", "http://192.168.1.20:3000"]
+        );
+    }
 }
 
 fn role_fields(role: Option<&crate::db::role::Status>) -> (bool, bool, Vec<&'static str>) {

@@ -1799,6 +1799,7 @@
     "health_db": "Database",
     "health_plugins": "Plugin installati",
     "health_plugins_running": "{{count}} in esecuzione",
+    "lan_urls": "Raggiungibile sulla tua rete a",
     "conf_not_persistent": "La cartella di configurazione non è utilizzabile. I segreti sono in una cartella temporanea e si perdono quando il contenitore viene ricreato.",
     "data_not_persistent": "La cartella dei dati non è scrivibile. Immagini e avatar sono in una cartella temporanea e si perdono quando il contenitore viene ricreato.",
     "db_superuser": "L'applicazione si connette a PostgreSQL come superutente.",

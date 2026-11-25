@@ -1799,6 +1799,7 @@
     "health_db": "Base de données",
     "health_plugins": "Plugins installés",
     "health_plugins_running": "{{count}} en cours",
+    "lan_urls": "Accessible sur votre réseau à",
     "conf_not_persistent": "Le dossier de configuration est inutilisable. Les secrets sont gardés dans un dossier temporaire et disparaissent à la recréation du conteneur.",
     "data_not_persistent": "Le dossier de données n'est pas accessible en écriture. Les images et avatars sont gardés dans un dossier temporaire et disparaissent à la recréation du conteneur.",
     "db_superuser": "L'application se connecte à PostgreSQL en tant que superutilisateur.",
