@@ -437,6 +437,15 @@ export class MediaService {
     );
   }
 
+  /** The media (and episode) a file belongs to. */
+  getFileOwner(fileId: number) {
+    return firstValueFrom(
+      this.http.get<{ mediaId: number; episodeId: number | null }>(`/api/media-files/${fileId}`, {
+        context: new HttpContext().set(SKIP_ERROR_TOAST, true),
+      }),
+    );
+  }
+
   /** Home "Recently added" feed. `mode` picks the ranking basis (media
    *  add time / newest file / both); `libraryId` scopes to one library. */
   getRecentlyAdded(

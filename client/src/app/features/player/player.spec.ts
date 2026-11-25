@@ -263,7 +263,10 @@ async function createHarness(opts: {
         useValue: router,
       },
       { provide: StreamingApiService, useValue: streamingApi },
-      { provide: MediaService, useValue: { getOne: vi.fn(async () => MOVIE) } },
+      {
+        provide: MediaService,
+        useValue: { getOne: vi.fn(async () => MOVIE), getFileOwner: vi.fn(() => Promise.reject(new Error('unmocked'))) },
+      },
       {
         provide: BrowserDeviceProfileService,
         useValue: {
@@ -2217,6 +2220,21 @@ describe('PlayerComponent startup', () => {
 
     expect(h.streamingApi.getPlaybackInfo).toHaveBeenCalledTimes(1);
     expect((h.streamingApi.getPlaybackInfo.mock.calls[0] as any[])[3]).toBe(1);
+  });
+
+  it('loads the media of a bare /watch/<fileId> link from its file', async () => {
+    const h = await createHarness();
+    const media = TestBed.inject(MediaService);
+    media.getFileOwner = vi.fn(async () => ({ mediaId: MEDIA_ID, episodeId: null }));
+    h.component.createShakaEngine = async () => {
+      h.component.engine = h.engine;
+    };
+
+    await h.component.ngAfterViewInit();
+
+    expect(media.getFileOwner).toHaveBeenCalledWith(MAIN_FILE_ID);
+    expect(media.getOne).toHaveBeenCalledWith(MEDIA_ID, { silent: true });
+    expect((h.component as any).nowPlaying().title).toBe(MOVIE.title);
   });
 
   it('opens the first load paused when the route was launched paused', async () => {

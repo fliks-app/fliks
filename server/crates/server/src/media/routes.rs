@@ -42,6 +42,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/media/{id}/cast", get(media_cast))
         .route("/api/media/{id}/crew", get(media_crew))
         .route("/api/media/{id}/streams/{mediaFileId}", get(media_streams))
+        .route("/api/media-files/{mediaFileId}", get(media_file_owner))
         .route(
             "/api/media/{id}/editions/{editionId}/chapters",
             get(edition_chapters),
@@ -296,6 +297,26 @@ pub async fn media_streams(
     assert_media_visible(&st.db, id, &libs, &a.kinds).await?;
     crate::libraries::assert_file_accessible(&st.db, file, &libs).await?;
     Ok(Json(streams::streams(&st, id, file).await?))
+}
+
+/// The media (and episode) a file belongs to, for a player opened on a bare file id.
+#[utoipa::path(get, path = "/api/media-files/{mediaFileId}", responses((status = 200)))]
+pub async fn media_file_owner(
+    State(st): State<AppState>,
+    a: Authed,
+    file: Result<PathParams<i32>, AppError>,
+) -> Result<Json<Value>, AppError> {
+    a.require(Action::Read, Subject::Media)?;
+    let PathParams(file) = file?;
+    let libs = accessible_library_ids(&st.db, &a).await?;
+    crate::libraries::assert_file_accessible(&st.db, file, &libs).await?;
+    let (media, episode): (i32, Option<i32>) =
+        sqlx::query_as(r#"SELECT "mediaId", "episodeId" FROM media_files WHERE id = $1"#)
+            .bind(file)
+            .fetch_one(&st.db)
+            .await?;
+    assert_media_visible(&st.db, media, &libs, &a.kinds).await?;
+    Ok(Json(json!({"mediaId": media, "episodeId": episode})))
 }
 
 #[utoipa::path(get, path = "/api/media/{id}/editions/{editionId}/chapters", responses((status = 200)))]

@@ -31,6 +31,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
 | `GET /api/media/:id/cast` | same | path `id` | `MediaCast[]` (rule 58) | 400; 404; 401; 403 | none |
 | `GET /api/media/:id/crew` | same | path `id` | `MediaCrew[]` (rule 58) | 400; 404; 401; 403 | none |
 | `GET /api/media/:id/streams/:mediaFileId` | same | path `id`, `mediaFileId` int | `{ streamIndex: number, type: 'audio'\|'subtitle', codec: string, language: string, title?: string }[]` (rules 59-61) | 400; 404 `Media #<id> not found` / `MediaFile #<id> not found`; 400 or 404 (never 500) when the library has no path (rule 60); 401; 403 | engine `POST /v1/probe` (read-only) |
+| `GET /api/media-files/:mediaFileId` | same | path `mediaFileId` int | `{ mediaId: number, episodeId: number \| null }` (rule 76) | 400; 404 `MediaFile #<id> not found` / `Media #<id> not found`; 401; 403 | none |
 
 ## Rules
 
@@ -167,7 +168,7 @@ Every route requires a credential (JWT or API key) and the policy `ability.can(A
 ### I. Streams
 
 59. `GET :id/streams/:mediaFileId`: gate (rule 11), `findOne(id)` (rule 32), the file with `id = mediaFileId` among the media's files; none (including a file of another media) = 404 `MediaFile #<mediaFileId> not found`. Path = `path.join(folder.path, file.relativePath)` where `folder` is the file's folder (`ingest.md` rule 1); the engine probe gets `path.resolve(<that>)`.
-File ACL (`libraries/acl.rs::assert_file_accessible`): a file is readable when its media (`media_files."mediaId"`) sits in the caller's library ids; any other answers 404 `MediaFile #<id> not found`, like a missing file. Every file-keyed entry goes through it: `resolve_file` (playback-info, qualities, edl, pre-roll), the engine resolver (stream, download, sprite, subtitle purposes, and the file of a stored subtitle), `GET /api/media/:id/streams/:mediaFileId`, the subtitle routes taking a `mediaFileId` (search-missing, auto, download, upload), the companion routes (list, download, edl, delete), and a subtitle bound to a file (404 `Subtitle #<id> not found`, as a missing subtitle). Resume info and continue-watching answer nothing for a media outside the caller's libraries.
+File ACL (`libraries/acl.rs::assert_file_accessible`): a file is readable when its media (`media_files."mediaId"`) sits in the caller's library ids; any other answers 404 `MediaFile #<id> not found`, like a missing file. Every file-keyed entry goes through it: `resolve_file` (playback-info, qualities, edl, pre-roll), the engine resolver (stream, download, sprite, subtitle purposes, and the file of a stored subtitle), `GET /api/media/:id/streams/:mediaFileId`, `GET /api/media-files/:mediaFileId`, the subtitle routes taking a `mediaFileId` (search-missing, auto, download, upload), the companion routes (list, download, edl, delete), and a subtitle bound to a file (404 `Subtitle #<id> not found`, as a missing subtitle). Resume info and continue-watching answer nothing for a media outside the caller's libraries.
 60. When `media.path` is null (library without `path`), the route answers 400 or 404, never 500.
 61. Probe: engine `POST /v1/probe {media:{mediaFileId:0,path}}` through the engine client (`engine-glue.md` probe row). An engine that is down, disabled, answers non-2xx or reports an error returns **`[]`** (200), never an error. Success: `[...audio.map(s => ({...s, type:'audio'})), ...subtitles.map(s => ({...s, type:'subtitle'}))]` sorted ascending by `streamIndex` (stable: audio before subtitle on equal index), each mapped to `{ streamIndex, type, codec, language, title }` (`title` omitted when absent).
 
@@ -408,6 +409,7 @@ CREATE TRIGGER media_search_vector BEFORE INSERT OR UPDATE OF title, "originalTi
 73. `path` (the `Media.path` of rule 30) and `library.path` are serialised only for callers who can manage libraries (`settings.access` or `manage:all`, the `Manage Library` ability); for every other `media.read` caller both keys are absent from `MLI` (list, `recently-added`) and `MD`. `tracking`, `streams`, `RI`, calendar and cast/crew carry no absolute path. In the seed only `admin` keeps them. `files[].relativePath` and `streamInfo` are not absolute paths and stay.
 74. `GET :id/collection` with no collection answers 200 with an empty body (rules 10, 57); `metadata` bigints (`budget`, `revenue`) are strings; only the exact string `true` is a true boolean query parameter (rule 5); `streams` answers `[]` when the engine is down (rule 61).
 75. The library-ACL helpers (`accessible_library_ids`, `assert_media_accessible`, the per-library counts) are shared with `counts.md` and the plugin object guards (libraries rules 30-36).
+76. `GET /api/media-files/:mediaFileId` names the media and episode owning a file, for a player opened on a bare `/watch/<fileId>`: file ACL (rule 59), then the owner's kind visibility (`assert_media_visible`).
 
 ## Events
 
