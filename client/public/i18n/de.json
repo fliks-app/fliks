@@ -885,7 +885,7 @@
     "username": "Benutzername",
     "password": "Passwort",
     "submit": "Anmelden",
-    "error": "Anmeldefehler",
+    "error_detail": "Anmeldung auf diesem Gerät fehlgeschlagen: {{detail}}",
     "back_to_picker": "Anderen Benutzer wählen",
     "sso_sign_in": "Mit {{name}} anmelden",
     "admin_sign_in": "Administrator-Anmeldung",

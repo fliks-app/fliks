@@ -885,7 +885,7 @@
     "username": "Username",
     "password": "Password",
     "submit": "Log in",
-    "error": "Login error",
+    "error_detail": "Sign-in failed on this device: {{detail}}",
     "back_to_picker": "Choose another user",
     "sso_sign_in": "Sign in with {{name}}",
     "admin_sign_in": "Administrator sign-in",

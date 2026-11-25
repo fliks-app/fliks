@@ -885,7 +885,7 @@
     "username": "Nome de utilizador",
     "password": "Palavra-passe",
     "submit": "Iniciar sessão",
-    "error": "Erro de início de sessão",
+    "error_detail": "Falha ao iniciar sessão neste dispositivo: {{detail}}",
     "back_to_picker": "Escolher outro utilizador",
     "sso_sign_in": "Entrar com {{name}}",
     "admin_sign_in": "Início de sessão de administrador",

@@ -1,4 +1,5 @@
 import { provideZonelessChangeDetection, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
@@ -102,5 +103,34 @@ describe('LoginComponent SSO', () => {
     const { router, fixture } = setup();
     fixture.componentInstance.goToSelectUser();
     expect(router.navigate).toHaveBeenCalledWith(['/select-user'], { queryParams: { autoLaunch: 0 } });
+  });
+});
+
+describe('LoginComponent errors', () => {
+  async function submit(failure: unknown) {
+    const s = setup();
+    Object.assign(s.auth, { login: vi.fn(async () => Promise.reject(failure)) });
+    s.fixture.componentInstance.form.setValue({ username: 'u', password: 'p' });
+    await s.fixture.componentInstance.onSubmit();
+    s.fixture.detectChanges();
+    return s.el.querySelector('[role="alert"]')?.textContent?.trim();
+  }
+
+  it('names an unreachable server', async () => {
+    expect(await submit(new HttpErrorResponse({ status: 0 }))).toBe('errors.network');
+  });
+
+  it('shows the server message of a rejected sign-in', async () => {
+    expect(await submit(new HttpErrorResponse({ status: 401, error: { message: 'Invalid credentials' } }))).toBe(
+      'Invalid credentials',
+    );
+  });
+
+  it('names an HTTP status the server gave no message for', async () => {
+    expect(await submit(new HttpErrorResponse({ status: 413 }))).toBe('errors.unknown');
+  });
+
+  it('names a failure on the device itself', async () => {
+    expect(await submit(new Error('Keychain error -34018'))).toBe('login.error_detail');
   });
 });

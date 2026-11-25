@@ -1,8 +1,10 @@
 import { Component, signal, inject, computed } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { extractMessage } from '../../core/interceptors/error.interceptor';
 import { AuthService } from '../../core/services/auth.service';
 import { oidcErrorText } from '../../core/services/oidc';
 import { ServerConfigService } from '../../core/services/server-config.service';
@@ -105,9 +107,10 @@ export class LoginComponent {
       void this.router.navigateByUrl(this.auth.takeSignInReturn(), { replaceUrl: true });
     } catch (err: unknown) {
       this.loading.set(false);
-      const httpErr = err as { error?: { message?: string } };
       this.error.set(
-        httpErr.error?.message ?? this.translate.instant('login.error'),
+        err instanceof HttpErrorResponse
+          ? extractMessage(err, this.translate)
+          : this.translate.instant('login.error_detail', { detail: (err as Error)?.message ?? String(err) }),
       );
     }
   }
