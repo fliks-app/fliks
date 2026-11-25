@@ -213,19 +213,23 @@ describe('NativeEngine position cadence', () => {
 describe('NativeEngine surface placement', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('keeps the native surface on the container rectangle', async () => {
-    let box = { left: 0, top: 0, right: innerWidth, bottom: innerHeight, width: innerWidth, height: innerHeight };
+  it('keeps the native surface on the container layout box, transforms excluded', async () => {
+    let box = { offsetLeft: 0, offsetTop: 0, offsetWidth: innerWidth, offsetHeight: innerHeight };
     const container = document.createElement('div');
-    container.getBoundingClientRect = () => box as DOMRect;
+    for (const key of Object.keys(box) as (keyof typeof box)[]) {
+      Object.defineProperty(container, key, { get: () => box[key] });
+    }
+    // The open animation's scale shows in the client rect only, mid-animation.
+    container.getBoundingClientRect = () => ({ left: 51, top: 24, right: innerWidth - 51, bottom: innerHeight - 24 }) as DOMRect;
     const engine = new NativeEngine();
     await engine.init(container);
     expect(plugin.resize).not.toHaveBeenCalled();
 
-    box = { ...box, right: innerWidth * 0.6, width: innerWidth * 0.6 };
+    box = { ...box, offsetWidth: Math.round(innerWidth * 0.6) };
     onResize();
     expect(plugin.resize).toHaveBeenLastCalledWith({ x: 0, y: 0, width: Math.round(innerWidth * 0.6), height: innerHeight });
 
-    box = { ...box, right: innerWidth, width: innerWidth };
+    box = { ...box, offsetWidth: innerWidth };
     onResize();
     expect(plugin.resize).toHaveBeenLastCalledWith({ x: 0, y: 0, width: -1, height: -1 });
     expect(plugin.resize).toHaveBeenCalledTimes(2);
