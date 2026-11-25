@@ -134,3 +134,15 @@ describe('LoginComponent errors', () => {
     expect(await submit(new Error('Keychain error -34018'))).toBe('login.error_detail');
   });
 });
+
+describe('LoginComponent locked username', () => {
+  it('disables the username chosen in the picker and still signs in with it', async () => {
+    const s = setup({ query: { username: 'bob' } });
+    Object.assign(s.auth, { login: vi.fn(async () => undefined), takeSignInReturn: () => '/' });
+    Object.assign(TestBed.inject(Router), { navigateByUrl: vi.fn() });
+    expect((s.el.querySelector('#username') as HTMLInputElement).disabled).toBe(true);
+    s.fixture.componentInstance.form.controls.password.setValue('p');
+    await s.fixture.componentInstance.onSubmit();
+    expect((s.auth as unknown as { login: ReturnType<typeof vi.fn> }).login).toHaveBeenCalledWith('bob', 'p');
+  });
+});

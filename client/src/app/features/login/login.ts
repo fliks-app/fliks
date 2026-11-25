@@ -46,8 +46,12 @@ export class LoginComponent {
   readonly usernameLocked = !!this.presetUsername;
 
   readonly form = this.fb.nonNullable.group({
+    // Disabled, not read-only: iOS still focuses and selects a read-only field.
     username: [
-      this.presetUsername ?? this.serverConfig.lastUsernameForActiveServer() ?? '',
+      {
+        value: this.presetUsername ?? this.serverConfig.lastUsernameForActiveServer() ?? '',
+        disabled: this.usernameLocked,
+      },
       Validators.required,
     ],
     password: ['', Validators.required],
