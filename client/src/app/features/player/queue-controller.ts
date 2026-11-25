@@ -117,8 +117,8 @@ export class QueueController {
     if (!this.state.ended()) return;
     if (this.state.error()) return;
     if (!this.upNext()) {
-      // A pre-roll chains to the main item and a party's server picks what plays next.
-      if (!this.host.preRollActive() && !this.session.partyActive()) untracked(() => this.host.close());
+      // A pre-roll chains to the main item, a party's server picks what plays next, and a switch in flight ends on its own.
+      if (!this.advancing && !this.host.preRollActive() && !this.session.partyActive()) untracked(() => this.host.close());
       return;
     }
     if (!this.autoplayEnabled()) return;
@@ -205,6 +205,7 @@ export class QueueController {
         if (skipped > 0) {
           this.toast.error(this.translate.instant('player.next_unavailable'));
         }
+        if (auto) this.host.close();
         return;
       }
 

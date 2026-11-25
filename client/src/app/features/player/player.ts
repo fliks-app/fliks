@@ -551,7 +551,8 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     clearEdlEnded: () => { this.edlEnded = false; },
     setBackdropUrl: (url) => this.showBackdrop(url),
     reloadForEpisode: (fileId, mediaId, episodeId) => this.reloadForEpisode(fileId, mediaId, episodeId),
-    close: () => this.onBack(),
+    // Nothing takes the app out of Android PiP: closing would leave the origin page in the PiP window.
+    close: () => { if (!this.inPipMode()) this.onBack(); },
   }), null);
   readonly webCrop = inject(WebVideoCropController);
 

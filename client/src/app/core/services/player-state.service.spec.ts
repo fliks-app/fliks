@@ -249,3 +249,13 @@ describe('PlayerStateService engine reload', () => {
     outer();
   });
 });
+
+describe('PlayerStateService end of stream', () => {
+  it('drops the end once playback resumes', () => {
+    const { service, state, fire } = setup();
+    fire('ended', undefined);
+    expect(service.ended()).toBe(true);
+    state('playing');
+    expect(service.ended()).toBe(false);
+  });
+});

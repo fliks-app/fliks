@@ -163,6 +163,7 @@ export class PlayerStateService {
       if (e.state === 'playing' || e.state === 'error' || e.state === 'ended') {
         this.startingPlayback.set(false);
       }
+      if (e.state === 'playing') this.ended.set(false);
       // Never latch while paused: the only clear path needs an advancing playhead, so the spinner would hide the play button.
       // An engine error reads as buffering until the recovery retries or ends on the card.
       const buffering = (e.state === 'buffering' || e.state === 'error') && !this.paused();

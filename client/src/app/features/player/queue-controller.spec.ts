@@ -123,7 +123,8 @@ describe('QueueController at the natural end', () => {
     const close = vi.fn();
     const { ctl, session, queue } = setup(true, { close, preRollActive: () => !!opts.preRoll });
     session.partyActive.set(!!opts.party);
-    queue.setIndex(opts.index);
+    if (opts.index < 0) queue.clear();
+    else queue.setIndex(opts.index);
     TestBed.inject(PlayerStateService).ended.set(true);
     ctl.autoAdvance();
     TestBed.resetTestingModule();
@@ -132,6 +133,7 @@ describe('QueueController at the natural end', () => {
 
   it('closes the player when nothing follows', () => {
     expect(ended({ index: 1 })).toHaveBeenCalledOnce();
+    expect(ended({ index: -1 })).toHaveBeenCalledOnce();
   });
 
   it('stays open when an item follows, autoplay or not', () => {
@@ -141,5 +143,28 @@ describe('QueueController at the natural end', () => {
   it('leaves a pre-roll and a party to pick what plays next', () => {
     expect(ended({ index: 1, preRoll: true })).not.toHaveBeenCalled();
     expect(ended({ index: 1, party: true })).not.toHaveBeenCalled();
+  });
+});
+
+describe('QueueController auto-advance into an unavailable item', () => {
+  it('closes once the switch finds nothing playable, not while it resolves', async () => {
+    let resolve!: (m: null) => void;
+    TestBed.overrideProvider(MediaService, { useValue: { getOne: () => new Promise((r) => (resolve = r)) } });
+    TestBed.overrideProvider(ToastService, { useValue: { error: vi.fn() } });
+    const close = vi.fn();
+    const { ctl, queue } = setup(true, { close, mediaId: () => 0 });
+    queue.start([{ mediaId: 1, mediaFileId: 11, title: 'a' }, { mediaId: 2, title: 'b' }], 0, { source: 'series', sourceId: 1, autoplay: true });
+    TestBed.inject(PlayerStateService).ended.set(true);
+
+    const advancing = ctl.advance(true);
+    for (let i = 0; i < 10 && queue.index() !== 1; i++) await Promise.resolve();
+    expect(queue.index()).toBe(1);
+    ctl.autoAdvance();
+    expect(close).not.toHaveBeenCalled();
+
+    resolve(null);
+    await advancing;
+    expect(close).toHaveBeenCalledOnce();
+    TestBed.resetTestingModule();
   });
 });
