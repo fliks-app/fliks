@@ -451,11 +451,10 @@ export class NativeEngine extends AbstractPlaybackEngine implements PlaybackEngi
    *  shrinks the player (a side panel) moves the picture with the controls. A full-viewport container sends -1. */
   private followContainer(container: HTMLElement): void {
     const sync = () => {
-      const r = container.getBoundingClientRect();
-      const full = r.left <= 0 && r.top <= 0 && r.right >= innerWidth && r.bottom >= innerHeight;
-      const rect = full
-        ? { x: 0, y: 0, width: -1, height: -1 }
-        : { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) };
+      // The layout box, transforms excluded: the open animation scales the container and no observer fires when it ends.
+      const { offsetLeft: x, offsetTop: y, offsetWidth: width, offsetHeight: height } = container;
+      const full = x <= 0 && y <= 0 && x + width >= innerWidth && y + height >= innerHeight;
+      const rect = full ? { x: 0, y: 0, width: -1, height: -1 } : { x, y, width, height };
       const key = `${rect.x},${rect.y},${rect.width},${rect.height}`;
       if (key === this.viewport || !this._initialized) return;
       this.viewport = key;
