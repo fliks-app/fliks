@@ -484,6 +484,14 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'general',
+        canActivate: [desktopGuard],
+        loadComponent: () =>
+          import('./features/app-settings/general-settings/general-settings').then(
+            (m) => m.GeneralSettingsPageComponent,
+          ),
+      },
+      {
         path: 'remote',
         loadComponent: () =>
           import('./features/app-settings/remote-settings/remote-settings').then(

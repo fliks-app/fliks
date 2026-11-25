@@ -185,7 +185,7 @@ describe('PushService', () => {
 
     async function started(): Promise<{ push: PushService; http: HttpTestingController }> {
       const r = create();
-      await vi.waitFor(() => expect(r.push.desktopPrefs()).not.toBeNull());
+      await vi.waitFor(() => expect(r.push.desktopStatus()).not.toBeNull());
       return r;
     }
     const note = (tag?: string, v = 1) => ({ v, id: 'n', ts: 0, ttl: 60, cat: 'account', title: 't', body: 'b', url: '/', tag });

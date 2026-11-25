@@ -195,6 +195,8 @@ export class PushService {
   private asking = false;
 
   constructor() {
+    // Shell prefs belong to the machine, not to an account or a server version.
+    if (this.mode === 'desktop') void desktopBridgeOrNull()?.getNotifyPrefs?.().then((p) => this.desktopPrefs.set(p ?? null));
     effect(() => {
       this.auth.sessionEpoch();
       const user = this.auth.user();
@@ -462,7 +464,6 @@ export class PushService {
     }
     await this.retryPendingDelete();
     if (this.mode === 'native') await this.startNative();
-    if (this.mode === 'desktop') this.desktopPrefs.set((await desktopBridgeOrNull()?.getNotifyPrefs?.()) ?? null);
     if (this.mode === 'desktop') await this.refreshDesktopStatus();
     if (this.mode === 'web') this.permission.set(this.webPermission());
     if (this.mode === 'native' || this.mode === 'web') await this.loadConfig();

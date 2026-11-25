@@ -23,25 +23,13 @@
             [hint]="'app_settings.notifications.device_hint' | translate"
           />
         }
-        @if (push.desktopPrefs(); as prefs) {
+        @if (push.desktopPrefs()) {
           <app-toggle-field
             [value]="push.desktopShows()"
             (valueChange)="push.setDesktopPref({ notifications: $event })"
             [disabled]="push.switchLocked()"
             [label]="'app_settings.notifications.device' | translate"
             [hint]="'app_settings.notifications.desktop_hint' | translate"
-          />
-          <app-toggle-field
-            [value]="prefs.background"
-            (valueChange)="push.setDesktopPref({ background: $event })"
-            [label]="'app_settings.notifications.background' | translate"
-            [hint]="'app_settings.notifications.background_hint' | translate"
-          />
-          <app-toggle-field
-            [value]="prefs.startAtLogin"
-            (valueChange)="push.setDesktopPref({ startAtLogin: $event })"
-            [label]="'app_settings.notifications.start_at_login' | translate"
-            [hint]="'app_settings.notifications.start_at_login_hint' | translate"
           />
         }
         @if (!push.mobileBlockedByAdmin()) {

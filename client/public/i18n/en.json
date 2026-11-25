@@ -408,6 +408,7 @@
   "app_settings": {
     "title": "Settings",
     "nav": {
+      "general": "General",
       "player": "Playback",
       "subtitles": "Subtitles",
       "cast": "Chromecast",
@@ -464,16 +465,20 @@
       "plugins_title": "Plugins",
       "plugins_hint": "Applies to all your devices.",
       "plugin_hint": "Messages sent by this plugin.",
-      "background": "Keep running in the background",
-      "background_hint": "Closing the window leaves Fliks running so notifications keep arriving.",
-      "start_at_login": "Start at login",
-      "start_at_login_hint": "Fliks opens in the background when you sign in to your computer.",
       "pending_expired": "Sign in again to open this notification.",
       "tray_open": "Open Fliks",
       "tray_quit": "Quit Fliks",
       "badge_label": "Notifications",
       "cat_system": "System",
       "cat_system_hint": "Health checks that fail on this server."
+    },
+    "general": {
+      "background": "Keep running in the background",
+      "background_hint": "Closing the window leaves Fliks running so notifications keep arriving.",
+      "start_at_login": "Start at login",
+      "start_at_login_hint": "Fliks opens in the background when you sign in to your computer.",
+      "quit_on_close": "Quit when the window closes",
+      "quit_on_close_hint": "Closing the window quits Fliks instead of leaving it in the Dock."
     }
   },
   "update_settings": {

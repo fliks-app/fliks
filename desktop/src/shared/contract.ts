@@ -245,6 +245,8 @@ export interface DesktopNotifyPrefs {
   /** Closing the window leaves the app running in the tray. */
   background: boolean;
   startAtLogin: boolean;
+  /** macOS only, absent elsewhere: closing the window quits instead of leaving the app in the dock. */
+  quitOnClose?: boolean;
 }
 
 /** Whether the OS shows Fliks' notifications: `blocked` in its settings, `unavailable` without a notification service. */

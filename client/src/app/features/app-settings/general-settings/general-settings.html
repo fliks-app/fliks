@@ -1,0 +1,27 @@
+<h1 class="text-2xl font-bold mb-4">{{ 'app_settings.nav.general' | translate }}</h1>
+@if (push.desktopPrefs(); as prefs) {
+  <div class="card bg-base-100 border border-base-200">
+    <div class="card-body gap-4">
+      <app-toggle-field
+        [value]="prefs.background"
+        (valueChange)="push.setDesktopPref({ background: $event })"
+        [label]="'app_settings.general.background' | translate"
+        [hint]="'app_settings.general.background_hint' | translate"
+      />
+      @if (prefs.quitOnClose !== undefined && !prefs.background) {
+        <app-toggle-field
+          [value]="prefs.quitOnClose"
+          (valueChange)="push.setDesktopPref({ quitOnClose: $event })"
+          [label]="'app_settings.general.quit_on_close' | translate"
+          [hint]="'app_settings.general.quit_on_close_hint' | translate"
+        />
+      }
+      <app-toggle-field
+        [value]="prefs.startAtLogin"
+        (valueChange)="push.setDesktopPref({ startAtLogin: $event })"
+        [label]="'app_settings.general.start_at_login' | translate"
+        [hint]="'app_settings.general.start_at_login_hint' | translate"
+      />
+    </div>
+  </div>
+}

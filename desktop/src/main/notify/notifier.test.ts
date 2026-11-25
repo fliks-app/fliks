@@ -66,6 +66,23 @@ test('with a tray, closing hides, until the app really quits', async () => {
   assert.equal(n.hideOnClose(), false);
 });
 
+test('quit on close is kept on macOS only', async () => {
+  const set = (on: boolean) => setPrefs({ quitOnClose: on }) as Promise<{ quitOnClose?: boolean }>;
+  const real = process.platform;
+  try {
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+    await new Notifier('/icon.png', async () => true).attach(host());
+    assert.equal((await set(true)).quitOnClose, undefined);
+    Object.defineProperty(process, 'platform', { value: 'darwin' });
+    const mac = new Notifier('/icon.png', async () => true);
+    await mac.attach(host());
+    assert.equal((await set(true)).quitOnClose, true);
+    assert.equal(mac.quitOnClose(), true);
+  } finally {
+    Object.defineProperty(process, 'platform', { value: real });
+  }
+});
+
 test('a second launch brings the window back', async () => {
   const n = new Notifier('/icon.png', async () => true);
   const h = host();

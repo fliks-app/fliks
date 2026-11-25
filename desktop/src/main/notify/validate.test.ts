@@ -37,6 +37,7 @@ test('badge and prefs inputs', () => {
   assert.throws(() => parseBadge('3'));
   assert.deepEqual(parsePrefsPatch({ background: true }), { background: true });
   assert.throws(() => parsePrefsPatch({ background: 'yes' }));
+  assert.deepEqual(parsePrefsPatch({ quitOnClose: false }), { quitOnClose: false });
 });
 
 test('script, backslash and scheme tricks leave the origin', () => {
