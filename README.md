@@ -180,7 +180,7 @@ full list of what it runs on.
 | **Android TV** | Play Store | Android 7 | |
 | **Samsung TV (Tizen)** | sideload for now | Tizen 6.5 | works fully, not yet on Samsung Apps |
 | **LG TV (webOS)** | LG Content Store | webOS 7.0 | approved, on the store |
-| **Desktop** | release assets, APT or Snap Store on Linux | macOS: Apple Silicon | Windows `.exe`, macOS `.dmg`, Linux `.deb` / AppImage |
+| **Desktop** | [Mac App Store](https://apps.apple.com/app/fliks/id6771854507), [release assets](https://github.com/fliks-app/fliks/releases/latest), APT or Snap Store on Linux | macOS 13, Apple Silicon | Windows `.exe`, macOS App Store or `.dmg`, Linux `.deb` / AppImage; [download page](https://docs.fliks.media/clients/desktop) |
 | **Chromecast** | built in, cast from any client | any | custom receiver, same player engine |
 | **Apple TV** | App Store | tvOS 17 | native SwiftUI app |
 | **Nintendo Switch** | build the `.nro` from [switchfliks](https://github.com/fliks-app/switchfliks) | homebrew-enabled console | **beta**, native client with hardware decode |
