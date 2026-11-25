@@ -187,7 +187,7 @@
           </div>
         </div>
       }
-      <router-outlet />
+      <router-outlet (activate)="navbar.showPage($event)" (attach)="navbar.showPage($event)" />
     </main>
     <!-- Native bottom navigation bar — phones only.
          Tablets and TV use the drawer/sidebar instead. -->

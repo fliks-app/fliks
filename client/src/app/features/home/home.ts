@@ -33,7 +33,7 @@ import { ConfirmationService } from '../../core/services/confirmation.service';
 import { MediaStartService } from '../../core/services/media-start.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { DefaultFocusDirective } from '../../shared/directives/default-focus.directive';
-import { NavbarService } from '../../core/services/navbar.service';
+import { HeroPage, NavbarService } from '../../core/services/navbar.service';
 import { DisplaySettingsService } from '../../core/services/display-settings.service';
 import { HomeSettingsService, HomeSectionType, ResolvedHomeSection } from '../../core/services/home-settings.service';
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
@@ -90,7 +90,7 @@ import type { MediaType } from '../../core/enums/media-type.enum';
   ],
   templateUrl: './home.html',
 })
-export class HomeComponent implements OnInit, OnDestroy {
+export class HomeComponent implements OnInit, OnDestroy, HeroPage {
   /** Holds the page's hero picture, which keeps the phone bar clear while it is under it. */
   private readonly heroHost: Element = inject(ElementRef).nativeElement;
   private readonly mediaService = inject(MediaService);
@@ -134,9 +134,6 @@ export class HomeComponent implements OnInit, OnDestroy {
     // repaint nothing.
     refreshOnResume: () => void this.loadAllSections({ force: true }),
     scrollKey: HomeComponent.SCROLL_KEY,
-    // In step with the route swap: a frame without the hero chrome would move the page under the bar.
-    onAttach: () => this.claimHeroChrome(),
-    onDetach: () => this.navbar.leaveHeroPage(this),
   });
   private readonly declineModal = viewChild(RequestDeclineModalComponent);
   readonly decline = new RequestDeclineFlow(() => this.declineModal());
@@ -268,11 +265,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   /** The carousel holds its place until its picks answer; an empty answer gives the place back. */
   protected readonly showHero = computed(() => this.heroVisible() && (!this.featuredLoaded() || this.featured().length > 0));
   /** Wherever the top bar shows, the carousel picture runs under it, so home is a hero page from its first frame. */
-  private readonly heroUnderBar = computed(() => this.showHero() && this.navbar.mobileNavbarVisible());
-  private readonly heroChrome = effect(() => {
-    if (this.routeFresh()) return;
-    this.claimHeroChrome();
-  });
+  readonly heroChrome = computed(() =>
+    this.showHero() && this.navbar.mobileNavbarVisible() ? { host: this.heroHost, brand: true } : null,
+  );
 
   /** The carousel's first button, else resuming, else the page's first focusable. */
   protected readonly defaultFocus = computed(() =>
@@ -282,11 +277,6 @@ export class HomeComponent implements OnInit, OnDestroy {
         ? "[data-home-focus^='cw:']"
         : '',
   );
-
-  private claimHeroChrome(): void {
-    if (this.heroUnderBar()) this.navbar.enterHeroPage(this, { host: this.heroHost, brand: true });
-    else this.navbar.leaveHeroPage(this);
-  }
 
   qualityProfileDisplay(id: number | null): string {
     if (id == null) return '-';
@@ -525,7 +515,6 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.navbar.leaveHeroPage(this);
     this.scrollMemory.deactivateIf(HomeComponent.SCROLL_KEY);
     this.playbackStopped.unsubscribe();
   }

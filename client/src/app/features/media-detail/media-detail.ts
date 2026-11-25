@@ -10,7 +10,7 @@ import { MediaService, Media } from '../../core/services/api/media.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ProfilesService, LanguageProfile } from '../../core/services/api/profiles.service';
 import { LibrariesApiService, LibrarySummary } from '../../core/services/api/libraries-api.service';
-import { NavbarService } from '../../core/services/navbar.service';
+import { HeroPage, NavbarService } from '../../core/services/navbar.service';
 import { BackgroundService } from '../../core/services/background.service';
 import { pickFanart } from '../../shared/utils/media-artwork.util';
 import { lazyModal } from '../../shared/utils/lazy-modal';
@@ -64,7 +64,7 @@ import { ModalComponent } from '../../shared/components/modal';
     ReleaseGrabController,
   ],
 })
-export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost {
+export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost, HeroPage {
   /** Holds the page's hero picture, which keeps the phone bar clear while it is under it. */
   private readonly heroHost: Element = inject(ElementRef).nativeElement;
   constructor() {
@@ -142,30 +142,22 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
   private fanartUrl: string | null = null;
   private fanartIsCover = false;
 
-  /** The hero navbar and the backdrop are global state, so a cached page hands
-   *  them back on the way out and reclaims them on return. */
-  private heroMenu: ((anchor: HTMLElement) => void) | null = null;
+  private readonly heroMenu = signal<((anchor: HTMLElement) => void) | null>(null);
+  /** Kept until the page resolves its next title, so switching episodes never blanks the bar. */
+  private readonly heroCentre = signal<{ title: string; logoUrl?: string | null } | null>(null);
+  readonly heroChrome = computed(() => ({ host: this.heroHost, ...this.heroCentre(), menu: this.heroMenu() }));
 
   setHeroMenu(open: ((anchor: HTMLElement) => void) | null): void {
-    const prev = this.heroMenu;
-    this.heroMenu = open;
-    // Parked: restoreChrome declares it again on return.
-    if (this.routeFresh()) return;
-    if (open) this.navbarService.heroMenu.set(open);
-    else if (this.navbarService.heroMenu() === prev) this.navbarService.heroMenu.set(null);
+    this.heroMenu.set(open);
   }
 
+  /** The backdrop is global state, so a cached page hands it back on the way out and reclaims it on return. */
   private releaseChrome(): void {
-    this.navbarService.leaveHeroPage(this);
     this.backgroundService.suspend(this);
   }
 
   private restoreChrome(): void {
     this.backgroundService.set(this, this.fanartUrl, { blur: this.fanartIsCover });
-    const m = this.media();
-    if (m) this.navbarService.enterHeroPage(this, { host: this.heroHost, title: this.navTitle() ?? m.title, logoUrl: m.logoUrl });
-    else this.navbarService.enterHeroPage(this, { host: this.heroHost });
-    this.navbarService.heroMenu.set(this.heroMenu);
   }
 
   /** Driven by the route param, not ngOnInit: switching episodes reuses this instance and must not refetch the held series. */
@@ -199,7 +191,7 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
     if (!m || !params || m.id !== Number(params.get('id'))) return;
     // Seeded stub: no season tree yet, so the page has not resolved what its title is.
     if (kindOf(m.type).hasSeasons && !m.seasons) return;
-    this.navbarService.enterHeroPage(this, { host: this.heroHost, title: title ?? m.title, logoUrl: m.logoUrl });
+    this.heroCentre.set({ title: title ?? m.title, logoUrl: m.logoUrl });
   });
 
   /** Fanart, never the episode still (TMDB stills cap at ~780×438 and look mushy fullscreen); the blurred cover when there is none. */
@@ -291,8 +283,6 @@ export class MediaDetailComponent implements OnInit, OnDestroy, MediaDetailHost 
   }
 
   ngOnInit() {
-    // Enter hero page immediately (transparent navbar) - title will be set after media loads
-    this.navbarService.enterHeroPage(this, { host: this.heroHost });
     // Load profiles in parallel with media - neither blocks the other
     void this.loadProfiles();
   }

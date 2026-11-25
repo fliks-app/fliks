@@ -141,8 +141,6 @@ function createHarness(remembered?: number) {
         provide: NavbarService,
         useValue: {
           setPageTitle: vi.fn(),
-          enterHeroPage: vi.fn(),
-          leaveHeroPage: vi.fn(),
           mobileNavbarVisible: signal(true),
           navigatedBack,
         },
@@ -611,7 +609,7 @@ describe('LibraryComponent: featured carousel', () => {
       component.library.set({ id: 3, name: 'Movies', mediaTypes: ['movie'] } as never);
       await TestBed.inject(ApplicationRef).whenStable();
       expect(component['showCarousel']()).toBe(false);
-      expect(TestBed.inject(NavbarService).enterHeroPage).not.toHaveBeenCalled();
+      expect(component.heroChrome()).toBeNull();
     } finally {
       serverHasFeatured.set(true);
     }

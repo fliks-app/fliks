@@ -69,7 +69,7 @@ function createFixture() {
       { provide: LibrariesApiService, useValue: {} },
       {
         provide: NavbarService,
-        useValue: { enterHeroPage: vi.fn(), leaveHeroPage: vi.fn(), navigatedBack },
+        useValue: { navigatedBack },
       },
       {
         provide: BackgroundService,
