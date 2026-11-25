@@ -8,7 +8,7 @@
         [label]="'app_settings.general.background' | translate"
         [hint]="'app_settings.general.background_hint' | translate"
       />
-      @if (prefs.quitOnClose !== undefined) {
+      @if (prefs.quitOnClose !== undefined && !prefs.background) {
         <app-toggle-field
           [value]="prefs.quitOnClose"
           (valueChange)="push.setDesktopPref({ quitOnClose: $event })"

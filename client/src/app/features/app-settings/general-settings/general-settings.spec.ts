@@ -37,4 +37,9 @@ describe('GeneralSettingsPageComponent', () => {
     switches[1].click();
     expect(setDesktopPref).toHaveBeenCalledWith({ quitOnClose: true });
   });
+
+  it('hides quit on close while closing keeps Fliks in the tray', async () => {
+    const { text } = await render({ notifications: true, background: true, startAtLogin: false, quitOnClose: false });
+    expect(text).not.toContain('app_settings.general.quit_on_close');
+  });
 });
