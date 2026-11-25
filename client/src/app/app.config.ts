@@ -64,6 +64,7 @@ import {
   hasPosterStamp,
   heroTitleStamped,
   HERO_TRIP_CLASS,
+  isRootEntryRoute,
   leafRoutePath,
   leavingPosterPage,
   markViewTransition,
@@ -142,7 +143,7 @@ export const appConfig: ApplicationConfig = {
                 // getCurrentNavigation(), not history.state: with deferred URL update the browser state isn't swapped in yet.
                 // Also true on a popstate back to a root page, which flattens the stack too.
                 const rootEntry =
-                  !!inject(Router).getCurrentNavigation()?.extras.state?.['rootEntry'];
+                  !!inject(Router).getCurrentNavigation()?.extras.state?.['rootEntry'] || isRootEntryRoute(to);
                 // Consumed before any guard can return early and strand it; root chrome switches root, so it spends the arming without using it.
                 const armed = consumeArmed() && !rootEntry;
                 if (rootEntry) resetStack();

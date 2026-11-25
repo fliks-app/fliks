@@ -233,29 +233,9 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.searchTimer) clearTimeout(this.searchTimer);
     if (this.filterDebounce) clearTimeout(this.filterDebounce);
     this.scrollMemory.deactivateIf(SearchComponent.SCROLL_KEY);
-    this.removeOutsidePointerListener();
-  }
-
-  /** Outside-tap → blur: Capacitor's iOS WebView doesn't reliably blur on a non-interactive tap, so a one-shot pointerdown listener does. */
-  private outsidePointerHandler: ((e: Event) => void) | null = null;
-
-  protected onInputFocus() {
-    if (this.outsidePointerHandler) return;
-    const inputEl = this.searchInput()?.nativeElement;
-    if (!inputEl) return;
-    this.outsidePointerHandler = (e: Event) => {
-      const target = e.target as Node | null;
-      if (!target) return;
-      // Tap inside the input or the surrounding <form> (clear button, icon)
-      // — keep focus.
-      if (inputEl.closest('form')?.contains(target)) return;
-      inputEl.blur();
-    };
-    document.addEventListener('pointerdown', this.outsidePointerHandler, { capture: true });
   }
 
   protected onInputBlur() {
-    this.removeOutsidePointerListener();
     // Capacitor WebView sometimes keeps the soft keyboard up after a JS
     // blur — force it down to match the visual state.
     if (Capacitor.isNativePlatform()) {
@@ -268,13 +248,6 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   protected dismissKeyboard() {
     this.recent.add(this.state.query());
     this.searchInput()?.nativeElement.blur();
-  }
-
-  private removeOutsidePointerListener() {
-    if (this.outsidePointerHandler) {
-      document.removeEventListener('pointerdown', this.outsidePointerHandler, { capture: true });
-      this.outsidePointerHandler = null;
-    }
   }
 
   /** A click on a result card or link commits the query. */

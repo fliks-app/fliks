@@ -4,6 +4,19 @@
   exclude: calendar;
 }
 
+/* Status colours of the built-in dark theme: toasts, alerts, badges and buttons share them. */
+@plugin "daisyui/theme" {
+  name: "dark";
+  --color-error: #f87171;
+  --color-error-content: #1a1a1a;
+  --color-success: #3ecf8e;
+  --color-success-content: #1a1a1a;
+  --color-info: #60a5fa;
+  --color-info-content: #1a1a1a;
+  --color-warning: #fbbf24;
+  --color-warning-content: #1a1a1a;
+}
+
 @import "./styles/foundations.css";
 @import "./styles/tv.css";
 @import "./styles/base-components.css";

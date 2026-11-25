@@ -55,20 +55,7 @@ import { icons } from '../icons';
         border-radius: 0.875rem;
         border: 0;
         box-shadow: 0 10px 30px -8px rgb(0 0 0 / 0.5);
-        color: #1a1a1a;
         animation: none;
-      }
-      .toast-pill.alert-error {
-        --alert-color: #f87171;
-      }
-      .toast-pill.alert-success {
-        --alert-color: #3ecf8e;
-      }
-      .toast-pill.alert-info {
-        --alert-color: #60a5fa;
-      }
-      .toast-pill.alert-warning {
-        --alert-color: #fbbf24;
       }
       .toast-pill--tall {
         align-items: flex-start;

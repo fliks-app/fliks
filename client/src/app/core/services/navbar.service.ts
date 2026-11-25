@@ -3,6 +3,7 @@ import { Injectable, Signal, TemplateRef, computed, effect, inject, signal, untr
 import { NavigationEnd, NavigationStart, Router, Scroll } from '@angular/router';
 import { Capacitor } from '@capacitor/core';
 import { DeviceService } from './device.service';
+import { isRootEntryRoute } from '../../shared/utils/view-transition';
 
 export type RailMode = 'none' | 'drawer' | 'collapsed' | 'expanded';
 
@@ -108,6 +109,7 @@ export class NavbarService {
     }
     // Empty, not `router.url`: seeding before the initial navigation would push a phantom '/' entry.
     let lastUrl = '';
+    let lastWasEntry = false;
     this.router.events.subscribe((e) => {
       if (e instanceof NavigationStart) {
         // A returned-to page must look as left; not `isPoppingBack` (top-level nav sets it too). backNavPending, not lastWasBack:
@@ -140,7 +142,8 @@ export class NavbarService {
       if (e instanceof NavigationEnd) {
         // Top-level entries mark their own navigation, so the stack is decided
         // by where the router landed rather than by a click that preceded it.
-        const rootEntry = !!(this.location.getState() as { rootEntry?: boolean } | null)?.rootEntry;
+        const entryRoute = isRootEntryRoute(this.router.routerState.snapshot.root);
+        const rootEntry = entryRoute || !!(this.location.getState() as { rootEntry?: boolean } | null)?.rootEntry;
         const popped = this.isPoppingBack;
         this.isPoppingBack = false;
         // goBack() navigates to a URL recorded here rather than calling
@@ -151,14 +154,16 @@ export class NavbarService {
           // Nothing to push: this navigation IS the pop.
         } else if (
           lastUrl &&
-          // A player is never a back target, whichever way it was left.
+          // A player is never a back target, whichever way it was left; nor is an entry screen once signed in.
           !lastUrl.startsWith('/watch') &&
+          !lastWasEntry &&
           this.pathOf(lastUrl) !== this.pathOf(e.urlAfterRedirects)
         ) {
           // Only a path change pushes a back entry; query-only changes (tabs, filters, sort) are in-page state.
           this.history.push(lastUrl);
         }
         lastUrl = e.urlAfterRedirects;
+        lastWasEntry = entryRoute;
         // Our stack is empty after a hard refresh: fall back to browser history. Skipped on native, where the WebView doesn't track it (see goBack()).
         const hasRealHistory = !this.isNative && window.history.length > 1;
         this.canGoBack.set(

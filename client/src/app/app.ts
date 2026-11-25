@@ -36,6 +36,8 @@ import { OfflinePlaybackSyncService } from './core/services/offline-playback-syn
 import { RemoteService } from './core/services/remote.service';
 import { TIZEN_MEDIA_KEYS, isBackKey } from './features/player/player-keymap';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
+import { installTapOutsideBlur } from './core/utils/tap-outside-blur';
+import { isRootEntryRoute } from './shared/utils/view-transition';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { BlockingOverlayAction, BlockingOverlayComponent } from './shared/components/blocking-overlay/blocking-overlay';
 import { ServerBootService } from './core/services/server-boot.service';
@@ -128,6 +130,7 @@ export class App implements OnInit, OnDestroy {
     this.remoteNotification.init();
 
     this.initInputModalityTracking();
+    installTapOutsideBlur();
 
     // Native shells reconnect from the Capacitor resume hook below: a second reconnect would detach this device again.
     if (!Capacitor.isNativePlatform()) {
@@ -297,8 +300,8 @@ export class App implements OnInit, OnDestroy {
       this.navbar.goBack();
       return;
     }
-    // A top-level page other than home steps back to home before leaving the app.
-    if (this.router.url.split(/[?#]/)[0] !== '/') {
+    // A top-level page other than home steps back to home before leaving the app; an entry screen leaves at once (home bounces back to it).
+    if (this.router.url.split(/[?#]/)[0] !== '/' && !isRootEntryRoute(this.router.routerState.snapshot.root)) {
       void this.router.navigateByUrl('/', { state: { rootEntry: true } });
       return;
     }

@@ -1,5 +1,6 @@
 <div
-  class="min-h-screen flex items-center justify-center bg-base-200 px-4 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]"
+  class="min-h-screen flex items-center justify-center bg-base-200 px-4 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] pb-[calc(max(env(safe-area-inset-bottom,0px),var(--keyboard-h,0px))+1.5rem)] transition-[padding] duration-300 ease-out motion-reduce:transition-none"
+  [style.--keyboard-h.px]="keyboard.height()"
 >
   <div class="flex w-full max-w-sm flex-col items-center gap-4">
     <div class="card w-full bg-base-100 shadow-xl">
@@ -8,6 +9,7 @@
 
         @if (error()) {
           <div role="alert" class="alert alert-error">
+            <svg [lucideIcon]="icons.CircleAlert" class="h-5 w-5 shrink-0"></svg>
             <span>{{ error() }}</span>
           </div>
         }
@@ -26,21 +28,24 @@
               <input
                 id="username"
                 type="text"
-                class="input input-bordered w-full read-only:bg-base-200 read-only:text-base-content/60 read-only:cursor-default"
+                class="input input-bordered w-full"
                 formControlName="username"
                 autocomplete="username"
                 autocapitalize="none"
                 autocorrect="off"
                 spellcheck="false"
-                [readOnly]="usernameLocked"
+                enterkeyhint="next"
+                (keydown.enter)="$event.preventDefault(); password.focus()"
               />
             </fieldset>
 
             <fieldset class="fieldset p-0">
               <label class="fieldset-label" for="password">{{ 'login.password' | translate }}</label>
               <input
+                #password
                 id="password"
                 type="password"
+                enterkeyhint="go"
                 class="input input-bordered w-full"
                 formControlName="password"
                 autocomplete="current-password"

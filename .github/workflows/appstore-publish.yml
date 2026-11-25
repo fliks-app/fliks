@@ -128,8 +128,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             clean archive
 
-      # An unsigned archive has no entitlements, so the export would sign without CarPlay Audio, push or the
-      # keychain group. The extension is signed first; `$(AppIdentifierPrefix)` is only expanded by Xcode signing.
+      # An unsigned archive has no entitlements, so the export would sign without CarPlay Audio, push or the keychain group,
+      # and Info.plist keeps an empty `AppIdentifierPrefix`: Xcode only expands it when it signs. The extension is signed first.
       - name: Embed entitlements in the archive
         working-directory: client/ios/App
         env:
@@ -138,6 +138,7 @@ jobs:
           app=build/App.xcarchive/Products/Applications/App.app
           sed "s/\$(AppIdentifierPrefix)/$TEAM_ID./" FliksNotificationService/NotificationService.entitlements > build/NotificationService.entitlements
           sed "s/\$(AppIdentifierPrefix)/$TEAM_ID./" App/App.entitlements > build/App.entitlements
+          plutil -replace AppIdentifierPrefix -string "$TEAM_ID." "$app/Info.plist"
           codesign -f -s - --entitlements build/NotificationService.entitlements "$app/PlugIns/FliksNotificationService.appex"
           codesign -f -s - --entitlements build/App.entitlements "$app"
 
@@ -160,6 +161,8 @@ jobs:
       # CarPlay Audio, production push and the shared keychain group must survive the unsigned archive and the re-sign at export.
       - name: Check IPA entitlements
         working-directory: client/ios/App/build
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           unzip -q export/App.ipa -d ipa
           check() { codesign -d --entitlements - "$1" 2>&1 | tee /dev/stderr | grep -q "$2"; }
@@ -168,6 +171,8 @@ jobs:
           test "$(codesign -d --xml --entitlements - $app 2>/dev/null | plutil -extract aps-environment raw -o - -)" = production
           check $app keychain-access-groups
           check $app/PlugIns/FliksNotificationService.appex keychain-access-groups
+          # The sessions vault builds its keychain group from this key; empty, every keychain call fails with -34018.
+          test "$(plutil -extract AppIdentifierPrefix raw -o - $app/Info.plist)" = "$TEAM_ID."
 
       # `altool --upload-app` is the only ASC upload path that takes an
       # API key on the command line — `xcrun notarytool` is for

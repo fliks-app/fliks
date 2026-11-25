@@ -410,4 +410,29 @@ describe('NavbarService', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(router.url).not.toMatch(/^\/watch/);
   });
+
+  it('starts a fresh stack on each entry screen and never returns to one once signed in', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([
+          { path: 'setup', component: PageStub, data: { rootEntry: true } },
+          { path: 'select-user', component: PageStub, data: { rootEntry: true } },
+          { path: 'login', component: PageStub, data: { rootEntry: true } },
+          { path: '**', component: PageStub },
+        ]),
+      ],
+    });
+    const navbar = TestBed.inject(NavbarService);
+    const router = TestBed.inject(Router);
+    pinSessionHistoryLength(1);
+    await router.navigateByUrl('/setup');
+    await router.navigateByUrl('/select-user');
+    await router.navigateByUrl('/login');
+    expect(navbar.canGoBack()).toBe(false);
+
+    await router.navigateByUrl('/movies/1');
+    expect(navbar.canGoBack()).toBe(false);
+    await router.navigateByUrl('/movies/2');
+    expect(navbar.backDepth).toBe(1);
+  });
 });
