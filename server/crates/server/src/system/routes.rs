@@ -29,7 +29,6 @@ fn manage_all(a: &Authed) -> Result<(), AppError> {
 
 #[derive(Serialize)]
 pub struct Database {
-    name: &'static str,
     ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<String>,
@@ -80,7 +79,6 @@ pub async fn health(State(st): State<AppState>, a: Authed) -> Result<Json<Health
         version: env!("CARGO_PKG_VERSION"),
         uptime_seconds: st.system.started.elapsed().as_secs(),
         database: Database {
-            name: "PostgreSQL",
             ok,
             message: probe.err().map(|e| e.to_string()),
         },

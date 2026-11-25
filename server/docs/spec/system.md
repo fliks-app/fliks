@@ -10,7 +10,7 @@ Every route needs authentication (JWT or API key). The backup routes need `manag
 
 | Method path | Auth (extractor + policy) | Request (fields, constraints) | Response (fields, types, nesting) | Errors (status, message/code) | Side effects |
 |---|---|---|---|---|---|
-| `GET /api/system/health` | `Read Settings` | none | 200 `{version: string, uptimeSeconds: int, database: {name:'PostgreSQL', ok: bool, message?: string}, installedPlugins: int, runningPlugins: int, restartSupervisor: string\|null, confPersistent: bool, dataPersistent: bool, dbSuperuser: bool, dbLimited: bool, dbGaps: string[], lanAddresses?: string[]}` | 401, 403; a database that is down is not an error (rule 4) | none |
+| `GET /api/system/health` | `Read Settings` | none | 200 `{version: string, uptimeSeconds: int, database: {ok: bool, message?: string}, installedPlugins: int, runningPlugins: int, restartSupervisor: string\|null, confPersistent: bool, dataPersistent: bool, dbSuperuser: bool, dbLimited: bool, dbGaps: string[], lanAddresses?: string[]}` | 401, 403; a database that is down is not an error (rule 4) | none |
 | `POST /api/system/restart` | `Manage Settings` | none (body ignored) | 201 `{ok: true, supervisor: string}` | 400 `No process supervisor detected`; 401, 403 | process exits 300 ms later (rule 8) |
 | `GET /api/system/version` | any authenticated user (`() => true`) | none | 200 `{version: string}`, suffixed `-dev` in a debug build | 401 | none |
 | `GET /api/system/update` | `Read Settings` | none | 200 `UpdateStatus` (rule 10) | 401, 403 | outbound HTTPS to GitHub (cached 6 h) |
@@ -36,7 +36,7 @@ Client use: status page, restart, backups page, download link (an `<a href targe
 ### B. Health and restart
 
 3. `health` = `{version, uptimeSeconds: floor(uptime), database, installedPlugins, runningPlugins, restartSupervisor, confPersistent, dataPersistent, dbSuperuser, dbLimited, dbGaps, lanAddresses}`. `version` = the product version (rule 9). `uptimeSeconds` = seconds since the `fliks-server` process started.
-4. `database`: `SELECT 1`; ok → `{name:'PostgreSQL', ok:true}`, failure → `{name:'PostgreSQL', ok:false, message:<driver error message>}` (`message` absent when ok). With the database down `health` still answers 200, with `ok:false` and both counts `0`.
+4. `database`: `SELECT 1`; ok → `{ok:true}`, failure → `{ok:false, message:<driver error message>}` (`message` absent when ok). With the database down `health` still answers 200, with `ok:false` and both counts `0`.
 5. `installedPlugins` = `SELECT count(*) FROM plugin_packages`; `runningPlugins` = same with `WHERE enabled = true` ("enabled", not necessarily reachable; capability health belongs to the plugin).
 5b. `confPersistent` is false once a secret file was placed in the temp dir or kept in memory (`auth.md` rule 2); `dataPersistent` is false when the data dir fell back to the temp dir. Both are true in a normal install.
 5c. `dbSuperuser` is true when the connected role is a PostgreSQL superuser (rule 41). `dbGaps` lists what a non-superuser role lacks, from `create_role`, `create_database`, `public_owner`, `foreign_objects`, `advisory_locks`, `plugin_roles`; `dbLimited` is true for a non-superuser role on PostgreSQL older than 16, where `CREATEROLE` can still reach the host. Never an error: a gap that breaks a migration fails there.
