@@ -93,10 +93,12 @@ export class SetupComponent {
   /** 401 counts as reachable: the server answered, we're just not logged in. */
   private async reachable(base: string, cancel$: Observable<void> = NEVER): Promise<boolean> {
     try {
-      await firstValueFrom(
-        this.http
-          .get(`${base}/api/auth/me`, { responseType: 'json' })
-          .pipe(timeout(PROBE_TIMEOUT_MS), takeUntil(cancel$)),
+      await this.serverConfig.probe(base, () =>
+        firstValueFrom(
+          this.http
+            .get(`${base}/api/auth/me`, { responseType: 'json' })
+            .pipe(timeout(PROBE_TIMEOUT_MS), takeUntil(cancel$)),
+        ),
       );
       return true;
     } catch (err: unknown) {

@@ -29,6 +29,7 @@ async function createComponent(http: HttpClient, activeUrl = '') {
         provide: ServerConfigService,
         useValue: {
           serverUrl: () => activeUrl,
+          probe: (_url: string, request: () => Promise<unknown>) => request(),
           knownServers: signal([]),
           updateKnownServer: (_: string, c: { url: string }) => Promise.resolve(c.url),
         },

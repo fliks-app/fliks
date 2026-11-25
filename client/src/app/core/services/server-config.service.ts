@@ -50,6 +50,17 @@ export class ServerConfigService {
     await desktopBridgeOrNull()?.setServerUrl?.(url).catch(() => {});
   }
 
+  /** Runs `request` against a server that is not the configured one yet, which the desktop shell would block. */
+  async probe<T>(url: string, request: () => Promise<T>): Promise<T> {
+    await this.reportToShell(url);
+    try {
+      return await request();
+    } finally {
+      const current = this._serverUrl();
+      if (current && current !== url) await this.reportToShell(current);
+    }
+  }
+
   private async loadKnownServers(): Promise<void> {
     const raw = await readPreference(KNOWN_SERVERS_KEY);
     if (!raw) return;
