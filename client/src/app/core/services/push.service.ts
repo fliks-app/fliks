@@ -103,6 +103,7 @@ const PENDING_URL_KEY = 'fliks.push.pendingUrl';
 const TOASTS_KEY = 'fliks.push.toasts';
 /** Per device, like the OS permission it guards. */
 const SNOOZE_KEY = 'fliks.push.askSnooze';
+const BANNER_KEY = 'fliks.push.homeBannerHidden';
 /** A tap that switched server resumes only if the app comes back within this. */
 const PENDING_URL_TTL_MS = 5 * 60_000;
 /** Sign-out must not hang on an unreachable push service or server. */
@@ -184,6 +185,16 @@ export class PushService {
   );
   /** Mobile whose admin has not switched the Fliks Relay connection on. */
   readonly mobileBlockedByAdmin = computed(() => this.mode === 'native' && this.nativeAvailable() && !this.mobileEnabled());
+  private readonly bannerHidden = signal(readFlag(BANNER_KEY, false));
+  /** Home banner: desktop until notifications reach a closed window, native until this device is on. */
+  readonly offerBanner = computed(() => {
+    if (this.bannerHidden() || !this.auth.user()) return false;
+    if (this.mode === 'desktop') {
+      const p = this.desktopPrefs();
+      return !!p && !this.systemBlock() && !(p.notifications && p.background);
+    }
+    return this.mode === 'native' && shouldAsk(this.askState('request', { declined: 0, until: 0 }));
+  });
   /** Whether a system notification reaches this device, so the toast would repeat it. */
   private readonly systemCovers = computed(
     () => this.mode === 'web' && this.subscribed() && this.permission() === 'granted',
@@ -273,18 +284,8 @@ export class PushService {
   async askInContext(reason: PushReason): Promise<void> {
     if (this.asking) return;
     const user = this.auth.user();
-    const stored = user ? readStored(this.flagKey(user.id)) : null;
     const snooze = this.readSnooze();
-    const state: AskState = {
-      mode: this.mode,
-      reason,
-      pushReady: this.canEnableDevice() && !this.mobileBlockedByAdmin(),
-      permission: this.permission(),
-      deviceEnabled: this.deviceEnabled(),
-      deviceOff: stored === '0',
-      snooze,
-      now: Date.now(),
-    };
+    const state = this.askState(reason, snooze);
     if (!user || !shouldAsk(state)) return;
     this.asking = true;
     try {
@@ -307,6 +308,32 @@ export class PushService {
     } finally {
       this.asking = false;
     }
+  }
+
+  /** Desktop also keeps Fliks running in the background; the banner goes either way, even where the shell refuses that. */
+  async acceptBanner(): Promise<void> {
+    if (this.mode === 'desktop') await this.setDesktopPref({ notifications: true, background: true });
+    else await this.enable();
+    this.hideBanner();
+  }
+
+  hideBanner(): void {
+    this.bannerHidden.set(true);
+    writeFlag(BANNER_KEY, true);
+  }
+
+  private askState(reason: PushReason, snooze: AskSnooze): AskState {
+    const user = this.auth.user();
+    return {
+      mode: this.mode,
+      reason,
+      pushReady: this.canEnableDevice() && !this.mobileBlockedByAdmin(),
+      permission: this.permission(),
+      deviceEnabled: this.deviceEnabled(),
+      deviceOff: (user ? readStored(this.flagKey(user.id)) : null) === '0',
+      snooze,
+      now: Date.now(),
+    };
   }
 
   /** The system page where a refused permission is given back. */

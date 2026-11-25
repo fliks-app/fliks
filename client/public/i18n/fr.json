@@ -698,6 +698,11 @@
       "admin_tv_hint": "Terminez la configuration depuis un navigateur à l'adresse {{address}}",
       "member_hint": "Aucune bibliothèque n'est partagée avec vous pour l'instant.",
       "add_library": "Ajouter une bibliothèque"
+    },
+    "notify_banner": {
+      "title": "Activer les notifications",
+      "body": "Fliks vous prévient des nouveaux épisodes, des réponses à vos demandes et des soirées qui commencent, même quand il est fermé.",
+      "hide": "Masquer"
     }
   },
   "playback_settings": {

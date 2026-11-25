@@ -698,6 +698,11 @@
       "admin_tv_hint": "Finish setup from a browser at {{address}}",
       "member_hint": "No library is shared with you yet.",
       "add_library": "Add a library"
+    },
+    "notify_banner": {
+      "title": "Turn on notifications",
+      "body": "Fliks lets you know about new episodes, answers to your requests and watch parties about to start, even when it is closed.",
+      "hide": "Hide"
     }
   },
   "playback_settings": {

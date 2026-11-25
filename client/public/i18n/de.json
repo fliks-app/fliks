@@ -698,6 +698,11 @@
       "admin_tv_hint": "Schließe die Einrichtung in einem Browser unter {{address}} ab",
       "member_hint": "Mit dir ist noch keine Bibliothek geteilt.",
       "add_library": "Bibliothek hinzufügen"
+    },
+    "notify_banner": {
+      "title": "Benachrichtigungen aktivieren",
+      "body": "Fliks informiert dich über neue Folgen, Antworten auf deine Anfragen und Watch-Partys, die gleich beginnen, auch wenn es geschlossen ist.",
+      "hide": "Ausblenden"
     }
   },
   "playback_settings": {

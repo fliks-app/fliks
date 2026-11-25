@@ -39,6 +39,7 @@ import { HomeSettingsService, HomeSectionType, ResolvedHomeSection } from '../..
 import { LibraryPrefsService } from '../../core/services/library-prefs.service';
 import { CardAction } from '../../core/services/card-actions.service';
 import { HeroCarouselComponent } from '../../shared/components/hero-carousel/hero-carousel';
+import { NotifyBannerComponent } from '../../shared/components/notify-banner/notify-banner';
 import { MediaCardComponent } from '../../shared/components/media-card/media-card';
 import { MosaicCardComponent } from '../../shared/components/mosaic-card/mosaic-card';
 import { HorizontalScrollerComponent } from '../../shared/components/horizontal-scroller';
@@ -79,6 +80,7 @@ import type { MediaType } from '../../core/enums/media-type.enum';
     SetupChecklistComponent,
     EmptyStateComponent,
     FollowRequestsCardComponent,
+    NotifyBannerComponent,
     ReceivedRecommendationsCardComponent,
     TvSectionDirective,
     TvRowDirective,

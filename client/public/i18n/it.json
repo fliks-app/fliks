@@ -698,6 +698,11 @@
       "admin_tv_hint": "Completa la configurazione da un browser all'indirizzo {{address}}",
       "member_hint": "Nessuna libreria è ancora condivisa con te.",
       "add_library": "Aggiungi una libreria"
+    },
+    "notify_banner": {
+      "title": "Attiva le notifiche",
+      "body": "Fliks ti avvisa dei nuovi episodi, delle risposte alle tue richieste e dei watch party in partenza, anche quando è chiuso.",
+      "hide": "Nascondi"
     }
   },
   "playback_settings": {

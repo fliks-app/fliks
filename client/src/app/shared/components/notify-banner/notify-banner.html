@@ -1,0 +1,23 @@
+@if (push.offerBanner()) {
+  <div [class.pb-4]="padding()">
+    <section class="card bg-base-200/60 backdrop-blur-sm reduced-effects:bg-base-200/90 shadow-sm">
+      <div class="card-body p-4 sm:p-5 flex-row flex-wrap items-center gap-x-4 gap-y-3">
+        <span class="hidden sm:inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary/15 text-primary shrink-0" aria-hidden="true">
+          <svg [lucideIcon]="icons.Bell" class="h-5 w-5"></svg>
+        </span>
+        <div class="flex-1 min-w-52">
+          <h2 class="font-semibold">{{ 'home.notify_banner.title' | translate }}</h2>
+          <p class="text-sm text-base-content/70">{{ 'home.notify_banner.body' | translate }}</p>
+        </div>
+        <div class="flex gap-2 ms-auto">
+          <button type="button" class="btn btn-ghost btn-sm" (click)="push.hideBanner()">
+            {{ 'home.notify_banner.hide' | translate }}
+          </button>
+          <button type="button" class="btn btn-primary btn-sm" [disabled]="push.busy()" (click)="push.acceptBanner()">
+            {{ 'app_settings.notifications.ask_enable' | translate }}
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+}
