@@ -551,6 +551,7 @@ export class PlayerComponent implements AfterViewInit, OnDestroy {
     clearEdlEnded: () => { this.edlEnded = false; },
     setBackdropUrl: (url) => this.showBackdrop(url),
     reloadForEpisode: (fileId, mediaId, episodeId) => this.reloadForEpisode(fileId, mediaId, episodeId),
+    close: () => this.onBack(),
   }), null);
   readonly webCrop = inject(WebVideoCropController);
 

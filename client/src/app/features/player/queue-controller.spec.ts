@@ -116,3 +116,30 @@ describe('QueueController while a reload runs', () => {
     expect(await cut.ctl.openPartyItem(item)).toBe(false);
   });
 });
+
+describe('QueueController at the natural end', () => {
+  const ended = (opts: { index: number; autoPlayNext?: boolean; preRoll?: boolean; party?: boolean }) => {
+    TestBed.overrideProvider(PlayerSettingsService, { useValue: { settings: () => ({ autoPlayNext: opts.autoPlayNext ?? true }) } });
+    const close = vi.fn();
+    const { ctl, session, queue } = setup(true, { close, preRollActive: () => !!opts.preRoll });
+    session.partyActive.set(!!opts.party);
+    queue.setIndex(opts.index);
+    TestBed.inject(PlayerStateService).ended.set(true);
+    ctl.autoAdvance();
+    TestBed.resetTestingModule();
+    return close;
+  };
+
+  it('closes the player when nothing follows', () => {
+    expect(ended({ index: 1 })).toHaveBeenCalledOnce();
+  });
+
+  it('stays open when an item follows, autoplay or not', () => {
+    expect(ended({ index: 0, autoPlayNext: false })).not.toHaveBeenCalled();
+  });
+
+  it('leaves a pre-roll and a party to pick what plays next', () => {
+    expect(ended({ index: 1, preRoll: true })).not.toHaveBeenCalled();
+    expect(ended({ index: 1, party: true })).not.toHaveBeenCalled();
+  });
+});
