@@ -16,7 +16,7 @@
       },
       "expect": {
         "body": {
-          "color": null,
+          "color": "primary",
           "defaultLanguageProfileId": null,
           "defaultQualityProfileId": null,
           "disk": {
@@ -65,7 +65,7 @@
       "as": "admin",
       "expect": {
         "body": {
-          "color": null,
+          "color": "primary",
           "defaultLanguageProfileId": null,
           "defaultQualityProfileId": null,
           "disk": {

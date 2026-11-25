@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO libraries (name, icon, color, \"mediaTypes\", \"preferredProvider\", \"metadataLanguage\",\n        \"metadataRegion\", \"defaultQualityProfileId\", \"defaultLanguageProfileId\", \"mergeM4b\", \"mergeM4bReplace\")\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
+  "query": "INSERT INTO libraries (name, icon, color, \"mediaTypes\", \"preferredProvider\", \"metadataLanguage\",\n        \"metadataRegion\", \"defaultQualityProfileId\", \"defaultLanguageProfileId\", \"mergeM4b\", \"mergeM4bReplace\")\n        VALUES ($1, COALESCE(NULLIF($2, ''), 'library'), COALESCE(NULLIF($3, ''), 'primary'), $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
   "describe": {
     "columns": [
       {
@@ -18,8 +18,8 @@
     "parameters": {
       "Left": [
         "Varchar",
-        "Varchar",
-        "Varchar",
+        "Text",
+        "Text",
         "Jsonb",
         "Varchar",
         "Varchar",
@@ -34,5 +34,5 @@
       false
     ]
   },
-  "hash": "18dde168566b339f2e41d6242ce3ca3536f970a329baddbb8c29392af87bf9a7"
+  "hash": "329e3ffd09484ab5097205a2ce0c76e97fefc84cb9442b113d26aea7e8299747"
 }

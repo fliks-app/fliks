@@ -16,7 +16,7 @@
       },
       "expect": {
         "body": {
-          "color": null,
+          "color": "primary",
           "defaultLanguageProfileId": null,
           "defaultQualityProfileId": null,
           "disk": {
@@ -33,7 +33,7 @@
               "position": 0
             }
           ],
-          "icon": null,
+          "icon": "library",
           "id": 3,
           "label": null,
           "mediaTypes": [

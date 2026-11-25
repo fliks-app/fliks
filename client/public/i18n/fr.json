@@ -2958,8 +2958,8 @@
       "name": "Nom",
       "name_required": "Le nom est obligatoire.",
       "icon": "Icône",
-      "icon_default": "Par défaut (bibliothèque)",
       "icons": {
+        "library": "Bibliothèque",
         "book": "Livre",
         "clapperboard": "Clap",
         "film": "Film",

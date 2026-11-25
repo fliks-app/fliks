@@ -25,7 +25,7 @@
           [attr.aria-label]="opt.labelKey ? (opt.labelKey | translate) : opt.label"
           (click)="state.formIcon.set(opt.value)"
         >
-          <app-lucide-icon [name]="opt.value || 'library'" class="h-5 w-5" />
+          <app-lucide-icon [name]="opt.value" class="h-5 w-5" />
         </button>
       }
     </div>

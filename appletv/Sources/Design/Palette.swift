@@ -34,9 +34,9 @@ extension Color {
 extension Library {
     var tint: Color { .fliks(color) }
 
-    /// Closest SF Symbol to the lucide icon the web client stores.
+    /// Closest SF Symbol to the lucide icon the web client stores; no icon is the web's default `library`.
     var symbol: String {
-        switch icon {
+        switch icon ?? "library" {
         case "film", "clapperboard", "video", "popcorn": "film"
         case "tv", "tv-minimal", "monitor", "monitor-play": "tv"
         case "music", "music-2", "audio-lines", "list-music": "music.note"
