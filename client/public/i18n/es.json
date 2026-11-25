@@ -2445,7 +2445,7 @@
       "throttle_enabled": "Limitar la codificación",
       "throttle_enabled_help": "Pausa la codificación cuando se adelanta demasiado a la reproducción y la reanuda cuando el espectador la alcanza. Ahorra CPU al detener o saltar.",
       "throttle_unavailable_help": "No disponible en este servidor: no puede pausar el codificador durante la reproducción.",
-      "throttle_threshold": "Umbral de limitación",
+      "throttle_threshold": "Umbral de limitación (s)",
       "throttle_threshold_help": "Cuántos segundos puede adelantarse el codificador a la reproducción antes de pausarse. Se reanuda a la mitad de este valor.",
       "auto_crop": "Permitir la transcodificación para quitar las barras negras",
       "auto_crop_help": "Los reproductores que recortan por sí mismos reciben el flujo original, los demás una versión recodificada. Para quitar las barras del archivo de forma definitiva, use un perfil de optimización.",

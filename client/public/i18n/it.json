@@ -2445,7 +2445,7 @@
       "throttle_enabled": "Limitare la codifica",
       "throttle_enabled_help": "Mette in pausa la codifica quando è troppo avanti rispetto alla riproduzione e la riprende quando lo spettatore recupera. Risparmia CPU su stop e salti.",
       "throttle_unavailable_help": "Non disponibile su questo server: non può mettere in pausa l'encoder durante la riproduzione.",
-      "throttle_threshold": "Soglia di limitazione",
+      "throttle_threshold": "Soglia di limitazione (s)",
       "throttle_threshold_help": "Quanti secondi l'encoder può anticipare la riproduzione prima di mettersi in pausa. Riprende a metà di questo valore.",
       "auto_crop": "Consenti la transcodifica per rimuovere le bande nere",
       "auto_crop_help": "I lettori che ritagliano da soli ricevono il flusso originale, gli altri una versione ricodificata. Per rimuovere le bande dal file in modo definitivo, usa un profilo di ottimizzazione.",
