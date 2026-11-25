@@ -68,6 +68,15 @@ impl MediaKind {
             .collect()
     }
 
+    /// Wire names of the video kinds, for SQL `= ANY(...)` bounds.
+    pub fn video_names() -> Vec<&'static str> {
+        Self::ALL
+            .into_iter()
+            .filter(|k| k.is_video())
+            .map(Self::as_str)
+            .collect()
+    }
+
     /// The families a media of this kind is wished in: one want each.
     pub const fn families(self) -> &'static [Family] {
         match self {

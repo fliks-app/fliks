@@ -1,7 +1,7 @@
 //! The job bodies of `scheduler.md` rules 22-31: loops, progress events, activity rows and logs.
 use crate::{
     events::{Hub, Num, SseEvent, Subject},
-    ingest::rescan::rescan_files,
+    ingest::rescan::{PROBE_VERSION, rescan_files},
     markers::{self, ScanSeason},
     state::AppState,
     stream::{self, sprite},
@@ -39,6 +39,7 @@ async fn run_unit(st: &AppState, name: &str) -> Outcome {
             let select = sqlx::query_as(MISSING_FILES).bind(MediaKind::seasonal_names());
             rescan(st, name, select).await
         }
+        super::names::STALE_PROBES => rescan(st, name, stale_probes()).await,
         "GenerateSprites" => sprites(st, name, true).await,
         "GenerateMissingSprites" => sprites(st, name, false).await,
         "DetectMarkers" => markers(st, name, false).await,
@@ -280,6 +281,18 @@ const MISSING_FILES: &str = r#"SELECT m.id, m.title, m."type" FROM media m JOIN 
 
 type MediaQuery<'q> =
     sqlx::query::QueryAs<'q, sqlx::Postgres, (i32, String, String), sqlx::postgres::PgArguments>;
+
+/// Video media with a file probed before the current `PROBE_VERSION`, or never.
+pub fn stale_probes() -> MediaQuery<'static> {
+    sqlx::query_as(
+        r#"SELECT m.id, m.title, m."type" FROM media m WHERE m."type" = ANY($1)
+             AND EXISTS (SELECT 1 FROM media_files f WHERE f."mediaId" = m.id
+               AND (f."probeVersion" IS NULL OR f."probeVersion" < $2))
+           ORDER BY m.id"#,
+    )
+    .bind(MediaKind::video_names())
+    .bind(PROBE_VERSION)
+}
 
 async fn rescan(st: &AppState, job: &str, select: MediaQuery<'_>) -> Outcome {
     let media = select
@@ -567,5 +580,36 @@ mod tests {
             (rows.iter().map(|m| m.id).collect::<Vec<_>>(), total),
             (vec![1], 2)
         );
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn stale_probes_are_the_video_media_with_an_old_or_missing_probe(db: PgPool) {
+        crate::db::migrate(&db).await.unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO media (id, title, "type") VALUES
+                 (1, 'a', 'movie'), (2, 'b', 'series'), (3, 'c', 'movie'), (4, 'd', 'comic');
+               INSERT INTO libraries (id, name, "mediaTypes") VALUES (1, 'L', '["movie"]');
+               INSERT INTO library_folders (id, "libraryId", path) VALUES (1, 1, '/m');"#,
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO media_files ("mediaId", "folderId", "relativePath", size, quality, "probeVersion")
+               VALUES (1, 1, 'a', 1, 'x', NULL), (2, 1, 'b', 1, 'x', $1 - 1), (3, 1, 'c', 1, 'x', $1),
+                      (4, 1, 'd', 1, 'x', NULL)"#,
+        )
+        .bind(PROBE_VERSION)
+        .execute(&db)
+        .await
+        .unwrap();
+        let ids: Vec<i32> = stale_probes()
+            .fetch_all(&db)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|m| m.0)
+            .collect();
+        assert_eq!(ids, vec![1, 2]);
     }
 }

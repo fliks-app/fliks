@@ -1,9 +1,9 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe, translatePlural } from '../../../../core/pipes/translate-plural.pipe';
 import { ToastService } from '../../../../core/services/toast.service';
-import { LibrariesApiService, UpdateLibraryBody } from '../../../../core/services/api/libraries-api.service';
+import { LibrariesApiService } from '../../../../core/services/api/libraries-api.service';
 import { OptimizeConfirmService } from '../../../../core/services/optimize-confirm.service';
 import { OptimizeService } from '../../../../core/services/api/optimize.service';
 import type {
@@ -39,12 +39,29 @@ export class LibraryOptimizeComponent implements OnInit {
   readonly summary = signal<OptimizeSummary | null>(null);
   readonly preview = signal<OptimizePreview | null>(null);
   readonly busy = signal(false);
+  readonly profileId = signal<number | null>(null);
+  readonly newFiles = signal(false);
+  readonly allowRename = signal(false);
+  readonly dirty = computed(() => {
+    const lib = this.state.library();
+    return !!lib && (lib.optimizeProfileId !== this.profileId() || lib.optimizeNewFiles !== this.newFiles()
+      || lib.allowRename !== this.allowRename());
+  });
   readonly previewBusy = signal(false);
   readonly queueBusy = signal(false);
 
   ngOnInit() {
     void this.optimize.profiles().then((p) => this.profiles.set(p));
+    this.hydrate();
     void this.loadSummary();
+  }
+
+  private hydrate() {
+    const lib = this.state.library();
+    if (!lib) return;
+    this.profileId.set(lib.optimizeProfileId);
+    this.newFiles.set(lib.optimizeNewFiles);
+    this.allowRename.set(lib.allowRename);
   }
 
   private async loadSummary() {
@@ -60,37 +77,33 @@ export class LibraryOptimizeComponent implements OnInit {
     }
   }
 
-  async setProfile(value: string) {
-    const id = value === '' ? null : Number(value);
-    // Without a profile there is nothing to apply to new files.
-    await this.patch({ optimizeProfileId: id, ...(id == null ? { optimizeNewFiles: false } : {}) });
-    this.preview.set(null);
-    await this.loadSummary();
+  setProfile(value: string) {
+    this.profileId.set(value === '' ? null : Number(value));
   }
 
-  setNewFiles(on: boolean) {
-    return this.patch({ optimizeNewFiles: on });
-  }
-
-  async setAllowRename(on: boolean) {
-    await this.patch({ allowRename: on });
-    this.preview.set(null);
-    await this.loadSummary();
-  }
-
-  private async patch(body: UpdateLibraryBody) {
+  async apply() {
     const lib = this.state.library();
     if (!lib) return;
+    const profileId = this.profileId();
     this.busy.set(true);
     try {
-      await this.api.update(lib.id, body);
+      // Without a profile there is nothing to apply to new files.
+      await this.api.update(lib.id, {
+        optimizeProfileId: profileId,
+        optimizeNewFiles: profileId != null && this.newFiles(),
+        allowRename: this.allowRename(),
+      });
       this.state.library.set(await this.api.get(lib.id));
+      this.hydrate();
+      this.toast.success(this.translate.instant('settings.libraries.saved'));
     } catch {
-      // The global interceptor toasts the reason; the refetch below restores the shown values.
-      this.state.library.set(await this.api.get(lib.id));
+      // The global interceptor toasts the reason; the draft stays for a retry.
+      return;
     } finally {
       this.busy.set(false);
     }
+    this.preview.set(null);
+    await this.loadSummary();
   }
 
   async queueAll() {

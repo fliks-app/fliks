@@ -138,6 +138,7 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
     { name: 'Identify', label: 'system.cmd_identify' },
     { name: 'RefreshEpisodeMetadata', label: 'system.cmd_refresh_episode_metadata' },
     { name: 'Rescan', label: 'system.cmd_rescan' },
+    { name: 'RescanStaleProbes', label: 'system.cmd_rescan_stale_probes' },
     { name: 'SubtitleSync', label: 'system.cmd_subtitle_sync' },
     { name: 'ImportSeerrRequests', label: 'system.cmd_import_seerr_requests' },
     { name: 'ImportWatchHistory', label: 'system.cmd_import_watch_history' },

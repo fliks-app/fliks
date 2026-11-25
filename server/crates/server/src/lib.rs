@@ -260,6 +260,7 @@ async fn boot(
         let st = state.clone();
         async move { ingest::post_import::recover_when_engine_ready(&st).await }
     });
+    tokio::spawn(jobs::rescan_stale_probes(state.clone()));
     party::boot(&state).await?;
     party::spawn(&state);
     requests::spawn(&state);

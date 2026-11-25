@@ -10,7 +10,7 @@ use std::{collections::HashMap, fmt::Display, future::Future};
 pub enum Trigger {
     Manual,
     Scheduled,
-    /// Only marker detection after an import.
+    /// Marker detection after an import, and the boot `RescanStaleProbes`.
     Auto,
 }
 

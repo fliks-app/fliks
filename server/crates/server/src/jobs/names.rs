@@ -61,6 +61,9 @@ pub const TRIGGER_ONLY: [&str; 7] = [
 /// Jobs run by their own interval tick, not the runner's: the subtitle ticks (rule 31) and the acquisition sweep.
 pub const TICKED: [&str; 3] = ["SubtitleSearch", "SubtitleUpgrade", "AcquisitionSweep"];
 
+/// Run at boot only (rule 27): not listed, not triggerable.
+pub const STALE_PROBES: &str = "RescanStaleProbes";
+
 /// Housekeeping tick of rule 26: not listed, not triggerable.
 pub const PRUNE_CRON: &str = "0 03 * * *";
 

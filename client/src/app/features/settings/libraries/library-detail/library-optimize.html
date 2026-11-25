@@ -6,7 +6,7 @@
 
       <div class="max-w-md">
         <app-select-field [label]="'settings.optimize.library.profile' | translate" [disabled]="busy()"
-          [value]="lib.optimizeProfileId == null ? '' : '' + lib.optimizeProfileId" (valueChange)="setProfile($event)">
+          [value]="profileId() == null ? '' : '' + profileId()" (valueChange)="setProfile($event)">
           <option value="">{{ 'settings.optimize.library.none' | translate }}</option>
           @for (p of profiles(); track p.id) {
             <option [value]="'' + p.id">{{ p.name }}</option>
@@ -29,11 +29,11 @@
 
         <div class="flex flex-col gap-1">
           <div class="flex flex-wrap gap-2 px-1 -mx-1 py-1">
-            <button type="button" class="btn btn-outline btn-sm" (click)="loadPreview()" [disabled]="previewBusy()">
+            <button type="button" class="btn btn-outline btn-sm" (click)="loadPreview()" [disabled]="previewBusy() || dirty()">
               @if (previewBusy()) { <span class="loading loading-spinner loading-sm"></span> }
               {{ 'settings.optimize.library.preview' | translate }}
             </button>
-            <button type="button" class="btn btn-primary btn-sm" (click)="queueAll()" [disabled]="queueBusy() || summary()?.filesWithDifference === 0">
+            <button type="button" class="btn btn-primary btn-sm" (click)="queueAll()" [disabled]="queueBusy() || dirty() || summary()?.filesWithDifference === 0">
               @if (queueBusy()) { <span class="loading loading-spinner loading-sm"></span> }
               {{ 'settings.optimize.library.queue' | translate }}
             </button>
@@ -76,13 +76,22 @@
           </div>
         }
 
-        <div class="divider my-0"></div>
-        <app-toggle-field [label]="'settings.optimize.library.new_files' | translate" [hint]="'settings.optimize.library.new_files_hint' | translate"
-          [disabled]="busy()" [value]="lib.optimizeNewFiles" (valueChange)="setNewFiles($event)" />
       }
 
+      <div class="divider my-0"></div>
+      @if (profileId() != null) {
+        <app-toggle-field [label]="'settings.optimize.library.new_files' | translate" [hint]="'settings.optimize.library.new_files_hint' | translate"
+          [disabled]="busy()" [value]="newFiles()" (valueChange)="newFiles.set($event)" />
+      }
       <app-toggle-field [label]="'settings.optimize.library.allow_rename' | translate" [hint]="'settings.optimize.library.allow_rename_hint' | translate"
-        [disabled]="busy()" [value]="lib.allowRename" (valueChange)="setAllowRename($event)" />
+        [disabled]="busy()" [value]="allowRename()" (valueChange)="allowRename.set($event)" />
+
+      <div class="card-actions justify-end">
+        <button type="button" class="btn btn-primary" (click)="apply()" [disabled]="busy() || !dirty()">
+          @if (busy()) { <span class="loading loading-spinner loading-sm"></span> }
+          {{ 'common.apply' | translate }}
+        </button>
+      </div>
     </div>
   </div>
 }

@@ -1,7 +1,12 @@
 import {
   Component,
+  DestroyRef,
+  ElementRef,
+  afterNextRender,
+  inject,
   input,
   model,
+  viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../../directives/tv-select.directive';
@@ -20,4 +25,19 @@ export class SelectFieldComponent<T = unknown> {
   readonly hint = input<string>();
   readonly disabled = input<boolean>(false);
   readonly size = input<'md' | 'sm'>('md');
+  private readonly select = viewChild.required<ElementRef<HTMLSelectElement>>('select');
+
+  constructor() {
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(() => {
+      // Projected options never register with ngModel, so options that arrive late must re-apply the value.
+      const el = this.select().nativeElement;
+      const observer = new MutationObserver(() => {
+        const v = `${this.value()}`;
+        if ([...el.options].some((o) => o.value === v)) el.value = v;
+      });
+      observer.observe(el, { childList: true });
+      destroyRef.onDestroy(() => observer.disconnect());
+    });
+  }
 }
