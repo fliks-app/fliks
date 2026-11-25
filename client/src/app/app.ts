@@ -36,6 +36,7 @@ import { OfflinePlaybackSyncService } from './core/services/offline-playback-syn
 import { RemoteService } from './core/services/remote.service';
 import { TIZEN_MEDIA_KEYS, isBackKey } from './features/player/player-keymap';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
+import { installTapOutsideBlur } from './core/utils/tap-outside-blur';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { BlockingOverlayAction, BlockingOverlayComponent } from './shared/components/blocking-overlay/blocking-overlay';
 import { ServerBootService } from './core/services/server-boot.service';
@@ -128,6 +129,7 @@ export class App implements OnInit, OnDestroy {
     this.remoteNotification.init();
 
     this.initInputModalityTracking();
+    installTapOutsideBlur();
 
     // Native shells reconnect from the Capacitor resume hook below: a second reconnect would detach this device again.
     if (!Capacitor.isNativePlatform()) {
