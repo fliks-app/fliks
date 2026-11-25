@@ -1,5 +1,6 @@
 import { Component, ElementRef, HostListener, computed, inject, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
+import { LucideDynamicIcon } from '@lucide/angular';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { isTypingTarget } from '../../core/utils/typing-target';
 import { icons } from '../../shared/icons';
@@ -9,7 +10,7 @@ import { SettingsSectionsService } from './settings-sections.service';
 
 @Component({
   selector: 'app-admin-shell',
-  imports: [CardActionsPanelComponent, TranslatePipe, SettingsDrawerComponent],
+  imports: [CardActionsPanelComponent, TranslatePipe, SettingsDrawerComponent, LucideDynamicIcon],
   templateUrl: './admin-shell.html',
 })
 export class AdminShellComponent {

@@ -676,7 +676,7 @@
     "section_optimize": "Optimización",
     "section_advanced": "Avanzado",
     "section_livetv": "TV en directo",
-    "filter_placeholder": "Filtrar ajustes (tecla /)"
+    "filter_placeholder": "Buscar un ajuste"
   },
   "home": {
     "libraries": "Bibliotecas",

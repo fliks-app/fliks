@@ -676,7 +676,7 @@
     "section_optimize": "Optimization",
     "section_advanced": "Advanced",
     "section_livetv": "Live TV",
-    "filter_placeholder": "Filter settings (press /)"
+    "filter_placeholder": "Search for a setting"
   },
   "home": {
     "libraries": "Libraries",

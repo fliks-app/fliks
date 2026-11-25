@@ -82,6 +82,7 @@ body.tv .nav-rail.rail-collapsed:not(.rail-open) .rail-icon {
   margin-top: auto;
 }
 .rail-sep {
+  flex: none;
   height: 1px;
   margin: 0.375rem 0.25rem;
   background: rgba(255, 255, 255, 0.1);

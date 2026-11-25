@@ -1,16 +1,19 @@
 <app-settings-drawer [title]="'admin.title' | translate" [icon]="icons.Shield" [sections]="sections()">
-  <input
-    drawerFilter
-    #filterInput
-    type="search"
-    class="input input-bordered input-sm w-full flex-none"
-    [placeholder]="'admin.filter_placeholder' | translate"
-    [attr.aria-label]="'admin.filter_placeholder' | translate"
-    [value]="filter()"
-    (input)="filter.set(filterInput.value)"
-    (keydown.enter)="openFirst()"
-    (keydown.escape)="filter.set(''); filterInput.blur()"
-  />
+  <label drawerFilter class="input input-bordered input-sm flex items-center gap-2 w-full flex-none">
+    <svg [lucideIcon]="icons.Search" class="h-4 w-4 text-base-content/50"></svg>
+    <input
+      data-no-focus-ring
+      #filterInput
+      type="search"
+      class="grow"
+      [placeholder]="'admin.filter_placeholder' | translate"
+      [attr.aria-label]="'admin.filter_placeholder' | translate"
+      [value]="filter()"
+      (input)="filter.set(filterInput.value)"
+      (keydown.enter)="openFirst()"
+      (keydown.escape)="filter.set(''); filterInput.blur()"
+    />
+  </label>
 </app-settings-drawer>
 
 <!-- Admin routes sit outside the main layout, which holds the other instance. -->

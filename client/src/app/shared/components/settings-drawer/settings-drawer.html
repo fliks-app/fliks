@@ -42,8 +42,9 @@
       <div class="nav-rail rail-open"
            [class.bg-base-100]="!background.url()"
            [class.app-sidebar-veil]="!!background.url()"
-           [class.backdrop-blur-sm]="!!background.url()"
-           style="padding-top: calc(env(safe-area-inset-top, 0px) + 1.5rem); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem); padding-left: calc(env(safe-area-inset-left, 0px) + 0.75rem)">
+           [class.backdrop-blur-sm]="!!background.url()">
+        <div class="rail-scroll scrollbar-none"
+             style="padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem); padding-left: calc(env(safe-area-inset-left, 0px) + 0.75rem)">
         <div class="rail-head">
           <div class="rail-item pointer-events-none">
             <span class="rail-icon"><svg [lucideIcon]="icon()" class="h-5 w-5"></svg></span>
@@ -54,10 +55,10 @@
           <span class="rail-icon"><svg [lucideIcon]="icons.ChevronLeft" class="h-5 w-5"></svg></span>
           <span class="rail-label">{{ 'admin.back_to_app' | translate }}</span>
         </a>
-        <div role="separator" class="rail-sep"></div>
         <ng-content select="[drawerFilter]"></ng-content>
+        <div role="separator" class="rail-sep"></div>
 
-        <nav class="rail-list scroll-ring-safe scrollbar-none" [attr.aria-label]="title()">
+        <nav class="rail-list" [attr.aria-label]="title()">
           <ul class="flex flex-col gap-0.5">
             @for (section of sections(); track section.id; let first = $first) {
               @if (section.label) {
@@ -85,6 +86,7 @@
           </ul>
         </nav>
         <ng-content select="[drawerFooter]"></ng-content>
+        </div>
       </div>
     </aside>
   </div>
