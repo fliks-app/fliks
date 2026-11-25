@@ -11,7 +11,8 @@
         @for (s of [m]; track s.id) {
           <div class="hc-slide" [style.--hc-delay]="changed() ? null : '0ms'" (animate.leave)="leave($event)" aria-live="off">
             <div class="hc-item" style="--i: 0">
-              @if (s.logoUrl) {
+              <!-- A phone's picture fills the slide: a logo's own colours vanish on it, the shadowed title never does. -->
+              @if (s.logoUrl && desktop()) {
                 <img class="hc-logo" [src]="s.logoUrl | resolveUrl: 'medium'" [alt]="s.title" />
               } @else {
                 <h2 class="hc-title">{{ s.title }}</h2>
