@@ -165,6 +165,20 @@ describe('HeroCarouselComponent', () => {
     expect(after?.textContent).toContain('hero_carousel.play_episode');
   });
 
+  it('resolves the series on screen again when the route comes back', async () => {
+    const { fixture, el, start, detached$, attached$ } = setup();
+    el.querySelectorAll<HTMLButtonElement>('.hc-dot')[1].click();
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(10);
+    detached$.next('k');
+    attached$.next('k');
+    fixture.detectChanges();
+    await vi.advanceTimersByTimeAsync(10);
+    fixture.detectChanges();
+    expect(start.nextUpOf).toHaveBeenCalledTimes(2);
+    expect(el.querySelector('.hc-slide:not(.hc-out) .btn-light')?.textContent).toContain('hero_carousel.resume_episode');
+  });
+
   it('plays a movie, and a series at its next episode with a Details link beside it', async () => {
     const { fixture, el, start } = setup();
     el.querySelector<HTMLButtonElement>('.btn-light')!.click();

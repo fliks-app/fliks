@@ -76,6 +76,7 @@ export class HeroCarouselComponent {
     // Episodes may have been watched meanwhile: each series resolves its next one again.
     onAttach: () => {
       this.episodes.set(new Map());
+      this.epoch.update((n) => n + 1);
       this.claimBackdrop();
     },
   });
@@ -104,6 +105,8 @@ export class HeroCarouselComponent {
 
   /** The episode a series slide plays, resolved once per series while the page is on screen; null when none is on disk. */
   private readonly episodes = signal(new Map<number, SeriesStart | null>());
+  /** Bumped on each return: re-resolves the slide on screen and drops answers fetched before it. */
+  private readonly epoch = signal(0);
   /** What the primary button does: play (a series once its episode is known, with its code), else open the detail page. */
   protected readonly primary = computed<{ play: boolean; labelKey: string; code?: string }>(() => {
     const m = this.current();
@@ -121,12 +124,15 @@ export class HeroCarouselComponent {
   constructor() {
     effect(() => {
       const m = this.current();
+      const epoch = this.epoch();
       if (!m || !kindOf(m.type).hasSeasons || untracked(() => this.episodes().has(m.id))) return;
       void this.start
         .nextUpOf(m)
         .then((r) => (r.next ? { series: r.media, next: r.next, resuming: r.resuming } : null))
         .catch(() => null)
-        .then((v) => this.episodes.update((map) => new Map(map).set(m.id, v)));
+        .then((v) => {
+          if (epoch === this.epoch()) this.episodes.update((map) => new Map(map).set(m.id, v));
+        });
     });
     effect((onCleanup) => {
       if (!this.running()) return;
