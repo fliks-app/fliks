@@ -26,7 +26,7 @@ env:
 jobs:
   changes:
     runs-on: ubuntu-latest
-    # A release PR waits for its base commit's main run.
+    # A release PR waits for its base commit's main run (or the next decisive one if that was superseded).
     timeout-minutes: 75
     permissions:
       contents: read

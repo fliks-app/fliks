@@ -34,7 +34,8 @@ jobs:
     timeout-minutes: 75
     steps:
       # The tag is cut when the release PR's merge lands: that commit's parent, the code being released,
-      # must be green on main. Fails closed; fix main, then re-run this job (and re-run a cancelled ci.yml).
+      # must be green on main (a superseded run defers to the next one, the release commit's at most).
+      # Fails closed; fix main, then re-run this job.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
@@ -44,7 +45,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           case "$(git log -1 --format=%s)" in 'chore(main): release '*) ;; *) exit 0 ;; esac
-          .github/scripts/main-is-green.sh "$(git rev-parse HEAD^1)"
+          .github/scripts/main-is-green.sh "$(git rev-parse HEAD^1)" "$(git rev-parse HEAD)"
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         with:
           # Personal access token instead of the default GITHUB_TOKEN
