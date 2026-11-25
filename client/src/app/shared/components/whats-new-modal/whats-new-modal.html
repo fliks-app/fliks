@@ -1,6 +1,7 @@
 <dialog
   #dialog
   appModal
+  fill
   boxClass="w-11/12 max-w-4xl"
   (keydown.arrowright)="go(index() + 1)"
   (keydown.arrowleft)="go(index() - 1)"
@@ -16,7 +17,7 @@
 
   <div
     #track
-    class="flex min-h-0 overflow-x-auto snap-x snap-mandatory motion-safe:scroll-smooth -mx-5 sm:-mx-6 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    class="flex min-h-0 overflow-x-auto snap-x snap-mandatory motion-safe:scroll-smooth pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     (scroll)="onScroll(track)"
   >
     @for (slide of slides(); track $index) {

@@ -13,7 +13,6 @@ import { LucideDynamicIcon } from '@lucide/angular';
 import { icons } from '../../icons';
 import { SwUpdate } from '@angular/service-worker';
 import { environment } from '../../../../environments/environment';
-import { DeviceService } from '../../../core/services/device.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { UsersApiService } from '../../../core/services/api/users-api.service';
 import { SERVER_SINCE, ServerVersionService } from '../../../core/services/server-version.service';
@@ -79,7 +78,6 @@ export class WhatsNewModalComponent {
   protected readonly icons = icons;
 
   private readonly translate = inject(TranslateService);
-  private readonly device = inject(DeviceService);
   private readonly auth = inject(AuthService);
   private readonly api = inject(UsersApiService);
   private readonly versions = inject(ServerVersionService);
@@ -104,7 +102,6 @@ export class WhatsNewModalComponent {
 
   private async showIfNew(id: number): Promise<void> {
     const current = environment.version;
-    if (this.device.isTv()) return;
     // The stored profile can predate notes seen on another device.
     await this.auth.refreshUser();
     const user = this.auth.user();
