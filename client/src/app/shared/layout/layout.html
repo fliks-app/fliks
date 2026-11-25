@@ -327,8 +327,8 @@
     <app-update-modal #updateModal />
   }
 
-  <!-- What's new carousel, once per version on desktop and web -->
-  @defer (when auth.user() && device.isDesktop()) {
+  <!-- What's new carousel, once per version everywhere but TV -->
+  @defer (when auth.user() && !device.isTv()) {
     <app-whats-new-modal />
   }
 
