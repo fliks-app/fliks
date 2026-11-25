@@ -26,7 +26,7 @@
         <div class="card-body py-4 px-5 gap-1">
           <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'system.health_lan' | translate }}</p>
           @for (url of h.lanUrls; track url) {
-            <a class="link link-hover font-mono font-medium break-all" [href]="url" target="_blank" rel="noopener noreferrer">{{ url }}</a>
+            <a class="text-lg font-bold link-hover break-all" [href]="url" target="_blank" rel="noopener noreferrer">{{ url.split('//')[1] }}</a>
           }
         </div>
       </div>
