@@ -2110,6 +2110,18 @@
         }
       }
     },
+    "/api/media-files/{mediaFileId}": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "The media (and episode) a file belongs to, for a player opened on a bare file id.",
+        "operationId": "media_file_owner",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/media-files/{mediaFileId}/cdg": {
       "get": {
         "tags": [

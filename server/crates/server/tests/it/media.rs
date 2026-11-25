@@ -655,3 +655,24 @@ async fn type_lists_several_kinds(pool: PgPool) {
         assert_eq!(c.get(&c.admin, uri).await.0, 400, "{uri}");
     }
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_file_names_its_media_within_the_caller_libraries(pool: PgPool) {
+    let c = ctx(pool.clone()).await;
+    let file = |m: i32| {
+        sqlx::query_scalar::<_, i32>(r#"SELECT id FROM media_files WHERE "mediaId" = $1"#)
+            .bind(m)
+            .fetch_one(&pool)
+    };
+    let own = file(1).await.unwrap();
+    let (s, body) = c.get(&c.plain, &format!("/api/media-files/{own}")).await;
+    assert_eq!((s, body), (200, json!({"mediaId": 1, "episodeId": null})));
+    let other = file(4).await.unwrap();
+    let (s, body) = c.get(&c.plain, &format!("/api/media-files/{other}")).await;
+    assert_eq!(
+        (s, body["message"].as_str()),
+        (404, Some(format!("MediaFile #{other} not found").as_str()))
+    );
+    let (s, _) = c.get(&c.admin, "/api/media-files/x").await;
+    assert_eq!(s, 400);
+}

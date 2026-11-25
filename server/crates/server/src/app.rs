@@ -277,6 +277,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         media::media_cast,
         media::media_crew,
         media::media_streams,
+        media::media_file_owner,
         notifications::list,
         notifications::create,
         notifications::events,

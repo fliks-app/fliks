@@ -57,6 +57,8 @@ const EXCLUDED_PATTERNS = [
   // Derived from profiles and jobs, which change under other prefixes: a stale count would size a rewrite.
   /^\/api\/libraries\/\d+\/optimize\//,
   /^\/api\/media\/\d+\/music\/candidates/,
+  // A file's owner changes when it is re-linked: a stale answer would launch the wrong title.
+  /^\/api\/media-files\/\d+$/,
 ];
 
 const DETAIL_PATTERN = /^\/api\/media\/\d+$/;
