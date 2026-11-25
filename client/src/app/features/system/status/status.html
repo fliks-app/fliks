@@ -24,9 +24,9 @@
     @if (h.lanUrls?.length) {
       <div class="card bg-base-100 border border-base-200">
         <div class="card-body py-4 px-5 gap-1">
-          <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'system.health_lan' | translate }}</p>
+          <p class="grow-0 text-sm text-base-content/60 uppercase tracking-wide">{{ 'system.health_lan' | translate }}</p>
           @for (url of h.lanUrls; track url) {
-            <a class="text-lg font-bold link-hover break-all" [href]="url" target="_blank" rel="noopener noreferrer">{{ url.split('//')[1] }}</a>
+            <p class="text-lg font-bold break-all">{{ url.split('//')[1] }}</p>
           }
         </div>
       </div>
