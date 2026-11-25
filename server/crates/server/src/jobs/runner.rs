@@ -102,6 +102,9 @@ fn fire(st: AppState, name: &'static str) {
 
 /// Boot: once the engine is up, rescans the video media a `PROBE_VERSION` bump left behind (rule 27).
 pub async fn rescan_stale_probes(st: AppState) {
+    if cron::disabled() {
+        return;
+    }
     let mut adopted = st.engine.adoptions();
     if !st.engine.enabled() && adopted.changed().await.is_err() {
         return;
