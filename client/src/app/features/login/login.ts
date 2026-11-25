@@ -1,4 +1,4 @@
-import { Component, signal, inject, computed } from '@angular/core';
+import { Component, DestroyRef, signal, inject, computed } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
@@ -6,6 +6,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { extractMessage } from '../../core/interceptors/error.interceptor';
 import { AuthService } from '../../core/services/auth.service';
+import { KeyboardOverlayService } from '../../core/services/keyboard-overlay.service';
 import { oidcErrorText } from '../../core/services/oidc';
 import { ServerConfigService } from '../../core/services/server-config.service';
 import { SsoButtonsComponent } from '../../shared/components/sso-buttons';
@@ -25,6 +26,8 @@ export class LoginComponent {
   private readonly translate = inject(TranslateService);
   private readonly serverConfig = inject(ServerConfigService);
   private readonly route = inject(ActivatedRoute);
+  /** The keyboard slides over the page and the card follows it up, instead of the WebView resizing at once. */
+  protected readonly keyboard = inject(KeyboardOverlayService);
 
   readonly isNative = this.serverConfig.isNative;
   readonly serverHost = computed(() => {
@@ -66,6 +69,8 @@ export class LoginComponent {
   );
 
   constructor() {
+    this.keyboard.enter();
+    inject(DestroyRef).onDestroy(() => this.keyboard.leave());
     // The route is reused when a failed sign-in lands here again, so the error is read from the stream.
     this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((q) => {
       if (!q.get('oidcError') && !q.get('state')) return;

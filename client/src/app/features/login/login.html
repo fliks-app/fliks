@@ -1,5 +1,6 @@
 <div
-  class="min-h-screen flex items-center justify-center bg-base-200 px-4 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]"
+  class="min-h-screen flex items-center justify-center bg-base-200 px-4 pt-[calc(env(safe-area-inset-top,0px)+1.5rem)] pb-[calc(max(env(safe-area-inset-bottom,0px),var(--keyboard-h,0px))+1.5rem)] transition-[padding] duration-300 ease-out motion-reduce:transition-none"
+  [style.--keyboard-h.px]="keyboard.height()"
 >
   <div class="flex w-full max-w-sm flex-col items-center gap-4">
     <div class="card w-full bg-base-100 shadow-xl">
