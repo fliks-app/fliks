@@ -69,7 +69,7 @@ async function fetchText(url: string): Promise<string | null> {
   return res.ok && !res.headers.get('content-type')?.includes('html') ? res.text() : null;
 }
 
-/** Carousel of `public/whats-new/<version>/<lang>.md` for the versions listed in `whats-new/index.json`, shown on desktop and web, once per account. */
+/** Carousel of `public/whats-new/<version>/<lang>.md` for the versions listed in `whats-new/index.json`, shown everywhere but TV, once per account. */
 @Component({
   selector: 'app-whats-new-modal',
   imports: [ModalComponent, TranslatePipe, MarkdownPipe, ModalHeaderComponent, ModalFooterComponent, LucideDynamicIcon],
@@ -104,7 +104,7 @@ export class WhatsNewModalComponent {
 
   private async showIfNew(id: number): Promise<void> {
     const current = environment.version;
-    if (!this.device.isDesktop()) return;
+    if (this.device.isTv()) return;
     // The stored profile can predate notes seen on another device.
     await this.auth.refreshUser();
     const user = this.auth.user();

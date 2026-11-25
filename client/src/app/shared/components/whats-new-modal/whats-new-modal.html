@@ -52,7 +52,7 @@
   </div>
 
   <app-modal-footer>
-    <div class="flex w-full items-center justify-between gap-3">
+    <div class="flex w-full flex-wrap items-center justify-between gap-3">
       <button
         class="btn btn-ghost rounded-full px-5"
         [class.invisible]="index() === 0"
@@ -60,7 +60,8 @@
       >
         {{ 'whats_new.previous' | translate }}
       </button>
-      <div class="flex gap-2">
+      <!-- A phone has no room for a dozen dots between the buttons: they take their own row above. -->
+      <div class="flex gap-2 order-first basis-full justify-center sm:order-none sm:basis-auto">
         @for (slide of slides(); track $index) {
           <button
             class="h-2 rounded-full transition-all"
