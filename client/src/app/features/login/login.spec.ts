@@ -146,3 +146,14 @@ describe('LoginComponent locked username', () => {
     expect((s.auth as unknown as { login: ReturnType<typeof vi.fn> }).login).toHaveBeenCalledWith('bob', 'p');
   });
 });
+
+describe('LoginComponent return keys', () => {
+  it('moves from the username to the password on Enter instead of submitting', () => {
+    const s = setup();
+    const submit = vi.spyOn(s.fixture.componentInstance, 'onSubmit');
+    const user = s.el.querySelector('#username') as HTMLInputElement;
+    user.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(document.activeElement).toBe(s.el.querySelector('#password'));
+    expect(submit).not.toHaveBeenCalled();
+  });
+});

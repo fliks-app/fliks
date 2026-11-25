@@ -32,14 +32,18 @@
                 autocapitalize="none"
                 autocorrect="off"
                 spellcheck="false"
+                enterkeyhint="next"
+                (keydown.enter)="$event.preventDefault(); password.focus()"
               />
             </fieldset>
 
             <fieldset class="fieldset p-0">
               <label class="fieldset-label" for="password">{{ 'login.password' | translate }}</label>
               <input
+                #password
                 id="password"
                 type="password"
+                enterkeyhint="go"
                 class="input input-bordered w-full"
                 formControlName="password"
                 autocomplete="current-password"
