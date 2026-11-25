@@ -1436,3 +1436,47 @@ async fn an_auto_orphan_whose_only_hit_is_another_title_is_not_imported(pool: Pg
     );
     let _ = std::fs::remove_dir_all(&c.tmp);
 }
+
+#[sqlx::test(migrations = false)]
+async fn icon_and_color_fall_back_to_the_column_defaults(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (s, lib) = call(
+        &c,
+        "POST",
+        "/api/libraries",
+        &c.admin,
+        json!({"name": "A", "icon": ""}),
+    )
+    .await;
+    assert_eq!(s, 201);
+    assert_eq!(
+        (lib["icon"].as_str(), lib["color"].as_str()),
+        (Some("library"), Some("primary"))
+    );
+    let uri = format!("/api/libraries/{}", lib["id"]);
+    let (_, lib) = call(
+        &c,
+        "PATCH",
+        &uri,
+        &c.admin,
+        json!({"icon": "film", "color": "accent"}),
+    )
+    .await;
+    assert_eq!(
+        (lib["icon"].as_str(), lib["color"].as_str()),
+        (Some("film"), Some("accent"))
+    );
+    let (s, lib) = call(
+        &c,
+        "PATCH",
+        &uri,
+        &c.admin,
+        json!({"icon": null, "color": ""}),
+    )
+    .await;
+    assert_eq!(s, 200);
+    assert_eq!(
+        (lib["icon"].as_str(), lib["color"].as_str()),
+        (Some("library"), Some("primary"))
+    );
+}

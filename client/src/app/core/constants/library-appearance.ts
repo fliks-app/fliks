@@ -1,11 +1,11 @@
 export interface LibraryAppearanceOption {
-  value: string | null;
+  value: string;
   label?: string;
   labelKey?: string;
 }
 
 export const LIBRARY_ICON_OPTIONS: readonly LibraryAppearanceOption[] = [
-  { value: null, labelKey: 'settings.libraries.icon_default' },
+  { value: 'library', labelKey: 'settings.libraries.icons.library' },
   { value: 'film', labelKey: 'settings.libraries.icons.film' },
   { value: 'tv', label: 'TV' },
   { value: 'popcorn', labelKey: 'settings.libraries.icons.popcorn' },

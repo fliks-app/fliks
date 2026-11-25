@@ -236,7 +236,7 @@ pub async fn create(
     let id = sqlx::query_scalar!(
         r#"INSERT INTO libraries (name, icon, color, "mediaTypes", "preferredProvider", "metadataLanguage",
         "metadataRegion", "defaultQualityProfileId", "defaultLanguageProfileId", "mergeM4b", "mergeM4bReplace")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id"#,
+        VALUES ($1, COALESCE(NULLIF($2, ''), 'library'), COALESCE(NULLIF($3, ''), 'primary'), $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id"#,
         dto.name,
         dto.icon,
         dto.color,
@@ -384,8 +384,19 @@ async fn patch(
         };
     }
     set!("name", dto.name.clone());
-    set!("icon", dto.icon.clone());
-    set!("color", dto.color.clone());
+    // An older client sends `null` for "no icon": it stores the column default, like an empty string.
+    for (col, v) in [("icon", &dto.icon), ("color", &dto.color)] {
+        match v.as_ref().map(|v| v.as_deref().filter(|v| !v.is_empty())) {
+            Some(Some(v)) => {
+                sets.push(format!("\"{col}\" = "));
+                sets.push_bind_unseparated(v.to_owned());
+            }
+            Some(None) => {
+                sets.push(format!("\"{col}\" = DEFAULT"));
+            }
+            None => {}
+        }
+    }
     set!(
         "mediaTypes",
         dto.media_types.clone().map(|t| serde_json::json!(t))

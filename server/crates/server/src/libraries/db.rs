@@ -16,8 +16,8 @@ pub struct Library {
     #[serde(with = "iso_ms")]
     pub updated_at: DateTime<Utc>,
     pub name: String,
-    pub icon: Option<String>,
-    pub color: Option<String>,
+    pub icon: String,
+    pub color: String,
     pub media_types: Json<Vec<String>>,
     pub preferred_provider: Option<String>,
     pub metadata_language: Option<String>,
@@ -48,8 +48,8 @@ pub struct Folder {
 pub struct Summary {
     pub id: i32,
     pub name: String,
-    pub icon: Option<String>,
-    pub color: Option<String>,
+    pub icon: String,
+    pub color: String,
     pub media_types: Json<Vec<String>>,
     pub default_quality_profile_id: Option<i32>,
     pub default_language_profile_id: Option<i32>,

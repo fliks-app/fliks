@@ -17,12 +17,12 @@
       },
       "expect": {
         "body": {
-          "color": null,
+          "color": "primary",
           "defaultLanguageProfileId": null,
           "defaultQualityProfileId": null,
           "disk": null,
           "folders": [],
-          "icon": null,
+          "icon": "library",
           "id": 3,
           "label": null,
           "mediaTypes": [

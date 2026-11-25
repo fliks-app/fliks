@@ -6,6 +6,7 @@ import {
   MetadataProfile,
   UpdateLibraryBody,
 } from '../../../../core/services/api/libraries-api.service';
+import { LIBRARY_COLOR_OPTIONS, LIBRARY_ICON_OPTIONS } from '../../../../core/constants/library-appearance';
 import { UserRow } from '../../../../core/services/api/users-api.service';
 import {
   QualityProfile,
@@ -34,8 +35,8 @@ export class LibraryDetailState {
 
   // Editable form fields, shared by the detail tabs and the creation wizard.
   readonly formName = signal('');
-  readonly formIcon = signal<string | null>(null);
-  readonly formColor = signal<string | null>(null);
+  readonly formIcon = signal(LIBRARY_ICON_OPTIONS[0].value);
+  readonly formColor = signal(LIBRARY_COLOR_OPTIONS[0].value);
   readonly formKinds = signal<ReadonlySet<MediaType>>(new Set(['movie', 'series']));
   readonly formProvider = signal<string | null>(null);
   readonly formMetadataLanguage = signal<string | null>(null);
@@ -56,8 +57,8 @@ export class LibraryDetailState {
   hydrate(lib: Library) {
     this.library.set(lib);
     this.formName.set(lib.name);
-    this.formIcon.set(lib.icon);
-    this.formColor.set(lib.color);
+    this.formIcon.set(lib.icon || LIBRARY_ICON_OPTIONS[0].value);
+    this.formColor.set(lib.color || LIBRARY_COLOR_OPTIONS[0].value);
     this.formKinds.set(new Set(lib.mediaTypes));
     this.formProvider.set(lib.preferredProvider);
     this.formMetadataLanguage.set(lib.metadataLanguage);
