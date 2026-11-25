@@ -8,7 +8,7 @@ import { ConfirmationService } from '../../../core/services/confirmation.service
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
 import { formatBytes } from '../../../core/utils/format-bytes';
 import { serverMessage } from '../../../core/utils/server-message';
-import { waitForServer } from '../../../core/utils/wait-for-server';
+import { ServerBootService } from '../../../core/services/server-boot.service';
 
 interface NotRestored { schema: string; message: string; code?: string; }
 interface RestoreResult { pluginsNotRestored: NotRestored[]; restarting: boolean; }
@@ -22,6 +22,7 @@ export class SystemBackupsComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly translate = inject(TranslateService);
   private readonly confirmation = inject(ConfirmationService);
+  private readonly serverBoot = inject(ServerBootService);
 
   readonly backups = signal<{ filename: string; size: number; date: string }[]>([]);
   readonly loading = signal(false);
@@ -61,10 +62,7 @@ export class SystemBackupsComponent implements OnInit {
       } else {
         void this.confirmation.alert({ title: this.translate.instant('common.success'), message: this.translate.instant(result.restarting ? 'system.restore_restarting' : 'system.restore_ok'), variant: 'info' });
       }
-      if (result.restarting) {
-        await waitForServer(this.http);
-        location.reload();
-      }
+      if (result.restarting) this.serverBoot.waitAndReload('restarting');
     } catch (err: unknown) {
       void this.confirmation.alert({ title: this.translate.instant('common.error'), message: serverMessage(err, this.translate, 'system.restore_failed'), variant: 'danger' });
     }

@@ -136,11 +136,17 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
     let listener = tokio::net::TcpListener::bind((cfg.bind, cfg.port)).await?;
     tracing::info!("listening on {}", listener.local_addr()?);
     let slot = boot::Slot::default();
+    let upgrading = boot::Upgrading::default();
+    let booting = boot::booting(
+        cfg.serve_static_path.clone(),
+        cfg.cors_origin.clone(),
+        upgrading.clone(),
+    );
     let (stop, mut stopped) = tokio::sync::watch::channel(false);
     let mut http = tokio::spawn(
         axum::serve(
             listener,
-            boot::gate(slot.clone()).into_make_service_with_connect_info::<SocketAddr>(),
+            boot::gate(slot.clone(), booting).into_make_service_with_connect_info::<SocketAddr>(),
         )
         .with_graceful_shutdown(async move {
             shutdown_signal().await;
@@ -149,7 +155,7 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
         .into_future(),
     );
     let booted = tokio::select! {
-        r = boot(cfg) => r?,
+        r = boot(cfg, &upgrading) => r?,
         _ = stopped.wait_for(|s| *s) => return Ok(()),
         r = &mut http => return r?.map_err(Into::into),
     };
@@ -179,7 +185,10 @@ pub async fn serve(cfg: Config) -> Result<(), BoxError> {
 }
 
 /// Everything between the bound listener and the first request: probe, dump, migrations, seeds.
-async fn boot(cfg: Config) -> Result<(AppState, axum::Router), BoxError> {
+async fn boot(
+    cfg: Config,
+    upgrading: &boot::Upgrading,
+) -> Result<(AppState, axum::Router), BoxError> {
     // One direct attempt: the pool would retry a refused connection for its whole acquire timeout.
     let probe =
         tokio::time::timeout(Duration::from_secs(10), PgConnection::connect_with(&cfg.db)).await;
@@ -195,6 +204,9 @@ async fn boot(cfg: Config) -> Result<(AppState, axum::Router), BoxError> {
     match db::role::status(&pool).await {
         Ok(s) => db::role::log(&s),
         Err(e) => tracing::warn!("database role check failed: {e}"),
+    }
+    if db::pending_version(&pool).await?.is_some() {
+        upgrading.store(true, std::sync::atomic::Ordering::Relaxed);
     }
     system::backup::before_migration(&cfg, &pool).await?;
     db::migrate(&pool).await?;

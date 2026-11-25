@@ -1,10 +1,13 @@
 import { HttpContextToken, HttpInterceptorFn, HttpErrorResponse, HttpEventType } from '@angular/common/http';
 import { Injector, inject } from '@angular/core';
-import { catchError, filter, retry, throwError, timeout, timer, TimeoutError } from 'rxjs';
+import { catchError, filter, retry, tap, throwError, timeout, timer, TimeoutError } from 'rxjs';
 import { TranslateService } from '@ngx-translate/core';
 import { ToastService } from '../services/toast.service';
 import { NetworkService } from '../services/network.service';
 import { SseService } from '../services/sse.service';
+import { ServerBootService } from '../services/server-boot.service';
+import { ServerConfigService } from '../services/server-config.service';
+import { targetsActiveServer } from './credentials.interceptor';
 import { pluginErrorMessage, translatedServerMessage } from '../utils/server-message';
 
 /** Set on a request whose failure the caller reports itself. For a batch: one summary beats N
@@ -21,12 +24,22 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toast = inject(ToastService);
   const translate = inject(TranslateService);
   const network = inject(NetworkService);
+  const serverConfig = inject(ServerConfigService);
   // Resolved on error only: SseService reaches HttpClient through AuthService.
   const injector = inject(Injector);
   const bounded =
     (req.method === 'GET' && req.responseType === 'json' && req.url.includes('/api/')) || req.context.has(API_TIMEOUT_MS);
 
   return next(req).pipe(
+    tap({
+      error: (err: unknown) => {
+        // A typed host being probed may be booting too; only the active server blocks the app.
+        if (err instanceof HttpErrorResponse && isStarting(err) && targetsActiveServer(req.url, serverConfig.serverUrl())
+            && (!serverConfig.isNative || serverConfig.isConfigured())) {
+          injector.get(ServerBootService).waitAndReload(err.error?.upgrading ? 'upgrading' : 'restarting');
+        }
+      },
+    }),
     // Only a GET that never reached the server is safe to resend; a timeout is downstream, so never retried.
     retry({
       count: req.method === 'GET' ? GET_RETRIES : 0,
@@ -45,9 +58,9 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
           : caught;
       if (err.status === 0 && req.url.includes('/api/')) network.reportDoubt();
       // Toasts for 400-499 except 408, plus 500 and 503 (an unreachable plugin); 401 is skipped since the auth guard already redirects.
-      // A mutation on an unreachable or restarting server (engine 502/504) answers the user unless the chip already does; GETs degrade in place.
+      // A mutation on an unreachable or restarting server (engine 502/504) answers the user unless the chip or the boot modal already does; GETs degrade in place.
       const unreachable =
-        req.method !== 'GET' && isUnreachable(err) && !injector.get(SseService).serverUnreachable();
+        req.method !== 'GET' && isUnreachable(err) && !isStarting(err) && !injector.get(SseService).serverUnreachable();
       const showToast =
         unreachable ||
         (err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 401) ||
@@ -56,12 +69,9 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       // Discover/search/browse GETs degrade in place, and one open fires several parallel metadata calls, so a 500 there must not spray toasts.
       const softMetadataGet =
         req.method === 'GET' && req.url.includes('/api/metadata') && err.status === 500;
-      // Health is polled while the server restarts, so a failed probe is expected.
-      const healthProbe = req.url.includes('/api/system/health');
       if (
         !showToast ||
         softMetadataGet ||
-        healthProbe ||
         req.context.get(SKIP_ERROR_TOAST) ||
         req.url.includes('/i18n/')
       ) {
@@ -80,7 +90,7 @@ function isFrameworkNotFound(status: number, message: unknown): boolean {
   return status === 404 && typeof message === 'string' && /^Cannot [A-Z]+ /.test(message);
 }
 
-/** The boot gate of the server answers every route but liveness with this 503 until it has migrated. */
+/** The boot gate of the server answers every API route but liveness with this 503 until it has migrated. */
 export const isStarting = (err: HttpErrorResponse): boolean =>
   err.status === 503 && err.error?.message === 'errors.starting';
 
