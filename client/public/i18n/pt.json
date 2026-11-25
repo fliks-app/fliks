@@ -1799,7 +1799,7 @@
     "health_db": "Base de dados",
     "health_plugins": "Plugins instalados",
     "health_plugins_running": "{{count}} em execução",
-    "lan_urls": "Acessível na sua rede em",
+    "health_lan": "Endereço local",
     "conf_not_persistent": "A pasta de configuração não é utilizável. Os segredos ficam numa pasta temporária e perdem-se quando o contentor é recriado.",
     "data_not_persistent": "A pasta de dados não é gravável. As imagens e os avatares ficam numa pasta temporária e perdem-se quando o contentor é recriado.",
     "db_superuser": "A aplicação liga-se ao PostgreSQL como superutilizador.",
