@@ -1,5 +1,33 @@
 # Changelog
 
+## [7.3.0](https://github.com/fliks-app/fliks/compare/v7.2.1...v7.3.0) (2026-11-25)
+
+
+### Features
+
+* **desktop:** add a general settings page with a quit-on-close option ([#3045](https://github.com/fliks-app/fliks/issues/3045)) ([887252f](https://github.com/fliks-app/fliks/commit/887252fc1247422199acf23e0d8a7661caabe414))
+* **home:** offer notifications from a home banner on desktop and mobile ([#3049](https://github.com/fliks-app/fliks/issues/3049)) ([a82c622](https://github.com/fliks-app/fliks/commit/a82c62222001712964f94f6bc7c6fa16d0cfe47e))
+* **libraries:** require an icon and a color on every library ([#3054](https://github.com/fliks-app/fliks/issues/3054)) ([1d3f0f1](https://github.com/fliks-app/fliks/commit/1d3f0f1c152e0cabc0a505c3cbf4fd81d9401c8e))
+* **system:** show the server's LAN URLs on native installs ([#3052](https://github.com/fliks-app/fliks/issues/3052)) ([f976864](https://github.com/fliks-app/fliks/commit/f97686413158a6f0c59bdc59968b58133395474c))
+* **whats-new:** show the what's-new modal on phones and tablets ([#3043](https://github.com/fliks-app/fliks/issues/3043)) ([5d82c01](https://github.com/fliks-app/fliks/commit/5d82c0161ce36702d6d87088b0b5d4ccde6cb7c0))
+
+
+### Bug Fixes
+
+* **boot:** serve the client during boot and block it with a starting modal ([#3057](https://github.com/fliks-app/fliks/issues/3057)) ([8840b2a](https://github.com/fliks-app/fliks/commit/8840b2a8e83f94ac906d150cac6b853f5142e60c))
+* **client:** keep the carousel focus ring whole and square the rail entries ([#3053](https://github.com/fliks-app/fliks/issues/3053)) ([2d9d154](https://github.com/fliks-app/fliks/commit/2d9d1542d10373961379645ec2d8a27062b5888a))
+* **desktop:** let the setup page reach a server before it is saved ([#3047](https://github.com/fliks-app/fliks/issues/3047)) ([2e96b8a](https://github.com/fliks-app/fliks/commit/2e96b8ac9dd1f15d9383366e37f4fd666ef82c31))
+* **hero-carousel:** resolve the shown series again when home comes back ([#3058](https://github.com/fliks-app/fliks/issues/3058)) ([5f7bcb2](https://github.com/fliks-app/fliks/commit/5f7bcb2ec9c626bd9fd149454db4c1dc7c489f1c))
+* **hero-carousel:** show the text title on phones instead of the logo ([#3042](https://github.com/fliks-app/fliks/issues/3042)) ([86ac499](https://github.com/fliks-app/fliks/commit/86ac499dc37ef4133d56f7031511ab0609e450a7))
+* **i18n:** say the user list setting applies at sign-in ([#3056](https://github.com/fliks-app/fliks/issues/3056)) ([1e3bc9a](https://github.com/fliks-app/fliks/commit/1e3bc9ad1301bf4b59a58539b11371a7dd1e94b2))
+* **i18n:** show the seconds unit on the throttle threshold label ([#3055](https://github.com/fliks-app/fliks/issues/3055)) ([723fb19](https://github.com/fliks-app/fliks/commit/723fb1919280a4d7cfaa83ccd388b0b31dbbbee3))
+* **player-bar:** keep the mini-player under the libraries sheet ([#3040](https://github.com/fliks-app/fliks/issues/3040)) ([68435b1](https://github.com/fliks-app/fliks/commit/68435b144680355cac1416a06d5f7af1bcca34d9))
+* **player:** close the player when a media ends with nothing next ([#3046](https://github.com/fliks-app/fliks/issues/3046)) ([082d12c](https://github.com/fliks-app/fliks/commit/082d12ce458f449b8866ad570b62c145c75a2a1b))
+* **player:** list stats for nerds below the watch-together actions ([#3051](https://github.com/fliks-app/fliks/issues/3051)) ([e494cb7](https://github.com/fliks-app/fliks/commit/e494cb7a578b63e83090b94bf68b2f0aaa7ea227))
+* **player:** load the media of a bare /watch/&lt;fileId&gt; link ([#3044](https://github.com/fliks-app/fliks/issues/3044)) ([5b57a78](https://github.com/fliks-app/fliks/commit/5b57a78b4f981ddcb042cfbad02dea7e06853a5e))
+* **player:** size the native surface from the container's layout box ([#3048](https://github.com/fliks-app/fliks/issues/3048)) ([9cceb6a](https://github.com/fliks-app/fliks/commit/9cceb6a75bc818cbb33fc1cef324ed1fad51121a))
+* **settings-drawer:** scroll the whole rail column and keep its background ([#3050](https://github.com/fliks-app/fliks/issues/3050)) ([46b6371](https://github.com/fliks-app/fliks/commit/46b6371d48715a87165becd555e6a48edae40944))
+
 ## [7.2.1](https://github.com/fliks-app/fliks/compare/v7.2.0...v7.2.1) (2026-11-24)
 
 
