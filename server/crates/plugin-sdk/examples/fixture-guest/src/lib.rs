@@ -162,10 +162,11 @@ fn echo(req: &Request) -> Result<Response, String> {
 /// A release picker's `search`: the releases set in the `releases` setting, as JSON; the item it
 /// was asked for is appended to `searched`, and `cooling` (an RFC 3339 instant) makes it answer 503.
 fn search(req: &Request) -> Result<Response, String> {
+    // Read before the search is logged: a test that sees the log may change `cooling` at once.
+    let until = mode("cooling");
     let item = req.param("itemId").unwrap_or_else(|| "-".into());
     let seen = mode("searched");
     host::config_set("searched", Some(&format!("{seen}{item};"))).map_err(|e| e.message)?;
-    let until = mode("cooling");
     if !until.is_empty() {
         let body = json!({ "error": { "cooldownUntil": until } });
         return Ok(Response::json(503, &body));
