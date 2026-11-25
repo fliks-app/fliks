@@ -1745,6 +1745,7 @@
     "cmd_identify": "Identify",
     "cmd_refresh_episode_metadata": "Refresh episode metadata",
     "cmd_rescan": "Rescan files",
+    "cmd_rescan_stale_probes": "Re-analyze files after an update",
     "cmd_subtitle_sync": "Subtitle sync",
     "cmd_import_seerr_requests": "Seerr request import",
     "cmd_import_watch_history": "Watch history import",
@@ -2076,6 +2077,7 @@
     "yes": "Yes",
     "no": "No",
     "save": "Save",
+    "apply": "Apply",
     "delete": "Delete",
     "actions": "Actions",
     "edit": "Edit",
@@ -4115,7 +4117,8 @@
         "per_level": {
           "reencode_one": "{{count}} re-encode",
           "reencode_other": "{{count}} re-encodes",
-          "remux": "{{count}} remux",
+          "remux_one": "{{count}} remux",
+          "remux_other": "{{count}} remuxes",
           "metadata_one": "{{count}} metadata fix",
           "metadata_other": "{{count}} metadata fixes"
         },

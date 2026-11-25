@@ -1745,6 +1745,7 @@
     "cmd_identify": "Identificar",
     "cmd_refresh_episode_metadata": "Atualizar metadados do episódio",
     "cmd_rescan": "Reanalisar ficheiros",
+    "cmd_rescan_stale_probes": "Reanálise dos ficheiros após uma atualização",
     "cmd_subtitle_sync": "Sincronização de legendas",
     "cmd_import_seerr_requests": "Importar pedidos do Seerr",
     "cmd_import_watch_history": "Importar histórico de reprodução",
@@ -2076,6 +2077,7 @@
     "yes": "Sim",
     "no": "Não",
     "save": "Guardar",
+    "apply": "Aplicar",
     "delete": "Eliminar",
     "edit": "Editar",
     "actions": "Ações",
@@ -4115,7 +4117,8 @@
         "per_level": {
           "reencode_one": "{{count}} recodificação",
           "reencode_other": "{{count}} recodificações",
-          "remux": "{{count}} remux",
+          "remux_one": "{{count}} remux",
+          "remux_other": "{{count}} remux",
           "metadata_one": "{{count}} correção de metadados",
           "metadata_other": "{{count}} correções de metadados"
         },

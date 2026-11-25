@@ -1745,6 +1745,7 @@
     "cmd_identify": "Identifizieren",
     "cmd_refresh_episode_metadata": "Episoden-Metadaten aktualisieren",
     "cmd_rescan": "Dateien neu einlesen",
+    "cmd_rescan_stale_probes": "Dateien nach einem Update neu analysieren",
     "cmd_subtitle_sync": "Untertitel-Synchronisierung",
     "cmd_import_seerr_requests": "Seerr-Anfragen importieren",
     "cmd_import_watch_history": "Wiedergabeverlauf importieren",
@@ -2076,6 +2077,7 @@
     "yes": "Ja",
     "no": "Nein",
     "save": "Speichern",
+    "apply": "Anwenden",
     "delete": "Löschen",
     "edit": "Bearbeiten",
     "actions": "Aktionen",
@@ -4115,7 +4117,8 @@
         "per_level": {
           "reencode_one": "{{count}} Neukodierung",
           "reencode_other": "{{count}} Neukodierungen",
-          "remux": "{{count}} Remux",
+          "remux_one": "{{count}} Remux",
+          "remux_other": "{{count}} Remux",
           "metadata_one": "{{count}} Metadatenkorrektur",
           "metadata_other": "{{count}} Metadatenkorrekturen"
         },
