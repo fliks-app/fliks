@@ -1,5 +1,5 @@
 //! Database backups (`docs/spec/system.md` rules 14-21, 31-35): `pg_dump` to a file; the restore is `restore.rs`.
-use crate::{config::Config, db, http::AppError, paths};
+use crate::{config::Config, http::AppError, paths};
 use chrono::Utc;
 use serde::Serialize;
 use serde_json::Value;
@@ -261,9 +261,11 @@ async fn dump(cfg: &Config, pool: &PgPool, dir: &Path, filename: String) -> Resu
 }
 
 /// Rules 31-35: dump before pending migrations, so a destructive one can be rolled back by a restore.
+/// `pending` is `db::pending_version`, read by the caller that also reports it.
 pub async fn before_migration(
     cfg: &Config,
     pool: &PgPool,
+    pending: Option<i64>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     sweep_partials(&dir()).await;
     let skip = std::env::var("FLIKS_SKIP_PRE_MIGRATION_BACKUP")
@@ -272,16 +274,17 @@ pub async fn before_migration(
         tracing::warn!("FLIKS_SKIP_PRE_MIGRATION_BACKUP is set: no backup before migrations");
         return Ok(());
     }
-    before_migration_in(cfg, pool, &dir().join("pre-migration")).await
+    before_migration_in(cfg, pool, &dir().join("pre-migration"), pending).await
 }
 
 pub async fn before_migration_in(
     cfg: &Config,
     pool: &PgPool,
     dir: &Path,
+    pending: Option<i64>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     sweep_partials(dir).await;
-    let Some(version) = db::pending_version(pool).await? else {
+    let Some(version) = pending else {
         return Ok(());
     };
     let filename = format!("fliks-pre-migration-v{version}-{}.dump", stamp());

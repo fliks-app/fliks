@@ -92,7 +92,8 @@ async fn connect(cfg: &Config) -> Result<PgPool, sqlx::Error> {
 
 pub async fn migrate(cfg: &Config) -> Result<(), BoxError> {
     let pool = connect(cfg).await?;
-    system::backup::before_migration(cfg, &pool).await?;
+    let pending = db::pending_version(&pool).await?;
+    system::backup::before_migration(cfg, &pool, pending).await?;
     db::migrate(&pool).await?;
     pool.close().await;
     Ok(())
@@ -205,10 +206,9 @@ async fn boot(
         Ok(s) => db::role::log(&s),
         Err(e) => tracing::warn!("database role check failed: {e}"),
     }
-    if db::pending_version(&pool).await?.is_some() {
-        upgrading.store(true, std::sync::atomic::Ordering::Relaxed);
-    }
-    system::backup::before_migration(&cfg, &pool).await?;
+    let pending = db::pending_version(&pool).await?;
+    upgrading.store(pending.is_some(), std::sync::atomic::Ordering::Relaxed);
+    system::backup::before_migration(&cfg, &pool, pending).await?;
     db::migrate(&pool).await?;
     jobs::sweep(&pool).await?;
     queue::boot(&pool).await?;
