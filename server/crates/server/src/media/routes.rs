@@ -316,8 +316,9 @@ pub async fn media_file_owner(
                  FROM media_files mf WHERE mf.id = $1"#,
         )
             .bind(file)
-            .fetch_one(&st.db)
-            .await?;
+            .fetch_optional(&st.db)
+            .await?
+            .ok_or_else(|| AppError::not_found(format!("MediaFile #{file} not found")))?;
     assert_media_visible(&st.db, media, &libs, &a.kinds).await?;
     Ok(Json(json!({"mediaId": media, "episodeId": episode})))
 }
