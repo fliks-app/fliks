@@ -31,8 +31,8 @@
 .hc-frame { position: relative; }
 .hc-body, .hc-dots, .hc-label { position: relative; z-index: 1; }
 .hc-stack { display: grid; }
-/* A slide arriving from the right must not widen the page for the length of its swap; the margin keeps focus rings. */
-.hc-body { overflow-x: clip; overflow-clip-margin: 1rem; }
+/* A slide arriving from the right must not widen the page for the length of its swap. */
+.hc-body { overflow-x: clip; }
 .hc-slide { grid-area: 1 / 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; }
 .hc-logo { object-fit: contain; }
 .hc-title { font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; }
@@ -100,6 +100,8 @@
   height: calc(12vh + 24.75rem + var(--hc-bar, 0px));
   padding: var(--hc-bar, 0px) 0 2.5rem var(--hc-inset);
 }
+/* Room for the focus ring and lift: `overflow-clip-margin` only applies when both axes clip. */
+:host(.hc-desktop) .hc-body { padding: 0 1rem; margin: 0 -1rem; }
 :host(.hc-desktop) .hc-slide { max-width: 42rem; }
 :host(.hc-desktop) .hc-logo { max-height: 5rem; max-width: 20rem; }
 :host(.hc-desktop) .hc-title { font-size: 1.5rem; }
