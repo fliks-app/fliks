@@ -100,6 +100,25 @@ fn fire(st: AppState, name: &'static str) {
     });
 }
 
+/// Boot: once the engine is up, rescans the video media a `PROBE_VERSION` bump left behind (rule 27).
+pub async fn rescan_stale_probes(st: AppState) {
+    let mut adopted = st.engine.adoptions();
+    if !st.engine.enabled() && adopted.changed().await.is_err() {
+        return;
+    }
+    match bodies::stale_probes().fetch_optional(&st.db).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return,
+        Err(e) => return tracing::warn!("{}: not read: {e}", names::STALE_PROBES),
+    }
+    let Some(claim) = st.jobs.claim(names::STALE_PROBES) else {
+        return;
+    };
+    let work = bodies::run(&st, names::STALE_PROBES);
+    audit::run_audited(&st, names::STALE_PROBES, audit::Trigger::Auto, work).await;
+    drop(claim);
+}
+
 /// The manual path (rule 6) after the row is queued; the claim is released when the job ends.
 pub async fn run_manual(st: AppState, id: i32, name: String, claim: Claim) {
     if let Err(e) = audit::mark_running(&st.db, id).await {
