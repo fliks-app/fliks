@@ -429,10 +429,6 @@
           <span class="flex-1 text-left">{{ 'player.fill_screen' | translate }}</span>
           @if (fillScreen()) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
         </button>
-        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="toggleStats.emit(); closeSheet()">
-          <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
-          @if (statsVisible()) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
-        </button>
       }
       @if (partyCanStart()) {
         <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="startParty.emit(); closeSheet()">
@@ -457,6 +453,12 @@
             {{ 'party.reaction_settings' | translate }}
             @if (partyReactionsOff()) { <span class="block text-sm text-white/50">{{ 'party.reactions_off_notice' | translate }}</span> }
           </span>
+        </button>
+      }
+      @if (local()) {
+        <button class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-white active:bg-white/10" (click)="toggleStats.emit(); closeSheet()">
+          <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
+          @if (statsVisible()) { <svg [lucideIcon]="icons.Check" class="h-5 w-5 text-white shrink-0"></svg> }
         </button>
       }
       <div class="divider my-1 before:bg-white/10 after:bg-white/10"></div>
@@ -533,11 +535,6 @@
             <span class="flex-1 text-left">{{ 'player.fill_screen' | translate }}</span>
             @if (fillScreen()) { <svg [lucideIcon]="icons.Check" class="h-4 w-4 text-white shrink-0"></svg> }
           </button>
-          <!-- Stats -->
-          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleStats.emit(); closeDropdown($event)">
-            <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
-            @if (statsVisible()) { <svg [lucideIcon]="icons.Check" class="h-4 w-4 text-white shrink-0"></svg> }
-          </button>
         }
         @if (partyCanStart()) {
           <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="startParty.emit(); closeDropdown($event)">
@@ -562,6 +559,12 @@
             {{ 'party.reaction_settings' | translate }}
             @if (partyReactionsOff()) { <span class="block text-sm text-white/50">{{ 'party.reactions_off_notice' | translate }}</span> }
           </span>
+          </button>
+        }
+        @if (local()) {
+          <button class="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-white hover:bg-white/10" (click)="toggleStats.emit(); closeDropdown($event)">
+            <span class="flex-1 text-left">{{ 'player.stats_for_nerds' | translate }}</span>
+            @if (statsVisible()) { <svg [lucideIcon]="icons.Check" class="h-4 w-4 text-white shrink-0"></svg> }
           </button>
         }
         <div class="divider my-1 before:bg-white/10 after:bg-white/10"></div>
