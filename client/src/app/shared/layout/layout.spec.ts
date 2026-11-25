@@ -102,6 +102,9 @@ const lib = (id: number, name: string, opts: Partial<LibrarySummary> = {}): Libr
 });
 
 const openUpdateModal = vi.fn();
+@Component({ template: '' })
+class TitledPageStub {}
+
 @Component({ selector: 'app-update-modal', template: '' })
 class UpdateModalStub {
   open = openUpdateModal;
@@ -373,6 +376,16 @@ describe('LayoutComponent nav — characterisation (data, not pixels)', () => {
   it('shows the Fliks logo in the navbar when the hero claim asks for the brand (home)', async () => {
     const fixture = await createFixture({ ...ADMIN_WITH_LIBRARIES, isHeroPage: true, heroBrand: true });
     expect(fixture.nativeElement.querySelector('nav.navbar img[src="fliks-logo-ondark.svg"]')).not.toBeNull();
+  });
+
+  it('names a hero page after its route title, the hero chrome being set before NavigationEnd', async () => {
+    const fixture = await createFixture({ ...ADMIN_WITH_LIBRARIES, isHeroPage: true });
+    const setPageTitle = vi.spyOn(TestBed.inject(NavbarService), 'setPageTitle');
+    const router = TestBed.inject(Router);
+    router.resetConfig([{ path: 'p', component: TitledPageStub, data: { titleKey: 'nav.home' } }]);
+    await router.navigateByUrl('/p');
+    fixture.detectChanges();
+    expect(setPageTitle).toHaveBeenCalledWith('nav.home');
   });
 
   it('keeps the navbar and its hamburger, and the rail inside the drawer, below md', async () => {

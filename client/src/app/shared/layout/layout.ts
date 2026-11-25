@@ -469,7 +469,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     requestAnimationFrame(() => main.classList.add('page-enter'));
   }
 
-  /** Applies `data.titleKey` from the deepest activated route (skipped on hero pages); routes without it set their own title, so don't clear here. */
+  /** Applies `data.titleKey` from the deepest activated route; routes without it set their own title, so don't clear here. */
   private syncNavbarTitleFromRoute() {
     let key: string | undefined;
     let r = this.router.routerState.snapshot.root;
@@ -477,7 +477,6 @@ export class LayoutComponent implements OnInit, OnDestroy {
       r = r.firstChild;
       if (r.data['titleKey']) key = r.data['titleKey'] as string;
     }
-    if (this.navbar.isHeroPage()) return;
     if (key) this.navbar.setPageTitle(this.translate.instant(key));
   }
 
