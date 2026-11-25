@@ -2,9 +2,12 @@
    Plain properties only: no `translate`/`scale`, `color-mix` or `:is`, so it holds on webOS, which gets no CSS downlevel. */
 :root {
   --rail-w: 4.5rem;
+  --rail-item-h: 2.375rem;
 }
+/* TV keeps its 10-foot rows, as the tab row had them. */
 body.tv {
   --rail-w: 5.5rem;
+  --rail-item-h: 2.75rem;
 }
 
 .nav-rail {
@@ -65,7 +68,7 @@ body.tv .nav-rail.rail-collapsed:not(.rail-open) .rail-icon {
   align-items: center;
   justify-content: space-between;
 }
-/* Header, entries and footer scroll as one; the padding leaves the rings room on every side. */
+/* Header, entries and footer scroll as one; the side padding makes a collapsed entry square and leaves the rings room. */
 .rail-scroll {
   display: flex;
   flex: 1 1 auto;
@@ -74,7 +77,7 @@ body.tv .nav-rail.rail-collapsed:not(.rail-open) .rail-icon {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: calc(env(safe-area-inset-top, 0px) + 1.5rem) 0.75rem 0.75rem;
+  padding: calc(env(safe-area-inset-top, 0px) + 1.5rem) calc((var(--rail-w) - var(--rail-item-h)) / 2) 0.75rem;
   scroll-padding-block: 0.75rem;
 }
 /* The footer sits at the bottom while everything fits, after the last entry once it does not. */
@@ -92,9 +95,8 @@ body.tv .nav-rail.rail-collapsed:not(.rail-open) .rail-icon {
   display: flex;
   align-items: center;
   width: 100%;
-  height: 2.375rem;
-  /* Centres the icon in the collapsed rail: (rail width - 2 x 0.75rem rail padding - icon) / 2. */
-  padding: 0 calc((var(--rail-w) - 2.75rem) / 2);
+  height: var(--rail-item-h);
+  padding: 0 calc((var(--rail-item-h) - 1.25rem) / 2);
   border-radius: 0.75rem;
   color: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
@@ -102,9 +104,7 @@ body.tv .nav-rail.rail-collapsed:not(.rail-open) .rail-icon {
   font-weight: 500;
   cursor: pointer;
 }
-/* TV keeps its 10-foot rows, as the tab row had them (2.75rem, semibold). */
 body.tv .rail-item {
-  height: 2.75rem;
   font-size: 1rem;
   font-weight: 600;
 }
@@ -176,7 +176,7 @@ body.tv .rail-item {
 }
 .rail-icon-btn {
   flex: none;
-  width: 2.375rem;
+  width: var(--rail-item-h);
   padding: 0;
   justify-content: center;
 }
