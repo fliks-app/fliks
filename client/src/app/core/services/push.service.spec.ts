@@ -190,6 +190,16 @@ describe('PushService', () => {
     }
     const note = (tag?: string, v = 1) => ({ v, id: 'n', ts: 0, ttl: 60, cat: 'account', title: 't', body: 'b', url: '/', tag });
 
+    it('offers the home banner until notifications reach a closed window, and turns both on', async () => {
+      const setNotifyPrefs = vi.fn(async (p: object) => ({ ...prefs, ...p }));
+      Object.assign(win.fliksDesktop as object, { setNotifyPrefs });
+      const { push } = await started();
+      await vi.waitFor(() => expect(push.offerBanner()).toBe(true));
+      await push.acceptBanner();
+      expect(setNotifyPrefs).toHaveBeenCalledWith({ notifications: true, background: true });
+      expect(push.offerBanner()).toBe(false);
+    });
+
     it('shows the test notification through the OS even with the window in front', async () => {
       await started();
       sseNotifications.next(note('test'));
@@ -225,6 +235,16 @@ describe('PushService', () => {
       status = 'allowed';
       onActive(true);
       await vi.waitFor(() => expect(push.systemBlock()).toBeNull());
+    });
+
+    it('keeps the home banner while the OS blocks Fliks, its button opening the OS settings', async () => {
+      status = 'blocked';
+      prefs.notifications = true;
+      const { push } = await started();
+      await vi.waitFor(() => expect(push.offerBanner()).toBe(true));
+      await push.acceptBanner();
+      expect((win.fliksDesktop as { openNotifySettings: ReturnType<typeof vi.fn> }).openNotifySettings).toHaveBeenCalledOnce();
+      expect(push.offerBanner()).toBe(true);
     });
 
     it('says when the system has no notification service, with no settings to open', async () => {
@@ -277,6 +297,15 @@ describe('PushService', () => {
       await vi.waitFor(() => expect(r.push.mobileEnabled()).toBe(mobile));
       return r;
     }
+
+    it('offers the home banner on a phone not yet on, and keeps it hidden once hidden', async () => {
+      const { push } = await started();
+      expect(push.offerBanner()).toBe(true);
+      push.hideBanner();
+      expect(push.offerBanner()).toBe(false);
+      TestBed.resetTestingModule();
+      expect((await started()).push.offerBanner()).toBe(false);
+    });
 
     it('turns push on after the pre-prompt and the system dialog', async () => {
       confirm.mockImplementation(turnOn);
@@ -395,6 +424,14 @@ describe('PushService', () => {
       expect(push.canOpenSystemSettings()).toBe(true);
       push.permission.set('granted');
       expect(push.systemBlock()).toBeNull();
+    });
+
+    it('keeps the home banner on a phone that refused, where only the system settings help', async () => {
+      plugin.status.mockResolvedValue({ available: true, permission: 'denied' });
+      const { push } = await started();
+      await vi.waitFor(() => expect(push.permission()).toBe('denied'));
+      expect(push.offerBanner()).toBe(true);
+      expect(push.canOpenSystemSettings()).toBe(true);
     });
 
     it('never asks on a TV', async () => {
