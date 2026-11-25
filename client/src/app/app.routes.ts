@@ -23,40 +23,47 @@ export const preloadVideoDetailPages = () => Promise.all([mediaDetailPage(), mov
 export const routes: Routes = [
   {
     path: 'setup',
+    data: { rootEntry: true },
     loadComponent: () =>
       import('./features/setup/setup').then((m) => m.SetupComponent),
   },
   {
     path: 'create-admin',
+    data: { rootEntry: true },
     canActivate: [serverConfigGuard],
     loadComponent: () =>
       import('./features/create-admin/create-admin').then((m) => m.CreateAdminComponent),
   },
   {
     path: 'select-user',
+    data: { rootEntry: true },
     canActivate: [serverConfigGuard, setupGuard],
     loadComponent: () =>
       import('./features/select-user/select-user').then((m) => m.SelectUserComponent),
   },
   {
     path: 'login',
+    data: { rootEntry: true },
     canActivate: [serverConfigGuard, setupGuard],
     loadComponent: () =>
       import('./features/login/login').then((m) => m.LoginComponent),
   },
   {
     path: 'quick-connect',
+    data: { rootEntry: true },
     canActivate: [serverConfigGuard],
     loadComponent: () =>
       import('./features/quick-connect/quick-connect-wait').then((m) => m.QuickConnectWaitComponent),
   },
   {
     path: 'oidc/complete',
+    data: { rootEntry: true },
     loadComponent: () =>
       import('./features/login/oidc-complete').then((m) => m.OidcCompleteComponent),
   },
   {
     path: 'quick-connect/:userId',
+    data: { rootEntry: true },
     canActivate: [serverConfigGuard],
     loadComponent: () =>
       import('./features/quick-connect/quick-connect-wait').then((m) => m.QuickConnectWaitComponent),

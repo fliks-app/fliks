@@ -107,7 +107,7 @@ export function previewPosterName(type: string, provider: string, externalId: st
 
 export interface RouteNode {
   firstChild: RouteNode | null;
-  routeConfig: { path?: string } | null;
+  routeConfig: { path?: string; data?: { rootEntry?: boolean } } | null;
 }
 
 /** Routes that carry a hero poster, i.e. the other half of a card's morph. */
@@ -134,6 +134,13 @@ export function leafRoutePath(root: RouteNode): string | undefined {
   let leaf = root;
   while (leaf.firstChild) leaf = leaf.firstChild;
   return leaf.routeConfig?.path;
+}
+
+/** A route flagged `rootEntry` (server, account picker, sign-in) starts a fresh stack, whichever navigation lands on it. */
+export function isRootEntryRoute(root: RouteNode): boolean {
+  let leaf = root;
+  while (leaf.firstChild) leaf = leaf.firstChild;
+  return !!leaf.routeConfig?.data?.rootEntry;
 }
 
 /** A list card opening the page with the other half of its morph; from a poster page the slide owns the pair. */
