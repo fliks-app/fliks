@@ -202,9 +202,12 @@ pub(crate) async fn login(
         return Err(AppError::with_message(
             StatusCode::TOO_MANY_REQUESTS,
             "Too many failed login attempts, try again later",
-        ));
+        )
+        .keyed("login.too_many_attempts", json!({})));
     }
-    let invalid = || AppError::unauthorized("Invalid credentials");
+    let invalid = || {
+        AppError::unauthorized("Invalid credentials").keyed("login.invalid_credentials", json!({}))
+    };
     let mut verified = vec![];
     for c in crate::users::login_candidates(&st.db, &dto.username).await? {
         let Some(stored) = c.hash.clone() else {
@@ -224,10 +227,13 @@ pub(crate) async fn login(
     };
     st.login_throttle.clear(ip, &dto.username);
     if !row.enabled {
-        return Err(AppError::unauthorized("Account disabled"));
+        return Err(
+            AppError::unauthorized("Account disabled").keyed("login.account_disabled", json!({}))
+        );
     }
     if !row.is_admin && oidc::password_login_admins_only(&st.db).await? {
-        return Err(AppError::unauthorized("Password login is disabled"));
+        return Err(AppError::unauthorized("Password login is disabled")
+            .keyed("login.password_login_disabled", json!({})));
     }
     sign_in(&st, &headers, row.id, SessionKind::Password).await
 }
