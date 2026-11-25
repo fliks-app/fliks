@@ -311,7 +311,10 @@ pub async fn media_file_owner(
     let libs = accessible_library_ids(&st.db, &a).await?;
     crate::libraries::assert_file_accessible(&st.db, file, &libs).await?;
     let (media, episode): (i32, Option<i32>) =
-        sqlx::query_as(r#"SELECT "mediaId", "episodeId" FROM media_files WHERE id = $1"#)
+        sqlx::query_as(
+            r#"SELECT mf."mediaId", (SELECT fi."episodeId" FROM media_file_items fi WHERE fi."mediaFileId" = mf.id)
+                 FROM media_files mf WHERE mf.id = $1"#,
+        )
             .bind(file)
             .fetch_one(&st.db)
             .await?;
