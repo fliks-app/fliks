@@ -8,3 +8,8 @@
   [open]="pwaAutoUpdate.installing()"
   [message]="'update.pwa_installing' | translate"
 />
+<app-blocking-overlay
+  [open]="serverBoot.down() !== null"
+  [message]="(serverBoot.down() === 'upgrading' ? 'system.boot_upgrading' : 'system.boot_restarting') | translate"
+  [actions]="serverBootActions()"
+/>

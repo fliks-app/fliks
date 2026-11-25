@@ -12,6 +12,8 @@ import { API_TIMEOUT_MS, errorInterceptor, SKIP_ERROR_TOAST } from './error.inte
 import { NetworkService } from '../services/network.service';
 import { ToastService } from '../services/toast.service';
 import { SseService } from '../services/sse.service';
+import { ServerBootService } from '../services/server-boot.service';
+import { ServerConfigService } from '../services/server-config.service';
 
 // Mirrors the `errors.*` subset of public/i18n/en.json so assertions read the
 // same generic copy production shows — not a value invented for the test.
@@ -34,6 +36,7 @@ describe('errorInterceptor', () => {
   let client: HttpClient;
   let toast: ToastService;
   const serverUnreachable = signal(false);
+  const serverBoot = { waitAndReload: vi.fn() };
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -42,6 +45,8 @@ describe('errorInterceptor', () => {
         provideHttpClient(withInterceptors([errorInterceptor])),
         provideHttpClientTesting(),
         { provide: SseService, useValue: { serverUnreachable } },
+        { provide: ServerBootService, useValue: serverBoot },
+        { provide: ServerConfigService, useValue: { serverUrl: () => '', isNative: false, isConfigured: () => false } },
         provideTranslateService({
           lang: 'en',
           fallbackLang: 'en',
@@ -57,6 +62,7 @@ describe('errorInterceptor', () => {
   afterEach(() => {
     http.verify();
     serverUnreachable.set(false);
+    serverBoot.waitAndReload.mockClear();
   });
 
   /** Fires a GET and flushes the given response; the interceptor rethrows
@@ -208,11 +214,6 @@ describe('errorInterceptor', () => {
     expect(toast.toasts()).toEqual([]);
   });
 
-  it('stays silent on the health probe regardless of status', () => {
-    fireAndFlush('/api/system/health', { message: 'Cannot GET /api/system/health' }, { status: 404 });
-    expect(toast.toasts()).toEqual([]);
-  });
-
   it('stays silent on an i18n load failure', () => {
     fireAndFlush('/i18n/fr.json', { message: 'not found' }, { status: 404 });
     expect(toast.toasts()).toEqual([]);
@@ -248,10 +249,24 @@ describe('errorInterceptor', () => {
     }
   });
 
-  it('toasts a mutation answered by the boot 503 with the starting message', () => {
+  it('leaves a mutation answered by the boot 503 to the boot modal', () => {
     client.post('/api/a', {}).subscribe({ error: () => {} });
     http.expectOne('/api/a').flush({ message: 'errors.starting' }, { status: 503, statusText: 'x' });
-    expect(toast.toasts().map((t) => t.message)).toEqual(['The server is starting']);
+    expect(toast.toasts()).toEqual([]);
+  });
+
+  it('never blocks the app for a booting host that is not the active server', () => {
+    client.post('https://other.example/api/auth/login', {}).subscribe({ error: () => {} });
+    http.expectOne('https://other.example/api/auth/login').flush({ message: 'errors.starting' }, { status: 503, statusText: 'x' });
+    expect(serverBoot.waitAndReload).not.toHaveBeenCalled();
+  });
+
+  it('blocks the app on the boot 503, saying when the server is upgrading', () => {
+    client.post('/api/a', {}).subscribe({ error: () => {} });
+    http.expectOne('/api/a').flush({ message: 'errors.starting' }, { status: 503, statusText: 'x' });
+    client.post('/api/b', {}).subscribe({ error: () => {} });
+    http.expectOne('/api/b').flush({ message: 'errors.starting', upgrading: true }, { status: 503, statusText: 'x' });
+    expect(serverBoot.waitAndReload.mock.calls).toEqual([['restarting'], ['upgrading']]);
   });
 
   it('keeps a GET silent when the server is unreachable', () => {

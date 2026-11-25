@@ -26,4 +26,10 @@ export class BlockingOverlayComponent {
       } else el.close();
     });
   }
+
+  /** Escape closes a dialog without a cancel event when the page has had no user activation. */
+  protected reopen(): void {
+    const el = this.dialog().nativeElement;
+    if (this.open() && !el.open) el.showModal();
+  }
 }

@@ -16,7 +16,7 @@ import { NeedsAttentionComponent } from '../../../shared/components/needs-attent
 import { PaginationComponent } from '../../../shared/components/pagination/pagination';
 import { DropdownMenuComponent } from '../../../shared/components/dropdown-menu';
 import { LocaleDatePipe } from '../../../core/pipes/locale-date.pipe';
-import { waitForServer } from '../../../core/utils/wait-for-server';
+import { ServerBootService } from '../../../core/services/server-boot.service';
 import { subjectEpisodeLine, subjectEpisodeLink, subjectMediaLink } from '../../../shared/utils/media-subject';
 
 export interface CommandEntry { id: number; name: string; status: string; trigger: string; startedOn: string; endedOn?: string; body?: Record<string, unknown>; }
@@ -62,7 +62,7 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
   readonly loading = signal(true);
   readonly triggering = signal<string | null>(null);
   readonly clearing = signal(false);
-  readonly restarting = signal(false);
+  protected readonly serverBoot = inject(ServerBootService);
 
   readonly registeredJobs = signal<SchedulerJob[]>([]);
 
@@ -305,15 +305,12 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
       variant: 'danger',
     });
     if (!confirmed) return;
-    this.restarting.set(true);
     try {
       await firstValueFrom(this.http.post('/api/system/restart', {}));
     } catch {
-      this.restarting.set(false);
       return;
     }
-    await waitForServer(this.http);
-    location.reload();
+    this.serverBoot.waitAndReload('restarting');
   }
 
   formatUptime(seconds: number): string {

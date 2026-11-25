@@ -1,4 +1,4 @@
-import { Component, effect, inject, untracked, OnInit, OnDestroy } from '@angular/core';
+import { Component, computed, effect, inject, untracked, OnInit, OnDestroy } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, take } from 'rxjs';
@@ -37,7 +37,10 @@ import { RemoteService } from './core/services/remote.service';
 import { TIZEN_MEDIA_KEYS, isBackKey } from './features/player/player-keymap';
 import { TvKeyboardDeferralService } from './core/services/tv-keyboard-deferral.service';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { BlockingOverlayComponent } from './shared/components/blocking-overlay/blocking-overlay';
+import { BlockingOverlayAction, BlockingOverlayComponent } from './shared/components/blocking-overlay/blocking-overlay';
+import { ServerBootService } from './core/services/server-boot.service';
+import { IS_STANDALONE_BUNDLE } from './core/utils/standalone-bundle';
+import { detectDevice } from './core/services/device.service';
 
 @Component({
   selector: 'app-root',
@@ -69,6 +72,15 @@ export class App implements OnInit, OnDestroy {
   private readonly navbar = inject(NavbarService);
   private readonly backGesture = inject(BackGestureService);
   protected readonly pwaAutoUpdate = inject(PwaAutoUpdateService);
+  protected readonly serverBoot = inject(ServerBootService);
+  /** Native keeps its downloads reachable while the server is down, as the unreachable chip does; TV has none. */
+  protected readonly serverBootActions = computed<BlockingOverlayAction[]>(() =>
+    this.serverBoot.down() && IS_STANDALONE_BUNDLE && detectDevice().formFactor !== 'tv'
+      ? [{ label: this.translate.instant('downloads.title'), run: () => {
+          this.serverBoot.dismiss();
+          void this.router.navigate(['/downloads'], { state: { rootEntry: true } });
+        } }]
+      : []);
   private readonly appResume = inject(AppResumeService);
   /** Injected so the offline playback queue is flushed on start, not only when
    *  some page happens to instantiate the service. */

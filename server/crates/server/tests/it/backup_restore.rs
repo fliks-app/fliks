@@ -732,7 +732,10 @@ async fn pre_backup(
     pool: &PgPool,
     dir: &std::path::Path,
 ) -> Result<(), String> {
-    fliks_server::system::backup::before_migration_in(&cfg_for(url, db), pool, dir)
+    let pending = fliks_server::db::pending_version(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    fliks_server::system::backup::before_migration_in(&cfg_for(url, db), pool, dir, pending)
         .await
         .map_err(|e| e.to_string())
 }
