@@ -237,6 +237,16 @@ describe('PushService', () => {
       await vi.waitFor(() => expect(push.systemBlock()).toBeNull());
     });
 
+    it('keeps the home banner while the OS blocks Fliks, its button opening the OS settings', async () => {
+      status = 'blocked';
+      prefs.notifications = true;
+      const { push } = await started();
+      await vi.waitFor(() => expect(push.offerBanner()).toBe(true));
+      await push.acceptBanner();
+      expect((win.fliksDesktop as { openNotifySettings: ReturnType<typeof vi.fn> }).openNotifySettings).toHaveBeenCalledOnce();
+      expect(push.offerBanner()).toBe(true);
+    });
+
     it('says when the system has no notification service, with no settings to open', async () => {
       status = 'unavailable';
       const { push } = await started();
@@ -414,6 +424,14 @@ describe('PushService', () => {
       expect(push.canOpenSystemSettings()).toBe(true);
       push.permission.set('granted');
       expect(push.systemBlock()).toBeNull();
+    });
+
+    it('keeps the home banner on a phone that refused, where only the system settings help', async () => {
+      plugin.status.mockResolvedValue({ available: true, permission: 'denied' });
+      const { push } = await started();
+      await vi.waitFor(() => expect(push.permission()).toBe('denied'));
+      expect(push.offerBanner()).toBe(true);
+      expect(push.canOpenSystemSettings()).toBe(true);
     });
 
     it('never asks on a TV', async () => {

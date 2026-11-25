@@ -17,7 +17,7 @@
             {{ 'home.notify_banner.hide' | translate }}
           </button>
           <button type="button" class="btn btn-primary btn-sm" [disabled]="push.busy()" (click)="push.acceptBanner()">
-            {{ 'app_settings.notifications.ask_enable' | translate }}
+            {{ (push.canOpenSystemSettings() ? 'app_settings.notifications.open_settings' : 'app_settings.notifications.ask_enable') | translate }}
           </button>
         </div>
       </div>

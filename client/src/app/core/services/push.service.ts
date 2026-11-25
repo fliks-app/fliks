@@ -186,14 +186,16 @@ export class PushService {
   /** Mobile whose admin has not switched the Fliks Relay connection on. */
   readonly mobileBlockedByAdmin = computed(() => this.mode === 'native' && this.nativeAvailable() && !this.mobileEnabled());
   private readonly bannerHidden = signal(readFlag(BANNER_KEY, false));
-  /** Home banner: desktop until notifications reach a closed window, native until this device is on. */
+  /** Home banner: desktop until notifications reach a closed window, native until this device is on, both while the system blocks Fliks. */
   readonly offerBanner = computed(() => {
     if (this.bannerHidden() || !this.auth.user()) return false;
     if (this.mode === 'desktop') {
       const p = this.desktopPrefs();
-      return !!p && !this.systemBlock() && !(p.notifications && p.background);
+      return !!p && (this.canOpenSystemSettings() || (!this.systemBlock() && !(p.notifications && p.background)));
     }
-    return this.mode === 'native' && shouldAsk(this.askState('request', { declined: 0, until: 0 }));
+    if (this.mode !== 'native') return false;
+    const s = this.askState('request', { declined: 0, until: 0 });
+    return shouldAsk(s) || (this.canOpenSystemSettings() && s.pushReady && !s.deviceOff);
   });
   /** Whether a system notification reaches this device, so the toast would repeat it. */
   private readonly systemCovers = computed(
@@ -312,6 +314,8 @@ export class PushService {
 
   /** Desktop also keeps Fliks running in the background; the banner goes either way, even where the shell refuses that. */
   async acceptBanner(): Promise<void> {
+    // The banner stays until the block is lifted; refreshing the block on return hides it.
+    if (this.canOpenSystemSettings()) return this.openSystemSettings();
     if (this.mode === 'desktop') await this.setDesktopPref({ notifications: true, background: true });
     else await this.enable();
     this.hideBanner();
