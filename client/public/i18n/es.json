@@ -1799,6 +1799,7 @@
     "health_db": "Base de datos",
     "health_plugins": "Plugins instalados",
     "health_plugins_running": "{{count}} en ejecución",
+    "health_lan": "Dirección local",
     "conf_not_persistent": "La carpeta de configuración no se puede usar. Los secretos están en una carpeta temporal y se pierden al recrear el contenedor.",
     "data_not_persistent": "La carpeta de datos no admite escritura. Las imágenes y los avatares están en una carpeta temporal y se pierden al recrear el contenedor.",
     "db_superuser": "La aplicación se conecta a PostgreSQL como superusuario.",

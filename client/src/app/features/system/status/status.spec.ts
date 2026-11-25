@@ -48,7 +48,7 @@ describe('SystemStatusComponent: persistence alerts', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  const health = { version: '7', uptimeSeconds: 1, database: {}, installedPlugins: 0, runningPlugins: 0, restartSupervisor: null };
+  const health = { version: '7', uptimeSeconds: 1, database: { ok: true }, installedPlugins: 0, runningPlugins: 0, restartSupervisor: null };
 
   it('shows no alert when an older server omits the fields', async () => {
     const el = await render(health);

@@ -15,30 +15,33 @@
 } @else if (health(); as h) {
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
     <div class="card bg-base-100 border border-base-200">
-      <div class="card-body py-4 px-5 gap-1">
+      <div class="card-body py-4 px-5 gap-1 *:grow-0">
         <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'system.health_app' | translate }}</p>
         <p class="text-lg font-bold">v{{ h.version }}</p>
         <p class="text-sm text-base-content/60">{{ 'system.uptime' | translate }}: {{ formatUptime(h.uptimeSeconds) }}</p>
       </div>
     </div>
-    <div class="card bg-base-100 border" [class.border-base-200]="h.database.ok" [class.border-error]="!h.database.ok">
-      <div class="card-body py-4 px-5 gap-1">
-        <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'system.health_db' | translate }}</p>
-        <div class="flex items-center gap-2">
-          <span class="inline-block w-2 h-2 rounded-full" [class.bg-success]="h.database.ok" [class.bg-error]="!h.database.ok"></span>
-          <span class="font-medium">{{ h.database.name }}</span>
+    @if (h.lanAddresses?.length) {
+      <div class="card bg-base-100 border border-base-200">
+        <div class="card-body py-4 px-5 gap-1 *:grow-0">
+          <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'system.health_lan' | translate }}</p>
+          @for (address of h.lanAddresses; track address) {
+            <p class="text-lg font-bold break-all">{{ address }}</p>
+          }
         </div>
-        @if (!h.database.ok) { <p class="text-sm text-error">{{ h.database.message }}</p> }
       </div>
-    </div>
+    }
     <div class="card bg-base-100 border border-base-200">
-      <div class="card-body py-4 px-5 gap-2">
+      <div class="card-body py-4 px-5 gap-1 *:grow-0">
         <p class="text-sm text-base-content/60 uppercase tracking-wide">{{ 'system.health_plugins' | translate }}</p>
         <p class="text-lg font-semibold">{{ h.installedPlugins | number }}</p>
         <p class="text-sm text-base-content/60">{{ 'system.health_plugins_running' | translate: { count: h.runningPlugins } }}</p>
       </div>
     </div>
   </div>
+  @if (!h.database.ok) {
+    <div role="alert" class="alert alert-error mt-3 text-sm">{{ 'system.health_db' | translate }}: {{ h.database.message }}</div>
+  }
   @if (h.confPersistent === false) {
     <div role="alert" class="alert alert-error mt-3 text-sm">{{ 'system.conf_not_persistent' | translate }}</div>
   }
