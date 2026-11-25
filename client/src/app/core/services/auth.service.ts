@@ -327,12 +327,13 @@ export class AuthService {
     );
   }
 
-  async login(username: string, password: string): Promise<LoginResponse> {
+  /** `quiet`: the caller shows the failure itself, so no error toast. */
+  async login(username: string, password: string, quiet = false): Promise<LoginResponse> {
     // Wipe any cached data from a previous session BEFORE the auth round-trip,
     // so the new login starts on a clean slate.
     await this.serverCache.clearAll();
     const res = await firstValueFrom(
-      this.http.post<LoginResponse>('/api/auth/login', { username, password }),
+      this.http.post<LoginResponse>('/api/auth/login', { username, password }, { context: new HttpContext().set(SKIP_ERROR_TOAST, quiet) }),
     );
     await this.finishLogin(res);
     rememberProvider(this.serverConfig.serverUrl(), res.user.id, null);

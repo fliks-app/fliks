@@ -143,7 +143,7 @@ describe('LoginComponent locked username', () => {
     expect((s.el.querySelector('#username') as HTMLInputElement).disabled).toBe(true);
     s.fixture.componentInstance.form.controls.password.setValue('p');
     await s.fixture.componentInstance.onSubmit();
-    expect((s.auth as unknown as { login: ReturnType<typeof vi.fn> }).login).toHaveBeenCalledWith('bob', 'p');
+    expect((s.auth as unknown as { login: ReturnType<typeof vi.fn> }).login).toHaveBeenCalledWith('bob', 'p', true);
   });
 });
 

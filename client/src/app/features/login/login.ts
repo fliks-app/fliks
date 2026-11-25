@@ -106,7 +106,7 @@ export class LoginComponent {
 
     const { username, password } = this.form.getRawValue();
     try {
-      await this.auth.login(username.trim(), password);
+      await this.auth.login(username.trim(), password, true);
       this.loading.set(false);
       void this.router.navigateByUrl(this.auth.takeSignInReturn(), { replaceUrl: true });
     } catch (err: unknown) {

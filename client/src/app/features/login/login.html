@@ -8,6 +8,7 @@
 
         @if (error()) {
           <div role="alert" class="alert alert-error">
+            <svg [lucideIcon]="icons.CircleAlert" class="h-5 w-5 shrink-0"></svg>
             <span>{{ error() }}</span>
           </div>
         }
