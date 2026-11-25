@@ -408,6 +408,7 @@
   "app_settings": {
     "title": "Paramètres",
     "nav": {
+      "general": "Général",
       "player": "Lecture",
       "subtitles": "Sous-titres",
       "cast": "Chromecast",
@@ -464,16 +465,20 @@
       "plugins_title": "Plugins",
       "plugins_hint": "Valable pour tous vos appareils.",
       "plugin_hint": "Messages envoyés par ce plugin.",
-      "background": "Rester actif en arrière-plan",
-      "background_hint": "Fermer la fenêtre laisse Fliks actif pour que les notifications continuent d'arriver.",
-      "start_at_login": "Lancer à l'ouverture de session",
-      "start_at_login_hint": "Fliks s'ouvre en arrière-plan quand vous ouvrez votre session.",
       "pending_expired": "Reconnectez-vous pour ouvrir cette notification.",
       "tray_open": "Ouvrir Fliks",
       "tray_quit": "Quitter Fliks",
       "badge_label": "Notifications",
       "cat_system": "Système",
       "cat_system_hint": "Contrôles de santé en échec sur ce serveur."
+    },
+    "general": {
+      "background": "Rester actif en arrière-plan",
+      "background_hint": "Fermer la fenêtre laisse Fliks actif pour que les notifications continuent d'arriver.",
+      "start_at_login": "Lancer à l'ouverture de session",
+      "start_at_login_hint": "Fliks s'ouvre en arrière-plan quand vous ouvrez votre session.",
+      "quit_on_close": "Quitter à la fermeture de la fenêtre",
+      "quit_on_close_hint": "Fermer la fenêtre quitte Fliks au lieu de le laisser dans le Dock."
     }
   },
   "update_settings": {

@@ -32,6 +32,7 @@ export class AppSettingsShellComponent {
     return [{
       id: 'app',
       items: [
+        ...(this.device.isDesktopNative() ? [item('general', icons.Settings)] : []),
         item('home', icons.House),
         item('display', icons.Monitor),
         item('player', icons.Play),

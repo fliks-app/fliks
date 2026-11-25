@@ -87,6 +87,10 @@ export class Notifier {
     return this.prefs.background && this.tray !== null && !isQuitting();
   }
 
+  quitOnClose(): boolean {
+    return this.prefs.quitOnClose === true;
+  }
+
   /** The close button of a platform whose window the shell cannot veto itself. */
   requestClose(): void {
     if (this.hideOnClose()) this.host?.hide();
@@ -126,8 +130,9 @@ export class Notifier {
   }
 
   private async setPrefs(patch: Partial<DesktopNotifyPrefs>): Promise<DesktopNotifyPrefs> {
-    const { background, startAtLogin, ...rest } = patch;
+    const { background, startAtLogin, quitOnClose, ...rest } = patch;
     this.save(rest);
+    if (quitOnClose !== undefined && process.platform === 'darwin') this.save({ quitOnClose });
     if (background !== undefined) {
       this.save({ background });
       await this.syncTray();

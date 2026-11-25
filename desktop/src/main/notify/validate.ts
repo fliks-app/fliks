@@ -62,7 +62,7 @@ export function parseBadge(v: unknown): number {
 export function parsePrefsPatch(v: unknown): Partial<DesktopNotifyPrefs> {
   const o = (v ?? {}) as Record<string, unknown>;
   const out: Partial<DesktopNotifyPrefs> = {};
-  for (const k of ['notifications', 'background', 'startAtLogin'] as const) {
+  for (const k of ['notifications', 'background', 'startAtLogin', 'quitOnClose'] as const) {
     if (o[k] === undefined) continue;
     if (typeof o[k] !== 'boolean') throw new Error('invalid prefs');
     out[k] = o[k];

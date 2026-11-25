@@ -256,6 +256,7 @@ async function startEmbedSession(haveApp: boolean): Promise<void> {
   // Registered before start() loads the renderer, so it can't invoke an unregistered channel.
   registerPlayerIpc(session, ipcHooks);
   session.hideOnClose = () => notifier?.hideOnClose() ?? false;
+  session.quitOnClose = () => notifier?.quitOnClose() ?? false;
   session.onFullscreenChange = refreshMenu;
   setMenuFullscreen(() => session.isFullscreen());
   setMenuPlayback((key) => pressMediaKey(session.uiContents, key));

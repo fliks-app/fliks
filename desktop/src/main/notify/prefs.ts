@@ -27,6 +27,7 @@ export function loadPrefs(): DesktopNotifyPrefs {
     notifications: raw.notifications !== false,
     background: raw.background === true,
     startAtLogin: raw.startAtLogin === true,
+    ...(process.platform === 'darwin' ? { quitOnClose: raw.quitOnClose === true } : {}),
   };
 }
 

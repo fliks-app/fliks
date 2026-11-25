@@ -408,6 +408,7 @@
   "app_settings": {
     "title": "Definições",
     "nav": {
+      "general": "Geral",
       "player": "Reprodução",
       "subtitles": "Legendas",
       "cast": "Chromecast",
@@ -464,16 +465,20 @@
       "plugins_title": "Plugins",
       "plugins_hint": "Aplica-se a todos os seus dispositivos.",
       "plugin_hint": "Mensagens enviadas por este plugin.",
-      "background": "Manter em segundo plano",
-      "background_hint": "Fechar a janela mantém o Fliks ativo para que as notificações continuem a chegar.",
-      "start_at_login": "Iniciar com a sessão",
-      "start_at_login_hint": "O Fliks abre em segundo plano quando inicia sessão no computador.",
       "pending_expired": "Inicie sessão novamente para abrir esta notificação.",
       "tray_open": "Abrir o Fliks",
       "tray_quit": "Sair do Fliks",
       "badge_label": "Notificações",
       "cat_system": "Sistema",
       "cat_system_hint": "Verificações de saúde que falham neste servidor."
+    },
+    "general": {
+      "background": "Manter em segundo plano",
+      "background_hint": "Fechar a janela mantém o Fliks ativo para que as notificações continuem a chegar.",
+      "start_at_login": "Iniciar com a sessão",
+      "start_at_login_hint": "O Fliks abre em segundo plano quando inicia sessão no computador.",
+      "quit_on_close": "Sair ao fechar a janela",
+      "quit_on_close_hint": "Fechar a janela encerra o Fliks em vez de deixá-lo no Dock."
     }
   },
   "update_settings": {

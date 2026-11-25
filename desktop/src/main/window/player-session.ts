@@ -92,6 +92,7 @@ export class PlayerSession {
   });
   /** Background mode: closing the window hides it instead of ending the session. */
   hideOnClose: () => boolean = () => false;
+  quitOnClose: () => boolean = () => false;
   /** The window is visible and focused (any of the session's windows). */
   onActive?: (active: boolean) => void;
   /** The framed window entered or left full screen. */
@@ -153,7 +154,7 @@ export class PlayerSession {
         return;
       }
       // macOS keeps the app alive in the dock. A hidden full-screen window would leave an empty Space.
-      if (process.platform === 'darwin' && !isQuitting()) {
+      if (process.platform === 'darwin' && !isQuitting() && !this.quitOnClose()) {
         e.preventDefault();
         if (this.frameWin.isFullScreen()) {
           this.frameWin.once('leave-full-screen', () => this.hide());
