@@ -16,3 +16,20 @@ describe('ServerConfigService — updateKnownServer', () => {
     ]);
   });
 });
+
+describe('ServerConfigService: probe', () => {
+  afterEach(() => delete (window as { fliksDesktop?: unknown }).fliksDesktop);
+
+  it('lets the shell reach the probed server, then gives it back the configured one', async () => {
+    const calls: string[] = [];
+    (window as { fliksDesktop?: unknown }).fliksDesktop = { setServerUrl: async (url: string) => void calls.push(url) };
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const config = TestBed.inject(ServerConfigService);
+    await config.save('https://home.example');
+    calls.length = 0;
+
+    await expect(config.probe('https://other.example', async () => calls.push('request'))).resolves.toBe(2);
+
+    expect(calls).toEqual(['https://other.example', 'request', 'https://home.example']);
+  });
+});
