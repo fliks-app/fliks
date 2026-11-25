@@ -1,5 +1,5 @@
 //! Library file and folder naming (`naming.service.ts`); no IO, the caller joins and confines.
-use crate::js::{rx, trim};
+use crate::js::{is_ws, rx, trim};
 use crate::media::kind::MediaKind;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -330,17 +330,12 @@ pub fn apply_album_format(format: &str, d: &AlbumNameTokens) -> String {
     )
 }
 
-/// The artist folder and the album folder of an album from the folder formats, each without dots and
-/// spaces at its ends.
+/// The artist folder and the album folder of an album from the folder formats.
 pub fn album_folder_parts(f: &NamingFormats, t: &AlbumNameTokens) -> (String, String) {
-    let part = |format: &str| {
-        apply_album_format(format, t)
-            .trim()
-            .trim_matches('.')
-            .trim()
-            .to_owned()
-    };
-    (part(&f.artist_folder), part(&f.album_folder))
+    (
+        apply_album_format(&f.artist_folder, t),
+        apply_album_format(&f.album_folder, t),
+    )
 }
 
 /// `artist/album`, the artist's left out when it is empty.
@@ -383,7 +378,8 @@ pub fn validate_folder_path(name: &str) -> Result<&str, FolderNameError> {
     Ok(name)
 }
 
-/// Drops leftover tokens, `undefined`, path-hostile characters and empty brackets.
+/// Drops leftover tokens, `undefined`, path-hostile characters, empty brackets, and dots at the ends
+/// (a leading one hides the folder, a trailing one is invalid on Windows).
 fn sanitize(name: &str) -> String {
     let s = rx!(r"\{[^}]*\}").replace_all(name, "");
     let s = s.replace("undefined", "");
@@ -395,7 +391,7 @@ fn sanitize(name: &str) -> String {
     let s = rx!(r"\(\s*\)").replace_all(&s, "");
     let s = rx!(r"\[\s*\]").replace_all(&s, "");
     let s = rx!(r"\s{2,}").replace_all(&s, " ");
-    trim(&s).to_owned()
+    s.trim_matches(|c| c == '.' || is_ws(c)).to_owned()
 }
 
 /// The `-GROUP` before an optional extension; empty when there is none.
