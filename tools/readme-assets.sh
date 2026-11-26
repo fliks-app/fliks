@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 #
 # Regenerate the README header assets: the stacked logo (light + dark) and the
-# screenshot deck. Screenshot sources are the *.webp already in .github/readme.
+# device collage. Sources: the *.webp in .github/readme (phone.webp is a phone
+# capture cropped below its status bar).
 #
-# Headless Chrome lays out both — CSS transforms and shadows beat scripting the
-# same stack of rotations in ImageMagick.
+# Headless Chrome lays out both: CSS frames and shadows beat ImageMagick.
+# CHROME picks the binary; a snap Chromium needs TMPDIR outside /tmp.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
 shots="$repo/.github/readme"
+chrome=${CHROME:-google-chrome}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
@@ -26,7 +28,7 @@ stacked() { # $1 source svg, $2 output name
 img{width:1200px;height:auto}</style>
 <img src="logo.svg">
 HTML
-  google-chrome --headless=new --disable-gpu --hide-scrollbars \
+  "$chrome" --headless=new --disable-gpu --hide-scrollbars \
     --window-size=1400,800 --default-background-color=00000000 \
     --screenshot="$work/wide.png" "file://$work/logo.html" 2>/dev/null
 
@@ -43,37 +45,39 @@ HTML
 stacked fliks-logo.svg        logo-stacked-light.webp
 stacked fliks-logo-ondark.svg logo-stacked-dark.webp
 
-# --- screenshot deck --------------------------------------------------------
+# --- device collage ---------------------------------------------------------
 
 cat > "$work/collage.html" <<HTML
 <!doctype html><meta charset="utf-8">
 <style>
-  html,body{margin:0;width:2000px;height:1600px;background:transparent;overflow:hidden}
+  html,body{margin:0;width:2400px;height:1600px;background:transparent;overflow:hidden}
   .stage{position:relative;width:100%;height:100%}
-  img{position:absolute;border-radius:14px;border:1px solid rgba(255,255,255,.10);
-      box-shadow:0 40px 80px rgba(0,0,0,.62),0 8px 20px rgba(0,0,0,.45)}
-  /* Deck cascading down-right. Each rotated bounding box stays inside the
-     canvas, so no pane is clipped and -trim sets the final aspect ratio. */
-  .library {width:1240px;left:50px;top:80px;transform:rotate(-7deg)}
-  .discover{width:1240px;left:715px;top:130px;transform:rotate(6deg)}
-  .home    {width:1320px;left:240px;top:470px;transform:rotate(-2.5deg)}
-  .detail  {width:1240px;left:640px;top:750px;transform:rotate(4deg)}
+  .stage>*{position:absolute;box-shadow:0 40px 80px rgba(0,0,0,.55),0 8px 20px rgba(0,0,0,.4)}
+  img{display:block;width:100%}
+  .desktop{left:350px;top:60px;width:1700px;border-radius:20px;
+           border:2px solid rgba(255,255,255,.11)}
+  .device{background:#121216;border:3px solid #464650}
+  .tablet{left:80px;top:720px;width:784px;padding:18px;border-radius:36px}
+  .tablet img{border-radius:22px}
+  .phone{left:1850px;top:560px;width:376px;padding:12px;border-radius:60px}
+  .phone img{border-radius:48px}
+  .island{position:absolute;top:26px;left:50%;width:104px;height:30px;margin-left:-52px;
+          border-radius:15px;background:#000}
 </style>
 <div class="stage">
-  <img class="library"  src="file://$shots/library.webp">
-  <img class="discover" src="file://$shots/discover.webp">
-  <img class="home"     src="file://$shots/home.webp">
-  <img class="detail"   src="file://$shots/detail.webp">
+  <img class="desktop" src="file://$shots/home.webp">
+  <div class="device tablet"><img src="file://$shots/detail.webp"></div>
+  <div class="device phone"><img src="file://$shots/phone.webp"><i class="island"></i></div>
 </div>
 HTML
 
-google-chrome --headless=new --disable-gpu --hide-scrollbars \
-  --window-size=2000,1600 --default-background-color=00000000 \
+"$chrome" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 \
+  --window-size=2400,1600 --default-background-color=00000000 \
   --screenshot="$work/collage.png" "file://$work/collage.html" 2>/dev/null
 
 # Trim the transparent margin the shadows don't reach, then keep a little air.
-convert "$work/collage.png" -trim +repage -bordercolor none -border 24 \
-  -resize 1500x -quality 86 "$shots/collage.webp"
+convert "$work/collage.png" -trim +repage -bordercolor none -border 48 \
+  -resize 2200x -quality 92 "$shots/collage.webp"
 
 identify -format '%f  %wx%h  %[channels]  %b\n' \
   "$shots/logo-stacked-light.webp" "$shots/logo-stacked-dark.webp" \
