@@ -2,7 +2,7 @@ name: App role database
 description: Hands the Postgres service to the non-superuser role `fliks_app` and migrates template1 as that role, as a production install runs.
 inputs:
   archive:
-    description: The nextest archive holding target/debug/fliks-server.
+    description: The directory of the nextest archives; it.tar.zst holds target/debug/fliks-server.
     required: true
 runs:
   using: composite
@@ -18,7 +18,7 @@ runs:
         DB_ADMIN_USERNAME: fliks
         DB_ADMIN_PASSWORD: fliks
       run: |
-        tar --zstd -xf "${{ inputs.archive }}/tests.tar.zst" -C "$RUNNER_TEMP" target/debug/fliks-server
+        tar --zstd -xf "${{ inputs.archive }}/it.tar.zst" -C "$RUNNER_TEMP" target/debug/fliks-server
         bin="$RUNNER_TEMP/target/debug/fliks-server"
         DB_NAME=template1 "$bin" db-role
         DB_NAME=fliks "$bin" db-role
