@@ -158,6 +158,7 @@ pub(super) async fn attempt(st: &AppState, ev: &EngineEvent) {
         r#"UPDATE livetv_channel_streams SET
              "probedVideoCodec" = COALESCE($2, "probedVideoCodec"), "probedAudioCodec" = COALESCE($3, "probedAudioCodec"),
              "probedContainer" = COALESCE($4, "probedContainer"), "probedFieldOrder" = COALESCE($6, "probedFieldOrder"),
+             "probedBitDepth" = CASE WHEN $2 IS NULL THEN "probedBitDepth" ELSE $7 END,
              "lastOkAt" = CASE WHEN $5::text IS NULL THEN now() ELSE "lastOkAt" END, "lastError" = $5
            WHERE id = $1"#,
     )
@@ -167,6 +168,7 @@ pub(super) async fn attempt(st: &AppState, ev: &EngineEvent) {
     .bind(non_empty(&probe.container))
     .bind(last_error)
     .bind(non_empty(&probe.field_order))
+    .bind(probe.bit_depth.and_then(|d| i32::try_from(d).ok()))
     .execute(&st.db)
     .await;
     if let Err(e) = done {
