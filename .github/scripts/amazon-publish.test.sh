@@ -70,23 +70,22 @@ SH
 chmod +x "$stub/curl"
 echo apk > "$stub/fliks.apk"
 n=0
-# case_ <ok|bad> <name> <event> <open edit or ""> <regex the call log must match> <regex it must not match>
+# case_ <ok|bad> <name> <dispatch> <open edit or ""> <log regex> <log antiregex> [<output regex>]
 case_() {
-  local want=$1 name=$2 event=$3 open=$4 has=$5 hasnt=$6 got=0
+  local want=$1 name=$2 dispatch=$3 open=$4 has=$5 hasnt=$6 says=${7:-} got=0
   rm -f "$stub/edit" "$stub/log"
   [ -z "$open" ] || echo "$open" > "$stub/edit"
-  out=$(PATH="$stub:$PATH" GITHUB_EVENT_NAME=$event AMAZON_TAG=v9.9.9 CLIENT_ID=c CLIENT_SECRET=s \
+  out=$(PATH="$stub:$PATH" AMAZON_DISPATCH=$dispatch AMAZON_TAG=v9.9.9 CLIENT_ID=c CLIENT_SECRET=s \
     APP=https://developer.amazon.com/api/appstore/v1/applications/app ./amazon-publish.sh "$stub/fliks.apk" 2>&1) || got=1
   [[ $want == bad && $got == 1 || $want == ok && $got == 0 ]] \
-    && grep -qE "$has" "$stub/log" && ! grep -qE "$hasnt" "$stub/log" \
+    && grep -qE "$has" "$stub/log" && ! grep -qE "$hasnt" "$stub/log" && grep -qE "$says" <<<"$out" \
     || { echo "FAIL ($want): $name"; echo "$out"; cat "$stub/log"; n=1; }
 }
-case_ ok "no open edit: creates and commits one" push "" '^POST /edits/new/commit$' '^POST /edits/e1'
-case_ ok "edit left in progress: reuses it" push "e1 IN_PROGRESS" '^POST /edits/e1/commit$' '^POST /edits$'
-case_ ok "tag during review: skipped" push "e1 SUBMITTED" '^GET /edits$' '^(PUT|POST) /edits'
-case_ bad "dispatch during review: fails" workflow_dispatch "e1 SUBMITTED" '^GET /edits$' '^(PUT|POST) /edits'
-case_ ok "dispatch with no review: publishes" workflow_dispatch "" '^POST /edits/new/commit$' '^$'
-case_ bad "unknown edit status: fails" push "e1 SOMETHING" '^GET /edits$' '^(PUT|POST) /edits'
-case_ ok "tag during review: warns" push "e1 SUBMITTED" '' '^(PUT|POST) /edits'
-[[ $out == *'::warning::v9.9.9 not sent to Amazon'* ]] || { echo "FAIL: no warning: $out"; n=1; }
+case_ ok "no open edit: creates and commits one" false "" '^POST /edits/new/commit$' '^POST /edits/e1'
+case_ ok "edit left in progress: reuses it" false "e1 IN_PROGRESS" '^POST /edits/e1/commit$' '^POST /edits$'
+case_ ok "tag during review: skipped" false "e1 SUBMITTED" '^GET /edits$' '^(PUT|POST) /edits'
+case_ bad "dispatch during review: fails" true "e1 SUBMITTED" '^GET /edits$' '^(PUT|POST) /edits' '::error::v9.9.9 not sent'
+case_ ok "dispatch with no review: publishes" true "" '^POST /edits/new/commit$' '^$'
+case_ bad "unknown edit status: fails" false "e1 SOMETHING" '^GET /edits$' '^(PUT|POST) /edits' '::error::.* is SOMETHING'
+case_ ok "tag during review: warns" false "e1 SUBMITTED" '' '^(PUT|POST) /edits' '::warning::v9.9.9 not sent'
 exit $n

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Replaces the APK of the Amazon Appstore listing and commits the edit, which sends it to Amazon review.
-# Usage: amazon-publish.sh <apk>. Env: APP (the application API URL), AMAZON_TAG, CLIENT_ID, CLIENT_SECRET.
+# Usage: amazon-publish.sh <apk>; sends it to Amazon review. Env: APP (the application API URL), AMAZON_TAG,
+# CLIENT_ID, CLIENT_SECRET, AMAZON_DISPATCH (true when an `amazon_tag` dispatch asked for this upload).
 set -euo pipefail
 apk_file=$1
 
@@ -30,8 +30,8 @@ case $status in
   '' | IN_PROGRESS) ;;
   SUBMITTED)
     message="$AMAZON_TAG not sent to Amazon: the previous release is still in review"
-    # A tag defers to the next one; a manual dispatch asked for this very upload, so it fails.
-    [ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ] && { echo "::error::$message"; exit 1; }
+    # A tag defers to the next one; an `amazon_tag` dispatch asked for this very upload, so it fails.
+    [ "${AMAZON_DISPATCH:-}" = true ] && { echo "::error::$message"; exit 1; }
     echo "::warning::$message"
     exit 0 ;;
   *) echo "::error::Amazon edit $edit is $status, neither in progress nor in review"; exit 1 ;;

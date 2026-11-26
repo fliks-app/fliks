@@ -209,13 +209,14 @@ jobs:
     # dispatch, and a skipped dependency would otherwise skip this job too.
     if: always() && !(startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')) && (needs.build-and-publish.result == 'success' || github.event.inputs.amazon_tag != '') && (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.amazon_tag != '')
     runs-on: ubuntu-latest
-    # Two tags racing for the same open Amazon edit (`reuse-any-open-edit` below)
+    # Two tags racing for the same open Amazon edit (reused by amazon-publish.sh)
     # would clobber each other's changes; serialize per app, not per tag.
     concurrency:
       group: amazon-appstore
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       AMAZON_TAG: ${{ github.event.inputs.amazon_tag || github.ref_name }}
+      AMAZON_DISPATCH: ${{ github.event.inputs.amazon_tag != '' }}
       APP: https://developer.amazon.com/api/appstore/v1/applications/${{ secrets.AMAZON_APPSTORE_APP_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
