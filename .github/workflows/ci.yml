@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
-      - run: .github/scripts/main-is-green.test.sh && .github/scripts/route-retention.test.sh && .github/scripts/client-route-gates.test.sh
+      - run: .github/scripts/main-is-green.test.sh && .github/scripts/route-retention.test.sh && .github/scripts/client-route-gates.test.sh && .github/scripts/amazon-publish.test.sh
       # Early signal on the release PR; release-please.yml gates the tag itself. The script comes from the
       # base branch, never from the PR. Only a branch of this repository is a release PR (a fork's is a PR).
       - name: the release PR's base commit is green on main
