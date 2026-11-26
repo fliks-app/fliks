@@ -84,9 +84,14 @@ fn folder_results_are_not_remapped() {
         series_title: t.into(),
         ..Default::default()
     };
-    assert_eq!(apply_series_folder_format("{Series Title}", &f("..")), "..");
-    assert_eq!(apply_series_folder_format("{Series Title}", &f("???")), "");
-    assert_eq!(apply_series_folder_format("{Series Title}", &f(".")), ".");
+    for t in ["..", "???", "."] {
+        let name = apply_series_folder_format("{Series Title}", &f(t));
+        assert_eq!(validate_folder_name(&name), Err(FolderNameError::Empty));
+    }
+    assert_eq!(
+        apply_series_folder_format("{Series Title}", &f(" S.H.I.E.L.D. ")),
+        "S.H.I.E.L.D"
+    );
 }
 
 #[test]
