@@ -70,8 +70,9 @@ export function keepRouteFresh(
 export function onParked(cb: () => void): void {
   const reuse = inject(CachingReuseStrategy);
   const route = inject(ActivatedRoute, { optional: true });
+  const destroyRef = inject(DestroyRef);
   if (!route) return;
-  reuse.detached$.pipe(takeUntilDestroyed()).subscribe((key) => {
+  reuse.detached$.pipe(takeUntilDestroyed(destroyRef)).subscribe((key) => {
     if (route.snapshot.pathFromRoot.some((s) => reuse.keyFor(s) === key)) cb();
   });
 }
