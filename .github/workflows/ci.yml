@@ -36,6 +36,7 @@ jobs:
     outputs:
       server: ${{ steps.diff.outputs.server }}
       client: ${{ steps.diff.outputs.client }}
+      mobile: ${{ steps.diff.outputs.mobile }}
       desktop: ${{ steps.diff.outputs.desktop }}
       libmpv_mac: ${{ steps.diff.outputs.libmpv_mac }}
       receiver: ${{ steps.diff.outputs.receiver }}
@@ -47,7 +48,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
-      - run: .github/scripts/main-is-green.test.sh && .github/scripts/route-retention.test.sh && .github/scripts/client-route-gates.test.sh && .github/scripts/amazon-publish.test.sh
+      - run: for t in .github/scripts/*.test.sh; do "$t" || exit 1; done
       # Early signal on the release PR; release-please.yml gates the tag itself. The script comes from the
       # base branch, never from the PR. Only a branch of this repository is a release PR (a fork's is a PR).
       - name: the release PR's base commit is green on main
@@ -65,7 +66,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           DRAFT: ${{ github.event.pull_request.draft }}
         run: |
-          out() { printf 'server=%s\nclient=%s\ndesktop=%s\nlibmpv_mac=%s\nreceiver=%s\ntvos=%s\nmacos=%s\nios_push=%s\n' "$1" "$1" "$1" "$1" "$1" "$1" "$1" "$1" >> "$GITHUB_OUTPUT"; }
+          out() { for area in server client mobile desktop libmpv_mac receiver tvos macos ios_push; do echo "$area=$1"; done >> "$GITHUB_OUTPUT"; }
           # Release PRs only bump versions (main re-runs everything after the merge); drafts wait for review.
           if [[ "$RELEASE_PR" == true || "$DRAFT" == true ]]; then out false; exit 0; fi
           case "$EVENT" in
@@ -80,6 +81,8 @@ jobs:
           {
             echo "server=$(hit '^(server/|engine\.lock$)')"
             echo "client=$(hit '^(client/|server/fixtures/|desktop/src/shared/)')"
+            # The native shells compile against the Capacitor plugins, never against the web bundle.
+            echo "mobile=$(hit '^client/(android/|ios/|package(-lock)?\.json$|capacitor\.config\.ts$)')"
             echo "desktop=$(hit '^desktop/')"
             echo "tvos=$(hit '^(appletv/|server/parity/scenarios/|client/public/i18n/)')"
             echo "macos=$(hit '^(macos/|scripts/embedded-postgres\.conf$)')"
@@ -111,6 +114,37 @@ jobs:
     if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: server
+    env:
+      SQLX_OFFLINE: 'true'
+      # One target dir for both workspaces: the plugin SDK reuses the compiled dependencies (455 of 477 crates).
+      CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-rust
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          # PR caches would evict main's from the repository's 10 GB.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          shared-key: server-lint
+          workspaces: server
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: plugin SDK fmt and clippy (native and wasm32-wasip2)
+        working-directory: server/crates/plugin-sdk
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo clippy --workspace --all-targets --target wasm32-wasip2 -- -D warnings
+
+  # The checks on the migrated schema, apart from `lint`: each of the two jobs checks the server crate once.
+  sqlx:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
     services:
       postgres: &postgres
         image: postgres:18
@@ -134,36 +168,30 @@ jobs:
       DATABASE_URL: postgres://fliks:fliks@localhost:5432/fliks
       # With DATABASE_URL set, query! would compile against the unmigrated DB; prepare --check forces online itself.
       SQLX_OFFLINE: 'true'
-      # One target dir for both workspaces: the plugin SDK reuses the compiled dependencies (455 of 477 crates).
       CARGO_TARGET_DIR: ${{ github.workspace }}/server/target
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-rust
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          # PR caches would evict main's from the repository's 10 GB.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # Restores lint's cache (the same check artifacts); saving is that job's.
+          save-if: false
           shared-key: server-lint
           workspaces: server
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: plugin SDK fmt and clippy (native and wasm32-wasip2)
-        working-directory: server/crates/plugin-sdk
-        run: |
-          cargo fmt --all --check
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo clippy --workspace --all-targets --target wasm32-wasip2 -- -D warnings
-      # sqlx-cli lands in ~/.cargo/bin, which rust-cache restores: the install is a no-op after the first main run.
+      - id: sqlx-cli
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/bin/sqlx
+            ~/.cargo/bin/cargo-sqlx
+          key: sqlx-cli-0.9.0-${{ runner.os }}
+      - if: steps.sqlx-cli.outputs.cache-hit != 'true'
+        run: cargo install sqlx-cli@0.9.0 --no-default-features --features postgres,rustls
       # The migrations are plain SQL, so sqlx-cli applies them without building the server binary.
       - name: sqlx offline cache is current
         run: |
-          if [ -d .sqlx ]; then
-            cargo install sqlx-cli@0.9.0 --no-default-features --features postgres,rustls
-            sqlx migrate run --source migrations
-            cargo sqlx prepare --check --workspace -- --all-targets
-          else
-            echo "::notice::no .sqlx directory, sqlx prepare check skipped"
-          fi
+          sqlx migrate run --source migrations
+          cargo sqlx prepare --check --workspace -- --all-targets
       # build.sh reads two probe fixtures of the pinned engine release; with PGHOST set it uses the runner's psql, no dump.
       # Each group seed is then applied on a copy of the template, as the parity runner does.
       - name: parity seeds build on the migrated schema
@@ -187,12 +215,22 @@ jobs:
             psql -v ON_ERROR_STOP=1 -q -d "$db" -f "$f" >/dev/null
           done
 
-  # Compiles the test binaries once; the `test-shard` jobs run them, so no shard pays the 4 minute compile.
+  # Compiles the test binaries once; the test jobs run them. Two halves, each compiling the server crate once:
+  # on one 4-core runner the lib and its test build take turns.
   build:
     needs: changes
     if: needs.changes.outputs.server == 'true'
+    name: build ${{ matrix.part }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      matrix:
+        include:
+          - part: lib
+            targets: --lib
+          # Holds target/debug/fliks-server and the fixture components.
+          - part: it
+            targets: --bins --test '*'
     defaults:
       run:
         working-directory: server
@@ -207,20 +245,23 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # One cache for both halves (the same dependency graph); `it` saves it.
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.part == 'it' }}
           shared-key: server-test
           workspaces: server
-      - uses: ./.github/actions/fixture-components
+      # The plugin host tests (`--test plugins`) fail under CI without the fixture.
+      - if: matrix.part == 'it'
+        uses: ./.github/actions/fixture-components
       - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
-      # Includes the plugin host tests (`--test plugins`), which fail under CI without the fixture.
       - name: archive the test binaries
         run: |
           mkdir -p "$ARCHIVE_DIR"
-          cargo nextest archive --workspace --archive-file "$ARCHIVE_DIR/tests.tar.zst"
-          cp target/wasm32-wasip2/release/fixture_*.wasm "$ARCHIVE_DIR"
+          cargo nextest archive --workspace ${{ matrix.targets }} --archive-file "$ARCHIVE_DIR/${{ matrix.part }}.tar.zst"
+      - if: matrix.part == 'it'
+        run: cp target/wasm32-wasip2/release/fixture_*.wasm "$ARCHIVE_DIR"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: nextest-archive
+          name: nextest-archive-${{ matrix.part }}
           path: ${{ env.ARCHIVE_DIR }}
           retention-days: 1
           compression-level: 0
@@ -239,11 +280,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: nextest-archive
+          name: nextest-archive-it
           path: ${{ env.ARCHIVE_DIR }}
       - name: openapi.json is current
         run: |
-          tar --zstd -xf "$ARCHIVE_DIR/tests.tar.zst" -C "$RUNNER_TEMP" target/debug/fliks-server
+          tar --zstd -xf "$ARCHIVE_DIR/it.tar.zst" -C "$RUNNER_TEMP" target/debug/fliks-server
           "$RUNNER_TEMP/target/debug/fliks-server" openapi | diff - server/openapi.json
       # An operation the last release served and a client of that release may call goes only with the `wire-break` label
       # and a line in server/wire-breaks.txt, which keeps later PRs green.
@@ -286,11 +327,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    name: test shard ${{ matrix.shard }}/3
+    name: test ${{ matrix.archive }} ${{ matrix.partition }}
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # The long serial chains (backups, plugin restores) are integration tests.
+        include:
+          - {archive: lib, partition: 1/1}
+          - {archive: it, partition: 1/3}
+          - {archive: it, partition: 2/3}
+          - {archive: it, partition: 3/3}
     services:
       postgres: *postgres
     defaults:
@@ -309,8 +355,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: nextest-archive
+          pattern: nextest-archive-*
           path: ${{ env.ARCHIVE_DIR }}
+          merge-multiple: true
       # The restore test runs pg_dump against the Postgres 18 service; the runner image ships 16.
       - name: PostgreSQL 18 client tools
         run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
@@ -318,12 +365,12 @@ jobs:
       # Every test database is a copy of template1: migrate it once here, before any test connects to it.
       - name: migrate template1
         run: |
-          tar --zstd -xf "$ARCHIVE_DIR/tests.tar.zst" -C "$RUNNER_TEMP" target/debug/fliks-server
+          tar --zstd -xf "$ARCHIVE_DIR/it.tar.zst" -C "$RUNNER_TEMP" target/debug/fliks-server
           DB_NAME=template1 "$RUNNER_TEMP/target/debug/fliks-server" migrate
       # cargo-nextest itself: the archive needs no Rust toolchain, `cargo` would install the pinned one.
       - run: >-
-          cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
-          --partition count:${{ matrix.shard }}/3 --no-fail-fast --profile ci
+          cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/${{ matrix.archive }}.tar.zst" --workspace-remap "${{ github.workspace }}/server"
+          --partition count:${{ matrix.partition }} --no-fail-fast --profile ci
 
   # The shipped tools are PostgreSQL 18's: the restore tests also run them against older servers than the shards':
   # 17 restores, 16 must refuse before touching anything (system.md rule 36).
@@ -368,18 +415,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: nextest-archive
+          pattern: nextest-archive-*
           path: ${{ env.ARCHIVE_DIR }}
+          merge-multiple: true
       - name: PostgreSQL 18 client tools
         run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
       - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
       - name: migrate template1
         run: |
-          tar --zstd -xf "$ARCHIVE_DIR/tests.tar.zst" -C "$RUNNER_TEMP" target/debug/fliks-server
+          tar --zstd -xf "$ARCHIVE_DIR/it.tar.zst" -C "$RUNNER_TEMP" target/debug/fliks-server
           DB_NAME=template1 "$RUNNER_TEMP/target/debug/fliks-server" migrate
-      - run: >-
-          cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
-          -E '${{ matrix.filter }}' --no-fail-fast --profile ci -j 2
+      - run: ${{ github.workspace }}/.github/scripts/nextest-archives.sh -E '${{ matrix.filter }}' --profile ci -j 2
 
   plugin-sdk:
     needs: changes
@@ -450,6 +496,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run check:i18n
+      # The production bundle and its service-worker checks: the native shells only build on a `mobile` change.
+      - run: npm run build
       - run: npx ng test --watch=false
 
   cast-receiver:
@@ -559,7 +607,7 @@ jobs:
 
   android:
     needs: changes
-    if: needs.changes.outputs.client == 'true'
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     defaults:
@@ -612,7 +660,7 @@ jobs:
 
   ios:
     needs: changes
-    if: needs.changes.outputs.client == 'true'
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: xcode-27
     timeout-minutes: 40
     defaults:
@@ -757,8 +805,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: nextest-archive
+          pattern: nextest-archive-*
           path: ${{ env.ARCHIVE_DIR }}
+          merge-multiple: true
       - name: PostgreSQL 18 client tools
         run: ${{ github.workspace }}/.github/scripts/install-pg18-client.sh
       - uses: taiki-e/install-action@9252097d36d2d3618ad98f5d873696a962b6897c # nextest
@@ -766,14 +815,12 @@ jobs:
         with:
           archive: ${{ env.ARCHIVE_DIR }}
       # The filterset is the `app-role` profile of .config/nextest.toml.
-      - run: >-
-          cargo-nextest nextest run --archive-file "$ARCHIVE_DIR/tests.tar.zst" --workspace-remap "${{ github.workspace }}/server"
-          --no-fail-fast --profile app-role
+      - run: ${{ github.workspace }}/.github/scripts/nextest-archives.sh --profile app-role
 
   # The only required check: a skipped job (area untouched) counts as passed.
   ci-ok:
     if: always()
-    needs: [changes, no-em-dash, lint, build, contract, test-shard, restore-pg, test-app-role, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos, macos]
+    needs: [changes, no-em-dash, lint, sqlx, build, contract, test-shard, restore-pg, test-app-role, plugin-sdk, windows-clippy, client, tizen, cast-receiver, desktop, desktop-win, desktop-mac, android, ios, tvos, macos]
     runs-on: ubuntu-latest
     steps:
       - env:
