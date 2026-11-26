@@ -1,7 +1,7 @@
-# Builds a signed AAB of the Fliks Android client and uploads it to
-# the Play Store internal track on every release tag (`v*` produced by
-# release-please) plus on manual `workflow_dispatch` for ad-hoc
-# re-uploads to other tracks.
+# Builds a signed AAB of the Fliks Android client and sends it to the
+# Play Store production track for review on every stable release tag
+# (`v*` produced by release-please), or to the track a manual
+# `workflow_dispatch` names. Google publishes it once approved.
 #
 # On tag builds it also assembles a signed APK and attaches it to the
 # GitHub release (release-please created it for the tag) as
@@ -17,10 +17,6 @@
 # To (re)publish to the Amazon Appstore only (e.g. after a Play Store-only
 # failure, or to retry without rebuilding), dispatch with `amazon_tag` set:
 # it downloads that tag's already-attached APK and skips the Android build.
-#
-# Promotion from `internal` → `alpha`/`beta`/`production` stays a
-# manual click in Play Console; this workflow never touches anything
-# beyond what the dispatch input asks for.
 #
 # Required repo secrets (one-shot setup, see
 # `plans/play-store-automation.plan.md`):
@@ -181,6 +177,10 @@ jobs:
     # Pre-releases (v5.1.0-beta.1) ship the APK on GitHub only, never to a store.
     if: github.event.inputs.apk_tag == '' && !(startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-'))
     runs-on: ubuntu-latest
+    # A new edit invalidates the open one, so two runs must not overlap.
+    concurrency:
+      group: play-store
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -189,47 +189,15 @@ jobs:
           name: signed-aab
           path: client/android/app/build/outputs/bundle/release
 
-      - name: Extract latest release notes from CHANGELOG.md
-        working-directory: client
-        # release-please writes one section per release in the format
-        # `## [X.Y.Z]` (followed by the date). Awk grabs everything
-        # between the first such header and the next one — that is
-        # the body of the most recent release. The result is dropped
-        # into the path the upload action reads (en-US default).
-        run: |
-          mkdir -p android/app/src/main/play/release-notes/en-US
-          awk '
-            /^## \[/ { count++; if (count > 1) exit }
-            count == 1 { print }
-          ' ../CHANGELOG.md \
-            | tail -n +2 \
-            > android/app/src/main/play/release-notes/en-US/default.txt
-          # Play Store rejects empty release notes — fail loudly rather
-          # than upload a blank section.
-          if [ ! -s android/app/src/main/play/release-notes/en-US/default.txt ]; then
-            echo "::error::Could not extract release notes from CHANGELOG.md"
-            exit 1
-          fi
-
-      - name: Upload to Play Store
-        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1
-        with:
-          serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
-          packageName: media.fliks.app
-          releaseFiles: client/android/app/build/outputs/bundle/release/app-proprietary-release.aab
-          # `tracks`, not `track`: the singular is deprecated and the action already converts
-          # it internally. A single value is accepted, so the dispatch input stays a choice.
-          tracks: ${{ github.event.inputs.track || 'internal' }}
-          # `draft` is required while the app itself is in draft status
-          # in Play Console (no production release ever submitted).
-          # Once the app is approved + published live, this can flip to
-          # `completed` so each upload rolls out automatically to the
-          # selected track.
-          status: draft
-          # Commit the edit normally so Google sends the changes for review:
-          # the track auto-reviews and the Edit API rejects the upload when
-          # changesNotSentForReview is set on it.
-          whatsNewDirectory: client/android/app/src/main/play/release-notes
+      # A stable tag goes to production; a dispatch to the track it names. Committing while other changes
+      # are in review would cancel that review, so the release is then skipped with a warning.
+      - name: Send to the Play Store for review
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+        run: >-
+          python3 -I .github/scripts/play-publish.py
+          client/android/app/build/outputs/bundle/release/app-proprietary-release.aab
+          ${{ github.event.inputs.track || 'production' }}
 
   # Replaces the APK of the Amazon Appstore listing (Fire TV + Fire tablets) with the one
   # just attached to the release, then commits the edit, which sends it to Amazon review.
