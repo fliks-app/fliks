@@ -183,7 +183,6 @@ fn grab(req: &Request) -> Result<Response, String> {
     if let Some(item) = &item {
         key = format!("{key}.{item}");
     }
-    host::config_set(&key, Some(&body)).map_err(|e| e.message)?;
     if let Some(media_id) = req
         .param("id")
         .and_then(|v| v.parse().ok())
@@ -197,6 +196,8 @@ fn grab(req: &Request) -> Result<Response, String> {
             },
         )]))?;
     }
+    // Recorded last: a test that sees the grab may retire the hold it put in flight.
+    host::config_set(&key, Some(&body)).map_err(|e| e.message)?;
     ok(json!({}))
 }
 
