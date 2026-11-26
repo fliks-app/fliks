@@ -30,6 +30,8 @@ cargo clippy --all-targets -- -D warnings 2>&1 | tail -30
 parity/run-all.sh   # full parity suite (parity/README.md)
 ```
 
+Name the test binary: `--lib <module>::` for unit tests, `--test it <module>::` for integration tests. A bare `<module>::` builds both, and the unit-test binary alone is half of a cold build.
+
 DB tests run against a throwaway PostgreSQL (`scripts/with-test-postgres.sh`), so concurrent runs never share `#[sqlx::test]` databases. One Rust build at a time across agents (`fliks-heavy`). Quiet: pipe test/clippy output through `tail -30`.
 
 `cargo sqlx prepare --workspace -- --all-targets` regenerates `.sqlx` (run it on a database migrated to HEAD after any `query!` or migration change). Never edit `.sqlx` by hand.
