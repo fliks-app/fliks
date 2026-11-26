@@ -105,7 +105,7 @@ pub async fn analyze(
                AND jsonb_array_length(COALESCE(mf."streamInfo"->'video', '[]'::jsonb)) > 0))
              AND ($2::int[] IS NOT NULL OR NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = mf.id AND j.state IN ('queued', 'leased', 'staged', 'committing')))
              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = mf.id AND j.state = 'failed'
-                               AND j.error->>'class' IN ('corrupt', 'damaged')
+                               AND j.error->>'class' IN ('corrupt', 'damaged', 'unsupported')
                                AND j."inSize" = mf.size AND j."inMtimeMs" IS NOT DISTINCT FROM mf."mtimeMs")
            ORDER BY mf.id"#,
         library_id,
