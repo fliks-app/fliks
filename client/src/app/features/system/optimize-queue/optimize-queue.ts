@@ -10,6 +10,7 @@ import {
   untracked,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ErrorBadgeComponent } from '../../../shared/components/error-badge';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe, translatePlural } from '../../../core/pipes/translate-plural.pipe';
@@ -56,7 +57,7 @@ export interface DeviceRow {
 
 @Component({
   selector: 'app-optimize-queue',
-  imports: [DatePipe, RouterLink, TranslatePipe, TranslatePluralPipe],
+  imports: [DatePipe, RouterLink, TranslatePipe, TranslatePluralPipe, ErrorBadgeComponent],
   templateUrl: './optimize-queue.html',
 })
 export class OptimizeQueueComponent implements OnInit {
@@ -118,6 +119,15 @@ export class OptimizeQueueComponent implements OnInit {
 
   readonly errorClass = (c: string) =>
     (ERROR_CLASSES as readonly string[]).includes(c) ? `optimize.queue.error_class.${c}` : null;
+
+  /** Class label, message and stderr tail, one per line, for the error badge. */
+  errorDetails(j: OptimizeJob): string | null {
+    const e = j.error;
+    if (!e) return null;
+    const c = e.class ? this.errorClass(e.class) : null;
+    const lines = [c ? this.translate.instant(c) : e.class, e.message, e.stderr];
+    return lines.filter((l) => !!l).join('\n') || null;
+  }
 
   isOffline(w: OptimizeWorker) {
     return this.now() - new Date(w.lastSeenAt).getTime() > WORKER_OFFLINE_MS;

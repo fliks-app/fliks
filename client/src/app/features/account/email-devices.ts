@@ -1,3 +1,4 @@
+import { ErrorBadgeComponent } from '../../shared/components/error-badge';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -21,7 +22,7 @@ const DEFAULT_FORMATS = ['epub', 'pdf'];
 /** E-reader addresses a book can be mailed to, and the latest mailings. */
 @Component({
   selector: 'app-account-email-devices',
-  imports: [DatePipe, TranslatePipe, InputFieldComponent, SelectFieldComponent, MultiSelectComponent],
+  imports: [ErrorBadgeComponent, DatePipe, TranslatePipe, InputFieldComponent, SelectFieldComponent, MultiSelectComponent],
   templateUrl: './email-devices.html',
 })
 export class AccountEmailDevicesComponent implements OnInit {

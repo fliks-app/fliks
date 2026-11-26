@@ -4,7 +4,7 @@ use crate::{
     busy::Claim,
     events::{Num, SseEvent, Subject},
     http::AppError,
-    jobs::{Command, Trigger, finish, insert_queued_with_body, mark_running},
+    jobs::{Command, Trigger, fail, finish, insert_queued_with_body, mark_running},
     state::AppState,
 };
 use fliks_domain::media::{
@@ -396,7 +396,7 @@ async fn run_detection(
     st.hub.activity().remove(&id);
     drop(claim);
     let run = match run {
-        Ok(n) => finish(&st.db, cmd, "completed", None)
+        Ok(n) => finish(&st.db, cmd, None)
             .await
             .map(|()| n)
             .map_err(|e| e.to_string()),
@@ -417,7 +417,7 @@ async fn run_detection(
         }
         Err(e) => {
             tracing::error!("IntroDetection failed for season #{season}: {e}");
-            match finish(&st.db, cmd, "failed", None).await {
+            match fail(&st.db, cmd, &e).await {
                 Ok(()) => st.hub.emit(SseEvent::CommandCompleted {
                     name: COMMAND.into(),
                     status: "failed".into(),

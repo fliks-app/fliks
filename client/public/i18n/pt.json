@@ -1676,6 +1676,13 @@
   },
   "system": {
     "title": "Sistema",
+    "command_status": {
+      "queued": "Na fila",
+      "running": "Em curso",
+      "completed": "Concluída",
+      "failed": "Falhou"
+    },
+    "command_interrupted": "Interrompida por um reinício do servidor",
     "subtitle": "Comandos manuais e histórico das tarefas.",
     "tab_status": "Estado",
     "tab_backups": "Cópias de segurança",
@@ -5678,6 +5685,8 @@
       "running_empty": "Nada em curso.",
       "waiting": "Em espera, por ordem de execução",
       "waiting_empty": "Nenhum trabalho em espera.",
+      "failures_badge_one": "{{count}} falha",
+      "failures_badge_other": "{{count}} falhas",
       "selected_one": "{{count}} selecionado",
       "selected_other": "{{count}} selecionados",
       "to_front": "Passar para o início",
@@ -5738,6 +5747,7 @@
         "nothing_to_do": "Nada a alterar",
         "shared": "Ficheiro partilhado",
         "stale": "Ficheiro alterado",
+        "unsupported": "Faixa não suportada",
         "verify": "Verificação falhou"
       }
     },

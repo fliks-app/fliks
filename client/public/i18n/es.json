@@ -1676,6 +1676,13 @@
   },
   "system": {
     "title": "Sistema",
+    "command_status": {
+      "queued": "En cola",
+      "running": "En curso",
+      "completed": "Completada",
+      "failed": "Fallida"
+    },
+    "command_interrupted": "Interrumpida por un reinicio del servidor",
     "subtitle": "Comandos manuales e historial de tareas.",
     "tab_status": "Estado",
     "tab_backups": "Copias de seguridad",
@@ -5678,6 +5685,8 @@
       "running_empty": "No hay nada en curso.",
       "waiting": "En espera, por orden de ejecución",
       "waiting_empty": "Ningún trabajo en espera.",
+      "failures_badge_one": "{{count}} fallo",
+      "failures_badge_other": "{{count}} fallos",
       "selected_one": "{{count}} seleccionado",
       "selected_other": "{{count}} seleccionados",
       "to_front": "Pasar al principio",
@@ -5738,6 +5747,7 @@
         "nothing_to_do": "Nada que cambiar",
         "shared": "Archivo compartido",
         "stale": "Archivo modificado",
+        "unsupported": "Pista no compatible",
         "verify": "Verificación fallida"
       }
     },

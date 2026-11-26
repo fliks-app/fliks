@@ -1,3 +1,4 @@
+import { ErrorBadgeComponent } from '../../../shared/components/error-badge';
 import {
   Component,
   ElementRef,
@@ -77,6 +78,7 @@ interface CreateNotificationBody {
 @Component({
   selector: 'app-notifications-settings',
   imports: [
+    ErrorBadgeComponent,
     ModalComponent,
     TvSelectDirective,
     ModalFooterComponent,

@@ -1676,6 +1676,13 @@
   },
   "system": {
     "title": "System",
+    "command_status": {
+      "queued": "Queued",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "command_interrupted": "Interrupted by a server restart",
     "subtitle": "Manual commands and task history.",
     "tab_status": "Status",
     "tab_backups": "Backups",
@@ -5678,6 +5685,8 @@
       "running_empty": "Nothing is running.",
       "waiting": "Waiting, in order of execution",
       "waiting_empty": "No job is waiting.",
+      "failures_badge_one": "{{count}} failure",
+      "failures_badge_other": "{{count}} failures",
       "selected_one": "{{count}} selected",
       "selected_other": "{{count}} selected",
       "to_front": "Move to the front",
@@ -5738,6 +5747,7 @@
         "nothing_to_do": "Nothing to change",
         "shared": "Shared file",
         "stale": "File changed",
+        "unsupported": "Unsupported track",
         "verify": "Verification failed"
       }
     },

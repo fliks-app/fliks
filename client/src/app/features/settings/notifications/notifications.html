@@ -108,7 +108,11 @@
         <div class="flex flex-col gap-2 text-sm">
           <p>
             {{ 'settings.notifications.relay_state' | translate }}:
-            <span class="badge badge-sm" [class.badge-success]="st.relay.state === 'ready'" [class.badge-error]="st.relay.state === 'error'">{{ 'settings.notifications.relay_state_' + st.relay.state | translate }}</span>
+            <app-error-badge
+              [error]="st.relay.error"
+              [label]="'settings.notifications.relay_state_' + st.relay.state | translate"
+              [badgeClass]="st.relay.state === 'ready' ? 'badge-success' : st.relay.state === 'error' ? 'badge-error' : ''"
+            />
           </p>
           @if (st.relay.error) {
             <p class="text-error">{{ st.relay.error }}</p>

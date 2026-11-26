@@ -113,9 +113,11 @@
       <ul class="flex flex-col gap-1 text-sm">
         @for (s of sends(); track s.id) {
           <li class="flex gap-2 items-center">
-            <span class="badge badge-sm" [class.badge-success]="s.status === 'sent'" [class.badge-error]="s.status === 'failed'">
-              {{ 'email_devices.status_' + s.status | translate }}
-            </span>
+            <app-error-badge
+              [error]="s.status === 'failed' && s.error ? 'email_devices.error_' + s.error : null"
+              [label]="'email_devices.status_' + s.status | translate"
+              [badgeClass]="s.status === 'sent' ? 'badge-success' : s.status === 'failed' ? 'badge-error' : ''"
+            />
             <span class="truncate flex-1">{{ s.fileName }} &rarr; {{ s.deviceName }}</span>
             @if (s.error) {
               <span class="text-error">{{ 'email_devices.error_' + s.error | translate }}</span>

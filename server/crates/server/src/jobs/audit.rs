@@ -87,23 +87,37 @@ pub async fn mark_running(db: &PgPool, id: i32) -> sqlx::Result<()> {
         .map(drop)
 }
 
-/// `status` is `completed` or `failed`; a `body` replaces the row's.
-pub async fn finish(db: &PgPool, id: i32, status: &str, body: Option<Value>) -> sqlx::Result<()> {
+/// A completed row; a `body` replaces the row's.
+pub async fn finish(db: &PgPool, id: i32, body: Option<Value>) -> sqlx::Result<()> {
     sqlx::query(
-        r#"UPDATE commands SET status = $2, "endedOn" = now(), body = COALESCE($3, body) WHERE id = $1"#,
+        r#"UPDATE commands SET status = 'completed', "endedOn" = now(), body = COALESCE($2, body) WHERE id = $1"#,
     )
     .bind(id)
-    .bind(status)
     .bind(body)
     .execute(db)
         .await
         .map(drop)
 }
 
-/// Rule 7 and the restore sweep: every unfinished row becomes failed.
+/// A failed row keeps its body (the subject) and gains the reason in `body.error`.
+pub async fn fail(db: &PgPool, id: i32, error: &str) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"UPDATE commands SET status = 'failed', "endedOn" = now(),
+             body = COALESCE(body, '{}'::jsonb) || jsonb_build_object('error', $2::text) WHERE id = $1"#,
+    )
+    .bind(id)
+    .bind(error)
+    .execute(db)
+    .await
+    .map(drop)
+}
+
+/// Rule 7 and the restore sweep: every unfinished row becomes failed, its reason a client key.
 pub async fn sweep(db: &PgPool) -> sqlx::Result<u64> {
     let n = sqlx::query(
-        r#"UPDATE commands SET status = 'failed', "endedOn" = now() WHERE status IN ('running', 'queued')"#,
+        r#"UPDATE commands SET status = 'failed', "endedOn" = now(),
+             body = COALESCE(body, '{}'::jsonb) || '{"error": "system.command_interrupted"}'::jsonb
+           WHERE status IN ('running', 'queued')"#,
     )
     .execute(db)
     .await?
@@ -197,14 +211,14 @@ pub async fn execute<T: JobBody, E: Display>(
     work: impl Future<Output = Result<T, E>>,
 ) {
     st.hub.emit(SseEvent::CommandStarted { name: name.into() });
-    let (status, body) = match work.await {
-        Ok(out) => ("completed", out.into_body()),
+    let (status, recorded) = match work.await {
+        Ok(out) => ("completed", finish(&st.db, id, out.into_body()).await),
         Err(e) => {
             tracing::error!("Command {name} {failed}: {e}");
-            ("failed", None)
+            ("failed", fail(&st.db, id, &e.to_string()).await)
         }
     };
-    if let Err(e) = finish(&st.db, id, status, body).await {
+    if let Err(e) = recorded {
         tracing::error!("Command {name}: cannot record {status}: {e}");
     }
     st.hub.emit(SseEvent::CommandCompleted {

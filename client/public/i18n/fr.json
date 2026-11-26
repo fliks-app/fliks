@@ -1676,6 +1676,13 @@
   },
   "system": {
     "title": "Système",
+    "command_status": {
+      "queued": "En attente",
+      "running": "En cours",
+      "completed": "Terminée",
+      "failed": "Échouée"
+    },
+    "command_interrupted": "Interrompue par un redémarrage du serveur",
     "subtitle": "Commandes manuelles et historique des tâches.",
     "tab_status": "Statut",
     "tab_backups": "Sauvegardes",
@@ -5678,6 +5685,8 @@
       "running_empty": "Rien n'est en cours.",
       "waiting": "En attente, dans l'ordre d'exécution",
       "waiting_empty": "Aucun travail en attente.",
+      "failures_badge_one": "{{count}} échec",
+      "failures_badge_other": "{{count}} échecs",
       "selected_one": "{{count}} sélectionné",
       "selected_other": "{{count}} sélectionnés",
       "to_front": "Passer en tête",
@@ -5738,6 +5747,7 @@
         "nothing_to_do": "Rien à modifier",
         "shared": "Fichier partagé",
         "stale": "Fichier modifié",
+        "unsupported": "Piste non prise en charge",
         "verify": "Vérification échouée"
       }
     },
