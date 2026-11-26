@@ -4,7 +4,7 @@
     <p class="text-sm text-base-content/60 mt-1">{{ 'settings.general.subtitle' | translate }}</p>
   </div>
 
-  <app-setup-checklist [showAll]="true" />
+  <app-setup-checklist [showDismissed]="true" />
 
   @if (loading()) {
     <div class="flex justify-center py-16">

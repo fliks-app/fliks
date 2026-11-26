@@ -12,7 +12,7 @@ const item = (key: string): ChecklistItem => ({ key, severity: 'recommended', do
 describe('SetupChecklistComponent', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  function render(isAdmin: boolean) {
+  function render(isAdmin: boolean, items = [item('download-provider'), item('subtitle-provider')], showDismissed = false) {
     TestBed.configureTestingModule({
       providers: bookSpecProviders(
         { provide: AuthService, useValue: { user: signal({ isAdmin }) } },
@@ -20,7 +20,7 @@ describe('SetupChecklistComponent', () => {
         {
           provide: SetupChecklistApiService,
           useValue: {
-            items: signal([item('download-provider'), item('subtitle-provider')]),
+            items: signal(items),
             loading: signal(false),
             refresh: async () => {},
           },
@@ -28,6 +28,7 @@ describe('SetupChecklistComponent', () => {
       ),
     });
     const fixture = TestBed.createComponent(SetupChecklistComponent);
+    fixture.componentRef.setInput('showDismissed', showDismissed);
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
   }
@@ -38,5 +39,12 @@ describe('SetupChecklistComponent', () => {
 
   it('shows every step to an admin', () => {
     expect(render(true).querySelectorAll('li')).toHaveLength(2);
+  });
+
+  it('never lists done steps, and lists dismissed ones only when asked', () => {
+    const items = [{ ...item('library'), done: true }, { ...item('notification'), dismissed: true }, item('users')];
+    expect(render(true, items).querySelectorAll('li')).toHaveLength(1);
+    TestBed.resetTestingModule();
+    expect(render(true, items, true).querySelectorAll('li')).toHaveLength(2);
   });
 });
