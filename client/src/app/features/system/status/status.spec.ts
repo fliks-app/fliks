@@ -68,3 +68,37 @@ describe('SystemStatusComponent: persistence alerts', () => {
     expect(el.querySelector('a[href$="#db-role"]')).not.toBeNull();
   });
 });
+
+describe('SystemStatusComponent: command rows', () => {
+  function component() {
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+        provideTranslateService({
+          lang: 'en',
+          loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({ system: { command_status: { failed: 'Failed' } } }) } },
+        }),
+        { provide: ConfirmationService, useValue: {} },
+        { provide: SseService, useValue: sseStub({ connectionId: signal('c') }) },
+      ],
+    });
+    return TestBed.createComponent(SystemStatusComponent).componentInstance;
+  }
+  const cmd = { id: 1, name: 'x', status: 'failed', trigger: 'manual', startedOn: '' };
+
+  it('reads the failure reason from the body, only when it is a string', () => {
+    const c = component();
+    expect(c.commandError({ ...cmd, body: { error: 'boom' } })).toBe('boom');
+    expect(c.commandError({ ...cmd, body: { error: 3 } })).toBeNull();
+    expect(c.commandError(cmd)).toBeNull();
+  });
+
+  it('translates a known status and falls back to the raw one', () => {
+    const c = component();
+    expect(c.statusLabel('failed')).toBe('Failed');
+    expect(c.statusLabel('weird')).toBe('weird');
+  });
+});

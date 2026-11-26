@@ -4,8 +4,8 @@
       <button
         type="button"
         class="btn btn-ghost btn-sm px-1.5"
-        [attr.aria-label]="'media_detail.download_detail_title' | translate"
-        (click)="$event.stopPropagation(); badgeClick.emit()"
+        [attr.aria-label]="(failureReason() !== null ? 'requests.failed_reason_title' : 'media_detail.download_detail_title') | translate"
+        (click)="$event.stopPropagation(); activate()"
       >
         <app-progress-badge
           [label]="d.labelKey | translate"

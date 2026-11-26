@@ -1,8 +1,9 @@
+import { ErrorBadgeComponent } from '../../../shared/components/error-badge';
 import {
   Component, signal, inject, OnInit, OnDestroy, effect, computed, untracked,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { DecimalPipe, NgClass } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -43,7 +44,7 @@ const MAX_VISIBLE_CHILDREN = 5;
 
 @Component({
   selector: 'app-system-status',
-  imports: [TranslatePipe, TranslatePluralPipe, LocaleDatePipe, DecimalPipe, NgClass, RouterLink, PaginationComponent, DropdownMenuComponent, NeedsAttentionComponent, LucideDynamicIcon],
+  imports: [TranslatePipe, TranslatePluralPipe, LocaleDatePipe, DecimalPipe, RouterLink, PaginationComponent, DropdownMenuComponent, NeedsAttentionComponent, LucideDynamicIcon, ErrorBadgeComponent],
   templateUrl: './status.html',
 })
 export class SystemStatusComponent implements OnInit, OnDestroy {
@@ -327,9 +328,20 @@ export class SystemStatusComponent implements OnInit, OnDestroy {
     switch (status) {
       case 'completed': return 'badge-success';
       case 'failed': return 'badge-error';
-      case 'started': return 'badge-info';
+      case 'running': return 'badge-info';
       default: return 'badge-ghost';
     }
+  }
+
+  commandError(cmd: CommandEntry): string | null {
+    const e = cmd.body?.['error'];
+    return typeof e === 'string' ? e : null;
+  }
+
+  statusLabel(status: string): string {
+    const key = `system.command_status.${status}`;
+    const label = this.translate.instant(key);
+    return label === key ? status : label;
   }
 
   readonly pluginUpdates = pluginUpdates;

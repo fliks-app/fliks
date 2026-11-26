@@ -40,7 +40,7 @@ async fn due(st: &AppState, days: u32, limit: u32) -> sqlx::Result<Vec<i32>> {
              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = f.id
                                AND j.state IN ('queued', 'leased', 'staged', 'committing'))
              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = f.id AND j.state = 'failed'
-                               AND j.error->>'class' IN ('corrupt', 'damaged')
+                               AND j.error->>'class' IN ('corrupt', 'damaged', 'unsupported')
                                AND j."inSize" = f.size AND j."inMtimeMs" IS NOT DISTINCT FROM f."mtimeMs")
              AND COALESCE((SELECT max(j."finishedAt") FROM jobs j WHERE j."mediaFileId" = f.id
                              AND j.kind = 'verify' AND j.state IN ('done', 'failed')), 'epoch')

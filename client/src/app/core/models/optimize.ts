@@ -222,7 +222,7 @@ export interface OptimizeJob {
   paused: boolean;
   workerId: string | null;
   deviceId: string | null;
-  error: { class?: string; message?: string } | null;
+  error: { class?: string; message?: string; stderr?: string } | null;
   /** The original can be put back: a backup is kept and no restore ran or was purged. */
   restorable: boolean;
   inPath: string | null;
@@ -335,5 +335,6 @@ export const ERROR_CLASSES = [
   'nospace',
   'shared',
   'stale',
+  'unsupported',
   'verify',
 ] as const;

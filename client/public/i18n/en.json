@@ -1596,6 +1596,10 @@
       "failed": "Failed",
       "removed": "Removed"
     },
+    "failed_reason_title": "Why this request failed",
+    "failed_reason": {
+      "provider-removed": "The metadata provider this request relied on was removed, so the title can no longer be added."
+    },
     "allowance_left_one": "{{count}} of {{limit}} requests left per {{days}} days",
     "allowance_left_other": "{{count}} of {{limit}} requests left per {{days}} days",
     "allowance_none_one": "Limit reached, next request in {{count}} day",
@@ -1676,6 +1680,13 @@
   },
   "system": {
     "title": "System",
+    "command_status": {
+      "queued": "Queued",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "command_interrupted": "Interrupted by a server restart",
     "subtitle": "Manual commands and task history.",
     "tab_status": "Status",
     "tab_backups": "Backups",
@@ -5678,6 +5689,8 @@
       "running_empty": "Nothing is running.",
       "waiting": "Waiting, in order of execution",
       "waiting_empty": "No job is waiting.",
+      "failures_badge_one": "{{count}} failure",
+      "failures_badge_other": "{{count}} failures",
       "selected_one": "{{count}} selected",
       "selected_other": "{{count}} selected",
       "to_front": "Move to the front",
@@ -5738,6 +5751,7 @@
         "nothing_to_do": "Nothing to change",
         "shared": "Shared file",
         "stale": "File changed",
+        "unsupported": "Unsupported track",
         "verify": "Verification failed"
       }
     },

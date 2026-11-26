@@ -1591,6 +1591,10 @@
       "failed": "Fehlgeschlagen",
       "removed": "Entfernt"
     },
+    "failed_reason_title": "Warum diese Anfrage fehlgeschlagen ist",
+    "failed_reason": {
+      "provider-removed": "Der Metadatenanbieter dieser Anfrage wurde entfernt, daher kann der Titel nicht mehr hinzugefügt werden."
+    },
     "approve_album": "Das ganze Album genehmigen",
     "tracks_of_one": "{{count}} von {{total}} Titel",
     "tracks_of_other": "{{count}} von {{total}} Titeln",
@@ -1676,6 +1680,13 @@
   },
   "system": {
     "title": "System",
+    "command_status": {
+      "queued": "Wartend",
+      "running": "Läuft",
+      "completed": "Abgeschlossen",
+      "failed": "Fehlgeschlagen"
+    },
+    "command_interrupted": "Durch einen Serverneustart unterbrochen",
     "subtitle": "Manuelle Befehle und Aufgabenverlauf.",
     "tab_status": "Status",
     "tab_backups": "Backups",
@@ -5678,6 +5689,8 @@
       "running_empty": "Nichts läuft.",
       "waiting": "Wartend, in Ausführungsreihenfolge",
       "waiting_empty": "Kein Auftrag wartet.",
+      "failures_badge_one": "{{count}} Fehler",
+      "failures_badge_other": "{{count}} Fehler",
       "selected_one": "{{count}} ausgewählt",
       "selected_other": "{{count}} ausgewählt",
       "to_front": "An den Anfang",
@@ -5738,6 +5751,7 @@
         "nothing_to_do": "Nichts zu ändern",
         "shared": "Geteilte Datei",
         "stale": "Datei geändert",
+        "unsupported": "Nicht unterstützte Spur",
         "verify": "Überprüfung fehlgeschlagen"
       }
     },

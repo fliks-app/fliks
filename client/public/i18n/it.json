@@ -1591,6 +1591,10 @@
       "failed": "Fallito",
       "removed": "Rimossa"
     },
+    "failed_reason_title": "Perché questa richiesta non è riuscita",
+    "failed_reason": {
+      "provider-removed": "Il provider di metadati di questa richiesta è stato rimosso, quindi il titolo non può più essere aggiunto."
+    },
     "approve_album": "Approva l'intero album",
     "tracks_of_one": "{{count}} traccia su {{total}}",
     "tracks_of_other": "{{count}} tracce su {{total}}",
@@ -1676,6 +1680,13 @@
   },
   "system": {
     "title": "Sistema",
+    "command_status": {
+      "queued": "In coda",
+      "running": "In corso",
+      "completed": "Completata",
+      "failed": "Non riuscita"
+    },
+    "command_interrupted": "Interrotta da un riavvio del server",
     "subtitle": "Comandi manuali e cronologia delle attività.",
     "tab_status": "Stato",
     "tab_backups": "Backup",
@@ -5678,6 +5689,8 @@
       "running_empty": "Niente in corso.",
       "waiting": "In attesa, in ordine di esecuzione",
       "waiting_empty": "Nessun lavoro in attesa.",
+      "failures_badge_one": "{{count}} errore",
+      "failures_badge_other": "{{count}} errori",
       "selected_one": "{{count}} selezionato",
       "selected_other": "{{count}} selezionati",
       "to_front": "Porta in testa",
@@ -5738,6 +5751,7 @@
         "nothing_to_do": "Niente da modificare",
         "shared": "File condiviso",
         "stale": "File modificato",
+        "unsupported": "Traccia non supportata",
         "verify": "Verifica non riuscita"
       }
     },

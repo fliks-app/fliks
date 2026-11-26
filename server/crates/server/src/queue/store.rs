@@ -364,7 +364,8 @@ pub fn next_after(class: JobErrorClass, failures: i32) -> Next {
         | JobErrorClass::Io
         | JobErrorClass::Corrupt
         | JobErrorClass::Damaged
-        | JobErrorClass::Verify => Next::Fail,
+        | JobErrorClass::Verify
+        | JobErrorClass::Unsupported => Next::Fail,
         JobErrorClass::Stale => Next::Skip,
         JobErrorClass::Nospace => Next::Retry { delay_s: 900 },
         JobErrorClass::Busy => Next::Retry { delay_s: 300 },
@@ -595,6 +596,7 @@ mod tests {
     fn errors_are_routed_by_class() {
         use JobErrorClass::*;
         assert_eq!(next_after(Corrupt, 0), Next::Fail);
+        assert_eq!(next_after(Unsupported, 0), Next::Fail);
         assert_eq!(next_after(Stale, 0), Next::Skip);
         assert_eq!(next_after(Busy, 2), Next::Retry { delay_s: 300 });
         assert_eq!(next_after(Engine, 0), Next::Retry { delay_s: 60 });

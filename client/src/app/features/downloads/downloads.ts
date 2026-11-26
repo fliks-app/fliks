@@ -1,3 +1,4 @@
+import { ErrorBadgeComponent } from '../../shared/components/error-badge';
 import { Component, signal, computed, inject, effect } from '@angular/core';
 import { Router } from '@angular/router';
 import { NgTemplateOutlet } from '@angular/common';
@@ -29,6 +30,7 @@ const openGroupKeys = signal<ReadonlySet<string>>(new Set());
 @Component({
   selector: 'app-downloads',
   imports: [
+    ErrorBadgeComponent,
     NgTemplateOutlet,
     RouterLink,
     CachedSrcDirective,

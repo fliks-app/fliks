@@ -272,7 +272,19 @@
                     />
                   </td>
                   <td class="tabular-nums">{{ i + 1 }}</td>
-                  <td class="max-w-xs truncate">{{ j.title ?? j.inPath }}</td>
+                  <td class="max-w-xs">
+                    <div class="flex items-center gap-1">
+                      <span class="truncate">{{ j.title ?? j.inPath }}</span>
+                      @if (j.failures > 0 && errorDetails(j); as details) {
+                        <app-error-badge
+                          class="shrink-0"
+                          badgeClass="badge-warning"
+                          [error]="details"
+                          [label]="'optimize.queue.failures_badge' | translatePlural: j.failures"
+                        />
+                      }
+                    </div>
+                  </td>
                   <td>
                     @if (j.level) {
                       {{ 'optimize.queue.level.' + j.level | translate }}
