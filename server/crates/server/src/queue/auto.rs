@@ -21,7 +21,7 @@ pub async fn queue_verify(st: &AppState, ids: &[i32], priority: i32) -> sqlx::Re
                 let payload = json!(VerifyPayload {
                     info: l.info.clone()
                 });
-                enqueue::insert_job(st, "verify", &l, payload, "verify", priority, 0).await?
+                enqueue::insert_job(st, "verify", &l, payload, None, "verify", priority, 0).await?
             }
             Err(o) => enqueue::done(id, o),
         });

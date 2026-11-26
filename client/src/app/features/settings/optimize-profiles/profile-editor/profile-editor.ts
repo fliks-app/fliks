@@ -10,15 +10,15 @@ import { MediaService, type MediaFileInfo } from '../../../../core/services/api/
 import { ProfilesService } from '../../../../core/services/api/profiles.service';
 import { ToastService } from '../../../../core/services/toast.service';
 import {
-  Change,
-  TrackKind,
   FileOutcome,
   FormatChoice,
   PresetKey,
   ProfileDocument,
-  Warning,
   applyFormatChoice,
   formatChoice,
+  groupedChanges,
+  trackOrdinal,
+  warningLine,
 } from '../../../../core/models/optimize';
 import { ToggleFieldComponent } from '../../../../shared/components/forms/toggle-field/toggle-field';
 import { SelectFieldComponent } from '../../../../shared/components/forms/select-field/select-field';
@@ -31,74 +31,11 @@ import {
 
 const FORMATS: FormatChoice[] = ['most_compact', 'playable_everywhere', 'hevc', 'av1'];
 const VIDEO_CODECS = ['h264', 'hevc', 'av1', 'vc1', 'mpeg2', 'mpeg4'];
-const GROUPS = ['video', 'audio', 'subtitles', 'file'] as const;
-type Group = (typeof GROUPS)[number];
-
-interface Line {
-  group: Group;
-  key: string;
-  params: Record<string, unknown>;
-}
 
 interface SampleOption {
   fileId: number;
   title: string;
   info: MediaFileInfo | null;
-}
-
-/** Position of an ffprobe stream among the tracks of its kind, counted from 1 (the absolute index counts the video too). */
-type Ordinal = (kind: TrackKind, streamIndex: number) => number | string;
-
-function lineOf(c: Change, track: Ordinal): Line {
-  const k = (t: string) => `settings.optimize.change.${t}`;
-  switch (c.type) {
-    case 'reencode':
-      return {
-        group: 'video',
-        key: k(c.cropOnly ? 'reencode_crop' : 'reencode'),
-        params: { codec: c.codec.toUpperCase(), depth: c.bitDepth, height: c.maxHeight ?? '' },
-      };
-    case 'drop':
-      return {
-        group: c.kind === 'audio' ? 'audio' : 'subtitles',
-        key: k(`drop_${c.reason}`),
-        params: { n: track(c.kind, c.streamIndex), language: c.language ?? '?' },
-      };
-    case 'ocr':
-      return { group: 'subtitles', key: k('ocr'), params: { n: track('subtitle', c.streamIndex) } };
-    case 'addAudio':
-      return { group: 'audio', key: k('add_audio'), params: { n: track('audio', c.sourceStream) } };
-    case 'reorder':
-      return { group: c.kind === 'audio' ? 'audio' : 'subtitles', key: k('reorder'), params: {} };
-    case 'default':
-      return { group: 'audio', key: k('default'), params: { n: track('audio', c.streamIndex) } };
-    case 'language':
-      return {
-        group: c.kind === 'audio' ? 'audio' : 'subtitles',
-        key: k('language'),
-        params: { n: track(c.kind, c.streamIndex), code: c.code },
-      };
-    case 'flags':
-      return {
-        group: c.kind === 'audio' ? 'audio' : 'subtitles',
-        key: k('flags'),
-        params: { n: track(c.kind, c.streamIndex) },
-      };
-    case 'title':
-      return {
-        group: c.kind === 'audio' ? 'audio' : 'subtitles',
-        key: k('title'),
-        params: { n: track(c.kind, c.streamIndex) },
-      };
-    case 'statisticsTags':
-      return { group: 'file', key: k('statistics_tags'), params: {} };
-    case 'hvc1':
-      return { group: 'file', key: k('hvc1'), params: {} };
-    case 'container':
-      return { group: 'file', key: k('container'), params: { to: c.to.toUpperCase() } };
-    case 'rename':
-      return { group: 'file', key: k('rename'), params: {} };
-  }
 }
 
 @Component({
@@ -163,19 +100,11 @@ export class OptimizeProfileEditorComponent implements OnInit {
   readonly lines = computed(() => {
     const o = this.outcome();
     const info = this.sampleFiles().find((f) => f.fileId === this.sampleFileId())?.info;
-    const track: Ordinal = (kind, streamIndex) => {
-      const list = kind === 'audio' ? info?.audio : info?.subtitles;
-      const pos = list?.findIndex((t) => t.streamIndex === streamIndex) ?? -1;
-      return pos >= 0 ? pos + 1 : '?';
-    };
-    const all = o?.status === 'diff' ? o.changes.map((c) => lineOf(c, track)) : [];
-    return GROUPS.map((g) => ({ group: g, items: all.filter((l) => l.group === g) })).filter(
-      (g) => g.items.length > 0,
-    );
+    return o?.status === 'diff' ? groupedChanges(o.changes, trackOrdinal(info)) : [];
   });
-  readonly warnings = computed<Warning[]>(() => {
+  readonly warnings = computed(() => {
     const o = this.outcome();
-    return o && (o.status === 'diff' || o.status === 'conform') ? o.warnings : [];
+    return o && (o.status === 'diff' || o.status === 'conform') ? o.warnings.map(warningLine) : [];
   });
   /** A track removal is final once the trash is purged. */
   readonly removesTracks = computed(() => {

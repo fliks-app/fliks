@@ -245,15 +245,7 @@
                 }
               }
               @for (w of warnings(); track $index) {
-                <div role="alert" class="alert alert-warning text-sm">
-                  @switch (w.type) {
-                    @case ('noAudioWouldRemain') { {{ 'settings.optimize.warning.no_audio' | translate }} }
-                    @case ('noLanguageMatch') { {{ 'settings.optimize.warning.no_language_match' | translate }} }
-                    @case ('profileSubtitleKept') { {{ 'settings.optimize.warning.profile_subtitle' | translate: { language: w.language } }} }
-                    @case ('losslessReplaced') { {{ 'settings.optimize.warning.lossless' | translate: { n: w.streamIndex + 1 } }} }
-                    @case ('videoCopied') { {{ 'settings.optimize.warning.video_copied.' + w.reason | translate }} }
-                  }
-                </div>
+                <div role="alert" class="alert alert-warning text-sm">{{ w.key | translate: w.params }}</div>
               }
               @if (removesTracks()) {
                 <div role="alert" class="alert alert-warning text-sm">{{ 'settings.optimize.warn.irreversible' | translate }}</div>

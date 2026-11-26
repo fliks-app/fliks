@@ -1,5 +1,7 @@
 /** Library optimization: wire types of `server/crates/server/src/optimize` (profile document, preview, difference). */
 
+import type { MediaFileInfo } from '../services/api/media.service';
+
 export type CodecChoice = 'auto' | 'hevc' | 'av1';
 export type Goal = 'space' | 'compatibility';
 export type Quality = 'small' | 'balanced' | 'faithful';
@@ -159,6 +161,96 @@ export type FileOutcome =
   | { status: 'conform'; warnings: Warning[] }
   | { status: 'diff'; level: OptimizeLevel; changes: Change[]; warnings: Warning[] };
 
+export const CHANGE_GROUPS = ['video', 'audio', 'subtitles', 'file'] as const;
+export type ChangeGroup = (typeof CHANGE_GROUPS)[number];
+
+/** A translation key and its params. */
+export interface ChangeLine {
+  group: ChangeGroup;
+  key: string;
+  params: Record<string, unknown>;
+}
+
+/** Position of an ffprobe stream among the tracks of its kind, counted from 1 (the absolute index counts the video too). */
+export type Ordinal = (kind: TrackKind, streamIndex: number) => number | string;
+
+export function trackOrdinal(info: MediaFileInfo | null | undefined): Ordinal {
+  return (kind, streamIndex) => {
+    const list = kind === 'audio' ? info?.audio : info?.subtitles;
+    const pos = list?.findIndex((t) => t.streamIndex === streamIndex) ?? -1;
+    return pos >= 0 ? pos + 1 : '?';
+  };
+}
+
+export function changeLine(c: Change, track: Ordinal): ChangeLine {
+  const k = (t: string) => `settings.optimize.change.${t}`;
+  const of = (kind: TrackKind): ChangeGroup => (kind === 'audio' ? 'audio' : 'subtitles');
+  switch (c.type) {
+    case 'reencode':
+      return {
+        group: 'video',
+        key: k(c.cropOnly ? 'reencode_crop' : 'reencode'),
+        params: { codec: c.codec.toUpperCase(), depth: c.bitDepth, height: c.maxHeight ?? '' },
+      };
+    case 'drop':
+      return {
+        group: of(c.kind),
+        key: k(`drop_${c.reason}`),
+        params: { n: track(c.kind, c.streamIndex), language: c.language ?? '?' },
+      };
+    case 'ocr':
+      return { group: 'subtitles', key: k('ocr'), params: { n: track('subtitle', c.streamIndex) } };
+    case 'addAudio':
+      return { group: 'audio', key: k('add_audio'), params: { n: track('audio', c.sourceStream) } };
+    case 'reorder':
+      return { group: of(c.kind), key: k('reorder'), params: {} };
+    case 'default':
+      return { group: 'audio', key: k('default'), params: { n: track('audio', c.streamIndex) } };
+    case 'language':
+      return {
+        group: of(c.kind),
+        key: k('language'),
+        params: { n: track(c.kind, c.streamIndex), code: c.code },
+      };
+    case 'flags':
+      return { group: of(c.kind), key: k('flags'), params: { n: track(c.kind, c.streamIndex) } };
+    case 'title':
+      return { group: of(c.kind), key: k('title'), params: { n: track(c.kind, c.streamIndex) } };
+    case 'statisticsTags':
+      return { group: 'file', key: k('statistics_tags'), params: {} };
+    case 'hvc1':
+      return { group: 'file', key: k('hvc1'), params: {} };
+    case 'container':
+      return { group: 'file', key: k('container'), params: { to: c.to.toUpperCase() } };
+    case 'rename':
+      return { group: 'file', key: k('rename'), params: {} };
+  }
+}
+
+/** The changes sorted into their groups, empty groups left out. */
+export function groupedChanges(changes: Change[], track: Ordinal) {
+  const all = changes.map((c) => changeLine(c, track));
+  return CHANGE_GROUPS.map((g) => ({ group: g, items: all.filter((l) => l.group === g) })).filter(
+    (g) => g.items.length > 0,
+  );
+}
+
+export function warningLine(w: Warning): { key: string; params: Record<string, unknown> } {
+  const k = (t: string) => `settings.optimize.warning.${t}`;
+  switch (w.type) {
+    case 'noAudioWouldRemain':
+      return { key: k('no_audio'), params: {} };
+    case 'noLanguageMatch':
+      return { key: k('no_language_match'), params: {} };
+    case 'profileSubtitleKept':
+      return { key: k('profile_subtitle'), params: { language: w.language } };
+    case 'losslessReplaced':
+      return { key: k('lossless'), params: { n: w.streamIndex + 1 } };
+    case 'videoCopied':
+      return { key: k(`video_copied.${w.reason}`), params: {} };
+  }
+}
+
 export type OriginalPolicy = 'trash' | 'keep' | 'delete';
 
 /** `GET/PUT /api/optimize/settings`; `window` minutes are since local midnight. */
@@ -235,6 +327,23 @@ export interface OptimizeJob {
   durationSeconds: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** `GET /api/optimize/jobs/{id}`: what the job does to its file. */
+export interface OptimizeJobDetail {
+  /** Null on a job queued before the diff was kept. */
+  diff: { changes: Change[]; warnings: Warning[] } | null;
+  /** Probe at queueing. */
+  source: (MediaFileInfo & { formatName?: string }) | null;
+  /** Probe of the output, once encoded. */
+  output: (MediaFileInfo & { formatName?: string }) | null;
+  /** A planned re-encode whose video was copied reports `remux`. */
+  doneLevel: OptimizeLevel | null;
+  copyReason: string | null;
+  cpuFallback: boolean;
+  startedAt: string | null;
+  encodedAt: string | null;
+  finishedAt: string | null;
 }
 
 export interface WorkerDevice {

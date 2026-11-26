@@ -3521,6 +3521,18 @@
         }
       }
     },
+    "/api/optimize/jobs/{id}": {
+      "get": {
+        "tags": [
+          "crate::queue::api"
+        ],
+        "operationId": "job_detail",
+        "responses": {
+          "200": {},
+          "404": {}
+        }
+      }
+    },
     "/api/optimize/jobs/{id}/cancel": {
       "post": {
         "tags": [

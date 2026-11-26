@@ -5713,7 +5713,9 @@
         "error": "Fehler",
         "codec": "Codec",
         "saved": "Eingespart",
-        "actions": "Aktionen"
+        "actions": "Aktionen",
+        "before": "Vorher",
+        "after": "Nachher"
       },
       "job": {
         "encoding": "Kodierung",
@@ -5759,6 +5761,30 @@
         "stale": "Datei geändert",
         "unsupported": "Nicht unterstützte Spur",
         "verify": "Überprüfung fehlgeschlagen"
+      },
+      "details": "Details",
+      "info": {
+        "done_as": "ausgeführt als {{level}}",
+        "queued_at": "Eingereiht",
+        "started_at": "Gestartet",
+        "encode_time": "Kodierdauer",
+        "finished_at": "Beendet",
+        "size": "Größe",
+        "saved": "{{size}} gespart, {{pct}} %",
+        "grew": "{{size}} größer, {{pct}} %",
+        "cpu_fallback": "Auf der CPU kodiert: der Hardware-Encoder ist bei der Kodierung oder der Prüfung gescheitert.",
+        "changes": "Änderungen",
+        "load_failed": "Die Details dieses Auftrags konnten nicht geladen werden.",
+        "no_diff": "Die Liste der Änderungen wurde für diesen Auftrag nicht gespeichert.",
+        "tracks": "Vorher und nachher",
+        "before": "Vorher",
+        "after": "Nachher",
+        "container": "Container",
+        "copy_reason": {
+          "unsupported_source": "Das Video wurde kopiert: der Encoder kann seine Quelle nicht lesen.",
+          "low_savings": "Das Video wurde kopiert: die Neukodierung hätte zu wenig Platz gespart.",
+          "too_slow": "Das Video wurde kopiert: die Neukodierung hätte zu lange gedauert."
+        }
       }
     },
     "action": {

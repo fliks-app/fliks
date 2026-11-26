@@ -5713,7 +5713,9 @@
         "error": "Erro",
         "codec": "Codec",
         "saved": "Poupado",
-        "actions": "Ações"
+        "actions": "Ações",
+        "before": "Antes",
+        "after": "Depois"
       },
       "job": {
         "encoding": "A codificar",
@@ -5759,6 +5761,30 @@
         "stale": "Ficheiro alterado",
         "unsupported": "Faixa não suportada",
         "verify": "Verificação falhou"
+      },
+      "details": "Detalhes",
+      "info": {
+        "done_as": "feito como {{level}}",
+        "queued_at": "Na fila",
+        "started_at": "Iniciado",
+        "encode_time": "Tempo de codificação",
+        "finished_at": "Concluído",
+        "size": "Tamanho",
+        "saved": "{{size}} poupados, {{pct}}%",
+        "grew": "{{size}} a mais, {{pct}}%",
+        "cpu_fallback": "Codificado na CPU: o codificador de hardware falhou na codificação ou na verificação.",
+        "changes": "Alterações",
+        "load_failed": "Não foi possível carregar os detalhes deste trabalho.",
+        "no_diff": "A lista de alterações não foi guardada para este trabalho.",
+        "tracks": "Antes e depois",
+        "before": "Antes",
+        "after": "Depois",
+        "container": "Contentor",
+        "copy_reason": {
+          "unsupported_source": "O vídeo foi copiado: o codificador não consegue ler a origem.",
+          "low_savings": "O vídeo foi copiado: recodificar poupava muito pouco espaço.",
+          "too_slow": "O vídeo foi copiado: recodificar demoraria demasiado."
+        }
       }
     },
     "action": {

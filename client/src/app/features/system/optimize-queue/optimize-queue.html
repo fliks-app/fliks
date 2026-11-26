@@ -189,7 +189,14 @@
                       }}</span>
                     </div>
                   </td>
-                  <td class="text-right">
+                  <td class="text-right whitespace-nowrap">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      (click)="info.set(j)"
+                    >
+                      {{ 'optimize.queue.details' | translate }}
+                    </button>
                     @if (j.state !== 'committing') {
                       <button
                         type="button"
@@ -257,6 +264,7 @@
                 <th>{{ 'optimize.queue.col.level' | translate }}</th>
                 <th>{{ 'optimize.queue.col.size' | translate }}</th>
                 <th>{{ 'optimize.queue.col.duration' | translate }}</th>
+                <th><span class="sr-only">{{ 'optimize.queue.col.actions' | translate }}</span></th>
               </tr>
             </thead>
             <tbody>
@@ -294,6 +302,15 @@
                   </td>
                   <td>{{ j.inSize != null ? formatBytes(j.inSize) : '-' }}</td>
                   <td>{{ j.durationSeconds != null ? eta(j.durationSeconds) : '-' }}</td>
+                  <td class="text-right">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      (click)="info.set(j)"
+                    >
+                      {{ 'optimize.queue.details' | translate }}
+                    </button>
+                  </td>
                 </tr>
               }
             </tbody>
@@ -358,6 +375,8 @@
               <th>{{ 'optimize.queue.col.level' | translate }}</th>
               <th>{{ 'optimize.queue.col.codec' | translate }}</th>
               <th>{{ 'optimize.queue.col.device' | translate }}</th>
+              <th>{{ 'optimize.queue.col.before' | translate }}</th>
+              <th>{{ 'optimize.queue.col.after' | translate }}</th>
               <th>{{ 'optimize.queue.col.saved' | translate }}</th>
               <th><span class="sr-only">{{ 'optimize.queue.col.actions' | translate }}</span></th>
             </tr>
@@ -375,14 +394,23 @@
                 </td>
                 <td>{{ j.codec?.toUpperCase() ?? '-' }}</td>
                 <td>{{ j.deviceId ?? '-' }}</td>
-                <td>
+                <td class="tabular-nums">{{ j.inSize != null ? formatBytes(j.inSize) : '-' }}</td>
+                <td class="tabular-nums">{{ j.outSize != null ? formatBytes(j.outSize) : '-' }}</td>
+                <td class="tabular-nums">
                   @if (savedBytes(j); as saved) {
                     {{ formatBytes(saved) }}
                   } @else {
                     -
                   }
                 </td>
-                <td class="text-right">
+                <td class="text-right whitespace-nowrap">
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs"
+                    (click)="info.set(j)"
+                  >
+                    {{ 'optimize.queue.details' | translate }}
+                  </button>
                   @if (j.restorable) {
                     <button
                       type="button"
@@ -402,3 +430,15 @@
     }
   }
 </div>
+
+<dialog
+  appModal
+  boxClass="w-11/12 max-w-3xl"
+  aria-labelledby="optimize-job-info-title"
+  [shown]="info() !== null"
+  (close)="info.set(null)"
+>
+  @if (info(); as j) {
+    <app-optimize-job-info [job]="j" />
+  }
+</dialog>

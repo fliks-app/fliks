@@ -5713,7 +5713,9 @@
         "error": "Erreur",
         "codec": "Codec",
         "saved": "Gagné",
-        "actions": "Actions"
+        "actions": "Actions",
+        "before": "Avant",
+        "after": "Après"
       },
       "job": {
         "encoding": "Encodage",
@@ -5759,6 +5761,30 @@
         "stale": "Fichier modifié",
         "unsupported": "Piste non prise en charge",
         "verify": "Vérification échouée"
+      },
+      "details": "Détails",
+      "info": {
+        "done_as": "fait en {{level}}",
+        "queued_at": "Mis en file",
+        "started_at": "Démarré",
+        "encode_time": "Durée d'encodage",
+        "finished_at": "Terminé",
+        "size": "Taille",
+        "saved": "{{size}} gagnés, {{pct}} %",
+        "grew": "{{size}} de plus, {{pct}} %",
+        "cpu_fallback": "Encodé sur le CPU : l'encodeur matériel a échoué à l'encodage ou à la vérification.",
+        "changes": "Modifications",
+        "load_failed": "Le détail de ce travail n'a pas pu être chargé.",
+        "no_diff": "La liste des modifications n'a pas été enregistrée pour ce travail.",
+        "tracks": "Avant et après",
+        "before": "Avant",
+        "after": "Après",
+        "container": "Conteneur",
+        "copy_reason": {
+          "unsupported_source": "La vidéo a été copiée : l'encodeur ne sait pas lire sa source.",
+          "low_savings": "La vidéo a été copiée : le réencodage gagnait trop peu de place.",
+          "too_slow": "La vidéo a été copiée : le réencodage aurait pris trop de temps."
+        }
       }
     },
     "action": {

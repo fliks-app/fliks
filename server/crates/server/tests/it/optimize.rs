@@ -311,6 +311,11 @@ async fn job_routes_follow_library_access(pool: PgPool) {
         .await;
         assert_eq!(s, 404, "{op}");
     }
+    let (s, _) = call(&c, "GET", &format!("/api/optimize/jobs/{job}"), Value::Null).await;
+    assert_eq!(s, 404);
+    let own = jobs[0]["id"].as_i64().unwrap();
+    let (s, d) = call(&c, "GET", &format!("/api/optimize/jobs/{own}"), Value::Null).await;
+    assert_eq!((s, d["output"].is_null()), (200, true));
     let (_, r) = call(
         &c,
         "POST",

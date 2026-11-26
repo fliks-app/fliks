@@ -5713,7 +5713,9 @@
         "error": "Errore",
         "codec": "Codec",
         "saved": "Risparmiato",
-        "actions": "Azioni"
+        "actions": "Azioni",
+        "before": "Prima",
+        "after": "Dopo"
       },
       "job": {
         "encoding": "Codifica",
@@ -5759,6 +5761,30 @@
         "stale": "File modificato",
         "unsupported": "Traccia non supportata",
         "verify": "Verifica non riuscita"
+      },
+      "details": "Dettagli",
+      "info": {
+        "done_as": "eseguito come {{level}}",
+        "queued_at": "In coda",
+        "started_at": "Avviato",
+        "encode_time": "Durata della codifica",
+        "finished_at": "Terminato",
+        "size": "Dimensione",
+        "saved": "{{size}} risparmiati, {{pct}}%",
+        "grew": "{{size}} in più, {{pct}}%",
+        "cpu_fallback": "Codificato sulla CPU: l'encoder hardware ha fallito la codifica o la verifica.",
+        "changes": "Modifiche",
+        "load_failed": "Impossibile caricare i dettagli di questo lavoro.",
+        "no_diff": "L'elenco delle modifiche non è stato salvato per questo lavoro.",
+        "tracks": "Prima e dopo",
+        "before": "Prima",
+        "after": "Dopo",
+        "container": "Contenitore",
+        "copy_reason": {
+          "unsupported_source": "Il video è stato copiato: l'encoder non sa leggere la sorgente.",
+          "low_savings": "Il video è stato copiato: la ricodifica risparmiava troppo poco spazio.",
+          "too_slow": "Il video è stato copiato: la ricodifica avrebbe richiesto troppo tempo."
+        }
       }
     },
     "action": {
