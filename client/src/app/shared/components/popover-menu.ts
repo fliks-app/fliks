@@ -15,6 +15,7 @@ import { BottomSheetComponent } from './bottom-sheet';
 import { TvService } from '../../core/services/tv.service';
 import { DeviceService } from '../../core/services/device.service';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
+import { onParked } from '../../core/services/keep-route-fresh';
 import {
   focusOverlayEntry,
   initialOverlayFocus,
@@ -69,6 +70,12 @@ export class PopoverMenuComponent {
     // The host is relocated on open, so Angular won't remove it on destroy; detach it or a mid-close sheet orphans its blocking backdrop.
     inject(DestroyRef).onDestroy(() => {
       if (this.reparented) this.host.nativeElement.remove();
+    });
+    // Cached with its page: a relocated host sits outside the detached DOM and would stay on screen.
+    onParked(() => {
+      if (!this.open()) return;
+      if (this.reparented) this.host.nativeElement.remove();
+      this.close();
     });
 
     // Programmatic focus: autofocus is unreliable on Capacitor's Android WebView for dynamically added content.

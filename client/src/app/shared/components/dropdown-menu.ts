@@ -15,6 +15,7 @@ import { BottomSheetComponent } from './bottom-sheet';
 import { DropdownToggleDirective } from '../directives/dropdown-toggle.directive';
 import { DeviceService } from '../../core/services/device.service';
 import { TvService } from '../../core/services/tv.service';
+import { onParked } from '../../core/services/keep-route-fresh';
 
 type Placement = 'bottom-end' | 'bottom-start' | 'top-end' | 'top-start';
 
@@ -44,10 +45,13 @@ export class DropdownMenuComponent {
   private wasOpen = false;
   /** The sheet host once it's been moved under <html> (see below). */
   private reparentedSheet: HTMLElement | null = null;
+  /** Bumped when the tree is cached, so the sheet goes back under <html> on return. */
+  private readonly parks = signal(0);
 
   constructor() {
     if (typeof document === 'undefined') return;
     effect(() => {
+      this.parks();
       const ref = this.sheet();
       if (!ref || this.useDropdown()) return;
       queueMicrotask(() => {
@@ -57,6 +61,13 @@ export class DropdownMenuComponent {
     });
     // The reparented sheet is outside Angular's DOM ownership; detach it so a mid-close teardown doesn't orphan its click-blocking backdrop.
     inject(DestroyRef).onDestroy(() => this.reparentedSheet?.remove());
+    // Cached with its page: the sheet sits outside the detached DOM and would stay on screen.
+    onParked(() => {
+      this.open.set(false);
+      this.reparentedSheet?.remove();
+      this.reparentedSheet = null;
+      this.parks.update((n) => n + 1);
+    });
     // The sheet branch skips DropdownToggleDirective, so refocus the trigger on close for parity with the dropdown.
     effect(() => {
       const open = this.open();

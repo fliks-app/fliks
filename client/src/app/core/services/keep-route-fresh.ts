@@ -65,3 +65,13 @@ export function keepRouteFresh(
 
   return detached.asReadonly();
 }
+
+/** Runs `cb` when the cached route holding the caller, or one of its ancestors, is detached: nothing renders it until it comes back. */
+export function onParked(cb: () => void): void {
+  const reuse = inject(CachingReuseStrategy);
+  const route = inject(ActivatedRoute, { optional: true });
+  if (!route) return;
+  reuse.detached$.pipe(takeUntilDestroyed()).subscribe((key) => {
+    if (route.snapshot.pathFromRoot.some((s) => reuse.keyFor(s) === key)) cb();
+  });
+}

@@ -39,6 +39,7 @@ import { DownloadManagerService } from '../../core/services/download-manager.ser
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { NetworkService } from '../../core/services/network.service';
 import { PageScrollerService } from '../../core/services/page-scroller.service';
+import { keepRouteFresh } from '../../core/services/keep-route-fresh';
 import { CardActionsPanelComponent } from '../components/card-actions-panel/card-actions-panel';
 import { UserMenuComponent } from '../components/user-menu';
 import { CastOverlayComponent } from '../cast-overlay/cast-overlay';
@@ -133,7 +134,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   protected readonly reportProblem = inject(ReportProblemService);
   protected readonly addToPlaylistSvc = inject(AddToPlaylistService);
   private readonly addToPlaylistModal = viewChild<AddToPlaylistModalComponent>('addToPlaylistModal');
-  // Bridge global "add to playlist" requests to the modal in this layout; consumed once so a rebuilt shell (player is outside it) doesn't reopen it.
+  // Bridge global "add to playlist" requests to the modal in this layout; consumed once so a rebuilt shell doesn't reopen it.
   private readonly addToPlaylistBridge = effect(() => {
     const req = this.addToPlaylistSvc.request();
     const modal = this.addToPlaylistModal();
@@ -187,6 +188,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   /** Bumps when language changes so the document title effect re-reads `app.name`. */
   private readonly langTick = signal(0);
   readonly canGoBack = this.navbar.canGoBack;
@@ -232,27 +234,52 @@ export class LayoutComponent implements OnInit, OnDestroy {
   });
 
   /** On the root so the toasts and other top-level overlays outside the layout clear the same chrome. */
-  private readonly chromeVars = (() => {
+  private readonly chromeVars = {
+    '--chrome-top': this.chromeTop,
+    '--dock-h': this.dockHeight,
+    '--chrome-bottom': this.chromeBottom,
+    '--chrome-bottom-total': this.chromeBottomTotal,
+  };
+  private setChromeVars(): void {
     const root = document.documentElement.style;
-    const vars = {
-      '--chrome-top': this.chromeTop,
-      '--dock-h': this.dockHeight,
-      '--chrome-bottom': this.chromeBottom,
-      '--chrome-bottom-total': this.chromeBottomTotal,
-    };
-    inject(DestroyRef).onDestroy(() => Object.keys(vars).forEach((k) => root.removeProperty(k)));
-    return effect(() => Object.entries(vars).forEach(([k, v]) => root.setProperty(k, v())));
-  })();
+    Object.entries(this.chromeVars).forEach(([k, v]) => root.setProperty(k, v()));
+  }
+  private clearChromeVars(): void {
+    const root = document.documentElement.style;
+    Object.keys(this.chromeVars).forEach((k) => root.removeProperty(k));
+  }
+  private readonly chromeVarsEffect = effect(() => this.setChromeVars());
+
+  private readonly outlet = viewChild.required(RouterOutlet);
+  /** Cached while a route outside the shell (player, reader, settings) is up: hand back what it holds on the document meanwhile. */
+  private readonly parked = keepRouteFresh({
+    // Admin pages outside the shell change libraries and badges with no SSE event.
+    refresh: () => void this.refreshCounts(),
+    // A resume reconnects SSE, which already refetches the counts.
+    refreshOnResume: () => undefined,
+    onDetach: () => {
+      this.clearChromeVars();
+      this.navbar.showPage(null);
+      this.stopScrollWork();
+    },
+    onAttach: () => {
+      this.setChromeVars();
+      this.navbar.showPage(this.outlet().isActivated ? this.outlet().component : null);
+    },
+  });
 
   // Android status bar icons: the app is dark-only, so light=false always.
   private readonly statusBarEffect = Capacitor.isNativePlatform() ? effect(() => {
     // Read the signal so the effect re-runs when transparency flips, in case
     // future code wants to react to it.
     void this.navbarTransparent();
+    if (this.parked()) return;
     Immersive.setLightStatusBar({ light: false }).catch(() => {});
   }) : null;
 
   private readonly documentTitleEffect = effect(() => {
+    // Read so a return from the player, which set its own title, writes ours back.
+    if (this.parked()) return;
     this.langTick();
     const main = this.navbar.mobileNavTitle();
     if (!main) return;
@@ -336,10 +363,13 @@ export class LayoutComponent implements OnInit, OnDestroy {
   // import.complete / import.failed reach only the requester, so library counts ride the broadcast queue.updated after each import.
   private readonly sseCounts = merge(this.sse.on('queue.updated', 'stalled.removed'), requestActivity(this.sse))
     .pipe(takeUntilDestroyed(this.destroyRef))
-    .subscribe(() => this.debouncedRefreshSidebarCounts());
+    .subscribe(() => {
+      if (!this.parked()) this.debouncedRefreshSidebarCounts();
+    });
 
   /** The SSE channel isn't per-user: a foreign request would 403 on approve. */
   private onPairingEvent(event: SseEvent): void {
+    if (this.parked()) return;
     if (event['userId'] !== this.auth.user()?.id) return;
     if (event.type === 'pairing.requested') {
       this.promptPairing(event);
@@ -421,6 +451,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.router.events
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(e => {
+        // Parked under the player or settings; `parked()` still holds on the return's NavigationEnd.
+        if (!this.host.nativeElement.isConnected) return;
         if (e instanceof Scroll) this.endScrollRestore();
         if (e instanceof NavigationEnd) {
           this.beginScrollRestore();
@@ -481,12 +513,18 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.clearChromeVars();
     this.navbar.showPage(null);
-    if (this.scrollRaf !== null) cancelAnimationFrame(this.scrollRaf);
+    this.stopScrollWork();
     if (this.isNative) {
       Keyboard.removeAllListeners();
     }
     if (this.sidebarCountsDebounceTimer) clearTimeout(this.sidebarCountsDebounceTimer);
+  }
+
+  private stopScrollWork(): void {
+    if (this.scrollRaf !== null) cancelAnimationFrame(this.scrollRaf);
+    this.scrollRaf = null;
     clearTimeout(this.restoreFallback);
   }
 
