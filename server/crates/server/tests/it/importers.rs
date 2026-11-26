@@ -881,6 +881,16 @@ async fn seerr_import_without_configuration_fails_through_the_event(pool: PgPool
     .await;
     assert_eq!(s, 201);
     assert_eq!(wait_command(&c, "ImportSeerrRequests").await, "failed");
+    let error: Option<String> = sqlx::query_scalar(
+        "SELECT body->>'error' FROM commands WHERE name = 'ImportSeerrRequests' ORDER BY id DESC LIMIT 1",
+    )
+    .fetch_one(&c.pool)
+    .await
+    .unwrap();
+    assert!(
+        error.is_some_and(|e| !e.is_empty()),
+        "the failure reason is stored"
+    );
 }
 
 #[sqlx::test(migrations = false)]
