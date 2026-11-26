@@ -176,4 +176,18 @@ describe('CachingReuseStrategy', () => {
     expect(handle.destroy).not.toHaveBeenCalled();
     expect(strategy.shouldAttach(snapshot)).toBe(true);
   });
+
+  it('caches a page only when every shell above it is cached too', () => {
+    const strategy = setup();
+    const page: Route = { path: 'plugins', data: { reuse: true } };
+    const shell = (reuse: boolean) =>
+      ({ routeConfig: { path: 's', data: { reuse } }, component: class {}, parent: null }) as unknown as ActivatedRouteSnapshot;
+    const under = (parent: ActivatedRouteSnapshot) =>
+      ({ routeConfig: page, params: {}, parent }) as unknown as ActivatedRouteSnapshot;
+
+    expect(strategy.shouldDetach(under(shell(true)))).toBe(true);
+    expect(strategy.shouldDetach(under(shell(false)))).toBe(false);
+    const grouping = { routeConfig: { path: 'g' }, component: null, parent: shell(true) } as unknown as ActivatedRouteSnapshot;
+    expect(strategy.shouldDetach(under(grouping))).toBe(true);
+  });
 });

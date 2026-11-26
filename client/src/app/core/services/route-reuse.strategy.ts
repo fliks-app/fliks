@@ -35,7 +35,7 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
   private nextRouteId = 0;
 
   private readonly injector = inject(Injector);
-  private readonly maxSize = cacheSize(inject(DeviceService));
+  private readonly device = inject(DeviceService);
 
   private readonly attachedSubject = new Subject<string>();
   /** The router calls `retrieve` twice per activation; one attach is announced once. */
@@ -88,8 +88,13 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
     return id;
   }
 
+  /** A page lives in its parent's outlet: under a shell that isn't cached itself, it would come back into a destroyed one. */
   shouldDetach(route: ActivatedRouteSnapshot): boolean {
-    return !!route.routeConfig?.data?.['reuse'];
+    if (!route.routeConfig?.data?.['reuse']) return false;
+    for (let p = route.parent; p; p = p.parent) {
+      if (p.routeConfig && p.component && !p.routeConfig.data?.['reuse']) return false;
+    }
+    return true;
   }
 
   store(route: ActivatedRouteSnapshot, handle: DetachedRouteHandle | null): void {
@@ -101,7 +106,7 @@ export class CachingReuseStrategy implements RouteReuseStrategy {
       if (existing && existing !== handle) this.destroyHandle(existing);
       this.cache.delete(key);
       this.cache.set(key, handle);
-      while (this.cache.size > this.maxSize) {
+      while (this.cache.size > cacheSize(this.device)) {
         const oldestKey = this.cache.keys().next().value as string;
         const oldest = this.cache.get(oldestKey);
         this.cache.delete(oldestKey);

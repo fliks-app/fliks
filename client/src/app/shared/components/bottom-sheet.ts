@@ -17,6 +17,7 @@ import {
 } from '@angular/core';
 import { DismissableStackService } from '../../core/services/dismissable-stack.service';
 import { TvService } from '../../core/services/tv.service';
+import { onParked } from '../../core/services/keep-route-fresh';
 import {
   TABBABLE_SELECTOR,
   focusOverlayEntry,
@@ -152,6 +153,9 @@ export class BottomSheetComponent {
       });
     });
 
+    // A detached tree runs no change detection, so an exit left to the timer would never land.
+    onParked(() => this.closeNow());
+
     // Cleanup if destroyed while open (route change, parent `@if`; PopoverMenu hardcodes `[open]="true"`, so the effect's close branch never runs).
     destroyRef.onDestroy(() => {
       this.unsettle();
@@ -216,6 +220,17 @@ export class BottomSheetComponent {
       this.dismissing.set(false);
       this.closed.emit();
     }, sheetDurationMs(document.documentElement));
+  }
+
+  private closeNow() {
+    if (!this.visible()) return;
+    this.unsettle();
+    if (this.exitTimer) clearTimeout(this.exitTimer);
+    this.exitTimer = null;
+    this.releaseOpenState();
+    this.visible.set(false);
+    this.dismissing.set(false);
+    this.closed.emit();
   }
 
   /** Undo the open-time side effects: restore page scroll, leave the dismiss

@@ -107,6 +107,8 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./shared/layout/layout').then((m) => m.LayoutComponent),
     canActivate: [serverConfigGuard, authGuard, passwordChangeGuard],
+    // Cached pages live in this shell's outlet: tearing it down for the player would orphan them.
+    data: { reuse: true },
     children: [
       {
         path: '',
