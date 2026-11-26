@@ -32,8 +32,6 @@ create, no subscription, and nothing leaves the house.
        alt="The home page on desktop and phone, a film page on a tablet">
 </p>
 
----
-
 ## What you get
 
 ### Watching
