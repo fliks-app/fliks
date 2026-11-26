@@ -48,9 +48,13 @@ const PGS_EN = sub({ id: 'emb-4', isImage: true, subtitleDbId: 12 });
 const SUP_EN = sub({ id: 'ext-13', isImage: true, subtitleDbId: 13 });
 const STREAMINFO_ONLY = sub({ id: 'emb-9', language: 'de' });
 
-/** The cast service loads the heartbeat on its first session: let that registration land before a beat. */
+/** The cast service registers through a dynamic import, a module-runner round trip that a timer tick can outrun. */
+async function registered(heartbeat: PlaybackHeartbeat): Promise<void> {
+  await vi.waitFor(() => expect(heartbeat['sources']).not.toHaveLength(0));
+}
+
 async function beat(heartbeat: PlaybackHeartbeat): Promise<void> {
-  await new Promise<void>((r) => setTimeout(r));
+  await registered(heartbeat);
   await heartbeat.beat();
 }
 
@@ -317,7 +321,7 @@ describe('another sender loads on the receiver', () => {
     const save = streamingApi.updatePlaybackState;
     cast.currentTime = () => 120;
     svc.startCast({ ...base, mediaFileId: 7, mediaId: 3, subtitles: [], activeSubtitleId: null });
-    await new Promise<void>((r) => setTimeout(r));
+    await registered(heartbeat);
     cast.receiverMedia.set({ mediaId: 4, mediaFileId: 9 });
     await heartbeat.beat();
     expect(save).not.toHaveBeenCalled();
@@ -434,8 +438,8 @@ describe('cast heartbeat without the player page', () => {
   });
 
   it('keeps the receiver beating at the final position when the cast clears', async () => {
-    const { svc, streamingApi } = playing();
-    await new Promise<void>((r) => setTimeout(r));
+    const { svc, streamingApi, heartbeat } = playing();
+    await registered(heartbeat);
     svc.clear();
     await vi.waitFor(() => expect(streamingApi.updatePlaybackState).toHaveBeenCalledTimes(1));
     expect(streamingApi.updatePlaybackState).toHaveBeenCalledWith(6, expect.objectContaining({ positionSeconds: 30, sessionId: 'b' }));
