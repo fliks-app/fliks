@@ -1596,6 +1596,10 @@
       "failed": "Failed",
       "removed": "Removed"
     },
+    "failed_reason_title": "Why this request failed",
+    "failed_reason": {
+      "provider-removed": "The metadata provider this request relied on was removed, so the title can no longer be added."
+    },
     "allowance_left_one": "{{count}} of {{limit}} requests left per {{days}} days",
     "allowance_left_other": "{{count}} of {{limit}} requests left per {{days}} days",
     "allowance_none_one": "Limit reached, next request in {{count}} day",

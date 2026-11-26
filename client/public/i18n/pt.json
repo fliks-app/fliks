@@ -1591,6 +1591,10 @@
       "failed": "Falha",
       "removed": "Removida"
     },
+    "failed_reason_title": "Porque é que este pedido falhou",
+    "failed_reason": {
+      "provider-removed": "O fornecedor de metadados deste pedido foi removido, por isso o título já não pode ser adicionado."
+    },
     "approve_album": "Aprovar o álbum completo",
     "tracks_of_one": "{{count}} de {{total}} faixa",
     "tracks_of_other": "{{count}} de {{total}} faixas",

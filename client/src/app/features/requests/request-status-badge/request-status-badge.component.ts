@@ -5,7 +5,8 @@ import {
   input,
   output,
 } from '@angular/core';
-import { TranslatePipe } from '@ngx-translate/core';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { ProgressBadgeComponent } from '../../../shared/components/progress-badge/progress-badge.component';
 import { DownloadProgressService } from '../../../core/services/download-progress.service';
 import {
@@ -30,6 +31,8 @@ import {
 export class RequestStatusBadgeComponent {
   private readonly downloadProgress = inject(DownloadProgressService);
   private readonly tv = inject(TvService);
+  private readonly translate = inject(TranslateService);
+  private readonly confirm = inject(ConfirmationService);
 
   readonly request = input.required<FliksRequestRow>();
   /** Emitted when the (clickable) download badge is activated. */
@@ -53,10 +56,32 @@ export class RequestStatusBadgeComponent {
       labelKey: 'requests.status.' + r.status,
       badgeClass: this.statusBadgeClass(r.status),
       percent: null,
-      isClickable: false,
+      isClickable: this.failureReason() !== null,
       busy: false,
     };
   });
+
+  /** Why a failed request failed, translated; the server stores it in `declinedReason`. */
+  readonly failureReason = computed<string | null>(() => {
+    const r = this.request();
+    const reason = r.declinedReason?.trim();
+    if (r.status !== 'failed' || !reason) return null;
+    const key = 'requests.failed_reason.' + reason;
+    const text = this.translate.instant(key);
+    return text === key ? reason : text;
+  });
+
+  activate(): void {
+    const reason = this.failureReason();
+    if (reason === null) {
+      this.badgeClick.emit();
+      return;
+    }
+    void this.confirm.alert({
+      title: this.translate.instant('requests.failed_reason_title'),
+      message: reason,
+    });
+  }
 
   /** Clickable on web/mobile only (see class doc on the TV exclusion). */
   readonly clickable = computed(

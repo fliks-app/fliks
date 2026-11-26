@@ -1591,6 +1591,10 @@
       "failed": "Fallito",
       "removed": "Rimossa"
     },
+    "failed_reason_title": "Perché questa richiesta non è riuscita",
+    "failed_reason": {
+      "provider-removed": "Il provider di metadati di questa richiesta è stato rimosso, quindi il titolo non può più essere aggiunto."
+    },
     "approve_album": "Approva l'intero album",
     "tracks_of_one": "{{count}} traccia su {{total}}",
     "tracks_of_other": "{{count}} tracce su {{total}}",

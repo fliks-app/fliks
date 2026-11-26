@@ -1591,6 +1591,10 @@
       "failed": "Error",
       "removed": "Eliminada"
     },
+    "failed_reason_title": "Por qué falló esta solicitud",
+    "failed_reason": {
+      "provider-removed": "Se eliminó el proveedor de metadatos de esta solicitud, así que el título ya no se puede añadir."
+    },
     "approve_album": "Aprobar el álbum completo",
     "tracks_of_one": "{{count}} de {{total}} pista",
     "tracks_of_other": "{{count}} de {{total}} pistas",

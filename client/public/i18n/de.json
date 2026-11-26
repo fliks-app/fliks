@@ -1591,6 +1591,10 @@
       "failed": "Fehlgeschlagen",
       "removed": "Entfernt"
     },
+    "failed_reason_title": "Warum diese Anfrage fehlgeschlagen ist",
+    "failed_reason": {
+      "provider-removed": "Der Metadatenanbieter dieser Anfrage wurde entfernt, daher kann der Titel nicht mehr hinzugefügt werden."
+    },
     "approve_album": "Das ganze Album genehmigen",
     "tracks_of_one": "{{count}} von {{total}} Titel",
     "tracks_of_other": "{{count}} von {{total}} Titeln",
