@@ -59,6 +59,9 @@ jobs:
       attestations: write
     name: ${{ matrix.os }} → ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
+    # Only the mas leg sets it, and an empty output from another leg doesn't override it.
+    outputs:
+      mas-uploaded: ${{ steps.mas-upload.outputs.uploaded }}
     strategy:
       # Don't cancel the other OSes when one fails — we want to see every
       # platform's outcome on a single run while this is being stabilised.
@@ -396,6 +399,7 @@ jobs:
       # altool reads the API key staged above from ~/.appstoreconnect/private_keys.
       - name: Upload to App Store Connect (Mac App Store)
         if: matrix.label == 'mas'
+        id: mas-upload
         shell: bash
         env:
           KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
@@ -407,6 +411,7 @@ jobs:
             action=--validate-app
           fi
           xcrun altool $action --type macos --file desktop/release/mas-arm64/*.pkg --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
+          if [[ $action == --upload-app ]]; then echo uploaded=true >> "$GITHUB_OUTPUT"; fi
 
       # Flat APT repo on the `apt` release, the one desktop/build/fliks.sources points at.
       - name: Publish the APT repository (Linux)
@@ -520,11 +525,16 @@ jobs:
           # Installers and packages are already compressed.
           compression-level: 0
 
-  # The Mac App Store build `build` uploaded on a stable tag; waits for Apple's processing on a cheap runner.
+  # Submits the Mac App Store build once uploaded, even if another platform's leg failed.
   submit-mas-for-review:
     needs: build
-    if: ${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') && vars.MAS_ENABLED == 'true' }}
+    if: ${{ !cancelled() && needs.build.outputs.mas-uploaded == 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: asc-submit-MAC_OS
+      cancel-in-progress: false
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -148,11 +148,14 @@ jobs:
             --apiKey "$KEY_ID" \
             --apiIssuer "$ISSUER_ID"
 
-  # Waits for Apple's processing on a cheap runner, then submits; a dispatch on a stable tag re-runs it.
+  # Waits for Apple's processing on a cheap runner, then submits; "Re-run failed jobs" retries it.
   submit-for-review:
     needs: build-and-publish
     if: ${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') && !inputs.dry_run }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: asc-submit-TV_OS
+      cancel-in-progress: false
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
