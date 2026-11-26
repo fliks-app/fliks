@@ -3462,7 +3462,13 @@
       "search_one": "Rechercher ce sous-titre",
       "search_one_ok": "Sous-titre {{lang}} téléchargé pour « {{title}} »",
       "search_one_none": "Aucun sous-titre {{lang}} trouvé avec un score suffisant",
-      "forced": "Forcé"
+      "forced": "Forcé",
+      "section_ocr": "OCR",
+      "ocr_rerun_hint": "Relit chaque piste de sous-titres image qui a déjà un résultat OCR. Chaque nouveau résultat remplace l'ancien. Les traitements tournent en arrière-plan.",
+      "ocr_rerun": "Relancer l'OCR",
+      "ocr_rerun_confirm": "Relancer l'OCR de tous les sous-titres ? Sur une grande bibliothèque, cela peut prendre longtemps.",
+      "ocr_rerun_started_one": "OCR lancé sur {{count}} piste.",
+      "ocr_rerun_started_other": "OCR lancé sur {{count}} pistes."
     },
     "plugins": {
       "title": "Plugins",

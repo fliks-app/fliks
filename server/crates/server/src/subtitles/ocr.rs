@@ -237,5 +237,53 @@ async fn try_run(
         return Err("the subtitle was removed during the run".into());
     }
     tracing::info!("OCR end (ok) - sub #{placeholder} -> {rel}");
+    drop_superseded(st, placeholder, file.id, source.stream_index.unwrap_or(0)).await;
     Ok(media.title.clone())
+}
+
+/// Deletes the earlier OCR rows of the track once a run attached its file (files rule 26).
+async fn drop_superseded(st: &AppState, placeholder: i32, file: i32, stream: i32) {
+    let older: Vec<i32> = match sqlx::query_scalar(
+        r#"SELECT id FROM subtitle_files WHERE "mediaFileId" = $1 AND "providerType" = 'ocr'
+           AND "sourceStreamIndex" = $2 AND id < $3"#,
+    )
+    .bind(file)
+    .bind(stream)
+    .bind(placeholder)
+    .fetch_all(&st.db)
+    .await
+    {
+        Ok(ids) => ids,
+        Err(e) => {
+            tracing::warn!("Earlier OCR rows of subtitle #{placeholder} not listed: {e}");
+            return;
+        }
+    };
+    for id in older {
+        if let Err(e) = super::sidecars::delete_subtitle(st, id).await {
+            tracing::warn!("Superseded OCR subtitle #{id} not deleted: {}", e.text());
+        }
+    }
+}
+
+/// Starts a run on every track that has an OCR row and still has its image track (subtitles rule 49).
+pub async fn rerun_all(st: &AppState) -> Result<usize, AppError> {
+    let tracks: Vec<(i32, String)> = sqlx::query_as(
+        r#"SELECT DISTINCT ON (o."mediaFileId", o."sourceStreamIndex") e.id, o.language
+           FROM subtitle_files o
+           JOIN subtitle_files e ON e."mediaFileId" = o."mediaFileId"
+             AND e."providerType" = 'embedded' AND e."streamIndex" = o."sourceStreamIndex"
+           WHERE o."providerType" = 'ocr'
+           ORDER BY o."mediaFileId", o."sourceStreamIndex", o.id DESC"#,
+    )
+    .fetch_all(&st.db)
+    .await?;
+    let mut started = 0;
+    for (source, language) in tracks {
+        match start(st, source, Some(&language), true).await {
+            Ok(_) => started += 1,
+            Err(e) => tracing::info!("OCR rerun of subtitle #{source} not started: {}", e.text()),
+        }
+    }
+    Ok(started)
 }

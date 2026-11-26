@@ -3462,7 +3462,13 @@
       "search_one": "Buscar este subtítulo",
       "search_one_ok": "Subtítulo {{lang}} descargado para «{{title}}»",
       "search_one_none": "No se encontró ningún subtítulo {{lang}} con una puntuación suficiente",
-      "forced": "Forzado"
+      "forced": "Forzado",
+      "section_ocr": "OCR",
+      "ocr_rerun_hint": "Vuelve a leer cada pista de subtítulos de imagen que ya tiene un resultado OCR. Cada nuevo resultado reemplaza al anterior. Los procesos se ejecutan en segundo plano.",
+      "ocr_rerun": "Volver a ejecutar el OCR",
+      "ocr_rerun_confirm": "¿Volver a ejecutar el OCR en todos los subtítulos OCR? En una biblioteca grande puede tardar mucho.",
+      "ocr_rerun_started_one": "OCR iniciado en {{count}} pista.",
+      "ocr_rerun_started_other": "OCR iniciado en {{count}} pistas."
     },
     "plugins": {
       "title": "Plugins",

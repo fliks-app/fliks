@@ -3441,7 +3441,13 @@
       "search_one": "Search for this subtitle",
       "search_one_ok": "{{lang}} subtitle downloaded for \"{{title}}\"",
       "search_one_none": "No {{lang}} subtitle found with a sufficient score",
-      "forced": "Forced"
+      "forced": "Forced",
+      "section_ocr": "OCR",
+      "ocr_rerun_hint": "Reads every image subtitle track that already has an OCR result again. Each new result replaces the old one. The runs go on in the background.",
+      "ocr_rerun": "Run OCR again",
+      "ocr_rerun_confirm": "Run OCR again on every OCR subtitle? This can take a long time on a large library.",
+      "ocr_rerun_started_one": "OCR started on {{count}} track.",
+      "ocr_rerun_started_other": "OCR started on {{count}} tracks."
     },
     "plugins": {
       "title": "Plugins",

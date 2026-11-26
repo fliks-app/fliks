@@ -101,6 +101,10 @@ export class SubtitlesApiService {
     );
   }
 
+  rerunOcr() {
+    return firstValueFrom(this.http.post<{ started: number }>('/api/subtitles/ocr/rerun', {}));
+  }
+
   translate(
     mediaId: number,
     subtitleId: number,

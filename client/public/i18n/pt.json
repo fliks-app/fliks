@@ -3462,7 +3462,13 @@
       "search_one": "Procurar esta legenda",
       "search_one_ok": "Legenda {{lang}} transferida para «{{title}}»",
       "search_one_none": "Nenhuma legenda {{lang}} encontrada com pontuação suficiente",
-      "forced": "Forçado"
+      "forced": "Forçado",
+      "section_ocr": "OCR",
+      "ocr_rerun_hint": "Lê novamente cada faixa de legendas de imagem que já tem um resultado OCR. Cada novo resultado substitui o anterior. Os processos correm em segundo plano.",
+      "ocr_rerun": "Executar o OCR novamente",
+      "ocr_rerun_confirm": "Executar o OCR novamente em todas as legendas OCR? Numa biblioteca grande pode demorar muito.",
+      "ocr_rerun_started_one": "OCR iniciado em {{count}} faixa.",
+      "ocr_rerun_started_other": "OCR iniciado em {{count}} faixas."
     },
     "plugins": {
       "title": "Plugins",

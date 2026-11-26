@@ -157,6 +157,7 @@ use utoipa::OpenApi;
     routes_activity::stats,
     routes_activity::health,
     routes_activity::missing,
+    routes_activity::rerun_ocr,
     routes_activity::blacklist_list,
     routes_activity::blacklist_add,
     routes_activity::blacklist_remove,
@@ -206,6 +207,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/subtitles/stats", get(routes_activity::stats))
         .route("/api/subtitles/health", get(routes_activity::health))
         .route("/api/subtitles/missing", get(routes_activity::missing))
+        .route("/api/subtitles/ocr/rerun", post(routes_activity::rerun_ocr))
         .route(
             "/api/subtitles/blacklist",
             get(routes_activity::blacklist_list)
