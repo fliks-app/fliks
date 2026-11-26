@@ -68,6 +68,7 @@ pub struct HStream {
     pub probed_video_codec: Option<String>,
     pub probed_field_order: Option<String>,
     pub probed_audio_codec: Option<String>,
+    pub probed_bit_depth: Option<i32>,
     pub last_error: Option<String>,
     pub last_ok_at: Option<DateTime<Utc>>,
     pub source: HSource,
@@ -89,6 +90,8 @@ struct StreamJoin {
     probed_field_order: Option<String>,
     #[sqlx(rename = "probedAudioCodec")]
     probed_audio_codec: Option<String>,
+    #[sqlx(rename = "probedBitDepth")]
+    probed_bit_depth: Option<i32>,
     #[sqlx(rename = "lastError")]
     last_error: Option<String>,
     #[sqlx(rename = "lastOkAt")]
@@ -115,6 +118,7 @@ impl From<StreamJoin> for HStream {
             probed_video_codec: r.probed_video_codec,
             probed_field_order: r.probed_field_order,
             probed_audio_codec: r.probed_audio_codec,
+            probed_bit_depth: r.probed_bit_depth,
             last_error: r.last_error,
             last_ok_at: r.last_ok_at,
             source: HSource {
@@ -140,7 +144,7 @@ pub async fn load_streams(
 ) -> sqlx::Result<Vec<HStream>> {
     let rows: Vec<StreamJoin> = sqlx::query_as(
         r#"SELECT s.id, s.url, s.priority, s."userAgent", s.referer, s."probedContainer", s."probedVideoCodec",
-                  s."probedFieldOrder", s."probedAudioCodec", s."lastError", s."lastOkAt", src.id AS source_id, src.name AS source_name, src.url AS source_url,
+                  s."probedFieldOrder", s."probedAudioCodec", s."probedBitDepth", s."lastError", s."lastOkAt", src.id AS source_id, src.name AS source_name, src.url AS source_url,
                   src."expiresAt" AS source_expires_at, src."accountStatus" AS source_account_status,
                   src."userAgent" AS source_user_agent, src.referer AS source_referer,
                   src."maxStreams" AS source_max_streams
@@ -304,6 +308,7 @@ fn upstream(s: &HStream, at_capacity: bool) -> LiveUpstream {
         probed_video_codec: s.probed_video_codec.clone(),
         probed_field_order: s.probed_field_order.clone(),
         probed_audio_codec: s.probed_audio_codec.clone(),
+        probed_bit_depth: s.probed_bit_depth.and_then(|d| u32::try_from(d).ok()),
         at_capacity,
         vetted: super::lineup::provider_chosen(&s.source.url, &s.url),
     }

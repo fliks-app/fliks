@@ -1993,7 +1993,7 @@ mod sessions {
         let ev = serde_json::from_value(
             json!({"type": "LiveAttempt", "capacityToken": t1, "upstream": 0,
             "upstreamUrl": "http://h/a.ts", "upstreamPriority": 0,
-            "probe": {"videoCodec": "h264", "audioCodec": "aac", "container": "mpegts"}}),
+            "probe": {"videoCodec": "h264", "audioCodec": "aac", "container": "mpegts", "bitDepth": 10}}),
         )
         .unwrap();
         session::events::on_event(&c.st, &ev).await;
@@ -2012,6 +2012,17 @@ mod sessions {
             ),
             (json!("h264"), json!("aac"), json!("mpegts"))
         );
+        assert_eq!(up["probedBitDepth"], 10);
+        // A probe that names a codec and no depth saw 8 bits.
+        let t2 = token_of(&w, 1);
+        session::events::on_event(&c.st, &attempt(&t2, "http://h/a.ts", None)).await;
+        let depth: Option<i32> = sqlx::query_scalar(
+            r#"SELECT "probedBitDepth" FROM livetv_channel_streams WHERE url = 'http://h/a.ts'"#,
+        )
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+        assert_eq!(depth, None);
     }
 
     #[sqlx::test(migrations = false)]
