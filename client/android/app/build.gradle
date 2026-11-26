@@ -24,7 +24,7 @@ android {
         applicationId "media.fliks.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionName "7.3.0" // x-release-please-version
+        versionName "7.3.1" // x-release-please-version
         versionCode = versionCodeOf(versionName)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
