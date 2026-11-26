@@ -33,8 +33,8 @@ export class SetupChecklistComponent implements OnInit {
    *  admin pages, which the 10-foot UI was never designed for. */
   protected readonly isTv = inject(TvService).isTv;
 
-  /** When `true`, also surface completed and dismissed items (with a reactivate button on the latter). */
-  readonly showAll = input(false);
+  /** When `true`, also list dismissed items, with a reactivate button. */
+  readonly showDismissed = input(false);
 
   private readonly auth = inject(AuthService);
 
@@ -44,17 +44,12 @@ export class SetupChecklistComponent implements OnInit {
   );
   readonly loading = this.api.loading;
 
-  /** Items shown in the list. Compact mode (default) keeps only the
-   *  pending, non-dismissed ones — those are the user's TODO. */
-  readonly visibleItems = computed(() => {
-    const all = this.items();
-    if (this.showAll()) return all;
-    return all.filter((i) => !i.done && !i.dismissed);
-  });
-
-  protected readonly shown = computed(
-    () => !this.isTv() && (this.visibleItems().length > 0 || (this.showAll() && this.items().length > 0)),
+  /** Pending items only: done ones never show. */
+  readonly visibleItems = computed(() =>
+    this.items().filter((i) => !i.done && (this.showDismissed() || !i.dismissed)),
   );
+
+  protected readonly shown = computed(() => !this.isTv() && this.visibleItems().length > 0);
 
   /** Severity counters used by the header badge. */
   readonly pendingRequiredCount = computed(

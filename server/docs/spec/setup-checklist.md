@@ -31,7 +31,7 @@ Guards run before the key check (auth rule 17): unauthenticated with a bad key i
 | 3 | `language-profile` | required | `["/admin","settings","language-profiles"]` | any row | `language_profiles` |
 | 4 | `download-provider` | recommended | `["/admin","settings","plugin-catalogue"]` | any enabled `plugin_packages` row whose manifest has `ui.releasePicker` (a download kind) | `plugin_packages` |
 | 5 | `subtitle-provider` | recommended | `["/admin","settings","subtitle-providers"]` | any row with `enabled = true` | `subtitle_providers` |
-| 6 | `notification` | recommended | `["/admin","settings","notifications"]` | any row (enabled or not) | `notification_connections` |
+| 6 | `notification` | recommended | `["/admin","settings","notifications"]` | any row (enabled or not), except the seeded `fliks-relay` row, which counts only while enabled | `notification_connections` |
 | 7 | `non-admin-user` | recommended | `["/admin","settings","users"]` | any user with `"isAdmin" <> true` (disabled users count) | `users` |
 | 8 | `auto-approval-rule` | recommended | `["/admin","settings","auto-approval"]` | any row (`enabled` ignored) | `auto_approval_rules` |
 | 9 | `data-import` | recommended | `["/admin","settings","data-imports"]` | the `app_settings` row `data_import_done`, written when a watch-history or Seerr import finishes (the audit rows are pruned after 30 days) | `app_settings` |

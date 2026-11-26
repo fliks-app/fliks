@@ -2342,7 +2342,6 @@
     "configure": "Configure",
     "dismiss": "Dismiss",
     "undismiss": "Re-enable",
-    "status_done": "Configured",
     "status_required": "Required",
     "status_recommended": "Recommended",
     "items": {

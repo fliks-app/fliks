@@ -321,6 +321,17 @@ async fn the_builtin_connection_is_seeded_and_protected(pool: PgPool) {
         .unwrap()
         .clone();
     assert_eq!(item["done"], false, "{item}");
+    // the relay, once enabled, does
+    set_relay(&c, true).await;
+    let (_, list) = call(&c, "GET", "/api/setup-checklist", Some(&c.admin), None).await;
+    let item = list
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["key"] == "notification")
+        .unwrap()
+        .clone();
+    assert_eq!(item["done"], true, "{item}");
 }
 
 #[sqlx::test]
