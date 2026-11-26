@@ -84,6 +84,7 @@
           [value]="autoSync() === 'true'"
           (valueChange)="autoSync.set($event ? 'true' : 'false')"
           [label]="'settings.subtitles.auto_sync' | translate"
+          [hint]="'settings.subtitles.auto_sync_hint' | translate"
           toggleClass="toggle-sm toggle-primary" />
 
         <div class="divider my-0"></div>
