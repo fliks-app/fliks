@@ -1,5 +1,25 @@
 # Changelog
 
+## [7.3.1](https://github.com/fliks-app/fliks/compare/v7.3.0...v7.3.1) (2026-11-26)
+
+
+### Features
+
+* **system:** open error details from failure badges ([#3066](https://github.com/fliks-app/fliks/issues/3066)) ([7ce131d](https://github.com/fliks-app/fliks/commit/7ce131d4dc0c5b0319216f29308c66ac02d63121))
+
+
+### Bug Fixes
+
+* **ios:** app store sign-in, clearer login errors and entry screen history ([#3063](https://github.com/fliks-app/fliks/issues/3063)) ([f579841](https://github.com/fliks-app/fliks/commit/f5798414e2be5f58688e893b6c5f830ecd2875ec)), closes [#3061](https://github.com/fliks-app/fliks/issues/3061)
+* **library-optimize:** apply button, saved profile on reload, boot rescan of stale probes ([#3060](https://github.com/fliks-app/fliks/issues/3060)) ([7a7bfb0](https://github.com/fliks-app/fliks/commit/7a7bfb0b9620b5897feae8df24d41a0ff1d3d379))
+* **naming:** drop dots at both ends of a formatted name ([#3065](https://github.com/fliks-app/fliks/issues/3065)) ([f9e8648](https://github.com/fliks-app/fliks/commit/f9e864847eb1be43c690340c45d5c15e7cd39c3a))
+* **navbar:** set the hero chrome as the outlet inserts the page ([#3064](https://github.com/fliks-app/fliks/issues/3064)) ([6006ef2](https://github.com/fliks-app/fliks/commit/6006ef23f53588896adc86889b5a216420495712))
+
+
+### Miscellaneous Chores
+
+* **release:** release 7.3.1 ([#3068](https://github.com/fliks-app/fliks/issues/3068)) ([ca20c73](https://github.com/fliks-app/fliks/commit/ca20c73e9f43153dd61e2be92b4303dd1a5800f1))
+
 ## [7.3.0](https://github.com/fliks-app/fliks/compare/v7.2.1...v7.3.0) (2026-11-25)
 
 
