@@ -29,7 +29,7 @@ create, no subscription, and nothing leaves the house.
 
 <p align="center">
   <img src=".github/readme/collage.webp" width="70%"
-       alt="The home page, a library, discovery and a film page">
+       alt="The home page on desktop and phone, a film page on a tablet">
 </p>
 
 ---
