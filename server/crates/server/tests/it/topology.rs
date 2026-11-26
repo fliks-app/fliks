@@ -81,6 +81,8 @@ async fn start(
         .env("FLIKS_DISABLE_CRON", "1")
         .envs(extra_env.iter().copied())
         .env("FLIKS_CONF_DIR", conf)
+        // Its own data dir: a boot deletes the unfinished dumps of the one the tests share.
+        .env("FLIKS_DATA_DIR", conf.join("data"))
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     let child = cmd.spawn().unwrap();
