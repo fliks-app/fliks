@@ -4,7 +4,7 @@
 Usage: play-publish.py <bundle.aab> <track>
 Env: PLAY_SERVICE_ACCOUNT_JSON (the service account key file contents).
 """
-import base64, json, os, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
+import base64, hashlib, http.client, json, os, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
 
 PACKAGE = "media.fliks.app"
 API = f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{PACKAGE}"
@@ -33,7 +33,7 @@ def request(method, url, body=None, headers=None, retry=False):
             response = e.code, e.headers, e.read()
             if attempt == 4 or not (e.code == 429 or (retry and e.code >= 500)):
                 return response
-        except (urllib.error.URLError, TimeoutError) as e:
+        except (OSError, http.client.HTTPException) as e:
             response = 0, {}, str(e).encode()
             if attempt == 4 or not retry:
                 return response
@@ -63,10 +63,10 @@ def access_token(account):
 def main(bundle_path, track):
     auth = {"Authorization": f"Bearer {access_token(json.loads(os.environ['PLAY_SERVICE_ACCOUNT_JSON']))}"}
 
-    def api(method, path, data=None, ok=(200,)):
+    def api(method, path, data=None, retry=True):
         body = json.dumps(data).encode() if data is not None else None
-        status, _, text = request(method, API + path, body, {**auth, "Content-Type": "application/json"}, retry=method == "GET")
-        if status not in ok:
+        status, _, text = request(method, API + path, body, {**auth, "Content-Type": "application/json"}, retry=retry)
+        if status != 200:
             sys.exit(f"{method} {path}: {status} {text.decode()}")
         return status, json.loads(text or "null")
 
@@ -76,37 +76,48 @@ def main(bundle_path, track):
         bundle = f.read()
     size = len(bundle)
     status, headers, text = request("POST", f"{UPLOAD}/edits/{edit}/bundles?uploadType=resumable", b"", {
-        **auth, "X-Upload-Content-Type": "application/octet-stream", "X-Upload-Content-Length": str(size)})
+        **auth, "Content-Type": "application/json", "X-Upload-Content-Type": "application/octet-stream",
+        "X-Upload-Content-Length": str(size)}, retry=True)
     if status != 200:
         sys.exit(f"upload session: {status} {text.decode()}")
     session, offset = headers["Location"], 0
-    # An interrupted PUT resumes from the offset the session reports, as the resumable protocol prescribes.
-    for attempt in range(5):
-        status, headers, text = request("PUT", session, bundle[offset:], {
-            "Content-Type": "application/octet-stream", "Content-Range": f"bytes {offset}-{size - 1}/{size}"})
+    # After an interruption only the offset the session reports is trusted, as the resumable protocol prescribes.
+    for attempt in range(8):
+        if offset is not None:
+            status, headers, text = request("PUT", session, bundle[offset:], {
+                "Content-Type": "application/octet-stream", "Content-Range": f"bytes {offset}-{size - 1}/{size}"})
+            if status in (200, 201):
+                break
+            if 0 < status < 500 and status != 308:
+                sys.exit(f"upload: {status} {text.decode()}")
+        time.sleep(2 ** min(attempt, 5))
+        status, headers, text = request("PUT", session, b"", {
+            "Content-Type": "application/octet-stream", "Content-Range": f"bytes */{size}"})
         if status in (200, 201):
             break
-        if 0 < status < 500:
-            sys.exit(f"upload: {status} {text.decode()}")
-        time.sleep(2 ** attempt)
-        status, headers, text = request("PUT", session, b"", {"Content-Range": f"bytes */{size}"})
-        if status in (200, 201):
-            break
-        if status == 308:
-            offset = int(headers["Range"].rsplit("-", 1)[1]) + 1 if headers.get("Range") else 0
+        if 0 < status < 500 and status != 308:
+            sys.exit(f"upload status: {status} {text.decode()}")
+        offset = (int(headers["Range"].rsplit("-", 1)[1]) + 1 if headers.get("Range") else 0) if status == 308 else None
     else:
-        sys.exit(f"upload: gave up after 5 attempts ({status} {text.decode()})")
-    version_code = json.loads(text)["versionCode"]
+        sys.exit(f"upload: gave up ({status} {text.decode()})")
+    # The completion response may come from a status query without the Bundle body, so look the bundle up.
+    digest = hashlib.sha256(bundle).hexdigest()
+    version_code = next(b["versionCode"] for b in api("GET", f"/edits/{edit}/bundles")[1]["bundles"]
+                        if b["sha256"].lower() == digest)
 
     notes = [{"language": l["language"], "text": WHATS_NEW.get(l["language"].split("-")[0], WHATS_NEW["en"])}
              for l in api("GET", f"/edits/{edit}/listings")[1]["listings"]]
     api("PUT", f"/edits/{edit}/tracks/{track}", {"track": track, "releases": [
         {"versionCodes": [str(version_code)], "status": "completed", "releaseNotes": notes}]})
 
-    status, _, text = request("POST", f"{API}/edits/{edit}:commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW", b"", auth)
+    status, _, text = request("POST", f"{API}/edits/{edit}:commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW", b"",
+                              {**auth, "Content-Type": "application/json"})
     if status == 400 and b"CHANGES_ALREADY_IN_REVIEW" in text:
-        # The edit stays open and the next one invalidates it; the next tag ships once this review is over.
-        print(f"::warning::{version_code} not sent to {track}: other changes are still in review")
+        message = f"{version_code} not sent to {track}: other changes are still in review"
+        # A tag defers to the next one; a manual dispatch asked for this very upload, so it fails.
+        if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
+            sys.exit(message)
+        print(f"::warning::{message}")
         return
     if status != 200:
         sys.exit(f"commit: {status} {text.decode()}")

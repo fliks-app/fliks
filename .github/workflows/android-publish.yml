@@ -189,8 +189,8 @@ jobs:
           name: signed-aab
           path: client/android/app/build/outputs/bundle/release
 
-      # A stable tag goes to production; a dispatch to the track it names. Committing while other changes
-      # are in review would cancel that review, so the release is then skipped with a warning.
+      # A stable tag goes to production, a dispatch to the track it names. Committing while other changes are
+      # in review would cancel that review, so a tag is then skipped with a warning and a dispatch fails.
       - name: Send to the Play Store for review
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}

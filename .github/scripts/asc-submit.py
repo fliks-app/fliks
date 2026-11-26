@@ -4,7 +4,7 @@
 Usage: asc-submit.py <IOS|TV_OS|MAC_OS> <version> <build number>
 Env: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH (the .p8 key).
 """
-import base64, json, os, subprocess, sys, time, urllib.error, urllib.request
+import base64, http.client, json, os, subprocess, sys, time, urllib.error, urllib.request
 
 API = "https://api.appstoreconnect.apple.com/v1"
 BUNDLE_ID = "media.fliks.app"
@@ -49,9 +49,9 @@ def call(method, path, data=None):
             # A write that hit a 5xx may have landed, so only reads and rate-limited requests are retried.
             if attempt == 4 or not (e.code == 429 or (method == "GET" and e.code >= 500)):
                 sys.exit(f"{method} {path}: {e.code} {e.read().decode()}")
-        except urllib.error.URLError as e:
+        except (OSError, http.client.HTTPException) as e:
             if attempt == 4 or method != "GET":
-                sys.exit(f"{method} {path}: {e.reason}")
+                sys.exit(f"{method} {path}: {e}")
         time.sleep(15 * (attempt + 1))
 
 
