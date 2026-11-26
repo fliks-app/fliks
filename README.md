@@ -11,7 +11,7 @@
 
 Point Fliks at the folders where your videos live and it does the rest:
 covers, descriptions, cast, seasons and episodes, laid out like the
-streaming apps you already use — except the library is yours.
+streaming apps you already use, except the library is yours.
 
 It turns a folder of video files into a proper streaming service for the
 household. Everyone gets their own profile and their own place in every
@@ -23,9 +23,9 @@ file.
 Self-hosted: the server runs on your machine, there is no account to
 create, no subscription, and nothing leaves the house.
 
-- **Server** — Docker, a Windows tray app or a macOS menu-bar app
-- **Clients** — web, iOS, Android, Android TV, Apple TV, Samsung, LG, desktop, Chromecast
-- **License** — [AGPL-3.0-or-later](LICENSE)
+- **Server**: Docker, a Windows tray app or a macOS menu-bar app
+- **Clients**: web, iOS, Android, Android TV, Apple TV, Samsung, LG, desktop, Chromecast
+- **License**: [AGPL-3.0-or-later](LICENSE)
 
 <p align="center">
   <img src=".github/readme/collage.webp" width="70%"
@@ -36,20 +36,20 @@ create, no subscription, and nothing leaves the house.
 
 ### Watching
 
-- **Adaptive streaming** — quality follows the bandwidth without a
+- **Adaptive streaming**: quality follows the bandwidth without a
   hiccup, or lock a bitrate by hand when you'd rather decide.
-- **Resume anywhere** — start on the phone, finish on the TV; the
+- **Resume anywhere**: start on the phone, finish on the TV; the
   position syncs live.
-- **Every track, switchable mid-playback** — all embedded audio
+- **Every track, switchable mid-playback**: all embedded audio
   renditions, all embedded and external subtitles (`.srt`, `.ass`), with
   your choice remembered per show.
-- **Subtitles found for you** — a video that came without any? Fliks
+- **Subtitles found for you**: a video that came without any? Fliks
   goes looking on the usual subtitle sites and picks the one that
   actually matches your copy, in the languages you asked for.
-- **Out of sync, fixed in one click** — Fliks listens to the dialogue
+- **Out of sync, fixed in one click**: Fliks listens to the dialogue
   and slides the subtitles back onto it. No hunting for the right
   offset, no re-downloading three files hoping one lands.
-- **Translated on demand** — nothing available in your language? Take a
+- **Translated on demand**: nothing available in your language? Take a
   track you do have and have it translated into one you can read. You
   bring the translation service; the result is saved next to the video
   so it's only done once.
@@ -57,28 +57,28 @@ create, no subscription, and nothing leaves the house.
   opacity, margins.
 - **Skip intro, next episode, chapter markers** and thumbnail previews
   when you scrub.
-- **Commercials skipped, cuts and mutes honoured** — drop an `.edl`
+- **Commercials skipped, cuts and mutes honoured**: drop an `.edl`
   file next to a video (the Kodi format Comskip and MCEBuddy write) and
   every client skips the ads, jumps the cuts and silences the muted
   stretches on its own. Each user can turn it off.
-- **Live TV**, from your own IPTV subscription — add an M3U playlist or
+- **Live TV**, from your own IPTV subscription: add an M3U playlist or
   an Xtream account and channels line up next to your library, with a
   program guide and a rewind buffer to pause live and jump back a few
   minutes. Setting one up: [docs/livetv.md](docs/livetv.md).
 
 ### Browsing
 
-- **Several libraries side by side** — movies, shows, home videos, kids —
+- **Several libraries side by side**: movies, shows, home videos, kids,
   each pointed at its own folder.
 - **Search across all of them**, filter and sort by status, date added,
   rating, runtime.
 - **Metadata from TMDB / TVDB**: posters, fanart, genres, cast and crew.
   Every person is a page listing everything they worked on in your
   libraries; every genre is a filter.
-- **Home rows** — Continue Watching, Recently Added, and
+- **Home rows**: Continue Watching, Recently Added, and
   recommendations weighted by what you've actually watched.
 - **Calendar** of upcoming episodes for the series you follow.
-- **Spoiler protection** — an account-wide switch that blurs the
+- **Spoiler protection**: an account-wide switch that blurs the
   synopsis of a film, a season or an episode you haven't watched, along
   with an unwatched episode's thumbnail and backdrop, and shows
   *Episode 3* in place of a title that gives the plot away. Click a
@@ -92,29 +92,29 @@ create, no subscription, and nothing leaves the house.
   screen, with playback kept in sync, a chat and press-to-talk voice.
   Plan one ahead, let guests propose and vote for what to watch, and
   build the evening's programme on the party page.
-- **Recommend something to someone** — pick a film or a season and send
+- **Recommend something to someone**: pick a film or a season and send
   it to another user. It shows up on their home page under *Recommended
   for you*, with your name on it.
-- **Playlists** — your own running order, drag to reorder, autoplay from
+- **Playlists**: your own running order, drag to reorder, autoplay from
   one item to the next, and watched items drop off on their own if you
   want them to.
-- **Shared playlists** — invite other users as viewer, editor or admin
+- **Shared playlists**: invite other users as viewer, editor or admin
   and build one together, or save someone else's public playlist to your
   own list.
-- **Downloads that keep themselves current** — turn a playlist to
+- **Downloads that keep themselves current**: turn a playlist to
   automatic on your phone, tablet or the desktop app: what you haven't
   watched is downloaded to the device, and what you have watched is
   removed to give the space back. Nothing to think about before a flight.
   A whole season or show downloads in one go, or keeps the next episodes
   on the device, over wifi only if you prefer.
-- **Notifications** — request decisions, party invitations, follow
+- **Notifications**: request decisions, party invitations, follow
   requests, new episodes and plugin messages reach you in the app, in the
   browser, from the desktop app and on your phone, even with Fliks
   closed. Mobile ones are end-to-end encrypted through an optional relay
   that an administrator turns on. See [Privacy](PRIVACY.md#push-notifications).
-- **Everyone stays in control** — each user decides whether their
+- **Everyone stays in control**: each user decides whether their
   profile is public and what appears on it: tastes, recent activity,
-  favourites, statistics — or nothing at all.
+  favourites, statistics, or nothing at all.
 
 ### Running it
 
@@ -133,7 +133,7 @@ create, no subscription, and nothing leaves the house.
   soon* list, with reminders before they're removed after a grace
   period. Or browse the suggestions (never played, ended series) and
   decide title by title.
-- **Images cached locally** — no hotlinking to external services while
+- **Images cached locally**: no hotlinking to external services while
   you browse.
 
 ---
@@ -202,9 +202,9 @@ Or from the Snap Store: `sudo snap install fliks`.
 | How you run it | Platforms | Hardware transcoding | Ships with |
 |---|---|---|---|
 | **Docker** *(recommended)* | `linux/amd64`, `linux/arm64` | Intel QSV · VAAPI · NVIDIA NVENC · AMD | server, web client, FFmpeg |
-| **Windows** — tray app, NSIS installer | Windows x64 | Intel QSV · AMD AMF · NVIDIA NVENC, auto-detected | everything, no dependencies |
-| **macOS** — menu-bar app, `.dmg` | macOS 13 Ventura+, Apple Silicon | VideoToolbox | everything, no dependencies |
-| **From source** | anywhere Rust and Node (client build) run | whatever your FFmpeg exposes | — |
+| **Windows** (tray app, NSIS installer) | Windows x64 | Intel QSV · AMD AMF · NVIDIA NVENC, auto-detected | everything, no dependencies |
+| **macOS** (menu-bar app, `.dmg`) | macOS 13 Ventura+, Apple Silicon | VideoToolbox | everything, no dependencies |
+| **From source** | anywhere Rust and Node (client build) run | whatever your FFmpeg exposes | nothing |
 
 The image is a single container: the Rust server (`fliks-server`, behind the
 `fliks-engine` streaming engine), the built Angular client served as static assets, and a self-contained
@@ -213,14 +213,14 @@ PostgreSQL container sits beside it (the example Compose pins 18.3).
 
 ### Encoders
 
-Which hardware path is available depends on the machine, not on Fliks —
+Which hardware path is available depends on the machine, not on Fliks:
 it probes at startup and falls back to CPU when nothing else answers.
 
 | Codec | CPU | Intel QSV | VAAPI | NVIDIA NVENC | AMD AMF | VideoToolbox |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|
 | H.264 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | HEVC | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| AV1 | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| AV1 | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 
 HDR10, HLG and Dolby Vision are tone-mapped to SDR when the receiving
 device can't render them.
@@ -229,7 +229,7 @@ device can't render them.
 
 ## Get started
 
-The server runs on one machine in the house — the one holding your video
+The server runs on one machine in the house, the one holding your video
 files. Everything else connects to it. Three ways to install it; they
 give you the same Fliks, so pick whichever suits the machine. All you
 need is a folder with your videos and about two minutes.
@@ -248,7 +248,7 @@ Download the `.dmg` from the
 to Applications. Fliks sits in the menu bar. Apple Silicon, macOS 13
 Ventura or newer. Details in [`macos/`](macos/).
 
-### Docker — Linux, NAS, or a home server
+### Docker: Linux, NAS, or a home server
 
 ```bash
 curl -LO https://raw.githubusercontent.com/fliks-app/fliks/main/docker-compose.example.yml
@@ -257,9 +257,9 @@ mv docker-compose.example.yml docker-compose.yml
 
 Open the file and set three things:
 
-1. `POSTGRES_PASSWORD` and `DB_PASSWORD` — the same real password
+1. `POSTGRES_PASSWORD` and `DB_PASSWORD`: the same real password
 2. the `/path/to/your/media:/medias` mount: where your files are
-3. `PORT` — only if `4848` is taken on the host
+3. `PORT`: only if `4848` is taken on the host
 
 ```bash
 docker compose up -d
@@ -267,7 +267,7 @@ docker compose up -d
 
 ### First run
 
-Whichever you picked, open `http://<host>:4848` in a browser — on the
+Whichever you picked, open `http://<host>:4848` in a browser; on the
 machine itself that's `http://localhost:4848`. A fresh install has no
 account: Fliks shows a setup page where you pick the administrator's username
 and password (at least 8 characters). Then add a library pointing at your
@@ -281,6 +281,6 @@ and you're done.
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE) — run a modified version on a network and
+[AGPL-3.0-or-later](LICENSE): run a modified version on a network and
 you owe its users the modified source.
 
