@@ -290,6 +290,7 @@ html.native-player-active app-background {
   .animate-pulse.aspect-2\/3::before,
   app-hero-poster div.aspect-2\/3::before,
   app-wanted .aspect-2\/3::before,
+  app-requests figure.aspect-2\/3::before,
   app-collection-detail .aspect-\[2\/3\]::before,
   app-media-detail-seasons .aspect-\[2\/3\]::before {
     content: '';
