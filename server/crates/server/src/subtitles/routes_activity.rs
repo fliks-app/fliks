@@ -261,6 +261,14 @@ pub async fn health(State(st): State<AppState>, a: Authed) -> Res<Json<Value>> {
     Ok(Json(Value::Array(out)))
 }
 
+#[utoipa::path(post, path = "/api/subtitles/ocr/rerun", responses((status = 200)))]
+pub async fn rerun_ocr(State(st): State<AppState>, a: Authed) -> Res<Json<Value>> {
+    a.require(Action::Manage, Subject::Settings)?;
+    Ok(Json(
+        json!({ "started": super::ocr::rerun_all(&st).await? }),
+    ))
+}
+
 #[utoipa::path(get, path = "/api/subtitles/missing", responses((status = 200)))]
 pub async fn missing(
     State(st): State<AppState>,

@@ -6008,6 +6008,17 @@
         }
       }
     },
+    "/api/subtitles/ocr/rerun": {
+      "post": {
+        "tags": [
+          "routes_activity"
+        ],
+        "operationId": "rerun_ocr",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/subtitles/providers": {
       "get": {
         "tags": [

@@ -117,5 +117,22 @@
         </div>
       </div>
     </div>
+
+    @if (ocrRerunSupported()) {
+      <div class="card bg-base-100 border border-base-200">
+        <div class="card-body gap-3">
+          <h2 class="card-title text-base">{{ 'settings.subtitles.section_ocr' | translate }}</h2>
+          <p class="text-sm text-base-content/60">{{ 'settings.subtitles.ocr_rerun_hint' | translate }}</p>
+          <div class="card-actions">
+            <button type="button" class="btn btn-sm" (click)="rerunOcr()" [disabled]="rerunning()">
+              @if (rerunning()) {
+                <span class="loading loading-spinner loading-sm"></span>
+              }
+              {{ 'settings.subtitles.ocr_rerun' | translate }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
   }
 </div>

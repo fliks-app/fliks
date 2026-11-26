@@ -1122,3 +1122,78 @@ async fn a_sidecar_is_read_against_its_files_folder_else_the_target(pool: PgPool
         other
     );
 }
+
+#[sqlx::test]
+async fn a_rerun_replaces_the_ocr_of_each_track_that_still_has_its_image_track(pool: PgPool) {
+    let c = ctx(pool).await;
+    row(
+        &c,
+        "en",
+        "embedded",
+        None,
+        Some("hdmv_pgs_subtitle"),
+        Some(2),
+    )
+    .await;
+    let stem = "Movie (2020)/Movie.2020.1080p.BluRay.x264-GRP";
+    let ocr_row = |lang: &'static str, path: String, stream: i32| {
+        let c = &c;
+        async move {
+            let id = row(c, lang, "ocr", Some(&path), Some("subrip"), None).await;
+            sqlx::query(r#"UPDATE subtitle_files SET "sourceStreamIndex" = $2 WHERE id = $1"#)
+                .bind(id)
+                .bind(stream)
+                .execute(&c.pool)
+                .await
+                .unwrap();
+            id
+        }
+    };
+    let old_path = format!("{stem}.fr.ocr.srt");
+    std::fs::write(c.root.join(&old_path), "old").unwrap();
+    let old = ocr_row("fr", old_path.clone(), 2).await;
+    // Its image track was dropped by an optimization: nothing to read again.
+    let dropped = ocr_row("en", format!("{stem}.en.ocr.srt"), 5).await;
+    let uri = "/api/subtitles/ocr/rerun";
+    assert_eq!(call(&c, "POST", uri, &c.reader, None).await.0, 403);
+    script_job(
+        &c,
+        "r1",
+        job_snapshot(
+            "r1",
+            "SubtitleOcr",
+            "done",
+            json!({"type": "SubtitleOcr", "srt": SRT}),
+            None,
+        ),
+    );
+    let (s, body) = call(&c, "POST", uri, &c.admin, None).await;
+    assert_eq!((s, body), (200, json!({"started": 1})));
+    let track = || async {
+        sqlx::query_as::<_, (i32, String, Option<String>)>(
+            r#"SELECT id, status::text, "filePath" FROM subtitle_files
+               WHERE "providerType" = 'ocr' AND "sourceStreamIndex" = 2"#,
+        )
+        .fetch_all(&c.pool)
+        .await
+        .unwrap()
+    };
+    until("ocr replaced", || async {
+        matches!(track().await.as_slice(), [(id, s, _)] if *id != old && s == "downloaded")
+    })
+    .await;
+    let path = track().await[0].2.clone().unwrap();
+    assert_eq!(path, format!("{stem}.fr.ocr-1.srt"));
+    assert!(!c.root.join(&old_path).exists());
+    let sent = &c.fake.seen("POST", "/v1/jobs")[0].body;
+    assert_eq!(
+        (sent["kind"]["language"].clone(), sent["priority"].clone()),
+        (json!("fr"), json!("low"))
+    );
+    let kept: i64 = sqlx::query_scalar("SELECT count(*) FROM subtitle_files WHERE id = $1")
+        .bind(dropped)
+        .fetch_one(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(kept, 1);
+}

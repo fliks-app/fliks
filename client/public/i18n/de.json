@@ -3461,7 +3461,13 @@
       "search_one": "Diesen Untertitel suchen",
       "search_one_ok": "Untertitel {{lang}} für „{{title}}“ heruntergeladen",
       "search_one_none": "Kein Untertitel {{lang}} mit ausreichendem Score gefunden",
-      "forced": "Erzwungen"
+      "forced": "Erzwungen",
+      "section_ocr": "OCR",
+      "ocr_rerun_hint": "Liest jede Bild-Untertitelspur mit vorhandenem OCR-Ergebnis erneut. Jedes neue Ergebnis ersetzt das alte. Die Läufe erfolgen im Hintergrund.",
+      "ocr_rerun": "OCR erneut ausführen",
+      "ocr_rerun_confirm": "OCR für alle OCR-Untertitel erneut ausführen? Bei einer großen Bibliothek kann das lange dauern.",
+      "ocr_rerun_started_one": "OCR für {{count}} Spur gestartet.",
+      "ocr_rerun_started_other": "OCR für {{count}} Spuren gestartet."
     },
     "plugins": {
       "title": "Plugins",

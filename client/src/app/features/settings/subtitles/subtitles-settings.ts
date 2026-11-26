@@ -7,6 +7,9 @@ import {
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
+import { SubtitlesApiService } from '../../../core/services/api/subtitles-api.service';
+import { ConfirmationService } from '../../../core/services/confirmation.service';
+import { translatePlural } from '../../../core/pipes/translate-plural.pipe';
 import { ToastService } from '../../../core/services/toast.service';
 import { ToggleFieldComponent } from '../../../shared/components/forms/toggle-field/toggle-field';
 import { LoadFailedComponent } from '../../../shared/components/load-failed/load-failed';
@@ -20,10 +23,14 @@ export class SubtitlesSettingsComponent implements OnInit {
   private readonly api = inject(SettingsApiService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
+  private readonly subtitles = inject(SubtitlesApiService);
+  readonly ocrRerunSupported = this.subtitles.ocrRerunSupported;
+  private readonly confirmation = inject(ConfirmationService);
 
   readonly loading = signal(true);
   readonly loadFailed = signal(false);
   readonly saving = signal(false);
+  readonly rerunning = signal(false);
 
   readonly autoSearch = signal('true');
   readonly searchInterval = signal('360');
@@ -82,6 +89,23 @@ export class SubtitlesSettingsComponent implements OnInit {
       // handled by global interceptor
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  async rerunOcr() {
+    const ok = await this.confirmation.confirm({
+      title: this.translate.instant('common.confirm'),
+      message: this.translate.instant('settings.subtitles.ocr_rerun_confirm'),
+    });
+    if (!ok) return;
+    this.rerunning.set(true);
+    try {
+      const { started } = await this.subtitles.rerunOcr();
+      this.toast.success(translatePlural(this.translate, 'settings.subtitles.ocr_rerun_started', started));
+    } catch {
+      // handled by global interceptor
+    } finally {
+      this.rerunning.set(false);
     }
   }
 }
