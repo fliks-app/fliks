@@ -1,8 +1,9 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
+import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 
 export interface SubtitleFileRow {
   id: number;
@@ -50,6 +51,8 @@ export interface SubtitleSearchResult {
 @Injectable({ providedIn: 'root' })
 export class SubtitlesApiService {
   private readonly http = inject(HttpClient);
+  private readonly serverVersion = inject(ServerVersionService);
+  readonly ocrRerunSupported = computed(() => this.serverVersion.supports(SERVER_SINCE.ocrRerun));
 
   getStreams(mediaId: number, mediaFileId: number) {
     return firstValueFrom(

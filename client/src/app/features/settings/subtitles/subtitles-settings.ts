@@ -24,6 +24,7 @@ export class SubtitlesSettingsComponent implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
   private readonly subtitles = inject(SubtitlesApiService);
+  readonly ocrRerunSupported = this.subtitles.ocrRerunSupported;
   private readonly confirmation = inject(ConfirmationService);
 
   readonly loading = signal(true);

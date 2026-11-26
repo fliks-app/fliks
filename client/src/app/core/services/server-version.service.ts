@@ -36,6 +36,7 @@ export const SERVER_SINCE = {
   problems: '7.2.0',
   featured: '7.2.0',
   remoteImages: '7.2.0',
+  ocrRerun: '7.4.0',
   // Release that carries the engine keyframes-route fix.
   keyframes: '7.1.1',
 } as const;
