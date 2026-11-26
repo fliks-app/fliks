@@ -1,9 +1,8 @@
 # Builds a signed IPA of the Fliks iOS client and uploads it to App
 # Store Connect on every release tag (`v*` produced by release-please)
 # plus on manual `workflow_dispatch` for ad-hoc re-uploads. The build
-# lands in TestFlight after Apple's processing (~10-30 min); promotion
-# to the public App Store still requires clicking "Submit for Review"
-# from App Store Connect.
+# lands in TestFlight after Apple's processing (~10-30 min); a stable
+# release tag then submits it for App Review (`submit-for-review`).
 #
 # Build number (CFBundleVersion / CURRENT_PROJECT_VERSION) comes from
 # `git rev-list --count HEAD` so each upload is monotonically higher
@@ -18,7 +17,8 @@
 #
 # How to mint the API key:
 #   App Store Connect → Users and Access → Keys → App Store Connect API
-#   → "+" → role "App Manager" → download the .p8 (one-shot, save it).
+#   → "+" → role "App Manager" or "Admin" (submitting for review needs
+#   one of them) → download the .p8 (one-shot, save it).
 #   Base64-encode for the secret: `base64 -i AuthKey_XXX.p8 | pbcopy`.
 name: Publish iOS to App Store Connect
 
@@ -193,3 +193,21 @@ jobs:
             --apiKey "$KEY_ID" \
             --apiIssuer "$ISSUER_ID"
         working-directory: ${{ github.workspace }}
+
+  # Waits for Apple's processing on a cheap runner, then submits; a dispatch on a stable tag re-runs it.
+  submit-for-review:
+    needs: build-and-publish
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') && !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/asc-submit
+        with:
+          platform: IOS
+          key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
+          issuer-id: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          key-p8-base64: ${{ secrets.APPSTORE_API_KEY_P8_BASE64 }}

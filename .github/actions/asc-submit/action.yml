@@ -1,0 +1,28 @@
+name: Submit for App Review
+description: Submits the build of this tag (commit-count build number) for App Review.
+inputs:
+  platform:
+    description: IOS, TV_OS or MAC_OS
+    required: true
+  key-id:
+    required: true
+  issuer-id:
+    required: true
+  key-p8-base64:
+    required: true
+runs:
+  using: composite
+  steps:
+    - id: key
+      uses: ./.github/actions/stage-asc-key
+      with:
+        key-id: ${{ inputs.key-id }}
+        key-p8-base64: ${{ inputs.key-p8-base64 }}
+
+    - shell: bash
+      env:
+        PLATFORM: ${{ inputs.platform }}
+        ASC_KEY_ID: ${{ inputs.key-id }}
+        ASC_ISSUER_ID: ${{ inputs.issuer-id }}
+        ASC_KEY_PATH: ${{ steps.key.outputs.path }}
+      run: python3 -I .github/scripts/asc-submit.py "$PLATFORM" "${GITHUB_REF_NAME#v}" "$(git rev-list --count HEAD)"

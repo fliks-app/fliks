@@ -519,3 +519,21 @@ jobs:
           if-no-files-found: warn
           # Installers and packages are already compressed.
           compression-level: 0
+
+  # The Mac App Store build `build` uploaded on a stable tag; waits for Apple's processing on a cheap runner.
+  submit-mas-for-review:
+    needs: build
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') && vars.MAS_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/asc-submit
+        with:
+          platform: MAC_OS
+          key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
+          issuer-id: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          key-p8-base64: ${{ secrets.APPSTORE_API_KEY_P8_BASE64 }}
