@@ -7,11 +7,13 @@ import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import { kindOf } from '../../../core/media-kinds';
 import { allowanceLine } from '../../../core/utils/request-allowance';
+import { BooksApiService } from '../../../core/services/api/books-api.service';
 import { LibrariesApiService, type LibrarySummary } from '../../../core/services/api/libraries-api.service';
 import { MetadataService, type SeasonStub } from '../../../core/services/api/metadata.service';
+import { MusicApiService } from '../../../core/services/api/music-api.service';
 import { ProfilesService } from '../../../core/services/api/profiles.service';
 import { extractMessage } from '../../../core/interceptors/error.interceptor';
-import { RequestsService, type CreateRequestBody, type RequestAllowance } from '../../../core/services/api/requests.service';
+import { RequestsService, type CreateRequestBody, type FliksRequestStatus, type RequestAllowance } from '../../../core/services/api/requests.service';
 import { PushService } from '../../../core/services/push.service';
 import type { WantSpec } from '../../../core/services/api/wants-api.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -48,6 +50,8 @@ export class AddDialogComponent {
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly metadata = inject(MetadataService);
+  private readonly books = inject(BooksApiService);
+  private readonly music = inject(MusicApiService);
   private readonly requestsApi = inject(RequestsService);
   private readonly push = inject(PushService);
   private readonly toast = inject(ToastService);
@@ -92,7 +96,9 @@ export class AddDialogComponent {
   protected readonly folders = computed(() => this.libraries().find((l) => l.id === this.libraryId())?.folders ?? []);
   /** An approved add absorbs pending seasons and skips held ones, so nothing is locked for it. */
   protected readonly alreadyRequested = computed(() => new Set(this.auto() ? [] : (this.req()?.alreadyRequestedSeasons ?? [])));
-  protected readonly showFollow = computed(() => this.hasSeasons() && !this.req()?.followsNewSeasons);
+  protected readonly showFollow = computed(
+    () => this.hasSeasons() && !this.req()?.followsNewSeasons && (this.requestsApi.addsByImport() || this.requestsApi.requestsFollowNewSeasons()),
+  );
   protected readonly locked = computed(() => !!this.req()?.profilesLocked);
   protected readonly qualityLocked = computed(() => this.locked() && this.req()?.lockedQualityProfileId != null);
   /** Folder and profile pickers are for who adds or manages; a member's request takes the library defaults. */
@@ -267,12 +273,17 @@ export class AddDialogComponent {
     const r = this.req();
     if (!r || !this.canSubmit()) return;
     this.busy.set(true);
+    const byImport = this.requestsApi.addsByImport();
     try {
-      const row = await this.requestsApi.create(this.body(r), true);
+      let row: { status: FliksRequestStatus; mediaId: number | null };
+      if (byImport) row = { status: 'approved', mediaId: await this.importIt(r) };
+      else row = await this.requestsApi.create(this.body(r), true);
       const recordings = r.kind === 'album' && r.recording ? [r.recording.externalId] : undefined;
       this.settled = true;
       rememberLibrary(r.kind, this.libraryId());
-      if (row.status !== 'pending') {
+      if (byImport) {
+        this.toast.success(this.translate.instant('discover.import_success'));
+      } else if (row.status !== 'pending') {
         this.toast.success(this.translate.instant('discover.request_approved'));
       } else if (this.auto()) {
         this.toast.info(this.translate.instant('discover.request_sent_for_approval'));
@@ -284,7 +295,8 @@ export class AddDialogComponent {
       this.done.emit({ status: row.status, mediaId: row.mediaId ?? null, ...(recordings ? { recordings } : {}) });
       if (row.status === 'pending') void this.push.askInContext('request');
     } catch (e) {
-      if (e instanceof HttpErrorResponse) this.toast.error(extractMessage(e, this.translate));
+      // The import routes keep the global error toast.
+      if (e instanceof HttpErrorResponse && !byImport) this.toast.error(extractMessage(e, this.translate));
     } finally {
       this.busy.set(false);
     }
@@ -296,6 +308,36 @@ export class AddDialogComponent {
       ...(this.libraryId() != null ? { libraryId: this.libraryId()! } : {}),
       ...(this.folders().length > 1 && folderId != null ? { folderId } : {}),
     };
+  }
+
+  private async importIt(r: AddRequest): Promise<number | null> {
+    const place = this.place();
+    switch (r.kind) {
+      case 'book': {
+        const saved = await this.books.import({ type: 'book', provider: r.provider, externalId: r.externalId, wants: this.readyWants(), ...place });
+        return saved.id;
+      }
+      case 'album': {
+        if (r.recording) {
+          const w = await this.music.wantRecording({ provider: r.provider, externalId: r.recording.externalId, albumExternalId: r.externalId, wants: this.audioWants(), ...place });
+          return w.mediaId;
+        }
+        return (await this.music.importAlbum({ provider: r.provider, externalId: r.externalId, wants: this.audioWants(), ...place })).id;
+      }
+      default: {
+        const saved = await this.metadata.importMedia({
+          type: r.kind,
+          provider: r.provider,
+          externalId: r.externalId,
+          qualityProfileId: this.qualityId()!,
+          languageProfileId: this.languageId() ?? undefined,
+          ...place,
+          ...(this.hasSeasons() && !this.seasonsFailed() ? { monitoredSeasons: [...this.selectedSeasons()].sort((a, b) => a - b) } : {}),
+          ...(kindOf(r.kind).hasSeasons ? { monitorNewSeasons: this.followNewSeasons() } : {}),
+        });
+        return saved.id;
+      }
+    }
   }
 
   private audioWants(): WantSpec[] | undefined {

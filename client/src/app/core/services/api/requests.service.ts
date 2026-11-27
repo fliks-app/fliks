@@ -1,10 +1,11 @@
-import { Injectable, effect, inject, signal, untracked } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { kindOf } from '../../media-kinds';
+import { AuthService } from '../auth.service';
 import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import { StorageScopeService } from '../storage-scope.service';
 import type { LastSearch } from './last-search.model';
@@ -241,14 +242,22 @@ export function requestAddLink(r: FliksRequestRow): (string | number)[] {
   return [...base, r.provider ?? 'tmdb', r.externalId ?? r.tmdbId ?? ''];
 }
 
+const IMPORT_KINDS: ReadonlySet<MediaType> = new Set(['movie', 'series', 'book', 'album']);
+
 @Injectable({ providedIn: 'root' })
 export class RequestsService {
   private readonly http = inject(HttpClient);
   private readonly scope = inject(StorageScopeService);
   private readonly serverVersion = inject(ServerVersionService);
-  private readonly _autoKinds = signal<ReadonlySet<MediaType>>(new Set());
-  /** The kinds whose create is certain to be approved for the caller: the one source of "Add" over "Request". */
-  readonly autoKinds = this._autoKinds.asReadonly();
+  private readonly auth = inject(AuthService);
+  private readonly fetchedKinds = signal<ReadonlySet<MediaType>>(new Set());
+  /** A server before it neither auto-approves adders nor takes `monitorNewSeasons` on a request. */
+  private readonly requestAdds = computed(() => this.serverVersion.supports(SERVER_SINCE.autoApproval));
+  /** An adder on an older server adds through the import routes. */
+  readonly addsByImport = computed(() => !this.requestAdds() && this.auth.hasPermission('media.create'));
+  readonly requestsFollowNewSeasons = this.requestAdds;
+  /** The kinds whose add is certain to land at once for the caller: the one source of "Add" over "Request". */
+  readonly autoKinds = computed<ReadonlySet<MediaType>>(() => (this.addsByImport() ? IMPORT_KINDS : this.fetchedKinds()));
 
   constructor() {
     effect(() => {
@@ -259,7 +268,7 @@ export class RequestsService {
 
   /** A hint: on failure, or on a server without the route, every add reads "Request". */
   async reloadAutoKinds(): Promise<void> {
-    this._autoKinds.set(new Set(await this.fetchAutoKinds()));
+    this.fetchedKinds.set(new Set(await this.fetchAutoKinds()));
   }
 
   private async fetchAutoKinds(): Promise<MediaType[]> {

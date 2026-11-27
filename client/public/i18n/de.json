@@ -1031,6 +1031,7 @@
     "already_requested": "Bereits angefragt",
     "seasons_already_requested": "Bereits angefragte Staffeln: {{seasons}}",
     "request_success": "Anfrage erfolgreich gesendet.",
+    "import_success": "Medium zur Bibliothek hinzugefügt.",
     "quality_profile": "Qualitätsprofil",
     "language_profile": "Sprachprofil",
     "request_title": "Medium anfragen",

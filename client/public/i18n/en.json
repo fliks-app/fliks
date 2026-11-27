@@ -1034,6 +1034,7 @@
     "already_requested": "Already requested",
     "seasons_already_requested": "Seasons already requested: {{seasons}}",
     "request_success": "Request sent successfully.",
+    "import_success": "Media added to the library.",
     "quality_profile": "Quality profile",
     "language_profile": "Language profile",
     "request_title": "Request media",

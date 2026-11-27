@@ -5,6 +5,8 @@ import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AddDialogComponent } from './add-dialog';
 import type { AddRequest, AddResult } from './add-plan';
+import { BooksApiService } from '../../../core/services/api/books-api.service';
+import { MusicApiService } from '../../../core/services/api/music-api.service';
 import { LibrariesApiService, type LibrarySummary } from '../../../core/services/api/libraries-api.service';
 import { MetadataService } from '../../../core/services/api/metadata.service';
 import { ProfilesService } from '../../../core/services/api/profiles.service';
@@ -25,10 +27,10 @@ const lib = (id: number, types: string[], folders: number[] = [10], q: number | 
     folders: folders.map((f) => ({ id: f, name: `f${f}` })),
   }) as unknown as LibrarySummary;
 
-type Opts = { allowance?: RequestAllowance | null; auto?: string[]; status?: string; seasons?: number[] };
+type Opts = { allowance?: RequestAllowance | null; auto?: string[]; status?: string; seasons?: number[]; oldServer?: boolean };
 
 function setup(libraries: LibrarySummary[], perms: string[] = ['media.create'], o: Opts = {}) {
-  const calls: Record<string, unknown[]> = { request: [] };
+  const calls: Record<string, unknown[]> = { request: [], import: [], book: [], album: [], want: [] };
   const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
   const ask = vi.fn();
   const show = vi.fn();
@@ -52,12 +54,23 @@ function setup(libraries: LibrarySummary[], perms: string[] = ['media.create'], 
         provide: MetadataService,
         useValue: {
           getSeasonStubs: async () => (o.seasons ?? [0, 1]).map((n) => ({ seasonNumber: n, episodeCount: 8 })),
+          importMedia: async (b: unknown) => (calls['import']!.push(b), { id: 41 }),
+        },
+      },
+      { provide: BooksApiService, useValue: { import: async (b: unknown) => (calls['book']!.push(b), { id: 42 }) } },
+      {
+        provide: MusicApiService,
+        useValue: {
+          importAlbum: async (b: unknown) => (calls['album']!.push(b), { id: 43 }),
+          wantRecording: async (b: unknown) => (calls['want']!.push(b), { mediaId: 44, itemId: 5 }),
         },
       },
       {
         provide: RequestsService,
         useValue: {
           autoKinds: signal(auto),
+          addsByImport: signal(!!o.oldServer && perms.includes('media.create')),
+          requestsFollowNewSeasons: signal(!o.oldServer),
           reloadAutoKinds: reload,
           allowance: async () => o.allowance ?? null,
           create: async (b: unknown) => (calls['request']!.push(b), { mediaId: 41, status: o.status ?? (auto.size ? 'approved' : 'pending'), absorbed: [] }),
@@ -285,6 +298,29 @@ describe('AddDialogComponent', () => {
     await cmp.add({ kind: 'book', provider: 'p', externalId: 'b1', title: 'B' });
     await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A' });
     expect((calls['request']![1] as { wants: unknown[] }).wants).toEqual([{ family: 'audio', language: null, qualityProfileId: 9 }]);
+  });
+
+  it('imports directly for an adder on a server older than auto-approval', async () => {
+    const { cmp, calls, done, toast } = setup([lib(1, ['movie', 'book', 'album'], [10], 5)], ['media.create'], { oldServer: true });
+    await cmp.add(movie);
+    await cmp.add({ kind: 'book', provider: 'p', externalId: 'b1', title: 'B' });
+    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A' });
+    await cmp.add({ kind: 'album', provider: 'musicbrainz', externalId: 'g1', title: 'A', recording: { externalId: 'r1', albumExternalId: 'g1' } });
+    expect(calls['request']).toEqual([]);
+    expect(calls['import']).toEqual([{ type: 'movie', provider: 'tmdb', externalId: '603', qualityProfileId: 5, languageProfileId: 3, libraryId: 1 }]);
+    expect(calls['book']).toHaveLength(1);
+    expect(calls['album']).toHaveLength(1);
+    expect(calls['want']).toHaveLength(1);
+    expect(toast.success).toHaveBeenCalledWith('discover.import_success');
+    expect(done[0]).toEqual({ status: 'approved', mediaId: 41 });
+  });
+
+  it('requests without follow-new-seasons on a server older than auto-approval', async () => {
+    const { cmp, calls } = setup([lib(1, ['series'])], ['requests.create'], { oldServer: true });
+    await cmp.add({ ...movie, kind: 'series', preselectedSeasons: [1] });
+    await new Promise((r) => setTimeout(r));
+    await inner(cmp).submit();
+    expect(calls['request']![0]).not.toHaveProperty('monitorNewSeasons');
   });
 
   it('ignores an add while another one loads', async () => {

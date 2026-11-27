@@ -391,4 +391,40 @@ export class MetadataService {
       this.http.get<MetadataDetails>(`/api/metadata/${provider}/${segment}/${encodeURIComponent(externalId)}`, { context }),
     );
   }
+
+  importFromTmdb(
+    type: MediaType,
+    tmdbId: number,
+    qualityProfileId: number,
+    languageProfileId?: number,
+    libraryId?: number,
+  ) {
+    const body: { type: string; tmdbId: number; qualityProfileId: number; languageProfileId?: number; libraryId?: number } = {
+      type,
+      tmdbId,
+      qualityProfileId,
+    };
+    if (languageProfileId != null) body.languageProfileId = languageProfileId;
+    if (libraryId != null) body.libraryId = libraryId;
+    return firstValueFrom(this.http.post<Media>('/api/media/import/tmdb', body));
+  }
+
+  /** Provider-aware import */
+  importMedia(opts: {
+    type: MediaType;
+    externalId: string;
+    provider: string;
+    qualityProfileId: number;
+    languageProfileId?: number;
+    libraryId?: number;
+    /** One of the library's folders; omitted means its default one. */
+    folderId?: number;
+    /** Series only: seasons to monitor. Omitted monitors every season but the
+     *  specials. */
+    monitoredSeasons?: number[];
+    /** Series only: whether a season announced later starts monitored. */
+    monitorNewSeasons?: boolean;
+  }) {
+    return firstValueFrom(this.http.post<Media>('/api/media/import', opts));
+  }
 }

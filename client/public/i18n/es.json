@@ -1031,6 +1031,7 @@
     "already_requested": "Ya solicitado",
     "seasons_already_requested": "Temporadas ya solicitadas: {{seasons}}",
     "request_success": "Solicitud enviada correctamente.",
+    "import_success": "Medio añadido a la biblioteca.",
     "quality_profile": "Perfil de calidad",
     "language_profile": "Perfil de idioma",
     "request_title": "Solicitar el contenido",
