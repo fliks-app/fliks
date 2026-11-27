@@ -140,6 +140,8 @@ export interface FliksRequestRow {
   qualityProfileId: number | null;
   languageProfileId: number | null;
   libraryId: number | null;
+  /** One of the library's folders; null is its default one. */
+  folderId?: number | null;
   mediaId: number | null;
   /** Joined media row when linked. Use `media?.title` to display the live
    *  title (the cached `title` field may be stale or empty). */
@@ -208,7 +210,8 @@ export interface TitleRequestState {
   /** The active row behind `requested`. */
   requestId: number | null;
   /** The title's pending add rows, any requester, ascending. */
-  pendingRequestIds: number[];
+  /** Absent before `SERVER_SINCE.autoApproval`. */
+  pendingRequestIds?: number[];
   wholeSeriesRequested: boolean;
   requestedSeasons: number[];
   profilesLocked: boolean;
@@ -251,11 +254,11 @@ export class RequestsService {
   private readonly serverVersion = inject(ServerVersionService);
   private readonly auth = inject(AuthService);
   private readonly fetchedKinds = signal<ReadonlySet<MediaType>>(new Set());
-  /** Older servers neither auto-approve adders nor take `monitorNewSeasons` on a request; drop with #3103. */
-  private readonly requestAdds = computed(() => this.serverVersion.supports(SERVER_SINCE.autoApproval));
   /** An adder on an older server adds through the import routes. */
-  readonly addsByImport = computed(() => !this.requestAdds() && this.auth.hasPermission('media.create'));
-  readonly requestsFollowNewSeasons = this.requestAdds;
+  readonly addsByImport = computed(() => !this.serverVersion.requestAdds() && this.auth.hasPermission('media.create'));
+  /** Add or Request is offered: a request, or an import on an older server. */
+  readonly canAdd = computed(() => this.auth.hasPermission('requests.create') || this.addsByImport());
+  readonly requestsFollowNewSeasons = this.serverVersion.requestAdds;
   /** The kinds whose add is certain to land at once for the caller: the one source of "Add" over "Request". */
   readonly autoKinds = computed<ReadonlySet<MediaType>>(() => (this.addsByImport() ? IMPORT_KINDS : this.fetchedKinds()));
 

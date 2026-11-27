@@ -35,7 +35,7 @@ function setup(perms: string[] = ['media.create'], auto = perms.includes('media.
       { provide: ActivatedRoute, useValue: { snapshot: { data: {}, paramMap: { get: () => null } } } },
       { provide: AuthService, useValue: { sharingDisabled: () => false, hasPermission: (p: string) => holdsPermission(perms, p) } },
       { provide: ScrollMemoryService, useValue: { activate: vi.fn(), restore: vi.fn(), deactivateIf: vi.fn() } },
-      { provide: RequestsService, useValue: { autoKinds: signal(new Set(auto)) } },
+      { provide: RequestsService, useValue: { autoKinds: signal(new Set(auto)), canAdd: signal(holdsPermission(perms, 'requests.create')) } },
       { provide: MusicApiService, useValue: { resolveArtist } },
       { provide: AudioPlayerService, useValue: { playTracks } },
       { provide: MusicDownloadsService, useValue: { albumTracks } },

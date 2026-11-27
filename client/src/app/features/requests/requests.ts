@@ -171,7 +171,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly kindFilter = signal<RequestKind | ''>('');
   /** Only the caller's own rows; offered to who sees others' rows. */
   readonly mineFilter = signal(false);
-  protected readonly canFilterMine = () => this.auth.hasPermission('requests.manage') || this.auth.hasPermission('media.create');
+  /** Only a manager's list holds other users' rows (rule 9). */
+  protected readonly canFilterMine = () => this.auth.hasPermission('requests.manage');
   /** Read-only modal: motif affiché après un refus. */
   readonly viewDeclineReasonModal = signal<{
     mediaTitle: string;

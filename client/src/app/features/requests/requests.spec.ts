@@ -49,7 +49,7 @@ function setup(opts: SetupOpts = {}) {
       { provide: ConfirmationService, useValue: { confirm } },
       { provide: ToastService, useValue: toast },
       { provide: ScrollMemoryService, useValue: { activate: vi.fn(), deactivateIf: vi.fn(), restoreSticky: vi.fn() } },
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       { provide: SseService, useValue: sse },
       { provide: DownloadProgressService, useValue: { progress: signal(new Map()) } },
       { provide: AuthService, useValue: { user: signal({ id: 1 }), hasPermission: () => true } },

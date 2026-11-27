@@ -13,7 +13,7 @@ const item = (mediaId: number, episodeId: number | null = null) =>
 function render(cover: PartyCover, head: PartyItem | null = null) {
   TestBed.configureTestingModule({
     providers: [
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       provideZonelessChangeDetection(),
       { provide: ServerConfigService, useValue: { isNative: false, resolveUrl: (u: string) => u } },
       { provide: AuthService, useValue: { playbackToken: null } },

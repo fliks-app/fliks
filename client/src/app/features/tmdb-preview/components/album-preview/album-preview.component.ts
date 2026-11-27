@@ -6,7 +6,6 @@ import { icons } from '../../../../shared/icons';
 import { translatePlural } from '../../../../core/pipes/translate-plural.pipe';
 import { MusicApiService } from '../../../../core/services/api/music-api.service';
 import type { AlbumPreview, AlbumPreviewTrack } from '../../../../core/services/api/music.models';
-import { AuthService } from '../../../../core/services/auth.service';
 import { RequestsService } from '../../../../core/services/api/requests.service';
 import { mediaDetailLink } from '../../../../core/media-kinds';
 import { AddDialogComponent } from '../../../../shared/components/add-dialog/add-dialog';
@@ -27,7 +26,6 @@ export class AlbumPreviewComponent implements OnInit {
   protected readonly icons = icons;
 
   private readonly router = inject(Router);
-  private readonly auth = inject(AuthService);
   private readonly requests = inject(RequestsService);
   private readonly host = inject(PREVIEW_HOST);
   private readonly music = inject(MusicApiService);
@@ -51,7 +49,7 @@ export class AlbumPreviewComponent implements OnInit {
   protected readonly failed = signal(false);
   protected readonly requested = signal(false);
   protected readonly placeholders = [0, 1, 2, 3, 4, 5, 6, 7];
-  protected readonly canRequest = computed(() => this.auth.hasPermission('requests.create'));
+  protected readonly canRequest = this.requests.canAdd;
   protected readonly auto = computed(() => this.requests.autoKinds().has('album'));
   protected readonly chips: HeroChip[] = [{ label: 'kinds.album', cls: 'badge badge-outline badge-sm md:badge-md' }];
   protected readonly posterTransitionName = computed(() => previewPosterName('album', this.provider(), this.externalId()));

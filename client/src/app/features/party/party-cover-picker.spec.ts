@@ -12,7 +12,7 @@ const options: CoverOption[] = [1, 2, 3, 4, 5].map((id) => ({ mediaId: id, episo
 function setup() {
   TestBed.configureTestingModule({
     providers: [
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       provideZonelessChangeDetection(),
       provideTranslateService(),
       { provide: ServerConfigService, useValue: { isNative: false, resolveUrl: (u: string) => u } },

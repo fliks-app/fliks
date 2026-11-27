@@ -707,7 +707,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // ── Cards ──
 
-  protected readonly canRequest = computed(() => this.auth.hasPermission('requests.create'));
+  protected readonly canRequest = this.requestsApi.canAdd;
   protected readonly autoAlbum = computed(() => this.requestsApi.autoKinds().has('album'));
 
   protected readonly videoHeld = this.state.videoHeld;

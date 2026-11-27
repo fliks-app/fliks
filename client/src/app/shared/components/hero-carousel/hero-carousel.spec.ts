@@ -40,7 +40,7 @@ function setup(tv = true, items?: Media[]) {
   };
   TestBed.configureTestingModule({
     providers: [
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       provideZonelessChangeDetection(),
       provideRouter([]),
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),

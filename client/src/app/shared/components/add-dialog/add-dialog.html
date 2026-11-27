@@ -8,8 +8,8 @@
     </div>
   </app-modal-header>
 
-  @if (req()?.pending && canManage()) {
-    <app-request-requesters class="mt-2" [requestId]="req()!.pending!.id" />
+  @if (canManage() && req()?.pending?.length === 1) {
+    <app-request-requesters class="mt-2" [requestId]="req()!.pending![0]!.id" />
   } @else if (req()?.requesterCount; as n) {
     <p class="mt-2 text-sm text-base-content/60" data-testid="requester-count">{{ 'add_dialog.requested_by_count' | translatePlural: n }}</p>
   }

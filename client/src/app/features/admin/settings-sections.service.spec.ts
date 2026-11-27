@@ -44,7 +44,7 @@ function createService(opts: { isAdmin?: boolean; permissions?: string[]; entrie
       },
       { provide: TvService, useValue: { isTv: () => false } },
       { provide: DeviceService, useValue: { isTouch: () => false } },
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       { provide: PluginUiRegistryService, useValue: { pluginEntries: () => opts.entries ?? [] } },
     ],
   });

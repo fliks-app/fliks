@@ -43,7 +43,7 @@ function setup(track?: string) {
       { provide: NavbarService, useValue: { heroPaddingTop: () => null } },
       { provide: DeviceService, useValue: { isTv: () => false } },
       { provide: PushService, useValue: { askInContext: vi.fn() } },
-      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true, supportsWhenKnown: async () => true } },
       { provide: PREVIEW_HOST, useValue: { setTitle: vi.fn(), setBackground: vi.fn() } },
     ],
   });

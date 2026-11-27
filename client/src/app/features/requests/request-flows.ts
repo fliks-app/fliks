@@ -54,7 +54,7 @@ export class RequestEditFlow {
   open(row: FliksRequestRow, mode: 'edit' | 'approve' = 'edit'): void {
     this.mode.set(mode);
     this.row.set(row);
-    this.folderId.set(defaultFolderId(this.libraries().find((l) => l.id === row.libraryId)?.folders));
+    this.folderId.set(row.folderId ?? defaultFolderId(this.libraries().find((l) => l.id === row.libraryId)?.folders));
     this.monitorNewSeasons.set(row.monitorNewSeasons ?? null);
     this.qualityProfileId.set(row.qualityProfileId);
     this.languageProfileId.set(row.languageProfileId);
@@ -79,11 +79,13 @@ export class RequestEditFlow {
     const libraryId = this.libraryId();
     const folders = this.libraries().find((l) => l.id === libraryId)?.folders ?? [];
     const folderId = this.folderId();
+    // A library sent resets the row's folder, so it goes only when it changed.
+    const moved = libraryId !== row.libraryId;
     return {
       ...(this.qualityProfileId() != null ? { qualityProfileId: this.qualityProfileId()! } : {}),
       ...(this.languageProfileId() != null ? { languageProfileId: this.languageProfileId()! } : {}),
-      ...(libraryId != null ? { libraryId } : {}),
-      ...(folders.length > 1 && folderId != null ? { folderId } : {}),
+      ...(moved && libraryId != null ? { libraryId } : {}),
+      ...(folders.length > 1 && folderId != null && (moved || folderId !== (row.folderId ?? defaultFolderId(folders))) ? { folderId } : {}),
       ...(kindOf(row.mediaType).hasSeasons && this.monitorNewSeasons() != null ? { monitorNewSeasons: this.monitorNewSeasons()! } : {}),
     };
   }

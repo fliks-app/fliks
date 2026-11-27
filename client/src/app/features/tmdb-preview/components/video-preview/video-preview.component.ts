@@ -87,7 +87,7 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
     previewPosterName(kindOf(this.type()).providerSegment, this.provider(), this.externalId()),
   );
 
-  readonly canRequest = computed(() => this.auth.hasPermission('requests.create'));
+  readonly canRequest = this.requestsApi.canAdd;
   /** The caller's create is approved at once: the button reads Add. */
   readonly auto = computed(() => this.requestsApi.autoKinds().has(this.type()));
 
@@ -112,10 +112,13 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
   /** Pending requests on this title, for a manager. */
   readonly pendingRequests = signal<FliksRequestRow[]>([]);
 
-  /** An add approves the title's pending rows, so only an approved or processing one leaves nothing to add. */
+  /** A request add approves the title's pending rows, so only an approved or processing one leaves nothing to add;
+   *  an import would bypass a pending request, so approving it is the way in there. */
   readonly showAdd = computed(() => {
+    if (!this.auto()) return false;
+    if (this.requestsApi.addsByImport()) return this.pendingRequests().length === 0;
     const s = this.titleState();
-    return this.auto() && (!s?.requested || s.pendingRequestIds.length > 0);
+    return !s?.requested || (s.pendingRequestIds?.length ?? 0) > 0;
   });
 
   readonly actionBusyId = signal<number | null>(null);
@@ -399,14 +402,13 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
     if (!m) return;
     const state = this.titleState();
     const others = state && !state.requestedByMe ? state.requesterCount : 0;
-    const me = this.auth.user()?.id;
     void this.addDialog()?.add({
       kind: type,
       title: m.title,
       provider: this.provider(),
       externalId: this.externalId(),
       titleKey: this.titleKey(m),
-      ...(this.auto() ? { pending: this.pendingRequests().find((r) => r.userId !== me), requesterCount: others || undefined } : {}),
+      ...(this.auto() ? { pending: this.pendingRequests(), requesterCount: others || undefined } : {}),
       alreadyRequestedSeasons: this.requestedSeasons(),
       profilesLocked: state?.profilesLocked ?? false,
       lockedQualityProfileId: state?.lockedQualityProfileId ?? null,

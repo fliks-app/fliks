@@ -83,7 +83,7 @@ async function createFixture(opts: FixtureOpts = {}): Promise<ComponentFixture<M
         lang: 'en',
         loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } },
       }),
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       { provide: TvService, useValue: { isTv: () => false } },
       { provide: DownloadManagerService, useValue: { tasks: signal([]) } },
       { provide: AuthService, useValue: { hasPermission: () => false, sharingDisabled: () => false } },

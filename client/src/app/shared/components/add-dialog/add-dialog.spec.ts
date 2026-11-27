@@ -203,10 +203,19 @@ describe('AddDialogComponent', () => {
   it('starts from the pending row it will approve, and asks even when one library takes the title', async () => {
     const pending = { id: 5, libraryId: 2, qualityProfileId: 11, languageProfileId: 12, seasons: null, monitorNewSeasons: false } as unknown as FliksRequestRow;
     const { cmp, calls, show } = setup([lib(1, ['movie']), lib(2, ['movie'])]);
-    await cmp.add({ ...movie, pending, requesterCount: 2 });
+    await cmp.add({ ...movie, pending: [pending], requesterCount: 2 });
     expect(show).toHaveBeenCalledOnce();
     await inner(cmp).submit();
     expect(calls['request']![0]).toMatchObject({ libraryId: 2, qualityProfileId: 11, languageProfileId: 12 });
+  });
+
+  it('ticks the union of the pending rows seasons for an add that approves them', async () => {
+    const rows = [{ id: 1, seasons: [1] }, { id: 2, seasons: [3] }] as unknown as FliksRequestRow[];
+    const { cmp, calls } = setup([lib(1, ['series'])], ['media.create'], { seasons: [0, 1, 2, 3] });
+    await cmp.add({ ...movie, kind: 'series', pending: rows });
+    await new Promise((r) => setTimeout(r));
+    await inner(cmp).submit();
+    expect((calls['request']![0] as { seasons: number[] }).seasons).toEqual([1, 3]);
   });
 
   it('asks the question when no library takes the kind and cannot submit', async () => {

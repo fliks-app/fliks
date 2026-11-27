@@ -7,6 +7,9 @@ describe('permissions', () => {
     expect(holdsPermission(['parties.manage'], 'parties.read_public')).toBe(true);
     expect(holdsPermission(['parties.create'], 'parties.manage')).toBe(false);
     expect(holdsPermission(['requests.manage'], 'requests.create')).toBe(false);
+    expect(holdsPermission(['media.create'], 'requests.create')).toBe(true);
+    expect(holdsPermission(['media.create'], 'requests.create', false)).toBe(false);
+    expect(holdsPermission(['parties.manage'], 'parties.create', false)).toBe(true);
   });
 
   it('names who includes a permission', () => {

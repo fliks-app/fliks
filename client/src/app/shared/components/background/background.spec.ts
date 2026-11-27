@@ -17,7 +17,7 @@ describe('BackgroundComponent', () => {
     const hero = signal(false);
     TestBed.configureTestingModule({
       providers: [
-        { provide: ServerVersionService, useValue: { supports: () => true } },
+        { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
         provideZonelessChangeDetection(),
         { provide: BackgroundService, useValue: { url, blur, hero } },
         { provide: DeviceService, useValue: { isTv: () => false, reducedEffects: () => false } },
@@ -71,7 +71,7 @@ function hero$() {
   const hero = signal(true);
   TestBed.configureTestingModule({
     providers: [
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       provideZonelessChangeDetection(),
       { provide: BackgroundService, useValue: { url: signal('/f.jpg'), blur: signal(false), hero } },
       { provide: DeviceService, useValue: { isTv: () => false, reducedEffects: () => true } },

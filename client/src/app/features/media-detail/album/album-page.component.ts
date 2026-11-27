@@ -14,7 +14,7 @@ import type { KaraokeJobChanged } from '../../../core/services/api/karaoke.model
 import { SseService } from '../../../core/services/sse.service';
 import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
 import { LikesApiService } from '../../../core/services/api/likes-api.service';
-import type { Media } from '../../../core/services/api/media.service';
+import { MediaService, type Media } from '../../../core/services/api/media.service';
 import { RequestsService, titleRef, type TitleRequestState } from '../../../core/services/api/requests.service';
 import { MusicApiService } from '../../../core/services/api/music-api.service';
 import type { AlbumCandidate, Track } from '../../../core/services/api/music.models';
@@ -78,6 +78,7 @@ export class AlbumPageComponent {
   private readonly identifyModal = inject(IdentifyModalService);
   private readonly auth = inject(AuthService);
   private readonly requestsApi = inject(RequestsService);
+  private readonly mediaApi = inject(MediaService);
   protected readonly party = inject(PartyService);
   protected readonly downloads = inject(MusicDownloadsService);
   private readonly progress = inject(DownloadProgressService);
@@ -118,7 +119,7 @@ export class AlbumPageComponent {
   }));
   /** A missing track, or every one, is asked for by an album request. */
   private readonly titleKey = computed(() => mediaTitleKey(this.media()));
-  protected readonly canRequest = computed(() => this.auth.hasPermission('requests.create') && this.titleKey() != null && this.album() != null);
+  protected readonly canRequest = computed(() => this.requestsApi.canAdd() && this.titleKey() != null && this.album() != null);
   protected readonly auto = computed(() => this.requestsApi.autoKinds().has('album'));
   private readonly requestState = signal<TitleRequestState | null>(null);
   private readonly asked = signal<ReadonlySet<string>>(new Set());
@@ -171,9 +172,22 @@ export class AlbumPageComponent {
   protected requestAlbum(): void {
     const key = this.titleKey();
     if (!key) return;
+    // An import of an album already held is a 409 on an older server: monitor its tracks instead.
+    if (this.requestsApi.addsByImport()) return void this.wantAll();
     const [provider, externalId] = titleRef(key);
     this.pendingRecording = null;
     void this.addDialog()?.add({ kind: 'album', provider, externalId, title: this.media().title });
+  }
+
+  /** Monitors every track of the release in one call. */
+  private async wantAll(): Promise<void> {
+    try {
+      await this.mediaApi.update(this.media().id, { monitored: true });
+      for (const t of this.tracks()) this.patch(t.itemId, { monitored: true });
+      this.askedAll.set(true);
+    } catch {
+      // The global interceptor toasts the failure.
+    }
   }
 
   protected readonly wantsOpen = signal(false);

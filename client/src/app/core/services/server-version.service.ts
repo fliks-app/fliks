@@ -1,5 +1,5 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
-import { Injectable, effect, inject, signal, untracked } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Capacitor } from '@capacitor/core';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
@@ -109,6 +109,9 @@ export class ServerVersionService {
   supports(since: string): boolean {
     return this.web || serverSupports(this.version(), since);
   }
+
+  /** Adds go through requests, auto-approved for `media.create`; an older server takes them as imports. Drop with #3103. */
+  readonly requestAdds = computed(() => this.supports(SERVER_SINCE.autoApproval));
 
   /** `supports` for a call that can run before the first version request has answered. */
   async supportsWhenKnown(since: string): Promise<boolean> {

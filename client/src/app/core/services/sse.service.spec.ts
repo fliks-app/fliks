@@ -29,7 +29,7 @@ function handle(event: Record<string, unknown>): DownloadProgressService {
       }),
       { provide: ToastService, useValue: { info: () => {}, success: () => {}, error: () => {}, warning: () => {} } },
       { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
-      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true, supportsWhenKnown: async () => true } },
       { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => false } },
     ],
   });
@@ -89,7 +89,7 @@ function setupUnreachable(authenticated: boolean): SseService {
       }),
       { provide: ToastService, useValue: { info: () => {}, success: () => {}, error: () => {}, warning: () => {} } },
       { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
-      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true, supportsWhenKnown: async () => true } },
       { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => authenticated, sessionEpoch: () => 0 } },
       { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
     ],
@@ -146,7 +146,7 @@ describe('SseService: session change', () => {
         }),
         { provide: ToastService, useValue: { info: () => {}, success: () => {}, error: () => {}, warning: () => {} } },
         { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
-        { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+        { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true, supportsWhenKnown: async () => true } },
         { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => true, sessionEpoch: epoch } },
         { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
       ],
@@ -195,7 +195,7 @@ describe('SseService: native dial credential', () => {
         }),
         { provide: ToastService, useValue: {} },
         { provide: ServerConfigService, useValue: { isNative: true, resolveUrl: (p: string) => `https://srv${p}` } },
-        { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+        { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true, supportsWhenKnown: async () => true } },
         {
           provide: AuthService,
           useValue: {
@@ -284,7 +284,7 @@ describe('SseService: tab nonce', () => {
         }),
         { provide: ToastService, useValue: {} },
         { provide: ServerConfigService, useValue: { apiUrl: () => '', isNative: false } },
-        { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+        { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true, supportsWhenKnown: async () => true } },
         { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => false } },
       ],
     });
@@ -324,7 +324,7 @@ describe('SseService: resume refresh', () => {
         }),
         { provide: ToastService, useValue: {} },
         { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
-        { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+        { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true, supportsWhenKnown: async () => true } },
         { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => false, sessionEpoch: () => 0 } },
         { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
         { provide: AppResumeService, useValue: { refresh } },

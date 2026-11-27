@@ -164,7 +164,7 @@ export class AddDialogComponent {
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());
     this.seasonsFailed.set(false);
-    this.followOverride.set(req.pending?.monitorNewSeasons ?? null);
+    this.followOverride.set(req.pending?.[0]?.monitorNewSeasons ?? null);
     this.wants.set([{ family: 'text', language: null }]);
     this.allowances.set(null);
   }
@@ -192,9 +192,10 @@ export class AddDialogComponent {
       const pairs = (l: Profile[]) => l.map((p) => ({ id: p.id, name: p.name }));
       this.choices.set({ libraries, quality: pairs(quality), language: pairs(language), wantQuality: pairs(wantQuality) });
       if (r.kind === 'book') this.wants.set([{ family: 'text', language: null, qualityProfileId: wantQuality[0]?.id ?? null }]);
-      this.pick(libraries.find((l) => l.id === r.pending?.libraryId) ?? preselect(libraries, r.kind));
-      if (r.pending?.qualityProfileId != null && !this.qualityLocked()) this.qualityId.set(r.pending.qualityProfileId);
-      if (r.pending?.languageProfileId != null && !this.locked()) this.languageId.set(r.pending.languageProfileId);
+      const first = r.pending?.[0];
+      this.pick(libraries.find((l) => l.id === first?.libraryId) ?? preselect(libraries, r.kind));
+      if (first?.qualityProfileId != null && !this.qualityLocked()) this.qualityId.set(first.qualityProfileId);
+      if (first?.languageProfileId != null && !this.locked()) this.languageId.set(first.languageProfileId);
       return true;
     } catch {
       this.loadFailed.set(true);
@@ -223,10 +224,12 @@ export class AddDialogComponent {
     this.pick(this.libraries().find((l) => l.id === id) ?? null);
   }
 
-  /** An add ticks the pending row's seasons, else every regular one; a request ticks only what the caller said. */
+  /** An add ticks the pending rows' seasons, else every regular one; a request ticks only what the caller said. */
   private loadSeasons(r: AddRequest) {
     this.seasonsLoading.set(true);
-    const pre = new Set(r.pending?.seasons ?? r.preselectedSeasons ?? []);
+    const pending = r.pending ?? [];
+    const wholePending = pending.some((p) => !p.seasons?.length);
+    const pre = new Set(pending.length ? pending.flatMap((p) => p.seasons ?? []) : (r.preselectedSeasons ?? []));
     this.metadata
       .getSeasonStubs(r.provider, r.externalId)
       .then((stubs) => {
@@ -234,7 +237,7 @@ export class AddDialogComponent {
         const taken = this.alreadyRequested();
         const all = stubs.map((s) => s.seasonNumber);
         const ticked =
-          this.auto() && !r.pending?.seasons?.length
+          this.auto() && (!pending.length || wholePending)
             ? all.filter((n) => n > 0)
             : all.filter((n) => pre.has(n) && !taken.has(n));
         this.selectedSeasons.set(new Set(ticked));

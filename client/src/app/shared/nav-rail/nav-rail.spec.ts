@@ -55,7 +55,7 @@ async function setup(o: Setup = {}): Promise<{ fixture: ComponentFixture<NavRail
       { provide: TvService, useValue: { isTv: () => !!o.tv } },
       { provide: DeviceService, useValue: { isTouch: () => false } },
       { provide: LiveTvAvailabilityService, useValue: { available: () => true } },
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       { provide: BackgroundService, useValue: { url: () => o.backdrop ?? null } },
       { provide: NetworkService, useValue: { isOnline: () => true } },
       { provide: PluginUiRegistryService, useValue: { contributionsFor: (slot: SlotId) => o.registry?.[slot] ?? [] } },

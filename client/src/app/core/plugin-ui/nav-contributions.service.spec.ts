@@ -43,7 +43,7 @@ function createService(opts: {
       { provide: TvService, useValue: { isTv: () => !!opts.isTv } },
       { provide: DeviceService, useValue: { isTouch: () => false } },
       { provide: LiveTvAvailabilityService, useValue: { available: () => opts.liveTv ?? true } },
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
     ],
   });
   return TestBed.inject(NavContributionsService);
