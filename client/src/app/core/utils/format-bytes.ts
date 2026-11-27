@@ -1,5 +1,5 @@
 /** Numbers follow the UI language (`<html lang>`, kept by ShellLanguageService): "1,5" in French, "1.5" in English. */
-export function localized(value: number, digits: number): string {
+function localized(value: number, digits: number): string {
   const lang = typeof document === 'undefined' ? undefined : document.documentElement.lang || undefined;
   return new Intl.NumberFormat(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
 }
@@ -22,4 +22,15 @@ export function formatBitrate(bps: number): string {
   if (bps >= 1_000_000) return `${localized(bps / 1_000_000, 1)} Mbps`;
   if (bps >= 1_000) return `${localized(bps / 1_000, 0)} kbps`;
   return `${bps} bps`;
+}
+
+/** A fraction as a percentage in the UI language; `signed` shows "+" and the minus sign. */
+export function formatPercent(fraction: number, digits: number, signed = false): string {
+  const lang = typeof document === 'undefined' ? undefined : document.documentElement.lang || undefined;
+  return new Intl.NumberFormat(lang, {
+    style: 'percent',
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+    signDisplay: signed ? 'exceptZero' : 'auto',
+  }).format(fraction);
 }

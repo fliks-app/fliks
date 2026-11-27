@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) FILTER (WHERE COALESCE(\"runsOn\", \"deviceId\") = $2) AS \"running!\",\n                  count(*) FILTER (WHERE \"deviceId\" = $2) AS \"leased!\"\n           FROM jobs WHERE state = 'leased' AND \"workerId\" = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "running!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "leased!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "d9ddd4b5c9ac24f7627df55466b15c2acdb776dbdd7bb4f2aa9a35db10d1c1fe"
+}

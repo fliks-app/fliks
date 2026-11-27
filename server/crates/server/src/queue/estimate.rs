@@ -21,15 +21,14 @@ pub struct Speeds {
 pub async fn speeds(st: &AppState) -> sqlx::Result<Speeds> {
     let rows = sqlx::query(
         r#"SELECT "deviceId", level, sum(dur)::float8 AS dur, sum(wall)::float8 AS wall FROM (
-             SELECT CASE WHEN result ->> 'cpuFallback' = 'true' THEN $2 ELSE "deviceId" END AS "deviceId",
-                    payload #>> '{plan,level}' AS level,
-                    (payload #>> '{info,durationSeconds}')::float8 AS dur,
-                    EXTRACT(EPOCH FROM "encodedAt" - "startedAt")::float8 AS wall,
-                    row_number() OVER (PARTITION BY "deviceId", payload #>> '{plan,level}'
-                                       ORDER BY "encodedAt" DESC) AS rn
-             FROM jobs WHERE kind = 'optimize' AND "encodedAt" IS NOT NULL AND "startedAt" IS NOT NULL
-               AND "deviceId" IS NOT NULL AND payload #>> '{info,durationSeconds}' IS NOT NULL
-               AND state IN ('staged', 'committing', 'done')) t
+             SELECT *, row_number() OVER (PARTITION BY "deviceId", level ORDER BY "encodedAt" DESC) AS rn
+             FROM (SELECT CASE WHEN result ->> 'cpuFallback' = 'true' THEN $2 ELSE "deviceId" END AS "deviceId",
+                          payload #>> '{plan,level}' AS level,
+                          (payload #>> '{info,durationSeconds}')::float8 AS dur,
+                          EXTRACT(EPOCH FROM "encodedAt" - "startedAt")::float8 AS wall, "encodedAt"
+                   FROM jobs WHERE kind = 'optimize' AND "encodedAt" IS NOT NULL AND "startedAt" IS NOT NULL
+                     AND "deviceId" IS NOT NULL AND payload #>> '{info,durationSeconds}' IS NOT NULL
+                     AND state IN ('staged', 'committing', 'done')) d) t
            WHERE rn <= $1 AND wall > 0 GROUP BY "deviceId", level"#,
     )
     .bind(LAST_JOBS)

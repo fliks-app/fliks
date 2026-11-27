@@ -12,7 +12,7 @@ import {
   type OptimizeJobDetail,
 } from '../../../../core/models/optimize';
 import type { MediaFileInfo } from '../../../../core/services/api/media.service';
-import { formatBytes, localized } from '../../../../core/utils/format-bytes';
+import { formatBytes, formatPercent } from '../../../../core/utils/format-bytes';
 import { formatAudioLabel, formatSubtitleLabel } from '../../../../core/utils/player.utils';
 import { formatEta } from '../../../../shared/utils/download-format';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
@@ -64,16 +64,12 @@ export class OptimizeJobInfoComponent {
   readonly videoSize = computed(() => {
     const d = this.detail();
     if (!d || (d.savingsPct == null && d.sampledSavingsPct == null)) return null;
-    const signed = (saved: number | null) => {
-      if (saved == null) return null;
-      const r = Math.round(-saved);
-      return `${r > 0 ? '+' : r < 0 ? '\u2212' : ''}${Math.abs(r)} %`;
-    };
+    const signed = (saved: number | null) => (saved == null ? null : formatPercent(-saved / 100, 0, true));
     return { real: signed(d.savingsPct), test: signed(d.sampledSavingsPct) };
   });
   readonly fidelity = computed(() => {
     const s = this.detail()?.ssim;
-    return s == null ? null : `${localized(s * 100, 1)} %`;
+    return s == null ? null : formatPercent(s, 1);
   });
   /** Wall time from the lease to the encoded output. */
   readonly encodeTime = computed(() => {

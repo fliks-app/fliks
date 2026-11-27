@@ -77,7 +77,7 @@ describe('OptimizeJobInfoComponent', () => {
     expect(c.before()?.video).toBe('H264 · 1920×1080 · 8 bit');
     expect(c.after()?.audio.length).toBe(1);
     expect(c.after()?.container).toBe('MATROSKA');
-    expect(c.videoSize()).toEqual({ real: '+22 %', test: '\u221230 %' });
-    expect(c.fidelity()).toMatch(/^98[.,]8 %$/);
+    expect(c.videoSize()).toEqual({ real: '+22%', test: '-30%' });
+    expect(c.fidelity()).toBe('98.8%');
   });
 });

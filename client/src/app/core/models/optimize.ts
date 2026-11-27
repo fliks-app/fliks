@@ -334,12 +334,12 @@ export interface OptimizeJob {
   updatedAt: string;
 }
 
-/** `GET /api/optimize/jobs/{id}`: what the job does to its file. */
 /** The device a job runs on now. */
 export function jobDevice(j: OptimizeJob): string | null {
   return j.runsOn ?? j.deviceId;
 }
 
+/** `GET /api/optimize/jobs/{id}`: what the job does to its file. */
 export interface OptimizeJobDetail {
   /** Null on a job queued before the diff was kept. */
   diff: { changes: Change[]; warnings: Warning[] } | null;

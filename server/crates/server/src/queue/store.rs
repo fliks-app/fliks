@@ -159,15 +159,18 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     )
     .execute(&mut *tx)
     .await?;
-    let running = sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!" FROM jobs WHERE state = 'leased' AND "workerId" = $1
-             AND COALESCE("runsOn", "deviceId") = $2"#,
+    let held = sqlx::query!(
+        r#"SELECT count(*) FILTER (WHERE COALESCE("runsOn", "deviceId") = $2) AS "running!",
+                  count(*) FILTER (WHERE "deviceId" = $2) AS "leased!"
+           FROM jobs WHERE state = 'leased' AND "workerId" = $1"#,
         w.key,
         w.device
     )
     .fetch_one(&mut *tx)
     .await?;
-    if running >= i64::from(w.max_jobs) {
+    // Leases moved to the CPU (checks, a software redo) free the device for one more batch, no more.
+    let max = i64::from(w.max_jobs);
+    if held.running >= max || held.leased >= 2 * max {
         return Ok(None);
     }
     let rows = sqlx::query!(
