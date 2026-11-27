@@ -9,6 +9,7 @@ import { LibrariesApiService, Library } from '../../../../core/services/api/libr
 import { MediaService, type MediaFileInfo } from '../../../../core/services/api/media.service';
 import { ProfilesService } from '../../../../core/services/api/profiles.service';
 import { ToastService } from '../../../../core/services/toast.service';
+import { episodeLabel } from '../../../../core/services/download-manager.service';
 import {
   FileOutcome,
   FormatChoice,
@@ -36,6 +37,11 @@ interface SampleOption {
   fileId: number;
   title: string;
   info: MediaFileInfo | null;
+}
+
+interface SampleMedia extends SampleOption {
+  mediaId: number;
+  series: boolean;
 }
 
 @Component({
@@ -80,13 +86,16 @@ export class OptimizeProfileEditorComponent implements OnInit {
 
   readonly sampleLibraries = signal<Library[]>([]);
   readonly sampleLibraryId = signal<number | null>(null);
-  readonly sampleFiles = signal<SampleOption[]>([]);
+  readonly sampleMedia = signal<SampleMedia[]>([]);
+  readonly sampleMediaId = signal<number | null>(null);
+  readonly sampleEpisodes = signal<SampleOption[]>([]);
   readonly sampleFileId = signal<number | null>(null);
   readonly outcome = signal<FileOutcome | null>(null);
   readonly outcomeError = signal(false);
   readonly outcomeBusy = signal(false);
   private previewSeq = 0;
   private libSeq = 0;
+  private mediaSeq = 0;
 
   readonly format = computed(() => {
     const d = this.doc();
@@ -99,7 +108,8 @@ export class OptimizeProfileEditorComponent implements OnInit {
 
   readonly lines = computed(() => {
     const o = this.outcome();
-    const info = this.sampleFiles().find((f) => f.fileId === this.sampleFileId())?.info;
+    const id = this.sampleFileId();
+    const info = [...this.sampleEpisodes(), ...this.sampleMedia()].find((f) => f.fileId === id)?.info;
     return o?.status === 'diff' ? groupedChanges(o.changes, trackOrdinal(info)) : [];
   });
   readonly warnings = computed(() => {
@@ -184,6 +194,8 @@ export class OptimizeProfileEditorComponent implements OnInit {
   async pickLibrary(id: number) {
     const seq = ++this.libSeq;
     this.sampleLibraryId.set(id);
+    this.sampleMediaId.set(null);
+    this.sampleEpisodes.set([]);
     this.sampleFileId.set(null);
     this.outcome.set(null);
     try {
@@ -191,13 +203,43 @@ export class OptimizeProfileEditorComponent implements OnInit {
         libraryId: id, limit: 100, sortBy: 'title', sortOrder: 'ASC',
       });
       if (seq !== this.libSeq) return;
-      const files = page.data.flatMap((m) =>
-        m.files?.[0] ? [{ fileId: m.files[0].id, title: m.title, info: m.files[0].streamInfo ?? null }] : [],
+      const media = page.data.flatMap((m) =>
+        m.files?.[0]
+          ? [{ mediaId: m.id, series: m.type === 'series', fileId: m.files[0].id, title: m.title, info: m.files[0].streamInfo ?? null }]
+          : [],
       );
-      this.sampleFiles.set(files);
-      this.sampleFileId.set(files[0]?.fileId ?? null);
+      this.sampleMedia.set(media);
+      if (media[0]) await this.pickMedia(media[0].mediaId);
     } catch {
-      if (seq === this.libSeq) this.sampleFiles.set([]);
+      if (seq === this.libSeq) this.sampleMedia.set([]);
+    }
+  }
+
+  /** A series previews one episode file, picked in a third select. */
+  async pickMedia(id: number) {
+    const seq = ++this.mediaSeq;
+    const m = this.sampleMedia().find((x) => x.mediaId === id);
+    this.sampleMediaId.set(id);
+    this.sampleEpisodes.set([]);
+    this.sampleFileId.set(m?.fileId ?? null);
+    if (!m?.series) return;
+    try {
+      const detail = await this.media.getOne(id, { silent: true });
+      if (seq !== this.mediaSeq) return;
+      const byEpisode = new Map((detail.files ?? []).map((f) => [f.episodeId, f]));
+      const seen = new Set<number>();
+      const episodes = (detail.seasons ?? []).flatMap((s) =>
+        s.episodes.flatMap((e) => {
+          const f = byEpisode.get(e.id);
+          if (!f || seen.has(f.id)) return [];
+          seen.add(f.id);
+          return [{ fileId: f.id, title: episodeLabel(s.seasonNumber, e.episodeNumber, e.title), info: f.streamInfo ?? null }];
+        }),
+      );
+      this.sampleEpisodes.set(episodes);
+      if (episodes[0] && !seen.has(m.fileId)) this.sampleFileId.set(episodes[0].fileId);
+    } catch {
+      // The series' first file stays the sample.
     }
   }
 

@@ -4071,6 +4071,7 @@
         "no_library": "Nenhuma biblioteca de vídeo de onde tirar um ficheiro de exemplo.",
         "library": "Biblioteca",
         "file": "Ficheiro de exemplo",
+        "episode": "Episódio",
         "no_file": "Esta biblioteca ainda não tem ficheiros.",
         "error": "Este ficheiro não pode ser comparado (não é um vídeo da biblioteca, ou o perfil é inválido).",
         "one_job": "uma tarefa, uma passagem",

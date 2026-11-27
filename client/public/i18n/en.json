@@ -4071,6 +4071,7 @@
         "no_library": "No video library to take a sample file from.",
         "library": "Library",
         "file": "Sample file",
+        "episode": "Episode",
         "no_file": "This library has no file yet.",
         "error": "This file cannot be compared (not a video of the library, or the profile is invalid).",
         "one_job": "one job, one pass",

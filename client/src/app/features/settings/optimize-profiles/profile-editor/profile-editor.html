@@ -201,15 +201,23 @@
                 <option [value]="l.id">{{ l.name }}</option>
               }
             </app-select-field>
-            @if (sampleFiles().length === 0) {
+            @if (sampleMedia().length === 0) {
               <p class="text-sm text-base-content/60">{{ 'settings.optimize.effect.no_file' | translate }}</p>
             } @else {
               <app-select-field size="sm" [label]="'settings.optimize.effect.file' | translate"
-                [value]="'' + sampleFileId()" (valueChange)="sampleFileId.set(+$event)">
-                @for (f of sampleFiles(); track f.fileId) {
-                  <option [value]="f.fileId">{{ f.title }}</option>
+                [value]="'' + sampleMediaId()" (valueChange)="pickMedia(+$event)">
+                @for (m of sampleMedia(); track m.mediaId) {
+                  <option [value]="m.mediaId">{{ m.title }}</option>
                 }
               </app-select-field>
+              @if (sampleEpisodes().length > 0) {
+                <app-select-field size="sm" [label]="'settings.optimize.effect.episode' | translate"
+                  [value]="'' + sampleFileId()" (valueChange)="sampleFileId.set(+$event)">
+                  @for (e of sampleEpisodes(); track e.fileId) {
+                    <option [value]="e.fileId">{{ e.title }}</option>
+                  }
+                </app-select-field>
+              }
             }
           }
 
