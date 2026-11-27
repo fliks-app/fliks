@@ -351,12 +351,19 @@ describe('LivePlayerComponent TV hide and show', () => {
 });
 
 describe('LivePlayerComponent engine', () => {
-  it('anchors live segments on the playlist instead of their own timestamps', () => {
+  it('anchors live segments on the playlist before loading the stream', async () => {
     const { component } = createComponent();
-    const engine = { configure: vi.fn(), on: vi.fn(), volume: 1 };
-    component.bindEngine(engine);
+    const calls: string[] = [];
+    const engine = {
+      configure: vi.fn(() => calls.push('configure')),
+      load: vi.fn(async () => void calls.push('load')),
+      play: vi.fn(async () => undefined),
+    };
+    component.ensureEngine = vi.fn().mockResolvedValue(engine);
+    await LivePlayerComponent.prototype['loadIntoEngine'].call(component, makeSession('s5', 5));
     expect(engine.configure).toHaveBeenCalledWith({
       manifest: { hls: { ignoreManifestTimestampsInSegmentsMode: false } },
     });
+    expect(calls).toEqual(['configure', 'load']);
   });
 });
