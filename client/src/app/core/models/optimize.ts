@@ -1,6 +1,7 @@
 /** Library optimization: wire types of `server/crates/server/src/optimize` (profile document, preview, difference). */
 
 import type { MediaFileInfo } from '../services/api/media.service';
+import type { MediaType } from '../enums/media-type.enum';
 
 export type CodecChoice = 'auto' | 'hevc' | 'av1';
 export type Goal = 'space' | 'compatibility';
@@ -310,7 +311,7 @@ export interface OptimizeJob {
   attempt: number;
   failures: number;
   progress: number;
-  /** Paused by playback on its device. */
+  /** No run progresses: it yields its slot or waits for one. */
   paused: boolean;
   workerId: string | null;
   deviceId: string | null;
@@ -321,6 +322,8 @@ export interface OptimizeJob {
   inSize: number | null;
   outSize: number | null;
   title: string | null;
+  mediaId: number | null;
+  mediaType: MediaType | null;
   libraryId: number | null;
   level: OptimizeLevel | null;
   codec: string | null;

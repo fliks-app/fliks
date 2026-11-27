@@ -29,6 +29,8 @@ import {
   WORKER_OFFLINE_MS,
   savedBytes,
 } from '../../../core/models/optimize';
+import { mediaDetailLink } from '../../../core/media-kinds';
+import { TvSelectDirective } from '../../../shared/directives/tv-select.directive';
 import { formatBytes } from '../../../core/utils/format-bytes';
 import { formatEta } from '../../../shared/utils/download-format';
 import { ModalComponent } from '../../../shared/components/modal';
@@ -52,7 +54,7 @@ export interface DeviceRow {
   id: string;
   maxJobs: number;
   jobs: OptimizeJob[];
-  /** Every job of the device is held back by playback. */
+  /** No job of the device progresses: each yields its slot or waits for one. */
   paused: boolean;
   offline: boolean;
 }
@@ -67,6 +69,7 @@ export interface DeviceRow {
     ErrorBadgeComponent,
     ModalComponent,
     OptimizeJobInfoComponent,
+    TvSelectDirective,
   ],
   templateUrl: './optimize-queue.html',
 })
@@ -320,7 +323,13 @@ export class OptimizeQueueComponent implements OnInit {
     if (ok) await this.act(() => this.api.restore(j.id), 'optimize.queue.restored');
   }
 
-  stateKey(j: OptimizeJob) {
-    return j.state === 'leased' ? (j.paused ? 'paused' : 'encoding') : j.state;
+  mediaLink(j: OptimizeJob): string[] | null {
+    return j.mediaId != null && j.mediaType ? mediaDetailLink(j.mediaType, j.mediaId) : null;
+  }
+
+  /** Badge of a running job; none while it simply progresses. */
+  stateKey(j: OptimizeJob): string | null {
+    if (j.state !== 'leased') return j.state;
+    return j.paused ? 'paused' : null;
   }
 }

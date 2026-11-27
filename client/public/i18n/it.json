@@ -5671,8 +5671,8 @@
       "level_left_one": "{{level}}: ne resta {{count}}, circa {{time}}",
       "level_left_other": "{{level}}: ne restano {{count}}, circa {{time}}",
       "level": {
-        "metadata": "Metadati",
-        "remux": "Remux",
+        "metadata": "Solo metadati",
+        "remux": "Remux senza perdita",
         "reencode": "Ricodifica"
       },
       "devices": "Dispositivi",
@@ -5704,7 +5704,7 @@
       "select": "Seleziona {{title}}",
       "col": {
         "title": "Titolo",
-        "level": "Livello",
+        "level": "Elaborazione",
         "device": "Dispositivo",
         "progress": "Avanzamento",
         "size": "Dimensione",
@@ -5718,7 +5718,6 @@
         "after": "Dopo"
       },
       "job": {
-        "encoding": "Codifica",
         "paused": "In pausa",
         "leased": "In corso",
         "staged": "File pronto",

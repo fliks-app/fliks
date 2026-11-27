@@ -5671,8 +5671,8 @@
       "level_left_one": "{{level}} : {{count}} restant, environ {{time}}",
       "level_left_other": "{{level}} : {{count}} restants, environ {{time}}",
       "level": {
-        "metadata": "Métadonnées",
-        "remux": "Remux",
+        "metadata": "Métadonnées seules",
+        "remux": "Remux sans perte",
         "reencode": "Réencodage"
       },
       "devices": "Appareils",
@@ -5704,7 +5704,7 @@
       "select": "Sélectionner {{title}}",
       "col": {
         "title": "Titre",
-        "level": "Niveau",
+        "level": "Traitement",
         "device": "Appareil",
         "progress": "Progression",
         "size": "Taille",
@@ -5718,7 +5718,6 @@
         "after": "Après"
       },
       "job": {
-        "encoding": "Encodage",
         "paused": "En pause",
         "leased": "En cours",
         "staged": "Fichier prêt",

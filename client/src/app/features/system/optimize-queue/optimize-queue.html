@@ -130,6 +130,7 @@
       }
     </div>
     <select
+      appTvSelect
       class="select select-bordered select-sm"
       [attr.aria-label]="'optimize.queue.library' | translate"
       [value]="libraryId() ?? ''"
@@ -166,7 +167,9 @@
             <tbody>
               @for (j of running(); track j.id) {
                 <tr>
-                  <td class="max-w-xs truncate">{{ j.title ?? j.inPath }}</td>
+                  <td class="max-w-xs truncate">
+                    <a class="link link-hover" [routerLink]="mediaLink(j)">{{ j.title ?? j.inPath }}</a>
+                  </td>
                   <td>
                     @if (j.level) {
                       {{ 'optimize.queue.level.' + j.level | translate }}
@@ -184,9 +187,11 @@
                         [attr.aria-label]="'optimize.queue.progress_of' | translate: { title: j.title ?? j.inPath }"
                       ></progress>
                       <span class="text-sm tabular-nums">{{ (j.progress * 100).toFixed(0) }}%</span>
-                      <span class="badge badge-sm" [class.badge-warning]="j.paused">{{
-                        'optimize.queue.job.' + stateKey(j) | translate
-                      }}</span>
+                      @if (stateKey(j); as key) {
+                        <span class="badge badge-sm" [class.badge-warning]="j.paused">{{
+                          'optimize.queue.job.' + key | translate
+                        }}</span>
+                      }
                     </div>
                   </td>
                   <td class="text-right whitespace-nowrap">
@@ -282,7 +287,9 @@
                   <td class="tabular-nums">{{ i + 1 }}</td>
                   <td class="max-w-xs">
                     <div class="flex items-center gap-1">
-                      <span class="truncate">{{ j.title ?? j.inPath }}</span>
+                      <a class="truncate link link-hover" [routerLink]="mediaLink(j)">{{
+                        j.title ?? j.inPath
+                      }}</a>
                       @if (j.failures > 0 && errorDetails(j); as details) {
                         <app-error-badge
                           class="shrink-0"
@@ -335,7 +342,9 @@
           <tbody>
             @for (j of jobs(); track j.id) {
               <tr>
-                <td class="max-w-xs truncate">{{ j.title ?? j.inPath }}</td>
+                <td class="max-w-xs truncate">
+                  <a class="link link-hover" [routerLink]="mediaLink(j)">{{ j.title ?? j.inPath }}</a>
+                </td>
                 <td>
                   <span class="badge badge-sm" [class.badge-error]="j.state === 'failed'">{{
                     'optimize.queue.job.' + j.state | translate
@@ -384,7 +393,9 @@
           <tbody>
             @for (j of jobs(); track j.id) {
               <tr>
-                <td class="max-w-xs truncate">{{ j.title ?? j.inPath }}</td>
+                <td class="max-w-xs truncate">
+                  <a class="link link-hover" [routerLink]="mediaLink(j)">{{ j.title ?? j.inPath }}</a>
+                </td>
                 <td>
                   @if (j.level) {
                     {{ 'optimize.queue.level.' + j.level | translate }}
