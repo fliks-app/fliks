@@ -263,6 +263,7 @@ impl Diff {
             too_slow: OptimizeTooSlow::Hardware,
             min_savings_pct: None,
             skip_hdr10plus_dv: None,
+            quality_check: None,
             container: None,
             clear_title: false,
             extra_subtitles: vec![],

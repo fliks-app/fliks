@@ -1294,8 +1294,8 @@ dependencies = [
 
 [[package]]
 name = "fliks-engine-core"
-version = "1.30.7"
-source = "git+https://github.com/fliks-app/engine?tag=v1.30.7#e45c8d210028ad35201615f715109ebe78e5a9f5"
+version = "1.31.1"
+source = "git+https://github.com/fliks-app/engine?tag=v1.31.1#cc446bed4fd7e2d070c040dd573787dd8b16f78d"
 dependencies = [
  "serde",
  "serde_json",
