@@ -113,6 +113,14 @@ async fn a_new_file_without_minimum_age_starts_at_once(pool: PgPool) {
         Outcome::Queued
     );
     assert!(crate::ingest::post_import::starts_now(&w.st, w.file).await);
+    let changes: Option<i32> = sqlx::query_scalar(
+        r#"SELECT jsonb_array_length(diff -> 'changes') FROM jobs WHERE "mediaFileId" = $1"#,
+    )
+    .bind(w.file)
+    .fetch_one(&w.st.db)
+    .await
+    .unwrap();
+    assert!(changes.is_some_and(|n| n > 0), "the job keeps its diff");
 }
 
 #[sqlx::test(migrations = false)]

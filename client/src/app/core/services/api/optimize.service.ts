@@ -6,6 +6,7 @@ import type {
   FileOutcome,
   JobState,
   OptimizeJob,
+  OptimizeJobDetail,
   OptimizeSettings,
   IssuedWorkerToken,
   OptimizeWorker,
@@ -124,6 +125,10 @@ export class OptimizeService {
   /** Moves queued jobs to the front, in the order given. */
   prioritize(ids: number[]) {
     return firstValueFrom(this.http.post<{ moved: number }>('/api/optimize/jobs/priority', { ids }));
+  }
+
+  job(id: number) {
+    return firstValueFrom(this.http.get<OptimizeJobDetail>(`/api/optimize/jobs/${id}`));
   }
 
   restore(id: number) {

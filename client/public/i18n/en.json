@@ -5713,7 +5713,9 @@
         "error": "Error",
         "codec": "Codec",
         "saved": "Saved",
-        "actions": "Actions"
+        "actions": "Actions",
+        "before": "Before",
+        "after": "After"
       },
       "job": {
         "encoding": "Encoding",
@@ -5759,6 +5761,30 @@
         "stale": "File changed",
         "unsupported": "Unsupported track",
         "verify": "Verification failed"
+      },
+      "details": "Details",
+      "info": {
+        "done_as": "done as {{level}}",
+        "queued_at": "Queued",
+        "started_at": "Started",
+        "encode_time": "Encoding time",
+        "finished_at": "Finished",
+        "size": "Size",
+        "saved": "{{size}} saved, {{pct}}%",
+        "grew": "{{size}} larger, {{pct}}%",
+        "cpu_fallback": "Encoded on the CPU: the hardware encoder failed its run or its check.",
+        "changes": "Changes",
+        "load_failed": "The details of this job could not be loaded.",
+        "no_diff": "The list of changes was not recorded for this job.",
+        "tracks": "Before and after",
+        "before": "Before",
+        "after": "After",
+        "container": "Container",
+        "copy_reason": {
+          "unsupported_source": "The video was copied: the encoder cannot read its source.",
+          "low_savings": "The video was copied: re-encoding saved too little space.",
+          "too_slow": "The video was copied: re-encoding would have taken too long."
+        }
       }
     },
     "action": {

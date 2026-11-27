@@ -26,6 +26,7 @@ pub fn router() -> Router<AppState> {
         .merge(super::control::router())
         .route("/api/optimize/jobs", get(list_jobs).post(enqueue))
         .route("/api/optimize/verify", post(verify))
+        .route("/api/optimize/jobs/{id}", get(job_detail))
         .route("/api/optimize/jobs/{id}/retry", post(retry))
         .route("/api/optimize/jobs/{id}/cancel", post(cancel))
         .route(
@@ -211,6 +212,62 @@ pub async fn list_jobs(
             })
             .collect(),
     ))
+}
+
+/// What a job does to its file: the diff decided at queueing, the probes before and after, and
+/// what the encode really did.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JobDetail {
+    /// `changes` and `warnings`; absent on a job queued before the diff was kept.
+    diff: Option<Value>,
+    source: Option<Value>,
+    output: Option<Value>,
+    /// A planned re-encode whose video was copied reports `remux`.
+    done_level: Option<String>,
+    copy_reason: Option<String>,
+    cpu_fallback: bool,
+    #[serde(with = "iso_ms::opt")]
+    started_at: Option<DateTime<Utc>>,
+    #[serde(with = "iso_ms::opt")]
+    encoded_at: Option<DateTime<Utc>>,
+    #[serde(with = "iso_ms::opt")]
+    finished_at: Option<DateTime<Utc>>,
+}
+
+#[utoipa::path(get, path = "/api/optimize/jobs/{id}", responses((status = 200), (status = 404)))]
+pub async fn job_detail(
+    State(st): State<AppState>,
+    authed: Authed,
+    PathParams(id): PathParams<i64>,
+) -> Result<Json<JobDetail>, AppError> {
+    manage_jobs(&authed)?;
+    super::control::require_job(&st, &authed, id).await?;
+    let r = sqlx::query(
+        r#"SELECT diff, payload -> 'info' AS source,
+             CASE WHEN result ? 'video' THEN jsonb_build_object('video', result -> 'video',
+               'audio', result -> 'audio', 'subtitles', result -> 'subtitles',
+               'formatName', result -> 'formatName', 'formatBitRate', result -> 'formatBitRate') END AS output,
+             result ->> 'level' AS done_level, result ->> 'copyReason' AS copy_reason,
+             COALESCE((result ->> 'cpuFallback')::boolean, false) AS cpu_fallback,
+             "startedAt", "encodedAt", "finishedAt"
+           FROM jobs WHERE id = $1"#,
+    )
+    .bind(id)
+    .fetch_one(&st.db)
+    .await
+    .map_err(db)?;
+    Ok(Json(JobDetail {
+        diff: r.get("diff"),
+        source: r.get("source"),
+        output: r.get("output"),
+        done_level: r.get("done_level"),
+        copy_reason: r.get("copy_reason"),
+        cpu_fallback: r.get("cpu_fallback"),
+        started_at: r.get("startedAt"),
+        encoded_at: r.get("encodedAt"),
+        finished_at: r.get("finishedAt"),
+    }))
 }
 
 #[utoipa::path(post, path = "/api/optimize/jobs/{id}/retry", responses((status = 200), (status = 409)))]

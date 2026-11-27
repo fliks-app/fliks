@@ -1,0 +1,193 @@
+@let j = job();
+<app-modal-header>
+  <div class="min-w-0">
+    <h3 id="optimize-job-info-title" class="text-lg font-bold break-words">
+      {{ j.title ?? j.inPath }}
+    </h3>
+    @if (j.title && j.inPath) {
+      <p class="text-sm text-base-content/60 break-all">{{ j.inPath }}</p>
+    }
+  </div>
+</app-modal-header>
+
+<div class="flex flex-col gap-5 text-sm">
+  <dl class="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+    <dt class="text-base-content/60">{{ 'optimize.queue.col.state' | translate }}</dt>
+    <dd>{{ 'optimize.queue.job.' + j.state | translate }}</dd>
+    @if (j.level) {
+      <dt class="text-base-content/60">{{ 'optimize.queue.col.level' | translate }}</dt>
+      <dd>
+        {{ 'optimize.queue.level.' + j.level | translate }}
+        @if (detail()?.doneLevel; as done) {
+          @if (done !== j.level) {
+            <span class="text-base-content/60">
+              ({{
+                'optimize.queue.info.done_as'
+                  | translate: { level: ('optimize.queue.level.' + done | translate) }
+              }})
+            </span>
+          }
+        }
+      </dd>
+    }
+    @if (j.deviceId) {
+      <dt class="text-base-content/60">{{ 'optimize.queue.col.device' | translate }}</dt>
+      <dd>{{ j.deviceId }}</dd>
+    }
+    <dt class="text-base-content/60">{{ 'optimize.queue.info.queued_at' | translate }}</dt>
+    <dd>{{ j.createdAt | date: 'medium' }}</dd>
+    @if (detail(); as d) {
+      @if (d.startedAt) {
+        <dt class="text-base-content/60">{{ 'optimize.queue.info.started_at' | translate }}</dt>
+        <dd>{{ d.startedAt | date: 'medium' }}</dd>
+      }
+      @if (encodeTime(); as t) {
+        <dt class="text-base-content/60">{{ 'optimize.queue.info.encode_time' | translate }}</dt>
+        <dd>{{ t }}</dd>
+      }
+      @if (d.finishedAt) {
+        <dt class="text-base-content/60">{{ 'optimize.queue.info.finished_at' | translate }}</dt>
+        <dd>{{ d.finishedAt | date: 'medium' }}</dd>
+      }
+    }
+    @if (j.inSize != null) {
+      <dt class="text-base-content/60">{{ 'optimize.queue.info.size' | translate }}</dt>
+      <dd class="tabular-nums">
+        {{ formatBytes(j.inSize) }}
+        @if (j.outSize != null) {
+          → {{ formatBytes(j.outSize) }}
+          @if (saved(); as s) {
+            <span class="text-base-content/60">
+              ({{
+                (s.bytes >= 0 ? 'optimize.queue.info.saved' : 'optimize.queue.info.grew')
+                  | translate
+                    : {
+                        size: formatBytes(s.bytes < 0 ? -s.bytes : s.bytes),
+                        pct: s.pct < 0 ? -s.pct : s.pct,
+                      }
+              }})
+            </span>
+          }
+        }
+      </dd>
+    }
+  </dl>
+
+  @if (copyReason(); as r) {
+    <div role="alert" class="alert alert-info text-sm">{{ r | translate }}</div>
+  }
+  @if (detail()?.cpuFallback) {
+    <div role="alert" class="alert alert-info text-sm">
+      {{ 'optimize.queue.info.cpu_fallback' | translate }}
+    </div>
+  }
+
+  <div class="flex flex-col gap-2">
+    <h4 class="font-semibold">{{ 'optimize.queue.info.changes' | translate }}</h4>
+    @if (failed()) {
+      <p class="text-base-content/60">{{ 'optimize.queue.info.load_failed' | translate }}</p>
+    } @else if (!detail()) {
+      <span class="loading loading-spinner loading-sm"></span>
+    } @else if (!detail()!.diff) {
+      <p class="text-base-content/60">{{ 'optimize.queue.info.no_diff' | translate }}</p>
+    } @else {
+      @for (g of changes(); track g.group) {
+        <div>
+          <p class="font-medium">{{ 'settings.optimize.group.' + g.group | translate }}</p>
+          <ul class="list-disc ps-5 flex flex-col gap-1 mt-1">
+            @for (l of g.items; track $index) {
+              <li>{{ l.key | translate: l.params }}</li>
+            }
+          </ul>
+        </div>
+      }
+      @for (w of warnings(); track $index) {
+        <div role="alert" class="alert alert-warning text-sm">
+          {{ w.key | translate: w.params }}
+        </div>
+      }
+    }
+  </div>
+
+  @if (before(); as b) {
+    @let a = after();
+    <div class="flex flex-col gap-2">
+      <h4 class="font-semibold">{{ 'optimize.queue.info.tracks' | translate }}</h4>
+      <div class="overflow-x-auto scroll-ring-safe">
+        <table class="table table-sm">
+          <thead>
+            <tr>
+              <th></th>
+              <th>{{ 'optimize.queue.info.before' | translate }}</th>
+              @if (a) {
+                <th>{{ 'optimize.queue.info.after' | translate }}</th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th class="font-normal text-base-content/60">
+                {{ 'optimize.queue.info.container' | translate }}
+              </th>
+              <td>{{ b.container || '-' }}</td>
+              @if (a) {
+                <td>{{ a.container || '-' }}</td>
+              }
+            </tr>
+            <tr>
+              <th class="font-normal text-base-content/60">
+                {{ 'settings.optimize.group.video' | translate }}
+              </th>
+              <td>{{ b.video || '-' }}</td>
+              @if (a) {
+                <td>{{ a.video || '-' }}</td>
+              }
+            </tr>
+            <tr class="align-top">
+              <th class="font-normal text-base-content/60">
+                {{ 'settings.optimize.group.audio' | translate }}
+              </th>
+              <td>
+                @for (t of b.audio; track $index) {
+                  <div>{{ t }}</div>
+                } @empty {
+                  -
+                }
+              </td>
+              @if (a) {
+                <td>
+                  @for (t of a.audio; track $index) {
+                    <div>{{ t }}</div>
+                  } @empty {
+                    -
+                  }
+                </td>
+              }
+            </tr>
+            <tr class="align-top">
+              <th class="font-normal text-base-content/60">
+                {{ 'settings.optimize.group.subtitles' | translate }}
+              </th>
+              <td>
+                @for (t of b.subtitles; track $index) {
+                  <div>{{ t }}</div>
+                } @empty {
+                  -
+                }
+              </td>
+              @if (a) {
+                <td>
+                  @for (t of a.subtitles; track $index) {
+                    <div>{{ t }}</div>
+                  } @empty {
+                    -
+                  }
+                </td>
+              }
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  }
+</div>

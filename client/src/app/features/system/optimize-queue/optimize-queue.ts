@@ -31,6 +31,8 @@ import {
 } from '../../../core/models/optimize';
 import { formatBytes } from '../../../core/utils/format-bytes';
 import { formatEta } from '../../../shared/utils/download-format';
+import { ModalComponent } from '../../../shared/components/modal';
+import { OptimizeJobInfoComponent } from './job-info/job-info';
 
 export type QueueTab = 'active' | 'failures' | 'finished';
 
@@ -57,7 +59,15 @@ export interface DeviceRow {
 
 @Component({
   selector: 'app-optimize-queue',
-  imports: [DatePipe, RouterLink, TranslatePipe, TranslatePluralPipe, ErrorBadgeComponent],
+  imports: [
+    DatePipe,
+    RouterLink,
+    TranslatePipe,
+    TranslatePluralPipe,
+    ErrorBadgeComponent,
+    ModalComponent,
+    OptimizeJobInfoComponent,
+  ],
   templateUrl: './optimize-queue.html',
 })
 export class OptimizeQueueComponent implements OnInit {
@@ -86,6 +96,8 @@ export class OptimizeQueueComponent implements OnInit {
   readonly jobs = signal<OptimizeJob[]>([]);
   readonly loading = signal(true);
   readonly busy = signal(false);
+  /** The job whose details are open. */
+  readonly info = signal<OptimizeJob | null>(null);
   /** Waiting jobs ticked for a batch action, in the order they were ticked. */
   readonly selected = signal<number[]>([]);
 

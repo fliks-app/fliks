@@ -380,16 +380,29 @@ async fn insert(
         input_url: None,
         input_token: None,
     });
-    insert_job(st, "optimize", l, payload, &hash, priority, min_age_days).await
+    let diff = serde_json::to_value(d).ok();
+    insert_job(
+        st,
+        "optimize",
+        l,
+        payload,
+        diff,
+        &hash,
+        priority,
+        min_age_days,
+    )
+    .await
 }
 
 /// The one write of a job: a no-op while another job of the file is active. `notBefore` is the file's
 /// creation plus `min_age_days`.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn insert_job(
     st: &AppState,
     kind: &str,
     l: &Loaded,
     payload: serde_json::Value,
+    diff: Option<serde_json::Value>,
     hash: &str,
     priority: i32,
     min_age_days: u32,
@@ -397,10 +410,10 @@ pub(super) async fn insert_job(
     let (id, snap) = (l.id, &l.snap);
     let job = sqlx::query_scalar::<_, i64>(
         r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", priority, "inPath", "inSize",
-             "inMtimeMs", "inDev", "inIno", "notBefore")
+             "inMtimeMs", "inDev", "inIno", "notBefore", diff)
            VALUES ($10, $1, $2, $3, $4, $5, $6, $7, $8, $9,
              CASE WHEN $11 > 0 THEN (SELECT "createdAt" FROM media_files WHERE id = $1) + make_interval(days => $11)
-                  ELSE now() END)
+                  ELSE now() END, $12)
            ON CONFLICT ("mediaFileId") WHERE "mediaFileId" IS NOT NULL
              AND state IN ('queued', 'leased', 'staged', 'committing') DO NOTHING
            RETURNING id"#,
@@ -416,6 +429,7 @@ pub(super) async fn insert_job(
     .bind(snap.ino)
     .bind(kind)
     .bind(min_age_days as i32)
+    .bind(diff)
     .fetch_optional(&st.db)
     .await?;
     if job.is_some() {

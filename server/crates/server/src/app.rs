@@ -109,6 +109,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         crate::queue::api::enqueue,
         crate::queue::api::verify,
         crate::queue::api::list_jobs,
+        crate::queue::api::job_detail,
         crate::queue::api::retry,
         crate::queue::api::cancel,
         crate::queue::api::get_settings,
