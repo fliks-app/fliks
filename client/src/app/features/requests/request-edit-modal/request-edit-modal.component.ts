@@ -37,7 +37,7 @@ export class RequestEditModalComponent {
   readonly saving = input(false);
   readonly mode = input<'edit' | 'approve'>('edit');
   readonly folderId = input<number | null>(null);
-  readonly monitorNewSeasons = input(true);
+  readonly monitorNewSeasons = input<boolean | null>(null);
   protected readonly folders = computed(() => this.libraries().find((l) => l.id === this.libraryId())?.folders ?? []);
 
   readonly qualityProfileIdChange = output<number | null>();

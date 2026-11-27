@@ -31,7 +31,8 @@ export class RequestEditFlow {
   readonly row = signal<FliksRequestRow | null>(null);
   readonly mode = signal<'edit' | 'approve'>('edit');
   readonly folderId = signal<number | null>(null);
-  readonly monitorNewSeasons = signal(true);
+  /** Null leaves the approval to derive it from the request's seasons. */
+  readonly monitorNewSeasons = signal<boolean | null>(null);
   readonly qualityProfileId = signal<number | null>(null);
   readonly languageProfileId = signal<number | null>(null);
   readonly libraryId = signal<number | null>(null);
@@ -54,7 +55,7 @@ export class RequestEditFlow {
     this.mode.set(mode);
     this.row.set(row);
     this.folderId.set(defaultFolderId(this.libraries().find((l) => l.id === row.libraryId)?.folders));
-    this.monitorNewSeasons.set(row.monitorNewSeasons ?? true);
+    this.monitorNewSeasons.set(row.monitorNewSeasons ?? null);
     this.qualityProfileId.set(row.qualityProfileId);
     this.languageProfileId.set(row.languageProfileId);
     this.libraryId.set(row.libraryId);
@@ -83,7 +84,7 @@ export class RequestEditFlow {
       ...(this.languageProfileId() != null ? { languageProfileId: this.languageProfileId()! } : {}),
       ...(libraryId != null ? { libraryId } : {}),
       ...(folders.length > 1 && folderId != null ? { folderId } : {}),
-      ...(kindOf(row.mediaType).hasSeasons ? { monitorNewSeasons: this.monitorNewSeasons() } : {}),
+      ...(kindOf(row.mediaType).hasSeasons && this.monitorNewSeasons() != null ? { monitorNewSeasons: this.monitorNewSeasons()! } : {}),
     };
   }
 

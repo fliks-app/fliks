@@ -161,14 +161,17 @@ describe('RequestsComponent', () => {
     expect((list.mock.calls.at(-1) as unknown as [{ userId?: number }])[0].userId).toBeUndefined();
   });
 
-  it('approves with the dialog edits, a series following new seasons by default', async () => {
+  it('approves with the dialog edits, and leaves an unset follow-new-seasons to the server', async () => {
     const { cmp, approve } = setup();
     const row = { id: 7, mediaType: 'series', qualityProfileId: 2, languageProfileId: null, libraryId: null, monitorNewSeasons: null } as never;
     cmp.edit.open(row, 'approve');
     cmp.edit.languageProfileId.set(5);
+    await cmp.submitApprove();
+    expect(approve).toHaveBeenLastCalledWith(7, { qualityProfileId: 2, languageProfileId: 5 });
+    cmp.edit.open(row, 'approve');
     cmp.edit.monitorNewSeasons.set(false);
     await cmp.submitApprove();
-    expect(approve).toHaveBeenCalledWith(7, { qualityProfileId: 2, languageProfileId: 5, monitorNewSeasons: false });
+    expect(approve).toHaveBeenLastCalledWith(7, { qualityProfileId: 2, monitorNewSeasons: false });
   });
 
   it('widens a track request with the whole-album approve', async () => {

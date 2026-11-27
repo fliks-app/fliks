@@ -73,7 +73,8 @@
           <input
             type="checkbox"
             class="toggle toggle-primary"
-            [checked]="monitorNewSeasons()"
+            [checked]="monitorNewSeasons() === true"
+            [indeterminate]="monitorNewSeasons() === null"
             (change)="monitorNewSeasonsChange.emit($any($event.target).checked)"
           />
           <span class="label-text">{{ 'requests.monitor_new_seasons' | translate }}</span>
