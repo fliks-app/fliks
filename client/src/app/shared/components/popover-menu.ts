@@ -143,10 +143,10 @@ export class PopoverMenuComponent {
    * It flips side when the requested one can't fit a usable menu, and its free space caps `maxHeight`. */
   readonly position = computed(() => {
     const p = this.place();
-    // `width` is a min-width: a right-aligned box is pinned by `right` so wider content grows away from the anchor.
-    if (!p.alignRight) return { ...p, right: null as number | null };
     const viewportW = typeof window !== 'undefined' ? window.innerWidth : 1280;
-    return { ...p, left: null as number | null, right: viewportW - p.left - p.width };
+    // `width` is a min-width: a right-aligned box is pinned by `right` so wider content grows away from the anchor, up to the gutter.
+    if (!p.alignRight) return { ...p, right: null as number | null, maxWidth: viewportW - p.left - 8 };
+    return { ...p, left: null as number | null, right: viewportW - p.left - p.width, maxWidth: p.left + p.width - 8 };
   });
 
   private place() {
