@@ -4071,6 +4071,7 @@
         "no_library": "Keine Videobibliothek für eine Beispieldatei.",
         "library": "Bibliothek",
         "file": "Beispieldatei",
+        "episode": "Episode",
         "no_file": "Diese Bibliothek hat noch keine Datei.",
         "error": "Diese Datei kann nicht verglichen werden (kein Video der Bibliothek oder ungültiges Profil).",
         "one_job": "ein Auftrag, ein Durchlauf",

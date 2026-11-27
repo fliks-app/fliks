@@ -4071,6 +4071,7 @@
         "no_library": "Nessuna libreria video da cui prendere un file di esempio.",
         "library": "Libreria",
         "file": "File di esempio",
+        "episode": "Episodio",
         "no_file": "Questa libreria non ha ancora file.",
         "error": "Questo file non può essere confrontato (non è un video della libreria, o il profilo non è valido).",
         "one_job": "un job, un passaggio",
