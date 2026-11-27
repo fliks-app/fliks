@@ -13,14 +13,14 @@ pub fn sanitize(raw: &str) -> String {
         .to_owned()
 }
 
-/// `(free, total)` bytes: `f_bfree * f_bsize` (root-reserved blocks count as free) and `f_blocks * f_bsize`.
+/// `(free, total)` bytes: `f_bfree * f_frsize` (root-reserved blocks count as free) and `f_blocks * f_frsize`.
 #[cfg(unix)]
 fn space(path: String) -> Option<(i64, i64)> {
     let c = std::ffi::CString::new(path).ok()?;
     // SAFETY: `s` is fully written by a successful `statvfs`, which is checked before it is read.
     let mut s: libc::statvfs = unsafe { std::mem::zeroed() };
     (unsafe { libc::statvfs(c.as_ptr(), &mut s) } == 0).then(|| {
-        let size = s.f_bsize as i64;
+        let size = s.f_frsize as i64;
         (s.f_bfree as i64 * size, s.f_blocks as i64 * size)
     })
 }
