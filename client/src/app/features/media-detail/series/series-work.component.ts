@@ -388,6 +388,10 @@ export class SeriesWorkComponent extends VideoWorkBase {
 
   protected readonly episodeMonitoredLoading = signal(false);
 
+  protected override subtitleFile() {
+    return this.episodeView.episodeActiveFile();
+  }
+
   // ── Downloads ──
 
   protected override downloadFileId(): number | null {

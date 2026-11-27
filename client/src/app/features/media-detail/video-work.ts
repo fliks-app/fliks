@@ -21,6 +21,7 @@ import { DetailHeroComponent, type DetailHeroBadge } from '../../shared/componen
 import { DownloadQualityModalComponent } from '../../shared/components/download-quality-modal/download-quality-modal';
 import { DownloadDetailModalComponent } from '../../shared/components/download-detail-modal/download-detail-modal';
 import { SubtitlesModalComponent } from '../../shared/components/subtitles-modal/subtitles-modal';
+import { SubtitleList } from '../../shared/components/subtitles-modal/subtitle-list';
 import { lazyModal } from '../../shared/utils/lazy-modal';
 import { afterViewTransition, viewTransitionEnded } from '../../shared/utils/view-transition';
 import { NavbarService } from '../../core/services/navbar.service';
@@ -238,6 +239,16 @@ export abstract class VideoWorkBase {
   protected readonly hero = viewChild(DetailHeroComponent);
   protected readonly subtitleSection = viewChild(SubtitlesModalComponent);
   protected readonly subtitlesOpener = lazyModal(() => this.subtitleSection());
+  protected readonly subtitleList = new SubtitleList({
+    mediaId: () => this.mediaId(),
+    fileId: () => this.subtitleFile()?.id ?? null,
+    streams: () => this.subtitleFile()?.streamInfo?.subtitles,
+    parked: () => this.host.parked(),
+  });
+  /** The file whose subtitles the hero and the modal show. */
+  protected subtitleFile() {
+    return this.activeFile();
+  }
   /** The file details sit below the fold: built once the opening transition ends, at once on a return that restores into them. */
   protected readonly fileInfoReady = viewTransitionEnded(inject(NavbarService).navigatedBack());
 
@@ -246,7 +257,7 @@ export abstract class VideoWorkBase {
   }
 
   protected reloadSubtitles(): void {
-    void this.subtitleSection()?.loadSubtitles(this.mediaId());
+    void this.subtitleList.load();
   }
 
   protected trackingScope(): TrackingScope {

@@ -18,9 +18,9 @@
   [originalLanguage]="m.metadata?.originalLanguage ?? null"
   [fanartUrl]="m.fanartUrl ?? m.posterUrl ?? null"
   [posterUrl]="m.posterUrl ?? null"
-  [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
-  [ocrLanguages]="subtitleSection()?.ocrInProgress() ?? []"
-  [translations]="subtitleSection()?.translationInProgress() ?? []"
+  [subtitles]="subtitleList.headerSubtitles()"
+  [ocrLanguages]="subtitleList.ocrInProgress()"
+  [translations]="subtitleList.translationInProgress()"
   [files]="headerFiles()"
   [selectedFileId]="activeFileId()"
   [userHasOpenWholeRequest]="host.requestFlow.hasBlockingRequest()"
@@ -67,12 +67,9 @@
 
 @if (subtitlesOpener.built()) {
   <app-subtitles-modal
-    [mediaId]="m.id"
-    [selectedFileId]="activeFileId()"
-    [streamSubtitles]="activeFile()?.streamInfo?.subtitles"
+    [list]="subtitleList"
     [canManage]="canManageSubtitles()"
     [languageProfileId]="m.languageProfile?.id ?? null"
-    [parked]="host.parked()"
   />
 }
 
