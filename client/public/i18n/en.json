@@ -5679,7 +5679,7 @@
       "device": {
         "free": "Free",
         "busy": "Busy",
-        "paused": "Paused by playback",
+        "paused": "Waiting for resources",
         "slots_one": "{{used}} of {{count}} job",
         "slots_other": "{{used}} of {{count}} jobs",
         "offline": "Offline"
