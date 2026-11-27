@@ -3,6 +3,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { holdsPermission } from '../../core/permissions';
 import { AuthService } from '../../core/services/auth.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import { LibrariesApiService } from '../../core/services/api/libraries-api.service';
@@ -20,7 +21,7 @@ describe('ArtistPageComponent', () => {
     TestBed.configureTestingModule({
       providers: bookSpecProviders(
         { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap({ id: '4' })) } },
-        { provide: AuthService, useValue: { hasPermission: (p: string) => perms.includes(p), user: () => null, sessionEpoch: () => 0, isAuthenticated: () => false } },
+        { provide: AuthService, useValue: { hasPermission: (p: string) => holdsPermission(perms, p), user: () => null, sessionEpoch: () => 0, isAuthenticated: () => false } },
         { provide: LibrariesApiService, useValue: { listMine: async () => [] } },
         { provide: AudioPlayerService, useValue: { playTracks } },
       ),

@@ -1,11 +1,9 @@
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import type { LibrarySummary } from '../../../core/services/api/libraries-api.service';
-import type { TitleKey } from '../../../core/services/api/requests.service';
+import type { FliksRequestRow, FliksRequestStatus, TitleKey } from '../../../core/services/api/requests.service';
 import type { WantSpec } from '../../../core/services/api/wants-api.service';
 import { kindOf } from '../../../core/media-kinds';
 import { defaultFolderId } from '../library-folder-select/library-folder-select';
-
-export type AddMode = 'import' | 'request';
 
 /** What a page asks the dialog to add: a provider hit of any kind. */
 export interface AddRequest {
@@ -15,8 +13,6 @@ export interface AddRequest {
   title: string;
   /** Music: one track of the album is wanted, not the whole album. */
   recording?: { externalId: string; albumExternalId: string };
-  /** Defaults to `import` for a caller who can add, else `request`. */
-  mode?: AddMode;
   /** A page that shows the choices anyway always opens the dialog. */
   alwaysAsk?: boolean;
   /** What a video request is keyed by, when it is not the provider and id above. */
@@ -28,10 +24,17 @@ export interface AddRequest {
   lockedLanguageProfileId?: number | null;
   /** The editions an active request already covers (books). */
   requestedWants?: WantSpec[];
+  /** Another user's pending row the add would approve: the dialog starts from its choices. */
+  pending?: FliksRequestRow;
+  /** People behind the title's active request, when the caller is not one of them. */
+  requesterCount?: number;
+  /** The series already follows new seasons: the toggle is not offered. */
+  followsNewSeasons?: boolean;
 }
 
 export interface AddResult {
-  mode: AddMode;
+  /** `pending` waits for a manager; any other status was approved on create. */
+  status: FliksRequestStatus;
   mediaId: number | null;
   /** A track request: the recordings it asked for. */
   recordings?: string[];
@@ -91,7 +94,7 @@ export function profileDefaults(lib: LibrarySummary | null, c: Choices) {
 
 /** Whether the add needs no question: one library takes the kind (an album: or the remembered one fits) and nothing else is to be picked. */
 export function askNothing(req: AddRequest, c: Choices): boolean {
-  if (req.alwaysAsk || kindOf(req.kind).hasSeasons) return false;
+  if (req.alwaysAsk || req.pending || req.requesterCount || kindOf(req.kind).hasSeasons) return false;
   const fit = compatible(c.libraries, req.kind);
   if (req.kind === 'album') return fit.length > 0 && c.wantQuality.length > 0 && (fit.length === 1 || fit.some((l) => l.id === lastLibrary('album')));
   if (fit.length !== 1) return false;

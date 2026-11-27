@@ -7,10 +7,8 @@ import { TranslatePluralPipe } from '../../../core/pipes/translate-plural.pipe';
 import type { MediaType } from '../../../core/enums/media-type.enum';
 import { kindOf } from '../../../core/media-kinds';
 import { allowanceLine } from '../../../core/utils/request-allowance';
-import { BooksApiService } from '../../../core/services/api/books-api.service';
 import { LibrariesApiService, type LibrarySummary } from '../../../core/services/api/libraries-api.service';
 import { MetadataService, type SeasonStub } from '../../../core/services/api/metadata.service';
-import { MusicApiService } from '../../../core/services/api/music-api.service';
 import { ProfilesService } from '../../../core/services/api/profiles.service';
 import { extractMessage } from '../../../core/interceptors/error.interceptor';
 import { RequestsService, type CreateRequestBody, type RequestAllowance } from '../../../core/services/api/requests.service';
@@ -25,8 +23,8 @@ import { ModalHeaderComponent } from '../modal-header';
 import { SeasonPickerComponent } from '../season-picker/season-picker.component';
 import { WantsEditorComponent } from '../wants-editor/wants-editor';
 import { RequestWantsComponent } from '../../../features/requests/request-wants/request-wants';
+import { RequestRequestersComponent } from '../../../features/requests/request-requesters/request-requesters.component';
 import {
-  type AddMode,
   type AddRequest,
   type AddResult,
   type Choices,
@@ -38,11 +36,11 @@ import {
   rememberLibrary,
 } from './add-plan';
 
-/** The one way to add a provider hit to a library, or to request it: straight away when one library takes
+/** The one way to add or request a provider hit, both a request create: straight away when one library takes
  *  it, else this dialog (library, folder, profiles; seasons for a series; editions for a book). */
 @Component({
   selector: 'app-add-dialog',
-  imports: [FormsModule, TranslatePipe, TranslatePluralPipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, ModalComponent, SeasonPickerComponent, LibraryFolderSelectComponent, WantsEditorComponent, RequestWantsComponent],
+  imports: [FormsModule, TranslatePipe, TranslatePluralPipe, TvSelectDirective, ModalHeaderComponent, ModalFooterComponent, ModalComponent, SeasonPickerComponent, LibraryFolderSelectComponent, WantsEditorComponent, RequestWantsComponent, RequestRequestersComponent],
   templateUrl: './add-dialog.html',
 })
 export class AddDialogComponent {
@@ -50,8 +48,6 @@ export class AddDialogComponent {
   private readonly librariesApi = inject(LibrariesApiService);
   private readonly profilesApi = inject(ProfilesService);
   private readonly metadata = inject(MetadataService);
-  private readonly books = inject(BooksApiService);
-  private readonly music = inject(MusicApiService);
   private readonly requestsApi = inject(RequestsService);
   private readonly push = inject(PushService);
   private readonly toast = inject(ToastService);
@@ -64,7 +60,6 @@ export class AddDialogComponent {
   private settled = false;
 
   protected readonly req = signal<AddRequest | null>(null);
-  protected readonly mode = signal<AddMode>('import');
   protected readonly loading = signal(false);
   protected readonly loadFailed = signal(false);
   protected readonly busy = signal(false);
@@ -88,21 +83,26 @@ export class AddDialogComponent {
   });
   private readonly allowances = signal<RequestAllowance | null>(null);
   protected readonly kind = computed<MediaType>(() => this.req()?.kind ?? 'movie');
+  /** The create is certain to be approved: the dialog says "Add". */
+  protected readonly auto = computed(() => this.requestsApi.autoKinds().has(this.kind()));
+  protected readonly canManage = computed(() => this.auth.hasPermission('requests.manage'));
   protected readonly hasSeasons = computed(() => kindOf(this.kind()).hasSeasons);
   protected readonly isVideo = computed(() => this.kind() === 'movie' || this.kind() === 'series');
   protected readonly libraries = computed(() => compatible(this.choices().libraries, this.kind()));
   protected readonly folders = computed(() => this.libraries().find((l) => l.id === this.libraryId())?.folders ?? []);
-  protected readonly alreadyRequested = computed(() => new Set(this.req()?.alreadyRequestedSeasons ?? []));
+  /** An approved add absorbs pending seasons and skips held ones, so nothing is locked for it. */
+  protected readonly alreadyRequested = computed(() => new Set(this.auto() ? [] : (this.req()?.alreadyRequestedSeasons ?? [])));
+  protected readonly showFollow = computed(() => this.hasSeasons() && !this.req()?.followsNewSeasons);
   protected readonly locked = computed(() => !!this.req()?.profilesLocked);
   protected readonly qualityLocked = computed(() => this.locked() && this.req()?.lockedQualityProfileId != null);
   /** Folder and profile pickers are for who adds or manages; a member's request takes the library defaults. */
-  protected readonly canChoose = computed(() => this.mode() === 'import' || this.auth.hasPermission('requests.manage'));
+  protected readonly canChoose = computed(() => this.canManage() || this.auth.hasPermission('media.create'));
   protected readonly noLibrary = computed(() => !this.loading() && this.libraries().length === 0);
   protected readonly nothingPicked = computed(() => this.hasSeasons() && !this.seasonsFailed() && this.selectedSeasons().size === 0);
   protected readonly wantsReady = computed(() => this.wants().every((w) => w.qualityProfileId != null));
-  /** The member's remaining requests of this kind; none while importing or without a limit. */
+  /** The member's remaining requests of this kind; none without a limit. */
   protected readonly allowance = computed(() => {
-    const a = this.mode() === 'request' ? this.allowances()?.[this.kind()] : undefined;
+    const a = this.allowances()?.[this.kind()];
     return a ? allowanceLine(this.translate, a) : null;
   });
   protected readonly canSubmit = computed(() => {
@@ -110,16 +110,16 @@ export class AddDialogComponent {
     if (this.busy() || this.loading() || this.noLibrary() || this.seasonsLoading() || this.nothingPicked()) return false;
     if (this.isVideo()) return !this.canChoose() || this.qualityId() != null;
     if (this.kind() === 'book') return this.wantsReady();
-    return this.mode() === 'import' || this.audioQualityId() != null;
+    return this.audioQualityId() != null;
   });
   protected readonly titleKey = computed(() => {
     const r = this.req();
     if (!r) return 'discover.add_title';
-    if (this.kind() === 'album') return this.mode() === 'import' ? 'discover.add_music' : 'discover.request_music';
-    return this.mode() === 'import' ? 'discover.add_title' : 'discover.request_title';
+    if (this.kind() === 'album') return this.auto() ? 'discover.add_music' : 'discover.request_music';
+    return this.auto() ? 'discover.add_title' : 'discover.request_title';
   });
   protected readonly confirmKey = computed(() => {
-    if (this.mode() === 'import') return 'discover.add_to_library';
+    if (this.auto()) return 'discover.add_to_library';
     if (this.hasSeasons()) return 'discover.select_seasons';
     return this.kind() === 'album' && !this.req()?.recording ? 'discover.request_album' : 'discover.request';
   });
@@ -132,8 +132,7 @@ export class AddDialogComponent {
   /** Adds the hit without a question when one library takes it, else opens the dialog. */
   async add(req: AddRequest): Promise<void> {
     if (!this.idle) return;
-    const mode = req.mode ?? (this.auth.hasPermission('media.create') ? 'import' : 'request');
-    this.begin(req, mode);
+    this.begin(req);
     if (!(await this.load(req))) {
       this.show();
       return;
@@ -146,10 +145,9 @@ export class AddDialogComponent {
     this.show();
   }
 
-  private begin(req: AddRequest, mode: AddMode) {
+  private begin(req: AddRequest) {
     this.settled = false;
     this.req.set(req);
-    this.mode.set(mode);
     this.busy.set(false);
     this.loadFailed.set(false);
     this.libraryId.set(null);
@@ -160,7 +158,7 @@ export class AddDialogComponent {
     this.seasons.set([]);
     this.selectedSeasons.set(new Set());
     this.seasonsFailed.set(false);
-    this.followOverride.set(null);
+    this.followOverride.set(req.pending?.monitorNewSeasons ?? null);
     this.wants.set([{ family: 'text', language: null }]);
     this.allowances.set(null);
   }
@@ -182,13 +180,15 @@ export class AddDialogComponent {
         video ? this.profilesApi.getQualityProfiles() : Promise.resolve([]),
         video ? this.profilesApi.getLanguageProfiles() : Promise.resolve([]),
         video ? Promise.resolve([]) : this.profilesApi.getQualityProfiles(family),
-        this.mode() === 'request' ? this.requestsApi.allowance() : Promise.resolve(null),
+        this.requestsApi.allowance(),
       ]);
       this.allowances.set(allowances);
       const pairs = (l: Profile[]) => l.map((p) => ({ id: p.id, name: p.name }));
       this.choices.set({ libraries, quality: pairs(quality), language: pairs(language), wantQuality: pairs(wantQuality) });
       if (r.kind === 'book') this.wants.set([{ family: 'text', language: null, qualityProfileId: wantQuality[0]?.id ?? null }]);
-      this.pick(preselect(libraries, r.kind));
+      this.pick(libraries.find((l) => l.id === r.pending?.libraryId) ?? preselect(libraries, r.kind));
+      if (r.pending?.qualityProfileId != null && !this.qualityLocked()) this.qualityId.set(r.pending.qualityProfileId);
+      if (r.pending?.languageProfileId != null && !this.locked()) this.languageId.set(r.pending.languageProfileId);
       return true;
     } catch {
       this.loadFailed.set(true);
@@ -217,19 +217,20 @@ export class AddDialogComponent {
     this.pick(this.libraries().find((l) => l.id === id) ?? null);
   }
 
-  /** Specials start unticked on an add, and nothing is ticked on a request unless the caller said so. */
+  /** An add ticks the pending row's seasons, else every regular one; a request ticks only what the caller said. */
   private loadSeasons(r: AddRequest) {
     this.seasonsLoading.set(true);
-    const pre = new Set(r.preselectedSeasons ?? []);
+    const pre = new Set(r.pending?.seasons ?? r.preselectedSeasons ?? []);
     this.metadata
       .getSeasonStubs(r.provider, r.externalId)
       .then((stubs) => {
         this.seasons.set(stubs);
         const taken = this.alreadyRequested();
+        const all = stubs.map((s) => s.seasonNumber);
         const ticked =
-          this.mode() === 'import'
-            ? stubs.map((s) => s.seasonNumber).filter((n) => n > 0)
-            : stubs.map((s) => s.seasonNumber).filter((n) => pre.has(n) && !taken.has(n));
+          this.auto() && !r.pending?.seasons?.length
+            ? all.filter((n) => n > 0)
+            : all.filter((n) => pre.has(n) && !taken.has(n));
         this.selectedSeasons.set(new Set(ticked));
       })
       .catch(() => this.seasonsFailed.set(true))
@@ -267,23 +268,23 @@ export class AddDialogComponent {
     if (!r || !this.canSubmit()) return;
     this.busy.set(true);
     try {
-      const mediaId = this.mode() === 'import' ? await this.importIt(r) : await this.requestIt(r);
+      const row = await this.requestsApi.create(this.body(r), true);
       const recordings = r.kind === 'album' && r.recording ? [r.recording.externalId] : undefined;
       this.settled = true;
       rememberLibrary(r.kind, this.libraryId());
-      this.toast.success(this.translate.instant(this.mode() === 'import' ? 'discover.import_success' : 'discover.request_success'));
-      this.close();
-      this.done.emit({ mode: this.mode(), mediaId, ...(recordings ? { recordings } : {}) });
-      if (this.mode() === 'request') void this.push.askInContext('request');
-    } catch (e) {
-      // A request already made counts as done; any other request failure is toasted here.
-      if (e instanceof HttpErrorResponse && e.status === 409 && this.mode() === 'request') {
-        this.settled = true;
-        this.close();
-        this.done.emit({ mode: 'request', mediaId: null, ...(r.recording ? { recordings: [r.recording.externalId] } : {}) });
-      } else if (this.mode() === 'request' && e instanceof HttpErrorResponse) {
-        this.toast.error(extractMessage(e, this.translate));
+      if (row.status !== 'pending') {
+        this.toast.success(this.translate.instant('discover.request_approved'));
+      } else if (this.auto()) {
+        this.toast.info(this.translate.instant('discover.request_sent_for_approval'));
+        void this.requestsApi.reloadAutoKinds();
+      } else {
+        this.toast.success(this.translate.instant('discover.request_success'));
       }
+      this.close();
+      this.done.emit({ status: row.status, mediaId: row.mediaId ?? null, ...(recordings ? { recordings } : {}) });
+      if (row.status === 'pending') void this.push.askInContext('request');
+    } catch (e) {
+      if (e instanceof HttpErrorResponse) this.toast.error(extractMessage(e, this.translate));
     } finally {
       this.busy.set(false);
     }
@@ -295,36 +296,6 @@ export class AddDialogComponent {
       ...(this.libraryId() != null ? { libraryId: this.libraryId()! } : {}),
       ...(this.folders().length > 1 && folderId != null ? { folderId } : {}),
     };
-  }
-
-  private async importIt(r: AddRequest): Promise<number | null> {
-    const place = this.place();
-    switch (r.kind) {
-      case 'book': {
-        const saved = await this.books.import({ type: 'book', provider: r.provider, externalId: r.externalId, wants: this.readyWants(), ...place });
-        return saved.id;
-      }
-      case 'album': {
-        if (r.recording) {
-          const w = await this.music.wantRecording({ provider: r.provider, externalId: r.recording.externalId, albumExternalId: r.externalId, wants: this.audioWants(), ...place });
-          return w.mediaId;
-        }
-        return (await this.music.importAlbum({ provider: r.provider, externalId: r.externalId, wants: this.audioWants(), ...place })).id;
-      }
-      default: {
-        const saved = await this.metadata.importMedia({
-          type: r.kind,
-          provider: r.provider,
-          externalId: r.externalId,
-          qualityProfileId: this.qualityId()!,
-          languageProfileId: this.languageId() ?? undefined,
-          ...place,
-          ...(this.hasSeasons() && !this.seasonsFailed() ? { monitoredSeasons: [...this.selectedSeasons()].sort((a, b) => a - b) } : {}),
-          ...(kindOf(r.kind).hasSeasons ? { monitorNewSeasons: this.followNewSeasons() } : {}),
-        });
-        return saved.id;
-      }
-    }
   }
 
   private audioWants(): WantSpec[] | undefined {
@@ -340,24 +311,29 @@ export class AddDialogComponent {
     });
   }
 
-  private async requestIt(r: AddRequest): Promise<number | null> {
+  private body(r: AddRequest): CreateRequestBody {
     const place = this.place();
-    let body: CreateRequestBody;
-    if (r.kind === 'book') {
-      body = { mediaType: 'book', externalId: r.externalId, title: r.title, wants: this.readyWants(), ...place };
-    } else if (r.kind === 'album') {
-      body = { mediaType: 'album', externalId: r.externalId, title: r.title, wants: [{ family: 'audio', language: null, qualityProfileId: this.audioQualityId() }], ...(r.recording ? { recordings: [r.recording.externalId] } : {}), ...place };
-    } else {
-      body = {
-        mediaType: r.kind as 'movie' | 'series',
-        ...(r.titleKey ?? (r.provider === 'tmdb' ? { tmdbId: Number(r.externalId) } : { provider: r.provider, externalId: r.externalId })),
-        title: r.title,
-        ...(this.canChoose() ? { qualityProfileId: this.qualityId() ?? undefined, languageProfileId: this.languageId() ?? undefined } : {}),
-        ...place,
-        ...(this.hasSeasons() && this.selectedSeasons().size > 0 ? { seasons: [...this.selectedSeasons()].sort((a, b) => a - b) } : {}),
-      };
+    if (r.kind === 'book') return { mediaType: 'book', externalId: r.externalId, title: r.title, wants: this.readyWants(), ...place };
+    if (r.kind === 'album') {
+      return { mediaType: 'album', externalId: r.externalId, title: r.title, wants: this.audioWants() ?? [], ...(r.recording ? { recordings: [r.recording.externalId] } : {}), ...place };
     }
-    const row = await this.requestsApi.create(body, true);
-    return row.mediaId ?? null;
+    return {
+      mediaType: r.kind as 'movie' | 'series',
+      ...(r.titleKey ?? (r.provider === 'tmdb' ? { tmdbId: Number(r.externalId) } : { provider: r.provider, externalId: r.externalId })),
+      title: r.title,
+      ...(this.canChoose() ? { qualityProfileId: this.qualityId() ?? undefined, languageProfileId: this.languageId() ?? undefined } : {}),
+      ...place,
+      ...this.seasonScope(),
+      ...(this.showFollow() ? { monitorNewSeasons: this.followNewSeasons() } : {}),
+    };
+  }
+
+  /** Every regular season and no special is the whole series: no `seasons`. */
+  private seasonScope(): { seasons?: number[] } {
+    const picked = this.selectedSeasons();
+    if (!this.hasSeasons() || this.seasonsFailed() || picked.size === 0) return {};
+    const regular = this.seasons().map((s) => s.seasonNumber).filter((n) => n > 0);
+    const whole = regular.length > 0 && regular.every((n) => picked.has(n)) && [...picked].every((n) => n > 0);
+    return whole ? {} : { seasons: [...picked].sort((a, b) => a - b) };
   }
 }

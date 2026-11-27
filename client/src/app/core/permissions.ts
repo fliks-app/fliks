@@ -1,6 +1,7 @@
 /** Core permissions each broader one includes, from the server ACL (`Permissions::from`): A includes B only when A's grants cover B's. */
 export const PERMISSION_INCLUDES: Readonly<Record<string, readonly string[]>> = {
   'parties.manage': ['parties.create', 'parties.read_public'],
+  'media.create': ['requests.create'],
 };
 
 /** Core permissions grouped by domain, in display order. */

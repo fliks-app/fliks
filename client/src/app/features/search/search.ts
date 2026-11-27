@@ -54,6 +54,7 @@ import { Keyboard } from '@capacitor/keyboard';
 import { UserAvatarComponent } from '../../shared/components/user-avatar/user-avatar';
 import { AddDialogComponent } from '../../shared/components/add-dialog/add-dialog';
 import type { AddRequest, AddResult } from '../../shared/components/add-dialog/add-plan';
+import { RequestsService } from '../../core/services/api/requests.service';
 import { TrackLineComponent } from '../music/track-line.component';
 import { MusicDownloadsService } from '../../core/services/music-downloads.service';
 import { HitStateComponent } from './hit-state/hit-state';
@@ -89,6 +90,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly router = inject(Router);
   protected readonly recent = inject(RecentSearchesService);
   private readonly auth = inject(AuthService);
+  private readonly requestsApi = inject(RequestsService);
   private readonly social = inject(SocialApiService);
   private readonly personsApi = inject(PersonsApiService);
   protected readonly resultKey = searchResultKey;
@@ -705,8 +707,8 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // ── Cards ──
 
-  protected readonly canAdd = computed(() => this.auth.hasPermission('media.create'));
-  protected readonly canRequest = computed(() => !this.canAdd() && this.auth.hasPermission('requests.create'));
+  protected readonly canRequest = computed(() => this.auth.hasPermission('requests.create'));
+  protected readonly autoAlbum = computed(() => this.requestsApi.autoKinds().has('album'));
 
   protected readonly videoHeld = this.state.videoHeld;
   protected readonly videoToAdd = this.state.videoToAdd;
@@ -756,13 +758,14 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     return ['/add/' + kindOf(row.mediaType).providerSegment, provider, externalId];
   }
 
-  /** Add, or Request for a caller who cannot add; none for a hit held already or asked for. */
+  /** Add when the create is approved at once, else Request; none for a hit held already or asked for (an add absorbs a pending one). */
   hitActions(row: SearchHit): CardAction[] {
-    if (row.existingMediaId != null || row.requestStatus === 'pending' || row.requestStatus === 'approved') return [];
-    if (!this.canAdd() && !this.canRequest()) return [];
+    const auto = this.requestsApi.autoKinds().has(row.mediaType);
+    if (!this.canRequest() || row.existingMediaId != null) return [];
+    if (row.requestStatus === 'approved' || row.requestStatus === 'processing' || (row.requestStatus === 'pending' && !auto)) return [];
     return [
       {
-        labelKey: this.canAdd() ? 'discover.add_to_library' : 'discover.request',
+        labelKey: auto ? 'discover.add_to_library' : 'discover.request',
         icon: 'plus',
         run: () => this.add(row),
       },
@@ -816,7 +819,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       patch((rows) => rows, (rows) =>
         rows.map((x) => {
           if (!asked.has(x.externalId)) return x;
-          if (r.mode === 'request') return { ...x, requestStatus: 'pending' as const };
+          if (r.status === 'pending') return { ...x, requestStatus: 'pending' as const };
           return x.existingMediaId == null ? { ...x, existingMediaId: r.mediaId, state: 'wanted' as const } : x;
         }),
       );
@@ -824,12 +827,12 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
       const next: SearchHit = {
         ...hit.row,
         existingMediaId: r.mediaId ?? hit.row.existingMediaId,
-        state: r.mode === 'import' ? 'wanted' : hit.row.state,
-        requestStatus: r.mode === 'request' ? 'pending' : hit.row.requestStatus,
+        state: r.status !== 'pending' ? 'wanted' : hit.row.state,
+        requestStatus: r.status,
       };
       const swap = (rows: SearchHit[]) => rows.map((x) => (x === hit.row ? next : x));
       for (const list of [this.state.movieHits, this.state.seriesHits, this.state.bookHits]) list.update(swap);
-      const wanted = r.mode === 'import' && r.mediaId != null;
+      const wanted = r.status !== 'pending' && r.mediaId != null;
       patch(swap, (rows) =>
         rows.map((x) =>
           x.album !== hit.row
@@ -837,7 +840,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
             : {
                 ...x,
                 album: next,
-                ...(r.mode === 'request' ? { requestStatus: 'pending' as const } : {}),
+                ...(r.status === 'pending' ? { requestStatus: 'pending' as const } : {}),
                 ...(wanted && x.existingMediaId == null ? { existingMediaId: r.mediaId, state: 'wanted' as const } : {}),
               },
         ),

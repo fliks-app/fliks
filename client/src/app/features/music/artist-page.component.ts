@@ -9,6 +9,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { MusicApiService } from '../../core/services/api/music-api.service';
 import type { ArtistAlbumGroup, Discography, PopularTrack } from '../../core/services/api/music.models';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
+import { RequestsService } from '../../core/services/api/requests.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ResolveUrlPipe } from '../../core/pipes/resolve-url.pipe';
 import { translatePlural } from '../../core/pipes/translate-plural.pipe';
@@ -47,6 +48,7 @@ export class ArtistPageComponent {
   private readonly router = inject(Router);
   private readonly player = inject(AudioPlayerService);
   private readonly auth = inject(AuthService);
+  private readonly requests = inject(RequestsService);
   private readonly addDialog = viewChild(AddDialogComponent);
   protected readonly id = toSignal(inject(ActivatedRoute).paramMap.pipe(map((p) => Number(p.get('id')))), { initialValue: 0 });
   protected readonly data = signal<Discography | null>(null);
@@ -78,8 +80,8 @@ export class ArtistPageComponent {
   protected readonly popularShown = signal(5);
   protected readonly popular = computed(() => (this.data()?.popular ?? []).slice(0, this.popularShown()));
   protected readonly popularSkeleton = [0, 1, 2, 3, 4];
-  protected readonly canAdd = computed(() => this.auth.hasPermission('media.create'));
-  protected readonly canRequest = computed(() => !this.canAdd() && this.auth.hasPermission('requests.create'));
+  protected readonly canRequest = computed(() => this.auth.hasPermission('requests.create'));
+  protected readonly auto = computed(() => this.requests.autoKinds().has('album'));
   protected readonly subtitle = computed(() => {
     const a = this.data()?.artist;
     return [a?.artistType, a?.disambiguation].filter(Boolean).join(' · ');
@@ -134,7 +136,6 @@ export class ArtistPageComponent {
       externalId: row.albumExternalId,
       title: row.albumTitle ?? row.title,
       recording: { externalId: row.recordingId, albumExternalId: row.albumExternalId },
-      mode: this.canAdd() ? 'import' : 'request',
     });
   }
 

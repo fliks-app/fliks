@@ -1,6 +1,7 @@
 import {
   Component,
   ElementRef,
+  computed,
   input,
   output,
   viewChild,
@@ -11,6 +12,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { FliksRequestRow } from '../../../core/services/api/requests.service';
 import { LibrarySummary } from '../../../core/services/api/libraries-api.service';
 import type { WantSpec } from '../../../core/services/api/wants-api.service';
+import { LibraryFolderSelectComponent } from '../../../shared/components/library-folder-select/library-folder-select';
 import { WantsEditorComponent } from '../../../shared/components/wants-editor/wants-editor';
 import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { ModalFooterComponent } from '../../../shared/components/modal-footer';
@@ -18,7 +20,7 @@ import { ModalComponent } from '../../../shared/components/modal';
 
 @Component({
   selector: 'app-request-edit-modal',
-  imports: [ModalComponent, TvSelectDirective, WantsEditorComponent, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
+  imports: [ModalComponent, TvSelectDirective, WantsEditorComponent, LibraryFolderSelectComponent, ModalFooterComponent, ModalHeaderComponent, FormsModule, TranslatePipe],
   templateUrl: './request-edit-modal.component.html',
 })
 export class RequestEditModalComponent {
@@ -33,10 +35,16 @@ export class RequestEditModalComponent {
   readonly libraryId = input<number | null>(null);
   readonly wants = input<WantSpec[]>([]);
   readonly saving = input(false);
+  readonly mode = input<'edit' | 'approve'>('edit');
+  readonly folderId = input<number | null>(null);
+  readonly monitorNewSeasons = input(true);
+  protected readonly folders = computed(() => this.libraries().find((l) => l.id === this.libraryId())?.folders ?? []);
 
   readonly qualityProfileIdChange = output<number | null>();
   readonly languageProfileIdChange = output<number | null>();
   readonly libraryIdChange = output<number | null>();
+  readonly folderIdChange = output<number | null>();
+  readonly monitorNewSeasonsChange = output<boolean>();
   readonly wantsChange = output<WantSpec[]>();
   readonly dismissed = output<void>();
   readonly save = output<void>();

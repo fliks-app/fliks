@@ -8,6 +8,12 @@
     </div>
   </app-modal-header>
 
+  @if (req()?.pending && canManage()) {
+    <app-request-requesters class="mt-2" [requestId]="req()!.pending!.id" />
+  } @else if (req()?.requesterCount; as n) {
+    <p class="mt-2 text-sm text-base-content/60" data-testid="requester-count">{{ 'add_dialog.requested_by_count' | translatePlural: n }}</p>
+  }
+
   @if (noLibrary()) {
     <div role="alert" class="alert alert-warning text-sm mt-4 py-2">{{ 'discover.no_compatible_library' | translate }}</div>
   }
@@ -20,7 +26,7 @@
   @if (hasSeasons()) {
     @if (seasonsFailed()) {
       <div role="alert" class="alert alert-warning text-sm mt-4 py-2">
-        {{ (mode() === 'import' ? 'discover.seasons_unavailable' : 'discover.seasons_unavailable_request') | translate }}
+        {{ (auto() ? 'discover.seasons_unavailable' : 'discover.seasons_unavailable_request') | translate }}
       </div>
     }
     <app-season-picker
@@ -29,12 +35,12 @@
       [selected]="selectedSeasons()"
       [locked]="alreadyRequested()"
       [loading]="seasonsLoading()"
-      [selectedBadgeKey]="mode() === 'import' ? 'discover.status_monitored' : 'discover.status_selected'"
-      [unselectedBadgeKey]="mode() === 'import' ? 'discover.status_not_monitored' : 'discover.status_not_requested'"
+      [selectedBadgeKey]="auto() ? 'discover.status_monitored' : 'discover.status_selected'"
+      [unselectedBadgeKey]="auto() ? 'discover.status_not_monitored' : 'discover.status_not_requested'"
       (seasonToggled)="toggleSeason($event)"
       (allToggled)="toggleAllSeasons()"
     />
-    @if (mode() === 'import' && kind() === 'series') {
+    @if (showFollow()) {
       <label class="mt-3 flex cursor-pointer items-center gap-3 text-base">
         <input
           type="checkbox"
@@ -55,7 +61,7 @@
       @if (!loading() && !wantsReady()) {
         <p class="text-sm text-warning" data-testid="book-profile-missing">{{ 'wants.profile_required' | translate }}</p>
       }
-      @if (mode() === 'request' && req()?.requestedWants?.length) {
+      @if (req()?.requestedWants?.length) {
         <p class="text-sm text-base-content/60" data-testid="book-already-requested">
           {{ 'book_requests.already_requested' | translate }}
           <app-request-wants [wants]="req()!.requestedWants!" />

@@ -8,6 +8,7 @@ import { of } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AlbumPreviewComponent } from './album-preview.component';
 import { LibrariesApiService } from '../../../../core/services/api/libraries-api.service';
+import { holdsPermission } from '../../../../core/permissions';
 import { AuthService } from '../../../../core/services/auth.service';
 import { NavbarService } from '../../../../core/services/navbar.service';
 import { DeviceService } from '../../../../core/services/device.service';
@@ -37,7 +38,7 @@ function setup(track?: string) {
       provideRouter([]),
       ...(track ? [{ provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({ track }) } } }] : []),
       { provide: LibrariesApiService, useValue: { listMine: async () => [] } },
-      { provide: AuthService, useValue: { hasPermission: (p: string) => p === 'media.create' } },
+      { provide: AuthService, useValue: { hasPermission: (p: string) => holdsPermission(['media.create'], p), user: () => null } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: NavbarService, useValue: { heroPaddingTop: () => null } },
       { provide: DeviceService, useValue: { isTv: () => false } },

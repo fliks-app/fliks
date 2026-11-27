@@ -279,7 +279,7 @@
   },
   "permissions": {
     "media.read": "Ver os medias",
-    "media.create": "Adicionar medias",
+    "media.create": "Adicionar mídia (pedidos aprovados automaticamente)",
     "media.edit": "Editar os medias",
     "media.delete": "Eliminar medias",
     "media.grab": "Transferir releases",
@@ -1031,7 +1031,6 @@
     "already_requested": "Já pedido",
     "seasons_already_requested": "Temporadas já pedidas: {{seasons}}",
     "request_success": "Pedido enviado com sucesso.",
-    "import_success": "Media adicionado à biblioteca.",
     "quality_profile": "Perfil de qualidade",
     "language_profile": "Perfil de idioma",
     "request_title": "Pedir o conteúdo",
@@ -1078,7 +1077,9 @@
     "status_deleted": "Eliminado",
     "add_music": "Adicionar música",
     "request_music": "Pedir música",
-    "request_album": "Pedir o álbum"
+    "request_album": "Pedir o álbum",
+    "request_approved": "Aprovado, adicionado à biblioteca.",
+    "request_sent_for_approval": "Enviado para aprovação."
   },
   "library": {
     "filter_monitored": "Monitorizados",
@@ -1604,7 +1605,12 @@
     "allowance_left_other": "Restam {{count}} de {{limit}} pedidos por período de {{days}} dias",
     "allowance_none_one": "Limite atingido, próximo pedido em {{count}} dia",
     "allowance_none_other": "Limite atingido, próximo pedido em {{count}} dias",
-    "quotaExceeded": "Limite de pedidos atingido: {{count}} de {{limit}} nos últimos {{days}} dias"
+    "quotaExceeded": "Limite de pedidos atingido: {{count}} de {{limit}} nos últimos {{days}} dias",
+    "approve_title": "Aprovar pedido",
+    "monitor_new_seasons": "Seguir as novas temporadas",
+    "filter_everyone": "Todos",
+    "filter_mine": "Os meus",
+    "added_by": "Adicionado por "
   },
   "activity": {
     "queue_empty": "Nenhuma transferência ativa.",
@@ -3308,7 +3314,8 @@
       "recap_years": "lançados entre {{from}} e {{to}}",
       "recap_year_from": "lançados a partir de {{from}}",
       "recap_year_to": "lançados até {{to}}",
-      "recap_except": "exceto {{names}}"
+      "recap_except": "exceto {{names}}",
+      "adders_hint": "Quem pode adicionar mídia não precisa de regra: os seus pedidos são sempre aprovados."
     },
     "metadata": {
       "title": "Metadados",
@@ -6366,6 +6373,8 @@
     "resume_episode": "Retomar {{code}}"
   },
   "add_dialog": {
-    "follow_new_seasons": "Seguir as novas temporadas"
+    "follow_new_seasons": "Seguir as novas temporadas",
+    "requested_by_count_one": "{{count}} pessoa pediu isto",
+    "requested_by_count_other": "{{count}} pessoas pediram isto"
   }
 }

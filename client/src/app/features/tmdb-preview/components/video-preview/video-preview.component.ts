@@ -87,8 +87,9 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
     previewPosterName(kindOf(this.type()).providerSegment, this.provider(), this.externalId()),
   );
 
-  readonly canImport = computed(() => this.auth.hasPermission('media.create'));
-  readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
+  readonly canRequest = computed(() => this.auth.hasPermission('requests.create'));
+  /** The caller's create is approved at once: the button reads Add. */
+  readonly auto = computed(() => this.requestsApi.autoKinds().has(this.type()));
 
   /** Global active-request state for this title (any user), populated after
    *  the media loads. Null until fetched / when the user can't request. */
@@ -108,17 +109,15 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
     this.auth.hasPermission('requests.manage'),
   );
 
-  /** Pending requests on this title, for a manager: importing narrower than the request's profiles leaves it PENDING with the media already imported. */
+  /** Pending requests on this title, for a manager. */
   readonly pendingRequests = signal<FliksRequestRow[]>([]);
 
-  /** Any pending request (per-season included) makes a raw import the wrong move; approving it is the way in. */
-  readonly pendingBlocksImport = computed(() => this.pendingRequests().length > 0);
-
-  /** The import button stands down while a pending request would be bypassed -
-   *  kept apart from `canImport`, which `canRequest` negates as a role test. */
-  readonly showImportButton = computed(
-    () => this.canImport() && !this.pendingBlocksImport(),
-  );
+  /** An add approves the title's pending rows, so only an approved or processing one leaves nothing to add. */
+  readonly showAdd = computed(() => {
+    const s = this.titleState();
+    if (!this.auto() || !s?.requested) return this.auto();
+    return s.pendingRequestIds ? s.pendingRequestIds.length > 0 : true;
+  });
 
   readonly actionBusyId = signal<number | null>(null);
 
@@ -226,9 +225,8 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    // Feeds the request form and the manager's edit modal; the import modal
-    // loads its own data on open.
-    if (this.canRequest() || this.canManageRequests()) void this.loadProfiles();
+    // Feeds the manager's pending panel and edit modal; the add dialog loads its own.
+    if (this.canManageRequests()) void this.loadProfiles();
 
     // The route names the title, so the request state loads beside the details.
     const routeKey: TitleKey = { provider: this.provider(), externalId: this.externalId() };
@@ -289,21 +287,13 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
     if (m) void this.loadTitleState(this.titleKey(m));
   }
 
-  openImportModal() {
-    const m = this.media();
-    if (!m) return;
-    void this.addDialog()?.add({
-      kind: this.type(),
-      title: m.title,
-      provider: this.provider(),
-      externalId: this.externalId(),
-      mode: 'import',
-    });
-  }
-
   protected onAdded(r: AddResult) {
-    if (r.mode === 'request') this.refreshExistingRequests();
-    else if (r.mediaId != null) void this.router.navigate(mediaDetailLink(this.type(), r.mediaId));
+    if (r.status !== 'pending' && r.mediaId != null) {
+      void this.router.navigate(mediaDetailLink(this.type(), r.mediaId));
+      return;
+    }
+    this.refreshExistingRequests();
+    if (this.canManageRequests()) this.refreshPendingRequests();
   }
 
   /** Pending requests on this title; bypasses the cache so an approve/decline shows on the next visit. */
@@ -409,13 +399,15 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
     const type = this.type();
     if (!m) return;
     const state = this.titleState();
+    const others = state && !state.requestedByMe ? state.requesterCount : 0;
+    const me = this.auth.user()?.id;
     void this.addDialog()?.add({
       kind: type,
       title: m.title,
       provider: this.provider(),
       externalId: this.externalId(),
-      mode: 'request',
       titleKey: this.titleKey(m),
+      ...(this.auto() ? { pending: this.pendingRequests().find((r) => r.userId !== me), requesterCount: others || undefined } : {}),
       alreadyRequestedSeasons: this.requestedSeasons(),
       profilesLocked: state?.profilesLocked ?? false,
       lockedQualityProfileId: state?.lockedQualityProfileId ?? null,

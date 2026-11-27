@@ -43,7 +43,6 @@ import { ModalHeaderComponent } from '../../../shared/components/modal-header';
 import { MediaCardComponent } from '../../../shared/components/media-card/media-card';
 import { TrackDownloadGlyphComponent } from '../../../shared/components/track-download-glyph/track-download-glyph';
 import { mediaDetailLink } from '../../../core/media-kinds';
-import { MediaService } from '../../../core/services/api/media.service';
 import { asAlbumMedia, versionMeta } from './album-media';
 import { mediaTitleKey } from '../request-flow-controller';
 import { LastSearchComponent } from '../../../shared/components/last-search/last-search';
@@ -79,7 +78,6 @@ export class AlbumPageComponent {
   private readonly identifyModal = inject(IdentifyModalService);
   private readonly auth = inject(AuthService);
   private readonly requestsApi = inject(RequestsService);
-  private readonly mediaApi = inject(MediaService);
   protected readonly party = inject(PartyService);
   protected readonly downloads = inject(MusicDownloadsService);
   private readonly progress = inject(DownloadProgressService);
@@ -118,12 +116,10 @@ export class AlbumPageComponent {
     'media.details': () => this.detailsDialog()?.nativeElement.showModal(),
     ...(this.auth.hasPermission('media.edit') && { 'media.edit-profiles': () => this.openWants() }),
   }));
-  /** A viewer who may only request asks for a missing track from its row. */
+  /** A missing track, or every one, is asked for by an album request. */
   private readonly titleKey = computed(() => mediaTitleKey(this.media()));
-  protected readonly canRequest = computed(
-    () => !this.auth.hasPermission('media.create') && this.auth.hasPermission('requests.create') && this.titleKey() != null && this.album() != null,
-  );
-  protected readonly canAdd = computed(() => this.auth.hasPermission('media.create') && this.titleKey() != null && this.album() != null);
+  protected readonly canRequest = computed(() => this.auth.hasPermission('requests.create') && this.titleKey() != null && this.album() != null);
+  protected readonly auto = computed(() => this.requestsApi.autoKinds().has('album'));
   private readonly requestState = signal<TitleRequestState | null>(null);
   private readonly asked = signal<ReadonlySet<string>>(new Set());
   private pendingRecording: string | null = null;
@@ -162,7 +158,7 @@ export class AlbumPageComponent {
     if (!key || !t.recordingId || this.addDialog()?.idle === false) return;
     const [provider, externalId] = titleRef(key);
     this.pendingRecording = t.recordingId;
-    void this.addDialog()?.add({ kind: 'album', provider, externalId, title: this.media().title, recording: { externalId: t.recordingId, albumExternalId: externalId }, mode: this.canAdd() ? 'import' : 'request' });
+    void this.addDialog()?.add({ kind: 'album', provider, externalId, title: this.media().title, recording: { externalId: t.recordingId, albumExternalId: externalId } });
   }
 
   protected onRequested(r: AddResult): void {
@@ -172,24 +168,12 @@ export class AlbumPageComponent {
     this.pendingRecording = null;
   }
 
-  /** A viewer who may only request asks for every missing track. */
   protected requestAlbum(): void {
     const key = this.titleKey();
     if (!key) return;
     const [provider, externalId] = titleRef(key);
     this.pendingRecording = null;
-    void this.addDialog()?.add({ kind: 'album', provider, externalId, title: this.media().title, mode: 'request' });
-  }
-
-  /** Monitors every track of the release in one call. */
-  protected async wantAll(): Promise<void> {
-    try {
-      await this.mediaApi.update(this.media().id, { monitored: true });
-      for (const t of this.tracks()) this.patch(t.itemId, { monitored: true });
-      this.askedAll.set(true);
-    } catch {
-      // The global interceptor toasts the failure.
-    }
+    void this.addDialog()?.add({ kind: 'album', provider, externalId, title: this.media().title });
   }
 
   protected readonly wantsOpen = signal(false);

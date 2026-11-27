@@ -74,8 +74,8 @@ export class BookPreviewComponent implements OnInit, OnDestroy {
   protected readonly failed = signal(false);
   /** The editions already asked for by an active request. */
   protected readonly requested = signal<WantSpec[]>([]);
-  protected readonly canImport = computed(() => this.auth.hasPermission('media.create'));
-  protected readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
+  protected readonly canRequest = computed(() => this.auth.hasPermission('requests.create'));
+  protected readonly auto = computed(() => this.requests.autoKinds().has('book'));
   protected readonly authors = computed(() => this.book()?.authors.join(', ') ?? '');
   protected readonly seriesLabel = computed(() => {
     const s = this.book()?.series;
@@ -115,14 +115,13 @@ export class BookPreviewComponent implements OnInit, OnDestroy {
       provider: this.provider(),
       externalId: this.externalId(),
       title: book.title,
-      mode: this.canImport() ? 'import' : 'request',
       alwaysAsk: true,
       requestedWants: this.requested(),
     });
   }
 
   protected onAdded(r: AddResult) {
-    if (r.mode === 'request') void this.loadRequested();
+    if (r.status === 'pending') void this.loadRequested();
     else if (r.mediaId != null && !this.destroyed) void this.router.navigate(mediaDetailLink('book', r.mediaId));
   }
 

@@ -92,12 +92,11 @@
         <div class="h-10 w-36 bg-base-300/40 rounded-lg animate-pulse" aria-hidden="true"></div>
       }
       @if (media()) {
-        @if (showImportButton()) {
-          <button type="button" class="btn btn-primary gap-2 max-md:flex-1" (click)="openImportModal()">
+        @if (showAdd()) {
+          <button type="button" class="btn btn-primary gap-2 max-md:flex-1" (click)="openRequestModal()">
             <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
           </button>
-        }
-        @if (canRequest()) {
+        } @else if (canRequest()) {
           @if (hasBlockingRequest()) {
             @if (titleState(); as state) {
               <app-request-watch [state]="state" [canManage]="canManageRequests()" (changed)="refreshExistingRequests()" />
@@ -117,7 +116,7 @@
     </ng-container>
 
     <ng-container ngProjectAs="[heroStatus]">
-      @if (canRequest() && !hasBlockingRequest() && requestedSeasons().length) {
+      @if (canRequest() && !auto() && !hasBlockingRequest() && requestedSeasons().length) {
         <p class="text-sm text-warning mt-2">
           {{ 'discover.seasons_already_requested' | translate:{ seasons: requestedSeasons().join(', ') } }}
         </p>

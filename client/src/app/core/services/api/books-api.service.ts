@@ -3,9 +3,8 @@ import { HttpClient, HttpContext } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { abortable } from '../../utils/abortable';
-import type { Media } from './media.service';
 import type {
-  BookChapter, BookImportBody, BookSeriesPut, BookPreview, BookSearchResult, BookSourceDelete, BookSourcePut,
+  BookChapter, BookSeriesPut, BookPreview, BookSearchResult, BookSourceDelete, BookSourcePut,
   BookSources, CollectionDetail, CollectionSummary, PersonListItem, PersonWorks,
 } from './books.models';
 
@@ -47,10 +46,6 @@ export class BooksApiService {
 
   preview(provider: string, externalId: string) {
     return firstValueFrom(this.http.get<BookPreview>(`/api/metadata/${provider}/book/${externalId}`));
-  }
-
-  import(body: BookImportBody) {
-    return firstValueFrom(this.http.post<Media>('/api/media/import', body));
   }
 
   putSeries(mediaId: number, body: BookSeriesPut) {

@@ -79,11 +79,11 @@
 </app-detail-hero>
 
 <ng-template #addAll let-compact="compact">
-  @if ((canAdd() || canRequest()) && hasUnwanted()) {
-    <button type="button" [class]="compact ? 'flex size-11 shrink-0 cursor-pointer items-center justify-center' : 'btn btn-outline'" [disabled]="!unwantedCount()" [attr.aria-label]="(canAdd() ? 'music.add_all' : 'music.request_album') | translate" (click)="canAdd() ? wantAll() : requestAlbum()" data-testid="want-all">
+  @if (canRequest() && hasUnwanted()) {
+    <button type="button" [class]="compact ? 'flex size-11 shrink-0 cursor-pointer items-center justify-center' : 'btn btn-outline'" [disabled]="!unwantedCount()" [attr.aria-label]="(auto() ? 'music.add_all' : 'music.request_album') | translate" (click)="requestAlbum()" data-testid="want-all">
       <svg [lucideIcon]="icons.Plus" [class]="compact ? 'size-6' : 'size-4'"></svg>
       @if (!compact) {
-        {{ (canAdd() ? 'music.add_all' : 'music.request_album') | translate }}
+        {{ (auto() ? 'music.add_all' : 'music.request_album') | translate }}
       }
     </button>
   }
@@ -154,14 +154,14 @@
             }
           }
           @case ('wanted') {
-            <svg [lucideIcon]="icons.Clock" class="size-5 text-base-content/60" role="img" [attr.aria-label]="(canAdd() ? 'music.status_searching' : 'music.status_requested') | translate" data-testid="track-wanted"></svg>
+            <svg [lucideIcon]="icons.Clock" class="size-5 text-base-content/60" role="img" [attr.aria-label]="(auto() ? 'music.status_searching' : 'music.status_requested') | translate" data-testid="track-wanted"></svg>
           }
           @case ('failed') {
             <svg [lucideIcon]="icons.CircleAlert" class="size-5 text-error" role="img" [attr.aria-label]="'music.status_failed' | translate" data-testid="track-failed"></svg>
           }
           @default {
-            @if ((canAdd() || canRequest()) && t.recordingId) {
-              <button type="button" class="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-base-300 focus-visible:outline-2" (click)="addTrack(t)" [attr.aria-label]="(canAdd() ? 'music.add_track' : 'music.request_track') | translate" data-testid="track-add">
+            @if (canRequest() && t.recordingId) {
+              <button type="button" class="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-base-300 focus-visible:outline-2" (click)="addTrack(t)" [attr.aria-label]="(auto() ? 'music.add_track' : 'music.request_track') | translate" data-testid="track-add">
                 <svg [lucideIcon]="icons.Plus" class="size-5"></svg>
               </button>
             }

@@ -41,7 +41,7 @@
       @if (book()) {
         @if (inLibraryLink(); as link) {
           <a class="btn btn-primary max-md:flex-1" [routerLink]="link">{{ 'books_search.open_in_library' | translate }}</a>
-        } @else if (canImport()) {
+        } @else if (auto()) {
           <button type="button" class="btn btn-primary gap-2 max-md:flex-1" (click)="openDialog()">
             <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
           </button>
@@ -112,6 +112,6 @@
   }
 }
 
-@if (book() && !inLibraryLink() && (canImport() || canRequest())) {
+@if (book() && !inLibraryLink() && canRequest()) {
   <app-add-dialog (done)="onAdded($event)" />
 }

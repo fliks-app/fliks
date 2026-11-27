@@ -50,10 +50,6 @@ export class MusicApiService {
     return firstValueFrom(this.http.post<{ id: number }>('/api/persons/resolve', body));
   }
 
-  /** Adds the album of a provider recording with that one track wanted. */
-  wantRecording(body: { provider: string; externalId: string; albumExternalId: string; libraryId?: number; folderId?: number; wants?: WantSpec[] }): Promise<{ mediaId: number; itemId: number | null }> {
-    return firstValueFrom(this.http.post<{ mediaId: number; itemId: number | null }>('/api/music/want-recording', body));
-  }
 
   discography(personId: number): Promise<Discography> {
     return firstValueFrom(this.http.get<Discography>(`/api/persons/${personId}/discography`));
@@ -83,10 +79,6 @@ export class MusicApiService {
     return firstValueFrom(this.http.get<AlbumPreviewTrack[]>('/api/music/albums/tracks', { params }));
   }
 
-  /** Adds an identified album (a provider hit) to a library; only `monitoredRecordings` stay monitored when given. */
-  importAlbum(body: { provider: string; externalId: string; libraryId?: number; folderId?: number; wants?: WantSpec[]; monitoredRecordings?: string[] }): Promise<Media> {
-    return firstValueFrom(this.http.post<Media>('/api/media/import', { type: 'album', ...body }));
-  }
 
   candidates(mediaId: number): Promise<AlbumCandidate[]> {
     return firstValueFrom(this.http.get<AlbumCandidate[]>(`/api/media/${mediaId}/music/candidates`));

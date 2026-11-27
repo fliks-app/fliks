@@ -32,7 +32,7 @@ export function mediaTitleKey(m: Media | null): TitleKey | null {
 
 /** Requesting and deleting through requests: who may, what is already pending, the dialogs. */
 export class RequestFlowController {
-  /** Regular requester (no `media.create`) with a key to request against;
+  /** A requester without the monitoring toggle (`media.create`) and a key to request against;
    *  an unidentified title has none, so the Demander actions stay hidden. */
   readonly canRequest = computed(
     () =>
@@ -165,8 +165,8 @@ export class RequestFlowController {
       title: m.title,
       provider,
       externalId,
-      mode: 'request',
       titleKey: key,
+      followsNewSeasons: !!m.monitorNewSeasons,
       alreadyRequestedSeasons: this.requestedSeasons(),
       ...extra,
       profilesLocked: state?.profilesLocked ?? false,

@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
@@ -11,14 +11,16 @@ import { MusicApiService } from '../../core/services/api/music-api.service';
 import { AudioPlayerService } from '../../core/services/audio-player/audio-player.service';
 import type { ArtistHit, RecordingHit, SearchHit } from '../../core/services/api/metadata.service';
 import { MusicDownloadsService } from '../../core/services/music-downloads.service';
+import { holdsPermission } from '../../core/permissions';
 import { AuthService } from '../../core/services/auth.service';
+import { RequestsService } from '../../core/services/api/requests.service';
 import { ScrollMemoryService } from '../../core/services/scroll-memory.service';
 import { SearchStateService } from '../../core/services/search-state.service';
 
 const hit = (extra: Partial<SearchHit> = {}): SearchHit =>
   ({ provider: 'tmdb', externalId: '1', mediaType: 'movie', title: 'T', year: 2000, posterUrl: null, existingMediaId: null, tmdbId: 1, ...extra }) as SearchHit;
 
-function setup(perms: string[] = ['media.create']) {
+function setup(perms: string[] = ['media.create'], auto = perms.includes('media.create') ? ['movie', 'series', 'book', 'album'] : []) {
   const navigate = vi.fn();
   const resolveArtist = vi.fn(async () => ({ id: 77 }));
   const playTracks = vi.fn(async () => undefined);
@@ -31,8 +33,9 @@ function setup(perms: string[] = ['media.create']) {
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
       { provide: Router, useValue: { navigate, events: of() } },
       { provide: ActivatedRoute, useValue: { snapshot: { data: {}, paramMap: { get: () => null } } } },
-      { provide: AuthService, useValue: { sharingDisabled: () => false, hasPermission: (p: string) => perms.includes(p) } },
+      { provide: AuthService, useValue: { sharingDisabled: () => false, hasPermission: (p: string) => holdsPermission(perms, p) } },
       { provide: ScrollMemoryService, useValue: { activate: vi.fn(), restore: vi.fn(), deactivateIf: vi.fn() } },
+      { provide: RequestsService, useValue: { autoKinds: signal(new Set(auto)) } },
       { provide: MusicApiService, useValue: { resolveArtist } },
       { provide: AudioPlayerService, useValue: { playTracks } },
       { provide: MusicDownloadsService, useValue: { albumTracks } },
@@ -57,14 +60,17 @@ describe('SearchComponent hits', () => {
     expect(c.cardStatus(hit())).toBeNull();
   });
 
-  it('offers Add to someone who can add and Request to someone who cannot, nothing for a held or asked title', () => {
-    expect(setup().c.hitActions(hit())[0]?.labelKey).toBe('discover.add_to_library');
+  it('offers Add when the create is approved at once and Request otherwise, nothing for a held or asked title', () => {
+    expect(setup(['requests.create'], ['movie']).c.hitActions(hit())[0]?.labelKey).toBe('discover.add_to_library');
     TestBed.resetTestingModule();
-    expect(setup(['requests.create']).c.hitActions(hit())[0]?.labelKey).toBe('discover.request');
+    const member = setup(['requests.create']).c;
+    expect(member.hitActions(hit())[0]?.labelKey).toBe('discover.request');
+    expect(member.hitActions(hit({ requestStatus: 'pending' }))).toEqual([]);
     TestBed.resetTestingModule();
     const { c } = setup();
     expect(c.hitActions(hit({ existingMediaId: 4 }))).toEqual([]);
-    expect(c.hitActions(hit({ requestStatus: 'pending' }))).toEqual([]);
+    expect(c.hitActions(hit({ requestStatus: 'approved' }))).toEqual([]);
+    expect(c.hitActions(hit({ requestStatus: 'pending' }))[0]?.labelKey).toBe('discover.add_to_library');
     TestBed.resetTestingModule();
     expect(setup([]).c.hitActions(hit())).toEqual([]);
   });
@@ -98,7 +104,7 @@ describe('SearchComponent hits', () => {
     state.recordingHits.set([rec('r', hit({ mediaType: 'album' }))]);
     const v = c as unknown as View;
     v.addItem(v.music().tracks[0]!);
-    v.onAdded({ mode: 'import', mediaId: 31, recordings: ['r'] });
+    v.onAdded({ status: 'approved', mediaId: 31, recordings: ['r'] });
     expect(state.recordingHits()[0]).toMatchObject({ existingMediaId: 31, state: 'wanted' });
     expect(v.music().tracks[0]!.state).toBe('pending');
   });
@@ -109,7 +115,7 @@ describe('SearchComponent hits', () => {
     state.recordingHits.set([rec('r', hit({ mediaType: 'album' }))]);
     const v = c as unknown as View;
     v.addItem(v.music().tracks[0]!);
-    v.onAdded({ mode: 'request', mediaId: null, recordings: ['r'] });
+    v.onAdded({ status: 'pending', mediaId: null, recordings: ['r'] });
     expect(state.recordingHits()[0]!.requestStatus).toBe('pending');
   });
 
@@ -121,7 +127,7 @@ describe('SearchComponent hits', () => {
     state.recordingHits.set([rec('a', album), rec('b', album)]);
     const v = c as unknown as View;
     v.addItem(v.music().tracks[0]!);
-    v.onAdded({ mode: 'import', mediaId: 32 });
+    v.onAdded({ status: 'approved', mediaId: 32 });
     expect(state.recordingHits().map((r) => r.existingMediaId)).toEqual([32, 32]);
     expect(state.albumHits()[0]).toMatchObject({ existingMediaId: 32, state: 'wanted' });
   });

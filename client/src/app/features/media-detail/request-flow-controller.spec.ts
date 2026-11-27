@@ -65,10 +65,10 @@ describe('RequestFlowController on a plugin-only title', () => {
     );
   });
 
-  it('opens the add dialog in request mode and asks for the deletion with that key', async () => {
+  it('opens the add dialog and asks for the deletion with that key', async () => {
     const { c, requests, open } = setup();
     c.openForMedia();
-    expect(open.mock.calls[0][0]).toMatchObject({ mode: 'request', provider: 'org.x:aid', externalId: '9', titleKey: { provider: 'org.x:aid', externalId: '9' } });
+    expect(open.mock.calls[0][0]).toMatchObject({ provider: 'org.x:aid', externalId: '9', titleKey: { provider: 'org.x:aid', externalId: '9' } });
     await c.requestDeletion();
     expect(requests.create).toHaveBeenCalledWith({
       kind: 'delete',
