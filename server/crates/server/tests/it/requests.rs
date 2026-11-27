@@ -2192,3 +2192,95 @@ async fn approve_with_edits_sets_series_profiles_on_every_pending_row(pool: PgPo
     .await;
     assert_eq!(s, 400, "{r}");
 }
+
+#[sqlx::test(migrations = false)]
+async fn an_absorbed_row_whose_import_fails_goes_back_to_pending(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, asked) = call(&c, "POST", "/api/requests", &c.user, movie(77)).await;
+    c.tmdb.down.lock_clean().insert(77);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.adder, movie(77)).await;
+    assert_eq!(s, 503, "the import's error is answered: {r}");
+    let (status, by, _, _) = row(&c, rid(&asked)).await;
+    assert_eq!((status.as_str(), by), ("pending", None));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_whole_series_add_over_season_requests_needs_the_season_list(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, asked) = call(&c, "POST", "/api/requests", &c.user, series(78, json!([1]))).await;
+    c.tmdb.down.lock_clean().insert(78);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.adder, series(78, json!([]))).await;
+    assert_eq!(
+        (s, &r["message"]),
+        (
+            503,
+            &json!("The seasons of this series cannot be read, try again shortly")
+        )
+    );
+    assert_eq!(row(&c, rid(&asked)).await.0, "pending", "nothing changed");
+    let rows: i64 =
+        sqlx::query_scalar(r#"SELECT count(*) FROM requests WHERE "externalId" = '78'"#)
+            .fetch_one(&c.pool())
+            .await
+            .unwrap();
+    assert_eq!(rows, 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn absorbing_charges_no_quota_to_a_rule_approved_caller(pool: PgPool) {
+    let c = ctx(pool).await;
+    let user = uid(&c, "user").await;
+    rule(&c, json!({"userIds": [user]})).await;
+    q(
+        &c.pool(),
+        r#"INSERT INTO user_quotas ("userId", kind, "limit") SELECT id, 'movie', 1 FROM users WHERE username = 'user'"#,
+    )
+    .await;
+    let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(96)).await;
+    assert_eq!(s, 201);
+    let (_, asked) = call(&c, "POST", "/api/requests", &c.other, movie(97)).await;
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, movie(97)).await;
+    assert_eq!((s, &r["absorbed"]), (201, &json!([rid(&asked)])), "{r}");
+    let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(98)).await;
+    assert_eq!(s, 403, "a row of theirs still counts");
+}
+
+#[sqlx::test(migrations = false)]
+async fn approve_with_edits_rolls_back_to_pending_when_the_import_fails(pool: PgPool) {
+    let c = ctx(pool).await;
+    second_profile(&c).await;
+    let (_, asked) = call(&c, "POST", "/api/requests", &c.user, movie(93)).await;
+    c.tmdb.down.lock_clean().insert(93);
+    let uri = format!("/api/requests/{}/approve", rid(&asked));
+    let (s, r) = call(&c, "POST", &uri, &c.admin, json!({"qualityProfileId": 2})).await;
+    assert_eq!(s, 503, "{r}");
+    let (status, by, quality, _) = row(&c, rid(&asked)).await;
+    assert_eq!((status.as_str(), by, quality), ("pending", None, Some(2)));
+}
+
+#[sqlx::test(migrations = false)]
+async fn two_approvals_with_edits_apply_one(pool: PgPool) {
+    let c = ctx(pool).await;
+    second_profile(&c).await;
+    let (_, asked) = call(&c, "POST", "/api/requests", &c.user, movie(94)).await;
+    let uri = format!("/api/requests/{}/approve", rid(&asked));
+    let (a, b) = tokio::join!(
+        call(&c, "POST", &uri, &c.admin, json!({"qualityProfileId": 1})),
+        call(
+            &c,
+            "POST",
+            &uri,
+            &c.validator,
+            json!({"qualityProfileId": 2})
+        ),
+    );
+    let mut codes = [a.0, b.0];
+    codes.sort_unstable();
+    assert_eq!(codes, [201, 409], "{a:?} {b:?}");
+    let won = if a.0 == 201 { 1 } else { 2 };
+    assert_eq!(
+        row(&c, rid(&asked)).await.2,
+        Some(won),
+        "the winner's edits only"
+    );
+}

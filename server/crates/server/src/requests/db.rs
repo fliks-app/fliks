@@ -528,17 +528,22 @@ pub async fn set_track_count(db: &PgPool, id: i32, count: i32) -> sqlx::Result<(
     Ok(())
 }
 
-/// Adds recordings to a pending album request scoped to some tracks.
+/// Adds to an album request scoped to some tracks the recordings it does not hold yet.
 pub async fn add_recordings(
     db: impl PgExecutor<'_>,
     id: i32,
     recordings: &[String],
 ) -> sqlx::Result<()> {
-    sqlx::query(r#"UPDATE requests SET recordings = recordings || $2 WHERE id = $1"#)
-        .bind(id)
-        .bind(recordings)
-        .execute(db)
-        .await?;
+    sqlx::query(
+        r#"UPDATE requests SET recordings = recordings
+             || ARRAY(SELECT r FROM unnest($2::text[]) WITH ORDINALITY AS n(r, i)
+                      WHERE r <> ALL(recordings) ORDER BY i)
+           WHERE id = $1"#,
+    )
+    .bind(id)
+    .bind(recordings)
+    .execute(db)
+    .await?;
     Ok(())
 }
 

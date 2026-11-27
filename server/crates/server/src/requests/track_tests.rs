@@ -431,3 +431,18 @@ async fn an_adder_absorbs_a_pending_track_request_and_asks_the_other_tracks(pool
     assert!(all.iter().all(|r| r.1 == "approved"), "{all:?}");
     assert_eq!(c.monitored().await, [ONE, TWO]);
 }
+
+#[sqlx::test(migrations = false)]
+async fn a_refused_track_want_leaves_the_grown_request_as_it_was(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (s, first) = c.ask(&c.admin, Some(json!([ONE]))).await;
+    assert_eq!(s, 201, "{first}");
+    let (s, r) = c.ask(&c.admin, Some(json!([THREE]))).await;
+    assert_eq!(s, 404, "another release holds it: {r}");
+    let id = first["id"].as_i64().unwrap() as i32;
+    assert_eq!(
+        rows(&c).await,
+        [(id, "approved".into(), Some(vec![ONE.into()]))]
+    );
+    assert_eq!(c.monitored().await, [ONE]);
+}

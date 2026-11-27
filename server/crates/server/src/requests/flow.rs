@@ -228,92 +228,72 @@ pub async fn allowance(st: &AppState, a: &Authed) -> Res<Value> {
     Ok(Value::Object(out))
 }
 
-/// Rule 12a.
-async fn assert_no_active_duplicate(
-    tx: &mut PgConnection,
-    dto: &CreateRequest,
-    keys: &[TitleKey],
-) -> Res<()> {
-    let existing = db::active_adds_of(&mut *tx, keys).await?;
-    if existing.is_empty() {
-        return Ok(());
-    }
-    if dto.media_type == MediaKind::Album {
-        return assert_album_unclaimed(dto, &existing);
-    }
-    if let Some(wants) = &dto.wants {
-        let overlap = overlapping_wants(&existing, wants);
-        if overlap.is_empty() {
-            return Ok(());
+/// Rule 12a: the active rows of the title an ADD create clashes with. A whole album clashes with another whole
+/// album only, so it can widen the tracks already requested.
+fn clashing(dto: &CreateRequest, existing: &[db::Req]) -> Vec<db::Req> {
+    let wants = dto.wants.as_deref().unwrap_or_default();
+    let one = std::slice::from_ref::<db::Req>;
+    let hits = |e: &db::Req| match (dto.media_type, &dto.recordings) {
+        (MediaKind::Album, None) => {
+            e.recordings.is_none() && !overlapping_wants(one(e), wants).is_empty()
         }
-        return Err(already_requested(&overlap));
-    }
-    let wanted = dto.seasons.as_deref().unwrap_or_default();
-    if !dto.media_type.has_seasons() || wanted.is_empty() {
-        return Err(AppError::conflict("This title has already been requested"));
-    }
-    let mut taken = vec![];
-    for e in &existing {
-        match e.scope() {
-            None => {
-                return Err(AppError::conflict(
-                    "The whole series has already been requested",
-                ));
-            }
-            Some(s) => taken.extend_from_slice(s),
+        (MediaKind::Album, Some(asked)) => e
+            .recordings
+            .as_ref()
+            .is_none_or(|t| t.iter().any(|x| asked.contains(x))),
+        _ if dto.wants.is_some() => !overlapping_wants(one(e), wants).is_empty(),
+        (k, _) => match (dto.seasons.as_deref().filter(|s| !s.is_empty()), e.scope()) {
+            (Some(w), Some(s)) if k.has_seasons() => s.iter().any(|n| w.contains(n)),
+            _ => true,
+        },
+    };
+    existing.iter().filter(|e| hits(e)).cloned().collect()
+}
+
+/// The guard's 409 for a clash (rule 12a), naming what `clashing` holds of the asked scope.
+fn conflict(dto: &CreateRequest, clashing: &[db::Req]) -> AppError {
+    let wants = dto.wants.as_deref().unwrap_or_default();
+    if let (MediaKind::Album, Some(asked)) = (dto.media_type, &dto.recordings) {
+        if clashing.iter().any(|e| e.recordings.is_none()) {
+            return AppError::conflict("The whole album has already been requested");
         }
+        let held: Vec<&String> = clashing
+            .iter()
+            .flat_map(|e| e.recordings.iter().flatten())
+            .collect();
+        let overlap: Vec<&str> = asked
+            .iter()
+            .filter(|r| held.contains(r))
+            .map(String::as_str)
+            .collect();
+        return AppError::conflict(format!(
+            "Track(s) {} have already been requested",
+            overlap.join(", ")
+        ));
     }
+    if dto.wants.is_some() {
+        return already_requested(&overlapping_wants(clashing, wants));
+    }
+    let scoped = dto.seasons.as_deref().filter(|s| !s.is_empty());
+    let Some(wanted) = scoped.filter(|_| dto.media_type.has_seasons()) else {
+        return AppError::conflict("This title has already been requested");
+    };
+    if clashing.iter().any(|e| e.scope().is_none()) {
+        return AppError::conflict("The whole series has already been requested");
+    }
+    let taken: Vec<i64> = clashing
+        .iter()
+        .flat_map(|e| e.scope().unwrap_or_default().to_vec())
+        .collect();
     let overlap: Vec<String> = wanted
         .iter()
         .filter(|s| taken.contains(s))
         .map(ToString::to_string)
         .collect();
-    if overlap.is_empty() {
-        return Ok(());
-    }
-    Err(AppError::conflict(format!(
+    AppError::conflict(format!(
         "Season(s) {} have already been requested",
         overlap.join(", ")
-    )))
-}
-
-/// Rule 52: a track request clashes with a whole-album request and with the tracks another one holds; a whole
-/// album clashes with another whole-album request only, so it can widen the tracks already requested.
-fn assert_album_unclaimed(dto: &CreateRequest, existing: &[db::Req]) -> Res<()> {
-    let Some(asked) = &dto.recordings else {
-        let whole: Vec<db::Req> = existing
-            .iter()
-            .filter(|e| e.recordings.is_none())
-            .cloned()
-            .collect();
-        let overlap = overlapping_wants(&whole, dto.wants.as_deref().unwrap_or_default());
-        return if overlap.is_empty() {
-            Ok(())
-        } else {
-            Err(already_requested(&overlap))
-        };
-    };
-    if existing.iter().any(|e| e.recordings.is_none()) {
-        return Err(AppError::conflict(
-            "The whole album has already been requested",
-        ));
-    }
-    let overlap: Vec<&str> = asked
-        .iter()
-        .filter(|r| {
-            existing
-                .iter()
-                .any(|e| e.recordings.iter().flatten().any(|t| t == *r))
-        })
-        .map(String::as_str)
-        .collect();
-    if overlap.is_empty() {
-        return Ok(());
-    }
-    Err(AppError::conflict(format!(
-        "Track(s) {} have already been requested",
-        overlap.join(", ")
-    )))
+    ))
 }
 
 /// Rule 52: every requested track is already in the library or wanted, so there is nothing to request.
@@ -376,16 +356,17 @@ fn want_label(w: &WantSpec) -> String {
 
 type Profiles = (Option<i32>, Option<i32>);
 
-/// Rule 12b: the profiles of the earliest active request, else of the library row; `decided` skips the
-/// pending rows, whose profiles an auto-approved create decides (rule 12c).
-async fn existing_series_profiles(
+/// Rule 12b: the profiles a series create of `a` takes, those of the earliest active request, else of the
+/// library row. An adder decides the profiles of the pending rows it absorbs (rule 12c), so they lock only others.
+async fn series_lock(
     conn: &mut PgConnection,
+    a: &Authed,
     key: &TitleKey,
     keys: &[TitleKey],
-    decided: bool,
 ) -> Res<Option<Profiles>> {
+    let adder = is_adder(a);
     let active = db::active_adds_of(&mut *conn, keys).await?;
-    if let Some(r) = active.iter().find(|r| !decided || r.status != "pending") {
+    if let Some(r) = active.iter().find(|r| !adder || r.status != "pending") {
         return Ok(Some((r.quality_profile_id, r.language_profile_id)));
     }
     // a title held twice has no single library row to lock the profiles to
@@ -409,7 +390,7 @@ pub async fn title_state(st: &AppState, a: &Authed, key: &TitleKey) -> Res<Value
     seasons.sort_unstable();
     seasons.dedup();
     let locked = if series {
-        existing_series_profiles(&mut conn, key, &keys, false).await?
+        series_lock(&mut conn, a, key, &keys).await?
     } else {
         None
     };
@@ -727,91 +708,76 @@ struct Scope {
     recordings: Option<Vec<String>>,
 }
 
-/// Rule 12c: the active rows the guard clashes with, and the asked scope none of them holds (`None`: nothing left).
-fn split(
+/// Rule 12c: the asked scope no clashing row holds, `None` when nothing is left. A whole series needs its
+/// regular seasons: unknown, it is a 503 rather than a remainder silently dropped.
+fn rest(
     dto: &CreateRequest,
-    existing: &[db::Req],
+    clashing: &[db::Req],
     all_seasons: Option<&[i64]>,
-) -> (Vec<db::Req>, Option<Scope>) {
+) -> Res<Option<Scope>> {
     let asked = Scope {
         seasons: dto.seasons.clone(),
         wants: dto.wants.clone(),
         recordings: dto.recordings.clone(),
     };
-    let keep = |f: &dyn Fn(&db::Req) -> bool| -> Vec<db::Req> {
-        existing.iter().filter(|e| f(e)).cloned().collect()
-    };
-    if dto.media_type == MediaKind::Album {
-        let Some(asked_tracks) = &dto.recordings else {
-            let wants = dto.wants.as_deref().unwrap_or_default();
-            let clashing = keep(&|e| {
-                e.recordings.is_none()
-                    && !overlapping_wants(std::slice::from_ref(e), wants).is_empty()
-            });
-            let rest = clashing.is_empty().then_some(asked);
-            return (clashing, rest);
-        };
-        let clashing = keep(&|e| {
-            e.recordings
-                .as_ref()
-                .is_none_or(|t| t.iter().any(|x| asked_tracks.contains(x)))
-        });
+    if let (MediaKind::Album, Some(tracks)) = (dto.media_type, &dto.recordings) {
+        if clashing.iter().any(|e| e.recordings.is_none()) {
+            return Ok(None);
+        }
         let held: Vec<&String> = clashing
             .iter()
             .flat_map(|e| e.recordings.iter().flatten())
             .collect();
-        let left: Vec<String> = asked_tracks
+        let left: Vec<String> = tracks
             .iter()
             .filter(|x| !held.contains(x))
             .cloned()
             .collect();
-        let whole = clashing.iter().any(|e| e.recordings.is_none());
-        let rest = (!whole && !left.is_empty()).then_some(Scope {
+        return Ok((!left.is_empty()).then_some(Scope {
             recordings: Some(left),
             ..asked
-        });
-        return (clashing, rest);
+        }));
     }
-    if let Some(wants) = &dto.wants {
-        let clashing = keep(&|e| !overlapping_wants(std::slice::from_ref(e), wants).is_empty());
+    if let Some(wants) = dto
+        .wants
+        .as_deref()
+        .filter(|_| dto.media_type != MediaKind::Album)
+    {
         let left: Vec<WantSpec> = wants
             .iter()
-            .filter(|w| overlapping_wants(&clashing, std::slice::from_ref(w)).is_empty())
+            .filter(|w| overlapping_wants(clashing, std::slice::from_ref(w)).is_empty())
             .cloned()
             .collect();
-        let rest = (!left.is_empty()).then_some(Scope {
+        return Ok((!left.is_empty()).then_some(Scope {
             wants: Some(left),
             ..asked
-        });
-        return (clashing, rest);
+        }));
     }
-    if !dto.media_type.has_seasons() {
-        return (existing.to_vec(), None);
-    }
-    let wanted = dto.seasons.as_deref().filter(|s| !s.is_empty());
-    let clashing = keep(&|e| match (wanted, e.scope()) {
-        (Some(w), Some(s)) => s.iter().any(|n| w.contains(n)),
-        _ => true,
-    });
-    if clashing.iter().any(|e| e.scope().is_none()) {
-        return (clashing, None);
+    if !dto.media_type.has_seasons() || clashing.iter().any(|e| e.scope().is_none()) {
+        return Ok(None);
     }
     let held: Vec<i64> = clashing
         .iter()
         .flat_map(|e| e.scope().unwrap_or_default().to_vec())
         .collect();
+    let wanted = match dto.seasons.as_deref().filter(|s| !s.is_empty()) {
+        Some(w) => w,
+        None => all_seasons.ok_or_else(|| {
+            AppError::with_message(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "The seasons of this series cannot be read, try again shortly",
+            )
+        })?,
+    };
     let left: Vec<i64> = wanted
-        .or(all_seasons)
-        .unwrap_or_default()
         .iter()
         .filter(|n| !held.contains(n))
         .copied()
         .collect();
-    let rest = (!left.is_empty()).then_some(Scope {
+    Ok((!left.is_empty()).then_some(Scope {
         seasons: Some(left),
         ..asked
-    });
-    (clashing, rest)
+    }))
 }
 
 /// The regular seasons of a series asked whole that may absorb requests of some seasons (rule 12c):
@@ -832,17 +798,23 @@ async fn series_seasons(
     {
         return Ok(None);
     }
-    if let Some(m) = db::media_by_ref(&st.db, &dto.key).await? {
-        let held = db::regular_seasons(&st.db, m.id).await?;
-        if !held.is_empty() {
-            return Ok(Some(held));
-        }
+    if let Some(held) = library_seasons(st, &dto.key).await? {
+        return Ok(Some(held));
     }
     Ok(services::title_facts(st, &dto.key)
         .await
         .ok()
         .and_then(|f| f.season_count)
         .map(|n| (1..=i64::from(n)).collect()))
+}
+
+/// The regular seasons of the library series holding the title, when it has some.
+async fn library_seasons(st: &AppState, key: &TitleKey) -> Res<Option<Vec<i64>>> {
+    let Some(m) = db::media_by_ref(&st.db, key).await? else {
+        return Ok(None);
+    };
+    let held = db::regular_seasons(&st.db, m.id).await?;
+    Ok((!held.is_empty()).then_some(held))
 }
 
 /// An absorbed book or album row's wants take the profile of the asked want they overlap (rule 12c).
@@ -870,25 +842,41 @@ async fn after_create(st: AppState, by: i32, after: After) -> Res<Option<i32>> {
     let mut first: Option<AppError> = None;
     let mut media = None;
     if let Some((row, album, tracks)) = after.grown {
-        match want_tracks(&st, album, &tracks, true).await {
-            Ok(()) => db::add_recordings(&st.db, row, &tracks).await?,
-            Err(e) => first = Some(e),
+        let grown = match want_tracks(&st, album, &tracks, true).await {
+            Ok(()) => db::add_recordings(&st.db, row, &tracks)
+                .await
+                .map_err(AppError::from),
+            Err(e) => Err(e),
+        };
+        if let Err(e) = grown {
+            first.get_or_insert(e);
         }
         media = Some(album);
     }
     for id in &after.absorbed {
-        let Some(row) = db::find(&st.db, *id).await? else {
-            continue;
+        let done = match db::find(&st.db, *id).await {
+            Ok(Some(row)) => finish_approve(&st, by, row, false).await,
+            Ok(None) => continue,
+            Err(e) => Err(e.into()),
         };
-        match finish_approve(&st, by, row, false).await {
+        match done {
             Ok(m) => media = media.or(m),
-            Err(e) => first = first.or(Some(e)),
+            Err(e) => {
+                first.get_or_insert(e);
+            }
         }
     }
     if let Some((added, spec)) = after.added {
+        let (id, user) = (added.id, added.user);
         match finish_create(st.clone(), added, spec).await {
             Ok(m) => media = m,
-            Err(e) => first = first.or(Some(e)),
+            Err(e) => {
+                // an approved row left without media must not hold the title
+                if let Err(d) = db::delete_claimed(&st.db, id, user).await {
+                    tracing::warn!("Request #{id}: failed create left its row: {d}");
+                }
+                first.get_or_insert(e);
+            }
         }
     }
     match first {
@@ -935,24 +923,24 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             .await
             .map_err(|e| lock_err(e, false))?;
     }
-    // A merge adds no request: no quota, unless the pending one is gone once the title is locked.
-    let skipped_quota = dto.media_type == MediaKind::Album
-        && db::active_adds_of(&mut tx, &keys)
-            .await?
-            .iter()
-            .any(|r| r.user_id == a.user.id && r.status == "pending");
-    if !skipped_quota {
+    // Only a create that inserts a row of the caller's counts: a merge or an absorbing create may insert none.
+    let deferred_quota = candidates.may_approve()
+        || dto.media_type == MediaKind::Album
+            && db::active_adds_of(&mut tx, &keys)
+                .await?
+                .iter()
+                .any(|r| r.user_id == a.user.id && r.status == "pending");
+    if !deferred_quota {
         check_quota(&mut tx, a, dto.media_type).await?;
     }
     db::lock_titles(&mut tx, &keys)
         .await
         .map_err(|e| lock_err(e, true))?;
     // an auto-approved create absorbs what the guard clashes with (rule 12c), known at step 6
-    let clash = match assert_no_active_duplicate(&mut tx, &dto, &keys).await {
-        Ok(()) => None,
-        Err(e) if e.status() == StatusCode::CONFLICT && candidates.may_approve() => Some(e),
-        Err(e) => return Err(e),
-    };
+    let clashing = clashing(&dto, &db::active_adds_of(&mut tx, &keys).await?);
+    if !clashing.is_empty() && !candidates.may_approve() {
+        return Err(conflict(&dto, &clashing));
+    }
     if let Some(l) = dto.library_id {
         assert_can_use_library(st, a, l).await?;
         assert_exist(st, None, None, Some(l)).await?;
@@ -971,9 +959,9 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         crate::libraries::assert_folder_in_library(&mut *tx, library_id, f).await?;
     }
     let auto = candidates.approves(a, &dto, library_id);
-    let decides = auto && chooser;
+    let decides = is_adder(a);
     if dto.media_type.has_seasons()
-        && let Some((q, l)) = existing_series_profiles(&mut tx, &key, &keys, decides).await?
+        && let Some((q, l)) = series_lock(&mut tx, a, &key, &keys).await?
     {
         dto.quality_profile_id = q.or(dto.quality_profile_id);
         dto.language_profile_id = l.or(dto.language_profile_id);
@@ -999,23 +987,28 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     let asked_wants = dto.wants.clone().unwrap_or_default();
     let mut absorbed: Vec<db::Req> = vec![];
     let mut insert = true;
-    if let Some(e) = clash {
+    if !clashing.is_empty() {
         if !auto {
-            return Err(e);
+            return Err(conflict(&dto, &clashing));
         }
-        let active = db::active_adds_of(&mut tx, &keys).await?;
-        let (clashing, rest) = split(&dto, &active, all_seasons.as_deref());
+        // a season request that landed after the pre-lock read: the library's seasons, else a 503
+        let all_seasons = match all_seasons {
+            Some(s) => Some(s),
+            None => library_seasons(st, &key).await?,
+        };
+        let left = rest(&dto, &clashing, all_seasons.as_deref())?;
         absorbed = clashing
-            .into_iter()
+            .iter()
             .filter(|r| r.status == "pending")
+            .cloned()
             .collect();
-        match rest {
+        match left {
             Some(r) => {
                 dto.seasons = r.seasons;
                 dto.wants = r.wants;
                 dto.recordings = r.recordings;
             }
-            None if absorbed.is_empty() => return Err(e),
+            None if absorbed.is_empty() => return Err(conflict(&dto, &clashing)),
             None => insert = false,
         }
     }
@@ -1052,9 +1045,6 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
                 "A pending request for this album already exists with another library or wants",
             ));
         }
-    }
-    if own.is_none() && skipped_quota && grown.is_none() {
-        check_quota(&mut tx, a, dto.media_type).await?;
     }
     if let Some(own) = &own {
         match (&dto.recordings, &own.recordings) {
@@ -1105,6 +1095,9 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         if db::claim_edited(&mut *tx, row.id, a.user.id, &edits).await? {
             claimed.push(row.id);
         }
+    }
+    if deferred_quota && insert {
+        check_quota(&mut tx, a, dto.media_type).await?;
     }
     let id = match insert {
         true => Some(
