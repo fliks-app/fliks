@@ -5721,7 +5721,7 @@
         "encoding": "Encoding",
         "paused": "Paused",
         "leased": "Running",
-        "staged": "Ready to swap",
+        "staged": "File ready",
         "committing": "Swapping",
         "queued": "Waiting",
         "failed": "Failed",

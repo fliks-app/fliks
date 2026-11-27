@@ -5721,7 +5721,7 @@
         "encoding": "A codificar",
         "paused": "Em pausa",
         "leased": "A decorrer",
-        "staged": "Pronto para substituir",
+        "staged": "Ficheiro pronto",
         "committing": "A substituir",
         "queued": "Em espera",
         "failed": "Falhou",
