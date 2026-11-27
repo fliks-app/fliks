@@ -637,6 +637,9 @@ export class LivePlayerComponent implements OnInit, OnDestroy {
   }
 
   private bindEngine(engine: PlaybackEngine): void {
+    // Shaka starts a live timeline at the first listed segment, not at its tfdt: anchor each
+    // segment on the playlist (Shaka's default), where VOD keeps the engine's timestamps.
+    engine.configure?.({ manifest: { hls: { ignoreManifestTimestampsInSegmentsMode: false } } });
     engine.volume = this.level();
     engine.on('error', (e) => this.recovery.onEngineError(e));
     engine.on('sessionExpired', () => void this.recovery.recoverFromLostSession('session_expired'));

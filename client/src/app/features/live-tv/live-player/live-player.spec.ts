@@ -349,3 +349,14 @@ describe('LivePlayerComponent TV hide and show', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('LivePlayerComponent engine', () => {
+  it('anchors live segments on the playlist instead of their own timestamps', () => {
+    const { component } = createComponent();
+    const engine = { configure: vi.fn(), on: vi.fn(), volume: 1 };
+    component.bindEngine(engine);
+    expect(engine.configure).toHaveBeenCalledWith({
+      manifest: { hls: { ignoreManifestTimestampsInSegmentsMode: false } },
+    });
+  });
+});
