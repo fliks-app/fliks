@@ -269,8 +269,14 @@ fn episode_block(o: &RejectionInput, title: &str, out: &mut Vec<ReleaseRejection
         matches!((o.expected_season, cov.seasons), (Some(e), Some(s)) if !within(&s, e));
     let wrong_episode =
         matches!((o.expected_episode, cov.episodes), (Some(e), Some(s)) if !within(&s, e));
+    // Specials are searched by their title, which carries no number.
+    let unnumbered = o.expected_episode.is_some()
+        && o.expected_season != Some(0)
+        && cov.seasons.is_none()
+        && cov.episodes.is_none()
+        && !cov.complete_series;
     let expected = format_season_episode(o.expected_season, o.expected_episode, None, None);
-    if wrong_season || wrong_episode {
+    if wrong_season || wrong_episode || unnumbered {
         out.push(rej(
             "EPISODE_MISMATCH",
             vec![
