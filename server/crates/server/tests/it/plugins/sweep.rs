@@ -478,17 +478,21 @@ async fn a_busy_unit_ask_is_retried_for_its_own_target() {
     };
     offer(&h, A, json!([release("a", 3)])).await;
     let rt = h.st.plugins.rt(A).unwrap();
+    let held = rt.clone();
     let spin = tokio::spawn(async move {
         let req = fliks_server::plugins::HttpRequest {
             method: "GET".into(),
             path: "/test/spin".into(),
-            query: vec![("s".into(), "3".into())],
+            query: vec![("s".into(), "10".into())],
             body: vec![],
             principal: fliks_server::plugins::Principal::Delegated(1),
         };
-        rt.http(req, false).await
+        held.http(req, false).await
     });
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    until("the spin running", Duration::from_secs(10), async || {
+        rt.http.free() == 0
+    })
+    .await;
     let ep2 = UnitRef {
         group: Some(1),
         number: Some(2.0),
@@ -499,18 +503,16 @@ async fn a_busy_unit_ask_is_retried_for_its_own_target() {
     let pick = Pick::of(Family::Video, None, Some(&ep2)).unwrap();
     h.st.plugins
         .request_scoped(&h.st, vec![(3, Scope::Only(vec![pick]))]);
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    spin.await.unwrap().unwrap();
     assert_eq!(
         searched(&h, A).await,
         "",
         "the busy search never reached the provider"
     );
-    spin.await.unwrap().unwrap();
     until("the retry's grab", Duration::from_secs(60), async || {
         item_grabbed(&h, 3, items[1]).await
     })
     .await;
-    tokio::time::sleep(Duration::from_millis(800)).await;
     assert_eq!(searched(&h, A).await, format!("{};", items[1]));
     assert!(!item_grabbed(&h, 3, items[0]).await && !item_grabbed(&h, 3, items[2]).await);
     h.finish().await;
