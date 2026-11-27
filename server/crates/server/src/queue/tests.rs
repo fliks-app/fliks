@@ -68,7 +68,7 @@ async fn a_stale_worker_is_fenced_out_after_its_lease_expired(pool: PgPool) {
         .unwrap();
     assert_eq!(second.attempt, 2);
     assert!(
-        store::heartbeat(&pool, id, "w1", 1, 0.5, false)
+        store::heartbeat(&pool, id, "w1", 1, 0.5, false, None)
             .await
             .unwrap()
             .is_none()
@@ -80,7 +80,7 @@ async fn a_stale_worker_is_fenced_out_after_its_lease_expired(pool: PgPool) {
         Settled::Stale
     );
     assert!(
-        store::heartbeat(&pool, id, "w2", 2, 0.5, false)
+        store::heartbeat(&pool, id, "w2", 2, 0.5, false, None)
             .await
             .unwrap()
             .is_some()
@@ -98,7 +98,7 @@ async fn a_restart_mid_job_keeps_the_lease(pool: PgPool) {
         .unwrap();
     store::boot(&pool).await.unwrap();
     assert_eq!(store::expire(&pool).await.unwrap(), 0);
-    let beat = store::heartbeat(&pool, id, "w1", 1, 0.4, false)
+    let beat = store::heartbeat(&pool, id, "w1", 1, 0.4, false, None)
         .await
         .unwrap()
         .unwrap();
@@ -185,6 +185,35 @@ async fn a_hardware_planned_encode_stays_off_the_cpu_while_a_gpu_exists(pool: Pg
             .unwrap()
             .is_some()
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_job_running_off_its_leased_gpu_counts_on_the_device_it_runs_on(pool: PgPool) {
+    crate::db::migrate(&pool).await.unwrap();
+    let a = job(&pool, Some("hevc"), "/m/a.mkv").await;
+    let b = job(&pool, Some("hevc"), "/m/b.mkv").await;
+    let c = job(&pool, Some("hevc"), "/m/c.mkv").await;
+    let hevc = vec!["hevc".to_string()];
+    let gpu = Want {
+        device: "gpu0",
+        hw: &hevc,
+        sw: &[],
+        fallback: &[],
+        ..want("w1", &[])
+    };
+    let cpu = want("w1", &hevc);
+    let beat = |id, on| store::heartbeat(&pool, id, "w1", 1, 0.5, false, on);
+    assert!(store::take(&pool, &gpu).await.unwrap().is_some());
+    assert!(store::take(&pool, &gpu).await.unwrap().is_none());
+    // The hardware encode was redone in software: the GPU is free, the CPU slot is taken.
+    beat(a, Some("cpu")).await.unwrap().unwrap();
+    assert!(store::take(&pool, &cpu).await.unwrap().is_none());
+    assert!(store::take(&pool, &gpu).await.unwrap().is_some());
+    assert_eq!(state(&pool, b).await, "leased");
+    // Two leases moved off a one-slot GPU: a third waits.
+    beat(b, Some("cpu")).await.unwrap().unwrap();
+    assert!(store::take(&pool, &gpu).await.unwrap().is_none());
+    assert_eq!(state(&pool, c).await, "queued");
 }
 
 #[sqlx::test(migrations = false)]

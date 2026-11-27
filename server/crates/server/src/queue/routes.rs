@@ -265,6 +265,24 @@ async fn reach_of(st: &AppState, who: Principal) -> Result<Reach, AppError> {
     Ok(Reach::Http(base.unwrap_or_default()))
 }
 
+/// What the engine reported about the work, kept in `jobs.result`.
+fn result_meta(req: &JobResultRequest) -> serde_json::Map<String, Value> {
+    let mut meta = serde_json::Map::new();
+    for (k, v) in [
+        ("level", json!(req.level)),
+        ("copyReason", json!(req.copy_reason)),
+        ("cpuFallback", json!(req.cpu_fallback)),
+        ("sampledSavingsPct", json!(req.sampled_savings_pct)),
+        ("savingsPct", json!(req.savings_pct)),
+        ("ssim", json!(req.ssim)),
+    ] {
+        if !v.is_null() {
+            meta.insert(k.into(), v);
+        }
+    }
+    meta
+}
+
 #[utoipa::path(post, path = "/engine/jobs/{id}/heartbeat", responses((status = 200), (status = 409)))]
 pub async fn heartbeat(
     State(st): State<AppState>,
@@ -281,6 +299,7 @@ pub async fn heartbeat(
         req.attempt as i32,
         req.progress,
         req.paused,
+        req.device_id.as_deref(),
     )
     .await
     .map_err(db)?;
@@ -294,6 +313,7 @@ pub async fn heartbeat(
             job_id: id,
             progress: req.progress.into(),
             paused: req.paused,
+            runs_on: req.device_id.clone(),
         },
     )
     .await;
@@ -322,16 +342,7 @@ pub async fn result(
     if kind.as_deref() == Some("separate") {
         return crate::karaoke::remote::result(&st, &key, id, req).await;
     }
-    let mut meta = serde_json::Map::new();
-    for (k, v) in [
-        ("level", json!(req.level)),
-        ("copyReason", json!(req.copy_reason)),
-        ("cpuFallback", json!(req.cpu_fallback)),
-    ] {
-        if !v.is_null() {
-            meta.insert(k.into(), v);
-        }
-    }
+    let meta = result_meta(&req);
     if req.ok && req.nothing_to_do {
         let r = store::skip_nothing(&st.db, id, &key, attempt, Value::Object(meta))
             .await
@@ -456,7 +467,21 @@ async fn output_error(
 
 #[cfg(test)]
 mod tests {
-    use super::codecs_of;
+    use super::{codecs_of, result_meta};
+    use serde_json::json;
+
+    #[test]
+    fn an_optimize_result_keeps_what_the_engine_measured() {
+        let req = serde_json::from_value(json!({ "workerId": "w", "attempt": 1, "ok": true,
+            "outSize": 4, "level": "reencode", "cpuFallback": false,
+            "sampledSavingsPct": 30.5, "savingsPct": 25.0, "ssim": 0.99 }))
+        .unwrap();
+        assert_eq!(
+            serde_json::Value::Object(result_meta(&req)),
+            json!({ "level": "reencode", "cpuFallback": false,
+                "sampledSavingsPct": 30.5, "savingsPct": 25.0, "ssim": 0.99 })
+        );
+    }
 
     #[test]
     fn encoders_map_to_plan_codecs() {

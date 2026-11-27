@@ -177,7 +177,7 @@
                       {{ 'optimize.queue.kind.' + j.kind | translate }}
                     }
                   </td>
-                  <td>{{ j.deviceId ?? '-' }}</td>
+                  <td>{{ jobDevice(j) ?? '-' }}</td>
                   <td>
                     <div class="flex items-center gap-2">
                       <progress
@@ -404,7 +404,7 @@
                   }
                 </td>
                 <td>{{ j.codec?.toUpperCase() ?? '-' }}</td>
-                <td>{{ j.deviceId ?? '-' }}</td>
+                <td>{{ jobDevice(j) ?? '-' }}</td>
                 <td class="tabular-nums">{{ j.inSize != null ? formatBytes(j.inSize) : '-' }}</td>
                 <td class="tabular-nums">{{ j.outSize != null ? formatBytes(j.outSize) : '-' }}</td>
                 <td class="tabular-nums">

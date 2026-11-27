@@ -27,6 +27,7 @@ import {
   type QueueStatus,
   ERROR_CLASSES,
   WORKER_OFFLINE_MS,
+  jobDevice,
   savedBytes,
 } from '../../../core/models/optimize';
 import { mediaDetailLink } from '../../../core/media-kinds';
@@ -85,6 +86,7 @@ export class OptimizeQueueComponent implements OnInit {
   readonly tabs: QueueTab[] = ['active', 'failures', 'finished'];
   readonly levels = LEVELS;
   readonly formatBytes = formatBytes;
+  readonly jobDevice = jobDevice;
   readonly savedBytes = savedBytes;
   readonly eta = (s: number | null) => (s == null ? '-' : formatEta(Math.round(s)));
 
@@ -118,7 +120,7 @@ export class OptimizeQueueComponent implements OnInit {
     this.workers().flatMap((w) =>
       w.devices.map((d) => {
         const jobs = this.jobs().filter(
-          (j) => j.state === 'leased' && j.workerId === w.instance && j.deviceId === d.id,
+          (j) => j.state === 'leased' && j.workerId === w.instance && jobDevice(j) === d.id,
         );
         return {
           worker: w.instance,
@@ -169,7 +171,12 @@ export class OptimizeQueueComponent implements OnInit {
         this.jobs.update((l) =>
           l.map((j) =>
             j.id === id
-              ? { ...j, progress: Number(e['progress']), paused: e['paused'] === true }
+              ? {
+                  ...j,
+                  progress: Number(e['progress']),
+                  paused: e['paused'] === true,
+                  runsOn: (e['runsOn'] as string | null | undefined) ?? null,
+                }
               : j,
           ),
         );

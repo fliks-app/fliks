@@ -133,6 +133,8 @@ pub struct JobRow {
     paused: bool,
     worker_id: Option<String>,
     device_id: Option<String>,
+    /// While leased: the device the job runs on when it is not `deviceId`.
+    runs_on: Option<String>,
     error: Option<Value>,
     in_path: Option<String>,
     in_size: Option<i64>,
@@ -162,7 +164,7 @@ pub async fn list_jobs(
     let libs = super::control::scope(&st, &authed).await?;
     let rows = sqlx::query(
         r#"SELECT j.id, j.kind, j."mediaFileId", j.state, j.priority, j.attempt, j.failures, j.progress, j.paused,
-             j."workerId", j."deviceId", j.error, j."inPath", j."inSize", j."outSize", j."createdAt", j."updatedAt",
+             j."workerId", j."deviceId", CASE WHEN j.state = 'leased' THEN j."runsOn" END AS runs_on, j.error, j."inPath", j."inSize", j."outSize", j."createdAt", j."updatedAt",
              CASE WHEN j.kind = 'separate' THEN COALESCE((SELECT i.title FROM item_parts ip
                JOIN items i ON i.id = ip."itemId" WHERE ip."mediaFileId" = j."mediaFileId"
                ORDER BY ip.version, i.id LIMIT 1), m.title) ELSE m.title END AS title,
@@ -200,6 +202,7 @@ pub async fn list_jobs(
                 paused: r.get("paused"),
                 worker_id: r.get("workerId"),
                 device_id: r.get("deviceId"),
+                runs_on: r.get("runs_on"),
                 error: r.get("error"),
                 in_path: r.get("inPath"),
                 in_size: r.get("inSize"),
@@ -232,6 +235,11 @@ pub struct JobDetail {
     done_level: Option<String>,
     copy_reason: Option<String>,
     cpu_fallback: bool,
+    /// Video savings the engine's samples predicted and the encode reached, in percent.
+    sampled_savings_pct: Option<f64>,
+    savings_pct: Option<f64>,
+    /// Lowest mean SSIM of the output's check windows.
+    ssim: Option<f64>,
     #[serde(with = "iso_ms::opt")]
     started_at: Option<DateTime<Utc>>,
     #[serde(with = "iso_ms::opt")]
@@ -255,6 +263,8 @@ pub async fn job_detail(
                'formatName', result -> 'formatName', 'formatBitRate', result -> 'formatBitRate') END AS output,
              result ->> 'level' AS done_level, result ->> 'copyReason' AS copy_reason,
              COALESCE((result ->> 'cpuFallback')::boolean, false) AS cpu_fallback,
+             (result ->> 'sampledSavingsPct')::float8 AS sampled_savings_pct,
+             (result ->> 'savingsPct')::float8 AS savings_pct, (result ->> 'ssim')::float8 AS ssim,
              "startedAt", "encodedAt", "finishedAt"
            FROM jobs WHERE id = $1"#,
     )
@@ -269,6 +279,9 @@ pub async fn job_detail(
         done_level: r.get("done_level"),
         copy_reason: r.get("copy_reason"),
         cpu_fallback: r.get("cpu_fallback"),
+        sampled_savings_pct: r.get("sampled_savings_pct"),
+        savings_pct: r.get("savings_pct"),
+        ssim: r.get("ssim"),
         started_at: r.get("startedAt"),
         encoded_at: r.get("encodedAt"),
         finished_at: r.get("finishedAt"),

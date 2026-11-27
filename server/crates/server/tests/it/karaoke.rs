@@ -694,6 +694,9 @@ fn uploaded(job: i64, sha_vocals: Option<&str>) -> JobResultRequest {
         level: None,
         copy_reason: None,
         cpu_fallback: None,
+        sampled_savings_pct: None,
+        savings_pct: None,
+        ssim: None,
         nothing_to_do: false,
         separate: Some(SeparateOutput {
             model: "m".into(),

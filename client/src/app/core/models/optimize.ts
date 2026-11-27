@@ -315,6 +315,8 @@ export interface OptimizeJob {
   paused: boolean;
   workerId: string | null;
   deviceId: string | null;
+  /** While leased: the device the job runs on when it is not `deviceId` (a GPU encode redone on the CPU). */
+  runsOn: string | null;
   error: { class?: string; message?: string; stderr?: string } | null;
   /** The original can be put back: a backup is kept and no restore ran or was purged. */
   restorable: boolean;
@@ -332,6 +334,11 @@ export interface OptimizeJob {
   updatedAt: string;
 }
 
+/** The device a job runs on now. */
+export function jobDevice(j: OptimizeJob): string | null {
+  return j.runsOn ?? j.deviceId;
+}
+
 /** `GET /api/optimize/jobs/{id}`: what the job does to its file. */
 export interface OptimizeJobDetail {
   /** Null on a job queued before the diff was kept. */
@@ -344,6 +351,11 @@ export interface OptimizeJobDetail {
   doneLevel: OptimizeLevel | null;
   copyReason: string | null;
   cpuFallback: boolean;
+  /** Video savings the engine's test encode predicted and the encode reached, in percent. */
+  sampledSavingsPct: number | null;
+  savingsPct: number | null;
+  /** Lowest mean SSIM of the output's check windows. */
+  ssim: number | null;
   startedAt: string | null;
   encodedAt: string | null;
   finishedAt: string | null;

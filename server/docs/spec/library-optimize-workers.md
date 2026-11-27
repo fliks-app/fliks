@@ -10,6 +10,8 @@ A remote worker is the engine binary started with `--worker-url` (or `FLIKS_WORK
 
 ## Karaoke separation
 
+A heartbeat's `deviceId` (the device a leased job runs on when it is not the leased one, `cpu` for the software work of a GPU lease) is kept in `jobs."runsOn"`, cleared at each lease. A leased job counts against `maxJobs` of `runsOn` when set, else of `deviceId`, so a GPU whose encode was redone in software is leased again, up to twice its `maxJobs` leases in all. `GET /api/optimize/jobs` answers `runsOn` while the job is leased.
+
 A worker's `hello.features` (the engine's, e.g. `karaoke-separate`, `onnx-cuda`) is kept with the instance. A queued `separate` job (`karaoke.md` rule 16) is leased only to an eligible token worker, on its `cpu` device (it counts against that device's `maxJobs`), as `{"type": "Separate", ...}` with `modelVersion`, `inputPath` or `inputUrl` and `inputToken`; there is no `stagedPath`. A worker that cannot get the model at that version fails it with the `model` class: the job goes back to the queue after 60 s without counting a failure, and that worker gets no more `separate` job until its next hello.
 
 ## Reaching the library

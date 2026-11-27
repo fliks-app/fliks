@@ -60,7 +60,7 @@
   {"mediaFileId":2,"mediaId":1,"type":"media.file_changed"},
   {"type":"optimize.queue_changed"},
   {"jobId":1,"state":"running","type":"optimize.job_changed"},
-  {"jobId":1,"paused":false,"progress":0.5,"type":"optimize.job_progress"},
+  {"jobId":1,"paused":false,"progress":0.5,"runsOn":"cpu","type":"optimize.job_progress"},
   {"model":{"id":"m"},"type":"karaoke.model_changed"},
   {"itemId":1,"progress":0.5,"stage":"s","state":"running","type":"karaoke.job_changed"},
   {"files":2,"leftover":0,"mediaId":1,"title":"t","type":"media.move.completed"},

@@ -58,7 +58,7 @@ pub async fn release_token(pool: &PgPool, token_id: i32) -> sqlx::Result<u64> {
 }
 
 /// The device id of a worker's CPU lane.
-const CPU_DEVICE: &str = "cpu";
+pub(super) const CPU_DEVICE: &str = "cpu";
 
 /// What the lease needs to know about the asking device.
 pub struct Want<'a> {
@@ -159,14 +159,18 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     )
     .execute(&mut *tx)
     .await?;
-    let running = sqlx::query_scalar!(
-        r#"SELECT count(*) AS "n!" FROM jobs WHERE state = 'leased' AND "workerId" = $1 AND "deviceId" = $2"#,
+    let held = sqlx::query!(
+        r#"SELECT count(*) FILTER (WHERE COALESCE("runsOn", "deviceId") = $2) AS "running!",
+                  count(*) FILTER (WHERE "deviceId" = $2) AS "leased!"
+           FROM jobs WHERE state = 'leased' AND "workerId" = $1"#,
         w.key,
         w.device
     )
     .fetch_one(&mut *tx)
     .await?;
-    if running >= i64::from(w.max_jobs) {
+    // Leases moved to the CPU (checks, a software redo) free the device for one more batch, no more.
+    let max = i64::from(w.max_jobs);
+    if held.running >= max || held.leased >= 2 * max {
         return Ok(None);
     }
     let rows = sqlx::query!(
@@ -220,7 +224,7 @@ pub async fn take(pool: &PgPool, w: &Want<'_>) -> sqlx::Result<Option<Taken>> {
     };
     let row = sqlx::query!(
         r#"WITH old AS (SELECT "stagedPath" FROM jobs WHERE id = $1)
-           UPDATE jobs SET state = 'leased', attempt = attempt + 1, "workerId" = $2, "deviceId" = $3,
+           UPDATE jobs SET state = 'leased', attempt = attempt + 1, "workerId" = $2, "deviceId" = $3, "runsOn" = NULL,
              "leaseUntil" = now() + make_interval(secs => $4), "startedAt" = now(),
              progress = 0, paused = false, "updatedAt" = now()
            WHERE id = $1 RETURNING attempt, payload, (SELECT "stagedPath" FROM old) AS old"#,
@@ -320,9 +324,10 @@ pub async fn heartbeat(
     attempt: i32,
     progress: f64,
     paused: bool,
+    runs_on: Option<&str>,
 ) -> sqlx::Result<Option<Beat>> {
     let row = sqlx::query!(
-        r#"UPDATE jobs SET progress = $4, paused = $5, "updatedAt" = now(),
+        r#"UPDATE jobs SET progress = $4, paused = $5, "runsOn" = $7, "updatedAt" = now(),
              "leaseUntil" = CASE WHEN state = 'leased' THEN now() + make_interval(secs => $6)
                                  ELSE "leaseUntil" END
            WHERE id = $1 AND "workerId" = $2 AND attempt = $3 AND state IN ('leased', 'cancelled')
@@ -332,7 +337,8 @@ pub async fn heartbeat(
         attempt,
         progress.clamp(0.0, 1.0) as f32,
         paused,
-        f64::from(LEASE_S)
+        f64::from(LEASE_S),
+        runs_on
     )
     .fetch_optional(pool)
     .await?;
