@@ -151,6 +151,9 @@
           }
         } @else if (!device.isTv() && (castService.isAvailable() || airPlay.available() || remote.targets().length > 0)) {
           <app-remote-picker />
+        } @else if (!device.isTv()) {
+          <!-- Cast/AirPlay availability lands late (Safari): hold the picker's height so the page doesn't shift. -->
+          <span class="btn btn-ghost btn-circle invisible pointer-events-none" aria-hidden="true"></span>
         }
       </div>
     </div>
