@@ -6,10 +6,8 @@ import {
   inject,
   input,
   signal,
-  untracked,
   viewChild,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { TvSelectDirective } from '../../directives/tv-select.directive';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
@@ -17,9 +15,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { LucideDynamicIcon } from '@lucide/angular';
 import { icons } from '../../icons';
 import { LocalizeLanguagePipe } from '../../../core/pipes/localize-language.pipe';
-import { formatSubtitleLabel, formatSubtitleParts } from '../../../core/utils/player.utils';
-import { embeddedSubtitleTag, embeddedSubtitleTitle, type SubtitleStreams } from '../../../core/utils/subtitle-tracks';
-import { localizeLanguage } from '../../../core/utils/language.utils';
+import { formatSubtitleLabel } from '../../../core/utils/player.utils';
 import {
   isImageBasedSubtitleCodec,
   isAssSubtitle,
@@ -50,11 +46,10 @@ import {
 } from '../../../core/services/api/translation-providers-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { LanguageProfile, ProfilesService } from '../../../core/services/api/profiles.service';
-import { SseService } from '../../../core/services/sse.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { PaginationComponent } from '../pagination/pagination';
 import { MediaDetailSubtitleSearchModalComponent } from '../../../features/media-detail/components/media-detail-subtitle-search-modal/media-detail-subtitle-search-modal.component';
-import type { DetailHeroSubtitle } from '../detail-hero/detail-hero';
+import { SubtitleList } from './subtitle-list';
 import { ModalHeaderComponent } from '../modal-header';
 import { ModalComponent } from '../modal';
 import { SyncReferenceSelectComponent } from '../sync-reference-select/sync-reference-select';
@@ -109,29 +104,25 @@ export class SubtitlesModalComponent {
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
   private readonly profilesApi = inject(ProfilesService);
-  private readonly sse = inject(SseService);
   private readonly appSettings = inject(AppSettingsService);
   private readonly streamingApi = inject(StreamingApiService);
   private readonly device = inject(DeviceService);
 
   // ── Inputs ──
-  readonly mediaId = input.required<number>();
+  readonly list = input.required<SubtitleList>();
   readonly episodeId = input<number | undefined>(undefined);
-  readonly selectedFileId = input<number | null>(null);
   readonly canManage = input(false);
   readonly searchDisabled = input(false);
   /** Language profile ID from the media — used to compute required subtitle languages */
   readonly languageProfileId = input<number | null>(null);
   readonly streams = input<MediaStream[]>([]);
-  /** The page is parked in the route cache: no toasts or reloads for events, the list is re-read on return. */
-  readonly parked = input(false);
-  /** The selected file's `streamInfo.subtitles`, for the embedded track titles and tags. */
-  readonly streamSubtitles = input<SubtitleStreams>(null);
 
   // ── Internal state ──
-  readonly subtitles = signal<SubtitleFileRow[]>([]);
-  readonly subtitlesLoading = signal(false);
   readonly subtitleActionBusy = signal(false);
+  protected readonly mediaId = computed(() => this.list().src.mediaId());
+  protected readonly selectedFileId = computed(() => this.list().src.fileId());
+  private get subtitles() { return this.list().subtitles; }
+  protected readonly filteredSubtitles = computed(() => this.list().filteredSubtitles());
 
   private readonly cardActions = inject(CardActionsService);
 
@@ -162,7 +153,7 @@ export class SubtitlesModalComponent {
     const url = sub.relativePath
       ? this.streamingApi.getSubtitleUrl(sub.mediaFileId, sub.id)
       : this.streamingApi.getEmbeddedSubtitleUrl(sub.mediaFileId, sub.streamIndex!);
-    void this.viewer()?.open(formatSubtitleLabel(this.withStreamInfo(sub), this.translate), url);
+    void this.viewer()?.open(formatSubtitleLabel(this.list().withStreamInfo(sub), this.translate), url);
   }
 
   protected isSyncing(sub: SubtitleFileRow): boolean {
@@ -341,7 +332,7 @@ export class SubtitlesModalComponent {
     this.cardActions.register({
       actions: this.buildSubActions(sub),
       anchor,
-      title: formatSubtitleLabel(this.withStreamInfo(sub), this.translate),
+      title: formatSubtitleLabel(this.list().withStreamInfo(sub), this.translate),
       placement: 'button',
     });
     this.cardActions.show();
@@ -420,7 +411,7 @@ export class SubtitlesModalComponent {
 
   /** Open the subtitles modal. Called from parent via viewChild. */
   show(): void {
-    void this.loadSubtitles(this.mediaId());
+    void this.list().load();
     this.modal()?.nativeElement.showModal();
   }
 
@@ -433,17 +424,6 @@ export class SubtitlesModalComponent {
 
   readonly pageSize = 10;
   readonly page = signal(0);
-
-  private withStreamInfo(sub: SubtitleFileRow) {
-    const streams = this.streamSubtitles();
-    return { ...sub, title: embeddedSubtitleTitle(sub, streams), languageTag: embeddedSubtitleTag(sub, streams) };
-  }
-
-  /** Only the active file's subtitles: a media's other files carry their own. */
-  readonly filteredSubtitles = computed(() => {
-    const fileId = this.selectedFileId();
-    return fileId == null ? [] : this.subtitles().filter((s) => s.mediaFileId === fileId);
-  });
 
   /** Required subtitle languages from language profile */
   readonly requiredSubtitleLangs = computed(() => {
@@ -480,57 +460,6 @@ export class SubtitlesModalComponent {
     this.page.set(Math.max(0, Math.min(p, this.totalPages() - 1)));
   }
 
-  /** Localized languages of OCR runs still in progress, surfaced by the detail
-   *  page as an "extraction en cours" indicator. */
-  readonly ocrInProgress = computed<string[]>(() =>
-    this.filteredSubtitles()
-      .filter((s) => s.status === 'processing' && s.providerType === 'ocr')
-      .map((s) => localizeLanguage(s.language, this.translate)),
-  );
-
-  /** Localized languages and live percent of in-progress translation runs, for the detail page's progress bar; `percent` is null until the first batch. */
-  readonly translationInProgress = computed<{ language: string; percent: number | null }[]>(() => {
-    return this.filteredSubtitles()
-      .filter((s) => s.status === 'processing' && s.providerType === 'translated')
-      .map((s) => ({
-        language: localizeLanguage(s.language, this.translate),
-        percent: this.translationPercent(s),
-      }));
-  });
-
-  /** Percent for a PROCESSING row: the live event, else the server's value at fetch time so a mid-run joiner still sees a bar. */
-  protected translationPercent(sub: SubtitleFileRow): number | null {
-    return this.sse.translationProgress()[sub.id] ?? sub.translationProgress ?? null;
-  }
-
-  /** Formatted subtitles for the detail hero dropdown */
-  readonly headerSubtitles = computed<DetailHeroSubtitle[]>(() => {
-    const hideBurnIn = this.appSettings.hideBurnInSubtitles();
-    // A subtitle only belongs in the header selector once it's a servable
-    // file: an OCR run still processing (or one that failed) isn't playable.
-    const subs = this.filteredSubtitles().filter(
-      (s) =>
-        s.status !== 'processing' &&
-        s.status !== 'failed' &&
-        !(hideBurnIn && isImageBasedSubtitleCodec(s.codec)),
-    );
-    const labelOpts = { showFormat: this.appSettings.showSubtitleFormat() };
-    return subs.map((s, i) => {
-      const id = s.streamIndex != null ? `emb-${s.streamIndex}` : `ext-${s.id}`;
-      const parts = formatSubtitleParts(this.withStreamInfo(s), this.translate, i + 1, labelOpts);
-      return {
-        id,
-        label: parts.sub ? `${parts.head} - ${parts.sub}` : parts.head,
-        head: parts.head,
-        sub: parts.sub,
-        language: s.language,
-        languageTag: this.withStreamInfo(s).languageTag,
-        forced: s.forced,
-        hearingImpaired: s.hearingImpaired,
-        image: isImageBasedSubtitleCodec(s.codec),
-      };
-    });
-  });
 
   // ── Streams / action modals ──
 
@@ -631,13 +560,6 @@ export class SubtitlesModalComponent {
     this.closeFpsModal();
   }
 
-  // ── Auto-load subtitles ──
-
-  private readonly loadEffect = effect(() => {
-    const mediaId = this.mediaId();
-    if (mediaId) void this.loadSubtitles(mediaId);
-  });
-
   private readonly loadProfilesEffect = effect(() => {
     const lpId = this.languageProfileId();
     if (lpId && !this.languageProfiles().length) {
@@ -648,78 +570,7 @@ export class SubtitlesModalComponent {
     }
   });
 
-  private wasParked = false;
-  private readonly unparkEffect = effect(() => {
-    const parked = this.parked();
-    if (!parked && this.wasParked) untracked(() => { const id = this.mediaId(); if (id) void this.loadSubtitles(id); });
-    this.wasParked = parked;
-  });
-
-  /** SSE: reload subtitles on sync/download events */
-  private readonly subtitleEvents = this.sse
-    .on('subtitle.list_changed', 'subtitle.synced', 'subtitle.downloaded', 'subtitle.failed')
-    .pipe(takeUntilDestroyed())
-    .subscribe((event) => {
-      const mediaId = this.mediaId();
-      if (this.parked() || !mediaId || (event['mediaId'] as number) !== mediaId) return;
-
-      const automatic = event['automatic'] === true;
-      if (event.type === 'subtitle.list_changed') {
-        // Carries no outcome to announce: it says the list moved, nothing more.
-        void this.loadSubtitles(mediaId);
-      } else if (event.type === 'subtitle.synced') {
-        if (!automatic) this.toast.success(this.translate.instant('sse.subtitle_synced'));
-        void this.loadSubtitles(mediaId);
-      } else if (event.type === 'subtitle.downloaded') {
-        if (!automatic) {
-          this.toast.success(
-            this.translate.instant(
-              event['reason'] === 'translation'
-                ? 'sse.subtitle_translated'
-                : 'sse.subtitle_downloaded',
-              { title: event['title'] ?? '', lang: event['language'] ?? '' },
-            ),
-          );
-        }
-        void this.loadSubtitles(mediaId);
-      } else if (event.type === 'subtitle.failed') {
-        if (!automatic) {
-          const key =
-            event['reason'] === 'rate_limit'
-              ? event['scope'] === 'daily'
-                ? 'media_detail.translation_rate_limited_daily'
-                : 'media_detail.translation_rate_limited'
-              : event['reason'] === 'translation'
-                ? 'sse.translation_failed'
-                : 'sse.subtitle_failed';
-          this.toast.error(this.translate.instant(key, { lang: event['language'] ?? '' }));
-        }
-        void this.loadSubtitles(mediaId);
-      }
-    });
-
   // ── Actions ──
-
-  async loadSubtitles(mediaId: number) {
-    // Spinner for an empty list only; read untracked so the effects calling this don't depend
-    // on the list they are about to replace.
-    this.subtitlesLoading.set(untracked(() => this.filteredSubtitles().length === 0));
-    void this.subActions.refreshSyncing();
-    try {
-      this.subtitles.set(await this.subtitlesApi.getForMedia(mediaId, { force: true }));
-      // Drop progress entries for translations that finished/failed so the map
-      // never keeps stale rows across runs.
-      this.sse.retainTranslationProgress(
-        this.subtitles()
-          .filter((s) => s.status === 'processing' && s.providerType === 'translated')
-          .map((s) => s.id),
-      );
-    } catch {
-      this.subtitles.set([]);
-    } finally {
-      this.subtitlesLoading.set(false);
-    }
-  }
 
   async searchMissing() {
     const fileId = this.selectedFileId();
@@ -778,7 +629,7 @@ export class SubtitlesModalComponent {
     params?: Record<string, unknown>;
   }) {
     await this.subActions.postProcess(this.mediaId(), event.subtitleId, event.action, event.params);
-    await this.loadSubtitles(this.mediaId());
+    await this.list().load();
   }
 
   private async confirmPostProcess(sub: SubtitleFileRow, labelKey: string, action: string) {

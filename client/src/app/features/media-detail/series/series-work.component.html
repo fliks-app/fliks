@@ -20,9 +20,9 @@
     [spoilerImage]="episodeSpoilerImage()"
     [spoilerOverview]="episodeSpoilerOverview()"
     [backRoute]="episodeView.episodeSeriesRoute()"
-    [subtitles]="subtitleSection()?.headerSubtitles() ?? []"
-    [ocrLanguages]="subtitleSection()?.ocrInProgress() ?? []"
-    [translations]="subtitleSection()?.translationInProgress() ?? []"
+    [subtitles]="subtitleList.headerSubtitles()"
+    [ocrLanguages]="subtitleList.ocrInProgress()"
+    [translations]="subtitleList.translationInProgress()"
     [files]="episodeView.episodeFiles()"
     [selectedFileId]="episodeView.episodeActiveFileId()"
     [qualityProfileName]="m.qualityProfile?.name ?? null"
@@ -89,14 +89,11 @@
 
   @if (subtitlesOpener.built()) {
     <app-subtitles-modal
-      [mediaId]="m.id"
+      [list]="subtitleList"
       [episodeId]="ep.id"
-      [selectedFileId]="episodeView.episodeActiveFileId()"
-      [streamSubtitles]="episodeView.episodeActiveFile()?.streamInfo?.subtitles"
       [canManage]="canManageSubtitles()"
       [searchDisabled]="!ep.hasFile"
       [languageProfileId]="m.languageProfile?.id ?? null"
-      [parked]="host.parked()"
     />
   }
 

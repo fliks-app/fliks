@@ -1,11 +1,14 @@
 import { provideZonelessChangeDetection, signal, type EnvironmentProviders, type Provider } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { TranslateLoader, provideTranslateService } from '@ngx-translate/core';
-import { of } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import { vi } from 'vitest';
 import { MediaService, type Media } from '../../core/services/api/media.service';
 import { LikesApiService } from '../../core/services/api/likes-api.service';
 import { StreamingApiService } from '../../core/services/api/streaming-api.service';
+import { SubtitlesApiService } from '../../core/services/api/subtitles-api.service';
+import { SubtitleActionsService } from '../../core/services/subtitle-actions.service';
+import { SseService } from '../../core/services/sse.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { DownloadManagerService } from '../../core/services/download-manager.service';
@@ -107,6 +110,9 @@ export function videoSpecProviders(
     { provide: TrackingModalService, useValue: { open: vi.fn() } },
     { provide: TvService, useValue: { isTv: () => false } },
     { provide: RecommendService, useValue: { open: vi.fn() } },
+    { provide: SubtitlesApiService, useValue: { getForMedia: vi.fn(async () => []) } },
+    { provide: SubtitleActionsService, useValue: { refreshSyncing: vi.fn(async () => {}), syncing: () => new Set() } },
+    { provide: SseService, useValue: { on: () => EMPTY, translationProgress: () => ({}), retainTranslationProgress: vi.fn() } },
     {
       provide: LikesApiService,
       useValue: { state: vi.fn(async () => ({ media: false, seasonIds: [], episodeIds: [] })), changed: signal(null) },

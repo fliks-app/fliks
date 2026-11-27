@@ -51,7 +51,7 @@
       }
     </div>
 
-    @if (subtitlesLoading()) {
+    @if (list().loading()) {
       <div class="flex justify-center py-4">
         <span class="loading loading-spinner loading-md"></span>
       </div>
@@ -81,7 +81,7 @@
       </ng-template>
       <ng-template #flagBadges let-sub>
         @if (sub.status === 'processing') {
-          @let percent = translationPercent(sub);
+          @let percent = list().translationPercent(sub);
           @if (sub.providerType === 'translated' && percent !== null) {
             <span class="inline-flex items-center gap-1 align-middle">
               <progress
@@ -533,4 +533,4 @@
      the top layer rather than inside another <dialog>. -->
 <app-subtitle-viewer-modal #subtitleViewer />
 
-<app-companion-import-modal (imported)="loadSubtitles(mediaId())" />
+<app-companion-import-modal (imported)="list().load()" />
