@@ -112,10 +112,10 @@ export class VideoPreviewComponent implements OnInit, OnDestroy {
   /** Pending requests on this title, for a manager. */
   readonly pendingRequests = signal<FliksRequestRow[]>([]);
 
-  /** An add approves the title's pending rows; a manager also sees when an approved one leaves nothing to add. */
+  /** An add approves the title's pending rows, so only an approved or processing one leaves nothing to add. */
   readonly showAdd = computed(() => {
-    if (!this.auto() || !this.titleState()?.requested || !this.canManageRequests()) return this.auto();
-    return this.pendingRequests().length > 0;
+    const s = this.titleState();
+    return this.auto() && (!s?.requested || s.pendingRequestIds.length > 0);
   });
 
   readonly actionBusyId = signal<number | null>(null);
