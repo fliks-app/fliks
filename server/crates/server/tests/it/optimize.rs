@@ -243,6 +243,25 @@ async fn library_assignment_and_preview(pool: PgPool) {
     )
     .await;
     assert_eq!(sm["filesWithDifference"], 1);
+
+    // A re-encode already done with the same codec, threshold and quality settles the video.
+    sqlx::query(
+        r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", state, "inPath", "outSize")
+           VALUES ('optimize', $1, '{"plan": {"codec": "hevc", "quality": "small", "minSavingsPct": 20}}', 'h', 'done', '/p', 1000)"#,
+    )
+    .bind(file_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let preview = format!("/api/libraries/{lib_id}/optimize/preview");
+    let (_, pv) = call(&c, "GET", &preview, Value::Null).await;
+    assert_eq!(pv["perLevel"]["reencode"], 1);
+    sqlx::query(r#"UPDATE jobs SET payload = jsonb_set(payload, '{plan,quality}', '"balanced"')"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, pv) = call(&c, "GET", &preview, Value::Null).await;
+    assert_eq!(pv["perLevel"]["reencode"], 0);
 }
 
 #[sqlx::test(migrations = false)]

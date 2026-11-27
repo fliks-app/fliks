@@ -3977,7 +3977,7 @@
         "skip_hardlinked": "Ignorer les fichiers à liens physiques multiples",
         "skip_hardlinked_hint": "Partagés avec un autre dossier : les remplacer ne libérerait pas d'espace.",
         "when_codec": "Format actuel de la vidéo",
-        "when_codec_hint": "Vide : n'importe lequel.",
+        "when_codec_hint": "Vide : n'importe lequel. Cocher le format cible réduit aussi les fichiers déjà dans ce format, si un encodage test gagne au moins 20 %.",
         "any": "N'importe lequel",
         "min_bitrate": "Débit actuel d'au moins (Mb/s)",
         "min_bitrate_hint": "Vide ou 0 : ignorer.",
