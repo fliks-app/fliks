@@ -1935,6 +1935,9 @@ async fn an_adder_absorbs_another_users_pending_movie_request(pool: PgPool) {
     second_profile(&c).await;
     let (s, asked) = call(&c, "POST", "/api/requests", &c.user, movie(70)).await;
     assert_eq!(s, 201, "{asked}");
+    let uri = "/api/requests/title-state?tmdbId=70&mediaType=movie";
+    let (_, state) = call(&c, "GET", uri, &c.adder, json!(null)).await;
+    assert_eq!(state["pendingRequestIds"], json!([rid(&asked)]), "{state}");
     let _ = domain(&mut c);
     let mut body = movie(70);
     body["qualityProfileId"] = json!(2);

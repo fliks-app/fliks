@@ -1220,7 +1220,7 @@ AND ($4::text IS NULL OR r.status::text = $4) AND ($5::text IS NULL OR r.kind::t
 AND ($6::text IS NULL OR (r.provider = $6 AND r."externalId" = $13))
 AND ($7::text IS NULL OR r."mediaType" = $7)
 AND ($14::text[] IS NULL OR r."mediaType" = ANY($14))
-ORDER BY r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
+ORDER BY (r.status = 'pending') DESC, r."createdAt" DESC, r.id ASC LIMIT $8 OFFSET $9"#,
         f.id,
         f.user_id,
         f.libraries,

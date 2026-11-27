@@ -319,7 +319,8 @@ async fn mark_state(
                FROM requests r
                LEFT JOIN provider_namespaces pn ON pn.name = r.provider
                CROSS JOIN LATERAL (SELECT r."userId" IS NOT DISTINCT FROM $1 AS mine) m
-               WHERE (mine OR r.status IN ('pending', 'approved', 'processing'))
+               WHERE (mine OR r.status IN ('pending', 'approved', 'processing')
+                              AND (r.seasons IS NULL OR jsonb_array_length(r.seasons) = 0))
                  AND r."mediaType" = $2 AND r.kind = 'add' AND r.recordings IS NULL
                  AND r."namespaceGeneration" IS NOT DISTINCT FROM pn.generation
                  AND (r.provider, r."externalId") IN (SELECT * FROM unnest($3::text[], $4::text[]))

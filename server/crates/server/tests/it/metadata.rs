@@ -1312,6 +1312,11 @@ async fn a_hit_carries_the_state_of_its_media_and_the_request_of_the_caller(pool
         ],
         "a removed request and another user's request are not the caller's"
     );
+    assert_eq!(
+        pick("othersRequestStatus")[5],
+        json!("pending"),
+        "another user's in-flight request"
+    );
 }
 
 #[sqlx::test(migrations = false)]

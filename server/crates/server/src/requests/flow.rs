@@ -433,6 +433,14 @@ pub async fn title_state(st: &AppState, a: &Authed, key: &TitleKey) -> Res<Value
     state["requesterCount"] = json!(people.len());
     state["watching"] = json!(pairs.iter().any(|p| p.1 == a.user.id));
     state["requestedByMe"] = json!(active.iter().any(|r| r.user_id == a.user.id));
+    // an auto-approved create absorbs these (rule 12c)
+    let mut pending: Vec<i32> = active
+        .iter()
+        .filter(|r| r.status == "pending")
+        .map(|r| r.id)
+        .collect();
+    pending.sort_unstable();
+    state["pendingRequestIds"] = json!(pending);
     if super::is_work(key.media_type) {
         let wants: Vec<&WantSpec> = active
             .iter()
@@ -758,7 +766,7 @@ fn split(
             .cloned()
             .collect();
         let whole = clashing.iter().any(|e| e.recordings.is_none());
-        let rest = (!whole && !left.is_empty()).then(|| Scope {
+        let rest = (!whole && !left.is_empty()).then_some(Scope {
             recordings: Some(left),
             ..asked
         });
@@ -771,7 +779,7 @@ fn split(
             .filter(|w| overlapping_wants(&clashing, std::slice::from_ref(w)).is_empty())
             .cloned()
             .collect();
-        let rest = (!left.is_empty()).then(|| Scope {
+        let rest = (!left.is_empty()).then_some(Scope {
             wants: Some(left),
             ..asked
         });
@@ -799,7 +807,7 @@ fn split(
         .filter(|n| !held.contains(n))
         .copied()
         .collect();
-    let rest = (!left.is_empty()).then(|| Scope {
+    let rest = (!left.is_empty()).then_some(Scope {
         seasons: Some(left),
         ..asked
     });
