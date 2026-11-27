@@ -5,6 +5,7 @@ import { MediaType } from '../../enums/media-type.enum';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { kindOf } from '../../media-kinds';
+import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import { StorageScopeService } from '../storage-scope.service';
 import type { LastSearch } from './last-search.model';
 import type { WantSpec } from './wants-api.service';
@@ -244,6 +245,7 @@ export function requestAddLink(r: FliksRequestRow): (string | number)[] {
 export class RequestsService {
   private readonly http = inject(HttpClient);
   private readonly scope = inject(StorageScopeService);
+  private readonly serverVersion = inject(ServerVersionService);
   private readonly _autoKinds = signal<ReadonlySet<MediaType>>(new Set());
   /** The kinds whose create is certain to be approved for the caller: the one source of "Add" over "Request". */
   readonly autoKinds = this._autoKinds.asReadonly();
@@ -255,14 +257,18 @@ export class RequestsService {
     });
   }
 
-  /** A hint: on failure every add reads "Request". */
+  /** A hint: on failure, or on a server without the route, every add reads "Request". */
   async reloadAutoKinds(): Promise<void> {
+    this._autoKinds.set(new Set(await this.fetchAutoKinds()));
+  }
+
+  private async fetchAutoKinds(): Promise<MediaType[]> {
+    if (!(await this.serverVersion.supportsWhenKnown(SERVER_SINCE.autoApproval))) return [];
     const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
     try {
-      const { kinds } = await firstValueFrom(this.http.get<{ kinds: MediaType[] }>('/api/requests/auto-approval', { context }));
-      this._autoKinds.set(new Set(kinds));
+      return (await firstValueFrom(this.http.get<{ kinds: MediaType[] }>('/api/requests/auto-approval', { context }))).kinds;
     } catch {
-      this._autoKinds.set(new Set());
+      return [];
     }
   }
 
