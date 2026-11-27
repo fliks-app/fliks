@@ -207,74 +207,6 @@
               "userId": 2
             },
             {
-              "approvedBy": {
-                "avatar": null,
-                "id": 1,
-                "username": "admin"
-              },
-              "approvedById": 1,
-              "declinedReason": null,
-              "externalId": "1001",
-              "fanartUrl": null,
-              "id": 6,
-              "kind": "add",
-              "languageProfileId": null,
-              "libraryId": 1,
-              "media": {
-                "addedById": null,
-                "additionalFanartUrls": [],
-                "alternativeTitles": [],
-                "digitalRelease": null,
-                "fanartUrl": null,
-                "folderName": "Parity Movie 01 (2020)",
-                "genres": [
-                  "Drama"
-                ],
-                "id": 1,
-                "imdbId": null,
-                "inCinemas": null,
-                "languageProfileId": null,
-                "libraryId": 1,
-                "logoUrl": null,
-                "metadataRefreshedAt": null,
-                "minimumAvailability": "released",
-                "monitored": true,
-                "originalTitle": null,
-                "overview": "Synthetic movie 1",
-                "path": null,
-                "physicalRelease": null,
-                "posterUrl": null,
-                "preferredProvider": null,
-                "qualityProfileId": null,
-                "rating": 7.5,
-                "releaseDate": "2020-01-01",
-                "runtime": 90,
-                "status": "released",
-                "title": "Parity Movie 01",
-                "tmdbCollectionId": null,
-                "tmdbCollectionName": null,
-                "tmdbId": 1001,
-                "tvdbId": null,
-                "type": "movie",
-                "year": 2020
-              },
-              "mediaId": 1,
-              "mediaType": "movie",
-              "posterUrl": null,
-              "provider": "tmdb",
-              "qualityProfileId": null,
-              "seasons": null,
-              "status": "available",
-              "title": "Parity Movie 01",
-              "tmdbId": 1001,
-              "user": {
-                "avatar": null,
-                "id": 2,
-                "username": "user"
-              },
-              "userId": 2
-            },
-            {
               "approvedBy": null,
               "approvedById": null,
               "declinedReason": null,
@@ -300,6 +232,36 @@
                 "username": "other"
               },
               "userId": 4
+            },
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "externalId": "9004",
+              "fanartUrl": null,
+              "id": 4,
+              "kind": "add",
+              "languageProfileId": 2,
+              "libraryId": 2,
+              "media": null,
+              "mediaId": null,
+              "mediaType": "series",
+              "posterUrl": "/api/images/request/series-9004/poster",
+              "provider": "tmdb",
+              "qualityProfileId": 1,
+              "seasons": [
+                1,
+                2
+              ],
+              "status": "pending",
+              "title": "Seasons Series",
+              "tmdbId": 9004,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
             }
           ],
           "total": 10
@@ -634,6 +596,63 @@
               "userId": 2
             },
             {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "externalId": "9004",
+              "fanartUrl": null,
+              "id": 4,
+              "kind": "add",
+              "languageProfileId": 2,
+              "libraryId": 2,
+              "media": null,
+              "mediaId": null,
+              "mediaType": "series",
+              "posterUrl": "/api/images/request/series-9004/poster",
+              "provider": "tmdb",
+              "qualityProfileId": 1,
+              "seasons": [
+                1,
+                2
+              ],
+              "status": "pending",
+              "title": "Seasons Series",
+              "tmdbId": 9004,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            },
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "externalId": "9001",
+              "fanartUrl": null,
+              "id": 1,
+              "kind": "add",
+              "languageProfileId": null,
+              "libraryId": 1,
+              "media": null,
+              "mediaId": null,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "provider": "tmdb",
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "pending",
+              "title": "Requested Movie",
+              "tmdbId": 9001,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            },
+            {
               "approvedBy": {
                 "avatar": null,
                 "id": 1,
@@ -702,36 +721,6 @@
               "userId": 2
             },
             {
-              "approvedBy": null,
-              "approvedById": null,
-              "declinedReason": null,
-              "externalId": "9004",
-              "fanartUrl": null,
-              "id": 4,
-              "kind": "add",
-              "languageProfileId": 2,
-              "libraryId": 2,
-              "media": null,
-              "mediaId": null,
-              "mediaType": "series",
-              "posterUrl": "/api/images/request/series-9004/poster",
-              "provider": "tmdb",
-              "qualityProfileId": 1,
-              "seasons": [
-                1,
-                2
-              ],
-              "status": "pending",
-              "title": "Seasons Series",
-              "tmdbId": 9004,
-              "user": {
-                "avatar": null,
-                "id": 2,
-                "username": "user"
-              },
-              "userId": 2
-            },
-            {
               "approvedBy": {
                 "avatar": null,
                 "id": 1,
@@ -755,33 +744,6 @@
               "status": "declined",
               "title": "Declined Movie",
               "tmdbId": 9003,
-              "user": {
-                "avatar": null,
-                "id": 2,
-                "username": "user"
-              },
-              "userId": 2
-            },
-            {
-              "approvedBy": null,
-              "approvedById": null,
-              "declinedReason": null,
-              "externalId": "9001",
-              "fanartUrl": null,
-              "id": 1,
-              "kind": "add",
-              "languageProfileId": null,
-              "libraryId": 1,
-              "media": null,
-              "mediaId": null,
-              "mediaType": "movie",
-              "posterUrl": null,
-              "provider": "tmdb",
-              "qualityProfileId": null,
-              "seasons": null,
-              "status": "pending",
-              "title": "Requested Movie",
-              "tmdbId": 9001,
               "user": {
                 "avatar": null,
                 "id": 2,
@@ -1062,6 +1024,90 @@
               "userId": 2
             },
             {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "externalId": "9005",
+              "fanartUrl": null,
+              "id": 5,
+              "kind": "add",
+              "languageProfileId": null,
+              "libraryId": 2,
+              "media": null,
+              "mediaId": null,
+              "mediaType": "series",
+              "posterUrl": null,
+              "provider": "tmdb",
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "pending",
+              "title": "Whole Series",
+              "tmdbId": 9005,
+              "user": {
+                "avatar": "/api/users/4/avatar?v=1767225600000",
+                "id": 4,
+                "username": "other"
+              },
+              "userId": 4
+            },
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "externalId": "9004",
+              "fanartUrl": null,
+              "id": 4,
+              "kind": "add",
+              "languageProfileId": 2,
+              "libraryId": 2,
+              "media": null,
+              "mediaId": null,
+              "mediaType": "series",
+              "posterUrl": "/api/images/request/series-9004/poster",
+              "provider": "tmdb",
+              "qualityProfileId": 1,
+              "seasons": [
+                1,
+                2
+              ],
+              "status": "pending",
+              "title": "Seasons Series",
+              "tmdbId": 9004,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            },
+            {
+              "approvedBy": null,
+              "approvedById": null,
+              "declinedReason": null,
+              "externalId": "9001",
+              "fanartUrl": null,
+              "id": 1,
+              "kind": "add",
+              "languageProfileId": null,
+              "libraryId": 1,
+              "media": null,
+              "mediaId": null,
+              "mediaType": "movie",
+              "posterUrl": null,
+              "provider": "tmdb",
+              "qualityProfileId": null,
+              "seasons": null,
+              "status": "pending",
+              "title": "Requested Movie",
+              "tmdbId": 9001,
+              "user": {
+                "avatar": null,
+                "id": 2,
+                "username": "user"
+              },
+              "userId": 2
+            },
+            {
               "approvedBy": {
                 "avatar": null,
                 "id": 1,
@@ -1130,63 +1176,6 @@
               "userId": 2
             },
             {
-              "approvedBy": null,
-              "approvedById": null,
-              "declinedReason": null,
-              "externalId": "9005",
-              "fanartUrl": null,
-              "id": 5,
-              "kind": "add",
-              "languageProfileId": null,
-              "libraryId": 2,
-              "media": null,
-              "mediaId": null,
-              "mediaType": "series",
-              "posterUrl": null,
-              "provider": "tmdb",
-              "qualityProfileId": null,
-              "seasons": null,
-              "status": "pending",
-              "title": "Whole Series",
-              "tmdbId": 9005,
-              "user": {
-                "avatar": "/api/users/4/avatar?v=1767225600000",
-                "id": 4,
-                "username": "other"
-              },
-              "userId": 4
-            },
-            {
-              "approvedBy": null,
-              "approvedById": null,
-              "declinedReason": null,
-              "externalId": "9004",
-              "fanartUrl": null,
-              "id": 4,
-              "kind": "add",
-              "languageProfileId": 2,
-              "libraryId": 2,
-              "media": null,
-              "mediaId": null,
-              "mediaType": "series",
-              "posterUrl": "/api/images/request/series-9004/poster",
-              "provider": "tmdb",
-              "qualityProfileId": 1,
-              "seasons": [
-                1,
-                2
-              ],
-              "status": "pending",
-              "title": "Seasons Series",
-              "tmdbId": 9004,
-              "user": {
-                "avatar": null,
-                "id": 2,
-                "username": "user"
-              },
-              "userId": 2
-            },
-            {
               "approvedBy": {
                 "avatar": null,
                 "id": 1,
@@ -1210,33 +1199,6 @@
               "status": "declined",
               "title": "Declined Movie",
               "tmdbId": 9003,
-              "user": {
-                "avatar": null,
-                "id": 2,
-                "username": "user"
-              },
-              "userId": 2
-            },
-            {
-              "approvedBy": null,
-              "approvedById": null,
-              "declinedReason": null,
-              "externalId": "9001",
-              "fanartUrl": null,
-              "id": 1,
-              "kind": "add",
-              "languageProfileId": null,
-              "libraryId": 1,
-              "media": null,
-              "mediaId": null,
-              "mediaType": "movie",
-              "posterUrl": null,
-              "provider": "tmdb",
-              "qualityProfileId": null,
-              "seasons": null,
-              "status": "pending",
-              "title": "Requested Movie",
-              "tmdbId": 9001,
               "user": {
                 "avatar": null,
                 "id": 2,
