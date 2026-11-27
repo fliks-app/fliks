@@ -205,8 +205,6 @@ export interface TitleRequestState {
   requestedByMe: boolean;
   /** The active row behind `requested`. */
   requestId: number | null;
-  /** The title's pending add rows, any requester. */
-  pendingRequestIds?: number[];
   wholeSeriesRequested: boolean;
   requestedSeasons: number[];
   profilesLocked: boolean;

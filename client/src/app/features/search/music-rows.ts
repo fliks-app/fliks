@@ -6,7 +6,13 @@ import { artistLine } from '../music/music-utils';
 /** What the glyph of a result says: `+` add, clock asked or searching, ring downloading, alert failed, check owned. */
 export type RowState = 'add' | 'pending' | 'downloading' | 'failed' | 'owned';
 
-export function rowState(h: { state?: HitState | null; requestStatus?: string | null }): RowState {
+/** Another user's in-flight add leaves nothing to ask, except a pending one an approved-at-once add absorbs. */
+export function othersBlock(h: Pick<SearchHit, 'othersRequestStatus'>, auto: boolean): boolean {
+  const s = h.othersRequestStatus;
+  return s === 'approved' || s === 'processing' || (s === 'pending' && !auto);
+}
+
+export function rowState(h: { state?: HitState | null; requestStatus?: string | null }, othersBlocked = false): RowState {
   if (h.state === 'owned' || h.requestStatus === 'available') return 'owned';
   if (h.state === 'downloading') return 'downloading';
   if (h.state === 'wanted') return 'pending';
@@ -19,7 +25,7 @@ export function rowState(h: { state?: HitState | null; requestStatus?: string | 
     case 'failed':
       return 'failed';
     default:
-      return 'add';
+      return othersBlocked ? 'pending' : 'add';
   }
 }
 
@@ -49,6 +55,8 @@ export interface MusicSources {
   albumHits: SearchHit[];
   localArtists: MusicPersonRow[];
   artistHits: ArtistHit[];
+  /** The caller's album request is approved at once. */
+  autoAlbum?: boolean;
 }
 
 export interface MusicItems {
@@ -80,7 +88,7 @@ export function musicItems(s: MusicSources): MusicItems {
   const held = new Set(s.localAlbums.map((m) => m.id));
   for (const h of s.albumHits) {
     if (h.existingMediaId != null && held.has(h.existingMediaId)) continue;
-    albums.push({ key: `a:${h.provider}:${h.externalId}`, kind: 'album', title: h.title, subtitle: albumLine(h), cover: h.posterUrl, durationSeconds: null, state: rowState(h), mediaId: h.existingMediaId, itemId: null, album: h });
+    albums.push({ key: `a:${h.provider}:${h.externalId}`, kind: 'album', title: h.title, subtitle: albumLine(h), cover: h.posterUrl, durationSeconds: null, state: rowState(h, othersBlock(h, !!s.autoAlbum)), mediaId: h.existingMediaId, itemId: null, album: h });
   }
 
   const localIds = new Set(s.localArtists.map((a) => a.id));

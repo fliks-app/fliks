@@ -71,6 +71,9 @@ describe('SearchComponent hits', () => {
     expect(c.hitActions(hit({ existingMediaId: 4 }))).toEqual([]);
     expect(c.hitActions(hit({ requestStatus: 'approved' }))).toEqual([]);
     expect(c.hitActions(hit({ requestStatus: 'pending' }))[0]?.labelKey).toBe('discover.add_to_library');
+    expect(c.hitActions(hit({ othersRequestStatus: 'pending' }))[0]?.labelKey).toBe('discover.add_to_library');
+    expect(c.hitActions(hit({ othersRequestStatus: 'processing' }))).toEqual([]);
+    expect(member.hitActions(hit({ othersRequestStatus: 'pending' }))).toEqual([]);
     TestBed.resetTestingModule();
     expect(setup([]).c.hitActions(hit())).toEqual([]);
   });

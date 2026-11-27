@@ -24,6 +24,8 @@ export interface SearchHit {
   state?: HitState | null;
   /** The status of the caller's newest request for this hit. */
   requestStatus?: FliksRequestStatus | null;
+  /** The newest in-flight whole-title add of another user. */
+  othersRequestStatus?: 'pending' | 'approved' | 'processing' | null;
   /** Video hits only. */
   existingMediaType?: MediaType | null;
   /** Absent on a result of a provider that is not TMDB. */

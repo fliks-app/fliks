@@ -58,7 +58,7 @@ import { RequestsService } from '../../core/services/api/requests.service';
 import { TrackLineComponent } from '../music/track-line.component';
 import { MusicDownloadsService } from '../../core/services/music-downloads.service';
 import { HitStateComponent } from './hit-state/hit-state';
-import { musicItems, topResult, type MusicItem, type MusicItems, type RowState } from './music-rows';
+import { musicItems, othersBlock, topResult, type MusicItem, type MusicItems, type RowState } from './music-rows';
 import { SearchRunner, SOURCES } from './search-runner';
 import { PersonsApiService } from '../../core/services/api/persons-api.service';
 import { canMarkWatched, kindOfListFilter, mediaDetailLink, kindOf } from '../../core/media-kinds';
@@ -429,14 +429,14 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
     if (st.hasQuery()) {
       items = musicItems({
         localTracks: st.localTracks(), recordings: st.recordingHits(), localAlbums: st.localResults().filter((m) => m.type === 'album'),
-        albumHits: st.albumHits(), localArtists: st.localArtists(), artistHits: st.artistHits(),
+        albumHits: st.albumHits(), localArtists: st.localArtists(), artistHits: st.artistHits(), autoAlbum: this.autoAlbum(),
       });
     } else {
       const t = st.musicTrending();
       if (!t) return none;
       items = musicItems({
         localTracks: [], recordings: this.asksTracks() ? t.recordings : [], localAlbums: [],
-        albumHits: this.asksAlbums() ? t.albums : [], localArtists: [], artistHits: this.asksArtists() ? t.artists : [],
+        albumHits: this.asksAlbums() ? t.albums : [], localArtists: [], artistHits: this.asksArtists() ? t.artists : [], autoAlbum: this.autoAlbum(),
       });
     }
     const ov = this.optimistic();
@@ -762,7 +762,7 @@ export class SearchComponent implements OnInit, AfterViewInit, OnDestroy {
   hitActions(row: SearchHit): CardAction[] {
     const auto = this.requestsApi.autoKinds().has(row.mediaType);
     if (!this.canRequest() || row.existingMediaId != null) return [];
-    if (row.requestStatus === 'approved' || row.requestStatus === 'processing' || (row.requestStatus === 'pending' && !auto)) return [];
+    if (row.requestStatus === 'approved' || row.requestStatus === 'processing' || (row.requestStatus === 'pending' && !auto) || othersBlock(row, auto)) return [];
     return [
       {
         labelKey: auto ? 'discover.add_to_library' : 'discover.request',
