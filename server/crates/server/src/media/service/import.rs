@@ -471,7 +471,11 @@ pub async fn import_in(
     profiles: (Option<i32>, Option<i32>),
     (library_id, folder_id): (Option<i32>, Option<i32>),
     added_by: Option<i32>,
-    (seasons, links): (Option<Vec<i32>>, Vec<(Namespace, String)>),
+    (seasons, follow_new_seasons, links): (
+        Option<Vec<i32>>,
+        Option<bool>,
+        Vec<(Namespace, String)>,
+    ),
 ) -> Result<i32, AppError> {
     if matches!(ns, Namespace::TMDB | Namespace::TVDB) && !media_type.is_video() {
         return Err(AppError::bad_request("the provider describes video only"));
@@ -490,7 +494,7 @@ pub async fn import_in(
             user: added_by,
             links,
             seasons,
-            follow_new_seasons: None,
+            follow_new_seasons,
             wants: None,
             prio: Priority::Interactive,
         },

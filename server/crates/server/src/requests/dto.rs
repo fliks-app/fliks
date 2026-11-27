@@ -51,6 +51,24 @@ impl<T: Copy> Field<T> {
     }
 }
 
+/// `monitorNewSeasons`: a boolean or `null`, on a series request only (rule 33).
+fn opt_bool_series(c: &mut Check, series: bool) -> Field<bool> {
+    let f = match c.o.get("monitorNewSeasons") {
+        None => return Field::Absent,
+        Some(Value::Null) => Field::Null,
+        Some(Value::Bool(b)) => Field::Val(*b),
+        Some(_) => {
+            c.err("monitorNewSeasons", "must be a boolean value");
+            return Field::Absent;
+        }
+    };
+    if !series {
+        c.errs
+            .push("monitorNewSeasons applies to a series request".into());
+    }
+    f
+}
+
 /// An optional integer field: absent, `null` or a value.
 fn opt_int(c: &mut Check, key: &str, coerced: bool, min: Option<i32>) -> Field<i32> {
     match c.o.get(key) {
@@ -76,6 +94,7 @@ pub struct CreateRequest {
     pub language_profile_id: Option<i32>,
     pub library_id: Option<i32>,
     pub folder_id: Option<i32>,
+    pub monitor_new_seasons: Option<bool>,
 }
 
 impl CreateRequest {
@@ -84,7 +103,7 @@ impl CreateRequest {
     }
 }
 
-const VIDEO_KEYS: [&str; 11] = [
+const VIDEO_KEYS: [&str; 12] = [
     "mediaType",
     "kind",
     "tmdbId",
@@ -96,6 +115,7 @@ const VIDEO_KEYS: [&str; 11] = [
     "languageProfileId",
     "libraryId",
     "folderId",
+    "monitorNewSeasons",
 ];
 /// A book is an Open Library work asked per edition (`wants`), with no profile of its own.
 const BOOK_KEYS: [&str; 7] = [
@@ -203,6 +223,10 @@ pub fn create_request(known: &Namespaces, v: Value, can_choose: bool) -> Res<Cre
     }
     let library = opt_int(&mut c, "libraryId", true, None);
     let folder = opt_int(&mut c, "folderId", true, None);
+    let follow_new = match book {
+        true => Field::Absent,
+        false => opt_bool_series(&mut c, media_type == Some(MediaKind::Series)),
+    };
     let title = o
         .get("title")
         .and_then(Value::as_str)
@@ -223,6 +247,7 @@ pub fn create_request(known: &Namespaces, v: Value, can_choose: bool) -> Res<Cre
         language_profile_id: language.value(),
         library_id: library.value(),
         folder_id: folder.value(),
+        monitor_new_seasons: follow_new.value().filter(|_| !delete),
     })
 }
 
@@ -371,8 +396,10 @@ pub struct UpdateRequest {
     pub language_profile_id: Field<i32>,
     pub library_id: Field<i32>,
     pub wants: Option<Vec<WantSpec>>,
+    pub monitor_new_seasons: Field<bool>,
 }
 
+/// The kind of the row decides where `monitorNewSeasons` is allowed, so the flow checks it.
 pub fn update_request(v: Value) -> Res<UpdateRequest> {
     let o = object(v);
     let mut c = Check::new(
@@ -382,6 +409,7 @@ pub fn update_request(v: Value) -> Res<UpdateRequest> {
             "languageProfileId",
             "libraryId",
             "wants",
+            "monitorNewSeasons",
         ],
         "",
     );
@@ -399,14 +427,33 @@ pub fn update_request(v: Value) -> Res<UpdateRequest> {
         quality_profile_id: opt_int(&mut c, "qualityProfileId", true, None),
         language_profile_id: opt_int(&mut c, "languageProfileId", true, None),
         library_id: opt_int(&mut c, "libraryId", true, None),
+        monitor_new_seasons: opt_bool_series(&mut c, true),
     };
     c.finish(u)
 }
 
-/// `wholeAlbum` of an approval: widens a track request to the whole album.
-pub fn approve(v: Value) -> Res<bool> {
+/// An approval's body: `wholeAlbum` widens a track request to the whole album, the rest edits the row (rule 23).
+#[derive(Default)]
+pub struct Approve {
+    pub whole: bool,
+    pub edits: super::db::Edits,
+}
+
+/// The row's kind decides where `monitorNewSeasons` and the profiles are allowed, so the flow checks it.
+pub fn approve(v: Value) -> Res<Approve> {
     let o = object(v);
-    let mut c = Check::new(&o, &["wholeAlbum"], "");
+    let mut c = Check::new(
+        &o,
+        &[
+            "wholeAlbum",
+            "qualityProfileId",
+            "languageProfileId",
+            "libraryId",
+            "folderId",
+            "monitorNewSeasons",
+        ],
+        "",
+    );
     let whole = match c.get("wholeAlbum") {
         None => false,
         Some(Value::Bool(b)) => *b,
@@ -415,7 +462,14 @@ pub fn approve(v: Value) -> Res<bool> {
             false
         }
     };
-    c.finish(whole)
+    let edits = super::db::Edits {
+        quality_profile_id: opt_int(&mut c, "qualityProfileId", true, Some(1)).value(),
+        language_profile_id: opt_int(&mut c, "languageProfileId", true, Some(1)).value(),
+        library_id: opt_int(&mut c, "libraryId", true, Some(1)).value(),
+        folder_id: opt_int(&mut c, "folderId", true, Some(1)).value(),
+        monitor_new_seasons: opt_bool_series(&mut c, true).value(),
+    };
+    c.finish(Approve { whole, edits })
 }
 
 /// `reason` of a decline: `@IsOptional @IsString @MaxLength(2000)`.

@@ -36,6 +36,8 @@ pub struct Req {
     pub wants: Option<Json<Vec<WantSpec>>>,
     /// The recording ids an album request is scoped to; `None` is the whole album.
     pub recordings: Option<Vec<String>>,
+    /// The requester's "follow new seasons" choice; `None` derives it (rule 33).
+    pub monitor_new_seasons: Option<bool>,
 }
 
 /// `Req` as the database returns it, before `media_type` is decoded.
@@ -56,6 +58,7 @@ struct RawReq {
     media_id: Option<i32>,
     wants: Option<Json<Vec<WantSpec>>>,
     recordings: Option<Vec<String>>,
+    monitor_new_seasons: Option<bool>,
 }
 
 impl TryFrom<RawReq> for Req {
@@ -81,6 +84,7 @@ impl TryFrom<RawReq> for Req {
             media_id: r.media_id,
             wants: r.wants,
             recordings: r.recordings,
+            monitor_new_seasons: r.monitor_new_seasons,
         })
     }
 }
@@ -110,7 +114,7 @@ pub async fn find(db: impl PgExecutor<'_>, id: i32) -> sqlx::Result<Option<Req>>
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
-        wants AS "wants: Json<Vec<WantSpec>>", recordings
+        wants AS "wants: Json<Vec<WantSpec>>", recordings, "monitorNewSeasons" AS monitor_new_seasons
         FROM requests WHERE id = $1"#,
         id
     )
@@ -128,7 +132,7 @@ pub async fn active_adds(db: impl PgExecutor<'_>, t: &TitleKey) -> sqlx::Result<
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
-        wants AS "wants: Json<Vec<WantSpec>>", recordings
+        wants AS "wants: Json<Vec<WantSpec>>", recordings, "monitorNewSeasons" AS monitor_new_seasons
         FROM requests
         WHERE "mediaType" = $1 AND provider = $2 AND "externalId" = $3 AND kind = 'add'
         AND "namespaceGeneration" IS NOT DISTINCT FROM
@@ -458,15 +462,16 @@ pub struct New<'a> {
     pub fanart_url: Option<&'a str>,
     pub wants: Option<&'a [WantSpec]>,
     pub recordings: Option<&'a [String]>,
+    pub monitor_new_seasons: Option<bool>,
 }
 
 pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
     sqlx::query_scalar!(
         r#"INSERT INTO requests ("userId", kind, "mediaType", provider, "externalId", title, seasons, status,
         "approvedById", "qualityProfileId", "languageProfileId", "libraryId", "folderId", "mediaId", "posterUrl", "fanartUrl", wants,
-        recordings, "namespaceGeneration")
+        recordings, "monitorNewSeasons", "namespaceGeneration")
         VALUES ($1, $2::text::requests_kind_enum, $3, $4, $5, $6, $7,
-        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+        $8::text::requests_status_enum, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
         (SELECT generation FROM provider_namespaces WHERE name = $4)) RETURNING id"#,
         n.user_id,
         n.kind,
@@ -485,7 +490,8 @@ pub async fn insert(db: impl PgExecutor<'_>, n: New<'_>) -> sqlx::Result<i32> {
         n.poster_url,
         n.fanart_url,
         n.wants.map(|w| Json(w.to_vec())) as Option<Json<Vec<WantSpec>>>,
-        n.recordings
+        n.recordings,
+        n.monitor_new_seasons
     )
     .fetch_one(db)
     .await
@@ -571,20 +577,25 @@ pub async fn patch(
     quality: Option<Option<i32>>,
     language: Option<Option<i32>>,
     library: Option<Option<i32>>,
+    monitor_new_seasons: Option<Option<bool>>,
 ) -> sqlx::Result<bool> {
     Ok(sqlx::query!(
         r#"UPDATE requests SET
         "qualityProfileId" = CASE WHEN $2 THEN $3 ELSE "qualityProfileId" END,
         "languageProfileId" = CASE WHEN $4 THEN $5 ELSE "languageProfileId" END,
         "libraryId" = CASE WHEN $6 THEN $7 ELSE "libraryId" END,
-        "folderId" = CASE WHEN $6 THEN NULL ELSE "folderId" END WHERE id = $1 AND status = 'pending'"#,
+        "folderId" = CASE WHEN $6 THEN NULL ELSE "folderId" END,
+        "monitorNewSeasons" = CASE WHEN $8 THEN $9 ELSE "monitorNewSeasons" END
+        WHERE id = $1 AND status = 'pending'"#,
         id,
         quality.is_some(),
         quality.flatten(),
         language.is_some(),
         language.flatten(),
         library.is_some(),
-        library.flatten()
+        library.flatten(),
+        monitor_new_seasons.is_some(),
+        monitor_new_seasons.flatten()
     )
     .execute(db)
     .await?
@@ -716,6 +727,63 @@ pub async fn claim_approval(
     Ok(r.rows_affected() == 1)
 }
 
+/// What an approval changes on the row it claims (rule 23 step 6); `None` leaves a column.
+#[derive(Debug, Clone, Default)]
+pub struct Edits {
+    pub quality_profile_id: Option<i32>,
+    pub language_profile_id: Option<i32>,
+    /// Resets the folder unless `folder_id` is set too.
+    pub library_id: Option<i32>,
+    pub folder_id: Option<i32>,
+    pub monitor_new_seasons: Option<bool>,
+}
+
+/// `claim_approval` of an ADD row with the approver's edits; false when it is not pending.
+pub async fn claim_edited(
+    db: impl PgExecutor<'_>,
+    id: i32,
+    by: i32,
+    e: &Edits,
+) -> sqlx::Result<bool> {
+    let r = sqlx::query!(
+        r#"UPDATE requests SET status = 'approved', "approvedById" = $2, "declinedReason" = NULL,
+        "qualityProfileId" = COALESCE($3, "qualityProfileId"),
+        "languageProfileId" = COALESCE($4, "languageProfileId"),
+        "libraryId" = COALESCE($5, "libraryId"),
+        "folderId" = CASE WHEN $6::int IS NOT NULL THEN $6 WHEN $5::int IS NOT NULL THEN NULL ELSE "folderId" END,
+        "monitorNewSeasons" = COALESCE($7, "monitorNewSeasons")
+        WHERE id = $1 AND status = 'pending'"#,
+        id,
+        by,
+        e.quality_profile_id,
+        e.language_profile_id,
+        e.library_id,
+        e.folder_id,
+        e.monitor_new_seasons
+    )
+    .execute(db)
+    .await?;
+    Ok(r.rows_affected() == 1)
+}
+
+/// Rule 12b: a series' profiles, set on its pending rows.
+pub async fn set_pending_profiles(
+    db: impl PgExecutor<'_>,
+    ids: &[i32],
+    (quality, language): (Option<i32>, Option<i32>),
+) -> sqlx::Result<()> {
+    sqlx::query!(
+        r#"UPDATE requests SET "qualityProfileId" = COALESCE($2, "qualityProfileId"),
+        "languageProfileId" = COALESCE($3, "languageProfileId") WHERE id = ANY($1) AND status = 'pending'"#,
+        ids,
+        quality,
+        language
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// Gives back the approval `by` claimed, unless the row moved on since.
 pub async fn rollback_to_pending(db: &PgPool, id: i32, by: i32) -> sqlx::Result<()> {
     sqlx::query!(
@@ -772,7 +840,7 @@ pub async fn in_flight_for_media(db: &PgPool, media_id: i32) -> sqlx::Result<Vec
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
-        wants AS "wants: Json<Vec<WantSpec>>", recordings
+        wants AS "wants: Json<Vec<WantSpec>>", recordings, "monitorNewSeasons" AS monitor_new_seasons
         FROM requests r WHERE status::text = ANY($2) AND (EXISTS (SELECT 1 FROM media_external_ids e
           WHERE e."mediaId" = $1 AND e.kind = r."mediaType" AND e.provider = r.provider
           AND e.value = r."externalId")
@@ -802,7 +870,7 @@ pub async fn linked(
         provider, "externalId" AS external_id, title, status::text AS "status!", seasons AS "seasons: Json<Vec<i64>>",
         "qualityProfileId" AS quality_profile_id, "languageProfileId" AS language_profile_id,
         "libraryId" AS library_id, "folderId" AS folder_id, "mediaId" AS media_id,
-        wants AS "wants: Json<Vec<WantSpec>>", recordings
+        wants AS "wants: Json<Vec<WantSpec>>", recordings, "monitorNewSeasons" AS monitor_new_seasons
         FROM requests WHERE "mediaId" = $1 AND ($2::text IS NULL OR kind::text = $2)
         AND status::text = ANY($3) ORDER BY id"#,
         media_id,
@@ -948,11 +1016,22 @@ pub async fn monitored_seasons(db: &PgPool, media_id: i32, season: i64) -> sqlx:
     Ok(nums.into_iter().map(i64::from).collect())
 }
 
+/// The regular season numbers of a library series.
+pub async fn regular_seasons(db: &PgPool, media_id: i32) -> sqlx::Result<Vec<i64>> {
+    sqlx::query_scalar(
+        r#"SELECT "number"::bigint FROM item_groups WHERE "mediaId" = $1 AND "number" > 0 ORDER BY 1"#,
+    )
+    .bind(media_id)
+    .fetch_all(db)
+    .await
+}
+
 /// Whole media monitored; a series gets its seasons and its new-seasons policy instead (`applyMonitoredForRequestScope`).
 pub async fn monitor_scope(
     db: &PgPool,
     media_id: i32,
     seasons: Option<&[i64]>,
+    follow_new: Option<bool>,
 ) -> sqlx::Result<()> {
     let mut tx = db.begin().await?;
     let kind = sqlx::query_scalar!(
@@ -994,7 +1073,8 @@ pub async fn monitor_scope(
     )
     .execute(&mut *tx)
     .await?;
-    if scope.is_none() || latest.is_none_or(|l| nums.contains(&l)) {
+    let derived = scope.is_none() || latest.is_none_or(|l| nums.contains(&l));
+    if follow_new.unwrap_or(derived) {
         sqlx::query!(
             r#"UPDATE media SET "monitorNewSeasons" = true WHERE id = $1 AND NOT "monitorNewSeasons""#,
             media_id
@@ -1110,6 +1190,8 @@ pub async fn rows(
   'mediaId', r."mediaId", 'seasons', r.seasons, 'posterUrl', r."posterUrl", 'fanartUrl', r."fanartUrl"
 ) || jsonb_build_object('provider', r.provider, 'externalId', r."externalId")
 || CASE WHEN r."mediaType" = 'book' THEN jsonb_build_object('wants', r.wants) ELSE '{}'::jsonb END
+|| CASE WHEN r."mediaType" = 'series' THEN
+  jsonb_build_object('monitorNewSeasons', r."monitorNewSeasons") ELSE '{}'::jsonb END
 || CASE WHEN r."mediaType" = 'album' THEN
   jsonb_build_object('recordings', r.recordings, 'trackCount', r."trackCount") ELSE '{}'::jsonb END AS "json!: Value"
 FROM requests r

@@ -43,6 +43,25 @@ pub fn can_manage(a: &Authed) -> bool {
     a.perms.can(Action::Manage, &Subject::FliksRequest)
 }
 
+/// `media.create`: an adder, whose every create is approved (rule 29).
+pub fn is_adder(a: &Authed) -> bool {
+    a.perms.can(Action::Create, &Subject::Media)
+}
+
+/// Rule 11: who picks the profiles of a request.
+pub fn can_choose(a: &Authed) -> bool {
+    can_manage(a) || is_adder(a)
+}
+
+/// Rule 13: the limit of a kind, 0 for unlimited; an adder has no quota.
+fn quota_limit(a: &Authed, kind: MediaKind) -> i32 {
+    if is_adder(a) {
+        0
+    } else {
+        a.user.quotas.limit(kind)
+    }
+}
+
 /// Every library is reachable: an admin or `manage:all`.
 pub fn is_super(a: &Authed) -> bool {
     a.perms.can(Action::Manage, &Subject::All)
@@ -156,7 +175,7 @@ fn quota_period(a: &Authed) -> i32 {
 /// Rule 13: the ADD requests of the window still pending or approved count against the limit; the
 /// caller holds the user's quota lock, so the count is still true at the insert.
 async fn check_quota(tx: &mut PgConnection, a: &Authed, media_type: MediaKind) -> Res<()> {
-    let limit = a.user.quotas.limit(media_type);
+    let limit = quota_limit(a, media_type);
     if limit == 0 {
         return Ok(());
     }
@@ -191,7 +210,7 @@ pub async fn allowance(st: &AppState, a: &Authed) -> Res<Value> {
     let since = Utc::now() - chrono::Duration::days(i64::from(period));
     let mut out = Map::new();
     for kind in MediaKind::ALL {
-        let limit = a.user.quotas.limit(kind);
+        let limit = quota_limit(a, kind);
         if limit == 0 {
             continue;
         }
@@ -357,13 +376,16 @@ fn want_label(w: &WantSpec) -> String {
 
 type Profiles = (Option<i32>, Option<i32>);
 
-/// Rule 12b: the profiles of the earliest active request, else of the library row.
+/// Rule 12b: the profiles of the earliest active request, else of the library row; `decided` skips the
+/// pending rows, whose profiles an auto-approved create decides (rule 12c).
 async fn existing_series_profiles(
     conn: &mut PgConnection,
     key: &TitleKey,
     keys: &[TitleKey],
+    decided: bool,
 ) -> Res<Option<Profiles>> {
-    if let Some(r) = db::active_adds_of(&mut *conn, keys).await?.first() {
+    let active = db::active_adds_of(&mut *conn, keys).await?;
+    if let Some(r) = active.iter().find(|r| !decided || r.status != "pending") {
         return Ok(Some((r.quality_profile_id, r.language_profile_id)));
     }
     // a title held twice has no single library row to lock the profiles to
@@ -387,7 +409,7 @@ pub async fn title_state(st: &AppState, a: &Authed, key: &TitleKey) -> Res<Value
     seasons.sort_unstable();
     seasons.dedup();
     let locked = if series {
-        existing_series_profiles(&mut conn, key, &keys).await?
+        existing_series_profiles(&mut conn, key, &keys, false).await?
     } else {
         None
     };
@@ -507,7 +529,7 @@ pub async fn ensure_media(
         .seasons
         .as_deref()
         .filter(|_| spec.title.media_type.has_seasons());
-    db::monitor_scope(&st.db, media_id, seasons).await?;
+    db::monitor_scope(&st.db, media_id, seasons, spec.monitor_new_seasons).await?;
     if spec.title.media_type == MediaKind::Album {
         let held = !created;
         let wanted = match spec.recordings.as_deref() {
@@ -689,11 +711,190 @@ async fn finish_create(st: AppState, n: Added, spec: Option<ImportSpec>) -> Res<
     Ok(media_id)
 }
 
+/// The part of an asked scope a create inserts: seasons, wants or recordings.
+#[derive(Debug, Clone)]
+struct Scope {
+    seasons: Option<Vec<i64>>,
+    wants: Option<Vec<WantSpec>>,
+    recordings: Option<Vec<String>>,
+}
+
+/// Rule 12c: the active rows the guard clashes with, and the asked scope none of them holds (`None`: nothing left).
+fn split(
+    dto: &CreateRequest,
+    existing: &[db::Req],
+    all_seasons: Option<&[i64]>,
+) -> (Vec<db::Req>, Option<Scope>) {
+    let asked = Scope {
+        seasons: dto.seasons.clone(),
+        wants: dto.wants.clone(),
+        recordings: dto.recordings.clone(),
+    };
+    let keep = |f: &dyn Fn(&db::Req) -> bool| -> Vec<db::Req> {
+        existing.iter().filter(|e| f(e)).cloned().collect()
+    };
+    if dto.media_type == MediaKind::Album {
+        let Some(asked_tracks) = &dto.recordings else {
+            let wants = dto.wants.as_deref().unwrap_or_default();
+            let clashing = keep(&|e| {
+                e.recordings.is_none()
+                    && !overlapping_wants(std::slice::from_ref(e), wants).is_empty()
+            });
+            let rest = clashing.is_empty().then_some(asked);
+            return (clashing, rest);
+        };
+        let clashing = keep(&|e| {
+            e.recordings
+                .as_ref()
+                .is_none_or(|t| t.iter().any(|x| asked_tracks.contains(x)))
+        });
+        let held: Vec<&String> = clashing
+            .iter()
+            .flat_map(|e| e.recordings.iter().flatten())
+            .collect();
+        let left: Vec<String> = asked_tracks
+            .iter()
+            .filter(|x| !held.contains(x))
+            .cloned()
+            .collect();
+        let whole = clashing.iter().any(|e| e.recordings.is_none());
+        let rest = (!whole && !left.is_empty()).then(|| Scope {
+            recordings: Some(left),
+            ..asked
+        });
+        return (clashing, rest);
+    }
+    if let Some(wants) = &dto.wants {
+        let clashing = keep(&|e| !overlapping_wants(std::slice::from_ref(e), wants).is_empty());
+        let left: Vec<WantSpec> = wants
+            .iter()
+            .filter(|w| overlapping_wants(&clashing, std::slice::from_ref(w)).is_empty())
+            .cloned()
+            .collect();
+        let rest = (!left.is_empty()).then(|| Scope {
+            wants: Some(left),
+            ..asked
+        });
+        return (clashing, rest);
+    }
+    if !dto.media_type.has_seasons() {
+        return (existing.to_vec(), None);
+    }
+    let wanted = dto.seasons.as_deref().filter(|s| !s.is_empty());
+    let clashing = keep(&|e| match (wanted, e.scope()) {
+        (Some(w), Some(s)) => s.iter().any(|n| w.contains(n)),
+        _ => true,
+    });
+    if clashing.iter().any(|e| e.scope().is_none()) {
+        return (clashing, None);
+    }
+    let held: Vec<i64> = clashing
+        .iter()
+        .flat_map(|e| e.scope().unwrap_or_default().to_vec())
+        .collect();
+    let left: Vec<i64> = wanted
+        .or(all_seasons)
+        .unwrap_or_default()
+        .iter()
+        .filter(|n| !held.contains(n))
+        .copied()
+        .collect();
+    let rest = (!left.is_empty()).then(|| Scope {
+        seasons: Some(left),
+        ..asked
+    });
+    (clashing, rest)
+}
+
+/// The regular seasons of a series asked whole that may absorb requests of some seasons (rule 12c):
+/// the library's, else the provider's count. Read before any lock, only when such a request exists.
+async fn series_seasons(
+    st: &AppState,
+    dto: &CreateRequest,
+    keys: &[TitleKey],
+    candidates: &rules::Candidates,
+) -> Res<Option<Vec<i64>>> {
+    if !dto.media_type.has_seasons()
+        || dto.seasons.as_deref().is_some_and(|s| !s.is_empty())
+        || !candidates.may_approve()
+        || db::active_adds_of(&mut *st.db.acquire().await?, keys)
+            .await?
+            .iter()
+            .all(|r| r.scope().is_none())
+    {
+        return Ok(None);
+    }
+    if let Some(m) = db::media_by_ref(&st.db, &dto.key).await? {
+        let held = db::regular_seasons(&st.db, m.id).await?;
+        if !held.is_empty() {
+            return Ok(Some(held));
+        }
+    }
+    Ok(services::title_facts(st, &dto.key)
+        .await
+        .ok()
+        .and_then(|f| f.season_count)
+        .map(|n| (1..=i64::from(n)).collect()))
+}
+
+/// An absorbed book or album row's wants take the profile of the asked want they overlap (rule 12c).
+fn reprofiled(row: &db::Req, asked: &[WantSpec]) -> Option<Vec<WantSpec>> {
+    let mut wants = row.wants.as_ref()?.0.clone();
+    for w in &mut wants {
+        if let Some(a) = asked.iter().find(|a| overlaps(a, w)) {
+            w.quality_profile_id = a.quality_profile_id;
+        }
+    }
+    Some(wants)
+}
+
+/// What a create leaves to run once its transaction is committed.
+struct After {
+    absorbed: Vec<i32>,
+    /// The caller's in-flight album row and its media, wanting the new tracks (rule 52).
+    grown: Option<(i32, i32, Vec<String>)>,
+    added: Option<(Added, Option<ImportSpec>)>,
+}
+
+/// Rules 12c, 14 and 52 after the commit: the absorbed approvals, the grown album row, the new row.
+/// Every part runs; the first error is answered. Answers the media of the response row.
+async fn after_create(st: AppState, by: i32, after: After) -> Res<Option<i32>> {
+    let mut first: Option<AppError> = None;
+    let mut media = None;
+    if let Some((row, album, tracks)) = after.grown {
+        match want_tracks(&st, album, &tracks, true).await {
+            Ok(()) => db::add_recordings(&st.db, row, &tracks).await?,
+            Err(e) => first = Some(e),
+        }
+        media = Some(album);
+    }
+    for id in &after.absorbed {
+        let Some(row) = db::find(&st.db, *id).await? else {
+            continue;
+        };
+        match finish_approve(&st, by, row, false).await {
+            Ok(m) => media = media.or(m),
+            Err(e) => first = first.or(Some(e)),
+        }
+    }
+    if let Some((added, spec)) = after.added {
+        match finish_create(st.clone(), added, spec).await {
+            Ok(m) => media = m,
+            Err(e) => first = first.or(Some(e)),
+        }
+    }
+    match first {
+        Some(e) => Err(e),
+        None => Ok(media),
+    }
+}
+
 pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Value> {
     if dto.delete {
         return create_delete(st, a, &dto).await;
     }
-    if !can_manage(a) {
+    let chooser = can_choose(a);
+    if !chooser {
         dto.quality_profile_id = None;
         dto.language_profile_id = None;
     }
@@ -710,7 +911,8 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     let keys = db::title_keys(&mut *st.db.acquire().await?, &key).await?;
     // network first: no lock, no connection held while TMDB answers
     let candidates = rules::candidates(st, a, &dto).await?;
-    let limited = a.user.quotas.limit(dto.media_type) != 0;
+    let all_seasons = series_seasons(st, &dto, &keys, &candidates).await?;
+    let limited = quota_limit(a, dto.media_type) != 0;
     // waiters queue here without a connection, so the lock holder can always get the ones it needs
     let turn = match limited {
         true => Some(QUOTA_TURNS.lock(a.user.id).await),
@@ -737,7 +939,12 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     db::lock_titles(&mut tx, &keys)
         .await
         .map_err(|e| lock_err(e, true))?;
-    assert_no_active_duplicate(&mut tx, &dto, &keys).await?;
+    // an auto-approved create absorbs what the guard clashes with (rule 12c), known at step 6
+    let clash = match assert_no_active_duplicate(&mut tx, &dto, &keys).await {
+        Ok(()) => None,
+        Err(e) if e.status() == StatusCode::CONFLICT && candidates.may_approve() => Some(e),
+        Err(e) => return Err(e),
+    };
     if let Some(l) = dto.library_id {
         assert_can_use_library(st, a, l).await?;
         assert_exist(st, None, None, Some(l)).await?;
@@ -755,8 +962,10 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
     if let Some(f) = dto.folder_id {
         crate::libraries::assert_folder_in_library(&mut *tx, library_id, f).await?;
     }
+    let auto = candidates.approves(a, &dto, library_id);
+    let decides = auto && chooser;
     if dto.media_type.has_seasons()
-        && let Some((q, l)) = existing_series_profiles(&mut tx, &key, &keys).await?
+        && let Some((q, l)) = existing_series_profiles(&mut tx, &key, &keys, decides).await?
     {
         dto.quality_profile_id = q.or(dto.quality_profile_id);
         dto.language_profile_id = l.or(dto.language_profile_id);
@@ -779,95 +988,214 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
         assert_tracks_unclaimed(st, &key, r).await?;
     }
 
-    let own = match dto.media_type {
-        MediaKind::Album => db::active_adds_of(&mut tx, &keys)
+    let asked_wants = dto.wants.clone().unwrap_or_default();
+    let mut absorbed: Vec<db::Req> = vec![];
+    let mut insert = true;
+    if let Some(e) = clash {
+        if !auto {
+            return Err(e);
+        }
+        let active = db::active_adds_of(&mut tx, &keys).await?;
+        let (clashing, rest) = split(&dto, &active, all_seasons.as_deref());
+        absorbed = clashing
+            .into_iter()
+            .filter(|r| r.status == "pending")
+            .collect();
+        match rest {
+            Some(r) => {
+                dto.seasons = r.seasons;
+                dto.wants = r.wants;
+                dto.recordings = r.recordings;
+            }
+            None if absorbed.is_empty() => return Err(e),
+            None => insert = false,
+        }
+    }
+
+    // The caller's own album request grows instead of a second row (rule 52).
+    let mine = match dto.media_type {
+        MediaKind::Album if insert => db::active_adds_of(&mut tx, &keys)
             .await?
             .into_iter()
-            .find(|r| r.user_id == a.user.id && r.status == "pending"),
+            .filter(|r| r.user_id == a.user.id)
+            .collect(),
+        _ => vec![],
+    };
+    let own = mine.iter().find(|r| r.status == "pending").cloned();
+    let grown = match &own {
+        None if auto => mine
+            .iter()
+            .find(|r| {
+                r.recordings.is_some()
+                    && dto.recordings.is_some()
+                    && r.media_id.is_some()
+                    && matches!(r.status.as_str(), "approved" | "processing")
+            })
+            .cloned(),
         _ => None,
     };
-    if own.is_none() && skipped_quota {
+    if let Some(row) = own.as_ref().or(grown.as_ref()) {
+        let wants_of = |w: &Option<Vec<WantSpec>>| serde_json::to_value(w).ok();
+        if dto.library_id.is_some_and(|l| row.library_id != Some(l))
+            || dto.wants.is_some()
+                && wants_of(&dto.wants) != wants_of(&row.wants.as_ref().map(|w| w.0.clone()))
+        {
+            return Err(AppError::conflict(
+                "A pending request for this album already exists with another library or wants",
+            ));
+        }
+    }
+    if own.is_none() && skipped_quota && grown.is_none() {
         check_quota(&mut tx, a, dto.media_type).await?;
     }
-    let auto = candidates.approves(a, &dto, library_id);
-    let merged = own.is_some();
-    let id = match own {
-        // The caller's pending album request grows instead of a second row.
-        Some(own) => {
-            let wants_of = |w: &Option<Vec<WantSpec>>| serde_json::to_value(w).ok();
-            if dto.library_id.is_some_and(|l| own.library_id != Some(l))
-                || dto.wants.is_some()
-                    && wants_of(&dto.wants) != wants_of(&own.wants.as_ref().map(|w| w.0.clone()))
-            {
-                return Err(AppError::conflict(
-                    "A pending request for this album already exists with another library or wants",
-                ));
-            }
-            match (&dto.recordings, &own.recordings) {
-                (Some(r), Some(_)) => db::add_recordings(&mut *tx, own.id, r).await?,
-                (None, Some(_)) => db::widen(&mut *tx, own.id).await?,
-                _ => {}
-            }
-            own.id
+    if let Some(own) = &own {
+        match (&dto.recordings, &own.recordings) {
+            (Some(r), Some(_)) => db::add_recordings(&mut *tx, own.id, r).await?,
+            (None, Some(_)) => db::widen(&mut *tx, own.id).await?,
+            _ => {}
         }
-        None => db::insert(
-            &mut *tx,
-            db::New {
-                user_id: a.user.id,
-                kind: "add",
-                title_key: &key,
-                title: &dto.title,
-                seasons: dto.seasons.as_deref(),
-                status: if auto { "approved" } else { "pending" },
-                approved_by: auto.then_some(a.user.id),
-                quality_profile_id: quality,
-                language_profile_id: language,
-                library_id: Some(library_id),
-                folder_id: dto.folder_id,
-                media_id: None,
-                poster_url: None,
-                fanart_url: None,
-                wants: dto.wants.as_deref(),
-                recordings: dto.recordings.as_deref(),
-            },
-        )
-        .await
-        .map_err(|e| lock_err(e, false))?,
+        insert = false;
+        if auto && !absorbed.iter().any(|r| r.id == own.id) {
+            absorbed.push(own.clone());
+        }
+    }
+    let grown = match grown {
+        Some(row) => {
+            insert = false;
+            Some((
+                row.id,
+                row.media_id.unwrap_or_default(),
+                dto.recordings.clone().unwrap_or_default(),
+            ))
+        }
+        None => None,
+    };
+
+    if decides && dto.media_type.has_seasons() {
+        let pending: Vec<i32> = db::active_adds_of(&mut tx, &keys)
+            .await?
+            .iter()
+            .filter(|r| r.status == "pending")
+            .map(|r| r.id)
+            .collect();
+        db::set_pending_profiles(&mut *tx, &pending, (quality, language)).await?;
+    }
+    let edits = db::Edits {
+        quality_profile_id: quality.filter(|_| decides && !super::is_work(dto.media_type)),
+        language_profile_id: language.filter(|_| decides && !super::is_work(dto.media_type)),
+        library_id: Some(library_id),
+        folder_id: dto.folder_id,
+        monitor_new_seasons: dto.monitor_new_seasons,
+    };
+    absorbed.sort_by_key(|r| r.id);
+    let mut claimed = vec![];
+    for row in &absorbed {
+        if decides && let Some(w) = reprofiled(row, &asked_wants) {
+            db::set_wants(&mut tx, row.id, &w).await?;
+        }
+        // a decline does not take the title lock: a row it took meanwhile is left alone
+        if db::claim_edited(&mut *tx, row.id, a.user.id, &edits).await? {
+            claimed.push(row.id);
+        }
+    }
+    let id = match insert {
+        true => Some(
+            db::insert(
+                &mut *tx,
+                db::New {
+                    user_id: a.user.id,
+                    kind: "add",
+                    title_key: &key,
+                    title: &dto.title,
+                    seasons: dto.seasons.as_deref(),
+                    status: if auto { "approved" } else { "pending" },
+                    approved_by: auto.then_some(a.user.id),
+                    quality_profile_id: quality,
+                    language_profile_id: language,
+                    library_id: Some(library_id),
+                    folder_id: dto.folder_id,
+                    media_id: None,
+                    poster_url: None,
+                    fanart_url: None,
+                    wants: dto.wants.as_deref(),
+                    recordings: dto.recordings.as_deref(),
+                    monitor_new_seasons: dto.monitor_new_seasons,
+                },
+            )
+            .await
+            .map_err(|e| lock_err(e, false))?,
+        ),
+        false => None,
     };
     tx.commit().await?;
     drop(turn);
-    if dto.recordings.is_some() && !merged {
+    if let Some(id) = id
+        && dto.recordings.is_some()
+    {
         remember_track_count(st, id, &key, library_id).await;
     }
+    if !claimed.is_empty() {
+        services::announce(st, &claimed).await;
+    }
 
-    let spec = (auto && !merged).then(|| ImportSpec {
-        title: key.clone(),
-        quality_profile_id: dto.quality_profile_id,
-        language_profile_id: dto.language_profile_id,
-        library_id: Some(library_id),
-        folder_id: dto.folder_id,
-        seasons: dto.seasons.clone(),
-        wants: dto.wants.clone(),
-        recordings: dto.recordings.clone(),
+    let added = id.map(|id| {
+        let spec = auto.then(|| ImportSpec {
+            title: key.clone(),
+            quality_profile_id: dto.quality_profile_id,
+            language_profile_id: dto.language_profile_id,
+            library_id: Some(library_id),
+            folder_id: dto.folder_id,
+            seasons: dto.seasons.clone(),
+            wants: dto.wants.clone(),
+            recordings: dto.recordings.clone(),
+            monitor_new_seasons: dto.monitor_new_seasons,
+        });
+        let added = Added {
+            id,
+            user: a.user.id,
+            key: key.clone(),
+            title: dto.title.clone(),
+            seasons: dto.seasons.clone(),
+        };
+        (added, spec)
     });
-    let added = Added {
-        id,
-        user: a.user.id,
-        key: key.clone(),
-        title: dto.title.clone(),
-        seasons: dto.seasons.clone(),
+    // the caller's merged pending album row stays pending unless the create is approved
+    let merged = own.as_ref().filter(|_| !auto).map(|r| r.id);
+    let shown = id
+        .or(grown.as_ref().map(|g| g.0))
+        .or(merged)
+        .or(claimed.first().copied())
+        .ok_or_else(|| AppError::conflict("Request is not pending"))?;
+    let after = After {
+        absorbed: claimed.clone(),
+        grown,
+        added,
     };
-    let media_id = if merged {
+    let media_id = if after.added.is_none() && after.absorbed.is_empty() && after.grown.is_none() {
         None
     } else {
-        settled(tokio::spawn(finish_create(st.clone(), added, spec))).await?
+        settled(tokio::spawn(after_create(st.clone(), a.user.id, after))).await?
     };
 
-    let art = art_wait(st, id, key).await;
-    let mut row = row_json(st, id).await?;
-    put(&mut row, "qualityProfile", id_obj(quality));
-    put(&mut row, "languageProfile", id_obj(language));
-    put(&mut row, "library", id_obj(Some(library_id)));
+    let art = match id {
+        Some(id) => art_wait(st, id, key, !auto).await,
+        None => None,
+    };
+    let row_of = db::find(&st.db, shown)
+        .await?
+        .ok_or_else(|| not_found(shown))?;
+    let mut row = row_json(st, shown).await?;
+    put(
+        &mut row,
+        "qualityProfile",
+        id_obj(row_of.quality_profile_id),
+    );
+    put(
+        &mut row,
+        "languageProfile",
+        id_obj(row_of.language_profile_id),
+    );
+    put(&mut row, "library", id_obj(row_of.library_id));
     put(
         &mut row,
         "media",
@@ -876,9 +1204,12 @@ pub async fn create(st: &AppState, a: &Authed, mut dto: CreateRequest) -> Res<Va
             None => Value::Null,
         },
     );
-    let art = art.unwrap_or_default();
-    put(&mut row, "posterUrl", json!(art.poster));
-    put(&mut row, "fanartUrl", json!(art.fanart));
+    if id.is_some() {
+        let art = art.unwrap_or_default();
+        put(&mut row, "posterUrl", json!(art.poster));
+        put(&mut row, "fanartUrl", json!(art.fanart));
+    }
+    put(&mut row, "absorbed", json!(claimed));
     Ok(Value::Object(row))
 }
 
@@ -899,8 +1230,8 @@ async fn remember_track_count(st: &AppState, id: i32, key: &TitleKey, library: i
     }
 }
 
-/// Rule 16: at most 5 s on the art; the download goes on in the background after that.
-async fn art_wait(st: &AppState, id: i32, key: TitleKey) -> Option<Art> {
+/// Rule 16: at most 5 s on the art, none when not `wait`; the download goes on in the background after that.
+async fn art_wait(st: &AppState, id: i32, key: TitleKey, wait: bool) -> Option<Art> {
     let st = st.clone();
     let task = tokio::spawn(async move {
         match services::request_art(&st, &key).await {
@@ -920,6 +1251,9 @@ async fn art_wait(st: &AppState, id: i32, key: TitleKey) -> Option<Art> {
             }
         }
     });
+    if !wait {
+        return None;
+    }
     tokio::time::timeout(ART_WAIT, task).await.ok()?.ok()?
 }
 
@@ -959,6 +1293,7 @@ async fn create_delete(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Va
             fanart_url: media.fanart_url.as_deref(),
             wants: None,
             recordings: None,
+            monitor_new_seasons: None,
         },
     )
     .await?;
@@ -1059,6 +1394,12 @@ pub async fn update(st: &AppState, a: &Authed, id: i32, dto: UpdateRequest) -> R
             "A book or album request takes its profiles per want",
         ));
     }
+    let follow_new = dto.monitor_new_seasons.touched();
+    if follow_new.is_some() && !row.media_type.has_seasons() {
+        return Err(AppError::bad_request(
+            "monitorNewSeasons applies to a series request",
+        ));
+    }
     if dto.wants.is_some() && !super::is_work(row.media_type) {
         return Err(AppError::bad_request(
             "Only a book or album request has wants",
@@ -1089,7 +1430,16 @@ pub async fn update(st: &AppState, a: &Authed, id: i32, dto: UpdateRequest) -> R
         Some(w) => set_wants(st, &row, w).await?,
         None => st.db.begin().await?,
     };
-    if !db::patch(&mut *tx, id, quality, language, library.map(some_id)).await? {
+    if !db::patch(
+        &mut *tx,
+        id,
+        quality,
+        language,
+        library.map(some_id),
+        follow_new,
+    )
+    .await?
+    {
         return Err(AppError::forbidden("Only pending requests can be updated"));
     }
     tx.commit().await?;
@@ -1174,6 +1524,7 @@ pub async fn watch(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         language_profile_id: row.language_profile_id,
         library_id: row.library_id,
         folder_id: row.folder_id,
+        monitor_new_seasons: row.monitor_new_seasons,
     };
     let candidates = rules::candidates(st, a, &dto).await?;
     let mut tx = st.db.begin().await?;
@@ -1193,9 +1544,9 @@ pub async fn watch(st: &AppState, a: &Authed, id: i32) -> Res<Value> {
         match settled(tokio::spawn(approve_add(
             st.clone(),
             a.user.id,
-            id,
             row,
             false,
+            db::Edits::default(),
         )))
         .await
         {
@@ -1225,48 +1576,113 @@ async fn pending_row(st: &AppState, a: &Authed, id: i32) -> Res<db::Req> {
     Ok(row)
 }
 
-/// `whole` widens a track request of an album to the whole album (rule 52).
-pub async fn approve(st: &AppState, a: &Authed, id: i32, whole: bool) -> Res<Value> {
+/// `wholeAlbum` widens a track request of an album to the whole album (rule 52); the edits are rule 23's.
+pub async fn approve(st: &AppState, a: &Authed, id: i32, body: dto::Approve) -> Res<Value> {
     let row = pending_row(st, a, id).await?;
     if row.kind == "delete" {
         return approve_delete(st, a, &row).await;
     }
-    if whole && row.media_type != MediaKind::Album {
+    if body.whole && row.media_type != MediaKind::Album {
         return Err(AppError::bad_request(
             "wholeAlbum applies to an album request",
         ));
     }
+    let e = &body.edits;
+    if super::is_work(row.media_type)
+        && (e.quality_profile_id.is_some() || e.language_profile_id.is_some())
+    {
+        return Err(AppError::bad_request(
+            "A book or album request takes its profiles per want",
+        ));
+    }
+    if e.monitor_new_seasons.is_some() && !row.media_type.has_seasons() {
+        return Err(AppError::bad_request(
+            "monitorNewSeasons applies to a series request",
+        ));
+    }
+    if let Some(l) = e.library_id {
+        assert_can_use_library(st, a, l).await?;
+    }
+    assert_exist(
+        st,
+        e.quality_profile_id,
+        e.language_profile_id,
+        e.library_id,
+    )
+    .await?;
+    if let Some(l) = e.library_id
+        && let Some(name) = db::library_refusing(&st.db, l, row.media_type).await?
+    {
+        return Err(AppError::bad_request(format!(
+            "Library \"{name}\" does not accept {}",
+            row.media_type
+        )));
+    }
     settled(tokio::spawn(approve_add(
         st.clone(),
         a.user.id,
-        id,
         row,
-        whole,
+        body.whole,
+        body.edits,
     )))
     .await
 }
 
-/// Rule 23 steps 5-11: the title lock covers the claim only, not the import. In a task so a client that leaves cannot strand the claimed row.
-async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bool) -> Res<Value> {
+/// Rule 23 steps 5-6: the title lock covers the claim and its edits only, not the import. In a task so a
+/// client that leaves cannot strand the claimed row.
+async fn approve_add(
+    st: AppState,
+    by: i32,
+    row: db::Req,
+    whole: bool,
+    mut edits: db::Edits,
+) -> Res<Value> {
     let st = &st;
-    let key = row.key();
+    let (id, key) = (row.id, row.key());
     let mut lock = st.db.begin().await?;
     sqlx::query("SET LOCAL lock_timeout = '10s'")
         .execute(&mut *lock)
         .await?;
-    db::lock_title(&mut lock, &key)
+    let keys = db::title_keys(&mut lock, &key).await?;
+    db::lock_titles(&mut lock, &keys)
         .await
         .map_err(|e| lock_err(e, true))?;
+    let library = edits.library_id.or(row.library_id);
     let existing = db::media_by_ref(&st.db, &key).await?;
     if existing.is_none() {
-        services::assert_import_target(st, row.media_type, row.library_id).await?;
+        services::assert_import_target(st, row.media_type, library).await?;
     }
-    if !db::claim_approval(&st.db, id, by, None).await? {
+    if let (Some(f), Some(l)) = (edits.folder_id, library) {
+        crate::libraries::assert_folder_in_library(&mut *lock, l, f).await?;
+    }
+    let profiled = edits.quality_profile_id.is_some() || edits.language_profile_id.is_some();
+    if row.media_type.has_seasons() && profiled {
+        let active = db::active_adds_of(&mut lock, &keys).await?;
+        if active.iter().any(|r| r.status != "pending") {
+            // rule 12b: a series in flight keeps its profiles
+            edits.quality_profile_id = None;
+            edits.language_profile_id = None;
+        } else {
+            let ids: Vec<i32> = active.iter().map(|r| r.id).collect();
+            let profiles = (edits.quality_profile_id, edits.language_profile_id);
+            db::set_pending_profiles(&mut *lock, &ids, profiles).await?;
+        }
+    }
+    if !db::claim_edited(&mut *lock, id, by, &edits).await? {
         return Err(AppError::conflict("Request is not pending"));
     }
-    let widen = whole && row.recordings.take().is_some();
     lock.commit().await?;
     services::announce(st, &[id]).await;
+    let row = db::find(&st.db, id).await?.ok_or_else(|| not_found(id))?;
+    finish_approve(st, by, row, whole).await?;
+    Ok(Value::Object(row_json(st, id).await?))
+}
+
+/// Rule 23 steps 7-10 of a claimed row: import or link, events, notification; a failure gives it back to
+/// `pending`. `widen` makes a track request of an album whole.
+async fn finish_approve(st: &AppState, by: i32, mut row: db::Req, widen: bool) -> Res<Option<i32>> {
+    let (id, key) = (row.id, row.key());
+    let widen = widen && row.recordings.take().is_some();
     let spec = ImportSpec {
         title: key.clone(),
         quality_profile_id: row.quality_profile_id,
@@ -1276,6 +1692,7 @@ async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bo
         seasons: row.seasons.as_ref().map(|s| s.0.clone()),
         wants: row.wants.as_ref().map(|w| w.0.clone()),
         recordings: row.recordings.clone(),
+        monitor_new_seasons: row.monitor_new_seasons,
     };
     let media = match ensure_media(st, spec, (Some(row.user_id), by)).await {
         Ok(m) => m,
@@ -1322,7 +1739,7 @@ async fn approve_add(st: AppState, by: i32, id: i32, mut row: db::Req, whole: bo
         crate::notifications::payload!({"title": row.title}),
         Some(user),
     );
-    Ok(Value::Object(row_json(st, id).await?))
+    Ok(media)
 }
 
 /// Rule 26: the request is done once the title is removed.

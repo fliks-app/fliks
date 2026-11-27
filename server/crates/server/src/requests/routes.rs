@@ -37,7 +37,7 @@ pub async fn create(
     req: Request,
 ) -> Res<(StatusCode, Json<Value>)> {
     a.require(Action::Create, Subject::FliksRequest)?;
-    let dto = dto::create_request(&st.namespaces(), body(req).await?, flow::can_manage(&a))?;
+    let dto = dto::create_request(&st.namespaces(), body(req).await?, flow::can_choose(&a))?;
     Ok(created(flow::create(&st, &a, dto).await?))
 }
 
@@ -51,6 +51,12 @@ pub async fn list(State(st): State<AppState>, a: Authed, Query(q): Pairs) -> Res
 pub async fn allowance(State(st): State<AppState>, a: Authed) -> Res<Json<Value>> {
     a.require(Action::Create, Subject::FliksRequest)?;
     Ok(Json(flow::allowance(&st, &a).await?))
+}
+
+#[utoipa::path(get, path = "/api/requests/auto-approval", responses((status = 200)))]
+pub async fn auto_approval(State(st): State<AppState>, a: Authed) -> Res<Json<Value>> {
+    a.require(Action::Create, Subject::FliksRequest)?;
+    Ok(Json(super::rules::auto_kinds(&st, &a).await?))
 }
 
 #[utoipa::path(get, path = "/api/requests/title-state", responses((status = 200)))]
@@ -109,8 +115,8 @@ pub async fn approve(
 ) -> Res<(StatusCode, Json<Value>)> {
     a.require(Action::Approve, Subject::FliksRequest)?;
     let id = int_param(&id)?;
-    let whole = dto::approve(body(req).await?)?;
-    Ok(created(flow::approve(&st, &a, id, whole).await?))
+    let body = dto::approve(body(req).await?)?;
+    Ok(created(flow::approve(&st, &a, id, body).await?))
 }
 
 #[utoipa::path(post, path = "/api/requests/{id}/decline", responses((status = 201)))]

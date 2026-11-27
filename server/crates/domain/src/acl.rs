@@ -116,7 +116,12 @@ impl Permissions {
             rules.push((Manage, S::All, Cond::Any));
             return Self { rules };
         }
-        let has = |p: &str| perms.iter().any(|x| x == p);
+        // an adder adds through a request (`requests.md` rule 1)
+        let has = |p: &str| {
+            perms
+                .iter()
+                .any(|x| x == p || (p == "requests.create" && x == "media.create"))
+        };
         let mut grant = |a: Action, s: Subject| rules.push((a, s, Cond::Any));
         for p in perms {
             if is_plugin_subject(p) {
@@ -158,7 +163,7 @@ impl Permissions {
         if has("livetv.read") {
             grant(Read, S::LiveTvChannel);
         }
-        if has("media.create") || has("requests.create") {
+        if has("requests.create") {
             grant(Track, S::Media);
         }
         if has("requests.create") {

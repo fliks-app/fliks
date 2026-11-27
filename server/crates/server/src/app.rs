@@ -461,6 +461,7 @@ pub const BODY_LIMIT_BYTES: usize = 100 * 1024;
         requests::create,
         requests::list,
         requests::allowance,
+        requests::auto_approval,
         requests::title_state,
         requests::get_one,
         requests::update,

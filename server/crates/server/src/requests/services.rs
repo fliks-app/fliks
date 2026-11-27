@@ -227,7 +227,7 @@ pub async fn import_title(
         (spec.quality_profile_id, spec.language_profile_id),
         (spec.library_id, spec.folder_id),
         added_by,
-        (seasons, vec![]),
+        (seasons, spec.monitor_new_seasons, vec![]),
     )
     .await
     .map(|id| (id, false))

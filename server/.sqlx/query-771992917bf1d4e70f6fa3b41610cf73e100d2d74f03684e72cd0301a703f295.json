@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET status = 'approved', \"approvedById\" = $2, \"declinedReason\" = NULL,\n        \"qualityProfileId\" = COALESCE($3, \"qualityProfileId\"),\n        \"languageProfileId\" = COALESCE($4, \"languageProfileId\"),\n        \"libraryId\" = COALESCE($5, \"libraryId\"),\n        \"folderId\" = CASE WHEN $6::int IS NOT NULL THEN $6 WHEN $5::int IS NOT NULL THEN NULL ELSE \"folderId\" END,\n        \"monitorNewSeasons\" = COALESCE($7, \"monitorNewSeasons\")\n        WHERE id = $1 AND status = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "771992917bf1d4e70f6fa3b41610cf73e100d2d74f03684e72cd0301a703f295"
+}

@@ -5392,6 +5392,17 @@
         }
       }
     },
+    "/api/requests/auto-approval": {
+      "get": {
+        "tags": [
+          "requests"
+        ],
+        "operationId": "auto_approval",
+        "responses": {
+          "200": {}
+        }
+      }
+    },
     "/api/requests/comments/{commentId}": {
       "delete": {
         "tags": [

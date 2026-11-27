@@ -2,7 +2,7 @@
 use super::{
     TitleFacts, db,
     dto::{self, CreateRequest},
-    flow::Res,
+    flow::{Res, is_adder},
     services,
 };
 use crate::{
@@ -22,7 +22,7 @@ use fliks_domain::{
     acl::{Action, Subject},
     media::{kind::MediaKind, wants::WantSpec},
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 
 /// What a rule is matched against.
 pub struct Ctx {
@@ -137,6 +137,8 @@ pub(super) fn reads_metadata(c: &Value, has_seasons: bool) -> bool {
 /// The enabled rules and, when one reads TMDB facts, the title's facts: the network part of
 /// `shouldAutoApprove`, fetched before the create takes any lock.
 pub struct Candidates {
+    /// `media.create`: approved before any rule.
+    adder: bool,
     rules: Vec<db::RuleRow>,
     facts: Option<TitleFacts>,
 }
@@ -155,6 +157,13 @@ fn could_match(c: &Value, a: &Authed, media_type: MediaKind) -> bool {
 }
 
 pub async fn candidates(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<Candidates> {
+    if is_adder(a) {
+        return Ok(Candidates {
+            adder: true,
+            rules: vec![],
+            facts: None,
+        });
+    }
     let mut rules = db::rules_enabled(&st.db).await?;
     rules.retain(|r| could_match(&r.criteria.0, a, dto.media_type));
     let scoped = dto.seasons.as_deref().is_some_and(|s| !s.is_empty());
@@ -176,12 +185,64 @@ pub async fn candidates(st: &AppState, a: &Authed, dto: &CreateRequest) -> Res<C
     } else {
         None
     };
-    Ok(Candidates { rules, facts })
+    Ok(Candidates {
+        adder: false,
+        rules,
+        facts,
+    })
+}
+
+/// A rule reading nothing beyond the requester and the media type approves every create it can match.
+fn unconditional(c: &Value) -> bool {
+    c.as_object().is_some_and(|o| {
+        o.iter().all(|(k, v)| {
+            matches!(k.as_str(), "userIds" | "roleIds" | "mediaType")
+                || v.is_null()
+                || v.as_array().is_some_and(Vec::is_empty)
+        })
+    })
+}
+
+/// `GET /api/requests/auto-approval` (rule 56): the kinds whose create is certain to be approved.
+pub async fn auto_kinds(st: &AppState, a: &Authed) -> Res<Value> {
+    let mut kinds: Vec<MediaKind> = [
+        MediaKind::Movie,
+        MediaKind::Series,
+        MediaKind::Book,
+        MediaKind::Album,
+    ]
+    .into_iter()
+    .filter(|k| a.kinds.has(*k))
+    .collect();
+    if !is_adder(a) {
+        let rules = db::rules_enabled(&st.db).await?;
+        kinds.retain(|k| {
+            rules
+                .iter()
+                .any(|r| unconditional(&r.criteria.0) && could_match(&r.criteria.0, a, *k))
+        });
+    }
+    let names: Vec<&str> = kinds.iter().map(|k| k.as_str()).collect();
+    Ok(json!({ "kinds": names }))
 }
 
 impl Candidates {
+    /// Whether some create of this caller can be approved: the duplicate guard waits for the decision.
+    pub fn may_approve(&self) -> bool {
+        self.adder || !self.rules.is_empty()
+    }
+
     /// `shouldAutoApprove`: the first enabled rule that matches wins. An empty `seasons` is no scope.
     pub fn approves(&self, a: &Authed, dto: &CreateRequest, library_id: i32) -> bool {
+        if self.adder {
+            tracing::info!(
+                "Auto-approving {} {} for user {}: media.create",
+                dto.media_type,
+                dto.key.external_id,
+                a.user.id
+            );
+            return true;
+        }
         let facts = self.facts.as_ref();
         let scoped = dto.seasons.as_deref().filter(|s| !s.is_empty());
         let ctx = Ctx {
@@ -283,4 +344,21 @@ pub async fn rule_remove(
         return Err(rule_not_found(id));
     }
     Ok(StatusCode::OK)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unconditional;
+    use serde_json::json;
+
+    #[test]
+    fn only_requester_and_kind_criteria_are_unconditional() {
+        assert!(unconditional(&json!({})));
+        assert!(unconditional(
+            &json!({"roleIds": [2], "mediaType": "movie", "libraryIds": []})
+        ));
+        assert!(!unconditional(&json!({"libraryIds": [1]})));
+        assert!(!unconditional(&json!({"maxSeasons": 2})));
+        assert!(!unconditional(&json!([])));
+    }
 }

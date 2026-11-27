@@ -153,7 +153,7 @@ async fn create(
         (None, None),
         (library, folder),
         None,
-        (None, links),
+        (None, None, links),
     )
     .await;
     match created {
