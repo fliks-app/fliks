@@ -1,5 +1,5 @@
 /** Numbers follow the UI language (`<html lang>`, kept by ShellLanguageService): "1,5" in French, "1.5" in English. */
-function localized(value: number, digits: number): string {
+export function localized(value: number, digits: number): string {
   const lang = typeof document === 'undefined' ? undefined : document.documentElement.lang || undefined;
   return new Intl.NumberFormat(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value);
 }

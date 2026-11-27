@@ -3,7 +3,7 @@
 //! are settled at queue time or by the worker).
 use super::codec::{self, Target};
 use super::languages::{self, Kind, Languages};
-use super::profile::{Container, ImageSubs, Incompatible, Profile, Quality, TooSlow};
+use super::profile::{Container, ImageSubs, Incompatible, Profile, Quality, TooSlow, Vmaf};
 use fliks_domain::track_markers::{Marker, audio_markers};
 use fliks_domain::{release::parsing::attributes::parse_release_attributes, subtitle_flags};
 use fliks_engine_core::api::{
@@ -268,7 +268,11 @@ impl Diff {
             too_slow: OptimizeTooSlow::Hardware,
             min_savings_pct: None,
             skip_hdr10plus_dv: None,
-            quality_check: None,
+            quality_check: match profile.guards.vmaf_sample {
+                Vmaf::Auto => None,
+                Vmaf::On => Some(true),
+                Vmaf::Off => Some(false),
+            },
             container: None,
             clear_title: false,
             extra_subtitles: vec![],
@@ -1402,6 +1406,24 @@ mod tests {
         let cropped = hevc_file(true);
         let r = reencode(run_profile(&profile, "a.mkv", &cropped, Some("en")));
         assert_eq!(r, Some((true, false)));
+    }
+
+    #[test]
+    fn the_quality_check_setting_reaches_the_plan_and_auto_leaves_the_engine_default() {
+        let lone = info("hevc", vec![audio(1, "und", "eac3", 6)]);
+        let none = HashSet::new();
+        let check = |v: Vmaf| {
+            let mut profile = Preset::CleanupOnly.document();
+            profile.guards.vmaf_sample = v;
+            diff(run(Preset::CleanupOnly, "a.mkv", &lone, Some("fr")))
+                .plan(&profile, &lone, &none, &[])
+                .unwrap()
+                .quality_check
+        };
+        assert_eq!(
+            (check(Vmaf::Auto), check(Vmaf::On), check(Vmaf::Off)),
+            (None, Some(true), Some(false))
+        );
     }
 
     #[test]

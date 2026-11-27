@@ -1,5 +1,6 @@
 //! Completion estimate: the speed of the last jobs of each device, stretched over the time window.
 use super::settings::{self, Settings};
+use super::store::CPU_DEVICE;
 use crate::{optimize::select::PerLevelF, state::AppState};
 use chrono::{DateTime, Timelike, Utc};
 use serde::Serialize;
@@ -20,7 +21,8 @@ pub struct Speeds {
 pub async fn speeds(st: &AppState) -> sqlx::Result<Speeds> {
     let rows = sqlx::query(
         r#"SELECT "deviceId", level, sum(dur)::float8 AS dur, sum(wall)::float8 AS wall FROM (
-             SELECT "deviceId", payload #>> '{plan,level}' AS level,
+             SELECT CASE WHEN result ->> 'cpuFallback' = 'true' THEN $2 ELSE "deviceId" END AS "deviceId",
+                    payload #>> '{plan,level}' AS level,
                     (payload #>> '{info,durationSeconds}')::float8 AS dur,
                     EXTRACT(EPOCH FROM "encodedAt" - "startedAt")::float8 AS wall,
                     row_number() OVER (PARTITION BY "deviceId", payload #>> '{plan,level}'
@@ -31,6 +33,7 @@ pub async fn speeds(st: &AppState) -> sqlx::Result<Speeds> {
            WHERE rn <= $1 AND wall > 0 GROUP BY "deviceId", level"#,
     )
     .bind(LAST_JOBS)
+    .bind(CPU_DEVICE)
     .fetch_all(&st.db)
     .await?;
     let conf = settings::load(&st.db).await?;

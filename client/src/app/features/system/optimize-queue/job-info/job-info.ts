@@ -4,6 +4,7 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { OptimizeService } from '../../../../core/services/api/optimize.service';
 import {
   groupedChanges,
+  jobDevice,
   savedBytes,
   trackOrdinal,
   warningLine,
@@ -11,7 +12,7 @@ import {
   type OptimizeJobDetail,
 } from '../../../../core/models/optimize';
 import type { MediaFileInfo } from '../../../../core/services/api/media.service';
-import { formatBytes } from '../../../../core/utils/format-bytes';
+import { formatBytes, localized } from '../../../../core/utils/format-bytes';
 import { formatAudioLabel, formatSubtitleLabel } from '../../../../core/utils/player.utils';
 import { formatEta } from '../../../../shared/utils/download-format';
 import { ModalHeaderComponent } from '../../../../shared/components/modal-header';
@@ -43,6 +44,7 @@ export class OptimizeJobInfoComponent {
   readonly failed = signal(false);
 
   readonly formatBytes = formatBytes;
+  readonly jobDevice = jobDevice;
 
   readonly saved = computed(() => {
     const j = this.job();
@@ -57,6 +59,21 @@ export class OptimizeJobInfoComponent {
   readonly copyReason = computed(() => {
     const r = this.detail()?.copyReason;
     return r && COPY_REASONS.includes(r) ? `optimize.queue.info.copy_reason.${r}` : null;
+  });
+  /** Change of the video size: what the encode reached and what its test encode predicted. */
+  readonly videoSize = computed(() => {
+    const d = this.detail();
+    if (!d || (d.savingsPct == null && d.sampledSavingsPct == null)) return null;
+    const signed = (saved: number | null) => {
+      if (saved == null) return null;
+      const r = Math.round(-saved);
+      return `${r > 0 ? '+' : r < 0 ? '\u2212' : ''}${Math.abs(r)} %`;
+    };
+    return { real: signed(d.savingsPct), test: signed(d.sampledSavingsPct) };
+  });
+  readonly fidelity = computed(() => {
+    const s = this.detail()?.ssim;
+    return s == null ? null : `${localized(s * 100, 1)} %`;
   });
   /** Wall time from the lease to the encoded output. */
   readonly encodeTime = computed(() => {

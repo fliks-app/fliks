@@ -366,6 +366,8 @@ pub enum SseEvent {
         job_id: i64,
         progress: Num,
         paused: bool,
+        /// The device the job runs on when it is not its leased one.
+        runs_on: Option<String>,
     },
     /// An engine model (`ModelInfo`) started or ended a download, progressed, or was deleted.
     #[serde(rename = "karaoke.model_changed")]
@@ -1008,7 +1010,7 @@ mod tests {
             MediaFileChanged => json!({"type":"media.file_changed","mediaId":1,"mediaFileId":2}),
             OptimizeQueueChanged => json!({"type":"optimize.queue_changed"}),
             OptimizeJobChanged => json!({"type":"optimize.job_changed","jobId":1,"state":"running"}),
-            OptimizeJobProgress => json!({"type":"optimize.job_progress","jobId":1,"progress":0.5,"paused":false}),
+            OptimizeJobProgress => json!({"type":"optimize.job_progress","jobId":1,"progress":0.5,"paused":false,"runsOn":"cpu"}),
             KaraokeModelChanged => json!({"type":"karaoke.model_changed","model":{"id":"m"}}),
             KaraokeJobChanged => json!({"type":"karaoke.job_changed","itemId":1,"state":"running","stage":"s","progress":0.5}),
             MediaMoveCompleted => json!({"type":"media.move.completed","mediaId":1,"title":"t","files":2,"leftover":0}),

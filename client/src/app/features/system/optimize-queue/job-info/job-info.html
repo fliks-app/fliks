@@ -30,9 +30,9 @@
         }
       </dd>
     }
-    @if (j.deviceId) {
+    @if (jobDevice(j); as device) {
       <dt class="text-base-content/60">{{ 'optimize.queue.col.device' | translate }}</dt>
-      <dd>{{ j.deviceId }}</dd>
+      <dd>{{ device }}</dd>
     }
     <dt class="text-base-content/60">{{ 'optimize.queue.info.queued_at' | translate }}</dt>
     <dd>{{ j.createdAt | date: 'medium' }}</dd>
@@ -48,6 +48,21 @@
       @if (d.finishedAt) {
         <dt class="text-base-content/60">{{ 'optimize.queue.info.finished_at' | translate }}</dt>
         <dd>{{ d.finishedAt | date: 'medium' }}</dd>
+      }
+      @if (videoSize(); as v) {
+        <dt class="text-base-content/60">{{ 'optimize.queue.info.video_size' | translate }}</dt>
+        <dd class="tabular-nums">
+          {{ v.real ?? '-' }}
+          @if (v.test) {
+            <span class="text-base-content/60">
+              ({{ 'optimize.queue.info.test_encode' | translate: { size: v.test } }})
+            </span>
+          }
+        </dd>
+      }
+      @if (fidelity(); as f) {
+        <dt class="text-base-content/60">{{ 'optimize.queue.info.fidelity' | translate }}</dt>
+        <dd class="tabular-nums">{{ f }}</dd>
       }
     }
     @if (j.inSize != null) {

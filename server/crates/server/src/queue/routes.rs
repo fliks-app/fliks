@@ -281,6 +281,7 @@ pub async fn heartbeat(
         req.attempt as i32,
         req.progress,
         req.paused,
+        req.device_id.as_deref(),
     )
     .await
     .map_err(db)?;
@@ -294,6 +295,7 @@ pub async fn heartbeat(
             job_id: id,
             progress: req.progress.into(),
             paused: req.paused,
+            runs_on: req.device_id.clone(),
         },
     )
     .await;
