@@ -3977,7 +3977,7 @@
         "skip_hardlinked": "Ignorar ficheiros com várias ligações físicas",
         "skip_hardlinked_hint": "Partilhados com outra pasta: substituí-los não libertaria espaço.",
         "when_codec": "Formato atual do vídeo",
-        "when_codec_hint": "Vazio significa qualquer formato.",
+        "when_codec_hint": "Vazio significa qualquer formato. Marcar o formato de destino também reduz os arquivos que já o usam, se uma codificação de teste economizar pelo menos 20%.",
         "any": "Qualquer",
         "min_bitrate": "Débito atual de pelo menos (Mb/s)",
         "min_bitrate_hint": "Vazio ou 0 para não limitar.",

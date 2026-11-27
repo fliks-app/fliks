@@ -3977,7 +3977,7 @@
         "skip_hardlinked": "Omitir archivos con varios enlaces físicos",
         "skip_hardlinked_hint": "Compartidos con otra carpeta: reemplazarlos no liberaría espacio.",
         "when_codec": "Formato actual del vídeo",
-        "when_codec_hint": "Vacío significa cualquiera.",
+        "when_codec_hint": "Vacío significa cualquiera. Marcar el formato de destino también reduce los archivos que ya lo usan, si una codificación de prueba ahorra al menos un 20 %.",
         "any": "Cualquiera",
         "min_bitrate": "Tasa de bits actual de al menos (Mb/s)",
         "min_bitrate_hint": "Vacío o 0 para no limitar.",

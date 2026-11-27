@@ -87,10 +87,12 @@ pub async fn analyze(
                                 AND n."providerType" = 'ocr' AND n."sourceStreamIndex" = o."sourceStreamIndex"
                                 AND n.id > o.id)), '{}') AS "ocr_failed!",
                   EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = mf.id AND j.kind = 'optimize'
-                            AND j.state IN ('done', 'skipped') AND j.result ? 'copyReason'
+                            AND j.state IN ('done', 'skipped')
                             AND (j."outSize" = mf.size OR j."inSize" = mf.size)
                             AND j.payload #>> '{plan,codec}' IS NOT DISTINCT FROM $4::text
-                            AND COALESCE((j.payload #>> '{plan,minSavingsPct}')::float8, -1) = $5::float8) AS "video_copied!"
+                            AND j.payload #>> '{plan,quality}' IS NOT DISTINCT FROM $6::text
+                            AND COALESCE((j.payload #>> '{plan,minSavingsPct}')::float8, -1)
+                                IN ($5::float8, GREATEST($5::float8, $7::float8))) AS "video_settled!"
            FROM media_files mf
            JOIN media m ON m.id = mf."mediaId"
            JOIN libraries l ON l.id = m."libraryId"
@@ -112,7 +114,11 @@ pub async fn analyze(
         only,
         PROBE_VERSION,
         ctx.target.map(|t| t.as_str().to_owned()),
-        f64::from(ctx.profile.guards.min_savings_pct)
+        f64::from(ctx.profile.guards.min_savings_pct),
+        serde_json::to_value(ctx.profile.video.quality)
+            .ok()
+            .and_then(|q| q.as_str().map(str::to_owned)),
+        f64::from(diff::RECOMPRESS_MIN_SAVINGS_PCT)
     )
     .fetch(db);
     let env = ctx.env();
@@ -142,7 +148,7 @@ pub async fn analyze(
             languages: &languages,
             transcoded_recently: r.transcoded,
             ocr_failed: &ocr_failed,
-            video_copied: r.video_copied,
+            video_settled: r.video_settled,
         };
         visit(Candidate {
             media_file_id: r.id,

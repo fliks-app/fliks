@@ -3977,7 +3977,7 @@
         "skip_hardlinked": "Dateien mit mehreren Hardlinks überspringen",
         "skip_hardlinked_hint": "Mit einem anderen Ordner geteilt: Ersetzen würde keinen Platz freigeben.",
         "when_codec": "Aktuelles Videoformat",
-        "when_codec_hint": "Leer bedeutet jedes Format.",
+        "when_codec_hint": "Leer bedeutet jedes Format. Ist das Zielformat angehakt, werden auch Dateien in diesem Format verkleinert, wenn eine Testkodierung mindestens 20 % spart.",
         "any": "Beliebig",
         "min_bitrate": "Aktuelle Bitrate von mindestens (Mb/s)",
         "min_bitrate_hint": "Leer oder 0 für keine Grenze.",

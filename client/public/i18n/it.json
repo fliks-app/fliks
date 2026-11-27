@@ -3977,7 +3977,7 @@
         "skip_hardlinked": "Ignora i file con più collegamenti fisici",
         "skip_hardlinked_hint": "Condivisi con un'altra cartella: sostituirli non libererebbe spazio.",
         "when_codec": "Formato attuale del video",
-        "when_codec_hint": "Vuoto significa qualsiasi formato.",
+        "when_codec_hint": "Vuoto significa qualsiasi formato. Spuntare il formato di destinazione riduce anche i file già in quel formato, se una codifica di prova risparmia almeno il 20%.",
         "any": "Qualsiasi",
         "min_bitrate": "Bitrate attuale di almeno (Mb/s)",
         "min_bitrate_hint": "Vuoto o 0 per nessun limite.",

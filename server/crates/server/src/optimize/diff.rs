@@ -27,6 +27,9 @@ pub struct Env<'a> {
     pub force: bool,
 }
 
+/// Floor of `guards.min_savings_pct` when a source is re-encoded into its own codec.
+pub const RECOMPRESS_MIN_SAVINGS_PCT: u32 = 20;
+
 pub struct File<'a> {
     pub relative_path: &'a str,
     pub info: &'a MediaInfo,
@@ -37,8 +40,8 @@ pub struct File<'a> {
     pub transcoded_recently: bool,
     /// Image tracks whose last OCR run failed: the difference does not list them again (`force` does).
     pub ocr_failed: &'a [u32],
-    /// An earlier job with this video setting copied the video, so a new pass would copy it again.
-    pub video_copied: bool,
+    /// An earlier job with this video setting settled the video (copied or re-encoded it).
+    pub video_settled: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -84,6 +87,8 @@ pub enum Change {
         max_height: Option<u32>,
         /// The crop alone justifies the re-encode: the minimum savings does not apply.
         crop_only: bool,
+        /// Only shrinks a source already in `codec`: savings of `RECOMPRESS_MIN_SAVINGS_PCT` at least.
+        recompress: bool,
     },
     #[serde(rename_all = "camelCase")]
     Drop {
@@ -277,6 +282,7 @@ impl Diff {
                         codec,
                         crop,
                         crop_only,
+                        recompress,
                         ..
                     } => {
                         plan.codec = Some(codec.as_str().to_owned());
@@ -292,8 +298,12 @@ impl Diff {
                             TooSlow::Hardware => OptimizeTooSlow::Hardware,
                             TooSlow::Skip => OptimizeTooSlow::Skip,
                         };
-                        plan.min_savings_pct =
-                            (!crop_only).then_some(f64::from(profile.guards.min_savings_pct));
+                        let min = profile.guards.min_savings_pct;
+                        plan.min_savings_pct = (!crop_only).then_some(f64::from(if *recompress {
+                            min.max(RECOMPRESS_MIN_SAVINGS_PCT)
+                        } else {
+                            min
+                        }));
                         plan.skip_hdr10plus_dv = Some(v.when.skip_hdr10plus_dv);
                         true
                     }
@@ -558,26 +568,35 @@ impl Builder<'_> {
             .max_resolution
             .height()
             .filter(|h| src.height.is_some_and(|sh| sh > *h));
-        let improving = self
-            .env
-            .target
-            .filter(|t| self.env.force || codec::improves(*t, &src.codec));
         // A reduction without an improving codec keeps a codec the encoders know.
         let same = match src_codec {
             Some("hevc") => Some(Target::Hevc),
             Some("av1") => Some(Target::Av1),
             _ => None,
         };
+        let improving = self
+            .env
+            .target
+            .filter(|t| self.env.force || codec::improves(*t, &src.codec));
+        // Listing the target's own codec asks to shrink files already in it.
+        let listed = src_codec.is_some_and(|c| when.codec.iter().any(|w| w == c));
         let codec_change = matches_when && improving.is_some();
         let resize = matches_when && max_h.is_some();
-        if !(codec_change || resize || crop.is_some()) {
+        let shrink = matches_when
+            && listed
+            && self
+                .env
+                .target
+                .is_some_and(|t| src_codec == Some(t.as_str()));
+        if !(codec_change || resize || shrink || crop.is_some()) {
             return false;
         }
         let Some(t) = improving.or(same) else {
             return false;
         };
-        let crop_only = !(codec_change || resize);
-        if self.f.video_copied && !self.env.force && !crop_only {
+        let crop_only = !(codec_change || resize) && crop.is_some();
+        let recompress = !(codec_change || resize) && crop.is_none();
+        if self.f.video_settled && !self.env.force && !crop_only {
             return false;
         }
         if let Some(reason) = hard_stop {
@@ -590,6 +609,7 @@ impl Builder<'_> {
             crop,
             max_height: max_h,
             crop_only,
+            recompress,
         });
         true
     }
@@ -1123,7 +1143,7 @@ mod tests {
             languages: &languages,
             transcoded_recently: false,
             ocr_failed: &[],
-            video_copied: false,
+            video_settled: false,
         };
         compute(&env, &f)
     }
@@ -1172,7 +1192,7 @@ mod tests {
             languages: &l,
             transcoded_recently: false,
             ocr_failed: &[],
-            video_copied: false,
+            video_settled: false,
         };
         assert!(matches!(
             compute(&env, &f),
@@ -1309,7 +1329,7 @@ mod tests {
             languages: &l,
             transcoded_recently: false,
             ocr_failed: &[],
-            video_copied: false,
+            video_settled: false,
         };
         let d = diff(compute(&env, &f));
         assert!(matches!(
@@ -1319,6 +1339,69 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    fn hevc_file(crop: bool) -> MediaInfo {
+        let mut i = info("hevc", vec![audio(1, "eng", "eac3", 6)]);
+        if crop {
+            i.video[0].crop = Some(CropInfo {
+                width: 1920,
+                height: 800,
+                x: 0,
+                y: 140,
+            });
+            i.video[0].crop_stable = Some(true);
+        }
+        i
+    }
+
+    fn reencode(o: Outcome) -> Option<(bool, bool)> {
+        match o {
+            Outcome::Diff(d) => d.changes.into_iter().find_map(|c| match c {
+                Change::Reencode {
+                    codec: Target::Hevc,
+                    crop_only,
+                    recompress,
+                    ..
+                } => Some((crop_only, recompress)),
+                _ => None,
+            }),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn a_source_in_the_target_codec_recompresses_only_when_listed() {
+        let mut profile = Preset::Balanced.document();
+        let i = hevc_file(false);
+        for (codecs, due) in [
+            (vec!["h264", "hevc"], Some((false, true))),
+            (vec!["h264"], None),
+            (vec![], None),
+        ] {
+            profile.video.when.codec = codecs.into_iter().map(String::from).collect();
+            let r = reencode(run_profile(&profile, "a.mkv", &i, Some("en")));
+            assert_eq!(r, due, "{:?}", profile.video.when.codec);
+        }
+    }
+
+    #[test]
+    fn a_recompress_needs_at_least_twenty_percent_and_a_crop_stays_crop_only() {
+        let mut profile = Preset::Balanced.document();
+        profile.video.when.codec = vec!["hevc".into()];
+        profile.video.crop_in_file = true;
+        let none = HashSet::new();
+        let i = hevc_file(false);
+        for (min, want) in [(5, 20.0), (30, 30.0)] {
+            profile.guards.min_savings_pct = min;
+            let p = diff(run_profile(&profile, "a.mkv", &i, Some("en")))
+                .plan(&profile, &i, &none, &[])
+                .unwrap();
+            assert_eq!(p.min_savings_pct, Some(want));
+        }
+        let cropped = hevc_file(true);
+        let r = reencode(run_profile(&profile, "a.mkv", &cropped, Some("en")));
+        assert_eq!(r, Some((true, false)));
     }
 
     #[test]
@@ -1375,6 +1458,7 @@ mod tests {
                     crop: None,
                     max_height: None,
                     crop_only: false,
+                    recompress: false,
                 },
                 Change::Default { stream_index: 2 },
                 Change::Container { to: "mkv" },
@@ -1396,7 +1480,7 @@ mod tests {
     }
 
     #[test]
-    fn a_video_copied_by_an_earlier_job_is_not_re_encoded_again() {
+    fn a_video_settled_by_an_earlier_job_is_not_re_encoded_again() {
         let profile = Preset::Balanced.document();
         let playable: HashSet<String> = ["aac"].map(String::from).into();
         let env = Env {
@@ -1408,7 +1492,7 @@ mod tests {
         };
         let i = info("h264", vec![audio(1, "eng", "aac", 2)]);
         let languages = Languages::default();
-        let mk = |video_copied, ocr_failed: &'static [u32]| File {
+        let mk = |video_settled, ocr_failed: &'static [u32]| File {
             relative_path: "a.mkv",
             info: &i,
             probe_version: Some(PROBE_VERSION),
@@ -1416,7 +1500,7 @@ mod tests {
             languages: &languages,
             transcoded_recently: false,
             ocr_failed,
-            video_copied,
+            video_settled,
         };
         assert!(matches!(compute(&env, &mk(false, &[])), Outcome::Diff(_)));
         assert!(matches!(

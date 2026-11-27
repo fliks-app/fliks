@@ -3977,7 +3977,7 @@
         "skip_hardlinked": "Skip files with several hard links",
         "skip_hardlinked_hint": "Shared with another folder: replacing them would not free any space.",
         "when_codec": "Current video format",
-        "when_codec_hint": "Empty means any format.",
+        "when_codec_hint": "Empty means any format. Ticking the target format also shrinks files already in it, when a test encode saves at least 20%.",
         "any": "Any",
         "min_bitrate": "Current bitrate of at least (Mb/s)",
         "min_bitrate_hint": "Leave empty or 0 for no limit.",
