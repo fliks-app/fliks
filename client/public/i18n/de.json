@@ -5671,15 +5671,15 @@
       "level_left_one": "{{level}}: noch {{count}}, etwa {{time}}",
       "level_left_other": "{{level}}: noch {{count}}, etwa {{time}}",
       "level": {
-        "metadata": "Metadaten",
-        "remux": "Remux",
+        "metadata": "Nur Metadaten",
+        "remux": "Verlustfreier Remux",
         "reencode": "Neu kodieren"
       },
       "devices": "Geräte",
       "device": {
         "free": "Frei",
         "busy": "Belegt",
-        "paused": "Durch Wiedergabe pausiert",
+        "paused": "Wartet auf Ressourcen",
         "slots_one": "{{used}} von {{count}} Auftrag",
         "slots_other": "{{used}} von {{count}} Aufträgen",
         "offline": "Offline"
@@ -5704,7 +5704,7 @@
       "select": "{{title}} auswählen",
       "col": {
         "title": "Titel",
-        "level": "Stufe",
+        "level": "Verarbeitung",
         "device": "Gerät",
         "progress": "Fortschritt",
         "size": "Größe",
@@ -5718,10 +5718,9 @@
         "after": "Nachher"
       },
       "job": {
-        "encoding": "Kodierung",
         "paused": "Pausiert",
         "leased": "Läuft",
-        "staged": "Bereit zum Austausch",
+        "staged": "Datei bereit",
         "committing": "Austausch",
         "queued": "Wartend",
         "failed": "Fehlgeschlagen",

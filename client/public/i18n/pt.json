@@ -5671,15 +5671,15 @@
       "level_left_one": "{{level}}: resta {{count}}, cerca de {{time}}",
       "level_left_other": "{{level}}: restam {{count}}, cerca de {{time}}",
       "level": {
-        "metadata": "Metadados",
-        "remux": "Remux",
+        "metadata": "Apenas metadados",
+        "remux": "Remux sem perda",
         "reencode": "Recodificação"
       },
       "devices": "Dispositivos",
       "device": {
         "free": "Livre",
         "busy": "Ocupado",
-        "paused": "Em pausa por reprodução",
+        "paused": "À espera de recursos",
         "slots_one": "{{used}} de {{count}} trabalho",
         "slots_other": "{{used}} de {{count}} trabalhos",
         "offline": "Offline"
@@ -5704,7 +5704,7 @@
       "select": "Selecionar {{title}}",
       "col": {
         "title": "Título",
-        "level": "Nível",
+        "level": "Processamento",
         "device": "Dispositivo",
         "progress": "Progresso",
         "size": "Tamanho",
@@ -5718,10 +5718,9 @@
         "after": "Depois"
       },
       "job": {
-        "encoding": "A codificar",
         "paused": "Em pausa",
         "leased": "A decorrer",
-        "staged": "Pronto para substituir",
+        "staged": "Ficheiro pronto",
         "committing": "A substituir",
         "queued": "Em espera",
         "failed": "Falhou",

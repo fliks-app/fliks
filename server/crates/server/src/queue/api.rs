@@ -138,6 +138,8 @@ pub struct JobRow {
     in_size: Option<i64>,
     out_size: Option<i64>,
     title: Option<String>,
+    media_id: Option<i32>,
+    media_type: Option<String>,
     library_id: Option<i32>,
     level: Option<String>,
     codec: Option<String>,
@@ -164,7 +166,8 @@ pub async fn list_jobs(
              CASE WHEN j.kind = 'separate' THEN COALESCE((SELECT i.title FROM item_parts ip
                JOIN items i ON i.id = ip."itemId" WHERE ip."mediaFileId" = j."mediaFileId"
                ORDER BY ip.version, i.id LIMIT 1), m.title) ELSE m.title END AS title,
-             m."libraryId" AS library_id, j.payload #>> '{plan,level}' AS level,
+             m.id AS media_id, m.type::text AS media_type, m."libraryId" AS library_id,
+             j.payload #>> '{plan,level}' AS level,
              j.payload #>> '{plan,codec}' AS codec,
              (j.payload #>> '{info,durationSeconds}')::float8 AS duration,
              (j.kind = 'optimize' AND j.state = 'done' AND j.result #>> '{journal,backup}' IS NOT NULL
@@ -202,6 +205,8 @@ pub async fn list_jobs(
                 in_size: r.get("inSize"),
                 out_size: r.get("outSize"),
                 title: r.get("title"),
+                media_id: r.get("media_id"),
+                media_type: r.get("media_type"),
                 library_id: r.get("library_id"),
                 level: r.get("level"),
                 codec: r.get("codec"),
