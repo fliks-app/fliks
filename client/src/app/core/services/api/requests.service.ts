@@ -251,7 +251,7 @@ export class RequestsService {
   private readonly serverVersion = inject(ServerVersionService);
   private readonly auth = inject(AuthService);
   private readonly fetchedKinds = signal<ReadonlySet<MediaType>>(new Set());
-  /** A server before it neither auto-approves adders nor takes `monitorNewSeasons` on a request. */
+  /** Older servers neither auto-approve adders nor take `monitorNewSeasons` on a request; drop with #3103. */
   private readonly requestAdds = computed(() => this.serverVersion.supports(SERVER_SINCE.autoApproval));
   /** An adder on an older server adds through the import routes. */
   readonly addsByImport = computed(() => !this.requestAdds() && this.auth.hasPermission('media.create'));
