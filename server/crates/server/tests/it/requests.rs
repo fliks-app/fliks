@@ -1859,7 +1859,7 @@ async fn row(c: &Ctx, id: i64) -> (String, Option<i32>, Option<i32>, Option<Valu
 }
 
 async fn second_profile(c: &Ctx) {
-    q(&c.pool(), "INSERT INTO quality_profiles (id, name, cutoff, items) VALUES (2, 'UHD', 1, '[]') ON CONFLICT (id) DO NOTHING").await;
+    q(&c.pool(), "INSERT INTO quality_profiles (id, name, family, cutoff, items) VALUES (2, 'UHD', 'video', 1, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items").await;
 }
 
 #[sqlx::test(migrations = false)]
@@ -2166,12 +2166,17 @@ async fn approve_with_edits_sets_series_profiles_on_every_pending_row(pool: PgPo
     assert_eq!(s, 201, "{r}");
     assert_eq!(row(&c, rid(&a)).await.2, Some(2));
     let (status, _, quality, _) = row(&c, rid(&b)).await;
-    assert_eq!((status.as_str(), quality), ("pending", Some(2)));
-    let uri = format!("/api/requests/{}/approve", rid(&b));
+    assert_eq!(
+        (status.as_str(), quality),
+        ("approved", Some(2)),
+        "the other row took the profile, so the import adopted it"
+    );
+    let (_, d) = call(&c, "POST", "/api/requests", &c.user, series(90, json!([3]))).await;
+    let uri = format!("/api/requests/{}/approve", rid(&d));
     let (s, r) = call(&c, "POST", &uri, &c.admin, json!({"qualityProfileId": 1})).await;
     assert_eq!(s, 201, "{r}");
     assert_eq!(
-        row(&c, rid(&b)).await.2,
+        row(&c, rid(&d)).await.2,
         Some(2),
         "an approved row locks the series' profiles"
     );
