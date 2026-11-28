@@ -72,7 +72,7 @@ function createComponent(overrides: Record<string, unknown> = {}) {
         },
       },
       { provide: Router, useValue: router },
-      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true, supportsWhenKnown: async () => true } },
       { provide: LiveTvApiService, useValue: api },
       {
         provide: DeviceService,

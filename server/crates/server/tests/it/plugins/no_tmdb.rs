@@ -25,6 +25,31 @@ async fn get(h: &H, uri: &str) -> (u16, Value) {
     h.call("GET", uri, Some(&h.admin), None).await
 }
 
+/// A request manager without `media.create`, whose requests wait for an approval.
+async fn manager(h: &H) -> String {
+    let role: i32 = sqlx::query_scalar(
+        r#"INSERT INTO roles (name, permissions) VALUES ('manager', '["media.read","requests.create","requests.manage"]') RETURNING id"#,
+    )
+    .fetch_one(&h.st.db)
+    .await
+    .unwrap();
+    let uid: i32 = sqlx::query_scalar(
+        r#"INSERT INTO users (username, "isAdmin", "roleId") VALUES ('manager', false, $1) RETURNING id"#,
+    )
+    .bind(role)
+    .fetch_one(&h.st.db)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO library_user_access ("libraryId", "userId") SELECT id, $1 FROM libraries"#,
+    )
+    .bind(uid)
+    .execute(&h.st.db)
+    .await
+    .unwrap();
+    session::token(&h.st, uid, "manager").await
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn with_no_provider_lists_and_search_answer_empty_and_a_request_waits() {
     let Some(s) = Scratch::create("notmdb").await else {
@@ -50,8 +75,9 @@ async fn with_no_provider_lists_and_search_answer_empty_and_a_request_waits() {
     assert_eq!(body["message"], "Unknown provider: tmdb");
 
     let ask = json!({"mediaType": "series", "tmdbId": 1396, "title": "T", "qualityProfileId": 1});
+    let asker = manager(&h).await;
     let (st, r) = h
-        .call("POST", "/api/requests", Some(&h.admin), Some(ask))
+        .call("POST", "/api/requests", Some(&asker), Some(ask))
         .await;
     assert_eq!((st, &r["status"]), (201, &json!("pending")), "{r}");
     let id = r["id"].as_i64().unwrap();
@@ -99,7 +125,8 @@ async fn a_library_title_is_one_request_whichever_key_asks_and_a_double_hold_is_
     held(&h, 101, &[("tmdb", "2"), ("tvdb", "20")]).await;
     held(&h, 102, &[("tmdb", "3"), ("tvdb", "555")]).await;
     held(&h, 103, &[("tmdb", "4"), ("tvdb", "555")]).await;
-    let ask = |body: Value| h.call("POST", "/api/requests", Some(&h.admin), Some(body));
+    let asker = manager(&h).await;
+    let ask = |body: Value| h.call("POST", "/api/requests", Some(&asker), Some(body));
     let tmdb =
         |id: i64| json!({"mediaType": "series", "tmdbId": id, "title": "T", "qualityProfileId": 1});
     let tvdb = |id: &str| json!({"mediaType": "series", "provider": "tvdb", "externalId": id, "title": "T", "qualityProfileId": 1});
@@ -147,8 +174,9 @@ async fn a_third_party_provider_serves_search_and_requests_without_tmdb() {
     assert_eq!((st, &d["title"]), (200, &json!("Sample")), "{d}");
 
     let ask = json!({"mediaType": "series", "provider": NS, "externalId": "1", "title": "Sample", "qualityProfileId": 1});
+    let asker = manager(&h).await;
     let (st, r) = h
-        .call("POST", "/api/requests", Some(&h.admin), Some(ask.clone()))
+        .call("POST", "/api/requests", Some(&asker), Some(ask.clone()))
         .await;
     assert_eq!(st, 201, "{r}");
     assert_eq!(
@@ -157,7 +185,7 @@ async fn a_third_party_provider_serves_search_and_requests_without_tmdb() {
     );
     let id = r["id"].as_i64().unwrap();
     let (_, dup) = h
-        .call("POST", "/api/requests", Some(&h.admin), Some(ask))
+        .call("POST", "/api/requests", Some(&asker), Some(ask))
         .await;
     assert_eq!(
         dup["statusCode"], 409,

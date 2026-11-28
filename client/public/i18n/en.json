@@ -279,7 +279,7 @@
   },
   "permissions": {
     "media.read": "View media",
-    "media.create": "Add media",
+    "media.create": "Add media (auto-approved requests)",
     "media.edit": "Edit media",
     "media.delete": "Delete media",
     "media.grab": "Download releases",
@@ -1078,7 +1078,9 @@
     "status_continuing": "Ongoing",
     "status_tba": "Upcoming",
     "status_announced": "Announced",
-    "status_deleted": "Deleted"
+    "status_deleted": "Deleted",
+    "request_approved": "Approved, added to the library.",
+    "request_sent_for_approval": "Sent for approval."
   },
   "library": {
     "filter_monitored": "Monitored",
@@ -1604,7 +1606,12 @@
     "allowance_left_other": "{{count}} of {{limit}} requests left per {{days}} days",
     "allowance_none_one": "Limit reached, next request in {{count}} day",
     "allowance_none_other": "Limit reached, next request in {{count}} days",
-    "quotaExceeded": "Request limit reached: {{count}} of {{limit}} in the last {{days}} days"
+    "quotaExceeded": "Request limit reached: {{count}} of {{limit}} in the last {{days}} days",
+    "approve_title": "Approve request",
+    "monitor_new_seasons": "Follow new seasons",
+    "filter_everyone": "Everyone",
+    "filter_mine": "Mine",
+    "added_by": "Added by "
   },
   "activity": {
     "queue_empty": "No active downloads.",
@@ -3308,7 +3315,8 @@
       "recap_years": "released between {{from}} and {{to}}",
       "recap_year_from": "released from {{from}}",
       "recap_year_to": "released up to {{to}}",
-      "recap_except": "except {{names}}"
+      "recap_except": "except {{names}}",
+      "adders_hint": "People who can add media need no rule: their requests are always approved."
     },
     "subtitle_providers": {
       "title": "Subtitle providers",
@@ -6366,6 +6374,8 @@
     "resume_episode": "Resume {{code}}"
   },
   "add_dialog": {
-    "follow_new_seasons": "Follow new seasons"
+    "follow_new_seasons": "Follow new seasons",
+    "requested_by_count_one": "{{count}} person requested this",
+    "requested_by_count_other": "{{count}} people requested this"
   }
 }

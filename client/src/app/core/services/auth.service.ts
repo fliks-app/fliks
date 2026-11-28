@@ -19,6 +19,7 @@ import {
 import { IS_STANDALONE_BUNDLE, restartApp } from '../utils/standalone-bundle';
 import { NATIVE_AUDIO } from '../plugins/audio-player.plugin';
 import { holdsPermission } from '../permissions';
+import { ServerVersionService } from './server-version.service';
 import { grantSatisfies, parsePluginGrant } from '../utils/plugin-grant';
 import { SKIP_ERROR_TOAST } from '../interceptors/error.interceptor';
 import { TvService } from './tv.service';
@@ -299,7 +300,9 @@ export class AuthService {
     const u = this._user();
     if (u?.isAdmin) return true;
     const held = u?.permissions ?? [];
-    if (holdsPermission(held, perm)) return true;
+    if (holdsPermission(held, perm, false)) return true;
+    // Read lazily: the server-version service injects this one.
+    if (holdsPermission(held, perm) && this.injector.get(ServerVersionService).requestAdds()) return true;
     // A plugin permission can be granted whole or for one action, so the strings need not match.
     const wanted = parsePluginGrant(perm);
     return !!wanted && held.some((grant) => grantSatisfies(grant, wanted));

@@ -200,7 +200,9 @@ pub async fn act(
 async fn run(st: &AppState, a: &Authed, g: &act::Grant) -> Res<()> {
     use crate::{requests::flow, social};
     match g.action.as_str() {
-        "request.approve" => flow::approve(st, a, g.target, false).await.map(drop),
+        "request.approve" => flow::approve(st, a, g.target, Default::default())
+            .await
+            .map(drop),
         "request.decline" => flow::decline(st, a, g.target, None).await.map(drop),
         "follow.accept" => social::accept_request(st, a, g.target).await.map(drop),
         "follow.decline" => social::reject_request(st, a, g.target).await.map(drop),

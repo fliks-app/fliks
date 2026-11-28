@@ -17,7 +17,7 @@ export class HitStateComponent {
   readonly state = input.required<RowState>();
   /** The viewer can add or request: without it the `+` is not drawn. */
   readonly canAct = input(false);
-  /** An admin adds, anyone else requests. */
-  readonly admin = input(false);
+  /** The viewer's request is approved at once: the `+` reads Add. */
+  readonly auto = input(false);
   readonly add = output<void>();
 }

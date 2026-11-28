@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET \"qualityProfileId\" = COALESCE($2, \"qualityProfileId\"),\n        \"languageProfileId\" = COALESCE($3, \"languageProfileId\") WHERE id = ANY($1) AND status = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4Array",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "72fed8cc767769809a72a99c2ea42067603a7c0f25e4fd955e5224feb369155d"
+}

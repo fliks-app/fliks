@@ -395,3 +395,54 @@ async fn a_fileless_album_identified_by_its_group_links_the_target_release(pool:
     }
     assert_eq!(held, [RELEASE]);
 }
+
+async fn rows(c: &Ctx) -> Vec<(i32, String, Option<Vec<String>>)> {
+    sqlx::query_as("SELECT id, status::text, recordings FROM requests ORDER BY id")
+        .fetch_all(&c.pool)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_auto_approved_track_add_grows_the_callers_approved_request(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (s, first) = c.ask(&c.admin, Some(json!([ONE]))).await;
+    assert_eq!(s, 201, "{first}");
+    let (s, r) = c.ask(&c.admin, Some(json!([TWO]))).await;
+    assert_eq!((s, &r["id"]), (201, &first["id"]), "{r}");
+    let id = first["id"].as_i64().unwrap() as i32;
+    assert_eq!(
+        rows(&c).await,
+        [(id, "approved".into(), Some(vec![ONE.into(), TWO.into()]))]
+    );
+    assert_eq!(c.monitored().await, [ONE, TWO]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_adder_absorbs_a_pending_track_request_and_asks_the_other_tracks(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, asked) = c.ask(&c.user, Some(json!([ONE]))).await;
+    let (s, r) = c.ask(&c.admin, Some(json!([ONE, TWO]))).await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(r["absorbed"], json!([asked["id"]]));
+    assert_eq!(r["recordings"], json!([TWO]));
+    let all = rows(&c).await;
+    assert_eq!(all.len(), 2);
+    assert!(all.iter().all(|r| r.1 == "approved"), "{all:?}");
+    assert_eq!(c.monitored().await, [ONE, TWO]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_refused_track_want_leaves_the_grown_request_as_it_was(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (s, first) = c.ask(&c.admin, Some(json!([ONE]))).await;
+    assert_eq!(s, 201, "{first}");
+    let (s, r) = c.ask(&c.admin, Some(json!([THREE]))).await;
+    assert_eq!(s, 404, "another release holds it: {r}");
+    let id = first["id"].as_i64().unwrap() as i32;
+    assert_eq!(
+        rows(&c).await,
+        [(id, "approved".into(), Some(vec![ONE.into()]))]
+    );
+    assert_eq!(c.monitored().await, [ONE]);
+}

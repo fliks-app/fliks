@@ -1,6 +1,12 @@
+/** The includes a server grants only from `SERVER_SINCE.autoApproval`. */
+export const REQUEST_ADD_INCLUDES: Readonly<Record<string, readonly string[]>> = {
+  'media.create': ['requests.create'],
+};
+
 /** Core permissions each broader one includes, from the server ACL (`Permissions::from`): A includes B only when A's grants cover B's. */
 export const PERMISSION_INCLUDES: Readonly<Record<string, readonly string[]>> = {
   'parties.manage': ['parties.create', 'parties.read_public'],
+  ...REQUEST_ADD_INCLUDES,
 };
 
 /** Core permissions grouped by domain, in display order. */
@@ -14,9 +20,10 @@ export const PERMISSION_GROUPS: readonly { id: string; permissions: readonly str
   { id: 'admin', permissions: ['settings.access', 'users.manage', 'roles.manage'] },
 ];
 
-/** True when `held` grants `perm` itself or through a broader permission that includes it. */
-export function holdsPermission(held: readonly string[], perm: string): boolean {
-  return held.includes(perm) || held.some((h) => PERMISSION_INCLUDES[h]?.includes(perm));
+/** True when `held` grants `perm` itself or through a broader permission that includes it; `requestAdds` is false on an older server. */
+export function holdsPermission(held: readonly string[], perm: string, requestAdds = true): boolean {
+  const via = (h: string) => !!PERMISSION_INCLUDES[h]?.includes(perm) && (requestAdds || !REQUEST_ADD_INCLUDES[h]?.includes(perm));
+  return held.includes(perm) || held.some(via);
 }
 
 /** The held permissions that include `perm`. */

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id,\n        wants AS \"wants: Json<Vec<WantSpec>>\", recordings\n        FROM requests r WHERE status::text = ANY($2) AND (EXISTS (SELECT 1 FROM media_external_ids e\n          WHERE e.\"mediaId\" = $1 AND e.kind = r.\"mediaType\" AND e.provider = r.provider\n          AND e.value = r.\"externalId\")\n          OR (r.\"mediaType\" = 'album' AND r.provider = 'musicbrainz' AND r.\"externalId\" =\n              (SELECT \"releaseGroupMbid\"::text FROM album_details WHERE \"mediaId\" = $1)))\n        ORDER BY id",
+  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id,\n        wants AS \"wants: Json<Vec<WantSpec>>\", recordings, \"monitorNewSeasons\" AS monitor_new_seasons\n        FROM requests WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -168,12 +168,22 @@
             "name": "recordings"
           }
         }
+      },
+      {
+        "ordinal": 16,
+        "name": "monitor_new_seasons",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "requests",
+            "name": "monitorNewSeasons"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
-        "Int4",
-        "TextArray"
+        "Int4"
       ]
     },
     "nullable": [
@@ -192,8 +202,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "af8530f49b9faff08c5971367eab61f0f9ac7474c68538727148d470473d9a4f"
+  "hash": "84458d6c32b1988bf3f43f3ff501d032a97580e41e93b15c1ac1a499a61259f5"
 }

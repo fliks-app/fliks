@@ -279,7 +279,7 @@
   },
   "permissions": {
     "media.read": "Medien ansehen",
-    "media.create": "Medien hinzufügen",
+    "media.create": "Medien hinzufügen (automatisch genehmigte Anfragen)",
     "media.edit": "Medien bearbeiten",
     "media.delete": "Medien löschen",
     "media.grab": "Releases herunterladen",
@@ -1078,7 +1078,9 @@
     "status_deleted": "Gelöscht",
     "add_music": "Musik hinzufügen",
     "request_music": "Musik anfragen",
-    "request_album": "Album anfragen"
+    "request_album": "Album anfragen",
+    "request_approved": "Genehmigt, zur Bibliothek hinzugefügt.",
+    "request_sent_for_approval": "Zur Genehmigung gesendet."
   },
   "library": {
     "filter_monitored": "Überwacht",
@@ -1604,7 +1606,12 @@
     "allowance_left_other": "Noch {{count}} von {{limit}} Anfragen pro {{days}} Tage",
     "allowance_none_one": "Limit erreicht, nächste Anfrage in {{count}} Tag",
     "allowance_none_other": "Limit erreicht, nächste Anfrage in {{count}} Tagen",
-    "quotaExceeded": "Anfragelimit erreicht: {{count}} von {{limit}} in den letzten {{days}} Tagen"
+    "quotaExceeded": "Anfragelimit erreicht: {{count}} von {{limit}} in den letzten {{days}} Tagen",
+    "approve_title": "Anfrage genehmigen",
+    "monitor_new_seasons": "Neue Staffeln verfolgen",
+    "filter_everyone": "Alle",
+    "filter_mine": "Meine",
+    "added_by": "Hinzugefügt von "
   },
   "activity": {
     "queue_empty": "Kein aktiver Download.",
@@ -3308,7 +3315,8 @@
       "recap_years": "erschienen zwischen {{from}} und {{to}}",
       "recap_year_from": "erschienen ab {{from}}",
       "recap_year_to": "erschienen bis {{to}}",
-      "recap_except": "außer {{names}}"
+      "recap_except": "außer {{names}}",
+      "adders_hint": "Wer Medien hinzufügen darf, braucht keine Regel: Diese Anfragen werden immer genehmigt."
     },
     "metadata": {
       "title": "Metadaten",
@@ -6366,6 +6374,8 @@
     "resume_episode": "{{code}} fortsetzen"
   },
   "add_dialog": {
-    "follow_new_seasons": "Neue Staffeln verfolgen"
+    "follow_new_seasons": "Neue Staffeln verfolgen",
+    "requested_by_count_one": "{{count}} Person hat das angefragt",
+    "requested_by_count_other": "{{count}} Personen haben das angefragt"
   }
 }

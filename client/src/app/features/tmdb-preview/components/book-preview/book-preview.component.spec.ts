@@ -9,6 +9,7 @@ import { vi, afterEach, beforeEach, describe, it, expect } from 'vitest';
 import { BookPreviewComponent } from './book-preview.component';
 import { bookPreviewFixture } from '../../../../testing/books.fixtures';
 import { LibrariesApiService, LibrarySummary } from '../../../../core/services/api/libraries-api.service';
+import { holdsPermission } from '../../../../core/permissions';
 import { AuthService } from '../../../../core/services/auth.service';
 import { NavbarService } from '../../../../core/services/navbar.service';
 import { DeviceService } from '../../../../core/services/device.service';
@@ -30,12 +31,12 @@ function setup(libraries: LibrarySummary[], canImport = true, allowed: string[] 
       provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
       { provide: Router, useValue: { navigate } },
       { provide: LibrariesApiService, useValue: { listMine: async () => libraries } },
-      { provide: AuthService, useValue: { hasPermission: (p: string) => allowed.includes(p) } },
+      { provide: AuthService, useValue: { hasPermission: (p: string) => holdsPermission(allowed, p), user: () => null } },
       { provide: ToastService, useValue: { success: vi.fn(), error: vi.fn() } },
       { provide: NavbarService, useValue: { heroPaddingTop: () => null } },
       { provide: DeviceService, useValue: { isTv: () => false } },
       { provide: PushService, useValue: { askInContext: vi.fn() } },
-      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true, supportsWhenKnown: async () => true } },
       { provide: PREVIEW_HOST, useValue: { setTitle: vi.fn(), setBackground: vi.fn() } },
     ],
   });
@@ -76,12 +77,12 @@ describe('BookPreviewComponent', () => {
     const { fixture, navigate } = setup([lib(1)]);
     const el = await settle(fixture);
     expect(el.querySelector('app-add-dialog')).not.toBeNull();
-    const cmp = fixture.componentInstance as unknown as { onAdded(r: { mode: string; mediaId: number | null }): void };
-    cmp.onAdded({ mode: 'import', mediaId: 42 });
+    const cmp = fixture.componentInstance as unknown as { onAdded(r: { status: string; mediaId: number | null }): void };
+    cmp.onAdded({ status: 'approved', mediaId: 42 });
     expect(navigate).toHaveBeenCalledWith(['/books', '42']);
   });
 
-  it('offers no Add without the import permission', async () => {
+  it('offers no Add without the request permission', async () => {
     const { fixture } = setup([lib(1)], false);
     const el = await settle(fixture);
     expect(el.querySelector('[data-hero-actions] button')).toBeNull();

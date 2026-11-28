@@ -62,7 +62,7 @@ describe('PushService', () => {
         { provide: ConfirmationService, useValue: { confirm } },
         { provide: Router, useValue: { navigateByUrl } },
         { provide: ServerConfigService, useValue: { serverUrl: () => 'https://a.test', resolveUrl: (u: string) => u } },
-        { provide: ServerVersionService, useValue: { supports: () => true } },
+        { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       ],
     });
     const push = TestBed.inject(PushService);

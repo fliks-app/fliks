@@ -97,3 +97,15 @@ fn acl_reproduces_expected() {
     }
     assert!(failed.is_empty(), "acl: {} of 35 cases fail", failed.len());
 }
+
+#[test]
+fn media_create_includes_requests_create() {
+    let p = Permissions::from(&["media.create".to_owned()], false);
+    assert!(p.can(Action::Create, &Subject::FliksRequest));
+    assert!(p.can(Action::Track, &Subject::Media));
+    assert!(p.can_request(Action::Read, true, false));
+    assert!(p.can_request(Action::Update, true, true));
+    assert!(p.can_request(Action::Delete, true, true));
+    assert!(!p.can_request(Action::Read, false, true));
+    assert!(!p.can(Action::Approve, &Subject::FliksRequest));
+}

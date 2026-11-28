@@ -43,7 +43,7 @@ async function setup() {
   const toast = { error: vi.fn() };
   TestBed.configureTestingModule({
     providers: [
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       provideZonelessChangeDetection(),
       { provide: TranslateService, useValue: { instant: (k: string) => k } },
       { provide: CastService, useValue: cast },

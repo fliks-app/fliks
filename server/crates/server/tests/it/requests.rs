@@ -97,6 +97,8 @@ struct Ctx {
     user: String,
     other: String,
     validator: String,
+    /// `media.create` alone: every create of theirs is approved.
+    adder: String,
 }
 
 type SeasonRow = (String, Option<String>, Option<Value>, Option<i32>);
@@ -186,6 +188,12 @@ async fn ctx_with_key(pool: PgPool, tmdb_key: bool) -> Ctx {
             r#"["requests.create","requests.manage"]"#,
             vec![MOVIES],
         ),
+        (
+            "adder",
+            false,
+            r#"["media.read","media.create"]"#,
+            vec![MOVIES, SERIES],
+        ),
     ] {
         let role: i32 = sqlx::query_scalar(
             "INSERT INTO roles (name, permissions) VALUES ($1, $2::jsonb) RETURNING id",
@@ -223,6 +231,7 @@ async fn ctx_with_key(pool: PgPool, tmdb_key: bool) -> Ctx {
         st,
         tmdb,
         hook,
+        adder: toks.pop().unwrap(),
         validator: toks.pop().unwrap(),
         other: toks.pop().unwrap(),
         user: toks.pop().unwrap(),
@@ -787,7 +796,7 @@ async fn concurrent_creates_of_one_title_leave_a_single_active_request(pool: PgP
     let (a, b, d, e) = tokio::join!(
         call(&c, "POST", "/api/requests", &c.user, movie(90)),
         call(&c, "POST", "/api/requests", &c.other, movie(90)),
-        call(&c, "POST", "/api/requests", &c.admin, movie(90)),
+        call(&c, "POST", "/api/requests", &c.validator, movie(90)),
         call(&c, "POST", "/api/requests", &c.user, movie(90)),
     );
     let codes = [a.0, b.0, d.0, e.0];
@@ -1827,4 +1836,451 @@ async fn unmonitoring_a_season_keeps_a_whole_series_request_on_the_other_seasons
     assert_eq!(row, ("available".into(), Some(json!([1, 3]))));
     let (s, r) = call(&c, "POST", "/api/requests", &c.user, series(94, json!([2]))).await;
     assert_eq!(s, 201, "{r}");
+}
+
+async fn uid(c: &Ctx, name: &str) -> i64 {
+    sqlx::query_scalar::<_, i32>("SELECT id FROM users WHERE username = $1")
+        .bind(name)
+        .fetch_one(&c.pool())
+        .await
+        .unwrap()
+        .into()
+}
+
+/// `(status, approvedById, qualityProfileId, seasons)` of a request row.
+async fn row(c: &Ctx, id: i64) -> (String, Option<i32>, Option<i32>, Option<Value>) {
+    sqlx::query_as(
+        r#"SELECT status::text, "approvedById", "qualityProfileId", seasons FROM requests WHERE id = $1"#,
+    )
+    .bind(id as i32)
+    .fetch_one(&c.pool())
+    .await
+    .unwrap()
+}
+
+async fn second_profile(c: &Ctx) {
+    q(&c.pool(), "INSERT INTO quality_profiles (id, name, family, cutoff, items) VALUES (2, 'UHD', 'video', 1, '[]') ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, family = EXCLUDED.family, cutoff = EXCLUDED.cutoff, items = EXCLUDED.items").await;
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_adder_is_approved_without_a_rule_picks_profiles_and_has_no_quota(pool: PgPool) {
+    let c = ctx(pool).await;
+    second_profile(&c).await;
+    q(
+        &c.pool(),
+        r#"INSERT INTO user_quotas ("userId", kind, "limit") SELECT id, 'movie', 1 FROM users WHERE username = 'adder'"#,
+    )
+    .await;
+    for t in [60, 61] {
+        let mut body = movie(t);
+        body["qualityProfileId"] = json!(2);
+        let (s, r) = call(&c, "POST", "/api/requests", &c.adder, body).await;
+        assert_eq!(s, 201, "{r}");
+        assert_eq!(
+            (&r["absorbed"], &r["qualityProfileId"]),
+            (&json!([]), &json!(2))
+        );
+        assert_eq!(status_of(&c, rid(&r)).await.0, "approved");
+    }
+    let (s, al) = call(&c, "GET", "/api/requests/allowance", &c.adder, json!(null)).await;
+    assert_eq!((s, al), (200, json!({})));
+    let mut bare = movie(62);
+    bare.as_object_mut().unwrap().remove("qualityProfileId");
+    let (s, r) = call(&c, "POST", "/api/requests", &c.adder, bare).await;
+    assert_eq!(s, 400, "an adder chooses, so a profile is required: {r}");
+}
+
+#[sqlx::test(migrations = false)]
+async fn the_auto_approval_hint_follows_the_permission_and_the_rule_shape(pool: PgPool) {
+    let c = ctx(pool).await;
+    let kinds = |tok: &str| {
+        let tok = tok.to_owned();
+        let c = &c;
+        async move {
+            let (s, r) = call(c, "GET", "/api/requests/auto-approval", &tok, json!(null)).await;
+            assert_eq!(s, 200, "{r}");
+            r["kinds"].clone()
+        }
+    };
+    assert!(
+        kinds(&c.adder)
+            .await
+            .as_array()
+            .unwrap()
+            .contains(&json!("movie"))
+    );
+    assert_eq!(kinds(&c.user).await, json!([]));
+    rule(&c, json!({"libraryIds": [MOVIES], "mediaType": "movie"})).await;
+    assert_eq!(
+        kinds(&c.user).await,
+        json!([]),
+        "a library criterion is no certainty"
+    );
+    let role: i32 = sqlx::query_scalar(r#"SELECT "roleId" FROM users WHERE username = 'user'"#)
+        .fetch_one(&c.pool())
+        .await
+        .unwrap();
+    rule(
+        &c,
+        json!({"roleIds": [role], "mediaType": "series", "libraryIds": []}),
+    )
+    .await;
+    assert_eq!(kinds(&c.user).await, json!(["series"]));
+    assert_eq!(kinds(&c.other).await, json!([]), "another role");
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_adder_absorbs_another_users_pending_movie_request(pool: PgPool) {
+    let mut c = ctx(pool).await;
+    second_profile(&c).await;
+    let (s, asked) = call(&c, "POST", "/api/requests", &c.user, movie(70)).await;
+    assert_eq!(s, 201, "{asked}");
+    let uri = "/api/requests/title-state?tmdbId=70&mediaType=movie";
+    let (_, state) = call(&c, "GET", uri, &c.adder, json!(null)).await;
+    assert_eq!(state["pendingRequestIds"], json!([rid(&asked)]), "{state}");
+    let _ = domain(&mut c);
+    let mut body = movie(70);
+    body["qualityProfileId"] = json!(2);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.adder, body.clone()).await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(
+        (rid(&r), &r["absorbed"]),
+        (rid(&asked), &json!([rid(&asked)]))
+    );
+    let adder = uid(&c, "adder").await as i32;
+    let (status, by, quality, _) = row(&c, rid(&asked)).await;
+    assert_eq!(
+        (status.as_str(), by, quality),
+        ("approved", Some(adder), Some(2))
+    );
+    assert_eq!(
+        r["userId"],
+        json!(uid(&c, "user").await),
+        "the requester stays"
+    );
+    let approved = domain(&mut c)
+        .into_iter()
+        .filter(|e| matches!(e, DomainEvent::RequestApproved { .. }))
+        .count();
+    assert_eq!(approved, 1);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.adder, body).await;
+    assert_eq!(
+        (s, &r["message"]),
+        (409, &json!("This title has already been requested"))
+    );
+    let rows: i64 =
+        sqlx::query_scalar(r#"SELECT count(*) FROM requests WHERE "externalId" = '70'"#)
+            .fetch_one(&c.pool())
+            .await
+            .unwrap();
+    assert_eq!(rows, 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_whole_series_add_absorbs_season_requests_and_adds_the_other_seasons(pool: PgPool) {
+    let c = ctx(pool).await;
+    *c.tmdb.facts.lock_clean() = Some(TitleFacts {
+        season_count: Some(4),
+        ..TitleFacts::default()
+    });
+    let (_, a) = call(&c, "POST", "/api/requests", &c.user, series(80, json!([1]))).await;
+    let (_, b) = call(
+        &c,
+        "POST",
+        "/api/requests",
+        &c.other,
+        series(80, json!([3])),
+    )
+    .await;
+    let (s, r) = call(&c, "POST", "/api/requests", &c.adder, series(80, json!([]))).await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(r["absorbed"], json!([rid(&a), rid(&b)]));
+    assert_eq!(
+        (&r["seasons"], &r["status"]),
+        (&json!([2, 4]), &json!("approved"))
+    );
+    for id in [rid(&a), rid(&b)] {
+        assert_eq!(row(&c, id).await.0, "approved");
+    }
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_add_leaves_out_approved_seasons_and_keeps_their_profiles(pool: PgPool) {
+    let c = ctx(pool).await;
+    second_profile(&c).await;
+    let (_, a) = call(&c, "POST", "/api/requests", &c.user, series(81, json!([1]))).await;
+    let (s, _) = call(
+        &c,
+        "POST",
+        &format!("/api/requests/{}/approve", rid(&a)),
+        &c.admin,
+        json!({}),
+    )
+    .await;
+    assert_eq!(s, 201);
+    let (_, b) = call(
+        &c,
+        "POST",
+        "/api/requests",
+        &c.other,
+        series(81, json!([2])),
+    )
+    .await;
+    let mut body = series(81, json!([1, 2, 3]));
+    body["qualityProfileId"] = json!(2);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.adder, body).await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(
+        (&r["absorbed"], &r["seasons"]),
+        (&json!([rid(&b)]), &json!([3]))
+    );
+    let (status, _, quality, _) = row(&c, rid(&b)).await;
+    assert_eq!(
+        (status.as_str(), quality),
+        ("approved", Some(1)),
+        "the approved row locks the profiles"
+    );
+    assert_eq!(r["qualityProfileId"], json!(1));
+    let (s, r) = call(
+        &c,
+        "POST",
+        "/api/requests",
+        &c.adder,
+        series(81, json!([2, 3])),
+    )
+    .await;
+    assert_eq!(
+        (s, &r["message"]),
+        (409, &json!("Season(s) 2, 3 have already been requested")),
+        "nothing pending, nothing left"
+    );
+}
+
+#[sqlx::test(migrations = false)]
+async fn concurrent_absorbing_creates_approve_a_pending_request_once(pool: PgPool) {
+    let mut c = ctx(pool).await;
+    let (_, asked) = call(&c, "POST", "/api/requests", &c.user, movie(75)).await;
+    let _ = domain(&mut c);
+    let (a, b) = tokio::join!(
+        call(&c, "POST", "/api/requests", &c.adder, movie(75)),
+        call(&c, "POST", "/api/requests", &c.admin, movie(75)),
+    );
+    let mut codes = [a.0, b.0];
+    codes.sort_unstable();
+    assert_eq!(codes, [201, 409], "{a:?} {b:?}");
+    assert_eq!(row(&c, rid(&asked)).await.0, "approved");
+    let approved = domain(&mut c)
+        .into_iter()
+        .filter(|e| matches!(e, DomainEvent::RequestApproved { .. }))
+        .count();
+    assert_eq!(approved, 1);
+}
+
+async fn follows_new(c: &Ctx, tmdb: i32) -> bool {
+    sqlx::query_scalar(
+        r#"SELECT m."monitorNewSeasons" FROM media m JOIN media_external_ids e ON e."mediaId" = m.id
+           WHERE e.provider = 'tmdb' AND e.value = $1"#,
+    )
+    .bind(tmdb.to_string())
+    .fetch_one(&c.pool())
+    .await
+    .unwrap()
+}
+
+#[sqlx::test(migrations = false)]
+async fn monitor_new_seasons_is_stored_patched_and_honoured_at_approval(pool: PgPool) {
+    let c = ctx(pool).await;
+    let mut body = series(85, json!([]));
+    body["monitorNewSeasons"] = json!(true);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, body).await;
+    assert_eq!((s, &r["monitorNewSeasons"]), (201, &json!(true)), "{r}");
+    let id = rid(&r);
+    for (v, want) in [(json!(false), json!(false)), (json!(null), json!(null))] {
+        let (s, r) = call(
+            &c,
+            "PATCH",
+            &format!("/api/requests/{id}"),
+            &c.user,
+            json!({"monitorNewSeasons": v}),
+        )
+        .await;
+        assert_eq!((s, &r["monitorNewSeasons"]), (200, &want), "{r}");
+    }
+    let mut m = movie(86);
+    m["monitorNewSeasons"] = json!(true);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, m).await;
+    assert_eq!(s, 400, "{r}");
+    let (s, r) = call(
+        &c,
+        "POST",
+        &format!("/api/requests/{id}/approve"),
+        &c.admin,
+        json!({"monitorNewSeasons": false}),
+    )
+    .await;
+    assert_eq!(s, 201, "{r}");
+    assert!(
+        !follows_new(&c, 85).await,
+        "false leaves a whole series unfollowed"
+    );
+
+    let mut scoped = series(87, json!([1]));
+    scoped["monitorNewSeasons"] = json!(true);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.adder, scoped).await;
+    assert_eq!(s, 201, "{r}");
+    assert!(
+        follows_new(&c, 87).await,
+        "true follows though the scope misses the latest season"
+    );
+    let (s, _) = call(&c, "POST", "/api/requests", &c.adder, series(88, json!([]))).await;
+    assert_eq!(s, 201);
+    assert!(follows_new(&c, 88).await, "null derives it");
+}
+
+#[sqlx::test(migrations = false)]
+async fn approve_with_edits_sets_series_profiles_on_every_pending_row(pool: PgPool) {
+    let c = ctx(pool).await;
+    second_profile(&c).await;
+    let (_, a) = call(&c, "POST", "/api/requests", &c.user, series(90, json!([1]))).await;
+    let (_, b) = call(
+        &c,
+        "POST",
+        "/api/requests",
+        &c.other,
+        series(90, json!([2])),
+    )
+    .await;
+    let uri = format!("/api/requests/{}/approve", rid(&a));
+    let (s, _) = call(&c, "POST", &uri, &c.user, json!({"qualityProfileId": 2})).await;
+    assert_eq!(s, 403, "a requester does not approve");
+    let (s, r) = call(
+        &c,
+        "POST",
+        &uri,
+        &c.admin,
+        json!({"qualityProfileId": 2, "extra": 1}),
+    )
+    .await;
+    assert_eq!(s, 400, "{r}");
+    let (s, r) = call(&c, "POST", &uri, &c.admin, json!({"qualityProfileId": 2})).await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(row(&c, rid(&a)).await.2, Some(2));
+    let (status, _, quality, _) = row(&c, rid(&b)).await;
+    assert_eq!(
+        (status.as_str(), quality),
+        ("approved", Some(2)),
+        "the other row took the profile, so the import adopted it"
+    );
+    let (_, d) = call(&c, "POST", "/api/requests", &c.user, series(90, json!([3]))).await;
+    let uri = format!("/api/requests/{}/approve", rid(&d));
+    let (s, r) = call(&c, "POST", &uri, &c.admin, json!({"qualityProfileId": 1})).await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(
+        row(&c, rid(&d)).await.2,
+        Some(2),
+        "an approved row locks the series' profiles"
+    );
+    let (_, m) = call(&c, "POST", "/api/requests", &c.user, movie(91)).await;
+    let uri = format!("/api/requests/{}/approve", rid(&m));
+    let (s, r) = call(
+        &c,
+        "POST",
+        &uri,
+        &c.admin,
+        json!({"monitorNewSeasons": true}),
+    )
+    .await;
+    assert_eq!(s, 400, "{r}");
+}
+
+#[sqlx::test(migrations = false)]
+async fn an_absorbed_row_whose_import_fails_goes_back_to_pending(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, asked) = call(&c, "POST", "/api/requests", &c.user, movie(77)).await;
+    c.tmdb.down.lock_clean().insert(77);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.adder, movie(77)).await;
+    assert_eq!(s, 503, "the import's error is answered: {r}");
+    let (status, by, _, _) = row(&c, rid(&asked)).await;
+    assert_eq!((status.as_str(), by), ("pending", None));
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_whole_series_add_over_season_requests_needs_the_season_list(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, asked) = call(&c, "POST", "/api/requests", &c.user, series(78, json!([1]))).await;
+    c.tmdb.down.lock_clean().insert(78);
+    let (s, r) = call(&c, "POST", "/api/requests", &c.adder, series(78, json!([]))).await;
+    assert_eq!(
+        (s, &r["message"]),
+        (
+            503,
+            &json!("The seasons of this series cannot be read, try again shortly")
+        )
+    );
+    assert_eq!(row(&c, rid(&asked)).await.0, "pending", "nothing changed");
+    let rows: i64 =
+        sqlx::query_scalar(r#"SELECT count(*) FROM requests WHERE "externalId" = '78'"#)
+            .fetch_one(&c.pool())
+            .await
+            .unwrap();
+    assert_eq!(rows, 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn absorbing_charges_no_quota_to_a_rule_approved_caller(pool: PgPool) {
+    let c = ctx(pool).await;
+    let user = uid(&c, "user").await;
+    rule(&c, json!({"userIds": [user]})).await;
+    q(
+        &c.pool(),
+        r#"INSERT INTO user_quotas ("userId", kind, "limit") SELECT id, 'movie', 1 FROM users WHERE username = 'user'"#,
+    )
+    .await;
+    let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(96)).await;
+    assert_eq!(s, 201);
+    let (_, asked) = call(&c, "POST", "/api/requests", &c.other, movie(97)).await;
+    let (s, r) = call(&c, "POST", "/api/requests", &c.user, movie(97)).await;
+    assert_eq!((s, &r["absorbed"]), (201, &json!([rid(&asked)])), "{r}");
+    let (s, _) = call(&c, "POST", "/api/requests", &c.user, movie(98)).await;
+    assert_eq!(s, 403, "a row of theirs still counts");
+}
+
+#[sqlx::test(migrations = false)]
+async fn approve_with_edits_rolls_back_to_pending_when_the_import_fails(pool: PgPool) {
+    let c = ctx(pool).await;
+    second_profile(&c).await;
+    let (_, asked) = call(&c, "POST", "/api/requests", &c.user, movie(93)).await;
+    c.tmdb.down.lock_clean().insert(93);
+    let uri = format!("/api/requests/{}/approve", rid(&asked));
+    let (s, r) = call(&c, "POST", &uri, &c.admin, json!({"qualityProfileId": 2})).await;
+    assert_eq!(s, 503, "{r}");
+    let (status, by, quality, _) = row(&c, rid(&asked)).await;
+    assert_eq!((status.as_str(), by, quality), ("pending", None, Some(2)));
+}
+
+#[sqlx::test(migrations = false)]
+async fn two_approvals_with_edits_apply_one(pool: PgPool) {
+    let c = ctx(pool).await;
+    second_profile(&c).await;
+    let (_, asked) = call(&c, "POST", "/api/requests", &c.user, movie(94)).await;
+    let uri = format!("/api/requests/{}/approve", rid(&asked));
+    let (a, b) = tokio::join!(
+        call(&c, "POST", &uri, &c.admin, json!({"qualityProfileId": 1})),
+        call(
+            &c,
+            "POST",
+            &uri,
+            &c.validator,
+            json!({"qualityProfileId": 2})
+        ),
+    );
+    let mut codes = [a.0, b.0];
+    codes.sort_unstable();
+    assert_eq!(codes, [201, 409], "{a:?} {b:?}");
+    let won = if a.0 == 201 { 1 } else { 2 };
+    assert_eq!(
+        row(&c, rid(&asked)).await.2,
+        Some(won),
+        "the winner's edits only"
+    );
 }

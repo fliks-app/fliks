@@ -1,10 +1,13 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { MediaType } from '../../enums/media-type.enum';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
 import { CacheRead, cacheHeaders } from '../../interceptors/cache.interceptor';
 import { kindOf } from '../../media-kinds';
+import { AuthService } from '../auth.service';
+import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
+import { StorageScopeService } from '../storage-scope.service';
 import type { LastSearch } from './last-search.model';
 import type { WantSpec } from './wants-api.service';
 
@@ -49,6 +52,8 @@ export type CreateVideoRequestBody = TitleKey & {
   /** One of the library's folders; omitted means its default one. */
   folderId?: number;
   seasons?: number[];
+  /** Series only: follow the seasons that air later; omitted derives it from the scope. */
+  monitorNewSeasons?: boolean;
 };
 
 /** A book is the Open Library work it is, asked per edition (format and language). */
@@ -83,6 +88,18 @@ export interface UpdateRequestBody {
   libraryId?: number | null;
   /** Pending book requests only: replaces the wished editions. */
   wants?: WantSpec[];
+  monitorNewSeasons?: boolean;
+}
+
+/** What a manager sets while approving; a series' profiles go to every active row of the title. */
+export interface ApproveBody {
+  qualityProfileId?: number;
+  languageProfileId?: number;
+  libraryId?: number;
+  folderId?: number;
+  monitorNewSeasons?: boolean;
+  /** Widens a track request to the whole album. */
+  wholeAlbum?: boolean;
 }
 
 export interface RequestMedia {
@@ -123,11 +140,15 @@ export interface FliksRequestRow {
   qualityProfileId: number | null;
   languageProfileId: number | null;
   libraryId: number | null;
+  /** One of the library's folders; null is its default one. */
+  folderId?: number | null;
   mediaId: number | null;
   /** Joined media row when linked. Use `media?.title` to display the live
    *  title (the cached `title` field may be stale or empty). */
   media: RequestMedia | null;
   seasons: number[] | null;
+  /** Series only: what the requester chose for later seasons; null derives it at approval. */
+  monitorNewSeasons?: boolean | null;
   /** Local card art (`/api/images/request/...`) stored at creation; null on
    *  requests that predate local request art (metadata fallback applies). */
   posterUrl: string | null;
@@ -153,6 +174,11 @@ export interface RequestWatcher {
 }
 
 /** A request's detail; `watchers` is sent to managers only. */
+/** A create's answer: the caller's row (or the earliest absorbed one) and the pending rows it approved. */
+export interface CreatedRequest extends FliksRequestRow {
+  absorbed: number[];
+}
+
 export interface FliksRequestDetail extends FliksRequestRow {
   watchers?: RequestWatcher[];
 }
@@ -183,6 +209,9 @@ export interface TitleRequestState {
   requestedByMe: boolean;
   /** The active row behind `requested`. */
   requestId: number | null;
+  /** The title's pending add rows, any requester, ascending. */
+  /** Absent before `SERVER_SINCE.autoApproval`. */
+  pendingRequestIds?: number[];
   wholeSeriesRequested: boolean;
   requestedSeasons: number[];
   profilesLocked: boolean;
@@ -216,14 +245,49 @@ export function requestAddLink(r: FliksRequestRow): (string | number)[] {
   return [...base, r.provider ?? 'tmdb', r.externalId ?? r.tmdbId ?? ''];
 }
 
+const IMPORT_KINDS: ReadonlySet<MediaType> = new Set(['movie', 'series', 'book', 'album']);
+
 @Injectable({ providedIn: 'root' })
 export class RequestsService {
   private readonly http = inject(HttpClient);
+  private readonly scope = inject(StorageScopeService);
+  private readonly serverVersion = inject(ServerVersionService);
+  private readonly auth = inject(AuthService);
+  private readonly fetchedKinds = signal<ReadonlySet<MediaType>>(new Set());
+  /** An adder on an older server adds through the import routes. */
+  readonly addsByImport = computed(() => !this.serverVersion.requestAdds() && this.auth.hasPermission('media.create'));
+  /** Add or Request is offered: a request, or an import on an older server. */
+  readonly canAdd = computed(() => this.auth.hasPermission('requests.create') || this.addsByImport());
+  readonly requestsFollowNewSeasons = this.serverVersion.requestAdds;
+  /** The kinds whose add is certain to land at once for the caller: the one source of "Add" over "Request". */
+  readonly autoKinds = computed<ReadonlySet<MediaType>>(() => (this.addsByImport() ? IMPORT_KINDS : this.fetchedKinds()));
 
-  /** `skipToast`: the caller reports the failure itself (a 409 is not one). */
+  constructor() {
+    effect(() => {
+      this.scope.scope();
+      untracked(() => void this.reloadAutoKinds());
+    });
+  }
+
+  /** A hint: on failure, or on a server without the route, every add reads "Request". */
+  async reloadAutoKinds(): Promise<void> {
+    this.fetchedKinds.set(new Set(await this.fetchAutoKinds()));
+  }
+
+  private async fetchAutoKinds(): Promise<MediaType[]> {
+    if (!(await this.serverVersion.supportsWhenKnown(SERVER_SINCE.autoApproval))) return [];
+    const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    try {
+      return (await firstValueFrom(this.http.get<{ kinds: MediaType[] }>('/api/requests/auto-approval', { context }))).kinds;
+    } catch {
+      return [];
+    }
+  }
+
+  /** `skipToast`: the caller reports the failure itself. */
   create(body: CreateRequestBody, skipToast = false) {
     const context = skipToast ? new HttpContext().set(SKIP_ERROR_TOAST, true) : undefined;
-    return firstValueFrom(this.http.post<FliksRequestRow>('/api/requests', body, { context }));
+    return firstValueFrom(this.http.post<CreatedRequest>('/api/requests', body, { context }));
   }
 
   update(id: number, body: UpdateRequestBody) {
@@ -293,10 +357,9 @@ export class RequestsService {
     return firstValueFrom(this.http.delete<void>(`/api/requests/${id}`));
   }
 
-  /** `wholeAlbum` widens a track request to the whole album. */
-  approve(id: number, wholeAlbum?: boolean, skipToast = false) {
+  approve(id: number, body: ApproveBody = {}, skipToast = false) {
     const context = skipToast ? new HttpContext().set(SKIP_ERROR_TOAST, true) : undefined;
-    return firstValueFrom(this.http.post<FliksRequestRow>(`/api/requests/${id}/approve`, wholeAlbum ? { wholeAlbum } : {}, { context }));
+    return firstValueFrom(this.http.post<FliksRequestRow>(`/api/requests/${id}/approve`, body, { context }));
   }
 
   decline(id: number, reason?: string) {

@@ -6,7 +6,7 @@ import { icons } from '../../../../shared/icons';
 import { translatePlural } from '../../../../core/pipes/translate-plural.pipe';
 import { MusicApiService } from '../../../../core/services/api/music-api.service';
 import type { AlbumPreview, AlbumPreviewTrack } from '../../../../core/services/api/music.models';
-import { AuthService } from '../../../../core/services/auth.service';
+import { RequestsService } from '../../../../core/services/api/requests.service';
 import { mediaDetailLink } from '../../../../core/media-kinds';
 import { AddDialogComponent } from '../../../../shared/components/add-dialog/add-dialog';
 import type { AddResult } from '../../../../shared/components/add-dialog/add-plan';
@@ -26,7 +26,7 @@ export class AlbumPreviewComponent implements OnInit {
   protected readonly icons = icons;
 
   private readonly router = inject(Router);
-  private readonly auth = inject(AuthService);
+  private readonly requests = inject(RequestsService);
   private readonly host = inject(PREVIEW_HOST);
   private readonly music = inject(MusicApiService);
   private readonly translate = inject(TranslateService);
@@ -49,8 +49,8 @@ export class AlbumPreviewComponent implements OnInit {
   protected readonly failed = signal(false);
   protected readonly requested = signal(false);
   protected readonly placeholders = [0, 1, 2, 3, 4, 5, 6, 7];
-  protected readonly canImport = computed(() => this.auth.hasPermission('media.create'));
-  protected readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
+  protected readonly canRequest = this.requests.canAdd;
+  protected readonly auto = computed(() => this.requests.autoKinds().has('album'));
   protected readonly chips: HeroChip[] = [{ label: 'kinds.album', cls: 'badge badge-outline badge-sm md:badge-md' }];
   protected readonly posterTransitionName = computed(() => previewPosterName('album', this.provider(), this.externalId()));
   protected readonly hero = computed(() => {
@@ -113,12 +113,11 @@ export class AlbumPreviewComponent implements OnInit {
       provider: this.provider(),
       externalId: this.externalId(),
       title: this.hero()?.title ?? '',
-      mode: this.canImport() ? 'import' : 'request',
     });
   }
 
   protected onAdded(r: AddResult): void {
-    if (r.mode === 'request') this.requested.set(true);
+    if (r.status === 'pending') this.requested.set(true);
     else if (r.mediaId != null) void this.router.navigate(mediaDetailLink('album', r.mediaId));
   }
 }

@@ -377,7 +377,7 @@
               </span>
             </button>
             @if (top.kind !== 'artist') {
-              <app-hit-state [state]="top.state" [canAct]="canAdd() || canRequest()" [admin]="canAdd()" (add)="addItem(top)" />
+              <app-hit-state [state]="top.state" [canAct]="canRequest()" [auto]="autoAlbum()" (add)="addItem(top)" />
             }
           </div>
         </section>
@@ -396,7 +396,7 @@
                     <ng-container ngProjectAs="[lead]" *ngTemplateOutlet="cover; context: { $implicit: i.cover }" />
                   </app-track-line>
                 </button>
-                <app-hit-state [state]="i.state" [canAct]="canAdd() || canRequest()" [admin]="canAdd()" (add)="addItem(i)" />
+                <app-hit-state [state]="i.state" [canAct]="canRequest()" [auto]="autoAlbum()" (add)="addItem(i)" />
               </li>
             }
           </ul>
@@ -423,7 +423,7 @@
                 <span class="mt-2 block truncate text-sm font-medium">{{ i.title }}</span>
                 <span class="block h-5 truncate text-sm text-base-content/60">{{ i.subtitle }}</span>
               </button>
-              <app-hit-state class="absolute! bottom-14 right-1 rounded-full bg-base-100/80" [state]="i.state" [canAct]="canAdd() || canRequest()" [admin]="canAdd()" (add)="addItem(i)" />
+              <app-hit-state class="absolute! bottom-14 right-1 rounded-full bg-base-100/80" [state]="i.state" [canAct]="canRequest()" [auto]="autoAlbum()" (add)="addItem(i)" />
             </div>
           }
         </app-horizontal-scroller>

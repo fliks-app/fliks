@@ -1,7 +1,7 @@
 @switch (state()) {
   @case ('add') {
     @if (canAct()) {
-      <button type="button" class="btn btn-ghost btn-circle size-11 min-h-0 p-0" data-card-link data-testid="hit-add" [attr.aria-label]="(admin() ? 'search.state_add' : 'search.state_request') | translate" (click)="add.emit()">
+      <button type="button" class="btn btn-ghost btn-circle size-11 min-h-0 p-0" data-card-link data-testid="hit-add" [attr.aria-label]="(auto() ? 'search.state_add' : 'search.state_request') | translate" (click)="add.emit()">
         <svg [lucideIcon]="icons.Plus" class="size-5"></svg>
       </button>
     }

@@ -1023,3 +1023,26 @@ async fn an_owner_cancel_promotes_the_earliest_watcher(pool: PgPool) {
         .unwrap();
     assert_eq!(rows, 0, "a manager removal ends the row");
 }
+
+#[sqlx::test(migrations = false)]
+async fn an_adder_absorbs_the_overlapping_edition_and_asks_the_others(pool: PgPool) {
+    let c = ctx(pool).await;
+    let (_, asked) = c
+        .request(&c.user, "OL3W", json!([want("text", Some("fr"))]))
+        .await;
+    let (s, r) = c
+        .request(
+            &c.admin,
+            "OL3W",
+            json!([want("text", None), want("audio", None)]),
+        )
+        .await;
+    assert_eq!(s, 201, "{r}");
+    assert_eq!(r["absorbed"], json!([asked["id"]]));
+    assert_eq!(r["wants"], json!([want("audio", None)]));
+    let statuses: Vec<String> = sqlx::query_scalar("SELECT status::text FROM requests ORDER BY id")
+        .fetch_all(&c.pool)
+        .await
+        .unwrap();
+    assert_eq!(statuses, ["approved", "approved"]);
+}

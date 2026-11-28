@@ -106,7 +106,7 @@ function setup(over: { local?: boolean; tv?: boolean; fileId?: number; account?:
       { provide: AudioPlayerService, useValue: audio },
       { provide: RemoteAudioOutput, useValue: audioView },
       { provide: PlaybackDevice, useValue: { icon: signal('tv') } },
-      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true, supportsWhenKnown: async () => true } },
       { provide: SseService, useValue: { targetId: signal('phone#1'), connectionId: signal(null) } },
       { provide: MusicApiService, useValue: { trackRequests: vi.fn(async () => []) } },
       { provide: RemoteService, useValue: { observedTargetId: signal('pc#1'), send: vi.fn() } },

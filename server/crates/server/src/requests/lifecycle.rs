@@ -94,7 +94,7 @@ impl Lifecycle {
             db::adopt(&self.st.db, r.id, media.id, added_by.filter(|u| *u != 0)).await?;
             services::announce(&self.st, &[r.id]).await;
             let seasons = r.scope().filter(|_| media.media_type.has_seasons());
-            db::monitor_scope(&self.st.db, media.id, seasons).await?;
+            db::monitor_scope(&self.st.db, media.id, seasons, r.monitor_new_seasons).await?;
             touched = true;
         }
         if touched {

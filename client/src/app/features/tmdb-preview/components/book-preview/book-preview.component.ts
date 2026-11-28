@@ -4,7 +4,6 @@ import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { TranslatePluralPipe, translatePlural } from '../../../../core/pipes/translate-plural.pipe';
 import { BooksApiService } from '../../../../core/services/api/books-api.service';
 import type { BookPreview } from '../../../../core/services/api/books.models';
-import { AuthService } from '../../../../core/services/auth.service';
 import { RequestsService } from '../../../../core/services/api/requests.service';
 import { mediaDetailLink } from '../../../../core/media-kinds';
 import type { WantSpec } from '../../../../core/services/api/wants-api.service';
@@ -31,7 +30,6 @@ export class BookPreviewComponent implements OnInit, OnDestroy {
   private readonly api = inject(BooksApiService);
   private readonly router = inject(Router);
   private readonly translate = inject(TranslateService);
-  private readonly auth = inject(AuthService);
   private readonly requests = inject(RequestsService);
   private readonly host = inject(PREVIEW_HOST);
   private readonly addDialog = viewChild(AddDialogComponent);
@@ -74,8 +72,8 @@ export class BookPreviewComponent implements OnInit, OnDestroy {
   protected readonly failed = signal(false);
   /** The editions already asked for by an active request. */
   protected readonly requested = signal<WantSpec[]>([]);
-  protected readonly canImport = computed(() => this.auth.hasPermission('media.create'));
-  protected readonly canRequest = computed(() => !this.canImport() && this.auth.hasPermission('requests.create'));
+  protected readonly canRequest = this.requests.canAdd;
+  protected readonly auto = computed(() => this.requests.autoKinds().has('book'));
   protected readonly authors = computed(() => this.book()?.authors.join(', ') ?? '');
   protected readonly seriesLabel = computed(() => {
     const s = this.book()?.series;
@@ -115,14 +113,13 @@ export class BookPreviewComponent implements OnInit, OnDestroy {
       provider: this.provider(),
       externalId: this.externalId(),
       title: book.title,
-      mode: this.canImport() ? 'import' : 'request',
       alwaysAsk: true,
       requestedWants: this.requested(),
     });
   }
 
   protected onAdded(r: AddResult) {
-    if (r.mode === 'request') void this.loadRequested();
+    if (r.status === 'pending') void this.loadRequested();
     else if (r.mediaId != null && !this.destroyed) void this.router.navigate(mediaDetailLink('book', r.mediaId));
   }
 

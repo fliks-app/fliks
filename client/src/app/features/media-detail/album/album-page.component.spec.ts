@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import type { Media } from '../../../core/services/api/media.service';
 import type { AlbumDetail, Track } from '../../../core/services/api/music.models';
+import { holdsPermission } from '../../../core/permissions';
 import { AuthService } from '../../../core/services/auth.service';
 import { DownloadProgressService } from '../../../core/services/download-progress.service';
 import { MusicDownloadsService } from '../../../core/services/music-downloads.service';
@@ -47,7 +48,7 @@ function setup(tracks: Track[], perms: string[] = [], extra: Partial<Media> = {}
       { provide: AudioPlayerService, useValue: player },
       { provide: PartyService, useValue: party },
       { provide: MusicDownloadsService, useValue: { available: () => true, itemIds: () => new Set<number>(), tracks: () => new Map(), progress: () => null, state: () => 'none', download: vi.fn(), remove: vi.fn() } },
-      { provide: AuthService, useValue: { hasPermission: (p: string) => perms.includes(p), user: () => null, sessionEpoch: () => 0, isAuthenticated: () => false } },
+      { provide: AuthService, useValue: { hasPermission: (p: string) => holdsPermission(perms, p), user: () => null, sessionEpoch: () => 0, isAuthenticated: () => false } },
     ),
   });
   const fixture = TestBed.createComponent(AlbumPageComponent);
@@ -95,18 +96,15 @@ describe('AlbumPageComponent', () => {
     expect(el.querySelector('[data-testid="versions"]')).toBeNull();
   });
 
-  it('lets an adder want an unwanted track from its row, and the whole album at once', () => {
-    const { fixture, el, http } = setup([track(1), track(2, { hasFile: false, monitored: false, recordingId: 'r2' })], ['media.create', 'media.edit'], {
+  it('asks for an unwanted track from its row, and for the whole album at once, through album requests', () => {
+    const { fixture, el } = setup([track(1), track(2, { hasFile: false, monitored: false, recordingId: 'r2' })], ['media.create'], {
       preferredProvider: 'musicbrainz', externalIds: [{ provider: 'musicbrainz', value: 'rel1' }],
     } as Partial<Media>);
-    expect(el.querySelectorAll('[data-testid="track-add"]').length).toBe(1);
+    const add = vi.spyOn(fixture.componentInstance['addDialog']()!, 'add').mockResolvedValue(undefined as never);
+    (el.querySelector('[data-testid="track-add"]') as HTMLButtonElement).click();
+    expect(add).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'album', externalId: 'rel1', recording: { externalId: 'r2', albumExternalId: 'rel1' } }));
     (el.querySelector('[data-testid="want-all"]') as HTMLButtonElement).click();
-    http.expectOne((r) => r.method === 'PUT' && r.url === '/api/media/9').flush({});
-    return fixture.whenStable().then(() => {
-      fixture.detectChanges();
-      expect(el.querySelector('[data-testid="track-add"]')).toBeNull();
-      expect((el.querySelector('[data-testid="want-all"]') as HTMLButtonElement).disabled).toBe(true);
-    });
+    expect(add).toHaveBeenLastCalledWith(expect.not.objectContaining({ recording: expect.anything() }));
   });
 
   it('plays the album from a clicked track with the album facts', () => {

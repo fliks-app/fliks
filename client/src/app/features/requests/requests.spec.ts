@@ -49,7 +49,7 @@ function setup(opts: SetupOpts = {}) {
       { provide: ConfirmationService, useValue: { confirm } },
       { provide: ToastService, useValue: toast },
       { provide: ScrollMemoryService, useValue: { activate: vi.fn(), deactivateIf: vi.fn(), restoreSticky: vi.fn() } },
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       { provide: SseService, useValue: sse },
       { provide: DownloadProgressService, useValue: { progress: signal(new Map()) } },
       { provide: AuthService, useValue: { user: signal({ id: 1 }), hasPermission: () => true } },
@@ -150,6 +150,34 @@ describe('RequestsComponent', () => {
     const { cmp, navigate } = setup();
     await cmp.onKindChange('problems');
     expect(navigate).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { view: 'problems', status: 'active' } }));
+  });
+
+  it('lists only the caller\'s rows on the Mine filter', async () => {
+    const { cmp, list } = setup();
+    await Promise.resolve();
+    cmp.onMineChange(true);
+    expect((list.mock.calls.at(-1) as unknown as [{ userId?: number }])[0].userId).toBe(1);
+    cmp.onMineChange(false);
+    expect((list.mock.calls.at(-1) as unknown as [{ userId?: number }])[0].userId).toBeUndefined();
+  });
+
+  it('approves with the dialog edits, and leaves an unset follow-new-seasons to the server', async () => {
+    const { cmp, approve } = setup();
+    const row = { id: 7, mediaType: 'series', qualityProfileId: 2, languageProfileId: null, libraryId: null, monitorNewSeasons: null } as never;
+    cmp.edit.open(row, 'approve');
+    cmp.edit.languageProfileId.set(5);
+    await cmp.submitApprove();
+    expect(approve).toHaveBeenLastCalledWith(7, { qualityProfileId: 2, languageProfileId: 5 });
+    cmp.edit.open(row, 'approve');
+    cmp.edit.monitorNewSeasons.set(false);
+    await cmp.submitApprove();
+    expect(approve).toHaveBeenLastCalledWith(7, { qualityProfileId: 2, monitorNewSeasons: false });
+  });
+
+  it('widens a track request with the whole-album approve', async () => {
+    const { cmp, approve } = setup();
+    await cmp.approve(3, true);
+    expect(approve).toHaveBeenCalledWith(3, { wholeAlbum: true });
   });
 
   describe('approve all', () => {

@@ -311,16 +311,20 @@ async fn mark_state(
         .flatten()
         .map(|(p, v)| (p.as_str(), v.as_str()))
         .unzip();
-    let mut asked: Vec<(String, String, String)> = vec![];
+    // the caller's newest request of each title, and the newest in-flight one of anyone else
+    let mut asked: Vec<(String, String, String, bool)> = vec![];
     if !ps.is_empty() && a.user.id != 0 {
         asked = sqlx::query_as(
-            r#"SELECT DISTINCT ON (r.provider, r."externalId") r.provider, r."externalId", r.status::text
+            r#"SELECT DISTINCT ON (r.provider, r."externalId", mine) r.provider, r."externalId", r.status::text, mine
                FROM requests r
                LEFT JOIN provider_namespaces pn ON pn.name = r.provider
-               WHERE r."userId" = $1 AND r."mediaType" = $2 AND r.kind = 'add' AND r.recordings IS NULL
+               CROSS JOIN LATERAL (SELECT r."userId" IS NOT DISTINCT FROM $1 AS mine) m
+               WHERE (mine OR r.status IN ('pending', 'approved', 'processing')
+                              AND (r.seasons IS NULL OR jsonb_array_length(r.seasons) = 0))
+                 AND r."mediaType" = $2 AND r.kind = 'add' AND r.recordings IS NULL
                  AND r."namespaceGeneration" IS NOT DISTINCT FROM pn.generation
                  AND (r.provider, r."externalId") IN (SELECT * FROM unnest($3::text[], $4::text[]))
-               ORDER BY r.provider, r."externalId", r."createdAt" DESC, r.id DESC"#,
+               ORDER BY r.provider, r."externalId", mine, r."createdAt" DESC, r.id DESC"#,
         )
         .bind(a.user.id)
         .bind(kind.as_str())
@@ -335,11 +339,18 @@ async fn mark_state(
             .and_then(|n| i32::try_from(n).ok())
             .and_then(|id| media.get(&id))
             .map_or(Value::Null, |s| (*s).into());
-        h["requestStatus"] = refs
-            .iter()
-            .find_map(|(p, v)| asked.iter().find(|(rp, rv, _)| rp == p && rv == v))
-            .filter(|(_, _, status)| status != "removed")
-            .map_or(Value::Null, |(_, _, status)| status.as_str().into());
+        let status_of = |of_mine: bool| {
+            refs.iter()
+                .find_map(|(p, v)| {
+                    asked
+                        .iter()
+                        .find(|(rp, rv, _, mine)| rp == p && rv == v && *mine == of_mine)
+                })
+                .filter(|(_, _, status, _)| status != "removed")
+                .map_or(Value::Null, |(_, _, status, _)| status.as_str().into())
+        };
+        h["requestStatus"] = status_of(true);
+        h["othersRequestStatus"] = status_of(false);
     }
     Ok(())
 }

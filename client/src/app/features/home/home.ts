@@ -653,7 +653,7 @@ export class HomeComponent implements OnInit, OnDestroy, HeroPage {
   async approveRequest(id: number, wholeAlbum = false) {
     this.requestActionBusyId.set(id);
     try {
-      this.patchRequest(await this.requestsService.approve(id, wholeAlbum));
+      this.patchRequest(await this.requestsService.approve(id, wholeAlbum ? { wholeAlbum } : {}));
     } catch {
       /* global error toast */
     } finally {

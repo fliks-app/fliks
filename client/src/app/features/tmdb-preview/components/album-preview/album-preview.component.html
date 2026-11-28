@@ -23,7 +23,7 @@
   <ng-container ngProjectAs="[heroActions]">
     @if (inLibraryLink(); as link) {
       <a class="btn btn-primary" [routerLink]="link" data-hero-actions>{{ 'music.open_in_library' | translate }}</a>
-    } @else if (canImport()) {
+    } @else if (auto()) {
       <button type="button" class="btn btn-primary gap-2" (click)="open()" data-hero-actions>
         <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>{{ 'discover.add_to_library' | translate }}
       </button>

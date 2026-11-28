@@ -169,6 +169,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly total = signal(0);
   readonly loading = signal(false);
   readonly kindFilter = signal<RequestKind | ''>('');
+  /** Only the caller's own rows; offered to who sees others' rows. */
+  readonly mineFilter = signal(false);
+  /** Only a manager's list holds other users' rows (rule 9). */
+  protected readonly canFilterMine = () => this.auth.hasPermission('requests.manage');
   /** Read-only modal: motif affiché après un refus. */
   readonly viewDeclineReasonModal = signal<{
     mediaTitle: string;
@@ -237,6 +241,22 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.reload();
   }
 
+  onMineChange(mine: boolean) {
+    this.mineFilter.set(mine);
+    this.reload();
+  }
+
+  private listFilters() {
+    const status = this.statusFilter();
+    const kind = this.kindFilter();
+    const userId = this.mineFilter() ? this.auth.user()?.id : undefined;
+    return {
+      ...(status ? { status } : {}),
+      ...(kind ? { kind } : {}),
+      ...(userId != null ? { userId } : {}),
+    };
+  }
+
   loadMore() {
     this.page++;
     this.fetch(true);
@@ -252,16 +272,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   private async fetch(append: boolean, force = false) {
     this.loading.set(true);
-    const status = this.statusFilter();
-    const kind = this.kindFilter();
     try {
       const res = await this.requestsService.list(
-        {
-          page: this.page,
-          limit: 25,
-          ...(status ? { status } : {}),
-          ...(kind ? { kind } : {}),
-        },
+        { page: this.page, limit: 25, ...this.listFilters() },
         { force },
       );
       this.rows.update((prev) =>
@@ -276,12 +289,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
   /** Force-refetches the loaded rows so backend status transitions surface, preserving the loaded page depth. */
   private async refreshStatuses(): Promise<void> {
     if (this.problemsView()) return;
-    const status = this.statusFilter();
-    const kind = this.kindFilter();
     const limit = Math.max(25, this.rows().length);
     try {
       const res = await this.requestsService.list(
-        { page: 1, limit, ...(status ? { status } : {}), ...(kind ? { kind } : {}) },
+        { page: 1, limit, ...this.listFilters() },
         { force: true },
       );
       this.rows.set(res.data);
@@ -357,13 +368,33 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** A video's approval sets its library and profiles first; the other kinds have nothing to set. */
+  approveClicked(row: FliksRequestRow) {
+    if (kindOf(row.mediaType).families.includes('video')) this.edit.open(row, 'approve');
+    else void this.approve(row.id);
+  }
+
   async approve(id: number, wholeAlbum = false) {
     this.actionBusyId.set(id);
     try {
-      const updated = await this.requestsService.approve(id, wholeAlbum);
+      const updated = await this.requestsService.approve(id, wholeAlbum ? { wholeAlbum } : {});
       this.patchRow(updated);
     } finally {
       this.actionBusyId.set(null);
+    }
+  }
+
+  async submitApprove() {
+    const row = this.edit.row();
+    if (!row) return;
+    this.edit.saving.set(true);
+    try {
+      this.patchRow(await this.requestsService.approve(row.id, this.edit.approveBody(row)));
+      this.edit.close();
+    } catch {
+      // error toast handled by interceptor
+    } finally {
+      this.edit.saving.set(false);
     }
   }
 
@@ -383,7 +414,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.approveAllProgress.set([0, ids.length]);
     for (const id of ids) {
       try {
-        await this.requestsService.approve(id, false, true);
+        await this.requestsService.approve(id, {}, true);
         done++;
       } catch {
         failed++;

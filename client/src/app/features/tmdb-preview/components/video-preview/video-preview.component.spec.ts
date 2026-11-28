@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer } from '@angular/platform-browser';
@@ -60,7 +60,10 @@ function createHarness(allowed: string[] = []) {
       { provide: MetadataService, useValue: { getDetails } },
       { provide: ProfilesService, useValue: { getQualityProfiles: async () => [], getLanguageProfiles: async () => [] } },
       { provide: LibrariesApiService, useValue: { listMine: async () => [] } },
-      { provide: RequestsService, useValue: { approve, update, decline, list, getTitleState } },
+      {
+        provide: RequestsService,
+        useValue: { approve, update, decline, list, getTitleState, canAdd: signal(allowed.includes('requests.create')), autoKinds: signal(new Set()), addsByImport: signal(false) },
+      },
       { provide: ToastService, useValue: toast },
       { provide: TvService, useValue: { isTv: () => false } },
       { provide: NavbarService, useValue: navbar },

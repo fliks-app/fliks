@@ -595,13 +595,24 @@ async fn folder_of_another_library_is_refused_on_a_request(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    // a request manager's create waits: an adder's would import, and this test has no provider
+    sqlx::query(
+        r#"UPDATE roles SET permissions = '["media.read","requests.create","requests.manage"]'"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(r#"INSERT INTO library_user_access ("libraryId", "userId") SELECT l.id, u.id FROM libraries l, users u WHERE u.username = 'user'"#)
+        .execute(&pool)
+        .await
+        .unwrap();
     let req = |library: i32| json!({"mediaType": "movie", "tmdbId": 603, "title": "T", "libraryId": library, "folderId": f["id"], "qualityProfileId": 1});
-    let (s, b) = call(&c, "POST", "/api/requests", &c.admin, req(1)).await;
+    let (s, b) = call(&c, "POST", "/api/requests", &c.user, req(1)).await;
     assert_eq!(
         (s, b["message"].clone()),
         (400, json!("errors.folder_not_in_library"))
     );
-    let (s, _) = call(&c, "POST", "/api/requests", &c.admin, req(2)).await;
+    let (s, _) = call(&c, "POST", "/api/requests", &c.user, req(2)).await;
     assert_eq!(s, 201);
     let stored: Option<i32> = sqlx::query_scalar(r#"SELECT "folderId" FROM requests"#)
         .fetch_one(&pool)

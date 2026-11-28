@@ -89,6 +89,8 @@ pub struct ImportSpec {
     pub wants: Option<Vec<fliks_domain::media::wants::WantSpec>>,
     /// The recordings of an album request scoped to some tracks.
     pub recordings: Option<Vec<String>>,
+    /// A series request's "follow new seasons"; `None` derives it (rule 33).
+    pub monitor_new_seasons: Option<bool>,
 }
 
 /// The media a delete request removed: its title, the folder to purge when it has one, and the media
@@ -103,6 +105,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/api/requests", get(routes::list).post(routes::create))
         .route("/api/requests/allowance", get(routes::allowance))
+        .route("/api/requests/auto-approval", get(routes::auto_approval))
         .route("/api/requests/title-state", get(routes::title_state))
         .route(
             "/api/requests/{id}",

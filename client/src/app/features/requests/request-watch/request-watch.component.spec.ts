@@ -13,6 +13,7 @@ const base: TitleRequestState = {
   requesterCount: 2,
   requestedByMe: false,
   requestId: 7,
+  pendingRequestIds: [7],
   wholeSeriesRequested: false,
   requestedSeasons: [],
   profilesLocked: false,

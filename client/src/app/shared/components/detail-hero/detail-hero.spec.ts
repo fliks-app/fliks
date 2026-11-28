@@ -152,7 +152,7 @@ async function createFixture(
           user: () => null,
         },
       },
-      { provide: ServerVersionService, useValue: { supports: () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true } },
       { provide: TvService, useValue: { isTv: () => !!media.isTv } },
       { provide: AutoDownloadService, useValue: { enabled: false, seriesKeep: () => null, setSeriesKeep: () => {} } },
       {

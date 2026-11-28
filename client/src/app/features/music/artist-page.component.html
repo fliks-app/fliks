@@ -58,9 +58,9 @@
                 </div>
                 <span class="flex size-8 shrink-0 items-center justify-center" data-testid="track-state">
                   @if (isAsked(p)) {
-                    <svg [lucideIcon]="icons.Clock" class="size-5 text-base-content/60" role="img" [attr.aria-label]="(canAdd() ? 'music.status_searching' : 'music.status_requested') | translate" data-testid="track-wanted"></svg>
-                  } @else if (p.albumExternalId && (canAdd() || canRequest())) {
-                    <button type="button" class="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-base-300 focus-visible:outline-2" (click)="want(p)" [attr.aria-label]="(canAdd() ? 'music.add_track' : 'music.request_track') | translate" data-testid="add-track">
+                    <svg [lucideIcon]="icons.Clock" class="size-5 text-base-content/60" role="img" [attr.aria-label]="(auto() ? 'music.status_searching' : 'music.status_requested') | translate" data-testid="track-wanted"></svg>
+                  } @else if (p.albumExternalId && canRequest()) {
+                    <button type="button" class="flex size-8 cursor-pointer items-center justify-center rounded-full hover:bg-base-300 focus-visible:outline-2" (click)="want(p)" [attr.aria-label]="(auto() ? 'music.add_track' : 'music.request_track') | translate" data-testid="add-track">
                       <svg [lucideIcon]="icons.Plus" class="size-5"></svg>
                     </button>
                   }

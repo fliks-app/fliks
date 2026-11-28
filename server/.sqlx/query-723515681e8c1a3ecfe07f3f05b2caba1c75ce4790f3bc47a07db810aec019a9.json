@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE requests SET\n        \"qualityProfileId\" = CASE WHEN $2 THEN $3 ELSE \"qualityProfileId\" END,\n        \"languageProfileId\" = CASE WHEN $4 THEN $5 ELSE \"languageProfileId\" END,\n        \"libraryId\" = CASE WHEN $6 THEN $7 ELSE \"libraryId\" END,\n        \"folderId\" = CASE WHEN $6 THEN NULL ELSE \"folderId\" END,\n        \"monitorNewSeasons\" = CASE WHEN $8 THEN $9 ELSE \"monitorNewSeasons\" END\n        WHERE id = $1 AND status = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool",
+        "Int4",
+        "Bool",
+        "Int4",
+        "Bool",
+        "Int4",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "723515681e8c1a3ecfe07f3f05b2caba1c75ce4790f3bc47a07db810aec019a9"
+}

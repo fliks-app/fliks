@@ -85,7 +85,7 @@ No auth route has a policy beyond the extractor.
     | Permission | Grants |
     |---|---|
     | `media.read` | read: Media, QualityProfile, LanguageProfile, SubtitleFile, SubtitleProvider, Library |
-    | `media.create` | create Media; plus track Media (shared with `requests.create`) |
+    | `media.create` | create Media; plus everything `requests.create` grants (an add is a request, `requests.md` rule 1) |
     | `media.edit` | update Media |
     | `media.delete` | delete Media |
     | `media.grab` | grab Media |

@@ -24,7 +24,7 @@ function setup() {
       }),
       { provide: ToastService, useValue: { info: () => {}, success: () => {}, error: () => {}, warning: () => {} } },
       { provide: ServerConfigService, useValue: { apiUrl: () => '' } },
-      { provide: ServerVersionService, useValue: { supports: () => true, supportsWhenKnown: async () => true } },
+      { provide: ServerVersionService, useValue: { requestAdds: () => true, supports: () => true, supportsWhenKnown: async () => true } },
       { provide: AuthService, useValue: { accessToken: () => null, isAuthenticated: () => false, sessionEpoch: () => 0 } },
       { provide: NetworkService, useValue: { isOnline: () => true, connectivityDoubt: () => 0 } },
     ],

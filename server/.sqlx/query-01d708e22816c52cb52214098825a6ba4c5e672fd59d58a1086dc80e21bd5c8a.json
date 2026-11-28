@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id,\n        wants AS \"wants: Json<Vec<WantSpec>>\", recordings\n        FROM requests WHERE \"mediaId\" = $1 AND ($2::text IS NULL OR kind::text = $2)\n        AND status::text = ANY($3) ORDER BY id",
+  "query": "SELECT id, \"userId\" AS user_id, \"mediaType\" AS \"media_type!\", kind::text AS \"kind!\",\n        provider, \"externalId\" AS external_id, title, status::text AS \"status!\", seasons AS \"seasons: Json<Vec<i64>>\",\n        \"qualityProfileId\" AS quality_profile_id, \"languageProfileId\" AS language_profile_id,\n        \"libraryId\" AS library_id, \"folderId\" AS folder_id, \"mediaId\" AS media_id,\n        wants AS \"wants: Json<Vec<WantSpec>>\", recordings, \"monitorNewSeasons\" AS monitor_new_seasons\n        FROM requests WHERE \"mediaId\" = $1 AND ($2::text IS NULL OR kind::text = $2)\n        AND status::text = ANY($3) ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -168,6 +168,17 @@
             "name": "recordings"
           }
         }
+      },
+      {
+        "ordinal": 16,
+        "name": "monitor_new_seasons",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "requests",
+            "name": "monitorNewSeasons"
+          }
+        }
       }
     ],
     "parameters": {
@@ -193,8 +204,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "31f904b7931041b406cc7376a851d5516a4280e3b80c28c2013b09692721e83c"
+  "hash": "01d708e22816c52cb52214098825a6ba4c5e672fd59d58a1086dc80e21bd5c8a"
 }

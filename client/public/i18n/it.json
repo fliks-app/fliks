@@ -279,7 +279,7 @@
   },
   "permissions": {
     "media.read": "Vedere i file multimediali",
-    "media.create": "Aggiungere file multimediali",
+    "media.create": "Aggiungere media (richieste approvate automaticamente)",
     "media.edit": "Modificare i file multimediali",
     "media.delete": "Eliminare file multimediali",
     "media.grab": "Scaricare release",
@@ -1078,7 +1078,9 @@
     "status_deleted": "Eliminato",
     "add_music": "Aggiungi musica",
     "request_music": "Richiedi musica",
-    "request_album": "Richiedi l'album"
+    "request_album": "Richiedi l'album",
+    "request_approved": "Approvato, aggiunto alla libreria.",
+    "request_sent_for_approval": "Inviato per approvazione."
   },
   "library": {
     "filter_monitored": "Monitorati",
@@ -1604,7 +1606,12 @@
     "allowance_left_other": "Restano {{count}} richieste su {{limit}} ogni {{days}} giorni",
     "allowance_none_one": "Limite raggiunto, prossima richiesta tra {{count}} giorno",
     "allowance_none_other": "Limite raggiunto, prossima richiesta tra {{count}} giorni",
-    "quotaExceeded": "Limite di richieste raggiunto: {{count}} su {{limit}} negli ultimi {{days}} giorni"
+    "quotaExceeded": "Limite di richieste raggiunto: {{count}} su {{limit}} negli ultimi {{days}} giorni",
+    "approve_title": "Approva richiesta",
+    "monitor_new_seasons": "Segui le nuove stagioni",
+    "filter_everyone": "Tutti",
+    "filter_mine": "Le mie",
+    "added_by": "Aggiunto da "
   },
   "activity": {
     "queue_empty": "Nessun download attivo.",
@@ -3308,7 +3315,8 @@
       "recap_years": "uscite tra il {{from}} e il {{to}}",
       "recap_year_from": "uscite dal {{from}}",
       "recap_year_to": "uscite fino al {{to}}",
-      "recap_except": "tranne {{names}}"
+      "recap_except": "tranne {{names}}",
+      "adders_hint": "Chi può aggiungere media non ha bisogno di regole: le sue richieste sono sempre approvate."
     },
     "metadata": {
       "title": "Metadati",
@@ -6366,6 +6374,8 @@
     "resume_episode": "Riprendi {{code}}"
   },
   "add_dialog": {
-    "follow_new_seasons": "Segui le nuove stagioni"
+    "follow_new_seasons": "Segui le nuove stagioni",
+    "requested_by_count_one": "{{count}} persona lo ha richiesto",
+    "requested_by_count_other": "{{count}} persone lo hanno richiesto"
   }
 }
