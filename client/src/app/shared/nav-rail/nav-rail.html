@@ -15,7 +15,7 @@
   <div class="rail-head">
     <div class="rail-item pointer-events-none">
       <span class="rail-icon relative">
-        <img src="fliks-icon.svg" alt="" class="h-8 w-8" />
+        <img src="fliks-icon.svg" alt="" class="h-8 w-8 max-w-none -m-1.5" />
         @if (!network.isOnline()) {
           <span class="badge badge-xs badge-warning absolute -right-1 -top-1" [attr.title]="'downloads.offline' | translate"></span>
         }
