@@ -1,4 +1,5 @@
 //! Separation on optimization workers: eligibility and the commit of their stems (`karaoke.md` rules 16-17).
+use super::stale::{Stamp, Wants};
 use super::{run, store, verified_providers};
 use crate::{
     events::SseEvent,
@@ -8,9 +9,7 @@ use crate::{
     state::AppState,
 };
 use axum::Json;
-use fliks_engine_core::api::{
-    JobError, JobErrorClass, JobPriority, JobResultRequest, ModelKind, STEM_NAMES,
-};
+use fliks_engine_core::api::{JobError, JobErrorClass, JobPriority, JobResultRequest, STEM_NAMES};
 use serde_json::{Value, json};
 
 pub use crate::queue::remote::upload_path;
@@ -103,15 +102,14 @@ pub async fn eligible_workers(st: &AppState) -> usize {
     n
 }
 
-/// `(model id, version)` of the main engine's installed separation model, the one stems must come from.
-pub async fn current_model(st: &AppState) -> Option<(String, String)> {
+/// The stamp stems must carry: the main engine's separation model and revision (rule 12a).
+pub async fn current_model(st: &AppState) -> Option<Stamp> {
     let models = super::engine_models(st).await.ok()?;
-    let sep = run::installed_model(&models.models, ModelKind::Separation)?;
-    Some((sep.id.clone(), sep.version.clone()))
+    Wants::of(&models).separate
 }
 
-pub fn profile_of(model: &(String, String)) -> String {
-    format!("karaoke:{}:{}", model.0, model.1)
+pub fn profile_of(want: &Stamp) -> String {
+    format!("karaoke:{}:{}:{}", want.model, want.version, want.revision)
 }
 
 /// Queues the separation of a track's file; `false` when its stems are valid or a job of it is active.
@@ -121,7 +119,7 @@ pub async fn enqueue(st: &AppState, item: i32) -> Result<bool, String> {
     let sep = current_model(st)
         .await
         .ok_or("no separation model is installed")?;
-    if store::valid(&st.db, t.file, &sep.0, &sep.1)
+    if store::valid(&st.db, t.file, &sep)
         .await
         .map_err(|e| e.to_string())?
     {
@@ -132,8 +130,8 @@ pub async fn enqueue(st: &AppState, item: i32) -> Result<bool, String> {
         .ok_or("the file is not readable")?;
     let payload = json!({
         "info": info,
-        "model": sep.0,
-        "modelVersion": sep.1,
+        "model": sep.model,
+        "modelVersion": sep.version,
         "providers": verified_providers(st).await,
     });
     let job: Option<i64> = sqlx::query_scalar(
@@ -191,7 +189,7 @@ pub async fn result_for(
     key: &str,
     id: i64,
     req: JobResultRequest,
-    current: Option<&(String, String)>,
+    current: Option<&Stamp>,
 ) -> Result<Json<Value>, AppError> {
     let attempt = req.attempt as i32;
     let conflict = || AppError::bare(axum::http::StatusCode::CONFLICT);
@@ -232,7 +230,7 @@ pub async fn result_for(
 }
 
 /// Whether the job's model version is the main engine's installed one.
-async fn is_current(st: &AppState, id: i64, current: Option<&(String, String)>) -> bool {
+async fn is_current(st: &AppState, id: i64, current: Option<&Stamp>) -> bool {
     let Some(cur) = current else {
         return true;
     };
@@ -307,7 +305,7 @@ async fn commit(
     (id, attempt): (i64, i32),
     file: Option<i32>,
     out: fliks_engine_core::api::SeparateOutput,
-    current: Option<&(String, String)>,
+    current: Option<&Stamp>,
 ) -> Result<Json<Value>, AppError> {
     let conflict = || AppError::bare(axum::http::StatusCode::CONFLICT);
     let item = match file {
@@ -317,8 +315,13 @@ async fn commit(
             .map(|i| (f, i)),
         None => None,
     };
-    // Stems of another version than the main engine's would be separated again at once.
-    let wanted = current.is_none_or(|m| *m == (out.model.clone(), out.model_version.clone()));
+    // Stems the main engine counts as outdated would be separated again at once.
+    let made = stamp_of(&out);
+    let wanted = current.is_none_or(|m| !made.stale(m));
+    if current.is_some_and(|m| made.model == m.model && made.version == m.version && !wanted) {
+        // An older engine on the worker: it gets no karaoke job until its next hello.
+        st.queue.block_karaoke(key);
+    }
     if item.is_none() || !wanted {
         tracing::info!(
             job = id,
@@ -398,12 +401,7 @@ async fn commit(
     st.karaoke.kick.notify_one();
     queue::emit_managers(st, SseEvent::OptimizeQueueChanged {}).await;
     if let Some((_, item)) = item.filter(|_| wanted) {
-        let opts = run::Opts {
-            align: true,
-            melody: true,
-            force: false,
-        };
-        match run::start(st, item, opts, JobPriority::Low, None).await {
+        match run::start(st, item, run::Opts::ALL, JobPriority::Low, None).await {
             run::Start::Idle => run::announce_ready(st, item).await,
             run::Start::Refused(r) => {
                 tracing::warn!(
@@ -417,6 +415,14 @@ async fn commit(
     Ok(Json(json!({})))
 }
 
+fn stamp_of(out: &fliks_engine_core::api::SeparateOutput) -> Stamp {
+    Stamp {
+        model: out.model.clone(),
+        version: out.model_version.clone(),
+        revision: out.revision,
+    }
+}
+
 /// One stem moved next to the others of its file, to be recorded.
 pub struct Moved {
     kind: &'static str,
@@ -426,6 +432,7 @@ pub struct Moved {
     provider: String,
     duration_ms: i32,
     file: i32,
+    revision: u32,
 }
 
 impl Moved {
@@ -439,6 +446,7 @@ impl Moved {
             path,
             size: self.size,
             duration_ms: self.duration_ms,
+            revision: self.revision,
         }
     }
 }
@@ -451,7 +459,7 @@ async fn move_stems(
     attempt: i32,
     out: &fliks_engine_core::api::SeparateOutput,
 ) -> Result<Vec<(String, Moved)>, String> {
-    let missing = store::missing(&st.db, file, Some((&out.model, &out.model_version)))
+    let missing = store::missing(&st.db, file, Some(&stamp_of(out)))
         .await
         .map_err(|e| e.to_string())?;
     if missing.is_empty() {
@@ -486,6 +494,7 @@ async fn move_stems(
                 provider: out.provider.clone(),
                 duration_ms: (out.duration_seconds * 1000.0).round() as i32,
                 file,
+                revision: out.revision,
             },
         ));
     }

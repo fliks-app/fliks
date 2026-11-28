@@ -2,7 +2,7 @@ import { Component, DestroyRef, ElementRef, computed, effect, inject, input, mod
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
-import type { KaraokeLanguage, KaraokeModel, KaraokeModelKind, KaraokeModels, KaraokeOrphan } from '../../../core/services/api/karaoke.models';
+import type { KaraokeLanguage, KaraokeModel, KaraokeModelKind, KaraokeModels, KaraokeOrphan, KaraokeStage } from '../../../core/services/api/karaoke.models';
 import { SettingsApiService } from '../../../core/services/api/settings-api.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
 import { SseService } from '../../../core/services/sse.service';
@@ -56,6 +56,7 @@ export class KaraokeModelsComponent {
   protected readonly accepted = signal(false);
   protected readonly languages = signal<KaraokeLanguage[]>([]);
   protected readonly stale = signal(0);
+  protected readonly stages = signal<Record<KaraokeStage, number>>({ separate: 0, align: 0, melody: 0 });
   protected readonly refused = signal(0);
   protected readonly resyncing = signal(false);
   protected readonly details = signal(false);
@@ -117,8 +118,9 @@ export class KaraokeModelsComponent {
 
   private async refreshStale(): Promise<void> {
     try {
-      const { tracks, refused, running, total, done } = await this.api.staleTracks();
+      const { tracks, refused, stages, running, total, done } = await this.api.staleTracks();
       this.stale.set(tracks);
+      this.stages.set(stages);
       this.refused.set(refused);
       this.resyncing.set(running);
       this.progress.set({ done, total });

@@ -124,6 +124,7 @@
   <div class="flex flex-col items-start gap-2 rounded-lg bg-base-200 p-4" data-testid="karaoke-realign">
     @if (stale() > 0) {
       <p class="font-medium">{{ 'karaoke.admin.stale' | translatePlural: stale() }}</p>
+      <p class="text-sm" data-testid="karaoke-stale-stages">{{ 'karaoke.admin.stale_stages' | translate: stages() }}</p>
       <p class="text-sm text-base-content/60">{{ 'karaoke.admin.stale_hint' | translate }}</p>
     }
     @if (refused() > 0) {

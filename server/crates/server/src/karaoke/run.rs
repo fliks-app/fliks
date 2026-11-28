@@ -1,4 +1,5 @@
 //! Preparation of a track: `Separate`, `Align`, `Melody` (`docs/spec/karaoke.md` rules 13, 18, 19).
+use super::stale::{Aligned, Pitched, Stages, Stamp, Wants};
 use super::{aligner, store};
 use crate::sync::MutexExt;
 use crate::{
@@ -8,7 +9,7 @@ use crate::{
 use fliks_domain::lyrics::{self as dl, Parsed, Sync, karaoke as kd};
 use fliks_engine_core::api::{
     AlignLine, JobKind, JobPriority, JobRequest, JobResult, MediaInfo, MediaRef, MelodySpan,
-    ModelInfo, ModelKind, ModelState, job_errors,
+    ModelInfo, ModelKind, ModelState, ModelsResponse, job_errors,
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -27,6 +28,8 @@ pub struct Opts {
     pub melody: bool,
     /// Redo done work (rule 13): `Align` reads the source again, `Melody` alone recomputes the pitch.
     pub force: bool,
+    /// Separate again stems that are present but outdated (rule 12a); false runs the lyrics steps on them.
+    pub separate: bool,
 }
 
 /// A queued or running preparation; it leaves the map when it ends.
@@ -46,6 +49,14 @@ pub struct RunState {
 }
 
 impl Opts {
+    /// What a request, the pass or a worker commit runs: every step that has work.
+    pub const ALL: Self = Self {
+        align: true,
+        melody: true,
+        force: false,
+        separate: true,
+    };
+
     /// A forced `Melody` alone recomputes the pitch; beside `Align` it only follows a new row.
     fn repitch(self) -> bool {
         self.force && !self.align
@@ -61,8 +72,8 @@ pub struct Outcome {
     pub rejected_match: Option<f64>,
     /// `Align` or `Melody` ran: the lyrics part of the record is replaced.
     pub lyrics_ran: bool,
-    /// `(aligner, text)` of the lyrics the aligner rejected.
-    pub rejected: Option<(String, String)>,
+    /// The `Align` whose result was rejected.
+    pub rejected: Option<Aligned>,
 }
 
 /// Why a step failed; `code` and its params are the wire form, the `Display` text is for logs.
@@ -336,19 +347,16 @@ async fn viewers(st: &AppState, item: i32) -> Arc<[i32]> {
     ids.into()
 }
 
-/// The track has every stem from an import or the installed separation model; false when unknown.
-pub(super) async fn stems_valid(st: &AppState, item: i32) -> bool {
-    let (Ok(Some(file)), Ok(models)) = (
-        store::track_file(&st.db, item).await,
-        super::engine_models(st).await,
-    ) else {
+/// The track's file has a stem of every kind, current or not; false when unknown.
+pub(super) async fn stems_present(st: &AppState, item: i32) -> bool {
+    let Ok(Some(file)) = store::track_file(&st.db, item).await else {
         return false;
     };
-    let sep = installed_model(&models.models, ModelKind::Separation)
-        .map(|m| (m.id.as_str(), m.version.as_str()));
-    store::missing(&st.db, file, sep)
-        .await
-        .is_ok_and(|m| m.is_empty())
+    store::rows(&st.db, file).await.is_ok_and(|rows| {
+        store::KINDS
+            .iter()
+            .all(|k| rows.iter().any(|r| r.kind == *k))
+    })
 }
 
 /// What a run would do.
@@ -359,15 +367,32 @@ enum Work {
     Lyrics,
 }
 
+/// The kinds `Separate` makes for `opts`: without `separate`, only the ones with no stem at all.
+async fn to_separate(
+    st: &AppState,
+    file: i32,
+    wants: &Wants,
+    opts: Opts,
+) -> sqlx::Result<Vec<&'static str>> {
+    let missing = store::missing(&st.db, file, wants.separate.as_ref()).await?;
+    if opts.separate || missing.is_empty() {
+        return Ok(missing);
+    }
+    let held = store::rows(&st.db, file).await?;
+    Ok(missing
+        .into_iter()
+        .filter(|k| !held.iter().any(|r| r.kind == *k))
+        .collect())
+}
+
 /// `Separate` lacks a kind, or an asked step has work, its feature and model.
 async fn pending(st: &AppState, item: i32, file: Option<i32>, opts: Opts) -> Work {
     let Some(file) = file else { return Work::Stems };
     let Ok(models) = super::engine_models(st).await else {
         return Work::Stems;
     };
-    let sep = installed_model(&models.models, ModelKind::Separation)
-        .map(|m| (m.id.as_str(), m.version.as_str()));
-    match store::missing(&st.db, file, sep).await {
+    let wants = Wants::of(&models);
+    match to_separate(st, file, &wants, opts).await {
         Ok(m) if m.is_empty() => {}
         _ => return Work::Stems,
     }
@@ -380,16 +405,21 @@ async fn pending(st: &AppState, item: i32, file: Option<i32>, opts: Opts) -> Wor
         .await
         .ok()
         .flatten()
-        .and_then(|f| f.rejected());
+        .and_then(|f| f.rejected.map(|r| r.0));
+    let choice = aligner::choice(st).await;
     let align = opts.align
         && caps.align
-        && align_plan(st, &models.models, &rows, opts.force)
-            .await
-            .is_some_and(|p| opts.force || rejected.as_ref() != Some(&p.key()));
+        && align_plan(&models, &choice, &rows).is_some_and(|p| {
+            p.due(&rows, opts.force) && (opts.force || !p.refused(rejected.as_ref()))
+        });
     let melody = opts.melody
         && caps.melody
-        && match melody_of(&rows).filter(|r| melody_spans(r, opts.repitch()).is_some()) {
-            Some(r) => !opts.repitch() || !lstore::is_ultrastar(&st.db, r.id).await.unwrap_or(true),
+        && match melody_of(&rows) {
+            Some(r) => {
+                let redo = opts.repitch() || pitch_outdated(r, wants.melody.as_ref());
+                melody_spans(r, redo).is_some()
+                    && (!redo || !lstore::is_ultrastar(&st.db, r.id).await.unwrap_or(true))
+            }
             None => false,
         };
     if align || melody {
@@ -397,6 +427,50 @@ async fn pending(st: &AppState, item: i32, file: Option<i32>, opts: Opts) -> Wor
     } else {
         Work::None
     }
+}
+
+/// The steps of `item` holding an outdated result (rule 12a), as the next run would see them.
+pub async fn outdated(st: &AppState, item: i32, models: &ModelsResponse) -> sqlx::Result<Stages> {
+    let wants = Wants::of(models);
+    let separate = match (store::track_file(&st.db, item).await?, &wants.separate) {
+        (Some(f), Some(w)) => store::rows(&st.db, f)
+            .await?
+            .iter()
+            .any(|r| !r.current(Some(w))),
+        _ => false,
+    };
+    let mut rows = lstore::list(&st.db, item).await?;
+    lstore::sort(&mut rows);
+    let choice = aligner::choice(st).await;
+    let rejected = store::failure(&st.db, item)
+        .await?
+        .and_then(|f| f.rejected.map(|r| r.0));
+    let (align, melody) = lyrics_outdated(&rows, models, &choice, &wants);
+    Ok(Stages {
+        separate,
+        align: align.is_some_and(|p| !p.refused(rejected.as_ref())),
+        melody,
+    })
+}
+
+/// The plan of an outdated generated row, and whether the pitch is outdated, from rule 66's order.
+pub(super) fn lyrics_outdated<'a>(
+    rows: &'a [lstore::Row],
+    models: &ModelsResponse,
+    choice: &aligner::Choice,
+    wants: &Wants,
+) -> (Option<AlignPlan<'a>>, bool) {
+    let align = align_plan(models, choice, rows).filter(|p| p.outdated(rows));
+    let melody = melody_of(rows).is_some_and(|r| pitch_outdated(r, wants.melody.as_ref()));
+    (align, melody)
+}
+
+/// The row's pitch came from a `Melody` that `want` would not make today.
+fn pitch_outdated(r: &lstore::Row, want: Option<&Stamp>) -> bool {
+    r.pitched_by
+        .as_ref()
+        .zip(want)
+        .is_some_and(|(p, w)| p.by.stale(w))
 }
 
 /// Registers the run and spawns it, unless it joins a running one, has nothing to do, or the caller is over a limit.
@@ -623,19 +697,17 @@ async fn steps(
     check(st, item).await?;
     let t = track(st, item).await?;
     let models = super::engine_models(st).await?;
-    let sep = installed_model(&models.models, ModelKind::Separation);
-    let missing = store::missing(
-        &st.db,
-        t.file,
-        sep.map(|m| (m.id.as_str(), m.version.as_str())),
-    )
-    .await?;
+    let wants = Wants::of(&models);
+    let missing = to_separate(st, t.file, &wants, opts).await?;
     let mut out = Outcome::default();
     if !missing.is_empty() {
-        let sep = sep.ok_or_else(|| Failure::ModelMissing {
-            message: "no separation model is installed".into(),
-        })?;
-        out.provider = Some(separate(st, item, &t, &sep.id, &missing, priority).await?);
+        let sep = wants
+            .separate
+            .as_ref()
+            .ok_or_else(|| Failure::ModelMissing {
+                message: "no separation model is installed".into(),
+            })?;
+        out.provider = Some(separate(st, item, &t, &sep.model, &missing, priority).await?);
         evict(st).await;
     }
     let vocals = store::rows(&st.db, t.file)
@@ -645,32 +717,24 @@ async fn steps(
         .map(|r| PathBuf::from(r.path))
         .ok_or("the vocals stem is missing")?;
     let caps = super::caps(st).await;
-    let pick = |k| installed_model(&models.models, k).map(|m| m.id.as_str());
     for step in [Step::Align, Step::Melody] {
         let res = match step {
             Step::Align if opts.align && caps.align => {
                 check(st, item).await?;
                 align(
-                    st,
-                    item,
-                    &t,
-                    &vocals,
-                    &models.models,
-                    opts.force,
-                    priority,
-                    &mut out,
+                    st, item, &t, &vocals, &models, opts.force, priority, &mut out,
                 )
                 .await
             }
-            Step::Melody if opts.melody && caps.melody => match pick(ModelKind::Melody) {
-                Some(model) => {
+            Step::Melody if opts.melody && caps.melody => match &wants.melody {
+                Some(want) => {
                     check(st, item).await?;
                     melody(
                         st,
                         item,
                         &t,
                         &vocals,
-                        model,
+                        want,
                         opts.repitch(),
                         priority,
                         &mut out,
@@ -769,6 +833,7 @@ async fn separate(
             path: &stem.path,
             size: stem.bytes as i64,
             duration_ms,
+            revision: s.revision,
         });
     }
     let _gate = write_gate(st, item).await?;
@@ -780,11 +845,12 @@ fn ms(v: i64) -> u32 {
     v.clamp(0, i64::from(u32::MAX)) as u32
 }
 
-/// The text `Align` times: the best main row of rule 66's order, unless a word-synced or reviewed one exists.
-fn align_source(rows: &[lstore::Row], force: bool) -> Option<&lstore::Row> {
+/// The text `Align` times: the best main row of rule 66's order but the unreviewed generated one,
+/// unless a word-synced or reviewed one exists.
+fn align_source(rows: &[lstore::Row]) -> Option<&lstore::Row> {
     let mains: Vec<_> = rows
         .iter()
-        .filter(|r| r.kind == "main" && !(force && r.source == "generated" && !r.reviewed))
+        .filter(|r| r.kind == "main" && !replaceable(r))
         .collect();
     let done = mains
         .iter()
@@ -816,42 +882,74 @@ fn text_digest(request: &[kd::Request]) -> String {
         .collect()
 }
 
+/// An unreviewed generated row, which a new `Align` replaces.
+fn replaceable(r: &lstore::Row) -> bool {
+    r.kind == "main" && r.source == "generated" && !r.reviewed
+}
+
 /// What an `Align` of the track would send.
-struct AlignPlan<'a> {
+pub(super) struct AlignPlan<'a> {
     src: &'a lstore::Row,
     /// The source on the audio's clock.
     doc: dl::Doc,
     request: Vec<kd::Request>,
-    language: Option<String>,
-    model: String,
+    pub(super) language: Option<String>,
+    /// The aligner as it would stamp its result.
+    pub(super) want: Stamp,
     /// The quality model, which reads the source audio.
     quality: bool,
     text: String,
 }
 
 impl AlignPlan<'_> {
-    fn key(&self) -> (String, String) {
-        (self.model.clone(), self.text.clone())
+    /// The generated row exists and another aligner, version, revision or text made it.
+    pub(super) fn outdated(&self, rows: &[lstore::Row]) -> bool {
+        rows.iter().find(|r| replaceable(r)).is_some_and(|g| {
+            g.aligned_by
+                .as_ref()
+                .is_none_or(|a| a.stale(&self.want, &self.text))
+        })
+    }
+
+    fn due(&self, rows: &[lstore::Row], force: bool) -> bool {
+        force || !rows.iter().any(replaceable) || self.outdated(rows)
+    }
+
+    /// The same aligner already rejected the same text (rule 18).
+    pub(super) fn refused(&self, rejected: Option<&Aligned>) -> bool {
+        rejected.is_some_and(|r| !r.stale(&self.want, &self.text))
+    }
+
+    /// The stamp of this plan's result.
+    pub(super) fn stamp(&self, matched: f64, fallback: Option<String>) -> Aligned {
+        Aligned {
+            by: self.want.clone(),
+            text: self.text.clone(),
+            matched,
+            fallback,
+        }
     }
 }
 
-async fn align_plan<'a>(
-    st: &AppState,
-    models: &[ModelInfo],
+pub(super) fn align_plan<'a>(
+    models: &ModelsResponse,
+    choice: &aligner::Choice,
     rows: &'a [lstore::Row],
-    force: bool,
 ) -> Option<AlignPlan<'a>> {
-    let src = align_source(rows, force)?;
+    let src = align_source(rows)?;
     let doc = on_audio(&src.doc.0, src.offset_ms);
     let request = kd::align_request(&doc);
     let language = aligner::language_of(&src.lang, &src.doc.0);
     let m = aligner::aligner(
-        models,
+        &models.models,
         language.as_deref(),
-        &aligner::overrides(st).await,
-        aligner::quality(st).await,
+        &choice.overrides,
+        choice.quality,
     )?;
-    let (quality, model) = (m.id == aligner::QUALITY_MODEL, m.id.clone());
+    let (quality, want) = (
+        m.id == aligner::QUALITY_MODEL,
+        Stamp::current(m, models.revisions.align),
+    );
     Some(AlignPlan {
         src,
         text: text_digest(&request),
@@ -859,13 +957,21 @@ async fn align_plan<'a>(
         request,
         language,
         quality,
-        model,
+        want,
     })
 }
 
-/// The quality model times the full mix; the others the vocals stem.
-fn align_media<'a>(quality: bool, source: &'a Path, vocals: &'a Path) -> &'a Path {
-    if quality { source } else { vocals }
+/// The quality model times the full mix, reading word ends from the vocals; the others the vocals.
+fn align_media<'a>(
+    quality: bool,
+    source: &'a Path,
+    vocals: &'a Path,
+) -> (&'a Path, Option<&'a Path>) {
+    if quality {
+        (source, Some(vocals))
+    } else {
+        (vocals, None)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -874,22 +980,24 @@ async fn align(
     item: i32,
     t: &Track,
     vocals: &Path,
-    models: &[ModelInfo],
+    models: &ModelsResponse,
     force: bool,
     priority: JobPriority,
     out: &mut Outcome,
 ) -> Result<(), Failure> {
     let mut rows = lstore::list(&st.db, item).await?;
     lstore::sort(&mut rows);
-    let Some(plan) = align_plan(st, models, &rows, force).await else {
+    let choice = aligner::choice(st).await;
+    let Some(plan) = align_plan(models, &choice, &rows).filter(|p| p.due(&rows, force)) else {
         return Ok(());
     };
     let rejected = store::failure(&st.db, item)
         .await?
-        .and_then(|f| f.rejected());
-    if !force && rejected == Some(plan.key()) {
+        .and_then(|f| f.rejected.map(|r| r.0));
+    if !force && plan.refused(rejected.as_ref()) {
         return Ok(());
     }
+    let (media, voicing) = align_media(plan.quality, &t.path, vocals);
     let kind = JobKind::Align {
         lines: plan
             .request
@@ -905,8 +1013,9 @@ async fn align(
             })
             .collect(),
         language: plan.language.clone(),
-        model: Some(plan.model.clone()),
+        model: Some(plan.want.model.clone()),
         providers: Some(super::verified_providers(st).await),
+        voicing: voicing.map(|v| v.to_string_lossy().into_owned()),
     };
     if let Err(e) = fliks_engine_core::jobs::align::validate(&kind) {
         return Err(if e.contains("at most") {
@@ -921,9 +1030,7 @@ async fn align(
         kind,
         media: MediaRef {
             media_file_id: t.file as u32,
-            path: align_media(plan.quality, &t.path, vocals)
-                .to_string_lossy()
-                .into_owned(),
+            path: media.to_string_lossy().into_owned(),
         },
         priority: Some(priority),
         force: false,
@@ -957,7 +1064,7 @@ async fn align(
     }
     if a.matched < MIN_MATCHED {
         out.rejected_match = Some(a.matched);
-        out.rejected = Some(plan.key());
+        out.rejected = Some(plan.stamp(a.matched, a.fallback.clone()));
         return Err(Failure::low_match(a.matched));
     }
     let src = plan.src;
@@ -979,14 +1086,8 @@ async fn align(
             lstore::retime(&st.db, src.id, &src.doc.0, &snapped).await?;
         }
     }
-    let mut source_ref = format!(
-        "{}#matched={:.2}#version={}#text={}",
-        a.model, a.matched, a.model_version, plan.text
-    );
-    if let Some(why) = &a.fallback {
-        source_ref.push_str(&format!("#fallback={why}"));
-    }
-    lstore::upsert(
+    let stamp = plan.stamp(a.matched, a.fallback.clone());
+    let id = lstore::upsert(
         &st.db,
         &lstore::New {
             item,
@@ -994,7 +1095,7 @@ async fn align(
             kind: "main",
             lang: &src.lang,
             source: "generated",
-            source_ref: Some(&source_ref),
+            source_ref: None,
             parsed: &Parsed {
                 sync: Sync::Word,
                 doc,
@@ -1006,6 +1107,7 @@ async fn align(
         },
     )
     .await?;
+    lstore::stamp_alignment(&st.db, id, &stamp).await?;
     Ok(())
 }
 
@@ -1033,12 +1135,13 @@ pub fn has_pitch(d: &dl::Doc) -> bool {
         .any(|c| c.pitch.is_some())
 }
 
-/// Writes the pitch of `notes` into row `id` only if its `doc` is still `snapshot`; false when it moved.
+/// Writes the pitch of `notes` and its stamp into row `id` only if its `doc` is still `snapshot`; false when it moved.
 pub async fn write_pitch(
     db: &sqlx::PgPool,
     id: i32,
     snapshot: &dl::Doc,
     notes: &[Vec<kd::Note>],
+    by: &Pitched,
 ) -> sqlx::Result<bool> {
     let mut tx = db.begin().await?;
     let current: Option<sqlx::types::Json<dl::Doc>> =
@@ -1050,9 +1153,10 @@ pub async fn write_pitch(
         return Ok(false);
     };
     kd::apply_pitch(&mut doc, notes);
-    sqlx::query("UPDATE lyrics SET doc = $2 WHERE id = $1")
+    sqlx::query(r#"UPDATE lyrics SET doc = $2, "pitchedBy" = $3 WHERE id = $1"#)
         .bind(id)
         .bind(sqlx::types::Json(&doc))
+        .bind(sqlx::types::Json(by))
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
@@ -1065,7 +1169,7 @@ async fn melody(
     item: i32,
     t: &Track,
     vocals: &Path,
-    model: &str,
+    want: &Stamp,
     repitch: bool,
     priority: JobPriority,
     out: &mut Outcome,
@@ -1073,11 +1177,12 @@ async fn melody(
     let Some(target) = melody_target(st, item).await? else {
         return Ok(());
     };
-    let Some(spans) = melody_spans(&target, repitch) else {
+    let redo = repitch || pitch_outdated(&target, Some(want));
+    let Some(spans) = melody_spans(&target, redo) else {
         return Ok(());
     };
     // An UltraStar row's notes are authored: a forced run would replace them for good.
-    if repitch && lstore::is_ultrastar(&st.db, target.id).await? {
+    if redo && lstore::is_ultrastar(&st.db, target.id).await? {
         return Ok(());
     }
     if spans.len() > MAX_MELODY_SPANS {
@@ -1095,7 +1200,7 @@ async fn melody(
                     end_ms: ms((*e).max(*s + 1) - offset),
                 })
                 .collect(),
-            model: Some(model.to_owned()),
+            model: Some(want.model.clone()),
         },
         media: MediaRef {
             media_file_id: t.file as u32,
@@ -1119,8 +1224,16 @@ async fn melody(
                 .collect()
         })
         .collect();
+    let by = Pitched {
+        by: Stamp {
+            model: m.model.clone(),
+            version: m.model_version.clone(),
+            revision: m.revision,
+        },
+        analysis: m.analysis,
+    };
     let _gate = write_gate(st, item).await?;
-    if !write_pitch(&st.db, target.id, &target.doc.0, &notes).await? {
+    if !write_pitch(&st.db, target.id, &target.doc.0, &notes, &by).await? {
         tracing::info!("karaoke melody of item #{item} dropped: the lyrics changed meanwhile");
     }
     Ok(())
@@ -1139,12 +1252,7 @@ mod tests {
             crate::config::Config::from_lookup(|_| None),
             "0123456789abcdef0123456789abcdef",
         );
-        let opts = Opts {
-            align: true,
-            melody: true,
-            force: false,
-        };
-        let start = start(&st, 1, opts, JobPriority::Normal, Some(1)).await;
+        let start = start(&st, 1, Opts::ALL, JobPriority::Normal, Some(1)).await;
         assert!(matches!(start, Start::Refused(Refusal::Unavailable)));
     }
 
@@ -1166,14 +1274,41 @@ mod tests {
             ),
             reviewed,
             preferred: false,
+            aligned_by: None,
+            pitched_by: None,
+        }
+    }
+
+    fn models() -> ModelsResponse {
+        let model = |id: &str, kind: &str| {
+            serde_json::json!({
+                "id": id, "kind": kind, "name": id, "version": "1", "default": true,
+                "state": "installed", "languages": ["fr"], "files": [], "downloadedBytes": 0,
+                "homepage": "", "sizeBytes": 0, "diskBytes": 0, "outdated": false, "verifying": false,
+                "licence": {"name": "l", "text": "t", "clear": true}
+            })
+        };
+        serde_json::from_value(serde_json::json!({
+            "runtime": {"onnx": true, "providers": [], "whisper": false, "rubberband": false},
+            "modelsDir": "/m", "usedBytes": 0, "orphans": [],
+            "models": [model("fr", "alignment"), model("pitch", "melody")],
+            "revisions": {"separate": 2, "align": 2, "melody": 2}
+        }))
+        .unwrap()
+    }
+
+    fn choice() -> aligner::Choice {
+        aligner::Choice {
+            overrides: HashMap::new(),
+            quality: false,
         }
     }
 
     #[test]
     fn the_quality_aligner_reads_the_source_audio_and_the_others_the_vocals() {
         let (src, vocals) = (Path::new("/m/a.flac"), Path::new("/s/vocals.wav"));
-        assert_eq!(align_media(true, src, vocals), src);
-        assert_eq!(align_media(false, src, vocals), vocals);
+        assert_eq!(align_media(true, src, vocals), (src, Some(vocals)));
+        assert_eq!(align_media(false, src, vocals), (vocals, None));
     }
 
     fn with_pitch(mut r: lstore::Row) -> lstore::Row {
@@ -1191,19 +1326,55 @@ mod tests {
             align,
             melody,
             force,
+            separate: true,
         }
     }
 
     #[test]
-    fn a_prepared_track_has_no_work_until_it_is_forced() {
-        let done = [
+    fn a_prepared_track_has_no_work_until_it_is_forced_or_outdated() {
+        let (models, choice) = (models(), choice());
+        let mut done = [
             with_pitch(row(1, "generated", "word", false)),
             row(2, "lrclib", "line", false),
         ];
-        assert!(align_source(&done, false).is_none());
+        let plan = align_plan(&models, &choice, &done).unwrap();
+        let stamp = plan.stamp(0.9, None);
+        done[0].aligned_by = Some(sqlx::types::Json(stamp.clone()));
+        let plan = align_plan(&models, &choice, &done).unwrap();
+        assert_eq!(
+            plan.src.id, 2,
+            "the source is read, never the generated row"
+        );
+        assert!(!plan.due(&done, false));
+        assert!(plan.due(&done, true));
         assert!(melody_spans(&done[0], false).is_none());
-        assert_eq!(align_source(&done, true).map(|r| r.id), Some(2));
         assert!(melody_spans(&done[0], opts(false, true, true).repitch()).is_some());
+        let mut older = done.clone();
+        older[0].aligned_by.as_mut().unwrap().by.revision = 1;
+        assert!(plan.due(&older, false), "an older revision is outdated");
+        let mut changed = done.clone();
+        changed[1].doc.0.lines[0].text = "a c".into();
+        let edited = align_plan(&models, &choice, &changed).unwrap();
+        assert!(edited.outdated(&changed), "the source text changed");
+        assert!(edited.refused(Some(&edited.stamp(0.1, None))));
+        assert!(!edited.refused(Some(&stamp)), "a rejection of another text");
+    }
+
+    #[test]
+    fn the_pitch_is_outdated_only_when_a_melody_made_it() {
+        let want = Wants::of(&models()).melody.unwrap();
+        let mut r = with_pitch(row(1, "generated", "word", false));
+        assert!(!pitch_outdated(&r, Some(&want)), "authored pitch");
+        let mut by = Pitched {
+            by: want.clone(),
+            analysis: None,
+        };
+        r.pitched_by = Some(sqlx::types::Json(by.clone()));
+        assert!(!pitch_outdated(&r, Some(&want)));
+        by.by.version = "0".into();
+        r.pitched_by = Some(sqlx::types::Json(by));
+        assert!(pitch_outdated(&r, Some(&want)));
+        assert!(!pitch_outdated(&r, None), "nothing can redo it");
     }
 
     #[test]
@@ -1212,7 +1383,7 @@ mod tests {
             with_pitch(row(1, "generated", "word", true)),
             row(2, "lrclib", "line", false),
         ];
-        assert!(align_source(&reviewed, true).is_none());
+        assert!(align_source(&reviewed).is_none());
         assert!(melody_of(&[row(2, "lrclib", "line", false)]).is_none());
     }
 
@@ -1275,12 +1446,11 @@ mod tests {
             row(1, "generated", "word", false),
             row(2, "lrclib", "line", false),
         ];
-        assert!(align_source(&rows, false).is_none());
-        assert_eq!(align_source(&rows, true).map(|r| r.id), Some(2));
+        assert_eq!(align_source(&rows).map(|r| r.id), Some(2));
         let reviewed = [
             row(1, "generated", "word", true),
             row(2, "lrclib", "line", false),
         ];
-        assert!(align_source(&reviewed, true).is_none());
+        assert!(align_source(&reviewed).is_none());
     }
 }

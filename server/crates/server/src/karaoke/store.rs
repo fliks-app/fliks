@@ -1,4 +1,5 @@
 //! `derived_audio`: rows, eviction, invalidation and the file sweep (`docs/spec/karaoke.md` rules 11-15).
+use super::stale::{Aligned, Stamp};
 use crate::sync::MutexExt;
 use crate::{paths, state::AppState};
 use sqlx::PgPool;
@@ -21,6 +22,22 @@ pub struct Row {
     pub size: i64,
     #[sqlx(rename = "durationMs")]
     pub duration_ms: i32,
+    pub revision: i32,
+}
+
+impl Row {
+    fn stamp(&self) -> Stamp {
+        Stamp {
+            model: self.model.clone(),
+            version: self.model_version.clone(),
+            revision: self.revision.max(0) as u32,
+        }
+    }
+
+    /// Imported, or made as `want` would make it today.
+    pub fn current(&self, want: Option<&Stamp>) -> bool {
+        self.provider == IMPORT || want.is_some_and(|w| !self.stamp().stale(w))
+    }
 }
 
 pub fn dir() -> PathBuf {
@@ -33,7 +50,7 @@ pub fn file_dir(file: i32) -> PathBuf {
 
 pub async fn rows(db: &PgPool, file: i32) -> sqlx::Result<Vec<Row>> {
     sqlx::query_as(
-        r#"SELECT kind, model, "modelVersion", provider, path, size, "durationMs"
+        r#"SELECT kind, model, "modelVersion", provider, path, size, "durationMs", revision
            FROM derived_audio WHERE "mediaFileId" = $1 ORDER BY kind"#,
     )
     .bind(file)
@@ -71,20 +88,18 @@ pub async fn track_of(db: &PgPool, file: i32) -> sqlx::Result<Option<i32>> {
     .await
 }
 
-/// The kinds `file` still needs from `Separate`: neither imported nor made by `model` (`None`: only imports count).
+/// The kinds `file` still needs from `Separate`: neither imported nor current for `want` (`None`: only imports count).
 pub async fn missing(
     db: &PgPool,
     file: i32,
-    model: Option<(&str, &str)>,
+    want: Option<&Stamp>,
 ) -> sqlx::Result<Vec<&'static str>> {
     let rows = rows(db, file).await?;
     let mut out = vec![];
     for k in KINDS {
         let mut held = false;
         for r in rows.iter().filter(|r| r.kind == k) {
-            let current = r.provider == IMPORT
-                || model.is_some_and(|(m, v)| r.model == m && r.model_version == v);
-            if current && tokio::fs::try_exists(&r.path).await.unwrap_or(false) {
+            if r.current(want) && tokio::fs::try_exists(&r.path).await.unwrap_or(false) {
                 held = true;
             }
         }
@@ -95,9 +110,9 @@ pub async fn missing(
     Ok(out)
 }
 
-/// Every kind of `file` is imported or made by `model`, on disk.
-pub async fn valid(db: &PgPool, file: i32, model: &str, version: &str) -> sqlx::Result<bool> {
-    Ok(missing(db, file, Some((model, version))).await?.is_empty())
+/// Every kind of `file` is imported or current for `want`, on disk.
+pub async fn valid(db: &PgPool, file: i32, want: &Stamp) -> sqlx::Result<bool> {
+    Ok(missing(db, file, Some(want)).await?.is_empty())
 }
 
 pub struct New<'a> {
@@ -109,6 +124,7 @@ pub struct New<'a> {
     pub path: &'a str,
     pub size: i64,
     pub duration_ms: i32,
+    pub revision: u32,
 }
 
 /// Replaces the row of `(file, kind)`; the file it named before is removed.
@@ -140,11 +156,12 @@ pub async fn put_in(db: &mut sqlx::PgConnection, n: &New<'_>) -> sqlx::Result<Op
     .fetch_optional(&mut *db)
     .await?;
     sqlx::query(
-        r#"INSERT INTO derived_audio ("mediaFileId", kind, model, "modelVersion", provider, path, size, "durationMs")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        r#"INSERT INTO derived_audio ("mediaFileId", kind, model, "modelVersion", provider, path, size, "durationMs", revision)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            ON CONFLICT ("mediaFileId", kind) DO UPDATE SET model = EXCLUDED.model,
              "modelVersion" = EXCLUDED."modelVersion", provider = EXCLUDED.provider, path = EXCLUDED.path,
-             size = EXCLUDED.size, "durationMs" = EXCLUDED."durationMs", "lastUsedAt" = now()"#,
+             size = EXCLUDED.size, "durationMs" = EXCLUDED."durationMs", revision = EXCLUDED.revision,
+             "lastUsedAt" = now()"#,
     )
     .bind(n.file)
     .bind(n.kind)
@@ -154,6 +171,7 @@ pub async fn put_in(db: &mut sqlx::PgConnection, n: &New<'_>) -> sqlx::Result<Op
     .bind(n.path)
     .bind(n.size)
     .bind(n.duration_ms)
+    .bind(n.revision as i32)
     .execute(&mut *db)
     .await?;
     Ok(old.filter(|o| o != n.path))
@@ -232,6 +250,7 @@ pub async fn import(
             path: &to,
             size,
             duration_ms,
+            revision: 1,
         },
     )
     .await
@@ -336,20 +355,21 @@ pub async fn total(db: &PgPool) -> sqlx::Result<i64> {
     .await
 }
 
-/// Rule 16: tracks lacking a stem of `model`, then with `sync` those with lyrics and no word timing.
+/// Rule 16: tracks lacking a stem current for `want` ([`Stamp::stale`]), then with `sync` those with lyrics and no word timing.
 pub async fn unprepared(
     db: &PgPool,
     skip: &[i32],
     limit: i64,
-    model: (&str, &str),
+    want: &Stamp,
     sync: bool,
 ) -> sqlx::Result<Vec<i32>> {
-    let profile = super::remote::profile_of(&(model.0.to_owned(), model.1.to_owned()));
+    let profile = super::remote::profile_of(want);
     sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         r#"SELECT id FROM (
              SELECT i.id, f.file,
                (SELECT count(DISTINCT d.kind) FROM derived_audio d WHERE d."mediaFileId" = f.file
-                  AND (d.provider = 'import' OR (d.model = $4 AND d."modelVersion" = $5))) AS held,
+                  AND (d.provider = 'import' OR (d.model = $4 AND d."modelVersion" = $5
+                       AND d.revision >= $7))) AS held,
                EXISTS (SELECT 1 FROM derived_audio d WHERE d."mediaFileId" = f.file) AS stale
              FROM items i JOIN track_details td ON td."itemId" = i.id
              JOIN LATERAL ({}) f(file) ON true
@@ -372,9 +392,10 @@ pub async fn unprepared(
     .bind(skip)
     .bind(limit)
     .bind(profile)
-    .bind(model.0)
-    .bind(model.1)
+    .bind(&want.model)
+    .bind(&want.version)
     .bind(sync)
+    .bind(want.revision as i32)
     .fetch_all(db)
     .await
 }
@@ -399,22 +420,13 @@ pub struct Recorded {
     pub error: Option<serde_json::Value>,
     #[sqlx(rename = "lyricsError")]
     pub lyrics_error: Option<serde_json::Value>,
-    #[sqlx(rename = "rejectedBy")]
-    pub rejected_by: Option<String>,
-    #[sqlx(rename = "rejectedText")]
-    pub rejected_text: Option<String>,
-}
-
-impl Recorded {
-    /// `(aligner, text digest)` of the lyrics the aligner last rejected.
-    pub fn rejected(&self) -> Option<(String, String)> {
-        self.rejected_by.clone().zip(self.rejected_text.clone())
-    }
+    /// The `Align` that last rejected the lyrics.
+    pub rejected: Option<sqlx::types::Json<Aligned>>,
 }
 
 pub async fn failure(db: &PgPool, item: i32) -> sqlx::Result<Option<Recorded>> {
     sqlx::query_as(
-        r#"SELECT error, "lyricsError", "rejectedBy", "rejectedText" FROM karaoke_failures
+        r#"SELECT error, "lyricsError", rejected FROM karaoke_failures
            WHERE "itemId" = $1"#,
     )
     .bind(item)
@@ -422,13 +434,11 @@ pub async fn failure(db: &PgPool, item: i32) -> sqlx::Result<Option<Recorded>> {
     .await
 }
 
-/// The failures of every track whose lyrics an aligner rejected.
-pub async fn rejections(db: &PgPool) -> sqlx::Result<Vec<(i32, String)>> {
-    sqlx::query_as(
-        r#"SELECT "itemId", "rejectedBy" FROM karaoke_failures WHERE "rejectedBy" IS NOT NULL"#,
-    )
-    .fetch_all(db)
-    .await
+/// The rejections of every track whose lyrics an aligner rejected.
+pub async fn rejections(db: &PgPool) -> sqlx::Result<Vec<(i32, sqlx::types::Json<Aligned>)>> {
+    sqlx::query_as(r#"SELECT "itemId", rejected FROM karaoke_failures WHERE rejected IS NOT NULL"#)
+        .fetch_all(db)
+        .await
 }
 
 /// Keeps what a run ended with: its failure, or none; the lyrics part only when a lyrics step ran.
@@ -447,27 +457,24 @@ pub async fn record(
             o.rejected.clone(),
         ),
     };
-    let (by, text) = rejected.unzip();
     let mut tx = db.begin().await?;
     sqlx::query(
-        r#"INSERT INTO karaoke_failures ("itemId", error, "lyricsError", "rejectedBy", "rejectedText")
-           VALUES ($1, $2, $3, $4, $5)
+        r#"INSERT INTO karaoke_failures ("itemId", error, "lyricsError", rejected)
+           VALUES ($1, $2, $3, $4)
            ON CONFLICT ("itemId") DO UPDATE SET error = EXCLUDED.error,
-             "lyricsError" = CASE WHEN $6 THEN EXCLUDED."lyricsError" ELSE karaoke_failures."lyricsError" END,
-             "rejectedBy" = CASE WHEN $6 THEN EXCLUDED."rejectedBy" ELSE karaoke_failures."rejectedBy" END,
-             "rejectedText" = CASE WHEN $6 THEN EXCLUDED."rejectedText" ELSE karaoke_failures."rejectedText" END"#,
+             "lyricsError" = CASE WHEN $5 THEN EXCLUDED."lyricsError" ELSE karaoke_failures."lyricsError" END,
+             rejected = CASE WHEN $5 THEN EXCLUDED.rejected ELSE karaoke_failures.rejected END"#,
     )
     .bind(item)
     .bind(error)
     .bind(lyrics)
-    .bind(by)
-    .bind(text)
+    .bind(rejected.map(sqlx::types::Json))
     .bind(lyrics_ran)
     .execute(&mut *tx)
     .await?;
     sqlx::query(
         r#"DELETE FROM karaoke_failures WHERE "itemId" = $1 AND error IS NULL
-             AND "lyricsError" IS NULL AND "rejectedBy" IS NULL"#,
+             AND "lyricsError" IS NULL AND rejected IS NULL"#,
     )
     .bind(item)
     .execute(&mut *tx)

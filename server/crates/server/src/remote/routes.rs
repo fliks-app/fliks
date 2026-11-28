@@ -646,6 +646,7 @@ mod tests {
                 vocal_level: None,
                 pitch: None,
                 stems_available: None,
+                can_shift_key: None,
                 queue: None,
                 supports_volume: None,
                 subtitle_id: None,

@@ -126,6 +126,8 @@ export interface RemoteState {
   vocalLevel?: number;
   pitch?: number;
   stemsAvailable?: boolean;
+  /** False while the device's output cannot change the key (Cast, native). */
+  canShiftKey?: boolean;
   /** Only on a beat that carries one: the first beat of a session and each change. */
   queue?: ReportedQueue;
   supportsVolume: boolean;

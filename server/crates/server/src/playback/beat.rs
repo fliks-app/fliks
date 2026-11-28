@@ -198,6 +198,7 @@ fn presence_beat(
                 .and_then(|p| i32::try_from(p).ok())
         }),
         stems_available: nullable(b, "stemsAvailable", Value::as_bool),
+        can_shift_key: nullable(b, "canShiftKey", Value::as_bool),
         queue: b.get("queue").and_then(QueueState::from_beat),
     }
 }
@@ -317,6 +318,7 @@ pub fn remote_state(target_id: String, s: &LiveSession, media: i32, b: &Value) -
         vocal_level: s.vocal_level.map(Num),
         pitch: s.pitch.map(i64::from),
         stems_available: s.stems_available,
+        can_shift_key: s.can_shift_key,
         queue: b.get("queue").and_then(QueueState::from_beat).map(Box::new),
         supports_volume: s.supports_volume,
         subtitle_id: s.subtitle_id.clone(),
@@ -810,6 +812,7 @@ mod tests {
             vocal_level: None,
             pitch: None,
             stems_available: None,
+            can_shift_key: None,
             queue: None,
             audio_plan: None,
             source_fps: None,
@@ -882,6 +885,7 @@ mod tests {
             vocal_level: Some(0.2),
             pitch: Some(2),
             stems_available: Some(true),
+            can_shift_key: Some(true),
             ..live()
         };
         let e = serde_json::to_value(remote_state("t".into(), &s, 7, &json!({}))).unwrap();

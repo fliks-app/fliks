@@ -110,6 +110,7 @@ fn alive(st: &AppState, sid: &str) {
         vocal_level: None,
         pitch: None,
         stems_available: None,
+        can_shift_key: None,
         queue: None,
         audio_plan: None,
         source_fps: None,

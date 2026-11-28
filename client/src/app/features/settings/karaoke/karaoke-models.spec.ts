@@ -99,7 +99,7 @@ describe('KaraokeModelsComponent', () => {
   });
 
   it('keeps the card and its details button when only refused tracks remain', async () => {
-    const c = create([], { tracks: 0, refused: 2, running: false, total: 0, done: 0 });
+    const c = create([], { tracks: 0, refused: 2, stages: { separate: 0, align: 0, melody: 0 }, running: false, total: 0, done: 0 });
     await new Promise((r) => setTimeout(r, 10));
     c.fixture.detectChanges();
     const el: HTMLElement = c.fixture.nativeElement;

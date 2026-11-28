@@ -7,9 +7,12 @@
         @if (t.artist || t.album) {
           <p class="text-sm text-base-content/60">{{ byline(t) }}</p>
         }
-        <p class="text-sm text-base-content/60">
-          {{ 'karaoke.admin.details_models' | translate: { language: language(t.language), current: name(t.model), next: name(t.aligner) } }}
-        </p>
+        <p class="text-sm">{{ stages(t) }}</p>
+        @if (t.aligner) {
+          <p class="text-sm text-base-content/60">
+            {{ 'karaoke.admin.details_models' | translate: { language: language(t.language), current: name(t.model), next: name(t.aligner) } }}
+          </p>
+        }
         @if (t.result; as r) {
           <p class="text-sm" [class.text-error]="r.status === 'failed'" [class.text-warning]="r.status === 'rejected'">
             @switch (r.status) {

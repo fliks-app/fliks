@@ -172,8 +172,22 @@ const MIN_PIECE: i64 = 80;
 
 /// Cuts each span's notes at cue starts and gives each piece to the cue holding its midpoint, else the nearest.
 pub fn apply_pitch(doc: &mut Doc, notes: &[Vec<Note>]) {
+    // A held last word ends before the same singer's next line starts.
+    let caps: Vec<i64> = (0..doc.lines.len())
+        .map(|i| {
+            let agent = &doc.lines[i].agent_id;
+            doc.lines[i + 1..]
+                .iter()
+                .find(|l| l.agent_id == *agent)
+                .and_then(|l| l.start)
+                .unwrap_or(i64::MAX)
+        })
+        .collect();
     let mut spans = notes.iter();
-    for line in doc.lines.iter_mut().filter(|l| !l.cues.is_empty()) {
+    for (line, cap) in doc.lines.iter_mut().zip(caps) {
+        if line.cues.is_empty() {
+            continue;
+        }
         let n = spans.next().map(Vec::as_slice).unwrap_or_default();
         for cue in &mut line.cues {
             cue.notes.clear();
@@ -202,10 +216,11 @@ pub fn apply_pitch(doc: &mut Doc, notes: &[Vec<Note>]) {
             }
         }
         let nexts: Vec<i64> = line.cues.iter().skip(1).map(|c| c.start).collect();
-        let nexts = nexts.into_iter().chain([i64::MAX]);
+        let nexts = nexts.into_iter().chain([cap]);
         for (cue, next) in line.cues.iter_mut().zip(nexts) {
-            // The aligner ends a held vowel where its level drops; the pitch knows it is still sung.
-            if let Some(e) = cue.notes.iter().map(|n| n.end).max() {
+            // A note begun inside the word holds it; one sung in the gap after it does not.
+            let held = cue.notes.iter().filter(|n| n.start < cue.end);
+            if let Some(e) = held.map(|n| n.end).max() {
                 cue.end = cue.end.max(e.min(next));
             }
             cue.pitch = main_pitch(&cue.notes);
@@ -459,6 +474,27 @@ mod tests {
         let spans = line_spans(&d);
         apply_pitch(&mut d, &[vec![(0, 350, 60.0)]]);
         assert_eq!((line_spans(&d), d.lines[0].cues[0].end), (spans, 300));
+    }
+
+    #[test]
+    fn a_note_in_the_gap_keeps_its_word_short_and_a_last_word_stops_at_the_next_line() {
+        let mut d = two_cues();
+        d.lines[0].cues[0].end = 100;
+        d.lines[0].cues[1].start = 900;
+        apply_pitch(&mut d, &[vec![(300, 500, 60.0)]]);
+        assert_eq!(
+            d.lines[0].cues[0].end, 100,
+            "a note after the word does not stretch it"
+        );
+        assert_eq!(d.lines[0].cues[0].pitch, Some(60.0));
+        let mut d = two_cues();
+        d.lines.push(Line {
+            start: Some(1200),
+            text: "ef".into(),
+            ..Line::default()
+        });
+        apply_pitch(&mut d, &[vec![(300, 3000, 62.0)]]);
+        assert_eq!(d.lines[0].cues[1].end, 1200);
     }
 
     #[test]
