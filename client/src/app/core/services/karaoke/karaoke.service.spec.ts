@@ -171,7 +171,7 @@ describe('KaraokeService', () => {
     expect(karaoke.results(doc)).toHaveLength(2);
   });
 
-  it('removes this device latency from its frames as they are captured, and calibrates on top of it', async () => {
+  it('removes this device latency from its frames as they are captured, and calibrates from the stamps as taken', async () => {
     vi.stubGlobal('AudioWorkletNode', class {});
     vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: () => undefined } });
     let frame!: (f: { t: number; midi: number | null }) => void;
@@ -184,6 +184,12 @@ describe('KaraokeService', () => {
     expect(karaoke.store.frames(1).map((f) => f.t)).toEqual([900]);
     karaoke.nudgeLatency(-2);
     expect(karaoke.latencyMs()).toBe(80);
+    const doc3 = { ...doc, cueLine: [{ index: 0, start: 0, end: 5000, value: 'x', cue: [cue(2000, 2400, 60), cue(4000, 4400, 60), cue(6000, 6400, 60)] }] } as StructuredLyrics;
+    for (const at of [2150, 4150, 6150]) for (let k = 0; k < 5; k++) frame({ t: at + k * 20, midi: 60 });
+    expect(karaoke.calibrate(doc3)).toBe(true);
+    expect(karaoke.latencyMs()).toBe(150);
+    karaoke.calibrate(doc3);
+    expect(karaoke.latencyMs()).toBe(150);
     karaoke.stopSinging();
     vi.unstubAllGlobals();
   });

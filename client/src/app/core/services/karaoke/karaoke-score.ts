@@ -16,6 +16,8 @@ export interface PitchFrame {
   midi: number | null;
   /** The key in force when the frame was sung; `scoreSinger` falls back to its `keyShift`. */
   key?: number;
+  /** This device's own frames: the capture delay already taken off `t`. */
+  lag?: number;
 }
 
 /** Distance in semitones between two notes, octave-insensitive (0..6). */

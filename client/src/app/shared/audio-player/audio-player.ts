@@ -338,7 +338,10 @@ export class AudioPlayerComponent {
 
   /** Entering the stage shows the lyrics panel it lives in. */
   protected sing(): void {
-    if (this.karaoke.singKind() === 'enter' && !this.lyricsShown()) this.toggleLyrics();
+    if (this.karaoke.singKind() === 'enter') {
+      this.lyricsEdit.set(false);
+      this.lyricsOn.set(true);
+    }
     this.karaoke.sing();
   }
 

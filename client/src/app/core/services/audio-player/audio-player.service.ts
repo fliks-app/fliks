@@ -1073,10 +1073,14 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     const file = this.stemFile;
     if (file === null || this._stemMode() === 'original') return void n.clearStems().catch(() => undefined);
     const api = this.injector.get(KaraokeApiService);
-    const g = this.mix();
+    const current = () => this.stemFile === file && this._stemMode() !== 'original';
     void this.stemToken(file)
-      .then(() => n.setStems({ key: String(file), instrumentalUrl: api.stemUrl(file, 'instrumental'), vocalsUrl: api.stemUrl(file, 'vocals') }))
-      .then(() => n.setStemMix({ main: g.main, instrumental: g.instrumental, vocals: g.vocals }))
+      .then(async () => {
+        if (!current()) return;
+        await n.setStems({ key: String(file), instrumentalUrl: api.stemUrl(file, 'instrumental'), vocalsUrl: api.stemUrl(file, 'vocals') });
+        const g = this.mix();
+        if (current()) await n.setStemMix({ main: g.main, instrumental: g.instrumental, vocals: g.vocals });
+      })
       .catch(() => undefined);
   }
 

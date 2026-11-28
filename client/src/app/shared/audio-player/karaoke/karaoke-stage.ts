@@ -251,7 +251,9 @@ export class KaraokeStageComponent {
     if (this.keyTimer) clearTimeout(this.keyTimer);
     this.keyTimer = setTimeout(() => {
       this.keyTimer = null;
-      if (this.targetKey() !== this.pitch()) void this.audio.setPitch?.(this.targetKey());
+      if (this.targetKey() === this.pitch()) return;
+      // A local reopen that fails leaves the key; a remote device reports its own.
+      void Promise.resolve(this.audio.setPitch?.(this.targetKey())).then(() => !this.output() && this.targetKey.set(this.pitch()));
     }, KEY_SETTLE_MS);
   }
 

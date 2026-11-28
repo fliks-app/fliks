@@ -120,7 +120,7 @@ export class KaraokeService {
       untracked(() => {
         this.store.clear();
         this.finishedFor = undefined;
-        if (!this.status()) void this.loadStatus();
+        void this.loadStatus();
       });
     });
     effect(() => {
@@ -206,9 +206,10 @@ export class KaraokeService {
     const had = stemsReady(this.itemState());
     this.itemState.update((s) => s && { ...s, state: j.state, stage: j.stage, progress: j.progress });
     const id = j.itemId;
+    const run = ++this.stateRun;
     void this.api.itemState(id).then(
       (s) => {
-        if (this.itemId() !== id) return;
+        if (run !== this.stateRun || this.itemId() !== id) return;
         this.itemState.set(s);
         if (!had && stemsReady(s)) this.flash();
         if (j.state === 'ready' || j.state === 'failed') this.prepared.next(id);
@@ -272,6 +273,7 @@ export class KaraokeService {
     try {
       await this.api.remove(id);
       this.stage.set(false);
+      if (this.local.track()?.itemId === id) void this.local.refreshStems();
       if (this.itemId() === id) await this.loadState(id);
       this.prepared.next(id);
     } catch {
@@ -317,7 +319,8 @@ export class KaraokeService {
     const gen = this.startGen;
     try {
       await this.capture.start((raw) => {
-        const f = { ...raw, t: raw.t - this.latencyMs() };
+        const lag = this.latencyMs();
+        const f = { ...raw, t: raw.t - lag, lag };
         this.ingest(me, [f]);
         this.pending.push(f);
         if (this.pending.length >= MAX_FRAMES_PER_BATCH) this.flush();
@@ -368,12 +371,13 @@ export class KaraokeService {
     this.setLatency(this.latencyMs() + steps * LATENCY_STEP_MS);
   }
 
-  /** Adds the delay this device's take still shows against the song; false when too few notes matched. */
+  /** Sets the capture delay from this device's take as it was stamped; false when too few notes matched. */
   calibrate(doc: StructuredLyrics): boolean {
     const me = this.auth.user()?.id;
-    const ms = me == null ? null : calibrate(doc, this.store.frames(me));
+    const raw = me == null ? [] : this.store.frames(me).map((f) => ({ ...f, t: f.t + (f.lag ?? 0) }));
+    const ms = calibrate(doc, raw);
     if (ms === null) return false;
-    this.setLatency(this.latencyMs() + ms);
+    this.setLatency(ms);
     return true;
   }
 
