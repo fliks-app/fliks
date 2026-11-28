@@ -101,9 +101,14 @@ export class LyricsViewComponent {
     });
     effect(() => {
       this.doc();
+      untracked(() => this.sync(this.pos));
+    });
+    // Only another document starts at the top: a new offset or timing of the same row keeps the place.
+    const docId = computed(() => this.doc().id);
+    effect(() => {
+      docId();
       untracked(() => {
         this.manualUntil = 0;
-        this.sync(this.pos);
         const box = this.scroller()?.nativeElement;
         if (box) box.scrollTop = 0;
       });

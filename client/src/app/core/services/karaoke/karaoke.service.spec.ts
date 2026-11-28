@@ -24,7 +24,7 @@ const doc = {
 } as StructuredLyrics;
 const take = (midi: number | null) => Array.from({ length: 50 }, (_, i) => ({ t: i * 20, midi }));
 const stem = { size: 1, durationMs: 1, contentType: 'audio/ogg' };
-const state = (s: Partial<KaraokeItemState> = {}): KaraokeItemState => ({ state: 'none', fileId: 9, stems: {}, lyrics: false, melody: false, cdg: false, ...s });
+const state = (s: Partial<KaraokeItemState> = {}): KaraokeItemState => ({ state: 'none', fileId: 9, stems: {}, lyrics: false, melody: false, cdg: false, stale: [], ...s });
 const ready = state({ state: 'ready', stems: { instrumental: stem, vocals: stem } });
 
 function setup(isTv = true, opts: { status?: object; item?: KaraokeItemState } = {}) {

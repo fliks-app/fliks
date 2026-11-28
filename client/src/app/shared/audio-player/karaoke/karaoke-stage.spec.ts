@@ -15,7 +15,7 @@ function remoteOutput(mode: string, level: number) {
   return { stemMode: signal(mode), vocalLevel: signal(level), stemsAvailable: signal(true), pitch: signal(0), position: signal(0), duration: signal(0), playing: signal(false), buffering: signal(false), rate: signal(1), setStemMode: vi.fn(), setVocalLevel: vi.fn(), setPitch: vi.fn() };
 }
 
-function create(output?: ReturnType<typeof remoteOutput>, opts: { canShiftKey?: boolean; party?: object } = {}) {
+function create(output?: ReturnType<typeof remoteOutput>, opts: { canShiftKey?: boolean; party?: object; item?: object; voice?: object; canEdit?: boolean } = {}) {
   const audio = {
     canShiftKey: signal(opts.canShiftKey ?? true),
     stemMode: signal('original'),
@@ -50,11 +50,14 @@ function create(output?: ReturnType<typeof remoteOutput>, opts: { canShiftKey?: 
     dismissBoard: vi.fn(),
     nudgeLatency: vi.fn(),
     setLatency: vi.fn(),
+    itemState: signal(opts.item ?? null),
+    voiceRange: signal(opts.voice ?? null),
+    prepare: vi.fn(),
   };
   TestBed.configureTestingModule({
     providers: [
       provideZonelessChangeDetection(),
-      provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({}) } } }),
+      provideTranslateService({ lang: 'en', loader: { provide: TranslateLoader, useValue: { getTranslation: () => of({ karaoke: { tonics_major: 'C Db D Eb E F F# G Ab A Bb B', tonics_minor: 'Cm C#m Dm Ebm Em Fm F#m Gm G#m Am Bbm Bm' } }) } } }),
       { provide: AudioPlayerService, useValue: audio },
       { provide: KaraokeService, useValue: karaoke },
       { provide: KaraokeRelayService, useValue: { open: vi.fn(), close: vi.fn() } },
@@ -63,7 +66,8 @@ function create(output?: ReturnType<typeof remoteOutput>, opts: { canShiftKey?: 
     ],
   });
   const f = TestBed.createComponent(KaraokeStageComponent);
-  f.componentRef.setInput('doc', { offset: 0, line: [], cueLine: [] } as unknown as StructuredLyrics);
+  f.componentRef.setInput('doc', { id: 1, synced: true, offset: 0, line: [], cueLine: [] } as unknown as StructuredLyrics);
+  if (opts.canEdit) f.componentRef.setInput('canEdit', true);
   if (output) f.componentRef.setInput('output', output);
   f.detectChanges();
   return { f, audio, karaoke, el: f.nativeElement as HTMLElement };
@@ -200,5 +204,32 @@ describe('KaraokeStageComponent mix bar', () => {
     expect(text).toContain('Next');
     expect(text).toContain('Bo');
     expect(text).not.toContain('Now');
+  });
+
+  it('shows what a key shift lands on, its doubt and whether it fits the voice', () => {
+    vi.useFakeTimers();
+    const analysis = { tuningCents: 0, lowMidi: 57, highMidi: 69, key: { key: { tonic: 9, mode: 'minor' }, confidence: 0.3, alternative: { tonic: 0, mode: 'major' } } };
+    const { f, el } = create(undefined, { item: { stale: [], analysis }, voice: { lo: 45, hi: 56 } });
+    expect(el.querySelector('[data-testid="karaoke-key-estimate"]')!.textContent).toContain('karaoke.key_uncertain');
+    expect(el.querySelector('[data-testid="karaoke-range-fit"]')!.textContent).toContain('karaoke.range_fits');
+    el.querySelector<HTMLButtonElement>('[aria-label="karaoke.key_up"]')!.click();
+    el.querySelector<HTMLButtonElement>('[aria-label="karaoke.key_up"]')!.click();
+    f.detectChanges();
+    expect(el.querySelector('[data-testid="karaoke-range-fit"]')!.textContent).toContain('karaoke.range_outside');
+    vi.useRealTimers();
+  });
+
+  it('shows nothing of the analysis when the server sent none', () => {
+    const { el } = create(undefined, { item: { stale: [] } });
+    expect(el.querySelector('[data-testid="karaoke-analysis"]')).toBeNull();
+  });
+
+  it('nudges the lyrics offset of an editor', () => {
+    const { f, el } = create(undefined, { canEdit: true });
+    const emitted: number[] = [];
+    f.componentInstance.offset.subscribe((v) => emitted.push(v));
+    el.querySelector<HTMLButtonElement>('[data-testid="karaoke-offset-sooner"]')!.click();
+    el.querySelector<HTMLButtonElement>('[data-testid="karaoke-offset-later"]')!.click();
+    expect(emitted).toEqual([100, -100]);
   });
 });

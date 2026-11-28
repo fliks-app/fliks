@@ -146,6 +146,28 @@ export interface KaraokeItemState {
   melody: boolean;
   /** A `.cdg` file sits next to the track (MP3+G). */
   cdg: boolean;
+  /** Steps whose result an older model or engine made. */
+  stale: KaraokeStage[];
+  /** What the melody step found in the song; absent when the pitch is authored or too few notes were sung. */
+  analysis?: KaraokeAnalysis;
+}
+
+/** `tonic` is a pitch class, 0 (C) to 11 (B). */
+export interface KaraokeKey {
+  tonic: number;
+  mode: 'major' | 'minor';
+}
+
+export interface KaraokeAnalysis {
+  /** -50 to 50 cents from A4 = 440 Hz. */
+  tuningCents: number;
+  /** MIDI pitches, tuning removed, that 5 % of the sung time lies under and above. */
+  lowMidi: number;
+  highMidi: number;
+  /** `confidence` -1 to 1; `alternative` the runner-up when it scores nearly as well. */
+  key?: { key: KaraokeKey; confidence: number; alternative?: KaraokeKey };
+  /** `confidence` 0 to 1. */
+  tempo?: { bpm: number; confidence: number };
 }
 
 /** Payload of the `karaoke.job_changed` SSE event. */

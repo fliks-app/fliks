@@ -22,6 +22,8 @@ import { layerAligned, mainLyrics, tapBack, tapLines, tapStamp, tapStart, type T
 
 const FORMATS: LyricsFormat[] = ['lrc', 'elrc', 'ttml', 'srt', 'plain'];
 const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttml: 'ttml', xml: 'ttml', srt: 'srt', txt: 'plain' };
+/** Nudges gather this long before the offset is saved. */
+const OFFSET_SAVE_MS = 500;
 const NO_LYRICS: StructuredLyrics = {
   id: 0, kind: 'main', lang: 'und', synced: false, offset: 0, displayArtist: '', displayTitle: '', source: '', reviewed: false, preferred: false, line: [],
 };
@@ -98,6 +100,9 @@ export class LyricsPanelComponent {
   protected readonly stageDoc = computed(() => (this.staged() ? (this.shown() ?? NO_LYRICS) : null));
 
   private anchor = { pos: 0, at: 0 };
+  private offsetTimer: ReturnType<typeof setTimeout> | null = null;
+  /** An offset shown but not saved yet: a reload in the meantime keeps it. */
+  private pendingOffset: { id: number; ms: number } | null = null;
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.session.stopSinging());
@@ -135,6 +140,29 @@ export class LyricsPanelComponent {
     if (ok) await this.session.remove();
   }
 
+  /** Applies a row's offset at once and saves it once the nudges settle; a refused save reloads the stored one. */
+  protected setOffset(id: number, ms: number): void {
+    this.pendingOffset = { id, ms };
+    this.applyOffset();
+    if (this.offsetTimer) clearTimeout(this.offsetTimer);
+    this.offsetTimer = setTimeout(() => {
+      this.offsetTimer = null;
+      const sent = this.pendingOffset;
+      void this.api.patch(id, { offsetMs: ms }).then(
+        () => this.pendingOffset === sent && (this.pendingOffset = null),
+        () => {
+          if (this.pendingOffset === sent) this.pendingOffset = null;
+          return this.reload();
+        },
+      );
+    }, OFFSET_SAVE_MS);
+  }
+
+  private applyOffset(): void {
+    const p = this.pendingOffset;
+    if (p) this.res.update((r) => r && { ...r, structuredLyrics: r.structuredLyrics.map((d) => (d.id === p.id ? { ...d, offset: p.ms } : d)) });
+  }
+
   /** A generated sync the user keeps: a re-sync never replaces a reviewed row. */
   protected keep(d: StructuredLyrics): Promise<void> {
     return this.act(async () => {
@@ -150,6 +178,7 @@ export class LyricsPanelComponent {
       const r = await run();
       if (this.itemId() !== id) return;
       this.res.set(r);
+      this.applyOffset();
       this.found.emit(r.structuredLyrics.length > 0);
       this.layerId.set(null);
     } catch {
