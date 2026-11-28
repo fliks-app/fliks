@@ -67,8 +67,12 @@ export class KaraokeStaleDetailsComponent {
     }
   }
 
-  protected name(id: string): string {
-    return this.models().find((m) => m.id === id)?.name ?? id;
+  protected name(id: string | null): string {
+    return (id && this.models().find((m) => m.id === id)?.name) ?? id ?? '';
+  }
+
+  protected stages(t: KaraokeStaleTrack): string {
+    return t.stale.map((s) => this.translate.instant(`karaoke.admin.stage_${s}`)).join(' · ');
   }
 
   protected byline(t: KaraokeStaleTrack): string {

@@ -4,6 +4,7 @@ mod background;
 pub mod cdg;
 pub mod remote;
 pub mod run;
+pub mod stale;
 pub mod store;
 
 use crate::sync::MutexExt;
@@ -441,9 +442,13 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
     let detail = a.user.is_admin || a.perms.can(Action::Manage, &Subject::Settings);
     let run = st.karaoke.runs.lock_clean().get(&item).cloned();
     let lyrics = crate::lyrics::store::list(&st.db, item).await?;
-    let melody = run::melody_target(st, item)
-        .await?
-        .is_some_and(|r| run::has_pitch(&r.doc.0));
+    let target = run::melody_target(st, item).await?;
+    let melody = target.as_ref().is_some_and(|r| run::has_pitch(&r.doc.0));
+    let analysis = target.and_then(|r| r.pitched_by).and_then(|p| p.0.analysis);
+    let outdated = match engine_models(st).await {
+        Ok(models) => run::outdated(st, item, &models).await?,
+        Err(_) => stale::Stages::default(),
+    };
     let cdg = match file {
         Some(f) => match crate::ingest::post_import::file_path(st, f).await? {
             Some((p, _)) => cdg::sidecar(&p).await.is_some(),
@@ -464,7 +469,11 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
         "stems": stems,
         "lyrics": lyrics.iter().any(|r| r.source == "generated"),
         "melody": melody,
+        "stale": outdated.names(),
     });
+    if let Some(a) = analysis {
+        out["analysis"] = json!(a);
+    }
     if let Some(f) = file {
         out["fileId"] = json!(f);
     }
@@ -571,6 +580,7 @@ pub async fn prepare(
         align: dto.align.unwrap_or(true),
         melody: dto.melody.unwrap_or(true),
         force: dto.force,
+        separate: true,
     };
     let priority = if a.perms.can(Action::Update, &Subject::Media) {
         JobPriority::Normal

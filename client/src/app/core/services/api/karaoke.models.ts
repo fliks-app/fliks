@@ -107,10 +107,23 @@ export interface KaraokeStaleTrack {
   title: string | null;
   album: string | null;
   artist: string | null;
+  /** The outdated steps of the track. */
+  stale: KaraokeStage[];
+  /** Its outdated sync was rejected for the same lyrics by the current aligner. */
+  refused: boolean;
   language: string | null;
-  model: string;
-  aligner: string;
+  model: string | null;
+  aligner: string | null;
   result: KaraokeRealignResult | null;
+}
+
+export interface KaraokeStaleCount {
+  tracks: number;
+  refused: number;
+  stages: Record<KaraokeStage, number>;
+  running: boolean;
+  total: number;
+  done: number;
 }
 
 export interface KaraokeStalePage {

@@ -1,4 +1,5 @@
 //! The `lyrics` table (`docs/spec/music.md` rules 61, 65).
+use crate::karaoke::stale::{Aligned, Pitched};
 use fliks_domain::lyrics::{self, Doc, Parsed, Sync};
 use sqlx::{PgConnection, PgPool, types::Json};
 
@@ -21,10 +22,16 @@ pub struct Row {
     pub doc: Json<Doc>,
     pub reviewed: bool,
     pub preferred: bool,
+    /// The `Align` that made a `generated` row.
+    #[sqlx(rename = "alignedBy")]
+    pub aligned_by: Option<Json<Aligned>>,
+    /// The `Melody` that wrote the row's pitch, cleared by any rewrite of its document.
+    #[sqlx(rename = "pitchedBy")]
+    pub pitched_by: Option<Json<Pitched>>,
 }
 
-pub const COLUMNS: &str =
-    r#"id, "itemId", kind, lang, sync, source, "sourceRef", "offsetMs", doc, reviewed, preferred"#;
+pub const COLUMNS: &str = r#"id, "itemId", kind, lang, sync, source, "sourceRef", "offsetMs", doc, reviewed, preferred,
+    "alignedBy", "pitchedBy""#;
 
 /// What a row is stored from.
 pub struct New<'a> {
@@ -49,6 +56,7 @@ pub async fn upsert(db: &PgPool, n: &New<'_>) -> sqlx::Result<i32> {
            ON CONFLICT ("itemId", kind, lang, source) DO UPDATE SET
              "mediaFileId" = EXCLUDED."mediaFileId", sync = EXCLUDED.sync, "sourceRef" = EXCLUDED."sourceRef",
              "audioDurationMs" = EXCLUDED."audioDurationMs", doc = EXCLUDED.doc, raw = EXCLUDED.raw,
+             "pitchedBy" = NULL,
              "offsetMs" = CASE WHEN lyrics.raw IS NOT DISTINCT FROM EXCLUDED.raw
                                THEN lyrics."offsetMs" ELSE EXCLUDED."offsetMs" END,
              reviewed = CASE WHEN lyrics.raw IS NOT DISTINCT FROM EXCLUDED.raw
@@ -103,6 +111,16 @@ pub async fn retime(db: &PgPool, id: i32, old: &Doc, new: &Doc) -> sqlx::Result<
     .execute(db)
     .await
     .map(drop)
+}
+
+/// Records the `Align` that made the generated row `id`.
+pub async fn stamp_alignment(db: &PgPool, id: i32, by: &Aligned) -> sqlx::Result<()> {
+    sqlx::query(r#"UPDATE lyrics SET "alignedBy" = $2 WHERE id = $1"#)
+        .bind(id)
+        .bind(Json(by))
+        .execute(db)
+        .await
+        .map(drop)
 }
 
 /// The row was read from an UltraStar text.
@@ -194,7 +212,7 @@ pub async fn rebind(
         if timed && drift.is_some_and(|d| d > CARRY_TOLERANCE_MS) {
             sqlx::query(
                 r#"UPDATE lyrics SET "mediaFileId" = $2, sync = 'none', doc = $3, "offsetMs" = 0,
-                     "audioDurationMs" = $4 WHERE id = $1"#,
+                     "audioDurationMs" = $4, "pitchedBy" = NULL WHERE id = $1"#,
             )
             .bind(id)
             .bind(file)

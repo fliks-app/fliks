@@ -1,6 +1,8 @@
 //! The aligner of a language, the library's languages and the re-alignment (`docs/spec/karaoke.md` rules 38-41).
 use super::run;
+use super::stale::{Aligned, Stages, Stamp, Wants};
 use super::{engine_err, manage_settings};
+use crate::lyrics::store as lstore;
 use crate::sync::MutexExt;
 use crate::{
     http::{AppError, auth::Authed},
@@ -14,11 +16,14 @@ use axum::{
 };
 use fliks_domain::language::{normalize_language_code, parse_language_code};
 use fliks_domain::lyrics::Doc;
-use fliks_engine_core::api::{ModelInfo, ModelKind, ModelState};
+use fliks_engine_core::api::{ModelInfo, ModelKind, ModelState, ModelsResponse};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::types::Json as Jsonb;
-use std::{collections::BTreeMap, collections::HashMap, sync::atomic::Ordering};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::{Arc, atomic::Ordering},
+};
 
 /// The language of a row: its `lang` when it is a code, else what the text says.
 pub(crate) fn language_of(lang: &str, doc: &Doc) -> Option<String> {
@@ -41,8 +46,21 @@ pub(crate) fn language_of(lang: &str, doc: &Doc) -> Option<String> {
 /// The opt-in model of the `quality` aligner: it times best on the full mix and is never picked by language.
 pub(crate) const QUALITY_MODEL: &str = "w2v-bert-music-ctc";
 
+/// The admin's aligner settings of rule 38.
+pub(crate) struct Choice {
+    pub(crate) overrides: HashMap<String, String>,
+    pub(crate) quality: bool,
+}
+
+pub(crate) async fn choice(st: &AppState) -> Choice {
+    Choice {
+        overrides: overrides(st).await,
+        quality: quality(st).await,
+    }
+}
+
 /// `karaoke.aligner` is `quality`: the admin chose the quality model over the per-language choice.
-pub(crate) async fn quality(st: &AppState) -> bool {
+async fn quality(st: &AppState) -> bool {
     settings::text(&st.db, "karaoke.aligner")
         .await
         .ok()
@@ -122,7 +140,7 @@ pub(crate) fn validate_overrides(value: &str) -> Result<(), &'static str> {
 }
 
 /// The admin's per-language choices; an entry that is not a model id is skipped.
-pub(crate) async fn overrides(st: &AppState) -> HashMap<String, String> {
+async fn overrides(st: &AppState) -> HashMap<String, String> {
     let Some(raw) = settings::text(&st.db, "karaoke.aligners")
         .await
         .ok()
@@ -180,8 +198,10 @@ pub async fn languages(State(st): State<AppState>, a: Authed) -> Result<Json<Val
     manage_settings(&a)?;
     let models = super::engine_models(&st).await.map_err(engine_err)?;
     let models = &models.models;
-    let chosen = overrides(&st).await;
-    let quality = quality(&st).await;
+    let Choice {
+        overrides: chosen,
+        quality,
+    } = choice(&st).await;
     let list: Vec<Value> = library_languages(&st)
         .await?
         .iter()
@@ -224,57 +244,104 @@ pub(super) async fn auto_download(st: &AppState) {
     }
 }
 
-/// Rule 41: unreviewed generated rows another aligner made (not a recogniser fallback); `blocked` if rejected.
-async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<Stale>> {
-    type Row = (i32, String, String, Option<Jsonb<Doc>>);
-    let rows: Vec<Row> = sqlx::query_as(
-        r#"SELECT "itemId", lang, "sourceRef", CASE WHEN lang = 'und' THEN doc END FROM lyrics
-           WHERE kind = 'main' AND source = 'generated' AND NOT reviewed
-             AND "sourceRef" IS NOT NULL AND "sourceRef" NOT LIKE '%#fallback=%'"#,
-    )
+/// Rule 41: the tracks holding an outdated result (rule 12a), by item id.
+async fn stale(st: &AppState, models: Arc<ModelsResponse>) -> sqlx::Result<Vec<Stale>> {
+    let mut out: BTreeMap<i32, Stale> = BTreeMap::new();
+    if let Some(want) = Wants::of(&models).separate {
+        let stems: Vec<(i32, String, String, i32)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            r#"SELECT i.id, d.model, d."modelVersion", d.revision
+               FROM items i JOIN track_details td ON td."itemId" = i.id
+               JOIN LATERAL ({}) f(file) ON true
+               JOIN derived_audio d ON d."mediaFileId" = f.file AND d.provider <> 'import'"#,
+            super::store::track_file_sql("i.id")
+        )))
+        .fetch_all(&st.db)
+        .await?;
+        for (item, model, version, revision) in stems {
+            let made = Stamp {
+                model,
+                version,
+                revision: revision.max(0) as u32,
+            };
+            if made.stale(&want) {
+                out.entry(item)
+                    .or_insert_with(|| Stale::new(item))
+                    .stages
+                    .separate = true;
+            }
+        }
+    }
+    let rows: Vec<lstore::Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        r#"SELECT {} FROM lyrics WHERE "itemId" IN (SELECT "itemId" FROM lyrics
+             WHERE (kind = 'main' AND source = 'generated' AND NOT reviewed) OR "pitchedBy" IS NOT NULL)"#,
+        lstore::COLUMNS
+    )))
     .fetch_all(&st.db)
     .await?;
-    let languages = blocking(move || {
-        rows.into_iter()
-            .map(|(item, lang, source_ref, doc)| {
-                let doc = doc.map(|d| d.0).unwrap_or_default();
-                (item, language_of(&lang, &doc), source_ref)
-            })
-            .collect::<Vec<_>>()
-    })
-    .await?;
-    let chosen = overrides(st).await;
-    let quality = quality(st).await;
-    let rejected: HashMap<i32, String> = super::store::rejections(&st.db)
+    let rejected: HashMap<i32, Aligned> = super::store::rejections(&st.db)
         .await?
         .into_iter()
+        .map(|(i, r)| (i, r.0))
         .collect();
-    Ok(languages
-        .into_iter()
-        .filter_map(|(item, language, source_ref)| {
-            let current = aligner(models, language.as_deref(), &chosen, quality)?
-                .id
-                .clone();
-            let model = source_ref.split('#').next().unwrap_or_default().to_owned();
-            let blocked = rejected.get(&item) == Some(&current);
-            (current != model).then_some(Stale {
-                item,
-                language,
-                model,
-                aligner: current,
-                blocked,
-            })
-        })
-        .collect())
+    let choice = choice(st).await;
+    let lyrics = blocking(move || {
+        let wants = Wants::of(&models);
+        let mut by_item: BTreeMap<i32, Vec<lstore::Row>> = BTreeMap::new();
+        for r in rows {
+            by_item.entry(r.item_id).or_default().push(r);
+        }
+        let mut found = vec![];
+        for (item, mut rows) in by_item {
+            lstore::sort(&mut rows);
+            let (plan, melody) = run::lyrics_outdated(&rows, &models, &choice, &wants);
+            let mut s = Stale::new(item);
+            s.stages.melody = melody;
+            if let Some(p) = plan {
+                s.refused = p.refused(rejected.get(&item));
+                s.stages.align = !s.refused;
+                s.language = p.language.clone();
+                s.aligner = Some(p.want.model.clone());
+                s.model = rows
+                    .iter()
+                    .find_map(|r| r.aligned_by.as_ref().filter(|_| r.source == "generated"))
+                    .map(|a| a.by.model.clone());
+            }
+            found.push(s);
+        }
+        found
+    })
+    .await?;
+    for s in lyrics.into_iter().filter(|s| s.stages.any() || s.refused) {
+        let e = out.entry(s.item).or_insert_with(|| Stale::new(s.item));
+        let separate = e.stages.separate;
+        *e = s;
+        e.stages.separate = separate;
+    }
+    Ok(out.into_values().collect())
 }
 
-/// A stale track, with the model that timed it and the one that would time it now.
+/// An outdated track: its outdated steps, and for `Align` the model that timed it and the one that would now.
 pub(super) struct Stale {
     pub(super) item: i32,
+    pub(super) stages: Stages,
+    /// `Align` is outdated but the current aligner rejected the same text (rule 18).
+    refused: bool,
     language: Option<String>,
-    model: String,
-    aligner: String,
-    blocked: bool,
+    model: Option<String>,
+    aligner: Option<String>,
+}
+
+impl Stale {
+    fn new(item: i32) -> Self {
+        Self {
+            item,
+            stages: Stages::default(),
+            refused: false,
+            language: None,
+            model: None,
+            aligner: None,
+        }
+    }
 }
 
 /// The last re-alignment attempt of a track in this process; a rejection is also recorded (rule 8).
@@ -335,9 +402,7 @@ pub async fn realign_items(
 ) -> Result<Json<Value>, AppError> {
     manage_settings(&a)?;
     let models = super::engine_models(&st).await.map_err(engine_err)?;
-    let models = &models.models;
-    let mut all = stale(&st, models).await?;
-    all.sort_by_key(|s| s.item);
+    let all = stale(&st, models).await?;
     let total = all.len();
     let page = page_of(all, q.offset);
     let ids: Vec<i32> = page.iter().map(|s| s.item).collect();
@@ -361,6 +426,8 @@ pub async fn realign_items(
                 "title": l.and_then(|l| l.title.as_deref()),
                 "album": l.and_then(|l| l.album.as_deref()),
                 "artist": l.and_then(|l| l.artists.as_deref()),
+                "stale": s.stages.names(),
+                "refused": s.refused,
                 "language": s.language,
                 "model": s.model,
                 "aligner": s.aligner,
@@ -377,11 +444,16 @@ pub async fn realign_items(
 pub async fn realign_count(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, AppError> {
     manage_settings(&a)?;
     let models = super::engine_models(&st).await.map_err(engine_err)?;
-    let models = &models.models;
     let all = stale(&st, models).await?;
+    let count = |f: fn(&Stages) -> bool| all.iter().filter(|s| f(&s.stages)).count();
     Ok(Json(json!({
-        "tracks": all.iter().filter(|s| !s.blocked).count(),
-        "refused": all.iter().filter(|s| s.blocked).count(),
+        "tracks": count(|s| s.any()),
+        "refused": all.iter().filter(|s| s.refused).count(),
+        "stages": {
+            "separate": count(|s| s.separate),
+            "align": count(|s| s.align),
+            "melody": count(|s| s.melody),
+        },
         "running": st.karaoke.realigning.load(Ordering::SeqCst),
         "total": st.karaoke.realign_total.load(Ordering::SeqCst),
         "done": st.karaoke.realign_done.load(Ordering::SeqCst),
@@ -397,11 +469,11 @@ pub async fn realign(
     if !settings::flag(&st.db, "karaoke.enabled", false).await {
         return Err(super::disabled());
     }
-    if !super::caps(&st).await.align {
+    let c = super::caps(&st).await;
+    if !(c.separate || c.align || c.melody) {
         return Err(super::unavailable());
     }
     let models = super::engine_models(&st).await.map_err(engine_err)?;
-    let models = &models.models;
     if st.karaoke.realigning.swap(true, Ordering::SeqCst) {
         return Err(super::refusal(
             StatusCode::CONFLICT,
@@ -409,7 +481,7 @@ pub async fn realign(
         ));
     }
     let tracks = match stale(&st, models).await {
-        Ok(t) => t.into_iter().filter(|s| !s.blocked).collect::<Vec<_>>(),
+        Ok(t) => t.into_iter().filter(|s| s.stages.any()).collect::<Vec<_>>(),
         Err(e) => {
             st.karaoke.realigning.store(false, Ordering::SeqCst);
             return Err(e.into());

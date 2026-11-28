@@ -915,6 +915,7 @@ export class RemoteService {
       vocalLevel: s.vocalLevel,
       pitch: s.pitch,
       stemsAvailable: s.stemsAvailable,
+      canShiftKey: s.canShiftKey,
       supportsVolume: s.supportsVolume,
       subtitleId: s.subtitleId,
       quality: s.quality,

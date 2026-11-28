@@ -138,6 +138,7 @@ export class RemoteAudioOutput implements AudioOutput {
   readonly vocalLevel = computed(() => this.report()?.vocalLevel ?? 0);
   readonly pitch = computed(() => this.report()?.pitch ?? 0);
   readonly stemsAvailable = computed(() => this.report()?.stemsAvailable ?? false);
+  readonly canShiftKey = computed(() => this.report()?.canShiftKey ?? true);
   private readonly report = computed(() => (this.live() ? this.remote.targetState() : null));
 
   setStemMode(mode: StemMode): void {

@@ -57,6 +57,7 @@ pub struct LiveSession {
     pub vocal_level: Option<f64>,
     pub pitch: Option<i32>,
     pub stems_available: Option<bool>,
+    pub can_shift_key: Option<bool>,
     /// The audio queue the device last reported (`heartbeat.md` rule 25).
     pub queue: Option<QueueState>,
     pub audio_plan: Option<AudioPlan>,
@@ -151,6 +152,7 @@ pub struct Beat {
     pub vocal_level: Option<Option<f64>>,
     pub pitch: Option<Option<i32>>,
     pub stems_available: Option<Option<bool>>,
+    pub can_shift_key: Option<Option<bool>>,
     /// A valid beat queue replaces the stored one; `None` keeps it.
     pub queue: Option<QueueState>,
 }
@@ -209,6 +211,7 @@ impl LiveSession {
             vocal_level: None,
             pitch: None,
             stems_available: None,
+            can_shift_key: None,
             queue: None,
             muted: None,
             audio_plan: Some(r.audio_plan.clone()),
@@ -277,7 +280,8 @@ impl LiveSession {
             stem_mode,
             vocal_level,
             pitch,
-            stems_available
+            stems_available,
+            can_shift_key
         );
         if let Some(r) = b.playback_rate {
             self.playback_rate = r;

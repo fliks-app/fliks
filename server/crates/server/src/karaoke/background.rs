@@ -163,8 +163,9 @@ async fn pass_workers(st: &AppState) -> Result<(), sqlx::Error> {
     )
     .fetch_one(&st.db)
     .await?;
-    let model = (current.0.as_str(), current.1.as_str());
-    for item in store::unprepared(&st.db, &skip_list(&st.karaoke), PER_WAKE, model, false).await? {
+    for item in
+        store::unprepared(&st.db, &skip_list(&st.karaoke), PER_WAKE, &current, false).await?
+    {
         // A local run took the track over: queueing it again would separate it twice.
         if st.karaoke.runs.lock_clean().contains_key(&item) {
             continue;
@@ -192,19 +193,15 @@ async fn pass_local(st: &AppState) -> Result<usize, sqlx::Error> {
         return Ok(0);
     };
     let sync = super::caps(st).await.align;
-    let model = (current.0.as_str(), current.1.as_str());
-    let tracks = store::unprepared(&st.db, &skip_list(&st.karaoke), PER_WAKE, model, sync).await?;
+    let tracks =
+        store::unprepared(&st.db, &skip_list(&st.karaoke), PER_WAKE, &current, sync).await?;
     let mut prepared = 0;
     for item in tracks {
         if store::total(&st.db).await? >= budget / 10 * 9 || route(st).await != Some(Route::Local) {
             break;
         }
-        let opts = run::Opts {
-            align: true,
-            melody: true,
-            force: false,
-        };
-        let run::Start::Started(handle) = run::start(st, item, opts, JobPriority::Low, None).await
+        let run::Start::Started(handle) =
+            run::start(st, item, run::Opts::ALL, JobPriority::Low, None).await
         else {
             st.karaoke.skipped.lock_clean().insert(item);
             continue;
@@ -249,13 +246,9 @@ pub async fn prepare_upcoming(st: &AppState, party: i32) {
         }
         last.insert(party, items.clone());
     }
-    let opts = run::Opts {
-        align: true,
-        melody: true,
-        force: false,
-    };
     for item in items {
-        if let run::Start::Refused(r) = run::start(st, item, opts, JobPriority::Normal, None).await
+        if let run::Start::Refused(r) =
+            run::start(st, item, run::Opts::ALL, JobPriority::Normal, None).await
         {
             tracing::debug!("karaoke of programme item #{item} not started: {r:?}");
         }
@@ -280,7 +273,7 @@ async fn may_separate_here(st: &AppState) -> bool {
         && store::total(&st.db).await.unwrap_or(i64::MAX) < super::budget_bytes(st).await / 10 * 9
 }
 
-/// Rule 41: re-aligns the stale items one track at a time; a row is replaced only by a new one.
+/// Rule 41: re-processes the outdated tracks one at a time; a result is replaced only by a new one.
 pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
     st.karaoke
         .realign_total
@@ -288,13 +281,12 @@ pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
     st.karaoke.realign_done.store(0, Ordering::SeqCst);
     for stale in items {
         let item = stale.item;
+        // Stems are separated again on the main engine only where the local pass may.
         let opts = run::Opts {
-            align: true,
-            melody: true,
-            force: true,
+            separate: may_separate_here(&st).await,
+            ..run::Opts::ALL
         };
-        // Without stems a re-alignment separates on the main engine: only where the local pass may.
-        let outcome = if !run::stems_valid(&st, item).await && !may_separate_here(&st).await {
+        let outcome = if !opts.separate && !run::stems_present(&st, item).await {
             None
         } else {
             match run::start(&st, item, opts, JobPriority::Low, None).await {

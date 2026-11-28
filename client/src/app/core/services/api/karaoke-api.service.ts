@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { SKIP_ERROR_TOAST } from '../../interceptors/error.interceptor';
-import type { KaraokeItemState, KaraokeLanguage, KaraokeModel, KaraokeModels, KaraokeStalePage, KaraokeStatus, StemKind } from './karaoke.models';
+import type { KaraokeItemState, KaraokeLanguage, KaraokeModel, KaraokeModels, KaraokeStaleCount, KaraokeStalePage, KaraokeStatus, StemKind } from './karaoke.models';
 
 @Injectable({ providedIn: 'root' })
 export class KaraokeApiService {
@@ -43,8 +43,8 @@ export class KaraokeApiService {
   }
 
   /** Generated lyrics a model other than their language's aligner timed. */
-  staleTracks(): Promise<{ tracks: number; refused: number; running: boolean; total: number; done: number }> {
-    return firstValueFrom(this.http.get<{ tracks: number; refused: number; running: boolean; total: number; done: number }>('/api/karaoke/realign', this.quiet));
+  staleTracks(): Promise<KaraokeStaleCount> {
+    return firstValueFrom(this.http.get<KaraokeStaleCount>('/api/karaoke/realign', this.quiet));
   }
 
   staleItems(offset: number): Promise<KaraokeStalePage> {

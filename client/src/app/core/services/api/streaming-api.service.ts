@@ -744,6 +744,7 @@ export class StreamingApiService {
       vocalLevel?: number;
       pitch?: number;
       stemsAvailable?: boolean;
+      canShiftKey?: boolean;
       hasNext?: boolean;
       lastCmdId?: string;
       lastCmdRefused?: string;

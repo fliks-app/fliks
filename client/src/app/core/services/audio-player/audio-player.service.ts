@@ -1668,7 +1668,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
         state: this.uiPlaying() ? ('playing' as const) : ('paused' as const),
         hasNext: this._musicMode() && this.neighbour(1) !== null,
         playbackRate: this.effectiveRate(),
-        ...(this._musicMode() && { stemMode: this._stemMode(), vocalLevel: this._vocalLevel(), pitch: this._pitch(), stemsAvailable: this._stemsAvailable() }),
+        ...(this._musicMode() && { stemMode: this._stemMode(), vocalLevel: this._vocalLevel(), pitch: this._pitch(), stemsAvailable: this._stemsAvailable(), canShiftKey: this.canShiftKey() }),
         ...this.volumeReport(),
         ...(this.castOut.active() && { castDevice: this.castOut.deviceName() ?? undefined }),
       } satisfies BeatBody,

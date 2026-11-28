@@ -12,6 +12,8 @@ const track = (itemId: number): KaraokeStaleTrack => ({
   title: `T${itemId}`,
   album: null,
   artist: null,
+  stale: ['align'],
+  refused: false,
   language: 'fr',
   model: 'a',
   aligner: 'b',

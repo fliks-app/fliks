@@ -598,6 +598,8 @@ pub enum SseEvent {
         pitch: Option<i64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stems_available: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        can_shift_key: Option<bool>,
         /// Only on a beat that carries one: never the stored list on every beat.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         queue: Option<Box<crate::account_session::QueueState>>,
