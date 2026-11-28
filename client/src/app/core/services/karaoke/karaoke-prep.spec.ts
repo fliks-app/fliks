@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { KaraokeItemState } from '../api/karaoke.models';
-import { singKind, weightedProgress } from './karaoke-prep';
+import { singKind, stemsReady, weightedProgress } from './karaoke-prep';
 
-const st = (state: KaraokeItemState['state']) => ({ state, fileId: 1, stems: {}, lyrics: false, melody: false, cdg: false }) as KaraokeItemState;
+const stem = { size: 1, durationMs: 1, contentType: 'audio/ogg' };
+const st = (state: KaraokeItemState['state'], stems: KaraokeItemState['stems'] = {}) => ({ state, fileId: 1, stems, lyrics: false, melody: false, cdg: false }) as KaraokeItemState;
+const both = { instrumental: stem, vocals: stem };
 
 describe('singKind', () => {
   it('maps each job state to a button state', () => {
@@ -11,18 +13,24 @@ describe('singKind', () => {
     expect(singKind(st('queued'), false)).toBe('queued');
     expect(singKind(st('running'), false)).toBe('running');
     expect(singKind(st('failed'), false)).toBe('retry');
-    expect(singKind(st('ready'), false)).toBe('enter');
-    expect(singKind(st('ready'), true)).toBe('exit');
+    expect(singKind(st('ready', both), false)).toBe('enter');
+    expect(singKind(st('ready', both), true)).toBe('exit');
+  });
+
+  it('enters as soon as both stems exist, while the lyrics steps run', () => {
+    expect(singKind(st('running', both), false)).toBe('enter');
+    expect(singKind(st('running', { vocals: stem }), false)).toBe('running');
+    expect(stemsReady(st('running', { instrumental: stem }))).toBe(false);
   });
 });
 
 describe('weightedProgress', () => {
-  it('spreads the stages over 0-70, 70-90 and 90-100', () => {
+  it('spreads the stages, each capped at 95 by the engine', () => {
     expect(weightedProgress('separate', 0)).toBe(0);
-    expect(weightedProgress('separate', 100)).toBe(70);
-    expect(weightedProgress('align', 50)).toBe(80);
-    expect(weightedProgress('melody', 100)).toBe(100);
+    expect(weightedProgress('separate', 95)).toBe(25);
+    expect(weightedProgress('separate', 100)).toBe(25);
+    expect(weightedProgress('align', 47.5)).toBe(55);
+    expect(weightedProgress('melody', 95)).toBe(100);
     expect(weightedProgress(undefined, undefined)).toBe(0);
-    expect(weightedProgress('separate', 60)).toBe(42);
   });
 });

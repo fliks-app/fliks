@@ -5,10 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StreamingApiService } from '../api/streaming-api.service';
 import { AuthService } from '../auth.service';
 import { CastPlayerService } from '../cast-player.service';
+import { ServerVersionService } from '../server-version.service';
 import { CastService } from '../cast.service';
 import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
 import { ServerConfigService } from '../server-config.service';
-import { ServerVersionService } from '../server-version.service';
 import { ToastService } from '../toast.service';
 import { MusicCastOutput, type MusicCastHost, type MusicCastState } from './music-cast-output';
 import type { MusicTrackRequest } from './music-queue';
@@ -30,7 +30,6 @@ const track = (id: number): MusicTrackRequest => ({
 const info = (sessionId: string, mediaFileId: number, durationSeconds = 100) => ({ sessionId, mediaFileId, durationSeconds, playMethod: 'DirectPlay' });
 
 describe('MusicCastOutput', () => {
-  let layeredServer = true;
   let current: MusicTrackRequest | null = track(1);
   let queue: { itemIds: number[]; index: number; shuffle: boolean; repeat: 'off' } | null = null;
   let karaoke = { mode: 'original' as string, level: 0 };
@@ -78,7 +77,6 @@ describe('MusicCastOutput', () => {
     { url: 'http://srv/api/media-files/77/stems/instrumental/pcm?token=st', gain: 1 },
     { url: 'http://srv/api/media-files/77/stems/vocals/pcm?token=st', gain: vocals },
   ];
-  const STEMS = { guide: 'audio/ogg', instrumental: 'audio/mpeg' };
 
   const start = async (out: MusicCastOutput) => {
     out.attach(host as MusicCastHost);
@@ -86,7 +84,6 @@ describe('MusicCastOutput', () => {
   };
 
   beforeEach(() => {
-    layeredServer = true;
     current = track(1);
     karaoke = { mode: 'original', level: 0 };
     queue = { itemIds: [1, 2], index: 0, shuffle: false, repeat: 'off' };
@@ -108,7 +105,7 @@ describe('MusicCastOutput', () => {
         { provide: StreamingApiService, useValue: { getItemPlaybackInfo, stopSession, absoluteUrl: (p: string) => `http://srv${p}`, buildAbsolutePlayUrl: (pi: { sessionId: string }) => ({ url: `/c/${pi.sessionId}`, contentType: 'audio/flac' }) } },
         { provide: AuthService, useValue: { ensureStreamToken: async () => 'st', getCastInfo: async () => ({ token: 't', streamBaseUrl: 'b' }), user: () => ({ id: 1 }) } },
         { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u } },
-        { provide: ServerVersionService, useValue: { supports: () => layeredServer } },
+        { provide: ServerVersionService, useValue: { supports: () => true } },
         { provide: NowPlayingMetadataService, useValue: { primeTracks: vi.fn() } },
         { provide: TranslateService, useValue: { instant: (k: string) => k } },
         { provide: ToastService, useValue: { error: vi.fn() } },
@@ -121,7 +118,7 @@ describe('MusicCastOutput', () => {
   it('declares the mix of the PCM stems before the LOAD that plays it', async () => {
     const out = TestBed.inject(MusicCastOutput);
     await start(out);
-    out.setStemSource(77, STEMS);
+    out.setStemSource(77);
     karaoke = { mode: 'guide', level: 0.25 };
     await out.applyStems();
     expect(cast.setMix).toHaveBeenCalledWith('karaoke-77', stems(0.25));
@@ -132,7 +129,7 @@ describe('MusicCastOutput', () => {
   it('moves the vocal level with the mix alone, no LOAD, and reloads the track on original', async () => {
     const out = TestBed.inject(MusicCastOutput);
     await start(out);
-    out.setStemSource(77, STEMS);
+    out.setStemSource(77);
     karaoke = { mode: 'guide', level: 0.4 };
     await out.applyStems();
     cast.loadMedia.mockClear();
@@ -146,21 +143,10 @@ describe('MusicCastOutput', () => {
     expect(host.reloaded).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 's1' }));
   });
 
-  it('loads the guide stem alone on a server without stem PCM', async () => {
-    layeredServer = false;
-    const out = TestBed.inject(MusicCastOutput);
-    await start(out);
-    out.setStemSource(77, STEMS);
-    karaoke = { mode: 'guide', level: 0.4 };
-    await out.applyStems();
-    expect(cast.setMix).not.toHaveBeenCalled();
-    expect(cast.loadMedia).toHaveBeenLastCalledWith(expect.objectContaining({ contentType: 'audio/ogg', stem: 'guide', mediaFileId: 77 }));
-  });
-
   it('drops a stem switch that was overtaken by a stop', async () => {
     const out = TestBed.inject(MusicCastOutput);
     await start(out);
-    out.setStemSource(77, STEMS);
+    out.setStemSource(77);
     karaoke = { mode: 'guide', level: 0.4 };
     cast.setMix.mockImplementationOnce(async () => out.stop());
     await out.applyStems();
@@ -264,7 +250,7 @@ describe('MusicCastOutput', () => {
   it('sends the session sid with a stem LOAD and leaves the stem on a takeover', async () => {
     const out = TestBed.inject(MusicCastOutput);
     await start(out);
-    out.setStemSource(77, STEMS);
+    out.setStemSource(77);
     karaoke = { mode: 'guide', level: 0.25 };
     await out.applyStems();
     expect(cast.loadMedia).toHaveBeenLastCalledWith(expect.objectContaining({ stem: 'mix', sid: 's1' }));
@@ -323,7 +309,7 @@ describe('MusicCastOutput', () => {
       await start(out);
       TestBed.tick();
       expect(cast.saveResumeState).toHaveBeenLastCalledWith('music', { mediaId: 3, mediaFileId: 10, itemId: 1, sid: 's1', stem: null, queue, stemMode: 'original', vocalLevel: 0 });
-      out.setStemSource(77, STEMS);
+      out.setStemSource(77);
       karaoke = { mode: 'guide', level: 0.25 };
       await out.applyStems();
       TestBed.tick();

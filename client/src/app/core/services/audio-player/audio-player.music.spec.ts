@@ -46,6 +46,7 @@ describe('AudioPlayerService music mode', () => {
   const stopSession = vi.fn();
   const castLoad = vi.fn();
   const itemState = vi.fn();
+  const stemUrl = vi.fn((f: number, k: string) => `/stems/${f}/${k}`);
   let host: MusicCastHost;
   const castOut = {
     active: signal(false),
@@ -137,7 +138,7 @@ describe('AudioPlayerService music mode', () => {
           },
         },
         { provide: MusicCastOutput, useValue: castOut },
-        { provide: KaraokeApiService, useValue: { itemState } },
+        { provide: KaraokeApiService, useValue: { itemState, stemUrl } },
         { provide: BrowserDeviceProfileService, useValue: { getProfile: () => ({}) } },
         { provide: MediaService, useValue: {} },
         { provide: ServerConfigService, useValue: { resolveUrl: (u: string) => u, serverUrl: () => '' } },
@@ -512,6 +513,23 @@ describe('AudioPlayerService music mode', () => {
     vi.unstubAllGlobals();
     expect(itemState).toHaveBeenCalled();
     expect(audio.stemsAvailable()).toBe(true);
+  });
+
+  it('streams the stems only in a stem mode, and leaves the mode with the music', async () => {
+    itemState.mockResolvedValue({ state: 'running', stage: 'align', fileId: 77, stems: { instrumental: { contentType: 'audio/ogg' }, vocals: { contentType: 'audio/ogg' } } });
+    const node = () => ({ gain: { value: 0 }, connect: vi.fn(function (this: unknown, n: unknown) { return n; }) });
+    vi.stubGlobal('AudioContext', class { destination = {}; createGain = node; createMediaElementSource = node; resume = async () => undefined; });
+    stemUrl.mockClear();
+    const audio = TestBed.inject(AudioPlayerService);
+    await audio.playTracks([track(1)]);
+    await audio.refreshStems();
+    expect(audio.stemsAvailable()).toBe(true);
+    expect(stemUrl).not.toHaveBeenCalled();
+    audio.setStemMode('instrumental');
+    await vi.waitFor(() => expect(stemUrl).toHaveBeenCalledWith(77, 'vocals'));
+    await audio.close();
+    vi.unstubAllGlobals();
+    expect(audio.stemMode()).toBe('original');
   });
 
   it('starts a new track on the receiver in the original mix', async () => {

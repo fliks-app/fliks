@@ -143,7 +143,11 @@
         @switch (st.kind) {
           @case ('owned') {
             @if (st.karaoke; as k) {
-              <span class="radial-progress text-primary" [style.--value]="k.progress ?? 0" style="--size: 1.25rem; --thickness: 2px" role="progressbar" [attr.aria-label]="'karaoke.preparing_pct' | translate: { pct: k.progress ?? 0 }" data-testid="track-karaoke"></span>
+              @if ('ready' in k) {
+                <svg [lucideIcon]="icons.MicVocal" class="size-5 text-base-content/60" role="img" [attr.aria-label]="'karaoke.track_ready' | translate" data-testid="track-karaoke-ready"></svg>
+              } @else {
+                <span class="radial-progress text-primary" [style.--value]="k.progress ?? 0" style="--size: 1.25rem; --thickness: 2px" role="progressbar" [attr.aria-label]="'karaoke.preparing_pct' | translate: { pct: k.progress ?? 0 }" data-testid="track-karaoke"></span>
+              }
             }
           }
           @case ('downloading') {

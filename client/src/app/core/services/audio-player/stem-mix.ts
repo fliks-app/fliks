@@ -68,6 +68,11 @@ export class StemMix {
     return this.ready;
   }
 
+  /** The file whose stems are loaded or loading. */
+  get file(): number | null {
+    return this.fileId;
+  }
+
   /** False when Web Audio is unavailable. */
   load(fileId: number): boolean {
     if (this.fileId === fileId) return true;
@@ -76,7 +81,7 @@ export class StemMix {
     if (!stems) return false;
     this.fileId = fileId;
     this.ready = false;
-    for (const kind of ['instrumental', 'vocals'] as const) {
+    for (const kind of KINDS) {
       stems[kind].el.src = this.url(fileId, kind);
       stems[kind].el.load();
     }

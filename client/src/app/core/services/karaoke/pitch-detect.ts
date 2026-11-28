@@ -45,6 +45,8 @@ export function detectPitch(buf: Float32Array, sampleRate: number): Pitch | null
 }
 
 const SMOOTH_FRAMES = 5;
+/** Frames a smoothed pitch trails the newest one by: the median of five sits two back. */
+export const SMOOTH_LAG = SMOOTH_FRAMES >> 1;
 const MIN_VOICED = 3;
 
 /** Steadies the mic pitch: a frame moves to the octave of the last output (scoring and the lane ignore

@@ -2,7 +2,6 @@ import { Injectable, Injector, computed, effect, inject, signal, untracked } fro
 import { AuthService } from '../auth.service';
 import { ServerConfigService } from '../server-config.service';
 import { BrowserDeviceProfileService, type DeviceProfile } from '../browser-device-profile.service';
-import { Capacitor } from '@capacitor/core';
 import { MediaService } from '../api/media.service';
 import { StreamingApiService, lostCurrentSession, type PlaybackInfoResponse } from '../api/streaming-api.service';
 import { PlaybackQueueService } from '../playback-queue.service';
@@ -28,6 +27,7 @@ import { MusicApiService, alignTrackRows } from '../api/music-api.service';
 import type { RemoteCommand, WireQueue } from '../sse.service';
 import { KaraokeApiService } from '../api/karaoke-api.service';
 import { TvService } from '../tv.service';
+import { stemsReady } from '../karaoke/karaoke-prep';
 import { StemMix, mixGains, type StemMode, GUIDE_VOCAL_LEVEL } from './stem-mix';
 import { FullPlayerState } from '../playback/full-player-state';
 import { PlaybackSession, type PartyQuery, type PlaybackCommand } from '../playback/playback-session';
@@ -183,8 +183,8 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   readonly pitch = this._pitch.asReadonly();
   /** True when the playing music track has its stems ready and this player can mix them. */
   readonly stemsAvailable = this._stemsAvailable.asReadonly();
-  /** True where the native player cannot mix stems. */
-  readonly stemsNative = !!this.nativeAudio && !NATIVE_STEMS.includes(Capacitor.getPlatform());
+  /** The engine transcodes a key change: a cast receiver and a native player play the file as it is. */
+  readonly canShiftKey = computed(() => this._musicMode() && !this.nativeAudio && !this.castOut.active());
   readonly replayGain = computed(() => this._prefs().replayGain);
   readonly preamp = computed(() => this._prefs().preamp);
   readonly active = computed(() => this._track() !== null);
@@ -616,6 +616,7 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
 
   private leaveMusic(): void {
     this._musicMode.set(false);
+    this._stemMode.set('original');
     this.mq.clear();
     this.syncQueue();
     this.applyGains();
@@ -910,20 +911,16 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     this.applyStemGains();
   }
 
-  private decodeStems(): void {
-    if (this._stemMode() !== 'original') this.stems?.decode();
-  }
-
   private applyStemGains(): void {
     if (this.nativeAudio) return this.pushNativeStems();
-    this.decodeStems();
+    this.loadStems();
     if (!this.stems?.loaded) return;
     this.stems.setGains(this.mix(), this.gainOf(this.mq.current) * this.duck * this.userLevel());
     void this.audioCtx?.resume().catch(() => undefined);
   }
 
   private mix() {
-    return mixGains(this._stemMode(), this._vocalLevel(), !!this.stems?.loaded || this.nativeStemFile !== null);
+    return mixGains(this._stemMode(), this._vocalLevel(), !!this.stems?.loaded || (!!this.nativeAudio && this.stemFile !== null));
   }
 
   private context(): AudioContext | null {
@@ -973,37 +970,47 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     this.reportSettled();
   }
 
-  /** Looks the playing track's stems up again, e.g. once a preparation finished. */
+  /** Looks the playing track's stems up again, e.g. once a preparation made them. */
   async refreshStems(): Promise<void> {
     const run = ++this.stemsRun;
-    const localStems = !this.stemsNative;
-    const itemId = this._musicMode() && (this.castOut.active() || localStems) && this._pitch() === 0 ? this._track()?.itemId : undefined;
+    const itemId = this._musicMode() && this._pitch() === 0 ? this._track()?.itemId : undefined;
     if (itemId === undefined) return this.dropStems();
     try {
-      const api = this.injector.get(KaraokeApiService);
-      const state = await api.itemState(itemId);
+      const state = await this.injector.get(KaraokeApiService).itemState(itemId);
       if (run !== this.stemsRun) return;
-      const ready = state.state === 'ready' && !!state.stems.instrumental && !!state.stems.vocals;
-      if (!ready) return this.dropStems();
+      if (!stemsReady(state)) return this.dropStems();
       if (this.castOut.active()) {
-        this.castOut.setStemSource(state.fileId, Object.fromEntries(Object.entries(state.stems).map(([k, v]) => [k, v.contentType])));
+        this.castOut.setStemSource(state.fileId);
         this._stemsAvailable.set(true);
         return this._stemMode() === 'original' ? undefined : this.castOut.applyStems();
       }
-      if (this.serverConfig.isNative) await this.auth.ensureStreamToken(state.fileId);
-      if (run !== this.stemsRun) return;
-      if (this.nativeAudio) {
-        this.nativeStemFile = state.fileId;
-        this._stemsAvailable.set(true);
-        return this.pushNativeStems();
-      }
-      this.stems ??= new StemMix(() => this.context(), (id, kind) => api.stemUrl(id, kind), () => this.onStemsReady(), () => this.onStemsFailed(), this.singlePipeline);
-      if (!this.stems.load(state.fileId)) return this.dropStems();
+      if (!this.nativeAudio && typeof AudioContext === 'undefined') return this.dropStems();
+      this.stemFile = state.fileId;
       this._stemsAvailable.set(true);
-      this.decodeStems();
+      this.applyStemGains();
     } catch {
       if (run === this.stemsRun) this.dropStems();
     }
+  }
+
+  /** The stems stream only in a stem mode: a plain listen never fetches them. */
+  private loadStems(): void {
+    const file = this._stemMode() === 'original' ? null : this.stemFile;
+    if (file === null) return void (this.stems?.file != null && this.stems.clear());
+    if (this.stems?.file === file) return this.stems.decode();
+    const run = this.stemsRun;
+    void this.stemToken(file).then(() => {
+      if (run !== this.stemsRun || this.stemFile !== file || this._stemMode() === 'original') return;
+      const api = this.injector.get(KaraokeApiService);
+      this.stems ??= new StemMix(() => this.context(), (id, kind) => api.stemUrl(id, kind), () => this.onStemsReady(), () => this.onStemsFailed(), this.singlePipeline);
+      if (!this.stems.load(file)) return this.onStemsFailed();
+      this.stems.decode();
+    });
+  }
+
+  /** A shell with an absolute server URL names the stems with a file-bound stream token. */
+  private stemToken(file: number): Promise<unknown> {
+    return this.serverConfig.isNative ? this.auth.ensureStreamToken(file).catch(() => null) : Promise.resolve();
   }
 
   /** Re-opens the playing track in another key (clamped to +-12 semitones) at the same position. */
@@ -1056,18 +1063,19 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     await this.load(position, true);
   }
 
-  private nativeStemFile: number | null = null;
+  /** The file whose stems are ready for the playing track; they load only in a stem mode. */
+  private stemFile: number | null = null;
 
-  /** The native player loads the stems only in a stem mode, and mixes them with ReplayGain applied on its side. */
+  /** The native player mixes the stems with ReplayGain applied on its side. */
   private pushNativeStems(): void {
     const n = this.nativeAudio;
     if (!n) return;
-    const file = this.nativeStemFile;
+    const file = this.stemFile;
     if (file === null || this._stemMode() === 'original') return void n.clearStems().catch(() => undefined);
     const api = this.injector.get(KaraokeApiService);
     const g = this.mix();
-    void n
-      .setStems({ key: String(file), instrumentalUrl: api.stemUrl(file, 'instrumental'), vocalsUrl: api.stemUrl(file, 'vocals') })
+    void this.stemToken(file)
+      .then(() => n.setStems({ key: String(file), instrumentalUrl: api.stemUrl(file, 'instrumental'), vocalsUrl: api.stemUrl(file, 'vocals') }))
       .then(() => n.setStemMix({ main: g.main, instrumental: g.instrumental, vocals: g.vocals }))
       .catch(() => undefined);
   }
@@ -1088,10 +1096,9 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
     this.stemsRun++;
     this._stemsAvailable.set(false);
     this.castOut.clearStems();
-    if (this.nativeStemFile !== null) {
-      this.nativeStemFile = null;
-      void this.nativeAudio?.clearStems().catch(() => undefined);
-    }
+    const native = this.nativeAudio && this.stemFile !== null;
+    this.stemFile = null;
+    if (native) void this.nativeAudio!.clearStems().catch(() => undefined);
     if (!this.stems) return;
     this.stems.clear();
     this.applyGains();
@@ -2101,8 +2108,6 @@ export class AudioPlayerService implements LocalPlayer<MusicHandoff> {
   }
 }
 
-/** Platforms whose native player mixes stems (karaoke spec rule 30). */
-const NATIVE_STEMS = ['android', 'ios'];
 
 function sameOrigin(url: string): boolean {
   try {

@@ -1,10 +1,15 @@
 import type { PluginListenerHandle } from '@capacitor/core';
 import { Capacitor } from '@capacitor/core';
 import { KaraokeMic } from '../../plugins/karaoke-mic.plugin';
-import { PitchSmoother, detectPitch } from './pitch-detect';
+import { PitchSmoother, SMOOTH_LAG, detectPitch } from './pitch-detect';
 import type { PitchFrame } from './karaoke-score';
 
 export const WINDOW = 2048;
+
+/** How far behind its stamp a frame's sound was: the window's middle, then the smoother's lag in blocks. */
+export function captureLagMs(block: number, rate: number): number {
+  return ((WINDOW / 2 + SMOOTH_LAG * block) / rate) * 1000;
+}
 
 /** Slides 1024-sample blocks through a 2048-sample window and reads its pitch. */
 export class PitchWindow {
@@ -37,7 +42,8 @@ export class MicCapture {
       const node = new AudioWorkletNode(ctx, 'karaoke-capture', { numberOfOutputs: 0 });
       const win = new PitchWindow();
       const smooth = new PitchSmoother();
-      node.port.onmessage = (ev: MessageEvent<Float32Array>) => onFrame({ t: now(), midi: smooth.push(win.push(ev.data, ctx.sampleRate)) });
+      node.port.onmessage = (ev: MessageEvent<Float32Array>) =>
+        onFrame({ t: now() - captureLagMs(ev.data.length, ctx.sampleRate), midi: smooth.push(win.push(ev.data, ctx.sampleRate)) });
       ctx.createMediaStreamSource(this.stream).connect(node);
       await ctx.resume();
     } catch (err) {
@@ -53,8 +59,7 @@ export class MicCapture {
     let rate = 48000;
     const block = await KaraokeMic.addListener('block', ({ data }) => {
       const pcm = new Int16Array(Uint8Array.from(atob(data), (c) => c.charCodeAt(0)).buffer);
-      // The pitch comes from the window ending at this block: stamp the middle of it, where the sound was.
-      onFrame({ t: now() - (WINDOW / 2 / rate) * 1000, midi: smooth.push(win.push(Float32Array.from(pcm, (v) => v / 32768), rate)) });
+      onFrame({ t: now() - captureLagMs(pcm.length, rate), midi: smooth.push(win.push(Float32Array.from(pcm, (v) => v / 32768), rate)) });
     });
     const restarted = await KaraokeMic.addListener('rate', (e) => (rate = e.sampleRate));
     const ended = await KaraokeMic.addListener('ended', () => this.stop());

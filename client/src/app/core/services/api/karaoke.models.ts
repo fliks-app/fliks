@@ -2,7 +2,7 @@ export type KaraokeModelKind = 'separation' | 'alignment' | 'melody';
 export type KaraokeModelState = 'absent' | 'downloading' | 'installed' | 'failed';
 export type KaraokeStage = 'separate' | 'align' | 'melody';
 export type KaraokeJobState = 'none' | 'queued' | 'running' | 'ready' | 'failed';
-export type StemKind = 'vocals' | 'instrumental' | 'guide';
+export type StemKind = 'vocals' | 'instrumental';
 
 export interface KaraokeStatus {
   enabled: boolean;
@@ -14,6 +14,8 @@ export interface KaraokeStatus {
   background: boolean;
   /** Optimization workers that take separation jobs now. */
   workers: number;
+  /** The engine can play a track in another key. */
+  pitchShift: boolean;
 }
 
 export interface KaraokeLicence {
@@ -84,7 +86,7 @@ export interface KaraokeLanguage {
 
 /** Why a step failed: a stable `code` with its params; `message` only for settings managers. */
 export interface KaraokeFailure {
-  code: 'lyrics_not_found_in_vocals' | 'lyrics_too_long' | 'no_word_timed' | 'failed';
+  code: 'lyrics_not_found_in_vocals' | 'lyrics_too_long' | 'no_word_timed' | 'model_missing' | 'unsupported' | 'engine_unavailable' | 'cancelled' | 'failed';
   /** Percent of the lyrics found in the vocals, and the least that is kept. */
   matched?: number;
   min?: number;
@@ -122,9 +124,10 @@ export interface KaraokeItemState {
   stage?: KaraokeStage;
   progress?: number;
   error?: KaraokeFailure;
-  /** The `Align` or `Melody` failure of the last run; the stems are ready. */
+  /** The `Align` or `Melody` failure of the last run that had one. */
   lyricsError?: KaraokeFailure;
   fileId: number;
+  /** Both kinds present: the stems play, even while `align` or `melody` still run. */
   stems: Partial<Record<StemKind, { size: number; durationMs: number; contentType: string }>>;
   lyrics: boolean;
   melody: boolean;

@@ -153,8 +153,8 @@ export interface RowState {
   kind: 'owned' | 'downloading' | 'wanted' | 'failed' | 'unwanted';
   /** Downloading: null while no percent is known. */
   percent?: number | null;
-  /** Owned: the karaoke prep ring, `progress` null when unknown. */
-  karaoke?: { progress: number | null };
+  /** Owned: the karaoke prep ring (`progress` null when unknown), or `ready` once the track can be sung. */
+  karaoke?: { progress: number | null } | { ready: true };
 }
 
 /** A download in flight; absent `itemIds` covers every track of the album. */
@@ -174,7 +174,7 @@ export function rowStates(
     const covering = o.leaves.filter((l) => !l.itemIds || l.itemIds.includes(t.itemId));
     const failed = t.lastAttempt === 'failed' || t.lastAttempt === 'import_failed';
     let s: RowState;
-    if (t.hasFile) s = { kind: 'owned', ...(k ? { karaoke: { progress: k.stage && k.progress != null ? weightedProgress(k.stage, k.progress) : null } } : {}) };
+    if (t.hasFile) s = { kind: 'owned', ...(k ? { karaoke: k.state === 'ready' ? { ready: true as const } : { progress: k.stage && k.progress != null ? weightedProgress(k.stage, k.progress) : null } } : {}) };
     else if (covering.length) {
       const known = covering.flatMap((l) => (l.percent == null ? [] : [l.percent]));
       s = { kind: 'downloading', percent: known.length < covering.length ? null : Math.round(known.reduce((a, p) => a + p, 0) / known.length) };

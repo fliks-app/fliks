@@ -98,7 +98,6 @@ describe('AudioPlayerService on the native player', () => {
     });
     const audio = TestBed.inject(AudioPlayerService);
     platform.mockRestore();
-    expect(audio.stemsNative).toBe(false);
     await audio.playTracks([track(1), track(2)]);
     emit('track', { index: 0, itemId: 1, mediaFileId: 10, sessionId: 's1' });
     await vi.waitFor(() => expect(audio.stemsAvailable()).toBe(true));

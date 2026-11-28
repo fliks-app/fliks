@@ -1,8 +1,8 @@
 <div
   #scroller
   class="scroll-ring-safe relative flex h-full flex-col gap-3 short:gap-0 [mask-image:linear-gradient(to_bottom,transparent,#000_8%,#000_92%,transparent)] tv:[mask-image:linear-gradient(to_bottom,transparent,#000_15%,#000_85%,transparent)]"
-  [class.overflow-y-auto]="!large() && !tv()"
-  [class.overflow-hidden]="large() || tv()"
+  [class.overflow-y-auto]="(!large() || !timed()) && !tv()"
+  [class.overflow-hidden]="(large() && timed()) || tv()"
   appTvSection
   data-testid="lyrics-lines"
 >
@@ -33,7 +33,7 @@
                 } @else if (s.dim) {
                   <span class="opacity-40" data-testid="lyrics-guessed" [attr.data-cue]="s.cue">{{ s.text }}</span>
                 } @else {
-                  <span [class]="sweepOf(i, r)" data-testid="lyrics-sweep" [attr.data-cue]="s.cue" [style.--p]="wipe(i, s.cue)">{{ s.text }}</span>
+                  <span [class]="sweepOf(i, r) + (s.guessed ? guessedMark : '')" data-testid="lyrics-sweep" [attr.data-cue]="s.cue" [style.--p]="wipe(i, s.cue)">{{ s.text }}</span>
                 }
               }
             } @else {

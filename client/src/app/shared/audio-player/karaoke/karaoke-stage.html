@@ -1,6 +1,6 @@
 <div class="scroll-ring-safe relative flex h-full min-h-0 flex-col gap-2 overflow-hidden short:gap-1 sm:gap-3 short:sm:gap-1" data-testid="karaoke-stage">
   <div class="grid min-h-6 shrink-0 place-items-center sm:min-h-10 compact:sm:min-h-6 short:min-h-0 short:sm:min-h-0">
-  <ul class="col-start-1 row-start-1 flex flex-wrap items-center justify-center gap-3 short:absolute short:right-1 short:top-0 short:z-10 short:flex-col short:items-end short:gap-1" [class.invisible]="!rows().length" data-testid="karaoke-scores">
+  <ul class="col-start-1 row-start-1 flex flex-wrap items-center justify-center gap-3 short:absolute short:right-1 short:top-0 short:z-10 short:flex-col short:items-end short:gap-1" [class.invisible]="!rows().length || status()?.error" data-testid="karaoke-scores">
     @for (r of rows(); track r.userId; let i = $index) {
       <li class="flex items-center gap-2 rounded-lg bg-base-200 px-3 py-1 short:py-0.5" [class.text-xl]="tv()" [class.text-base]="!tv()">
         @let s = singer(r.agentId, i);
@@ -18,7 +18,7 @@
     }
   </ul>
 
-  @if (!rows().length) {
+  @if (!rows().length || status()?.error) {
     <p class="col-start-1 row-start-1 text-center text-sm" [class]="status()?.error ? 'text-error' : 'text-base-content/60'" [attr.role]="status()?.error ? 'alert' : null" data-testid="karaoke-status">
       {{ status()?.text }}
     </p>
@@ -28,9 +28,25 @@
   <canvas #lane class="h-24 w-full shrink-0 text-base-content" [class.sm:h-40]="!tv()" [class.compact:sm:h-28]="!tv()" [class.short:h-12]="!tv()" [class.short:sm:h-12]="!tv()" aria-hidden="true" data-testid="karaoke-lane"></canvas>
   <span #primary class="hidden text-primary" aria-hidden="true"></span>
 
-  <div class="flex min-h-24 flex-1 flex-col justify-center short:min-h-24">
-    <app-lyrics-view class="block h-full sm:h-80 sm:max-h-full" [doc]="doc()" [large]="true" [output]="output()" />
-  </div>
+  @if (cdgFile(); as file) {
+    <app-cdg-canvas class="mx-auto block min-h-0 w-full max-w-3xl" [class.flex-1]="!hasLines()" [fileId]="file" [output]="output()" data-testid="karaoke-stage-cdg" />
+  }
+  @if (hasLines()) {
+    <div class="flex min-h-24 flex-1 flex-col justify-center short:min-h-24">
+      <app-lyrics-view class="block h-full sm:h-80 sm:max-h-full" [doc]="doc()" [large]="true" [output]="output()" [seekable]="lineSeek()" />
+    </div>
+  } @else if (!cdgFile()) {
+    <div class="flex-1"></div>
+  }
+
+  @if (upNext().length) {
+    <div class="flex shrink-0 flex-wrap items-baseline justify-center gap-x-3 gap-y-1 text-sm text-base-content/60" data-testid="karaoke-up-next">
+      <span class="font-semibold">{{ 'karaoke.up_next' | translate }}</span>
+      @for (r of upNext(); track $index) {
+        <span class="max-w-full truncate">{{ r.title }}@if (r.singer) { <span class="text-base-content"> · {{ r.singer }}</span> }</span>
+      }
+    </div>
+  }
 
   <div class="scroll-ring-safe flex shrink-0 items-center justify-center gap-2 px-1 py-1 max-sm:flex-nowrap short:flex-nowrap sm:flex-wrap compact:sm:flex-nowrap" appTvSection data-testid="karaoke-controls">
     <div class="flex min-w-0 items-center gap-2 rounded-full bg-base-200 p-1 max-sm:flex-1 short:flex-1 compact:sm:flex-1" role="group" [attr.aria-label]="'karaoke.mix' | translate">
@@ -38,7 +54,7 @@
         @for (m of modes; track m) {
           <button
             type="button"
-            class="btn btn-xs sm:btn-sm join-item"
+            class="btn btn-sm join-item"
             [class.btn-primary]="stemMode() === m"
             [attr.aria-pressed]="stemMode() === m"
             [disabled]="m !== 'original' && !stemsAvailable()"
@@ -70,6 +86,9 @@
     </div>
     <ng-container [ngTemplateOutlet]="actions" />
   </div>
+  @if (pitch() !== 0) {
+    <p class="shrink-0 text-center text-sm text-base-content/60" data-testid="karaoke-key-stems-off">{{ 'karaoke.key_stems_off' | translate }}</p>
+  }
 
   <dialog #settings class="modal" [class.modal-bottom]="sheet()" [class.modal-end]="!sheet()" data-testid="karaoke-settings-sheet" [attr.aria-label]="'karaoke.settings' | translate">
     <div class="modal-box flex flex-col gap-4" [class.w-[360px]]="!sheet()">
@@ -93,18 +112,18 @@
         <div class="flex items-center justify-between gap-3">
           <span class="text-sm font-semibold">{{ 'karaoke.key' | translate }}</span>
           <div class="join items-center" role="group" [attr.aria-label]="'karaoke.key' | translate">
-            <button type="button" class="btn btn-sm join-item" [disabled]="pitch() <= -12" (click)="setPitch(-1)" [attr.aria-label]="'karaoke.key_down' | translate">
+            <button type="button" class="btn btn-sm join-item" [disabled]="!!keyBlocked() || targetKey() <= -12" (click)="setPitch(-1)" [attr.aria-label]="'karaoke.key_down' | translate">
               <svg [lucideIcon]="icons.Minus" class="h-4 w-4"></svg>
             </button>
-            <button type="button" class="btn btn-sm join-item min-w-14 tabular-nums text-primary" [disabled]="pitch() === 0" (click)="setPitch(0)" data-testid="karaoke-key">
-              {{ pitch() > 0 ? '+' : '' }}{{ pitch() }}
+            <button type="button" class="btn btn-sm join-item min-w-14 tabular-nums text-primary" [disabled]="!!keyBlocked() || targetKey() === 0" (click)="setPitch(0)" [attr.aria-label]="'karaoke.key_reset' | translate" data-testid="karaoke-key">
+              {{ targetKey() > 0 ? '+' : '' }}{{ targetKey() }}
             </button>
-            <button type="button" class="btn btn-sm join-item" [disabled]="pitch() >= 12" (click)="setPitch(1)" [attr.aria-label]="'karaoke.key_up' | translate">
+            <button type="button" class="btn btn-sm join-item" [disabled]="!!keyBlocked() || targetKey() >= 12" (click)="setPitch(1)" [attr.aria-label]="'karaoke.key_up' | translate">
               <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>
             </button>
           </div>
         </div>
-        <p class="min-h-4 text-sm text-base-content/60" [class.invisible]="pitch() === 0">{{ 'karaoke.key_stems_off' | translate }}</p>
+        <p class="min-h-4 text-sm text-base-content/60" data-testid="karaoke-key-hint">{{ (keyBlocked() ?? 'karaoke.key_stems_off') | translate }}</p>
         @if (canSing) {
           <div class="flex items-center justify-between gap-3">
             <span class="text-sm font-semibold">
@@ -115,6 +134,18 @@
               {{ 'karaoke.calibrate' | translate }}
             </button>
           </div>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm">{{ 'karaoke.latency_adjust' | translate }}</span>
+            <div class="join items-center" role="group" [attr.aria-label]="'karaoke.latency_adjust' | translate">
+              <button type="button" class="btn btn-sm join-item" (click)="karaoke.nudgeLatency(-1)" [attr.aria-label]="'karaoke.latency_less' | translate" data-testid="karaoke-latency-less">
+                <svg [lucideIcon]="icons.Minus" class="h-4 w-4"></svg>
+              </button>
+              <button type="button" class="btn btn-sm join-item" [disabled]="karaoke.latencyMs() === 0" (click)="karaoke.setLatency(0)" data-testid="karaoke-latency-reset">{{ 'karaoke.latency_reset' | translate }}</button>
+              <button type="button" class="btn btn-sm join-item" (click)="karaoke.nudgeLatency(1)" [attr.aria-label]="'karaoke.latency_more' | translate" data-testid="karaoke-latency-more">
+                <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>
+              </button>
+            </div>
+          </div>
           <p class="min-h-4 text-sm text-base-content/60" [class.invisible]="calibrated() !== false">{{ 'karaoke.calibrate_failed' | translate }}</p>
         }
         @if (canEdit()) {
@@ -123,6 +154,7 @@
             <div class="flex flex-wrap gap-2">
               <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="recompute.emit('melody')" data-testid="karaoke-recompute-melody">{{ 'karaoke.recompute_melody' | translate }}</button>
               <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="recompute.emit('sync')" data-testid="karaoke-recompute-sync">{{ 'karaoke.recompute_sync' | translate }}</button>
+              <button type="button" class="btn btn-sm btn-error btn-outline" [disabled]="busy()" (click)="closeSettings(); remove.emit()" data-testid="karaoke-remove">{{ 'karaoke.remove' | translate }}</button>
             </div>
           </div>
         }

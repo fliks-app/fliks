@@ -53,6 +53,8 @@ export interface AudioOutput {
   setStemMode?(mode: StemMode): void;
   setVocalLevel?(level: number): void;
   setPitch?(semitones: number): Promise<void> | void;
+  /** False where a key change would do nothing; absent when the output cannot tell. */
+  readonly canShiftKey?: Signal<boolean>;
   /** Whether the driven device applies `action`; absent on the local player. */
   supports?(action: RemoteAction): boolean;
 }

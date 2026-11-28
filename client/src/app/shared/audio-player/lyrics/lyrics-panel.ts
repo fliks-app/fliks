@@ -1,40 +1,41 @@
-import { Component, DestroyRef, computed, effect, inject, input, model, output, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { KaraokeApiService } from '../../../core/services/api/karaoke-api.service';
-import type { KaraokeFailure, KaraokeItemState, KaraokeJobChanged, KaraokeStatus } from '../../../core/services/api/karaoke.models';
+import { LucideDynamicIcon } from '@lucide/angular';
+import { icons } from '../../icons';
+import type { KaraokeFailure } from '../../../core/services/api/karaoke.models';
 import { DeviceService } from '../../../core/services/device.service';
 import { KaraokeService } from '../../../core/services/karaoke/karaoke.service';
 import { failureText } from '../../../core/services/karaoke/karaoke-failure';
-import { singKind, weightedProgress } from '../../../core/services/karaoke/karaoke-prep';
 import { LyricsApiService } from '../../../core/services/api/lyrics-api.service';
 import type { LyricsFormat, LyricsKind, LyricsResponse, StructuredLyrics } from '../../../core/services/api/lyrics.models';
 import type { AudioOutput } from '../../../core/services/audio-player/audio-output';
 import { AudioPlayerService } from '../../../core/services/audio-player/audio-player.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmationService } from '../../../core/services/confirmation.service';
-import { SseService } from '../../../core/services/sse.service';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
 import { CdgCanvasComponent } from '../cdg/cdg-canvas';
 import { KaraokeStageComponent } from '../karaoke/karaoke-stage';
 import { LyricsViewComponent } from './lyrics-view';
 import { layerAligned, mainLyrics, tapBack, tapLines, tapStamp, tapStart, type TapState } from './lyrics-logic';
 
-const READY_BUBBLE_MS = 6000;
 const FORMATS: LyricsFormat[] = ['lrc', 'elrc', 'ttml', 'srt', 'plain'];
 const EXTENSIONS: Record<string, LyricsFormat> = { lrc: 'lrc', elrc: 'elrc', ttml: 'ttml', xml: 'ttml', srt: 'srt', txt: 'plain' };
+const NO_LYRICS: StructuredLyrics = {
+  id: 0, kind: 'main', lang: 'und', synced: false, offset: 0, displayArtist: '', displayTitle: '', source: '', reviewed: false, preferred: false, line: [],
+};
 
 /** Lyrics of one track: pick a version, follow it, and (with `media.edit`) fix or add one. */
 @Component({
   selector: 'app-lyrics-panel',
-  imports: [FormsModule, TranslatePipe, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent],
+  imports: [FormsModule, TranslatePipe, LucideDynamicIcon, TvSectionDirective, LyricsViewComponent, KaraokeStageComponent, CdgCanvasComponent],
   templateUrl: './lyrics-panel.html',
 })
 export class LyricsPanelComponent {
   private readonly api = inject(LyricsApiService);
-  private readonly karaoke = inject(KaraokeApiService);
-  private readonly session = inject(KaraokeService);
+  protected readonly session = inject(KaraokeService);
+  protected readonly icons = icons;
   private readonly translate = inject(TranslateService);
   private readonly confirm = inject(ConfirmationService);
   private readonly local = inject(AudioPlayerService);
@@ -43,7 +44,7 @@ export class LyricsPanelComponent {
   protected readonly canEdit = inject(AuthService).hasPermission('media.edit');
 
   readonly itemId = input.required<number>();
-  /** Shows the offset, import and fetch tools (with `media.edit`). */
+  /** Shows the import and fetch tools (with `media.edit`). */
   readonly edit = input(false);
   /** Another device's session: the lines and the karaoke stage follow it. */
   readonly output = input<AudioOutput | null>(null);
@@ -60,8 +61,8 @@ export class LyricsPanelComponent {
   protected readonly failed = signal(false);
   protected readonly busy = signal(false);
   protected readonly mode = signal<'view' | 'import' | 'tap'>('view');
-  /** The karaoke view (pitch lane, scores) in place of the plain lyrics; owned by the player so it survives hiding the lyrics. */
-  readonly stage = model(false);
+  /** The karaoke view (pitch lane, scores) in place of the plain lyrics; the service owns it so it survives hiding the lyrics. */
+  private readonly stage = this.session.stage;
 
   readonly layerId = signal<number | null>(null);
   protected readonly docs = computed(() => this.res()?.structuredLyrics ?? []);
@@ -89,60 +90,23 @@ export class LyricsPanelComponent {
   protected readonly tap = signal<TapState>({ lines: [], next: 0 });
   protected readonly tapReady = computed(() => tapLines(this.tap()) !== null);
 
-  protected readonly kStatus = signal<KaraokeStatus | null>(null);
-  protected readonly kState = signal<KaraokeItemState | null>(null);
-  protected readonly kBusy = signal(false);
-  /** The Sing button's state, read by the player. */
-  readonly singKind = computed(() => singKind(this.kState(), this.stage()));
-  /** Overall preparation progress 0..100 while running. */
-  readonly prepPct = computed(() => weightedProgress(this.kState()?.stage, this.kState()?.progress));
-  readonly failedReason = computed(() => {
-    const e = this.kState()?.error;
-    return e ? this.failure(e) : '';
-  });
-  /** The "ready, sing" bubble, shown for a few seconds once a preparation ends. */
-  protected readonly readyBubble = signal(false);
-  private readyTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Karaoke controls drive the displayed track, in a library with the feature ready and, in remote view, on a device that applies stems. */
-  readonly karaokeOn = computed(
-    () =>
-      (!this.output() || !!this.output()!.supports?.('karaoke')) &&
-      !!this.kStatus()?.ready &&
-      this.audio.musicMode() &&
-      this.audio.track()?.itemId === this.itemId(),
-  );
-  readonly stemsNative = computed(() => !this.output() && this.local.stemsNative);
-  /** The word-synced text for the karaoke view, once the track is ready. */
-  protected readonly stageDoc = computed(() => (this.stage() && this.karaokeOn() && !this.stemsNative() && this.kState()?.state === 'ready' ? this.shown() : null));
+  /** The karaoke state is the displayed track's: this panel may still show the one before. */
+  private readonly current = computed(() => this.session.itemId() === this.itemId());
+  protected readonly kState = computed(() => (this.current() ? this.session.itemState() : null));
+  /** The karaoke view once the stems play; a track with no lyrics sings over an empty page. */
+  protected readonly staged = computed(() => this.current() && this.session.singKind() === 'exit');
+  protected readonly stageDoc = computed(() => (this.staged() ? (this.shown() ?? NO_LYRICS) : null));
 
   private anchor = { pos: 0, at: 0 };
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => {
-      this.clearBubble();
-      this.session.stopSinging();
-    });
+    inject(DestroyRef).onDestroy(() => this.session.stopSinging());
     // The mic outlives the stage, which is rebuilt on every track: it stops with karaoke, not with the track.
     effect(() => {
-      const state = this.kState();
-      if (!this.stage() || (state && state.state !== 'ready')) untracked(() => (this.session.singing() || this.session.starting()) && this.session.stopSinging());
+      if (!this.stage()) untracked(() => (this.session.singing() || this.session.starting()) && this.session.stopSinging());
     });
-    void this.karaoke.status().then((s) => this.kStatus.set(s), () => undefined);
-    inject(SseService)
-      .karaokeEvents.pipe(takeUntilDestroyed())
-      .subscribe((e) => {
-        if (e.type !== 'karaoke.job_changed') return;
-        const j = e as unknown as KaraokeJobChanged;
-        if (j.itemId === this.itemId()) void this.onJob(j);
-      });
-    effect(() => {
-      const id = this.itemId();
-      const on = this.karaokeOn();
-      untracked(() => {
-        this.kState.set(null);
-        this.clearBubble();
-        if (on) void this.loadKaraoke(id);
-      });
+    this.session.prepared.pipe(takeUntilDestroyed()).subscribe((id) => {
+      if (id === this.itemId()) void this.reload();
     });
     effect(() => {
       const id = this.itemId();
@@ -155,82 +119,28 @@ export class LyricsPanelComponent {
     });
   }
 
-  private async loadKaraoke(id: number): Promise<void> {
-    try {
-      const s = await this.karaoke.itemState(id);
-      if (this.itemId() === id) this.kState.set(s);
-    } catch {
-      // No state: the block stays hidden.
-    }
-  }
-
-  private async onJob(j: KaraokeJobChanged): Promise<void> {
-    if (j.state === 'ready' || j.state === 'failed') {
-      await this.loadKaraoke(j.itemId);
-      if (j.state === 'ready') {
-        void this.local.refreshStems();
-        void this.reload();
-        this.flashReady();
-      }
-      return;
-    }
-    this.kState.update((s) => s && { ...s, state: j.state, stage: j.stage, progress: j.progress });
-  }
-
-  private flashReady(): void {
-    if (this.stage()) return;
-    this.clearBubble();
-    this.readyBubble.set(true);
-    this.readyTimer = setTimeout(() => this.readyBubble.set(false), READY_BUBBLE_MS);
-  }
-
-  private clearBubble(): void {
-    if (this.readyTimer) clearTimeout(this.readyTimer);
-    this.readyTimer = null;
-    this.readyBubble.set(false);
-  }
-
-  /** The Sing button: prepare or retry, else enter or leave karaoke (leaving returns to the original mix). */
-  sing(): void {
-    switch (this.singKind()) {
-      case 'prepare':
-      case 'retry':
-        void this.start({});
-        break;
-      case 'enter':
-      case 'exit': {
-        const on = !this.stage();
-        this.stage.set(on);
-        this.clearBubble();
-        if (!on) this.audio.setStemMode?.('original');
-      }
-    }
-  }
-
-  protected enter(): void {
-    this.clearBubble();
-    this.stage.set(true);
-  }
-
   /** Redoes the lyrics timing (and the melody of the new lyrics) or the melody only; the stems stay. */
   protected recompute(part: 'sync' | 'melody'): Promise<void> {
-    return this.start({ align: part === 'sync', melody: true, force: true });
+    return this.session.prepare({ align: part === 'sync', melody: true, force: true });
   }
 
-  private async start(body: { align?: boolean; melody?: boolean; force?: boolean }): Promise<void> {
-    this.kBusy.set(true);
-    try {
-      const s = await this.karaoke.prepare(this.itemId(), body);
-      this.kState.set(s);
-      if (s.state === 'ready') {
-        void this.local.refreshStems();
-        this.flashReady();
-      }
-    } catch {
-      // The interceptor toasts the reason.
-    } finally {
-      this.kBusy.set(false);
-    }
+  /** Cancels a preparation, or drops the track's stems and generated lyrics. */
+  protected async removeKaraoke(): Promise<void> {
+    const ok = await this.confirm.confirm({
+      title: this.translate.instant('karaoke.remove_title'),
+      message: this.translate.instant('karaoke.remove_message'),
+      confirmLabel: this.translate.instant('common.delete'),
+      variant: 'danger',
+    });
+    if (ok) await this.session.remove();
+  }
+
+  /** A generated sync the user keeps: a re-sync never replaces a reviewed row. */
+  protected keep(d: StructuredLyrics): Promise<void> {
+    return this.act(async () => {
+      await this.api.patch(d.id, { reviewed: true });
+      await this.reload();
+    });
   }
 
   private async load(id: number, run: () => Promise<LyricsResponse> = () => this.api.get(id)): Promise<void> {

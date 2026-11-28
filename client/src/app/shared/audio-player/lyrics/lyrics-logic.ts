@@ -35,6 +35,8 @@ export interface CueSegment {
   prev: number;
   /** A guessed word inside parentheses: shown dimmed, never swept. */
   dim?: boolean;
+  /** Any other guessed word: swept, marked as placed by interpolation. */
+  guessed?: boolean;
 }
 
 /** A line cut at its cues' UTF-8 byte ranges: the cues and the text between them, so no word is glued to the next. */
@@ -58,7 +60,7 @@ export function cueSegments(text: string, cues: readonly LyricsCue[]): CueSegmen
     const word = slice(from, to);
     const dim = !!c.guessed && (depth > 0 || word.includes('('));
     nest(word);
-    out.push({ text: word, cue: k, prev: k - 1, ...(dim ? { dim } : {}) });
+    out.push({ text: word, cue: k, prev: k - 1, ...(dim ? { dim } : c.guessed ? { guessed: true } : {}) });
     at = to;
   });
   if (at < bytes.length) out.push({ text: slice(at, bytes.length), cue: null, prev: cues.length - 1 });

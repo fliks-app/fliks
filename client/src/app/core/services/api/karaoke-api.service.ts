@@ -59,8 +59,9 @@ export class KaraokeApiService {
     return firstValueFrom(this.http.get<KaraokeItemState>(`/api/items/${itemId}/karaoke`, this.quiet));
   }
 
-  prepare(itemId: number, body: { align?: boolean; melody?: boolean; force?: boolean } = {}): Promise<KaraokeItemState> {
-    return firstValueFrom(this.http.post<KaraokeItemState>(`/api/items/${itemId}/karaoke`, body));
+  /** `quiet` for a request the user did not ask for (a stage entry, the next track): a refusal is not toasted. */
+  prepare(itemId: number, body: { align?: boolean; melody?: boolean; force?: boolean } = {}, quiet = false): Promise<KaraokeItemState> {
+    return firstValueFrom(this.http.post<KaraokeItemState>(`/api/items/${itemId}/karaoke`, body, quiet ? this.quiet : {}));
   }
 
   remove(itemId: number): Promise<void> {

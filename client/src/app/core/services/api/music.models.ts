@@ -99,8 +99,8 @@ export interface Track {
   orphaned: boolean;
   /** The newest finished acquisition covering the track (queue state). */
   lastAttempt?: 'imported' | 'failed' | 'import_failed' | 'removed' | null;
-  /** The karaoke prep under way, when any; follows `karaoke.job_changed`. */
-  karaoke?: { state: 'queued' | 'running'; stage?: KaraokeStage; progress: number | null } | null;
+  /** The karaoke prep under way, or `ready` once the stems exist; follows `karaoke.job_changed`. */
+  karaoke?: { state: 'queued' | 'running' | 'ready'; stage?: KaraokeStage | null; progress: number | null } | null;
   discNumber: number;
   discTitle: string | null;
   position: number;

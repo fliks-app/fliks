@@ -23,7 +23,6 @@ export const SERVER_SINCE = {
   playlistM3u: '7.0.0',
   playlistPreview: '7.0.0',
   listWithoutTotal: '7.0.0',
-  stemPcm: '7.0.0',
   whatsNew: '7.0.0',
   acquisitionQueue: '7.0.0',
   optimize: '7.0.0',
