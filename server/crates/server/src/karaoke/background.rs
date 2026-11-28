@@ -2,11 +2,13 @@
 use super::{Shared, aligner, gpu_provider, run, store, verified_providers};
 use crate::sync::MutexExt;
 use crate::{engine::Feed, settings, state::AppState};
-use fliks_engine_core::api::{EngineEvent, JobPriority, ModelKind, ModelState};
+use fliks_engine_core::api::{EngineEvent, JobPriority};
 use std::{sync::atomic::Ordering, time::Duration};
 
 const WAKE_EVERY: Duration = Duration::from_secs(600);
 const PER_WAKE: i64 = 20;
+/// Programme rows prepared ahead of the playing one while the party's karaoke display is open.
+const UPCOMING: usize = 5;
 
 /// Where the pass sends `Separate`: to the optimization workers when one takes it, else to the main engine.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -15,13 +17,17 @@ pub enum Route {
     Local,
 }
 
-/// Rule 16, minus the budget: where the pass runs now, `None` when it must not.
+/// Rule 16, minus the budget: where the pass runs now, `None` when it must not (queue pause included).
 pub async fn route(st: &AppState) -> Option<Route> {
     if !settings::flag(&st.db, "karaoke.enabled", false).await
         || !settings::flag(&st.db, "karaoke.background", true).await
         || !super::caps(st).await.separate
     {
         return None;
+    }
+    match crate::queue::settings::load(&st.db).await {
+        Ok(q) if !q.paused && q.open_now() => {}
+        _ => return None,
     }
     if super::remote::eligible_workers(st).await > 0 {
         return Some(Route::Workers);
@@ -50,13 +56,19 @@ pub fn spawn(st: &AppState) {
     tokio::spawn(pass_loop(st.clone()));
 }
 
-/// Re-emits the engine's model events and drops stems of a replaced separation model.
+/// Re-emits the engine's model events; any of them, or a gap in the feed, drops the cached models.
 async fn follow(st: AppState) {
     let mut feed = st.engine.subscribe();
     loop {
         let event = match feed.recv().await {
             Ok(Feed::Event(e)) => e,
-            Ok(Feed::Resync(..)) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+            Ok(Feed::Resync(..)) => {
+                super::forget_models(&st);
+                continue;
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                tracing::debug!("karaoke model feed lagged by {n} events");
+                super::forget_models(&st);
                 continue;
             }
             Err(_) => return,
@@ -64,16 +76,9 @@ async fn follow(st: AppState) {
         let EngineEvent::ModelChanged { model } = &*event else {
             continue;
         };
+        super::forget_models(&st);
         if let Ok(v) = serde_json::to_value(model) {
             super::emit_model(&st, v).await;
-        }
-        if model.kind == ModelKind::Separation
-            && model.state == ModelState::Installed
-            && let Ok(all) = st.engine.models().await
-            && let Some(sep) = run::installed_model(&all.models, ModelKind::Separation)
-            && let Err(e) = store::invalidate_stale_models(&st.db, &sep.id, &sep.version).await
-        {
-            tracing::warn!("karaoke model invalidation failed: {e}");
         }
     }
 }
@@ -81,30 +86,43 @@ async fn follow(st: AppState) {
 async fn pass_loop(st: AppState) {
     let mut adopted = st.engine.adoptions();
     let timed = !crate::jobs::cron_disabled();
+    let mut again = false;
     loop {
-        tokio::select! {
-            () = tokio::time::sleep(WAKE_EVERY), if timed => {}
-            changed = adopted.changed() => {
-                if changed.is_err() { return }
-                st.karaoke.stopped.store(false, Ordering::Relaxed);
+        if !again {
+            tokio::select! {
+                () = tokio::time::sleep(WAKE_EVERY), if timed => {}
+                changed = adopted.changed() => {
+                    if changed.is_err() { return }
+                    super::forget_models(&st);
+                    restart(&st.karaoke);
+                }
+                () = st.karaoke.wake.notified() => restart(&st.karaoke),
+                () = st.karaoke.kick.notified() => {}
             }
-            () = st.karaoke.wake.notified() => {
-                st.karaoke.stopped.store(false, Ordering::Relaxed);
+            aligner::auto_download(&st).await;
+        }
+        // A batch that prepared a track is followed by the next one at once.
+        again = match pass(&st).await {
+            Ok(n) => n > 0,
+            Err(e) => {
+                tracing::warn!("karaoke background pass failed: {e}");
+                false
             }
-            () = st.karaoke.kick.notified() => {}
-        }
-        aligner::auto_download(&st).await;
-        if let Err(e) = pass(&st).await {
-            tracing::warn!("karaoke background pass failed: {e}");
-        }
+        };
     }
 }
 
-/// Rules 16 and 17: up to 20 tracks without stems, newest first, until a run reports an unwanted CPU.
-async fn pass(st: &AppState) -> Result<(), sqlx::Error> {
+/// An adoption or a settings change: the CPU stop and the skipped tracks start over.
+fn restart(k: &Shared) {
+    k.stopped.store(false, Ordering::Relaxed);
+    k.skipped.lock_clean().clear();
+}
+
+/// Rules 16 and 17: one batch until a run reports an unwanted CPU; the tracks it prepared locally.
+async fn pass(st: &AppState) -> Result<usize, sqlx::Error> {
     match route(st).await {
-        None => Ok(()),
-        Some(Route::Workers) => pass_workers(st).await,
+        None => Ok(0),
+        Some(Route::Workers) => pass_workers(st).await.map(|()| 0),
         Some(Route::Local) => {
             // A job no worker took runs here now.
             sqlx::query("DELETE FROM jobs WHERE kind = 'separate' AND state = 'queued'")
@@ -145,39 +163,38 @@ async fn pass_workers(st: &AppState) -> Result<(), sqlx::Error> {
     )
     .fetch_one(&st.db)
     .await?;
-    for item in store::unprepared(&st.db, &fail_list(&st.karaoke), PER_WAKE, &profile).await? {
+    let model = (current.0.as_str(), current.1.as_str());
+    for item in store::unprepared(&st.db, &skip_list(&st.karaoke), PER_WAKE, model, false).await? {
         // A local run took the track over: queueing it again would separate it twice.
-        if st
-            .karaoke
-            .runs
-            .lock_clean()
-            .get(&item)
-            .is_some_and(run::RunState::active)
-        {
+        if st.karaoke.runs.lock_clean().contains_key(&item) {
             continue;
         }
         if active >= PER_WAKE || store::total(&st.db).await? >= budget / 10 * 9 {
             break;
         }
         match super::remote::enqueue(st, item).await {
-            Ok(queued) => active += i64::from(queued),
+            Ok(true) => active += 1,
+            Ok(false) => {
+                st.karaoke.skipped.lock_clean().insert(item);
+            }
             Err(e) => {
                 tracing::warn!("karaoke separation of item #{item} not queued: {e}");
-                st.karaoke.failed.lock_clean().insert(item);
+                st.karaoke.skipped.lock_clean().insert(item);
             }
         }
     }
     Ok(())
 }
 
-async fn pass_local(st: &AppState) -> Result<(), sqlx::Error> {
+async fn pass_local(st: &AppState) -> Result<usize, sqlx::Error> {
     let budget = super::budget_bytes(st).await;
-    let failed: Vec<i32> = fail_list(&st.karaoke);
-    let profile = super::remote::current_model(st)
-        .await
-        .map(|m| super::remote::profile_of(&m))
-        .unwrap_or_default();
-    let tracks = store::unprepared(&st.db, &failed, PER_WAKE, &profile).await?;
+    let Some(current) = super::remote::current_model(st).await else {
+        return Ok(0);
+    };
+    let sync = super::caps(st).await.align;
+    let model = (current.0.as_str(), current.1.as_str());
+    let tracks = store::unprepared(&st.db, &skip_list(&st.karaoke), PER_WAKE, model, sync).await?;
+    let mut prepared = 0;
     for item in tracks {
         if store::total(&st.db).await? >= budget / 10 * 9 || route(st).await != Some(Route::Local) {
             break;
@@ -189,6 +206,7 @@ async fn pass_local(st: &AppState) -> Result<(), sqlx::Error> {
         };
         let run::Start::Started(handle) = run::start(st, item, opts, JobPriority::Low, None).await
         else {
+            st.karaoke.skipped.lock_clean().insert(item);
             continue;
         };
         match handle.await {
@@ -198,18 +216,63 @@ async fn pass_local(st: &AppState) -> Result<(), sqlx::Error> {
             {
                 st.karaoke.stopped.store(true, Ordering::Relaxed);
                 tracing::info!("karaoke background pass stopped: the engine ran on the CPU");
+                return Ok(prepared);
             }
-            Ok(Ok(_)) => {}
+            Ok(Ok(_)) => prepared += 1,
+            // A lasting failure is recorded and leaves `unprepared`; a passing one waits for the next wake.
             _ => {
-                st.karaoke.failed.lock_clean().insert(item);
+                st.karaoke.skipped.lock_clean().insert(item);
             }
         }
     }
-    Ok(())
+    Ok(prepared)
 }
 
-fn fail_list(k: &Shared) -> Vec<i32> {
-    k.failed.lock_clean().iter().copied().collect()
+fn skip_list(k: &Shared) -> Vec<i32> {
+    k.skipped.lock_clean().iter().copied().collect()
+}
+
+/// Rule 37: prepares the next programme tracks while the party's karaoke display is open.
+pub async fn prepare_upcoming(st: &AppState, party: i32) {
+    if !st.relay.has_display(party) || !settings::flag(&st.db, "karaoke.enabled", false).await {
+        st.karaoke.upcoming.lock_clean().remove(&party);
+        return;
+    }
+    let items = match upcoming_tracks(st, party).await {
+        Ok(items) => items,
+        Err(e) => return tracing::warn!("karaoke programme of party #{party} not read: {e}"),
+    };
+    {
+        let mut last = st.karaoke.upcoming.lock_clean();
+        if last.get(&party) == Some(&items) {
+            return;
+        }
+        last.insert(party, items.clone());
+    }
+    let opts = run::Opts {
+        align: true,
+        melody: true,
+        force: false,
+    };
+    for item in items {
+        if let run::Start::Refused(r) = run::start(st, item, opts, JobPriority::Normal, None).await
+        {
+            tracing::debug!("karaoke of programme item #{item} not started: {r:?}");
+        }
+    }
+}
+
+/// The track items of the programme after the playing row, at most [`UPCOMING`].
+async fn upcoming_tracks(st: &AppState, party: i32) -> sqlx::Result<Vec<i32>> {
+    let ids = crate::party::upcoming_items(st, party).await?;
+    sqlx::query_scalar(
+        r#"SELECT t.id FROM unnest($1::int[]) WITH ORDINALITY t(id, n)
+           JOIN track_details td ON td."itemId" = t.id ORDER BY t.n LIMIT $2"#,
+    )
+    .bind(&ids)
+    .bind(UPCOMING as i64)
+    .fetch_all(&st.db)
+    .await
 }
 
 async fn may_separate_here(st: &AppState) -> bool {
@@ -244,7 +307,7 @@ pub(super) async fn realign(st: AppState, items: Vec<aligner::Stale>) {
         st.karaoke
             .realign_results
             .lock_clean()
-            .insert(item, aligner::result_of(outcome, &stale));
+            .insert(item, aligner::result_of(outcome));
         st.karaoke.realign_done.fetch_add(1, Ordering::SeqCst);
     }
     st.karaoke.realign_total.store(0, Ordering::SeqCst);

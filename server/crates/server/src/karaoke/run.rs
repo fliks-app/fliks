@@ -2,23 +2,21 @@
 use super::{aligner, store};
 use crate::sync::MutexExt;
 use crate::{
-    events::SseEvent, ingest::post_import::file_path, lyrics::store as lstore, state::AppState,
+    engine::EngineError, events::SseEvent, ingest::post_import::file_path, lyrics::store as lstore,
+    state::AppState,
 };
 use fliks_domain::lyrics::{self as dl, Parsed, Sync, karaoke as kd};
 use fliks_engine_core::api::{
     AlignLine, JobKind, JobPriority, JobRequest, JobResult, MediaInfo, MediaRef, MelodySpan,
-    ModelInfo, ModelKind, ModelState,
+    ModelInfo, ModelKind, ModelState, job_errors,
 };
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
-    time::{Duration, Instant},
 };
 
-/// The engine's own limits for an `Align` request (`docs/spec/karaoke.md` section 4).
-const MAX_ALIGN_LINES: usize = 3000;
-const MAX_ALIGN_WORDS: usize = 6000;
 /// A line found at this share of its words gives its start to the source row.
 const SNAP_MATCHED: f64 = 0.8;
 const MAX_MELODY_SPANS: usize = 100_000;
@@ -27,22 +25,24 @@ const MAX_MELODY_SPANS: usize = 100_000;
 pub struct Opts {
     pub align: bool,
     pub melody: bool,
-    /// Redo done work: `Align` reads the source lyrics again (the generated row stays until a new one
-    /// replaces it); `Melody` runs over existing pitch unless `Align` is asked too.
+    /// Redo done work (rule 13): `Align` reads the source again, `Melody` alone recomputes the pitch.
     pub force: bool,
 }
 
+/// A queued or running preparation; it leaves the map when it ends.
 #[derive(Clone)]
 pub struct RunState {
     pub state: &'static str,
     pub stage: Option<&'static str>,
     pub progress: Option<f64>,
-    pub error: Option<Failure>,
-    pub lyrics_error: Option<Failure>,
-    /// Who asked; `None` for the background pass.
+    /// Who asked; `None` for the background pass and the party programme.
     pub user: Option<i32>,
     /// The users `karaoke.job_changed` goes to.
     pub viewers: Arc<[i32]>,
+    /// Set by a `DELETE` of the track; every write of the run holds it, so none lands after.
+    pub(crate) cancelled: Arc<tokio::sync::Mutex<bool>>,
+    /// The engine job running now, which that `DELETE` cancels.
+    pub(crate) job: Option<String>,
 }
 
 impl Opts {
@@ -52,23 +52,21 @@ impl Opts {
     }
 }
 
-impl RunState {
-    pub(crate) fn active(&self) -> bool {
-        self.state == "queued" || self.state == "running"
-    }
-}
-
-/// What a run learned that the background pass acts on.
+/// What a run learned that the background pass and the failure record act on.
 #[derive(Default)]
 pub struct Outcome {
     pub provider: Option<String>,
     pub lyrics_error: Option<Failure>,
     /// Share of the lyrics found in the vocals, when that was too low to save the alignment.
     pub rejected_match: Option<f64>,
+    /// `Align` or `Melody` ran: the lyrics part of the record is replaced.
+    pub lyrics_ran: bool,
+    /// `(aligner, text)` of the lyrics the aligner rejected.
+    pub rejected: Option<(String, String)>,
 }
 
 /// Why a step failed; `code` and its params are the wire form, the `Display` text is for logs.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "code", rename_all = "snake_case")]
 pub enum Failure {
     /// Percentages of the lyrics found in the vocals and the least that is kept.
@@ -78,7 +76,20 @@ pub enum Failure {
     },
     LyricsTooLong,
     NoWordTimed,
-    /// Anything else; `message` is the engine's or the server's text, for settings managers only.
+    /// The step's model is not installed.
+    ModelMissing {
+        message: String,
+    },
+    /// This engine cannot run the step (no ONNX runtime, no speech recogniser).
+    Unsupported {
+        message: String,
+    },
+    /// No engine runs, or it did not answer.
+    EngineUnavailable {
+        message: String,
+    },
+    Cancelled,
+    /// Anything else (an unreadable file); `message` is the engine's or the server's text.
     Failed {
         message: String,
     },
@@ -89,6 +100,43 @@ impl Failure {
         Self::LyricsNotFoundInVocals {
             matched: (matched * 100.0).round() as u32,
             min: (MIN_MATCHED * 100.0).round() as u32,
+        }
+    }
+
+    /// A failure the same file would meet again: the background pass leaves the track alone.
+    pub fn permanent(&self) -> bool {
+        matches!(self, Self::Failed { .. })
+    }
+
+    /// The engine's typed `<code>: <text>` errors, else `Failed`.
+    fn of_engine(message: String) -> Self {
+        let code = message.split(':').next().unwrap_or_default();
+        match code {
+            job_errors::MODEL_MISSING => Self::ModelMissing { message },
+            job_errors::UNSUPPORTED => Self::Unsupported { message },
+            _ => Self::Failed { message },
+        }
+    }
+}
+
+impl From<EngineError> for Failure {
+    fn from(e: EngineError) -> Self {
+        match e {
+            EngineError::Job { state, .. } if state == "cancelled" => Self::Cancelled,
+            EngineError::Job { what, .. } => Self::of_engine(what),
+            EngineError::Http {
+                status, ref code, ..
+            } if status < 500 => match code.as_deref() {
+                Some(c @ (job_errors::MODEL_MISSING | job_errors::UNSUPPORTED)) => {
+                    Self::of_engine(format!("{c}: {e}"))
+                }
+                _ => Self::Failed {
+                    message: e.to_string(),
+                },
+            },
+            e => Self::EngineUnavailable {
+                message: e.to_string(),
+            },
         }
     }
 }
@@ -105,6 +153,12 @@ impl From<&str> for Failure {
     }
 }
 
+impl From<sqlx::Error> for Failure {
+    fn from(e: sqlx::Error) -> Self {
+        e.to_string().into()
+    }
+}
+
 impl std::fmt::Display for Failure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -113,7 +167,11 @@ impl std::fmt::Display for Failure {
             }
             Self::LyricsTooLong => f.write_str("the lyrics are too long to align"),
             Self::NoWordTimed => f.write_str("no lyrics word could be timed"),
-            Self::Failed { message } => f.write_str(message),
+            Self::Cancelled => f.write_str("cancelled"),
+            Self::ModelMissing { message }
+            | Self::Unsupported { message }
+            | Self::EngineUnavailable { message }
+            | Self::Failed { message } => f.write_str(message),
         }
     }
 }
@@ -145,12 +203,12 @@ pub(super) enum Admit {
 }
 
 pub(super) fn admit(runs: &HashMap<i32, RunState>, item: i32, user: Option<i32>) -> Admit {
-    if runs.get(&item).is_some_and(RunState::active) {
+    if runs.contains_key(&item) {
         return Admit::Join;
     }
     let held = runs
         .values()
-        .filter(|r| r.active() && user.is_some() && r.user == user)
+        .filter(|r| user.is_some() && r.user == user)
         .count();
     if held >= MAX_RUNS_PER_USER {
         Admit::Busy
@@ -166,16 +224,12 @@ pub struct Track {
     pub duration_ms: Option<i32>,
 }
 
-/// The file a track's stems derive from: its newest version.
+/// The track's file ([`store::track_file`]) with its path, probe and duration.
 pub async fn track(st: &AppState, item: i32) -> Result<Track, String> {
-    let file: Option<i32> = sqlx::query_scalar(
-        r#"SELECT ip."mediaFileId" FROM item_parts ip WHERE ip."itemId" = $1 ORDER BY ip.version DESC, ip.position LIMIT 1"#,
-    )
-    .bind(item)
-    .fetch_optional(&st.db)
-    .await
-    .map_err(|e| e.to_string())?;
-    let file = file.ok_or("the track has no file")?;
+    let file = store::track_file(&st.db, item)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("the track has no file")?;
     let (path, info) = file_path(st, file)
         .await
         .map_err(|e| e.to_string())?
@@ -208,31 +262,35 @@ pub fn installed_model(models: &[ModelInfo], kind: ModelKind) -> Option<&ModelIn
     installed.clone().find(|m| m.default).or(installed.next())
 }
 
+fn event(item: i32, state: &str, stage: Option<&str>, progress: Option<f64>) -> SseEvent {
+    SseEvent::KaraokeJobChanged {
+        item_id: i64::from(item),
+        state: state.to_owned(),
+        stage: stage.map(str::to_owned),
+        progress: progress.map(Into::into),
+    }
+}
+
 /// Applies `f` to the run of `item` and tells its viewers; a no-op once the run is gone.
 fn update(st: &AppState, item: i32, f: impl FnOnce(&mut RunState)) {
     let (ev, viewers) = {
         let mut runs = st.karaoke.runs.lock_clean();
         let Some(r) = runs.get_mut(&item) else { return };
         f(r);
-        let ev = SseEvent::KaraokeJobChanged {
-            item_id: i64::from(item),
-            state: r.state.to_owned(),
-            stage: r.stage.map(str::to_owned),
-            progress: r.progress.map(Into::into),
-        };
-        (ev, r.viewers.clone())
+        (event(item, r.state, r.stage, r.progress), r.viewers.clone())
     };
     st.hub.emit_to_users(&viewers, ev);
 }
 
 /// Tells the viewers of a track that its stems are done and nothing is left to run.
 pub async fn announce_ready(st: &AppState, item: i32) {
-    let ev = SseEvent::KaraokeJobChanged {
-        item_id: i64::from(item),
-        state: "ready".to_owned(),
-        stage: None,
-        progress: None,
-    };
+    let ev = event(item, "ready", None, None);
+    st.hub.emit_to_users(&viewers(st, item).await, ev);
+}
+
+/// A worker's progress on the track's `Separate`, 0 to 100.
+pub async fn announce_worker(st: &AppState, item: i32, progress: f64) {
+    let ev = event(item, "running", Some("separate"), Some(progress));
     st.hub.emit_to_users(&viewers(st, item).await, ev);
 }
 
@@ -244,16 +302,10 @@ fn stage(st: &AppState, item: i32, stage: &'static str) {
     });
 }
 
-/// A callback that reports a running job's percent at most once a second.
+/// The engine already sends a job's percent at most once a second.
 fn progress(st: &AppState, item: i32, which: &'static str) -> crate::engine::Progress {
-    let (st, last) = (st.clone(), std::sync::Mutex::new(Instant::now()));
+    let st = st.clone();
     Arc::new(move |pct| {
-        let mut at = last.lock_clean();
-        if at.elapsed() < Duration::from_secs(1) {
-            return;
-        }
-        *at = Instant::now();
-        drop(at);
         update(&st, item, |r| {
             r.state = "running";
             r.stage = Some(which);
@@ -284,40 +336,67 @@ async fn viewers(st: &AppState, item: i32) -> Arc<[i32]> {
     ids.into()
 }
 
-/// What a run still has to do: `Separate` is not valid, or an asked step has work and its feature.
-async fn pending(st: &AppState, item: i32, opts: Opts) -> bool {
-    if !stems_valid(st, item).await {
-        return true;
+/// The track has every stem from an import or the installed separation model; false when unknown.
+pub(super) async fn stems_valid(st: &AppState, item: i32) -> bool {
+    let (Ok(Some(file)), Ok(models)) = (
+        store::track_file(&st.db, item).await,
+        super::engine_models(st).await,
+    ) else {
+        return false;
+    };
+    let sep = installed_model(&models.models, ModelKind::Separation)
+        .map(|m| (m.id.as_str(), m.version.as_str()));
+    store::missing(&st.db, file, sep)
+        .await
+        .is_ok_and(|m| m.is_empty())
+}
+
+/// What a run would do.
+#[derive(Debug, PartialEq, Eq)]
+enum Work {
+    None,
+    Stems,
+    Lyrics,
+}
+
+/// `Separate` lacks a kind, or an asked step has work, its feature and model.
+async fn pending(st: &AppState, item: i32, file: Option<i32>, opts: Opts) -> Work {
+    let Some(file) = file else { return Work::Stems };
+    let Ok(models) = super::engine_models(st).await else {
+        return Work::Stems;
+    };
+    let sep = installed_model(&models.models, ModelKind::Separation)
+        .map(|m| (m.id.as_str(), m.version.as_str()));
+    match store::missing(&st.db, file, sep).await {
+        Ok(m) if m.is_empty() => {}
+        _ => return Work::Stems,
     }
     let caps = super::caps(st).await;
     let Ok(mut rows) = lstore::list(&st.db, item).await else {
-        return true;
+        return Work::Stems;
     };
     lstore::sort(&mut rows);
-    has_work(&rows, &caps, opts)
-}
-
-/// The track has valid stems of the installed separation model; false when any of that is unknown.
-pub(super) async fn stems_valid(st: &AppState, item: i32) -> bool {
-    let Ok(t) = track(st, item).await else {
-        return false;
-    };
-    let Ok(models) = st.engine.models().await else {
-        return false;
-    };
-    let Some(sep) = installed_model(&models.models, ModelKind::Separation) else {
-        return false;
-    };
-    store::valid(&st.db, t.file, &sep.id, &sep.version)
+    let rejected = store::failure(&st.db, item)
         .await
-        .unwrap_or(false)
-}
-
-fn has_work(rows: &[lstore::Row], caps: &super::Caps, opts: Opts) -> bool {
-    (opts.align && caps.align && align_source(rows, opts.force).is_some())
-        || (opts.melody
-            && caps.melody
-            && melody_of(rows).is_some_and(|r| melody_spans(r, opts.repitch()).is_some()))
+        .ok()
+        .flatten()
+        .and_then(|f| f.rejected());
+    let align = opts.align
+        && caps.align
+        && align_plan(st, &models.models, &rows, opts.force)
+            .await
+            .is_some_and(|p| opts.force || rejected.as_ref() != Some(&p.key()));
+    let melody = opts.melody
+        && caps.melody
+        && match melody_of(&rows).filter(|r| melody_spans(r, opts.repitch()).is_some()) {
+            Some(r) => !opts.repitch() || !lstore::is_ultrastar(&st.db, r.id).await.unwrap_or(true),
+            None => false,
+        };
+    if align || melody {
+        Work::Lyrics
+    } else {
+        Work::None
+    }
 }
 
 /// Registers the run and spawns it, unless it joins a running one, has nothing to do, or the caller is over a limit.
@@ -328,31 +407,24 @@ pub async fn start(
     priority: JobPriority,
     user: Option<i32>,
 ) -> Start {
-    if st
-        .karaoke
-        .runs
-        .lock_clean()
-        .get(&item)
-        .is_some_and(RunState::active)
-    {
+    if st.karaoke.runs.lock_clean().contains_key(&item) {
         return Start::Idle;
     }
-    // A track with no file fails visibly in `steps`; there is no file to check for a worker here.
-    let file = match track(st, item).await {
-        Ok(t) => Some(t.file),
+    let file = match store::track_file(&st.db, item).await {
+        Ok(f) => f,
         Err(e) => {
-            tracing::debug!("karaoke of track #{item}: {e}");
-            None
+            tracing::warn!("karaoke of track #{item} not started: {e}");
+            return Start::Refused(Refusal::Unavailable);
         }
     };
-    // The pass leaves any worker job alone; a user's request only a job a worker will take.
+    // A leased worker job is separating the file; a queued one is the pass's, which a request takes over.
     if let Some(f) = file {
-        let held = if user.is_some() {
-            super::remote::held_by_worker(st, f).await
+        let states: &[&str] = if user.is_some() {
+            &["leased"]
         } else {
-            store::worker_separating(&st.db, f, &["queued", "leased"]).await
+            &["queued", "leased"]
         };
-        match held {
+        match store::worker_separating(&st.db, f, states).await {
             Ok(false) => {}
             Ok(true) => return Start::Idle,
             Err(e) => {
@@ -361,7 +433,14 @@ pub async fn start(
             }
         }
     }
-    if user.is_some() {
+    let work = pending(st, item, file, opts).await;
+    if work == Work::None {
+        return Start::Idle;
+    }
+    if work == Work::Stems && !super::caps(st).await.separate {
+        return Start::Refused(Refusal::Unavailable);
+    }
+    if user.is_some() && work == Work::Stems {
         match store::total(&st.db).await {
             Ok(total) if total >= super::budget_bytes(st).await.saturating_mul(2) => {
                 return Start::Refused(Refusal::Full);
@@ -372,9 +451,6 @@ pub async fn start(
                 return Start::Refused(Refusal::Unavailable);
             }
         }
-    }
-    if !pending(st, item, opts).await {
-        return Start::Idle;
     }
     let viewers = viewers(st, item).await;
     {
@@ -390,10 +466,10 @@ pub async fn start(
                 state: "queued",
                 stage: None,
                 progress: None,
-                error: None,
-                lyrics_error: None,
                 user,
                 viewers,
+                cancelled: Arc::default(),
+                job: None,
             },
         );
     }
@@ -411,32 +487,131 @@ pub async fn start(
     update(st, item, |_| {});
     let st = st.clone();
     Start::Started(tokio::spawn(async move {
+        // Unattended runs share one slot, so a user's request always finds the other.
+        let _lane = match user {
+            None => Some(st.karaoke.unattended.acquire().await),
+            Some(_) => None,
+        };
         let _slot = st.karaoke.slots.acquire().await;
-        let done = steps(&st, item, opts, priority).await;
-        match &done {
-            Ok(out) => {
-                update(&st, item, |r| {
-                    r.state = "ready";
-                    r.stage = None;
-                    r.progress = None;
-                    r.lyrics_error.clone_from(&out.lyrics_error);
-                });
-                if out.lyrics_error.is_none() {
-                    st.karaoke.runs.lock_clean().remove(&item);
-                }
-            }
-            Err(e) => {
-                tracing::warn!("karaoke of item #{item} failed: {e}");
-                update(&st, item, |r| {
-                    r.state = "failed";
-                    r.stage = None;
-                    r.progress = None;
-                    r.error = Some(e.clone());
-                });
-            }
-        }
+        let inner = st.clone();
+        let done = tokio::spawn(async move { steps(&inner, item, opts, priority).await })
+            .await
+            .unwrap_or_else(|e| Err(format!("the run stopped: {e}").into()));
+        finish(&st, item, &done).await;
         done
     }))
+}
+
+/// Records the outcome, ends the run and tells its viewers.
+async fn finish(st: &AppState, item: i32, done: &Result<Outcome, Failure>) {
+    if let Err(e) = done {
+        tracing::warn!("karaoke of item #{item} failed: {e}");
+    }
+    if !matches!(done, Err(Failure::Cancelled))
+        && let Err(e) = store::record(&st.db, item, done).await
+    {
+        tracing::warn!("karaoke failure of item #{item} not recorded: {e}");
+    }
+    let viewers = st
+        .karaoke
+        .runs
+        .lock_clean()
+        .remove(&item)
+        .map(|r| r.viewers);
+    let state = match done {
+        Ok(_) => "ready",
+        Err(Failure::Cancelled) => "none",
+        Err(_) => "failed",
+    };
+    if let Some(v) = viewers {
+        st.hub.emit_to_users(&v, event(item, state, None, None));
+    }
+}
+
+/// The run's `DELETE` came: stop before the next step.
+async fn check(st: &AppState, item: i32) -> Result<(), Failure> {
+    let flag = st
+        .karaoke
+        .runs
+        .lock_clean()
+        .get(&item)
+        .map(|r| r.cancelled.clone());
+    match flag {
+        Some(f) if *f.lock().await => Err(Failure::Cancelled),
+        _ => Ok(()),
+    }
+}
+
+/// Holds the run's cancel flag for a write; `Cancelled` once a `DELETE` set it.
+async fn write_gate(
+    st: &AppState,
+    item: i32,
+) -> Result<Option<tokio::sync::OwnedMutexGuard<bool>>, Failure> {
+    let flag = st
+        .karaoke
+        .runs
+        .lock_clean()
+        .get(&item)
+        .map(|r| r.cancelled.clone());
+    let Some(flag) = flag else { return Ok(None) };
+    let g = flag.lock_owned().await;
+    if *g {
+        return Err(Failure::Cancelled);
+    }
+    Ok(Some(g))
+}
+
+/// Submits `req`, keeping its id on the run for a `DELETE` to cancel.
+async fn run_job(
+    st: &AppState,
+    item: i32,
+    req: &JobRequest,
+    which: &'static str,
+) -> Result<JobResult, Failure> {
+    let id = st.engine.submit_job(req).await?;
+    if let Some(r) = st.karaoke.runs.lock_clean().get_mut(&item) {
+        r.job = Some(id.clone());
+    }
+    if check(st, item).await.is_err() {
+        let _ = st.engine.cancel_job(&id).await;
+    }
+    let done = st
+        .engine
+        .wait_job(id, req, Some(progress(st, item, which)))
+        .await;
+    if let Some(r) = st.karaoke.runs.lock_clean().get_mut(&item) {
+        r.job = None;
+    }
+    Ok(done?)
+}
+
+/// Cancels the run of `item`, if any, and waits for a write in progress to end.
+pub(crate) async fn cancel(st: &AppState, item: i32) {
+    let flag = st
+        .karaoke
+        .runs
+        .lock_clean()
+        .get(&item)
+        .map(|r| r.cancelled.clone());
+    let Some(flag) = flag else { return };
+    *flag.lock().await = true;
+    let job = st
+        .karaoke
+        .runs
+        .lock_clean()
+        .get(&item)
+        .and_then(|r| r.job.clone());
+    if let Some(job) = job
+        && let Err(e) = st.engine.cancel_job(&job).await
+    {
+        tracing::warn!("karaoke job {job} not cancelled: {e}");
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Step {
+    Align,
+    Melody,
 }
 
 async fn steps(
@@ -445,47 +620,76 @@ async fn steps(
     opts: Opts,
     priority: JobPriority,
 ) -> Result<Outcome, Failure> {
+    check(st, item).await?;
     let t = track(st, item).await?;
-    let models = st.engine.models().await.map_err(|e| e.to_string())?;
-    let sep = installed_model(&models.models, ModelKind::Separation)
-        .ok_or("model_missing: no separation model is installed")?;
-    store::invalidate_stale_models(&st.db, &sep.id, &sep.version)
-        .await
-        .map_err(|e| e.to_string())?;
+    let models = super::engine_models(st).await?;
+    let sep = installed_model(&models.models, ModelKind::Separation);
+    let missing = store::missing(
+        &st.db,
+        t.file,
+        sep.map(|m| (m.id.as_str(), m.version.as_str())),
+    )
+    .await?;
     let mut out = Outcome::default();
-    if !store::valid(&st.db, t.file, &sep.id, &sep.version)
-        .await
-        .map_err(|e| e.to_string())?
-    {
-        out.provider = Some(separate(st, item, &t, &sep.id, priority).await?);
+    if !missing.is_empty() {
+        let sep = sep.ok_or_else(|| Failure::ModelMissing {
+            message: "no separation model is installed".into(),
+        })?;
+        out.provider = Some(separate(st, item, &t, &sep.id, &missing, priority).await?);
         evict(st).await;
     }
     let vocals = store::rows(&st.db, t.file)
-        .await
-        .map_err(|e| e.to_string())?
+        .await?
         .into_iter()
         .find(|r| r.kind == "vocals")
         .map(|r| PathBuf::from(r.path))
         .ok_or("the vocals stem is missing")?;
     let caps = super::caps(st).await;
     let pick = |k| installed_model(&models.models, k).map(|m| m.id.as_str());
-    if opts.align
-        && caps.align
-        && let Err(e) = align(st, item, &t, &vocals, &models.models, opts.force, priority).await
-    {
-        tracing::warn!("karaoke align of item #{item} failed: {e}");
-        if let Failure::LyricsNotFoundInVocals { matched, .. } = &e {
-            out.rejected_match = Some(f64::from(*matched) / 100.0);
+    for step in [Step::Align, Step::Melody] {
+        let res = match step {
+            Step::Align if opts.align && caps.align => {
+                check(st, item).await?;
+                align(
+                    st,
+                    item,
+                    &t,
+                    &vocals,
+                    &models.models,
+                    opts.force,
+                    priority,
+                    &mut out,
+                )
+                .await
+            }
+            Step::Melody if opts.melody && caps.melody => match pick(ModelKind::Melody) {
+                Some(model) => {
+                    check(st, item).await?;
+                    melody(
+                        st,
+                        item,
+                        &t,
+                        &vocals,
+                        model,
+                        opts.repitch(),
+                        priority,
+                        &mut out,
+                    )
+                    .await
+                }
+                None => Ok(()),
+            },
+            _ => Ok(()),
+        };
+        match res {
+            Ok(()) => {}
+            Err(Failure::Cancelled) => return Err(Failure::Cancelled),
+            Err(e) => {
+                tracing::warn!("karaoke {step:?} of item #{item} failed: {e}");
+                out.lyrics_ran = true;
+                out.lyrics_error.get_or_insert(e);
+            }
         }
-        out.lyrics_error = Some(e);
-    }
-    if opts.melody
-        && caps.melody
-        && let Some(model) = pick(ModelKind::Melody)
-        && let Err(e) = melody(st, item, &t, &vocals, model, opts.repitch(), priority).await
-    {
-        tracing::warn!("karaoke melody of item #{item} failed: {e}");
-        out.lyrics_error.get_or_insert(e);
     }
     Ok(out)
 }
@@ -501,14 +705,15 @@ pub async fn evict(st: &AppState) {
     }
 }
 
-/// The provider that ran the network.
+/// Makes the `missing` stems; the provider that ran the network.
 async fn separate(
     st: &AppState,
     item: i32,
     t: &Track,
     model: &str,
+    missing: &[&'static str],
     priority: JobPriority,
-) -> Result<String, String> {
+) -> Result<String, Failure> {
     let info = t.info.clone().ok_or("the file was not probed")?;
     stage(st, item, "separate");
     let _separating = super::Separating::new(&st.karaoke, t.file);
@@ -518,18 +723,20 @@ async fn separate(
         .map_err(|e| e.to_string())?;
     let tag = crate::config::random_hex(4);
     let at = |k: &str| {
-        dir.join(format!("{k}-{tag}.opus"))
-            .to_string_lossy()
-            .into_owned()
+        missing.contains(&k).then(|| {
+            dir.join(format!("{k}-{tag}.opus"))
+                .to_string_lossy()
+                .into_owned()
+        })
     };
     let providers = super::verified_providers(st).await;
     let req = JobRequest {
         kind: JobKind::Separate {
             info,
             model: Some(model.to_owned()),
-            vocals: Some(at("vocals")),
-            instrumental: Some(at("instrumental")),
-            guide: Some(at("guide")),
+            vocals: at("vocals"),
+            instrumental: at("instrumental"),
+            guide: None,
             guide_vocals_gain: None,
             bitrate_kbps: None,
             providers: Some(providers),
@@ -543,37 +750,29 @@ async fn separate(
         priority: Some(priority),
         force: false,
     };
-    let result = st
-        .engine
-        .run_job(&req, Some(progress(st, item, "separate")))
-        .await
-        .map_err(|e| e.to_string())?;
-    let JobResult::Separate { separate: s } = result else {
+    let JobResult::Separate { separate: s } = run_job(st, item, &req, "separate").await? else {
         return Err("the engine answered another result".into());
     };
     let duration_ms = (s.duration_seconds * 1000.0).round() as i32;
-    for (kind, stem) in [
-        ("vocals", &s.vocals),
-        ("instrumental", &s.instrumental),
-        ("guide", &s.guide),
-    ] {
+    let mut rows = vec![];
+    for (kind, stem) in [("vocals", &s.vocals), ("instrumental", &s.instrumental)] {
+        if !missing.contains(&kind) {
+            continue;
+        }
         let stem = stem.as_ref().ok_or("the engine wrote no stem")?;
-        store::put(
-            &st.db,
-            &store::New {
-                file: t.file,
-                kind,
-                model: &s.model,
-                model_version: &s.model_version,
-                provider: &s.provider,
-                path: &stem.path,
-                size: stem.bytes as i64,
-                duration_ms,
-            },
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+        rows.push(store::New {
+            file: t.file,
+            kind,
+            model: &s.model,
+            model_version: &s.model_version,
+            provider: &s.provider,
+            path: &stem.path,
+            size: stem.bytes as i64,
+            duration_ms,
+        });
     }
+    let _gate = write_gate(st, item).await?;
+    store::put_all(&st.db, &rows).await?;
     Ok(s.provider)
 }
 
@@ -596,80 +795,140 @@ fn align_source(rows: &[lstore::Row], force: bool) -> Option<&lstore::Row> {
         .filter(|r| !done && !kd::align_request(&r.doc.0).is_empty())
 }
 
+/// `doc` on the audio's clock: the row's `offsetMs` (positive shows the text sooner) folded into its times.
+fn on_audio(doc: &dl::Doc, offset_ms: i32) -> dl::Doc {
+    match offset_ms {
+        0 => doc.clone(),
+        o => kd::retimed(doc, -f64::from(o), 1.0),
+    }
+}
+
+/// A short digest of the lines `Align` times, kept with its result and its rejection.
+fn text_digest(request: &[kd::Request]) -> String {
+    let mut h = Sha256::new();
+    for r in request {
+        h.update(r.text.as_bytes());
+        h.update(b"\n");
+    }
+    h.finalize()[..8]
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// What an `Align` of the track would send.
+struct AlignPlan<'a> {
+    src: &'a lstore::Row,
+    /// The source on the audio's clock.
+    doc: dl::Doc,
+    request: Vec<kd::Request>,
+    language: Option<String>,
+    model: String,
+    /// The quality model, which reads the source audio.
+    quality: bool,
+    text: String,
+}
+
+impl AlignPlan<'_> {
+    fn key(&self) -> (String, String) {
+        (self.model.clone(), self.text.clone())
+    }
+}
+
+async fn align_plan<'a>(
+    st: &AppState,
+    models: &[ModelInfo],
+    rows: &'a [lstore::Row],
+    force: bool,
+) -> Option<AlignPlan<'a>> {
+    let src = align_source(rows, force)?;
+    let doc = on_audio(&src.doc.0, src.offset_ms);
+    let request = kd::align_request(&doc);
+    let language = aligner::language_of(&src.lang, &src.doc.0);
+    let m = aligner::aligner(
+        models,
+        language.as_deref(),
+        &aligner::overrides(st).await,
+        aligner::quality(st).await,
+    )?;
+    let (quality, model) = (m.id == aligner::QUALITY_MODEL, m.id.clone());
+    Some(AlignPlan {
+        src,
+        text: text_digest(&request),
+        doc,
+        request,
+        language,
+        quality,
+        model,
+    })
+}
+
 /// The quality model times the full mix; the others the vocals stem.
 fn align_media<'a>(quality: bool, source: &'a Path, vocals: &'a Path) -> &'a Path {
     if quality { source } else { vocals }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn align(
     st: &AppState,
     item: i32,
     t: &Track,
-    vocals: &std::path::Path,
+    vocals: &Path,
     models: &[ModelInfo],
     force: bool,
     priority: JobPriority,
+    out: &mut Outcome,
 ) -> Result<(), Failure> {
-    let mut rows = lstore::list(&st.db, item)
-        .await
-        .map_err(|e| e.to_string())?;
+    let mut rows = lstore::list(&st.db, item).await?;
     lstore::sort(&mut rows);
-    let Some(src) = align_source(&rows, force) else {
+    let Some(plan) = align_plan(st, models, &rows, force).await else {
         return Ok(());
     };
-    let request = kd::align_request(&src.doc.0);
-    let words: usize = request
-        .iter()
-        .map(|r| r.text.split_whitespace().count())
-        .sum();
-    if request.len() > MAX_ALIGN_LINES || words > MAX_ALIGN_WORDS {
-        return Err(Failure::LyricsTooLong);
+    let rejected = store::failure(&st.db, item)
+        .await?
+        .and_then(|f| f.rejected());
+    if !force && rejected == Some(plan.key()) {
+        return Ok(());
     }
-    let language = aligner::language_of(&src.lang, &src.doc.0);
-    let quality = aligner::quality(st).await;
-    let model = aligner::aligner(
-        models,
-        language.as_deref(),
-        &aligner::overrides(st).await,
-        quality,
-    )
-    .ok_or("model_missing: no alignment model is installed")?
-    .id
-    .clone();
+    let kind = JobKind::Align {
+        lines: plan
+            .request
+            .iter()
+            .map(|r| AlignLine {
+                text: r.text.clone(),
+                start_ms: r.start.map(ms),
+                end_ms: r
+                    .end
+                    .zip(r.start)
+                    .filter(|(e, s)| e >= s)
+                    .map(|(e, _)| ms(e)),
+            })
+            .collect(),
+        language: plan.language.clone(),
+        model: Some(plan.model.clone()),
+        providers: Some(super::verified_providers(st).await),
+    };
+    if let Err(e) = fliks_engine_core::jobs::align::validate(&kind) {
+        return Err(if e.contains("at most") {
+            Failure::LyricsTooLong
+        } else {
+            e.into()
+        });
+    }
     stage(st, item, "align");
+    out.lyrics_ran = true;
     let req = JobRequest {
-        kind: JobKind::Align {
-            lines: request
-                .iter()
-                .map(|r| AlignLine {
-                    text: r.text.clone(),
-                    start_ms: r.start.map(ms),
-                    end_ms: r
-                        .end
-                        .zip(r.start)
-                        .filter(|(e, s)| e >= s)
-                        .map(|(e, _)| ms(e)),
-                })
-                .collect(),
-            language,
-            model: Some(model),
-            providers: Some(super::verified_providers(st).await),
-        },
+        kind,
         media: MediaRef {
             media_file_id: t.file as u32,
-            path: align_media(quality, &t.path, vocals)
+            path: align_media(plan.quality, &t.path, vocals)
                 .to_string_lossy()
                 .into_owned(),
         },
         priority: Some(priority),
         force: false,
     };
-    let result = st
-        .engine
-        .run_job(&req, Some(progress(st, item, "align")))
-        .await
-        .map_err(|e| e.to_string())?;
-    let JobResult::Align { align: a } = result else {
+    let JobResult::Align { align: a } = run_job(st, item, &req, "align").await? else {
         return Err("the engine answered another result".into());
     };
     let placed: Vec<kd::Placed> = a
@@ -692,18 +951,22 @@ async fn align(
                 .collect(),
         })
         .collect();
-    let doc = kd::from_alignment(&src.doc.0, &request, &placed);
+    let doc = kd::from_alignment(&plan.doc, &plan.request, &placed);
     if doc.lines.is_empty() {
         return Err(Failure::NoWordTimed);
     }
     if a.matched < MIN_MATCHED {
+        out.rejected_match = Some(a.matched);
+        out.rejected = Some(plan.key());
         return Err(Failure::low_match(a.matched));
     }
+    let src = plan.src;
+    let _gate = write_gate(st, item).await?;
     // A line-synced source follows the audio: lines the engine found take its time, the others the fit.
     if src.sync == "line" && !src.reviewed {
         let fitted = match a.lrc_fit {
-            Some(f) => kd::retimed(&src.doc.0, f.offset_ms, f.scale),
-            None => src.doc.0.clone(),
+            Some(f) => kd::retimed(&plan.doc, f.offset_ms, f.scale),
+            None => plan.doc.clone(),
         };
         let found: Vec<_> = a
             .lines
@@ -711,14 +974,15 @@ async fn align(
             .filter(|l| l.repeat == 0 && l.matched >= SNAP_MATCHED)
             .map(|l| (l.line as usize, i64::from(l.start_ms)))
             .collect();
-        let doc = kd::snapped(&fitted, &request, &found);
-        if doc != src.doc.0 {
-            lstore::retime(&st.db, src.id, &src.doc.0, &doc)
-                .await
-                .map_err(|e| e.to_string())?;
+        let snapped = kd::snapped(&fitted, &plan.request, &found);
+        if snapped != src.doc.0 {
+            lstore::retime(&st.db, src.id, &src.doc.0, &snapped).await?;
         }
     }
-    let mut source_ref = format!("{}#matched={:.2}", a.model, a.matched);
+    let mut source_ref = format!(
+        "{}#matched={:.2}#version={}#text={}",
+        a.model, a.matched, a.model_version, plan.text
+    );
     if let Some(why) = &a.fallback {
         source_ref.push_str(&format!("#fallback={why}"));
     }
@@ -741,8 +1005,7 @@ async fn align(
             reviewed: false,
         },
     )
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
     Ok(())
 }
 
@@ -796,32 +1059,40 @@ pub async fn write_pitch(
     Ok(true)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn melody(
     st: &AppState,
     item: i32,
     t: &Track,
-    vocals: &std::path::Path,
+    vocals: &Path,
     model: &str,
     repitch: bool,
     priority: JobPriority,
+    out: &mut Outcome,
 ) -> Result<(), Failure> {
-    let Some(target) = melody_target(st, item).await.map_err(|e| e.to_string())? else {
+    let Some(target) = melody_target(st, item).await? else {
         return Ok(());
     };
     let Some(spans) = melody_spans(&target, repitch) else {
         return Ok(());
     };
+    // An UltraStar row's notes are authored: a forced run would replace them for good.
+    if repitch && lstore::is_ultrastar(&st.db, target.id).await? {
+        return Ok(());
+    }
     if spans.len() > MAX_MELODY_SPANS {
         return Err(Failure::LyricsTooLong);
     }
     stage(st, item, "melody");
+    out.lyrics_ran = true;
+    let offset = i64::from(target.offset_ms);
     let req = JobRequest {
         kind: JobKind::Melody {
             spans: spans
                 .iter()
                 .map(|(s, e)| MelodySpan {
-                    start_ms: ms(*s),
-                    end_ms: ms((*e).max(*s + 1)),
+                    start_ms: ms(*s - offset),
+                    end_ms: ms((*e).max(*s + 1) - offset),
                 })
                 .collect(),
             model: Some(model.to_owned()),
@@ -833,12 +1104,7 @@ async fn melody(
         priority: Some(priority),
         force: false,
     };
-    let result = st
-        .engine
-        .run_job(&req, Some(progress(st, item, "melody")))
-        .await
-        .map_err(|e| e.to_string())?;
-    let JobResult::Melody { melody: m } = result else {
+    let JobResult::Melody { melody: m } = run_job(st, item, &req, "melody").await? else {
         return Err("the engine answered another result".into());
     };
     let notes: Vec<Vec<kd::Note>> = m
@@ -846,14 +1112,15 @@ async fn melody(
         .iter()
         .map(|s| {
             s.iter()
-                .map(|n| (i64::from(n.start_ms), i64::from(n.end_ms), n.midi))
+                .map(|n| {
+                    let at = |v: u32| i64::from(v) + offset;
+                    (at(n.start_ms), at(n.end_ms), n.midi)
+                })
                 .collect()
         })
         .collect();
-    if !write_pitch(&st.db, target.id, &target.doc.0, &notes)
-        .await
-        .map_err(|e| e.to_string())?
-    {
+    let _gate = write_gate(st, item).await?;
+    if !write_pitch(&st.db, target.id, &target.doc.0, &notes).await? {
         tracing::info!("karaoke melody of item #{item} dropped: the lyrics changed meanwhile");
     }
     Ok(())
@@ -909,22 +1176,6 @@ mod tests {
         assert_eq!(align_media(false, src, vocals), vocals);
     }
 
-    fn caps() -> super::super::Caps {
-        super::super::Caps {
-            separate: true,
-            align: true,
-            melody: true,
-        }
-    }
-
-    fn opts(align: bool, melody: bool, force: bool) -> Opts {
-        Opts {
-            align,
-            melody,
-            force,
-        }
-    }
-
     fn with_pitch(mut r: lstore::Row) -> lstore::Row {
         r.doc = sqlx::types::Json(
             serde_json::from_value(serde_json::json!({"agents": [], "lines": [
@@ -935,16 +1186,24 @@ mod tests {
         r
     }
 
+    fn opts(align: bool, melody: bool, force: bool) -> Opts {
+        Opts {
+            align,
+            melody,
+            force,
+        }
+    }
+
     #[test]
     fn a_prepared_track_has_no_work_until_it_is_forced() {
         let done = [
             with_pitch(row(1, "generated", "word", false)),
             row(2, "lrclib", "line", false),
         ];
-        assert!(!has_work(&done, &caps(), opts(true, true, false)));
-        assert!(has_work(&done, &caps(), opts(true, false, true)));
-        assert!(has_work(&done, &caps(), opts(false, true, true)));
-        assert!(!has_work(&done, &caps(), opts(false, true, false)));
+        assert!(align_source(&done, false).is_none());
+        assert!(melody_spans(&done[0], false).is_none());
+        assert_eq!(align_source(&done, true).map(|r| r.id), Some(2));
+        assert!(melody_spans(&done[0], opts(false, true, true).repitch()).is_some());
     }
 
     #[test]
@@ -953,18 +1212,50 @@ mod tests {
             with_pitch(row(1, "generated", "word", true)),
             row(2, "lrclib", "line", false),
         ];
-        assert!(!has_work(&reviewed, &caps(), opts(true, false, true)));
-        let line_only = [row(2, "lrclib", "line", false)];
-        assert!(!has_work(&line_only, &caps(), opts(false, true, true)));
-        let no_align = super::super::Caps {
-            align: false,
-            ..caps()
+        assert!(align_source(&reviewed, true).is_none());
+        assert!(melody_of(&[row(2, "lrclib", "line", false)]).is_none());
+    }
+
+    #[test]
+    fn the_row_offset_is_folded_into_the_times_the_engine_reads() {
+        let doc: dl::Doc = serde_json::from_value(serde_json::json!({"agents": [], "lines": [
+            {"text": "a", "start": 1000, "end": 2000}, {"text": "b", "start": 300}]}))
+        .unwrap();
+        // Shown 500 ms sooner: each line is sung 500 ms before its written time.
+        let shown_sooner = on_audio(&doc, 500);
+        let starts: Vec<_> = shown_sooner.lines.iter().map(|l| l.start).collect();
+        assert_eq!(starts, [Some(500), Some(0)]);
+        assert_eq!(shown_sooner.lines[0].end, Some(1500));
+        assert_eq!(on_audio(&doc, -500).lines[1].start, Some(800));
+        assert_eq!(on_audio(&doc, 0), doc);
+    }
+
+    #[test]
+    fn engine_errors_map_to_codes_a_client_can_name() {
+        let job = |state: &str, what: &str| {
+            Failure::from(EngineError::Job {
+                state: state.into(),
+                what: what.into(),
+            })
         };
-        let done = [
-            with_pitch(row(1, "generated", "word", false)),
-            row(2, "lrclib", "line", false),
-        ];
-        assert!(!has_work(&done, &no_align, opts(true, false, true)));
+        assert!(matches!(
+            job("failed", "model_missing: no such model"),
+            Failure::ModelMissing { .. }
+        ));
+        assert!(matches!(
+            job("failed", "unsupported: no ONNX runtime"),
+            Failure::Unsupported { .. }
+        ));
+        assert_eq!(job("cancelled", "x"), Failure::Cancelled);
+        assert!(matches!(job("failed", "bad audio"), Failure::Failed { .. }));
+        assert!(matches!(
+            Failure::from(EngineError::NotRunning),
+            Failure::EngineUnavailable { .. }
+        ));
+        assert!(job("failed", "bad audio").permanent());
+        assert!(!Failure::from(EngineError::NotRunning).permanent());
+        let wire = serde_json::to_value(job("failed", "model_missing: m")).unwrap();
+        assert_eq!(wire["code"], "model_missing");
     }
 
     #[test]

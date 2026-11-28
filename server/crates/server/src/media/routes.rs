@@ -209,7 +209,7 @@ pub async fn get_media(
         media["comic"] = comics::detail(&st.db, id, a.user.id, &acl).await?;
     } else if media["type"] == MediaKind::Album.as_str() {
         let mut album = music::detail(&st.db, id, a.user.id, &acl).await?;
-        crate::karaoke::tag_tracks(&st, &mut album);
+        crate::karaoke::tag_tracks(&st, &mut album).await?;
         album["versions"] = crate::metadata::music::versions(&st, id, &acl)
             .await?
             .into();

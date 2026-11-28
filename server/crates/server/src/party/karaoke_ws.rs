@@ -1,4 +1,4 @@
-//! Pitch-frame relay of a party's karaoke (`docs/spec/karaoke.md` rule 26): members send frame batches over a
+//! Pitch-frame relay of a party's karaoke (`docs/spec/karaoke.md` rule 30): members send frame batches over a
 //! WebSocket, the party host's display sockets receive them stamped with the sender. Never audio.
 use super::routes::{R, fail, host_of, member_row, require_open};
 use crate::{
@@ -64,6 +64,11 @@ impl Relay {
         }
         *n += 1;
         Some(Slot(self.clone(), (party, user)))
+    }
+
+    /// The party's host has a karaoke display open.
+    pub fn has_display(&self, party: i32) -> bool {
+        self.0.lock_clean().contains_key(&party)
     }
 
     fn add(&self, party: i32, id: u64, tx: Sink) {
@@ -158,6 +163,7 @@ async fn serve(st: AppState, party: i32, user: i32, display: bool, _slot: Slot, 
     let (tx, mut rx) = mpsc::channel::<String>(64);
     if display {
         st.relay.add(party, id, tx);
+        crate::karaoke::upcoming(&st, party);
     }
     let mut bucket = Bucket(Instant::now(), 0);
     let mut recheck = tokio::time::interval(RECHECK);
@@ -202,6 +208,9 @@ async fn serve(st: AppState, party: i32, user: i32, display: bool, _slot: Slot, 
     }
     if display {
         st.relay.remove(party, id);
+        if !st.relay.has_display(party) {
+            st.karaoke.upcoming.lock_clean().remove(&party);
+        }
     }
 }
 

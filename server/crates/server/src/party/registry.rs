@@ -541,6 +541,7 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
         }
     };
     let mut moved = false;
+    let mut programme = false;
     for e in d.effects {
         match e {
             Effect::Persist { position, item } => {
@@ -578,6 +579,7 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
                 });
             }
             Effect::Programme { rev, item } => {
+                programme = true;
                 let dto = match item {
                     Some(item) => Some(
                         item_dto(st, &item)
@@ -685,6 +687,9 @@ pub async fn deliver(st: &AppState, party: i32, d: Delivery) {
         } {
             tracing::warn!(error = %err, party, "party update not announced");
         }
+    }
+    if moved || programme {
+        crate::karaoke::upcoming(st, party);
     }
 }
 

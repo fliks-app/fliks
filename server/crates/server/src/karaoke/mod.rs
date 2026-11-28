@@ -27,7 +27,7 @@ use axum::{
     routing::{get, post},
 };
 use fliks_domain::acl::{Action, Subject};
-use fliks_engine_core::api::{JobPriority, ModelKind};
+use fliks_engine_core::api::{JobPriority, ModelKind, ModelsResponse};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
@@ -43,7 +43,15 @@ use tower_http::services::ServeFile;
 
 pub use background::{drop_stale_separations, spawn};
 
-/// Tracks prepared at once (rule 13).
+/// Prepares the next programme tracks of a party whose karaoke display is open (rule 37).
+pub fn upcoming(st: &AppState, party: i32) {
+    if st.relay.has_display(party) {
+        let st = st.clone();
+        tokio::spawn(async move { background::prepare_upcoming(&st, party).await });
+    }
+}
+
+/// Tracks prepared at once (rule 13); runs nobody asked for (the pass, the programme) share one.
 const SLOTS: usize = 2;
 const DEFAULT_BUDGET_MB: i64 = 4096;
 const MIN_BUDGET_MB: i64 = 256;
@@ -66,12 +74,17 @@ const GPU_PROVIDERS: [&str; 10] = [
 pub struct Shared {
     pub(crate) runs: Mutex<HashMap<i32, run::RunState>>,
     pub(crate) slots: Semaphore,
+    pub(crate) unattended: Semaphore,
     /// Set when a `Separate` ran on the CPU: the pass rests until the next adoption or settings change.
     pub(crate) stopped: AtomicBool,
     /// Files whose `Separate` is writing its folder: the sweep leaves them alone.
     pub(crate) separating: Mutex<HashSet<i32>>,
-    /// Tracks the pass failed on, left alone until the process restarts.
-    pub(crate) failed: Mutex<HashSet<i32>>,
+    /// Tracks the pass found nothing to do on or failed on for a passing reason, until its next wake.
+    pub(crate) skipped: Mutex<HashSet<i32>>,
+    /// The engine's models with the generation they were read at; dropped on each model event.
+    models: Mutex<(u64, Option<Arc<ModelsResponse>>)>,
+    /// The upcoming programme rows each party with an open karaoke display had prepared last.
+    pub(crate) upcoming: Mutex<HashMap<i32, Vec<i32>>>,
     pub(crate) wake: Notify,
     /// A karaoke-capable worker connected: the pass runs, `stopped` stays as it is.
     pub(crate) kick: Notify,
@@ -81,6 +94,29 @@ pub struct Shared {
     pub(crate) realign_total: AtomicUsize,
     pub(crate) realign_done: AtomicUsize,
     pub(crate) realign_results: Mutex<HashMap<i32, aligner::RealignResult>>,
+}
+
+/// The engine's models, cached until the next model event or adoption: the engine stats every file.
+pub(crate) async fn engine_models(st: &AppState) -> Result<Arc<ModelsResponse>, EngineError> {
+    let at = {
+        let m = st.karaoke.models.lock_clean();
+        if let Some(cached) = &m.1 {
+            return Ok(cached.clone());
+        }
+        m.0
+    };
+    let fresh = Arc::new(st.engine.models().await?);
+    let mut m = st.karaoke.models.lock_clean();
+    if m.0 == at {
+        m.1 = Some(fresh.clone());
+    }
+    Ok(fresh)
+}
+
+pub(crate) fn forget_models(st: &AppState) {
+    let mut m = st.karaoke.models.lock_clean();
+    m.0 += 1;
+    m.1 = None;
 }
 
 /// Keeps a file out of the sweep until dropped.
@@ -104,9 +140,12 @@ impl Default for Shared {
         Self {
             runs: Mutex::default(),
             slots: Semaphore::new(SLOTS),
+            unattended: Semaphore::new(1),
             stopped: AtomicBool::new(false),
             separating: Mutex::default(),
-            failed: Mutex::default(),
+            skipped: Mutex::default(),
+            models: Mutex::default(),
+            upcoming: Mutex::default(),
             wake: Notify::new(),
             kick: Notify::new(),
             realigning: AtomicBool::new(false),
@@ -168,6 +207,34 @@ pub(crate) async fn verified_providers(st: &AppState) -> Vec<String> {
         .unwrap_or_else(|| DEFAULT_VERIFIED.map(str::to_owned).to_vec())
 }
 
+/// Rule 7: the karaoke settings a malformed value would silently replace by their default.
+pub(crate) fn validate_setting(key: &str, value: &str) -> Result<(), String> {
+    let int = |min: i64, max: i64| {
+        value
+            .trim()
+            .parse::<i64>()
+            .ok()
+            .filter(|n| (min..=max).contains(n))
+            .map(drop)
+            .ok_or_else(|| format!("{key} must be an integer from {min} to {max}"))
+    };
+    match key {
+        "karaoke.disk_budget_mb" => int(MIN_BUDGET_MB, i64::MAX >> 20),
+        "karaoke.queue_cap" => int(1, 20),
+        "karaoke.verified_providers" => serde_json::from_str::<Vec<String>>(value)
+            .ok()
+            .filter(|v| v.iter().all(|p| GPU_PROVIDERS.contains(&p.as_str())))
+            .map(drop)
+            .ok_or_else(|| {
+                format!(
+                    "{key} must be a JSON array of: {}",
+                    GPU_PROVIDERS.join(", ")
+                )
+            }),
+        _ => Ok(()),
+    }
+}
+
 /// The verified GPU provider the engine lists, if any (rule 16).
 pub fn gpu_provider(features: &[String], verified: &[String]) -> Option<String> {
     GPU_PROVIDERS
@@ -188,7 +255,7 @@ pub(crate) async fn caps(st: &AppState) -> Caps {
     let features = st.engine.engine_features();
     let has = |f: &str| features.iter().any(|x| x == f);
     let models = match has("models") {
-        true => st.engine.models().await.ok(),
+        true => engine_models(st).await.ok(),
         false => None,
     };
     let ready = |feature: &str, kind: ModelKind| {
@@ -237,6 +304,7 @@ pub async fn status(State(st): State<AppState>, _a: Authed) -> Json<Value> {
         "melody": c.melody,
         "ready": enabled && c.separate,
         "gpu": gpu,
+        "pitchShift": features.iter().any(|f| f == "pitch-shift"),
         "background": background::allowed(&st).await,
         "workers": remote::eligible_workers(&st).await,
     }))
@@ -286,6 +354,7 @@ pub async fn download(
         ]));
     }
     let m = st.engine.download_model(&id).await.map_err(engine_err)?;
+    forget_models(&st);
     let body = serde_json::to_value(m).map_err(|e| AppError::internal(e.to_string()))?;
     Ok((StatusCode::ACCEPTED, Json(body)))
 }
@@ -298,7 +367,7 @@ pub async fn delete_model(
 ) -> Result<StatusCode, AppError> {
     manage_settings(&a)?;
     st.engine.delete_model(&id).await.map_err(engine_err)?;
-    store::invalidate_model(&st.db, &id).await?;
+    forget_models(&st);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -310,6 +379,7 @@ pub async fn verify_model(
 ) -> Result<(StatusCode, Json<fliks_engine_core::api::ModelInfo>), AppError> {
     manage_settings(&a)?;
     let m = st.engine.verify_model(&id).await.map_err(engine_err)?;
+    forget_models(&st);
     Ok((StatusCode::ACCEPTED, Json(m)))
 }
 
@@ -328,33 +398,34 @@ pub async fn delete_model_orphan(
 }
 
 /// A failure as sent: the engine's `message` goes to users who manage settings only (rule 8).
-fn failure_json(f: &run::Failure, detail: bool) -> Value {
-    let mut v = json!(f);
+fn failure_json(f: &Value, detail: bool) -> Value {
+    let mut v = f.clone();
     if let Some(o) = v.as_object_mut().filter(|_| !detail) {
         o.remove("message");
     }
     v
 }
 
-/// The run speaks only while queued or running; a finished one never outvotes the rows.
-fn derive_state(run: Option<&run::RunState>, ready: bool, worker: bool) -> &'static str {
-    match run {
-        Some(r) if r.active() => r.state,
+/// A live run decides, then the stems, then a worker's job, then the recorded failure.
+fn derive_state(
+    run: Option<&run::RunState>,
+    ready: bool,
+    worker: Option<remote::WorkerJob>,
+    failed: bool,
+) -> &'static str {
+    match (run, worker) {
+        (Some(r), _) => r.state,
         _ if ready => "ready",
-        _ if worker => "queued",
-        Some(r) if r.state == "failed" => "failed",
+        (_, Some(w)) if w.leased => "running",
+        (_, Some(_)) => "queued",
+        _ if failed => "failed",
         _ => "none",
     }
 }
 
 /// Rule 8.
 async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppError> {
-    let file: Option<i32> = sqlx::query_scalar(
-        r#"SELECT "mediaFileId" FROM item_parts WHERE "itemId" = $1 ORDER BY version LIMIT 1"#,
-    )
-    .bind(item)
-    .fetch_optional(&st.db)
-    .await?;
+    let file = store::track_file(&st.db, item).await?;
     let rows = match file {
         Some(f) => store::rows(&st.db, f).await?,
         None => vec![],
@@ -366,12 +437,7 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
             json!({"size": r.size, "durationMs": r.duration_ms, "contentType": mime_of(&r.path)}),
         );
     }
-    let imported = |k: &str| {
-        rows.iter()
-            .any(|r| r.kind == k && r.provider == store::IMPORT)
-    };
-    let ready = store::KINDS.iter().all(|k| stems.contains_key(*k))
-        || (imported("vocals") && imported("instrumental"));
+    let ready = store::KINDS.iter().all(|k| stems.contains_key(*k));
     let detail = a.user.is_admin || a.perms.can(Action::Manage, &Subject::Settings);
     let run = st.karaoke.runs.lock_clean().get(&item).cloned();
     let lyrics = crate::lyrics::store::list(&st.db, item).await?;
@@ -386,10 +452,12 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
         None => false,
     };
     let worker = match file {
-        Some(f) => remote::held_by_worker(st, f).await?,
-        None => false,
+        Some(f) => remote::worker_job(st, f).await?,
+        None => None,
     };
-    let state = derive_state(run.as_ref(), ready, worker);
+    let recorded = store::failure(&st.db, item).await?;
+    let error = recorded.as_ref().and_then(|f| f.error.clone());
+    let state = derive_state(run.as_ref(), ready, worker, error.is_some());
     let mut out = json!({
         "state": state,
         "cdg": cdg,
@@ -400,35 +468,52 @@ async fn state_of(st: &AppState, a: &Authed, item: i32) -> Result<Value, AppErro
     if let Some(f) = file {
         out["fileId"] = json!(f);
     }
-    if let Some(r) = run {
-        if let Some(s) = r.stage {
-            out["stage"] = json!(s);
-        }
-        if let Some(p) = r.progress {
-            out["progress"] = json!(p);
-        }
-        if let Some(e) = r.error {
-            out["error"] = failure_json(&e, detail);
-        }
-        if let Some(e) = r.lyrics_error {
-            out["lyricsError"] = failure_json(&e, detail);
-        }
+    let (stage, progress) = match (&run, worker) {
+        (Some(r), _) => (r.stage, r.progress),
+        (None, Some(w)) if w.leased && !ready => (Some("separate"), w.progress),
+        _ => (None, None),
+    };
+    if let Some(s) = stage {
+        out["stage"] = json!(s);
+    }
+    if let Some(p) = progress {
+        out["progress"] = json!(p);
+    }
+    if let Some(e) = error.filter(|_| state == "failed") {
+        out["error"] = failure_json(&e, detail);
+    }
+    if let Some(e) = recorded.and_then(|f| f.lyrics_error) {
+        out["lyricsError"] = failure_json(&e, detail);
     }
     Ok(out)
 }
 
-/// Sets `karaoke` on each track of an album detail: the state, stage and progress of its running job, else null.
-pub(crate) fn tag_tracks(st: &AppState, album: &mut Value) {
-    let runs = st.karaoke.runs.lock_clean();
+/// Sets `karaoke` on each track of an album detail: its running job, `ready` when its stems exist, else null.
+pub(crate) async fn tag_tracks(st: &AppState, album: &mut Value) -> sqlx::Result<()> {
+    let ids: Vec<i32> = album["tracks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|t| t["itemId"].as_i64().map(|i| i as i32))
+        .collect();
+    let ready: HashSet<i32> = store::ready_tracks(&st.db, &ids)
+        .await?
+        .into_iter()
+        .collect();
+    tag(album, &st.karaoke.runs.lock_clean(), &ready);
+    Ok(())
+}
+
+fn tag(album: &mut Value, runs: &HashMap<i32, run::RunState>, ready: &HashSet<i32>) {
     for t in album["tracks"].as_array_mut().into_iter().flatten() {
-        let job = t["itemId"]
-            .as_i64()
-            .and_then(|i| runs.get(&(i as i32)))
-            .filter(|r| r.active());
-        t["karaoke"] = job.map_or(
-            Value::Null,
-            |r| json!({"state": r.state, "stage": r.stage, "progress": r.progress}),
-        );
+        let id = t["itemId"].as_i64().map(|i| i as i32);
+        t["karaoke"] = match id.and_then(|i| runs.get(&i)) {
+            Some(r) => json!({"state": r.state, "stage": r.stage, "progress": r.progress}),
+            None if id.is_some_and(|i| ready.contains(&i)) => {
+                json!({"state": "ready", "stage": null, "progress": null})
+            }
+            None => Value::Null,
+        };
     }
 }
 
@@ -453,6 +538,20 @@ pub struct PrepareDto {
     force: bool,
 }
 
+/// A refusal of the karaoke routes: the code as `message`, its translation key as `key`.
+pub(crate) fn refusal(status: StatusCode, code: &str) -> AppError {
+    let key = format!("karaoke.error.{}", code.trim_start_matches("karaoke_"));
+    AppError::with_message(status, code).keyed(&key, json!({}))
+}
+
+pub(crate) fn disabled() -> AppError {
+    refusal(StatusCode::CONFLICT, "karaoke_disabled")
+}
+
+pub(crate) fn unavailable() -> AppError {
+    refusal(StatusCode::SERVICE_UNAVAILABLE, "karaoke_unavailable")
+}
+
 #[utoipa::path(post, path = "/api/items/{itemId}/karaoke", responses((status = 200), (status = 202), (status = 409), (status = 429), (status = 503)))]
 pub async fn prepare(
     State(st): State<AppState>,
@@ -466,13 +565,7 @@ pub async fn prepare(
         a.require(Action::Update, Subject::Media)?;
     }
     if !settings::flag(&st.db, "karaoke.enabled", false).await {
-        return Err(AppError::conflict("karaoke_disabled"));
-    }
-    if !caps(&st).await.separate {
-        return Err(AppError::with_message(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "karaoke_unavailable",
-        ));
+        return Err(disabled());
     }
     let opts = run::Opts {
         align: dto.align.unwrap_or(true),
@@ -488,24 +581,19 @@ pub async fn prepare(
         run::Start::Started(_) => StatusCode::ACCEPTED,
         run::Start::Idle => StatusCode::OK,
         run::Start::Refused(run::Refusal::Busy) => {
-            return Err(AppError::with_message(
-                StatusCode::TOO_MANY_REQUESTS,
-                "karaoke_busy",
-            ));
+            return Err(refusal(StatusCode::TOO_MANY_REQUESTS, "karaoke_busy"));
         }
         run::Start::Refused(run::Refusal::Full) => {
-            return Err(AppError::with_message(
+            return Err(refusal(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "karaoke_storage_full",
             ));
         }
-        run::Start::Refused(run::Refusal::Unavailable) => {
-            return Err(AppError::with_message(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "karaoke_unavailable",
-            ));
-        }
+        run::Start::Refused(run::Refusal::Unavailable) => return Err(unavailable()),
     };
+    if let Some(f) = store::track_file(&st.db, item).await? {
+        store::touch(&st.db, f).await?;
+    }
     Ok((status, Json(state_of(&st, &a, item).await?)))
 }
 
@@ -517,6 +605,7 @@ pub async fn remove(
 ) -> Result<StatusCode, AppError> {
     a.require(Action::Update, Subject::Media)?;
     crate::music::assert_track(&st, &a, item).await?;
+    run::cancel(&st, item).await;
     let files: Vec<i32> =
         sqlx::query_scalar(r#"SELECT "mediaFileId" FROM item_parts WHERE "itemId" = $1"#)
             .bind(item)
@@ -527,12 +616,8 @@ pub async fn remove(
         .bind(item)
         .execute(&st.db)
         .await?;
-    {
-        let mut runs = st.karaoke.runs.lock_clean();
-        if runs.get(&item).is_some_and(|r| !r.active()) {
-            runs.remove(&item);
-        }
-    }
+    store::forget_failure(&st.db, item).await?;
+    st.karaoke.skipped.lock_clean().remove(&item);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -544,22 +629,8 @@ pub async fn stem(
     Path((file, kind)): Path<(i32, String)>,
     req: Request,
 ) -> Result<Response, AppError> {
-    let from_start = req
-        .headers()
-        .get(header::RANGE)
-        .and_then(|v| v.to_str().ok())
-        .is_none_or(|r| r.starts_with("bytes=0-"));
-    let path = stem_path(&st, auth, file, &kind, from_start).await?;
-    let mime = mime_of(&path).parse().expect("mime");
-    let mut res = ServeFile::new_with_mime(&path, &mime)
-        .oneshot(req)
-        .await
-        .map_or_else(|e| match e {}, |r| r.map(Body::new));
-    res.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("private, max-age=0"),
-    );
-    Ok(res)
+    let path = stem_path(&st, auth, file, &kind).await?;
+    Ok(serve_whole(&path, mime_of(&path), req).await)
 }
 
 #[derive(Deserialize)]
@@ -576,29 +647,23 @@ pub async fn stem_pcm(
     Path((file, kind)): Path<(i32, String)>,
     Query(q): Query<PcmQuery>,
 ) -> Result<Response, AppError> {
-    let from = q.from.unwrap_or(0.0);
-    let path = stem_path(&st, auth, file, &kind, from <= 0.0).await?;
+    let path = stem_path(&st, auth, file, &kind).await?;
     let pcm = crate::pcm::rendition(&st, file, std::path::Path::new(&path)).await?;
-    crate::pcm::serve(&pcm, from, q.to).await
+    crate::pcm::serve(&pcm, q.from.unwrap_or(0.0), q.to).await
 }
 
-/// The stem file of `kind` for `file`, after the credential and track checks of rule 20.
-async fn stem_path(
+/// The credential and track checks of rule 20 for `file`; `not_found` names what is missing.
+async fn check_track_file(
     st: &AppState,
     auth: FileBoundAuthed,
     file: i32,
-    kind: &str,
-    from_start: bool,
-) -> Result<String, AppError> {
+    not_found: fn() -> AppError,
+) -> Result<(), AppError> {
     let FileBoundAuthed { auth, bound_file } = auth;
     if bound_file.is_some_and(|b| i64::from(b) != i64::from(file)) {
         return Err(AppError::bare(StatusCode::UNAUTHORIZED));
     }
     auth.require(Action::Read, Subject::Media)?;
-    let not_found = || AppError::not_found("Stem not found");
-    if !store::KINDS.contains(&kind) {
-        return Err(not_found());
-    }
     let item: i32 = sqlx::query_scalar(
         r#"SELECT ip."itemId" FROM item_parts ip JOIN track_details td ON td."itemId" = ip."itemId"
            WHERE ip."mediaFileId" = $1 LIMIT 1"#,
@@ -607,10 +672,38 @@ async fn stem_path(
     .fetch_optional(&st.db)
     .await?
     .ok_or_else(not_found)?;
-    crate::music::assert_track(st, &auth, item).await?;
-    store::serve(&st.db, file, kind, from_start)
+    crate::music::assert_track(st, &auth, item).await
+}
+
+/// The stem file of `kind` for `file`, after the checks of rule 20.
+async fn stem_path(
+    st: &AppState,
+    auth: FileBoundAuthed,
+    file: i32,
+    kind: &str,
+) -> Result<String, AppError> {
+    let not_found = || AppError::not_found("Stem not found");
+    if !store::KINDS.contains(&kind) {
+        return Err(not_found());
+    }
+    check_track_file(st, auth, file, not_found).await?;
+    store::serve(&st.db, file, kind)
         .await?
         .ok_or_else(not_found)
+}
+
+/// A whole file with byte ranges, never cached by the browser across sessions.
+async fn serve_whole(path: &str, mime: &str, req: Request) -> Response {
+    let mime = mime.parse().expect("mime");
+    let mut res = ServeFile::new_with_mime(path, &mime)
+        .oneshot(req)
+        .await
+        .map_or_else(|e| match e {}, |r| r.map(Body::new));
+    res.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, max-age=0"),
+    );
+    res
 }
 
 /// Rule 32: the `.cdg` of the track of `file`, served whole like a stem (same credentials).
@@ -621,35 +714,13 @@ pub async fn cdg_file(
     Path(file): Path<i32>,
     req: Request,
 ) -> Result<Response, AppError> {
-    let FileBoundAuthed { auth, bound_file } = auth;
-    if bound_file.is_some_and(|b| i64::from(b) != i64::from(file)) {
-        return Err(AppError::bare(StatusCode::UNAUTHORIZED));
-    }
-    auth.require(Action::Read, Subject::Media)?;
     let not_found = || AppError::not_found("Graphics not found");
-    let item: i32 = sqlx::query_scalar(
-        r#"SELECT ip."itemId" FROM item_parts ip JOIN track_details td ON td."itemId" = ip."itemId"
-           WHERE ip."mediaFileId" = $1 LIMIT 1"#,
-    )
-    .bind(file)
-    .fetch_optional(&st.db)
-    .await?
-    .ok_or_else(not_found)?;
-    crate::music::assert_track(&st, &auth, item).await?;
+    check_track_file(&st, auth, file, not_found).await?;
     let (audio, _) = crate::ingest::post_import::file_path(&st, file)
         .await?
         .ok_or_else(not_found)?;
     let path = cdg::sidecar(&audio).await.ok_or_else(not_found)?;
-    let mime = "application/octet-stream".parse().expect("mime");
-    let mut res = ServeFile::new_with_mime(&path, &mime)
-        .oneshot(req)
-        .await
-        .map_or_else(|e| match e {}, |r| r.map(Body::new));
-    res.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("private, max-age=0"),
-    );
-    Ok(res)
+    Ok(serve_whole(&path.to_string_lossy(), "application/octet-stream", req).await)
 }
 
 /// The type of a stem file: Ogg Opus from a run, whatever an UltraStar import named.
@@ -678,6 +749,16 @@ mod tests {
     }
 
     #[test]
+    fn karaoke_settings_are_refused_when_malformed() {
+        assert!(validate_setting("karaoke.disk_budget_mb", "100").is_err());
+        assert!(validate_setting("karaoke.disk_budget_mb", "4096").is_ok());
+        assert!(validate_setting("karaoke.queue_cap", "21").is_err());
+        assert!(validate_setting("karaoke.verified_providers", r#"["cuda","gpu"]"#).is_err());
+        assert!(validate_setting("karaoke.verified_providers", r#"["cuda"]"#).is_ok());
+        assert!(validate_setting("karaoke.verified_providers", "cuda").is_err());
+    }
+
+    #[test]
     fn only_a_verified_gpu_provider_the_engine_lists_counts() {
         let feats = s(&["onnx", "onnx-cuda", "onnx-openvino", "onnx-coreml"]);
         assert_eq!(gpu_provider(&feats, &s(&["coreml"])), Some("coreml".into()));
@@ -692,15 +773,15 @@ mod tests {
 
     #[test]
     fn a_failure_is_a_code_with_params_and_the_message_stays_with_managers() {
-        let low = run::Failure::LyricsNotFoundInVocals {
+        let low = json!(run::Failure::LyricsNotFoundInVocals {
             matched: 12,
             min: 17,
-        };
+        });
         assert_eq!(
             failure_json(&low, false),
             json!({"code": "lyrics_not_found_in_vocals", "matched": 12, "min": 17})
         );
-        let other = run::Failure::from("engine said no");
+        let other = json!(run::Failure::from("engine said no"));
         assert_eq!(
             failure_json(&other, true),
             json!({"code": "failed", "message": "engine said no"})
@@ -713,10 +794,10 @@ mod tests {
             state,
             stage: None,
             progress: None,
-            error: None,
-            lyrics_error: None,
             user,
             viewers: Arc::from([]),
+            cancelled: Arc::default(),
+            job: None,
         }
     }
 
@@ -728,30 +809,19 @@ mod tests {
         assert_eq!(run::admit(&runs, 3, None), run::Admit::Go);
         assert_eq!(run::admit(&runs, 1, Some(7)), run::Admit::Join);
         assert_eq!(run::admit(&runs, 1, Some(8)), run::Admit::Join);
-        runs.insert(2, run(Some(7), "failed"));
+        runs.remove(&2);
         assert_eq!(run::admit(&runs, 3, Some(7)), run::Admit::Go);
     }
 
-    #[tokio::test]
-    async fn an_album_detail_tags_each_track_with_its_active_job_or_null() {
-        let pool = sqlx::PgPool::connect_lazy("postgres://unused@localhost/unused").unwrap();
-        let st = AppState::new(
-            pool,
-            crate::config::Config::from_lookup(|_| None),
-            "0123456789abcdef0123456789abcdef",
-        );
+    #[test]
+    fn an_album_detail_tags_each_track_with_its_job_ready_or_null() {
         let mut running = run(None, "running");
         running.progress = Some(0.4);
         running.stage = Some("align");
-        {
-            let mut runs = st.karaoke.runs.lock_clean();
-            runs.insert(1, run(None, "queued"));
-            runs.insert(2, running);
-            runs.insert(3, run(None, "failed"));
-        }
+        let runs = HashMap::from([(1, run(None, "queued")), (2, running)]);
         let mut album =
             json!({"tracks": [{"itemId": 1}, {"itemId": 2}, {"itemId": 3}, {"itemId": 4}]});
-        tag_tracks(&st, &mut album);
+        tag(&mut album, &runs, &HashSet::from([2, 3]));
         let tag = |i: usize| album["tracks"][i]["karaoke"].clone();
         assert_eq!(
             tag(0),
@@ -761,7 +831,11 @@ mod tests {
             tag(1),
             json!({"state": "running", "stage": "align", "progress": 0.4})
         );
-        assert_eq!((tag(2), tag(3)), (Value::Null, Value::Null));
+        assert_eq!(
+            tag(2),
+            json!({"state": "ready", "stage": null, "progress": null})
+        );
+        assert_eq!(tag(3), Value::Null);
     }
 
     fn model(
@@ -820,29 +894,35 @@ mod state_tests {
             state,
             stage: None,
             progress: None,
-            error: None,
-            lyrics_error: None,
             user: None,
             viewers: Vec::new().into(),
+            cancelled: Arc::default(),
+            job: None,
         }
     }
 
     #[test]
-    fn the_state_follows_the_rows_once_a_run_is_over() {
+    fn a_live_run_decides_then_the_stems_then_a_worker_then_the_recorded_failure() {
+        let leased = Some(remote::WorkerJob {
+            leased: true,
+            progress: Some(40.0),
+        });
+        let waiting = Some(remote::WorkerJob {
+            leased: false,
+            progress: None,
+        });
         let cases = [
-            (Some("running"), true, false, "running"),
-            (Some("queued"), false, true, "queued"),
-            (Some("ready"), true, false, "ready"),
-            (Some("ready"), false, false, "none"),
-            (Some("failed"), true, false, "ready"),
-            (Some("failed"), false, false, "failed"),
-            (Some("failed"), false, true, "queued"),
-            (None, false, true, "queued"),
-            (None, false, false, "none"),
+            (Some("running"), true, None, false, "running"),
+            (Some("queued"), false, waiting, true, "queued"),
+            (None, true, leased, true, "ready"),
+            (None, false, leased, true, "running"),
+            (None, false, waiting, true, "queued"),
+            (None, false, None, true, "failed"),
+            (None, false, None, false, "none"),
         ];
-        for (r, ready, worker, want) in cases {
+        for (r, ready, worker, failed, want) in cases {
             let r = r.map(run);
-            assert_eq!(derive_state(r.as_ref(), ready, worker), want);
+            assert_eq!(derive_state(r.as_ref(), ready, worker, failed), want);
         }
     }
 }

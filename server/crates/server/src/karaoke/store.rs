@@ -4,7 +4,7 @@ use crate::{paths, state::AppState};
 use sqlx::PgPool;
 use std::path::{Path, PathBuf};
 
-pub const KINDS: [&str; 3] = ["vocals", "instrumental", "guide"];
+pub const KINDS: [&str; 2] = ["vocals", "instrumental"];
 /// A row this young is in use by the run that made it: eviction leaves it.
 const EVICT_GRACE_MINUTES: i32 = 10;
 /// A drift above this between the file and its stems is a different recording (`music.md` rule 65).
@@ -44,25 +44,60 @@ pub async fn rows(db: &PgPool, file: i32) -> sqlx::Result<Vec<Row>> {
 /// The provider of an imported stem (an UltraStar `#VOCALS`/`#INSTRUMENTAL` file), kept by eviction and model changes.
 pub const IMPORT: &str = "import";
 
-/// The stems of `file` when both imports exist on disk, or all three exist and were made by `model`.
-pub async fn valid(db: &PgPool, file: i32, model: &str, version: &str) -> sqlx::Result<bool> {
+/// The file a track's stems derive from, as SQL over the item expression `item`: its newest version, what plays.
+pub(crate) fn track_file_sql(item: &str) -> String {
+    format!(
+        r#"SELECT ip."mediaFileId" FROM item_parts ip WHERE ip."itemId" = {item}
+           ORDER BY ip.version DESC, ip.position LIMIT 1"#
+    )
+}
+
+pub async fn track_file(db: &PgPool, item: i32) -> sqlx::Result<Option<i32>> {
+    sqlx::query_scalar(sqlx::AssertSqlSafe(track_file_sql("$1")))
+        .bind(item)
+        .fetch_optional(db)
+        .await
+}
+
+/// The track whose stems `file` holds: the item it is the [`track_file`] of.
+pub async fn track_of(db: &PgPool, file: i32) -> sqlx::Result<Option<i32>> {
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        r#"SELECT p."itemId" FROM item_parts p WHERE p."mediaFileId" = $1
+           AND p."mediaFileId" = ({}) ORDER BY p."itemId" LIMIT 1"#,
+        track_file_sql(r#"p."itemId""#)
+    )))
+    .bind(file)
+    .fetch_optional(db)
+    .await
+}
+
+/// The kinds `file` still needs from `Separate`: neither imported nor made by `model` (`None`: only imports count).
+pub async fn missing(
+    db: &PgPool,
+    file: i32,
+    model: Option<(&str, &str)>,
+) -> sqlx::Result<Vec<&'static str>> {
     let rows = rows(db, file).await?;
-    let on_disk = |k: &str, imported: bool| {
-        rows.iter().any(|r| {
-            r.kind == k && (r.provider == IMPORT) == imported && Path::new(&r.path).is_file()
-        })
-    };
-    if on_disk("vocals", true) && on_disk("instrumental", true) {
-        return Ok(true);
+    let mut out = vec![];
+    for k in KINDS {
+        let mut held = false;
+        for r in rows.iter().filter(|r| r.kind == k) {
+            let current = r.provider == IMPORT
+                || model.is_some_and(|(m, v)| r.model == m && r.model_version == v);
+            if current && tokio::fs::try_exists(&r.path).await.unwrap_or(false) {
+                held = true;
+            }
+        }
+        if !held {
+            out.push(k);
+        }
     }
-    Ok(KINDS.iter().all(|k| {
-        rows.iter().any(|r| {
-            r.kind == *k
-                && r.model == model
-                && r.model_version == version
-                && Path::new(&r.path).is_file()
-        })
-    }))
+    Ok(out)
+}
+
+/// Every kind of `file` is imported or made by `model`, on disk.
+pub async fn valid(db: &PgPool, file: i32, model: &str, version: &str) -> sqlx::Result<bool> {
+    Ok(missing(db, file, Some((model, version))).await?.is_empty())
 }
 
 pub struct New<'a> {
@@ -78,9 +113,19 @@ pub struct New<'a> {
 
 /// Replaces the row of `(file, kind)`; the file it named before is removed.
 pub async fn put(db: &PgPool, n: &New<'_>) -> sqlx::Result<()> {
-    let old = put_in(&mut *db.acquire().await?, n).await?;
-    if let Some(old) = old {
-        let _ = tokio::fs::remove_file(old).await;
+    put_all(db, std::slice::from_ref(n)).await
+}
+
+/// [`put`] of several rows in one transaction, so a failure leaves the earlier set whole.
+pub async fn put_all(db: &PgPool, rows: &[New<'_>]) -> sqlx::Result<()> {
+    let mut tx = db.begin().await?;
+    let mut old = vec![];
+    for n in rows {
+        old.extend(put_in(&mut tx, n).await?);
+    }
+    tx.commit().await?;
+    for o in old {
+        let _ = tokio::fs::remove_file(o).await;
     }
     Ok(())
 }
@@ -114,27 +159,22 @@ pub async fn put_in(db: &mut sqlx::PgConnection, n: &New<'_>) -> sqlx::Result<Op
     Ok(old.filter(|o| o != n.path))
 }
 
-/// The file of a served stem; a request that starts the file marks every stem of it as used.
-pub async fn serve(
-    db: &PgPool,
-    file: i32,
-    kind: &str,
-    start: bool,
-) -> sqlx::Result<Option<String>> {
-    let path: Option<String> = sqlx::query_scalar(
-        r#"SELECT path FROM derived_audio WHERE "mediaFileId" = $1 AND kind = $2"#,
-    )
-    .bind(file)
-    .bind(kind)
-    .fetch_optional(db)
-    .await?;
-    if start && path.is_some() {
-        sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() WHERE "mediaFileId" = $1"#)
-            .bind(file)
-            .execute(db)
-            .await?;
-    }
-    Ok(path)
+/// The file of a served stem.
+pub async fn serve(db: &PgPool, file: i32, kind: &str) -> sqlx::Result<Option<String>> {
+    sqlx::query_scalar(r#"SELECT path FROM derived_audio WHERE "mediaFileId" = $1 AND kind = $2"#)
+        .bind(file)
+        .bind(kind)
+        .fetch_optional(db)
+        .await
+}
+
+/// Marks every stem of `file` as used: a karaoke request for its track (rule 14).
+pub async fn touch(db: &PgPool, file: i32) -> sqlx::Result<()> {
+    sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() WHERE "mediaFileId" = $1"#)
+        .bind(file)
+        .execute(db)
+        .await
+        .map(drop)
 }
 
 async fn unlink(paths: Vec<String>) -> u64 {
@@ -165,7 +205,10 @@ pub async fn import(
     .fetch_optional(db)
     .await
     .map_err(std::io::Error::other)?;
-    if held.is_some_and(|(p, s)| s == size && Path::new(&p).is_file()) {
+    if let Some((p, s)) = held
+        && s == size
+        && tokio::fs::try_exists(&p).await.unwrap_or(false)
+    {
         return Ok(());
     }
     let ext = src
@@ -233,27 +276,6 @@ pub async fn invalidate_if_replaced(db: &PgPool, file: i32, duration_ms: i32) ->
     Ok(unlink(paths).await)
 }
 
-/// A deleted model takes its stems with it.
-pub async fn invalidate_model(db: &PgPool, model: &str) -> sqlx::Result<u64> {
-    let paths = sqlx::query_scalar("DELETE FROM derived_audio WHERE model = $1 RETURNING path")
-        .bind(model)
-        .fetch_all(db)
-        .await?;
-    Ok(unlink(paths).await)
-}
-
-/// Stems of another model or version than the one the host picks (rule 12).
-pub async fn invalidate_stale_models(db: &PgPool, model: &str, version: &str) -> sqlx::Result<u64> {
-    let paths = sqlx::query_scalar(
-        r#"DELETE FROM derived_audio WHERE provider <> 'import' AND (model <> $1 OR "modelVersion" <> $2) RETURNING path"#,
-    )
-    .bind(model)
-    .bind(version)
-    .fetch_all(db)
-    .await?;
-    Ok(unlink(paths).await)
-}
-
 /// A `separate` job of `file` is in one of `states`.
 pub async fn worker_separating(db: &PgPool, file: i32, states: &[&str]) -> sqlx::Result<bool> {
     sqlx::query_scalar(
@@ -289,7 +311,7 @@ pub async fn drop_missing(db: &PgPool) -> sqlx::Result<u64> {
             .await?;
     let mut removed = 0;
     for (file, kind, path) in rows {
-        if Path::new(&path).is_file() {
+        if tokio::fs::try_exists(&path).await.unwrap_or(true) {
             continue;
         }
         removed += sqlx::query(
@@ -314,34 +336,151 @@ pub async fn total(db: &PgPool) -> sqlx::Result<i64> {
     .await
 }
 
-/// Tracks with a file and no valid stems, newest first, leaving out `failed` (rule 16): a file with both
-/// imports is done, like [`valid`].
+/// Rule 16: tracks lacking a stem of `model`, then with `sync` those with lyrics and no word timing.
 pub async fn unprepared(
     db: &PgPool,
-    failed: &[i32],
+    skip: &[i32],
     limit: i64,
-    profile: &str,
+    model: (&str, &str),
+    sync: bool,
 ) -> sqlx::Result<Vec<i32>> {
-    sqlx::query_scalar(
-        r#"SELECT i.id FROM items i JOIN track_details td ON td."itemId" = i.id
-           JOIN item_parts ip ON ip."itemId" = i.id AND ip.version = (
-             SELECT min(version) FROM item_parts WHERE "itemId" = i.id)
-           WHERE (SELECT count(*) FROM derived_audio d WHERE d."mediaFileId" = ip."mediaFileId") < 3
-             AND (SELECT count(DISTINCT d.kind) FROM derived_audio d
-                  WHERE d."mediaFileId" = ip."mediaFileId" AND d.provider = 'import') < 2
-             AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = ip."mediaFileId"
-                             AND j.kind = 'separate' AND j.state IN ('queued', 'leased'))
-             AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = ip."mediaFileId"
-                             AND j.kind = 'separate' AND j.state IN ('cancelled', 'failed')
-                             AND j."profileHash" = $3)
-             AND i.id <> ALL($1)
-           ORDER BY i.id DESC LIMIT $2"#,
-    )
-    .bind(failed)
+    let profile = super::remote::profile_of(&(model.0.to_owned(), model.1.to_owned()));
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        r#"SELECT id FROM (
+             SELECT i.id, f.file,
+               (SELECT count(DISTINCT d.kind) FROM derived_audio d WHERE d."mediaFileId" = f.file
+                  AND (d.provider = 'import' OR (d.model = $4 AND d."modelVersion" = $5))) AS held,
+               EXISTS (SELECT 1 FROM derived_audio d WHERE d."mediaFileId" = f.file) AS stale
+             FROM items i JOIN track_details td ON td."itemId" = i.id
+             JOIN LATERAL ({}) f(file) ON true
+             WHERE i.id <> ALL($1)
+               AND NOT EXISTS (SELECT 1 FROM karaoke_failures kf WHERE kf."itemId" = i.id
+                               AND kf.error ->> 'code' = 'failed')) t
+           WHERE (held < {kinds}
+                  AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j."mediaFileId" = t.file AND j.kind = 'separate'
+                                  AND (j.state IN ('queued', 'leased')
+                                       OR (j.state IN ('cancelled', 'failed') AND j."profileHash" = $3))))
+              OR (held >= {kinds} AND $6
+                  AND EXISTS (SELECT 1 FROM lyrics l WHERE l."itemId" = t.id AND l.kind = 'main'
+                              AND l.source <> 'generated')
+                  AND NOT EXISTS (SELECT 1 FROM lyrics l WHERE l."itemId" = t.id AND l.kind = 'main'
+                                  AND l.sync = 'word'))
+           ORDER BY held >= {kinds}, stale, id DESC LIMIT $2"#,
+        track_file_sql("i.id"),
+        kinds = KINDS.len()
+    )))
+    .bind(skip)
     .bind(limit)
     .bind(profile)
+    .bind(model.0)
+    .bind(model.1)
+    .bind(sync)
     .fetch_all(db)
     .await
+}
+
+/// The tracks of `items` whose [`track_file`] holds every kind.
+pub async fn ready_tracks(db: &PgPool, items: &[i32]) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        r#"SELECT t.id FROM unnest($1::int[]) t(id)
+           WHERE (SELECT count(DISTINCT d.kind) FROM derived_audio d
+                  WHERE d."mediaFileId" = ({})) >= {}"#,
+        track_file_sql("t.id"),
+        KINDS.len()
+    )))
+    .bind(items)
+    .fetch_all(db)
+    .await
+}
+
+/// The recorded failures of a track (rule 8): wire `Failure` objects and the rejected lyrics.
+#[derive(sqlx::FromRow, Debug, Clone)]
+pub struct Recorded {
+    pub error: Option<serde_json::Value>,
+    #[sqlx(rename = "lyricsError")]
+    pub lyrics_error: Option<serde_json::Value>,
+    #[sqlx(rename = "rejectedBy")]
+    pub rejected_by: Option<String>,
+    #[sqlx(rename = "rejectedText")]
+    pub rejected_text: Option<String>,
+}
+
+impl Recorded {
+    /// `(aligner, text digest)` of the lyrics the aligner last rejected.
+    pub fn rejected(&self) -> Option<(String, String)> {
+        self.rejected_by.clone().zip(self.rejected_text.clone())
+    }
+}
+
+pub async fn failure(db: &PgPool, item: i32) -> sqlx::Result<Option<Recorded>> {
+    sqlx::query_as(
+        r#"SELECT error, "lyricsError", "rejectedBy", "rejectedText" FROM karaoke_failures
+           WHERE "itemId" = $1"#,
+    )
+    .bind(item)
+    .fetch_optional(db)
+    .await
+}
+
+/// The failures of every track whose lyrics an aligner rejected.
+pub async fn rejections(db: &PgPool) -> sqlx::Result<Vec<(i32, String)>> {
+    sqlx::query_as(
+        r#"SELECT "itemId", "rejectedBy" FROM karaoke_failures WHERE "rejectedBy" IS NOT NULL"#,
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// Keeps what a run ended with: its failure, or none; the lyrics part only when a lyrics step ran.
+pub async fn record(
+    db: &PgPool,
+    item: i32,
+    done: &Result<super::run::Outcome, super::run::Failure>,
+) -> sqlx::Result<()> {
+    let json = |f: &super::run::Failure| serde_json::to_value(f).ok();
+    let (error, lyrics, lyrics_ran, rejected) = match done {
+        Err(e) => (json(e), None, false, None),
+        Ok(o) => (
+            None,
+            o.lyrics_error.as_ref().and_then(json),
+            o.lyrics_ran,
+            o.rejected.clone(),
+        ),
+    };
+    let (by, text) = rejected.unzip();
+    let mut tx = db.begin().await?;
+    sqlx::query(
+        r#"INSERT INTO karaoke_failures ("itemId", error, "lyricsError", "rejectedBy", "rejectedText")
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT ("itemId") DO UPDATE SET error = EXCLUDED.error,
+             "lyricsError" = CASE WHEN $6 THEN EXCLUDED."lyricsError" ELSE karaoke_failures."lyricsError" END,
+             "rejectedBy" = CASE WHEN $6 THEN EXCLUDED."rejectedBy" ELSE karaoke_failures."rejectedBy" END,
+             "rejectedText" = CASE WHEN $6 THEN EXCLUDED."rejectedText" ELSE karaoke_failures."rejectedText" END"#,
+    )
+    .bind(item)
+    .bind(error)
+    .bind(lyrics)
+    .bind(by)
+    .bind(text)
+    .bind(lyrics_ran)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"DELETE FROM karaoke_failures WHERE "itemId" = $1 AND error IS NULL
+             AND "lyricsError" IS NULL AND "rejectedBy" IS NULL"#,
+    )
+    .bind(item)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await
+}
+
+pub async fn forget_failure(db: &PgPool, item: i32) -> sqlx::Result<()> {
+    sqlx::query(r#"DELETE FROM karaoke_failures WHERE "itemId" = $1"#)
+        .bind(item)
+        .execute(db)
+        .await
+        .map(drop)
 }
 
 /// Rule 14: the file last used longest ago first, all its rows at once, until the total fits `budget` bytes.

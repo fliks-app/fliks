@@ -317,6 +317,7 @@ pub async fn heartbeat(
         },
     )
     .await;
+    crate::karaoke::remote::heartbeat(&st, id, req.progress).await;
     Ok(Json(JobHeartbeatResponse {
         lease_until: beat.lease_until.timestamp_millis() as f64,
         cancel: beat.cancel,

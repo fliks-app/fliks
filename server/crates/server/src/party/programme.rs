@@ -75,6 +75,20 @@ pub async fn add_items(
     Ok(Json(dto(&st, &row, me, true).await?))
 }
 
+/// The items of the programme after the playing row (all of them before the start), in order.
+pub async fn upcoming_items(st: &AppState, party: i32) -> sqlx::Result<Vec<i32>> {
+    let Some(row) = super::db::get(&st.db, party).await? else {
+        return Ok(vec![]);
+    };
+    let rows = super::db::programme_rows(&st.db, party).await?;
+    let from = (row.status == "live")
+        .then(|| row.item())
+        .flatten()
+        .and_then(|c| rows.iter().position(|r| same_row(&r.item, &c)))
+        .map_or(0, |i| i + 1);
+    Ok(rows[from..].iter().filter_map(|r| r.item.item_id).collect())
+}
+
 /// The host removes any row but the playing one; a member removes the upcoming rows they added.
 #[utoipa::path(delete, path = "/api/parties/{id}/programme/items/{itemId}", responses((status = 200)))]
 pub async fn remove_item(
