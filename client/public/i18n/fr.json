@@ -6167,8 +6167,7 @@
     "lyrics_sooner": "Afficher les paroles plus tôt",
     "lyrics_later": "Afficher les paroles plus tard",
     "lyrics_offset_hint": "Une valeur positive affiche les paroles plus tôt, pour tout le monde.",
-    "outdated": "Fait par un ancien modèle : {{steps}}",
-    "update": "Mettre à jour"
+    "outdated": "Fait par une ancienne version : {{steps}}"
   },
   "acquisition_queue": {
     "page_title": "Activité",

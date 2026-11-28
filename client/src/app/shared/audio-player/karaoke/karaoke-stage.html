@@ -123,6 +123,7 @@
             </button>
           </div>
         </div>
+        <p class="min-h-4 text-sm text-base-content/60" data-testid="karaoke-key-hint">{{ (keyBlocked() ?? 'karaoke.key_stems_off') | translate }}</p>
         @if (analysis(); as a) {
           <div class="flex flex-col gap-1 text-sm" data-testid="karaoke-analysis">
             @if (a.key) {
@@ -144,7 +145,6 @@
             }
           </div>
         }
-        <p class="min-h-4 text-sm text-base-content/60" data-testid="karaoke-key-hint">{{ (keyBlocked() ?? 'karaoke.key_stems_off') | translate }}</p>
         @if (canSing) {
           <div class="flex items-center justify-between gap-3">
             <span class="text-sm font-semibold">
@@ -169,7 +169,7 @@
           </div>
           <p class="min-h-4 text-sm text-base-content/60" [class.invisible]="calibrated() !== false">{{ 'karaoke.calibrate_failed' | translate }}</p>
         }
-        @if (canEdit() && doc().id && doc().synced) {
+        @if (canEdit() && !output() && doc().id && doc().synced) {
           <div class="flex items-center justify-between gap-3">
             <span class="text-sm font-semibold">
               {{ 'karaoke.lyrics_offset' | translate }}
@@ -188,10 +188,7 @@
           <p class="text-sm text-base-content/60">{{ 'karaoke.lyrics_offset_hint' | translate }}</p>
         }
         @if (stale()) {
-          <div class="flex items-center justify-between gap-3" data-testid="karaoke-stale">
-            <span class="text-sm">{{ 'karaoke.outdated' | translate: { steps: stale() } }}</span>
-            <button type="button" class="btn btn-sm" [disabled]="busy() || preparing()" (click)="karaoke.prepare({})" data-testid="karaoke-update">{{ 'karaoke.update' | translate }}</button>
-          </div>
+          <p class="text-sm text-base-content/60" data-testid="karaoke-stale">{{ 'karaoke.outdated' | translate: { steps: stale() } }}</p>
         }
         @if (canEdit()) {
           <div class="flex flex-col gap-2 border-t border-base-content/10 pt-3">

@@ -1,5 +1,6 @@
 import type { KaraokeAnalysis, KaraokeKey } from '../api/karaoke.models';
 import { readStored, writeStored } from '../../utils/local-flag';
+import type { LaneRange } from './pitch-lane';
 
 /** Under this correlation the key is a guess, not an estimate. */
 export const SURE_KEY = 0.5;
@@ -8,11 +9,6 @@ const VOICE_KEY = 'karaoke.voice';
 /** About a minute of voiced singing before the range is trusted. */
 const MIN_FRAMES = 3000;
 const SAVE_EVERY = 500;
-
-export interface Range {
-  low: number;
-  high: number;
-}
 
 const pc = (n: number) => ((n % 12) + 12) % 12;
 
@@ -27,10 +23,10 @@ export function noteName(midi: number, names: string[]): string {
 }
 
 /** Whether the shifted song sits in the voice, an octave away included since scoring folds octaves; null with no voice range. */
-export function fitsVoice(a: KaraokeAnalysis, shift: number, voice: Range | null): boolean | null {
+export function fitsVoice(a: KaraokeAnalysis, shift: number, voice: LaneRange | null): boolean | null {
   if (!voice) return null;
   const [lo, hi] = [Math.round(a.lowMidi) + shift, Math.round(a.highMidi) + shift];
-  return [-12, 0, 12].some((o) => lo + o >= voice.low - 1 && hi + o <= voice.high + 1);
+  return [-12, 0, 12].some((o) => lo + o >= voice.lo - 1 && hi + o <= voice.hi + 1);
 }
 
 /** This device's sung pitches per semitone, kept across songs; the 5th to 95th percentile is the voice's range. */
@@ -54,9 +50,9 @@ export class VoiceRange {
     writeStored(VOICE_KEY, JSON.stringify(this.counts));
   }
 
-  range(): Range | null {
+  range(): LaneRange | null {
     const total = this.counts.reduce((a, b) => a + b, 0);
-    return total < MIN_FRAMES ? null : { low: this.at(total * 0.05), high: this.at(total * 0.95) };
+    return total < MIN_FRAMES ? null : { lo: this.at(total * 0.05), hi: this.at(total * 0.95) };
   }
 
   private at(target: number): number {

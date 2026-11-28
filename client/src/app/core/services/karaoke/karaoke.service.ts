@@ -325,7 +325,8 @@ export class KaraokeService {
       await this.capture.start((raw) => {
         const lag = this.latencyMs();
         const f = { ...raw, t: raw.t - lag, lag };
-        if (f.midi !== null && this.voice.add(f.midi)) this.voiceRange.set(this.voice.range());
+        // No echo cancelling: only Instrumental keeps the record's voice out of the learned range.
+        if (f.midi !== null && this.audio.stemMode?.() === 'instrumental' && this.voice.add(f.midi)) this.voiceRange.set(this.voice.range());
         this.ingest(me, [f]);
         this.pending.push(f);
         if (this.pending.length >= MAX_FRAMES_PER_BATCH) this.flush();

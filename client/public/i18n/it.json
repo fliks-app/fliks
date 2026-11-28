@@ -6167,8 +6167,7 @@
     "lyrics_sooner": "Mostra il testo prima",
     "lyrics_later": "Mostra il testo dopo",
     "lyrics_offset_hint": "Un valore positivo mostra il testo prima, per tutti.",
-    "outdated": "Creato da un modello precedente: {{steps}}",
-    "update": "Aggiorna"
+    "outdated": "Creato da una versione precedente: {{steps}}"
   },
   "acquisition_queue": {
     "page_title": "Attività",

@@ -107,6 +107,7 @@ export class KaraokeStageComponent {
   });
   /** What the melody found, worded for the key the taps aim at; null when the server sent no analysis. */
   protected readonly analysis = computed(() => {
+    this.translate.currentLang();
     const a = this.karaoke.itemState()?.analysis;
     if (!a) return null;
     const shift = this.targetKey();
@@ -129,9 +130,11 @@ export class KaraokeStageComponent {
       details: details.filter(Boolean).join(' · '),
     };
   });
-  /** Steps an older model made, worded; the stage entry already asked for them to be redone. */
-  protected readonly stale = computed(() => (this.karaoke.itemState()?.stale ?? []).map((s) => this.translate.instant(`karaoke.admin.stage_${s}`) as string).join(' · '));
-  protected readonly preparing = computed(() => ['queued', 'running'].includes(this.karaoke.itemState()?.state ?? ''));
+  /** Steps an older model or engine made, worded; the stage entry already asked for them to be redone. */
+  protected readonly stale = computed(() => {
+    this.translate.currentLang();
+    return (this.karaoke.itemState()?.stale ?? []).map((s) => this.translate.instant(`karaoke.admin.stage_${s}`) as string).join(' · ');
+  });
   protected readonly hasLines = computed(() => this.doc().line.length > 0);
   protected readonly lineSeek = computed(() => this.seekable() && !this.party.active());
   /** The next programme rows with their singers, on the party's display. */

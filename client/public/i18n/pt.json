@@ -6152,8 +6152,8 @@
     "latency_reset": "Repor",
     "needs_model": "O karaoke precisa de um modelo de separação da voz",
     "track_ready": "Pronto para karaoke",
-    "tonics_major": "Do Re♭ Re Mi♭ Mi Fa Fa♯ Sol La♭ La Si♭ Si",
-    "tonics_minor": "Dom Do♯m Rem Mi♭m Mim Fam Fa♯m Solm Sol♯m Lam Si♭m Sim",
+    "tonics_major": "Dó Ré♭ Ré Mi♭ Mi Fá Fá♯ Sol Lá♭ Lá Si♭ Si",
+    "tonics_minor": "Dóm Dó♯m Rém Mi♭m Mim Fám Fá♯m Solm Sol♯m Lám Si♭m Sim",
     "key_or": "{{a}} ou {{b}}",
     "key_estimated": "Tonalidade estimada",
     "key_uncertain": "pouco fiável",
@@ -6167,8 +6167,7 @@
     "lyrics_sooner": "Mostrar a letra mais cedo",
     "lyrics_later": "Mostrar a letra mais tarde",
     "lyrics_offset_hint": "Um valor positivo mostra a letra mais cedo, para todos.",
-    "outdated": "Feito por um modelo anterior: {{steps}}",
-    "update": "Atualizar"
+    "outdated": "Feito por uma versão anterior: {{steps}}"
   },
   "acquisition_queue": {
     "page_title": "Atividade",

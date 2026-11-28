@@ -101,6 +101,8 @@ export class LyricsPanelComponent {
 
   private anchor = { pos: 0, at: 0 };
   private offsetTimer: ReturnType<typeof setTimeout> | null = null;
+  /** An offset shown but not saved yet: a reload in the meantime keeps it. */
+  private pendingOffset: { id: number; ms: number } | null = null;
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.session.stopSinging());
@@ -140,12 +142,25 @@ export class LyricsPanelComponent {
 
   /** Applies a row's offset at once and saves it once the nudges settle; a refused save reloads the stored one. */
   protected setOffset(id: number, ms: number): void {
-    this.res.update((r) => r && { ...r, structuredLyrics: r.structuredLyrics.map((d) => (d.id === id ? { ...d, offset: ms } : d)) });
+    this.pendingOffset = { id, ms };
+    this.applyOffset();
     if (this.offsetTimer) clearTimeout(this.offsetTimer);
     this.offsetTimer = setTimeout(() => {
       this.offsetTimer = null;
-      void this.api.patch(id, { offsetMs: ms }).catch(() => this.reload());
+      const sent = this.pendingOffset;
+      void this.api.patch(id, { offsetMs: ms }).then(
+        () => this.pendingOffset === sent && (this.pendingOffset = null),
+        () => {
+          if (this.pendingOffset === sent) this.pendingOffset = null;
+          return this.reload();
+        },
+      );
     }, OFFSET_SAVE_MS);
+  }
+
+  private applyOffset(): void {
+    const p = this.pendingOffset;
+    if (p) this.res.update((r) => r && { ...r, structuredLyrics: r.structuredLyrics.map((d) => (d.id === p.id ? { ...d, offset: p.ms } : d)) });
   }
 
   /** A generated sync the user keeps: a re-sync never replaces a reviewed row. */
@@ -163,6 +178,7 @@ export class LyricsPanelComponent {
       const r = await run();
       if (this.itemId() !== id) return;
       this.res.set(r);
+      this.applyOffset();
       this.found.emit(r.structuredLyrics.length > 0);
       this.layerId.set(null);
     } catch {

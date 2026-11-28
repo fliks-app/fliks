@@ -6167,8 +6167,7 @@
     "lyrics_sooner": "Show the lyrics sooner",
     "lyrics_later": "Show the lyrics later",
     "lyrics_offset_hint": "A positive value shows the lyrics sooner, for everyone.",
-    "outdated": "Made by an older model: {{steps}}",
-    "update": "Update"
+    "outdated": "Made by an older version: {{steps}}"
   },
   "acquisition_queue": {
     "page_title": "Activity",

@@ -209,7 +209,7 @@ describe('KaraokeStageComponent mix bar', () => {
   it('shows what a key shift lands on, its doubt and whether it fits the voice', () => {
     vi.useFakeTimers();
     const analysis = { tuningCents: 0, lowMidi: 57, highMidi: 69, key: { key: { tonic: 9, mode: 'minor' }, confidence: 0.3, alternative: { tonic: 0, mode: 'major' } } };
-    const { f, el } = create(undefined, { item: { stale: [], analysis }, voice: { low: 45, high: 56 } });
+    const { f, el } = create(undefined, { item: { stale: [], analysis }, voice: { lo: 45, hi: 56 } });
     expect(el.querySelector('[data-testid="karaoke-key-estimate"]')!.textContent).toContain('karaoke.key_uncertain');
     expect(el.querySelector('[data-testid="karaoke-range-fit"]')!.textContent).toContain('karaoke.range_fits');
     el.querySelector<HTMLButtonElement>('[aria-label="karaoke.key_up"]')!.click();

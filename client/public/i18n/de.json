@@ -6167,8 +6167,7 @@
     "lyrics_sooner": "Liedtext früher zeigen",
     "lyrics_later": "Liedtext später zeigen",
     "lyrics_offset_hint": "Ein positiver Wert zeigt den Liedtext früher, für alle.",
-    "outdated": "Von einem älteren Modell erstellt: {{steps}}",
-    "update": "Aktualisieren"
+    "outdated": "Von einer älteren Version erstellt: {{steps}}"
   },
   "acquisition_queue": {
     "page_title": "Aktivität",

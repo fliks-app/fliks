@@ -6167,8 +6167,7 @@
     "lyrics_sooner": "Mostrar la letra antes",
     "lyrics_later": "Mostrar la letra después",
     "lyrics_offset_hint": "Un valor positivo muestra la letra antes, para todos.",
-    "outdated": "Hecho por un modelo anterior: {{steps}}",
-    "update": "Actualizar"
+    "outdated": "Hecho por una versión anterior: {{steps}}"
   },
   "acquisition_queue": {
     "page_title": "Actividad",

@@ -16,9 +16,9 @@ describe('key analysis', () => {
 
   it('fits the voice an octave away, not a span wider than it', () => {
     expect(fitsVoice(song, 0, null)).toBeNull();
-    expect(fitsVoice(song, 0, { low: 45, high: 57 })).toBe(true);
-    expect(fitsVoice(song, 4, { low: 45, high: 57 })).toBe(false);
-    expect(fitsVoice(song, 0, { low: 50, high: 58 })).toBe(false);
+    expect(fitsVoice(song, 0, { lo: 45, hi: 57 })).toBe(true);
+    expect(fitsVoice(song, 4, { lo: 45, hi: 57 })).toBe(false);
+    expect(fitsVoice(song, 0, { lo: 50, hi: 58 })).toBe(false);
   });
 
   it('learns a range once enough was sung and keeps it', () => {
@@ -28,6 +28,6 @@ describe('key analysis', () => {
     for (let i = 0; i < 2000; i++) v.add(60 + (i % 5));
     v.add(100);
     v.save();
-    expect(new VoiceRange().range()).toEqual({ low: 55, high: 64 });
+    expect(new VoiceRange().range()).toEqual({ lo: 55, hi: 64 });
   });
 });
