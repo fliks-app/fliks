@@ -9,6 +9,11 @@ use serde::{Deserialize, Serialize};
 pub use lrc::to_lrc;
 
 /// `#VOCALS` and `#INSTRUMENTAL` of an UltraStar text (`None` when it is not one).
+/// An UltraStar text: its notes are authored, not measured.
+pub fn is_ultrastar(text: &str) -> bool {
+    ultrastar::looks_like(text)
+}
+
 pub fn ultrastar_stems(text: &str) -> Option<(Option<String>, Option<String>)> {
     ultrastar::stems(text)
 }

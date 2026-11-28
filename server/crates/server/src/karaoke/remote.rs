@@ -1,7 +1,5 @@
-//! Separation on optimization workers: leasing, eligibility and the commit of a worker's stems
-//! (`docs/spec/karaoke.md` rules 16-17, `library-optimize-workers.md`).
+//! Separation on optimization workers: eligibility and the commit of their stems (`karaoke.md` rules 16-17).
 use super::{run, store, verified_providers};
-use crate::sync::MutexExt;
 use crate::{
     events::SseEvent,
     http::AppError,
@@ -17,8 +15,7 @@ use serde_json::{Value, json};
 
 pub use crate::queue::remote::upload_path;
 
-/// Whether a registered worker takes `Separate` jobs: a token worker whose engine has the feature and
-/// an accepted provider, unless its last job failed on the model.
+/// A token worker with the feature and an accepted provider takes `Separate`, unless it failed on the model.
 pub fn eligible_now(
     w: &Worker,
     blocked: bool,
@@ -51,15 +48,50 @@ pub async fn eligible(st: &AppState, key: &str, w: &Worker) -> bool {
     )
 }
 
-/// A worker will take the file's `separate` job: it holds it, or it waits and one could.
-pub async fn held_by_worker(st: &AppState, file: i32) -> sqlx::Result<bool> {
-    if store::worker_separating(&st.db, file, &["leased"]).await? {
-        return Ok(true);
-    }
-    Ok(
-        store::worker_separating(&st.db, file, &["queued"]).await?
-            && eligible_workers(st).await > 0,
+/// The file's `separate` job a worker holds, or one waiting while a worker could take it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WorkerJob {
+    pub leased: bool,
+    /// The worker's percent, 0 to 100, once it reported one.
+    pub progress: Option<f64>,
+}
+
+pub async fn worker_job(st: &AppState, file: i32) -> sqlx::Result<Option<WorkerJob>> {
+    let job: Option<(String, Option<f32>)> = sqlx::query_as(
+        r#"SELECT state, progress FROM jobs WHERE "mediaFileId" = $1 AND kind = 'separate'
+             AND state IN ('queued', 'leased') ORDER BY state = 'leased' DESC LIMIT 1"#,
     )
+    .bind(file)
+    .fetch_optional(&st.db)
+    .await?;
+    Ok(match job {
+        Some((state, p)) if state == "leased" => Some(WorkerJob {
+            leased: true,
+            progress: p.filter(|p| *p > 0.0).map(|p| f64::from(p) * 100.0),
+        }),
+        Some(_) if eligible_workers(st).await > 0 => Some(WorkerJob {
+            leased: false,
+            progress: None,
+        }),
+        _ => None,
+    })
+}
+
+/// A worker's heartbeat on a `separate` job: the track's viewers see its progress.
+pub async fn heartbeat(st: &AppState, id: i64, progress: f64) {
+    let file: Option<i32> = sqlx::query_scalar(
+        r#"SELECT "mediaFileId" FROM jobs WHERE id = $1 AND kind = 'separate' AND state = 'leased'"#,
+    )
+    .bind(id)
+    .fetch_optional(&st.db)
+    .await
+    .ok()
+    .flatten();
+    if let Some(f) = file
+        && let Ok(Some(item)) = store::track_of(&st.db, f).await
+    {
+        run::announce_worker(st, item, progress.clamp(0.0, 1.0) * 100.0).await;
+    }
 }
 
 /// Live workers that take `Separate` jobs now.
@@ -73,7 +105,7 @@ pub async fn eligible_workers(st: &AppState) -> usize {
 
 /// `(model id, version)` of the main engine's installed separation model, the one stems must come from.
 pub async fn current_model(st: &AppState) -> Option<(String, String)> {
-    let models = st.engine.models().await.ok()?;
+    let models = super::engine_models(st).await.ok()?;
     let sep = run::installed_model(&models.models, ModelKind::Separation)?;
     Some((sep.id.clone(), sep.version.clone()))
 }
@@ -82,13 +114,19 @@ pub fn profile_of(model: &(String, String)) -> String {
     format!("karaoke:{}:{}", model.0, model.1)
 }
 
-/// Queues the separation of a track's first file; `false` when a job of that file is already active.
+/// Queues the separation of a track's file; `false` when its stems are valid or a job of it is active.
 pub async fn enqueue(st: &AppState, item: i32) -> Result<bool, String> {
     let t = run::track(st, item).await?;
     let info = t.info.clone().ok_or("the file was not probed")?;
     let sep = current_model(st)
         .await
         .ok_or("no separation model is installed")?;
+    if store::valid(&st.db, t.file, &sep.0, &sep.1)
+        .await
+        .map_err(|e| e.to_string())?
+    {
+        return Ok(false);
+    }
     let snap = snapshot(t.path.clone())
         .await
         .ok_or("the file is not readable")?;
@@ -136,18 +174,7 @@ fn db(e: sqlx::Error) -> AppError {
     e.into()
 }
 
-/// The first track item of a file, the one a stem set belongs to.
-async fn item_of(st: &AppState, file: i32) -> sqlx::Result<Option<i32>> {
-    sqlx::query_scalar(
-        r#"SELECT "itemId" FROM item_parts WHERE "mediaFileId" = $1 ORDER BY version LIMIT 1"#,
-    )
-    .bind(file)
-    .fetch_optional(&st.db)
-    .await
-}
-
-/// The result of a leased `Separate`: a failure is routed by its class, stems are verified, stored and
-/// the job row deleted (it never enters `staged`).
+/// A leased `Separate` ends: a failure goes by its class, stems are verified and kept, the job deleted.
 pub async fn result(
     st: &AppState,
     key: &str,
@@ -200,7 +227,7 @@ pub async fn result_for(
     if e.class == JobErrorClass::Model {
         st.queue.block_karaoke(key);
     }
-    after_failure(st, id, file).await;
+    after_failure(st).await;
     Ok(Json(json!({})))
 }
 
@@ -238,32 +265,20 @@ async fn drop_job(st: &AppState, key: &str, id: i64, attempt: i32) -> sqlx::Resu
     Ok(n > 0)
 }
 
-/// A job that landed `failed` leaves its item out of the pass for this profile and until a restart.
-async fn after_failure(st: &AppState, id: i64, file: Option<i32>) {
+/// A job that landed `failed` stays: `unprepared` leaves its track out for this model.
+async fn after_failure(st: &AppState) {
     crate::queue::remote::sweep(st).await;
     st.queue.wake.notify_waiters();
-    let failed: Option<String> = sqlx::query_scalar("SELECT state FROM jobs WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&st.db)
-        .await
-        .ok()
-        .flatten();
-    if failed.as_deref() == Some("failed")
-        && let Some(file) = file
-        && let Ok(Some(item)) = item_of(st, file).await
-    {
-        st.karaoke.failed.lock_clean().insert(item);
-    }
 }
 
-/// Each of the three stems must match its upload (size and SHA-256).
+/// Each stem the host keeps must match its upload (size and SHA-256); a `guide` upload is ignored.
 async fn verify(
     st: &AppState,
     id: i64,
     attempt: i32,
     out: &fliks_engine_core::api::SeparateOutput,
 ) -> Option<JobError> {
-    for name in STEM_NAMES {
+    for name in store::KINDS {
         let Some(stem) = out.stems.iter().find(|s| s.name == name) else {
             return Some(error(
                 JobErrorClass::Network,
@@ -296,11 +311,22 @@ async fn commit(
 ) -> Result<Json<Value>, AppError> {
     let conflict = || AppError::bare(axum::http::StatusCode::CONFLICT);
     let item = match file {
-        Some(f) => item_of(st, f).await.map_err(db)?.map(|i| (f, i)),
+        Some(f) => store::track_of(&st.db, f)
+            .await
+            .map_err(db)?
+            .map(|i| (f, i)),
         None => None,
     };
-    // Stems of another version than the main engine's would be invalidated at once.
+    // Stems of another version than the main engine's would be separated again at once.
     let wanted = current.is_none_or(|m| *m == (out.model.clone(), out.model_version.clone()));
+    if item.is_none() || !wanted {
+        tracing::info!(
+            job = id,
+            ?file,
+            wanted,
+            "karaoke worker stems discarded: no current track or model"
+        );
+    }
     let _separating = item
         .filter(|_| wanted)
         .map(|(f, _)| super::Separating::new(&st.karaoke, f));
@@ -314,7 +340,7 @@ async fn commit(
                 {
                     return Err(conflict());
                 }
-                after_failure(st, id, file).await;
+                after_failure(st).await;
                 return Ok(Json(json!({})));
             }
         },
@@ -377,11 +403,15 @@ async fn commit(
             melody: true,
             force: false,
         };
-        if matches!(
-            run::start(st, item, opts, JobPriority::Low, None).await,
-            run::Start::Idle
-        ) {
-            run::announce_ready(st, item).await;
+        match run::start(st, item, opts, JobPriority::Low, None).await {
+            run::Start::Idle => run::announce_ready(st, item).await,
+            run::Start::Refused(r) => {
+                tracing::warn!(
+                    "karaoke lyrics of item #{item} not started after a worker commit: {r:?}"
+                );
+                run::announce_ready(st, item).await;
+            }
+            run::Start::Started(_) => {}
         }
     }
     Ok(Json(json!({})))
@@ -413,7 +443,7 @@ impl Moved {
     }
 }
 
-/// Moves the uploads next to the stems of the file, unless the stems are already valid (nothing moves).
+/// Moves the uploads of the missing kinds next to the stems of the file (none when they are valid).
 async fn move_stems(
     st: &AppState,
     file: i32,
@@ -421,10 +451,10 @@ async fn move_stems(
     attempt: i32,
     out: &fliks_engine_core::api::SeparateOutput,
 ) -> Result<Vec<(String, Moved)>, String> {
-    if store::valid(&st.db, file, &out.model, &out.model_version)
+    let missing = store::missing(&st.db, file, Some((&out.model, &out.model_version)))
         .await
-        .map_err(|e| e.to_string())?
-    {
+        .map_err(|e| e.to_string())?;
+    if missing.is_empty() {
         return Ok(vec![]);
     }
     let dir = store::file_dir(file);
@@ -433,7 +463,7 @@ async fn move_stems(
         .map_err(|e| e.to_string())?;
     let tag = crate::config::random_hex(4);
     let mut moved: Vec<(String, Moved)> = vec![];
-    for name in STEM_NAMES {
+    for name in missing {
         let stem = out
             .stems
             .iter()

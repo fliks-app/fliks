@@ -600,7 +600,7 @@ async fn a_restore_blocked_on_the_row_lock_loses_to_a_purge_that_committed_first
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_user_request_takes_over_a_queued_separation_no_worker_will_take(pool: PgPool) {
+async fn a_user_request_takes_over_a_queued_separation_and_leaves_a_leased_one(pool: PgPool) {
     use crate::karaoke::{remote, store};
     let w = world(pool, json!([])).await;
     sqlx::query("UPDATE jobs SET state = 'done'")
@@ -615,15 +615,15 @@ async fn a_user_request_takes_over_a_queued_separation_no_worker_will_take(pool:
     .execute(&w.st.db)
     .await
     .unwrap();
-    // No eligible worker: the queued job is nobody's, and the takeover removes it.
-    assert!(!remote::held_by_worker(&w.st, w.file).await.unwrap());
+    // No eligible worker: the queued job shows nothing, and the takeover removes it.
+    assert_eq!(remote::worker_job(&w.st, w.file).await.unwrap(), None);
     assert_eq!(
         store::take_queued_separation(&w.st.db, w.file)
             .await
             .unwrap(),
         1
     );
-    // A leased job is a worker's: held, and the takeover leaves it.
+    // A leased job is a worker's: it runs, and the takeover leaves it.
     sqlx::query(
         r#"INSERT INTO jobs (id, kind, "mediaFileId", payload, "profileHash", state, attempt, "workerId", "leaseUntil")
            VALUES (3, 'separate', $1, '{}'::jsonb, 'h', 'leased', 1, 'w', now() + interval '1 minute')"#,
@@ -632,7 +632,12 @@ async fn a_user_request_takes_over_a_queued_separation_no_worker_will_take(pool:
     .execute(&w.st.db)
     .await
     .unwrap();
-    assert!(remote::held_by_worker(&w.st, w.file).await.unwrap());
+    assert!(
+        remote::worker_job(&w.st, w.file)
+            .await
+            .unwrap()
+            .is_some_and(|j| j.leased)
+    );
     assert_eq!(
         store::take_queued_separation(&w.st.db, w.file)
             .await

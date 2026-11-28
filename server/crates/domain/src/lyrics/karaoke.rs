@@ -63,23 +63,34 @@ pub fn retimed(doc: &Doc, offset_ms: f64, scale: f64) -> Doc {
     }
 }
 
-/// `doc` with the start of each `(request line, start)` moved to the aligned time, its duration kept.
+/// `doc` with each `(request line, start)` moved there, between its neighbours' starts, duration kept.
 pub fn snapped(doc: &Doc, req: &[Request], starts: &[(usize, i64)]) -> Doc {
     let mut out = doc.clone();
     for (i, start) in starts {
-        let Some(l) = req.get(*i).and_then(|r| out.lines.get_mut(r.source_line)) else {
+        let Some(at) = req.get(*i).map(|r| r.source_line) else {
             continue;
         };
-        if let Some(old) = l.start {
-            l.end = l.end.map(|e| start + (e - old).max(0));
-            l.start = Some(*start);
-        }
+        let Some(old) = out.lines.get(at).and_then(|l| l.start) else {
+            continue;
+        };
+        let lo = out.lines[..at]
+            .iter()
+            .rev()
+            .find_map(|l| l.start)
+            .unwrap_or(0);
+        let hi = out.lines[at + 1..]
+            .iter()
+            .find_map(|l| l.start)
+            .unwrap_or(i64::MAX);
+        let start = (*start).clamp(lo, hi.max(lo));
+        let l = &mut out.lines[at];
+        l.end = l.end.map(|e| start + (e - old).max(0));
+        l.start = Some(start);
     }
     out
 }
 
-/// The word-synced document of an alignment. Cues keep ascending, char-aligned, non-overlapping byte
-/// ranges inside their text (`to_lrc` slices on them): a word that breaks that is dropped.
+/// The word-synced document of an alignment; a word whose byte range `to_lrc` could not slice is dropped.
 pub fn from_alignment(src: &Doc, req: &[Request], placed: &[Placed]) -> Doc {
     let lines = placed
         .iter()
@@ -133,8 +144,7 @@ pub fn from_alignment(src: &Doc, req: &[Request], placed: &[Placed]) -> Doc {
     }
 }
 
-/// The `(start, end)` of every line that has cues, from its start (or first cue) to its last cue,
-/// so a note sung off its word's timing is found; only lines of different agents may overlap.
+/// Each cued line from its start (or first cue) to its last cue; only lines of different agents overlap.
 pub fn line_spans(doc: &Doc) -> Vec<(i64, i64)> {
     let mut prev: Option<(&Option<String>, i64)> = None;
     doc.lines
@@ -160,8 +170,7 @@ pub type Note = (i64, i64, f64);
 /// Shortest piece, in ms, a note may be cut into at a cue start.
 const MIN_PIECE: i64 = 80;
 
-/// Writes the notes of each `line_spans` span into the cue holding their midpoint, else the nearest,
-/// after cutting a note at the cue starts it spans; a cue's `pitch` is its `main_pitch`.
+/// Cuts each span's notes at cue starts and gives each piece to the cue holding its midpoint, else the nearest.
 pub fn apply_pitch(doc: &mut Doc, notes: &[Vec<Note>]) {
     let mut spans = notes.iter();
     for line in doc.lines.iter_mut().filter(|l| !l.cues.is_empty()) {
@@ -226,6 +235,13 @@ mod tests {
         let r = snapped(&doc(), &req, &[(0, 1500), (9, 7)]);
         assert_eq!((r.lines[0].start, r.lines[0].end), (Some(1500), Some(3500)));
         assert_eq!(r.lines[2].start, Some(4000));
+        let late = snapped(&doc(), &req, &[(0, 5000), (1, 100)]);
+        assert_eq!(late.lines[0].start, Some(3000), "never past the next line");
+        assert_eq!(
+            late.lines[2].start,
+            Some(3000),
+            "never before the previous one"
+        );
     }
 
     fn doc() -> Doc {

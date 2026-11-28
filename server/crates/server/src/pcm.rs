@@ -41,7 +41,8 @@ pub async fn rendition(
         meta.len()
     ));
     let out = dir().join(format!("{}.s16le", hex(&key[..12])));
-    if out.is_file() {
+    if tokio::fs::try_exists(&out).await.unwrap_or(false) {
+        touch(&out).await;
         return Ok(out);
     }
     tokio::fs::create_dir_all(dir())
@@ -110,7 +111,17 @@ pub async fn serve(path: &Path, from: f64, to: Option<f64>) -> Result<Response, 
     Ok(res)
 }
 
-/// Removes the oldest files of `dir` until the rest fit in `budget` bytes.
+/// A served rendition counts as recent for [`prune`], which goes by modification time.
+async fn touch(path: &Path) {
+    if let Ok(f) = tokio::fs::OpenOptions::new().write(true).open(path).await {
+        let _ = f
+            .into_std()
+            .await
+            .set_modified(std::time::SystemTime::now());
+    }
+}
+
+/// Removes the least recently served files of `dir` until the rest fit in `budget` bytes.
 async fn prune(dir: &Path, budget: u64) {
     let Ok(mut rd) = tokio::fs::read_dir(dir).await else {
         return;

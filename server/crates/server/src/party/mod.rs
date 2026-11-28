@@ -12,7 +12,7 @@ mod routes;
 pub use cover::{DIR as COVER_DIR, owned_uploads};
 pub use dto::parse_ice_servers;
 pub use karaoke_ws::{__path_karaoke_ws, Relay, karaoke_ws};
-pub use programme::{__path_add_items, __path_remove_item, add_items, remove_item};
+pub use programme::{__path_add_items, __path_remove_item, add_items, remove_item, upcoming_items};
 pub use proposals::*;
 pub use registry::{
     Parties, boot, clear_files, end_owned, end_playing, end_playing_items, hold, persist_positions,

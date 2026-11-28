@@ -105,6 +105,16 @@ pub async fn retime(db: &PgPool, id: i32, old: &Doc, new: &Doc) -> sqlx::Result<
     .map(drop)
 }
 
+/// The row was read from an UltraStar text.
+pub async fn is_ultrastar(db: &PgPool, id: i32) -> sqlx::Result<bool> {
+    let raw: Option<String> = sqlx::query_scalar("SELECT raw FROM lyrics WHERE id = $1")
+        .bind(id)
+        .fetch_optional(db)
+        .await?
+        .flatten();
+    Ok(raw.is_some_and(|r| lyrics::is_ultrastar(&r)))
+}
+
 pub async fn list(db: &PgPool, item: i32) -> sqlx::Result<Vec<Row>> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {COLUMNS} FROM lyrics WHERE \"itemId\" = $1"

@@ -76,19 +76,22 @@ fn rank(m: &ModelInfo) -> (bool, bool) {
     (m.languages.is_empty(), m.default)
 }
 
-/// Rule 38. In quality mode the quality model, installed or not: the engine refuses it when absent.
+/// Rule 38. In quality mode the quality model while it is installed, else the standard choice.
 pub(crate) fn aligner<'a>(
     models: &'a [ModelInfo],
     language: Option<&'a str>,
     overrides: &HashMap<String, String>,
     quality: bool,
 ) -> Option<&'a ModelInfo> {
-    if quality {
-        return models
-            .iter()
-            .find(|m| m.id == QUALITY_MODEL && m.kind == ModelKind::Alignment);
-    }
     let installed = |m: &&ModelInfo| m.state == ModelState::Installed;
+    if quality
+        && let Some(q) = models
+            .iter()
+            .filter(installed)
+            .find(|m| m.id == QUALITY_MODEL && m.kind == ModelKind::Alignment)
+    {
+        return Some(q);
+    }
     language
         .and_then(|l| overrides.get(l))
         .and_then(|id| {
@@ -175,7 +178,8 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> 
 #[utoipa::path(get, path = "/api/karaoke/languages", responses((status = 200), (status = 503)))]
 pub async fn languages(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, AppError> {
     manage_settings(&a)?;
-    let models = st.engine.models().await.map_err(engine_err)?.models;
+    let models = super::engine_models(&st).await.map_err(engine_err)?;
+    let models = &models.models;
     let chosen = overrides(&st).await;
     let quality = quality(&st).await;
     let list: Vec<Value> = library_languages(&st)
@@ -201,9 +205,10 @@ pub(super) async fn auto_download(st: &AppState) {
     {
         return;
     }
-    let Ok(models) = st.engine.models().await.map(|m| m.models) else {
+    let Ok(models) = super::engine_models(st).await else {
         return;
     };
+    let models = &models.models;
     let langs = library_languages(st).await.unwrap_or_default();
     let mut wanted: Vec<&ModelInfo> = langs
         .keys()
@@ -219,14 +224,11 @@ pub(super) async fn auto_download(st: &AppState) {
     }
 }
 
-/// Rule 41: the items whose unreviewed generated row the current aligner of its language did not make.
-/// A row the recogniser placed after a CTC failure is not stale: the same model would fail again.
-/// A track whose last re-alignment was rejected is `blocked` until its aligner or lyrics change.
+/// Rule 41: unreviewed generated rows another aligner made (not a recogniser fallback); `blocked` if rejected.
 async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<Stale>> {
-    type Row = (i32, String, String, Option<Jsonb<Doc>>, i64);
+    type Row = (i32, String, String, Option<Jsonb<Doc>>);
     let rows: Vec<Row> = sqlx::query_as(
-        r#"SELECT "itemId", lang, "sourceRef", CASE WHEN lang = 'und' THEN doc END,
-             extract(epoch FROM "updatedAt")::bigint FROM lyrics
+        r#"SELECT "itemId", lang, "sourceRef", CASE WHEN lang = 'und' THEN doc END FROM lyrics
            WHERE kind = 'main' AND source = 'generated' AND NOT reviewed
              AND "sourceRef" IS NOT NULL AND "sourceRef" NOT LIKE '%#fallback=%'"#,
     )
@@ -234,32 +236,32 @@ async fn stale(st: &AppState, models: &[ModelInfo]) -> sqlx::Result<Vec<Stale>> 
     .await?;
     let languages = blocking(move || {
         rows.into_iter()
-            .map(|(item, lang, source_ref, doc, updated)| {
+            .map(|(item, lang, source_ref, doc)| {
                 let doc = doc.map(|d| d.0).unwrap_or_default();
-                (item, language_of(&lang, &doc), source_ref, updated)
+                (item, language_of(&lang, &doc), source_ref)
             })
             .collect::<Vec<_>>()
     })
     .await?;
     let chosen = overrides(st).await;
     let quality = quality(st).await;
-    let results = st.karaoke.realign_results.lock_clean();
+    let rejected: HashMap<i32, String> = super::store::rejections(&st.db)
+        .await?
+        .into_iter()
+        .collect();
     Ok(languages
         .into_iter()
-        .filter_map(|(item, language, source_ref, updated)| {
+        .filter_map(|(item, language, source_ref)| {
             let current = aligner(models, language.as_deref(), &chosen, quality)?
                 .id
                 .clone();
             let model = source_ref.split('#').next().unwrap_or_default().to_owned();
-            let blocked = results.get(&item).is_some_and(|r| {
-                r.status == "rejected" && r.aligner == current && r.lyrics_at == updated
-            });
+            let blocked = rejected.get(&item) == Some(&current);
             (current != model).then_some(Stale {
                 item,
                 language,
                 model,
                 aligner: current,
-                updated,
                 blocked,
             })
         })
@@ -272,29 +274,20 @@ pub(super) struct Stale {
     language: Option<String>,
     model: String,
     aligner: String,
-    /// When the lyrics row was last written.
-    updated: i64,
     blocked: bool,
 }
 
-/// The last re-alignment attempt of a track; a server restart forgets it.
+/// The last re-alignment attempt of a track in this process; a rejection is also recorded (rule 8).
 #[derive(Clone, serde::Serialize)]
 pub(crate) struct RealignResult {
     status: &'static str,
     matched: Option<f64>,
     error: Option<run::Failure>,
     at: i64,
-    #[serde(skip)]
-    aligner: String,
-    #[serde(skip)]
-    lyrics_at: i64,
 }
 
 /// `None` is a track the run skipped: busy, or without stems where this server may not separate.
-pub(super) fn result_of(
-    run: Option<Result<run::Outcome, run::Failure>>,
-    s: &Stale,
-) -> RealignResult {
+pub(super) fn result_of(run: Option<Result<run::Outcome, run::Failure>>) -> RealignResult {
     let (status, matched, error) = match run {
         None => ("skipped", None, None),
         Some(Err(e)) => ("failed", None, Some(e)),
@@ -309,8 +302,6 @@ pub(super) fn result_of(
         matched,
         error,
         at: chrono::Utc::now().timestamp(),
-        aligner: s.aligner.clone(),
-        lyrics_at: s.updated,
     }
 }
 
@@ -343,7 +334,8 @@ pub async fn realign_items(
     Query(q): Query<PageQuery>,
 ) -> Result<Json<Value>, AppError> {
     manage_settings(&a)?;
-    let models = st.engine.models().await.map_err(engine_err)?.models;
+    let models = super::engine_models(&st).await.map_err(engine_err)?;
+    let models = &models.models;
     let mut all = stale(&st, &models).await?;
     all.sort_by_key(|s| s.item);
     let total = all.len();
@@ -384,7 +376,8 @@ pub async fn realign_items(
 #[utoipa::path(get, path = "/api/karaoke/realign", responses((status = 200), (status = 503)))]
 pub async fn realign_count(State(st): State<AppState>, a: Authed) -> Result<Json<Value>, AppError> {
     manage_settings(&a)?;
-    let models = st.engine.models().await.map_err(engine_err)?.models;
+    let models = super::engine_models(&st).await.map_err(engine_err)?;
+    let models = &models.models;
     let all = stale(&st, &models).await?;
     Ok(Json(json!({
         "tracks": all.iter().filter(|s| !s.blocked).count(),
@@ -402,17 +395,18 @@ pub async fn realign(
 ) -> Result<(StatusCode, Json<Value>), AppError> {
     manage_settings(&a)?;
     if !settings::flag(&st.db, "karaoke.enabled", false).await {
-        return Err(AppError::conflict("karaoke_disabled"));
+        return Err(super::disabled());
     }
     if !super::caps(&st).await.align {
-        return Err(AppError::with_message(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "karaoke_unavailable",
-        ));
+        return Err(super::unavailable());
     }
-    let models = st.engine.models().await.map_err(engine_err)?.models;
+    let models = super::engine_models(&st).await.map_err(engine_err)?;
+    let models = &models.models;
     if st.karaoke.realigning.swap(true, Ordering::SeqCst) {
-        return Err(AppError::conflict("karaoke_realign_running"));
+        return Err(super::refusal(
+            StatusCode::CONFLICT,
+            "karaoke_realign_running",
+        ));
     }
     let tracks = match stale(&st, &models).await {
         Ok(t) => t.into_iter().filter(|s| !s.blocked).collect::<Vec<_>>(),
@@ -471,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn the_quality_model_is_never_picked_by_language_and_always_in_quality_mode() {
+    fn the_quality_model_is_never_picked_by_language_and_wins_in_quality_mode_once_installed() {
         let mut all = zoo("installed", "installed", "installed");
         all.push(model(QUALITY_MODEL, &[], false, "absent"));
         assert_eq!(pick(&all, Some("de"), &[]).as_deref(), Some("omni"));
@@ -479,17 +473,17 @@ mod tests {
             recommended(&all, Some("it")).map(|m| m.id.as_str()),
             Some("omni")
         );
-        let q = aligner(&all, Some("fr"), &HashMap::new(), true).map(|m| m.id.as_str());
-        assert_eq!(q, Some(QUALITY_MODEL));
-        assert!(
-            aligner(
-                &zoo("installed", "installed", "installed"),
-                None,
-                &HashMap::new(),
-                true
-            )
-            .is_none()
+        let q = |all: &[ModelInfo]| {
+            aligner(all, Some("fr"), &HashMap::new(), true).map(|m| m.id.clone())
+        };
+        assert_eq!(
+            q(&all).as_deref(),
+            Some("fr"),
+            "absent: the standard choice"
         );
+        all.pop();
+        all.push(model(QUALITY_MODEL, &[], false, "installed"));
+        assert_eq!(q(&all).as_deref(), Some(QUALITY_MODEL));
     }
 
     #[test]
@@ -540,15 +534,7 @@ mod tests {
             lyrics_error,
             ..Default::default()
         };
-        let s = Stale {
-            item: 1,
-            language: None,
-            model: "a".into(),
-            aligner: "b".into(),
-            updated: 7,
-            blocked: false,
-        };
-        let status = |r| result_of(r, &s).status;
+        let status = |r| result_of(r).status;
         assert_eq!(status(Some(Ok(out(None, None)))), "ok");
         assert_eq!(
             status(Some(Ok(out(Some(0.18), Some("x".into()))))),
@@ -557,10 +543,9 @@ mod tests {
         assert_eq!(status(Some(Ok(out(None, Some("x".into()))))), "failed");
         assert_eq!(status(Some(Err("engine".into()))), "failed");
         assert_eq!(status(None), "skipped");
-        let r = result_of(Some(Ok(out(Some(0.18), None))), &s);
         assert_eq!(
-            (r.matched, r.aligner.as_str(), r.lyrics_at),
-            (Some(0.18), "b", 7)
+            result_of(Some(Ok(out(Some(0.18), None)))).matched,
+            Some(0.18)
         );
     }
 

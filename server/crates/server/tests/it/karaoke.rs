@@ -200,7 +200,8 @@ async fn the_state_lists_the_stems_and_a_delete_removes_them_and_the_generated_l
         (&ready["state"], &ready["lyrics"]),
         (&json!("ready"), &json!(true))
     );
-    assert_eq!(ready["stems"]["guide"]["size"], 10);
+    assert_eq!(ready["stems"]["vocals"]["size"], 10);
+    assert!(ready["stems"]["guide"].is_null());
     assert_eq!(
         call(&app, &t, "DELETE", "/api/items/1/karaoke", None)
             .await
@@ -238,7 +239,7 @@ async fn preparing_needs_the_setting_then_the_engine(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = false)]
-async fn stems_are_invalidated_by_a_replaced_file_a_model_and_the_budget(pool: PgPool) {
+async fn stems_are_invalidated_by_a_replaced_file_and_evicted_by_the_budget(pool: PgPool) {
     let (_app, st, _t) = ctx(&pool).await;
     let dir = Dir::new();
     for (file, model) in [(1, "old"), (2, "new")] {
@@ -247,7 +248,13 @@ async fn stems_are_invalidated_by_a_replaced_file_a_model_and_the_budget(pool: P
         }
     }
     assert!(store::valid(&st.db, 2, "new", "1").await.unwrap());
+    // Another model's stems stay served until the file is separated again.
     assert!(!store::valid(&st.db, 1, "new", "1").await.unwrap());
+    assert_eq!(
+        store::missing(&st.db, 1, Some(("new", "1"))).await.unwrap(),
+        store::KINDS
+    );
+    assert_eq!(store::rows(&st.db, 1).await.unwrap().len(), 2);
     // Within 2 s the file is the same recording; beyond it the stems go.
     assert_eq!(
         store::invalidate_if_replaced(&st.db, 2, 201_500)
@@ -259,27 +266,13 @@ async fn stems_are_invalidated_by_a_replaced_file_a_model_and_the_budget(pool: P
         store::invalidate_if_replaced(&st.db, 2, 230_000)
             .await
             .unwrap(),
-        3
+        2
     );
     assert!(!dir.path().join("2-vocals.opus").exists());
-    assert_eq!(
-        store::invalidate_stale_models(&st.db, "new", "1")
-            .await
-            .unwrap(),
-        3
-    );
-    assert_eq!(store::total(&st.db).await.unwrap(), 0);
-    for k in store::KINDS {
-        stem(&st, dir.path(), 1, k, "m").await;
-    }
-    assert_eq!(store::invalidate_model(&st.db, "m").await.unwrap(), 3);
-    for k in store::KINDS {
-        stem(&st, dir.path(), 1, k, "m").await;
-    }
     // Rows younger than the grace are never evicted, even over the budget.
     assert_eq!(store::evict(&st.db, 0).await.unwrap(), 0);
     // A file goes whole, and a young row protects its siblings.
-    sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() - interval '1 hour' WHERE kind <> 'guide'"#)
+    sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() - interval '1 hour' WHERE kind <> 'vocals'"#)
         .execute(&st.db)
         .await
         .unwrap();
@@ -288,23 +281,21 @@ async fn stems_are_invalidated_by_a_replaced_file_a_model_and_the_budget(pool: P
         .execute(&st.db)
         .await
         .unwrap();
-    assert_eq!(store::evict(&st.db, 10).await.unwrap(), 3);
+    assert_eq!(store::evict(&st.db, 10).await.unwrap(), 2);
     assert_eq!(store::total(&st.db).await.unwrap(), 0);
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_stem_request_touches_every_stem_of_the_file_only_from_byte_zero(pool: PgPool) {
+async fn a_karaoke_request_touches_every_stem_of_the_file_and_serving_does_not(pool: PgPool) {
     let (_app, st, _t) = ctx(&pool).await;
     let dir = Dir::new();
     for k in store::KINDS {
         stem(&st, dir.path(), 1, k, "m").await;
     }
-    let age = || async {
-        sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() - interval '1 hour'"#)
-            .execute(&st.db)
-            .await
-            .unwrap();
-    };
+    sqlx::query(r#"UPDATE derived_audio SET "lastUsedAt" = now() - interval '1 hour'"#)
+        .execute(&st.db)
+        .await
+        .unwrap();
     let fresh = || async {
         sqlx::query_scalar::<_, i64>(
             r#"SELECT count(*) FROM derived_audio WHERE "lastUsedAt" > now() - interval '1 minute'"#,
@@ -313,29 +304,11 @@ async fn a_stem_request_touches_every_stem_of_the_file_only_from_byte_zero(pool:
         .await
         .unwrap()
     };
-    age().await;
-    assert!(
-        store::serve(&st.db, 1, "vocals", false)
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(store::serve(&st.db, 1, "vocals").await.unwrap().is_some());
+    assert!(store::serve(&st.db, 1, "other").await.unwrap().is_none());
     assert_eq!(fresh().await, 0);
-    assert!(
-        store::serve(&st.db, 1, "vocals", true)
-            .await
-            .unwrap()
-            .is_some()
-    );
-    assert_eq!(fresh().await, 3);
-    age().await;
-    assert!(
-        store::serve(&st.db, 1, "other", true)
-            .await
-            .unwrap()
-            .is_none()
-    );
-    assert_eq!(fresh().await, 0);
+    store::touch(&st.db, 1).await.unwrap();
+    assert_eq!(fresh().await, 2);
 }
 
 #[sqlx::test(migrations = false)]
@@ -476,18 +449,12 @@ async fn ultrastar_stems_are_imported_kept_and_dropped_with_their_header(pool: P
         .await
         .unwrap();
     assert_eq!(store::evict(&st.db, 0).await.unwrap(), 0);
-    assert_eq!(
-        store::invalidate_stale_models(&st.db, "other", "2")
-            .await
-            .unwrap(),
-        0
-    );
     // A header naming a path or a missing file imports nothing; one kind dropped removes its row.
     run(song("#VOCALS:v.mp3\n#INSTRUMENTAL:../i.mp3")).await;
     assert_eq!(store::rows(&st.db, 1).await.unwrap().len(), 1);
     run(song("")).await;
     assert!(store::rows(&st.db, 1).await.unwrap().is_empty());
-    let _ = std::fs::remove_dir_all(store::file_dir(1));
+    store::invalidate_files(&st.db, &[1]).await.unwrap();
 }
 
 #[sqlx::test(migrations = false)]
@@ -528,6 +495,8 @@ async fn import_row(st: &AppState, file: i32, kind: &str, provider: &str) {
     .unwrap();
 }
 
+const M: (&str, &str) = ("m", "1");
+
 async fn second_track(st: &AppState) {
     sqlx::raw_sql(
         r#"INSERT INTO items (id, "mediaId", "editionId", title) VALUES (2, 10, 1, 'Two');
@@ -544,26 +513,34 @@ async fn the_background_pass_skips_a_track_with_both_imported_stems(pool: PgPool
     let (_app, st, _t) = ctx(&pool).await;
     second_track(&st).await;
     assert_eq!(
-        store::unprepared(&st.db, &[], 20, "").await.unwrap(),
+        store::unprepared(&st.db, &[], 20, M, false).await.unwrap(),
         [2, 1]
     );
     import_row(&st, 1, "vocals", "import").await;
     assert_eq!(
-        store::unprepared(&st.db, &[], 20, "").await.unwrap(),
+        store::unprepared(&st.db, &[], 20, M, false).await.unwrap(),
         [2, 1],
         "one import is not enough"
     );
     import_row(&st, 1, "instrumental", "import").await;
-    assert_eq!(store::unprepared(&st.db, &[], 20, "").await.unwrap(), [2]);
     assert_eq!(
-        store::unprepared(&st.db, &[2], 20, "").await.unwrap(),
+        store::unprepared(&st.db, &[], 20, M, false).await.unwrap(),
+        [2]
+    );
+    assert_eq!(
+        store::unprepared(&st.db, &[2], 20, M, false).await.unwrap(),
         Vec::<i32>::new()
     );
     for kind in store::KINDS {
         import_row(&st, 2, kind, "cpu").await;
     }
+    // Stems of another model come after tracks with none; those of the current model are done.
+    assert_eq!(
+        store::unprepared(&st.db, &[], 20, M, false).await.unwrap(),
+        [2]
+    );
     assert!(
-        store::unprepared(&st.db, &[], 20, "")
+        store::unprepared(&st.db, &[], 20, ("ultrastar", "1"), false)
             .await
             .unwrap()
             .is_empty()
@@ -584,13 +561,13 @@ async fn imports_stay_out_of_the_disk_budget_they_cannot_be_evicted_for(pool: Pg
         .execute(&st.db)
         .await
         .unwrap();
-    assert_eq!(store::total(&st.db).await.unwrap(), 30);
+    assert_eq!(store::total(&st.db).await.unwrap(), 20);
     assert_eq!(
-        store::evict(&st.db, 30).await.unwrap(),
+        store::evict(&st.db, 20).await.unwrap(),
         0,
         "the generated stems fit alone"
     );
-    assert_eq!(store::evict(&st.db, 0).await.unwrap(), 3);
+    assert_eq!(store::evict(&st.db, 0).await.unwrap(), 2);
     assert_eq!(store::rows(&st.db, 1).await.unwrap().len(), 2);
 }
 
@@ -636,17 +613,19 @@ async fn a_failed_copy_keeps_the_imported_stem_the_header_still_names(pool: PgPo
     let after = store::rows(&st.db, 1).await.unwrap();
     assert_eq!(after.len(), 2);
     assert!(store::valid(&st.db, 1, "m", "1").await.unwrap());
-    let _ = std::fs::remove_dir_all(store::file_dir(1));
+    store::invalidate_files(&st.db, &[1]).await.unwrap();
 }
 
 use fliks_engine_core::api::{JobResultRequest, SeparateOutput, StemUpload};
 use fliks_server::karaoke::remote::{result, result_for, upload_path};
 
+/// A random job id: parallel tests share the uploads folder.
 async fn separate_lease(st: &AppState) -> i64 {
     sqlx::query_scalar(
-        r#"INSERT INTO jobs (kind, "mediaFileId", payload, "profileHash", priority, state, attempt,
+        r#"INSERT INTO jobs (id, kind, "mediaFileId", payload, "profileHash", priority, state, attempt,
              "workerId", "leaseUntil")
-           VALUES ('separate', 1, '{}', 'h', -1, 'leased', 1, 'k', now() + interval '1 minute')
+           VALUES (1000 + (random() * 1e9)::bigint, 'separate', 1, '{}', 'h', -1, 'leased', 1, 'k',
+             now() + interval '1 minute')
            RETURNING id"#,
     )
     .fetch_one(&st.db)
@@ -709,12 +688,13 @@ fn uploaded(job: i64, sha_vocals: Option<&str>) -> JobResultRequest {
 }
 
 #[sqlx::test(migrations = false)]
-async fn a_worker_result_stores_the_three_stems_and_leaves_no_job(pool: PgPool) {
+async fn a_worker_result_stores_its_stems_without_the_guide_and_leaves_no_job(pool: PgPool) {
     let (_app, st, _t) = ctx(&pool).await;
     let job = separate_lease(&st).await;
     let _ = result(&st, "k", job, uploaded(job, None)).await.unwrap();
     let rows = store::rows(&st.db, 1).await.unwrap();
-    assert_eq!(rows.len(), 3);
+    assert_eq!(rows.len(), 2);
+    assert!(!upload_path(job, 1, "guide").exists());
     assert!(
         rows.iter()
             .all(|r| r.provider == "cuda" && r.duration_ms == 12346)
@@ -757,7 +737,7 @@ async fn a_mismatched_stem_hash_stores_nothing_and_requeues_as_network(pool: PgP
 async fn a_track_already_valid_discards_the_uploads(pool: PgPool) {
     let (_app, st, _t) = ctx(&pool).await;
     let dir = Dir::new();
-    for kind in ["vocals", "instrumental", "guide"] {
+    for kind in store::KINDS {
         stem(&st, dir.path(), 1, kind, "m").await;
     }
     let job = separate_lease(&st).await;
@@ -773,10 +753,13 @@ async fn a_track_already_valid_discards_the_uploads(pool: PgPool) {
 #[sqlx::test(migrations = false)]
 async fn a_track_with_a_queued_or_leased_separation_is_not_unprepared(pool: PgPool) {
     let (_app, st, _t) = ctx(&pool).await;
-    assert_eq!(store::unprepared(&st.db, &[], 10, "").await.unwrap(), [1]);
+    assert_eq!(
+        store::unprepared(&st.db, &[], 10, M, false).await.unwrap(),
+        [1]
+    );
     let job = separate_lease(&st).await;
     assert!(
-        store::unprepared(&st.db, &[], 10, "")
+        store::unprepared(&st.db, &[], 10, M, false)
             .await
             .unwrap()
             .is_empty()
@@ -786,7 +769,10 @@ async fn a_track_with_a_queued_or_leased_separation_is_not_unprepared(pool: PgPo
         .execute(&st.db)
         .await
         .unwrap();
-    assert_eq!(store::unprepared(&st.db, &[], 10, "").await.unwrap(), [1]);
+    assert_eq!(
+        store::unprepared(&st.db, &[], 10, M, false).await.unwrap(),
+        [1]
+    );
 }
 
 #[sqlx::test(migrations = false)]
@@ -862,13 +848,13 @@ async fn a_cancelled_separation_sticks_and_a_stale_queued_one_is_dropped(pool: P
     .await
     .unwrap();
     assert!(
-        store::unprepared(&st.db, &[], 10, "karaoke:m:2")
+        store::unprepared(&st.db, &[], 10, ("m", "2"), false)
             .await
             .unwrap()
             .is_empty()
     );
     assert_eq!(
-        store::unprepared(&st.db, &[], 10, "karaoke:m:3")
+        store::unprepared(&st.db, &[], 10, ("m", "3"), false)
             .await
             .unwrap(),
         [1]
@@ -882,4 +868,116 @@ async fn a_cancelled_separation_sticks_and_a_stale_queued_one_is_dropped(pool: P
         .await
         .unwrap();
     assert_eq!(n, 1);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_track_with_two_versions_is_prepared_and_reported_on_its_newest_file(pool: PgPool) {
+    let (app, st, t) = ctx(&pool).await;
+    sqlx::query(
+        r#"INSERT INTO item_parts ("itemId", "mediaFileId", "mediaId", version, position) VALUES (1, 2, 10, 1, 0)"#,
+    )
+    .execute(&st.db)
+    .await
+    .unwrap();
+    assert_eq!(store::track_file(&st.db, 1).await.unwrap(), Some(2));
+    assert_eq!(store::track_of(&st.db, 2).await.unwrap(), Some(1));
+    assert_eq!(store::track_of(&st.db, 1).await.unwrap(), None);
+    let dir = Dir::new();
+    // Stems of the older version neither make the track ready nor take it out of the pass.
+    for k in store::KINDS {
+        stem(&st, dir.path(), 1, k, "m").await;
+    }
+    let (_, body) = call(&app, &t, "GET", "/api/items/1/karaoke", None).await;
+    let state = json_of(&body);
+    assert_eq!(
+        (&state["state"], &state["fileId"]),
+        (&json!("none"), &json!(2))
+    );
+    assert_eq!(
+        store::unprepared(&st.db, &[], 10, M, false).await.unwrap(),
+        [1]
+    );
+    assert!(store::ready_tracks(&st.db, &[1]).await.unwrap().is_empty());
+    for k in store::KINDS {
+        stem(&st, dir.path(), 2, k, "m").await;
+    }
+    let (_, body) = call(&app, &t, "GET", "/api/items/1/karaoke", None).await;
+    assert_eq!(json_of(&body)["state"], "ready");
+    assert!(
+        store::unprepared(&st.db, &[], 10, M, false)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(store::ready_tracks(&st.db, &[1]).await.unwrap(), [1]);
+}
+
+#[sqlx::test(migrations = false)]
+async fn a_lasting_failure_is_kept_reported_and_left_out_of_the_pass_until_a_delete(pool: PgPool) {
+    use fliks_server::karaoke::run::{Failure, Outcome};
+    let (app, st, t) = ctx(&pool).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO roles (id, name, permissions) VALUES (60, 'Viewer', '["media.read"]');
+           INSERT INTO users (id, username, "isAdmin", "roleId") VALUES (2, 'reader', false, 60);
+           INSERT INTO library_user_access ("userId", "libraryId") VALUES (2, 1);"#,
+    )
+    .execute(&st.db)
+    .await
+    .unwrap();
+    let failed: Result<Outcome, Failure> = Err("unreadable audio".into());
+    store::record(&st.db, 1, &failed).await.unwrap();
+    let (_, body) = call(&app, &t, "GET", "/api/items/1/karaoke", None).await;
+    let state = json_of(&body);
+    assert_eq!(state["state"], "failed");
+    assert_eq!(
+        state["error"],
+        json!({"code": "failed", "message": "unreadable audio"})
+    );
+    let reader = session::token(&st, 2, "reader").await;
+    let (_, body) = call(&app, &reader, "GET", "/api/items/1/karaoke", None).await;
+    assert_eq!(json_of(&body)["error"], json!({"code": "failed"}));
+    assert!(
+        store::unprepared(&st.db, &[], 10, M, false)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    // A passing failure does not keep the track out.
+    let down: Result<Outcome, Failure> = Err(Failure::EngineUnavailable {
+        message: "down".into(),
+    });
+    store::record(&st.db, 1, &down).await.unwrap();
+    assert_eq!(
+        store::unprepared(&st.db, &[], 10, M, false).await.unwrap(),
+        [1]
+    );
+    // A rejection survives a run that did no lyrics step, and a success clears the error.
+    let rejected = Outcome {
+        lyrics_error: Some(Failure::NoWordTimed),
+        lyrics_ran: true,
+        rejected: Some(("a".into(), "t".into())),
+        ..Default::default()
+    };
+    store::record(&st.db, 1, &Ok(rejected)).await.unwrap();
+    store::record(&st.db, 1, &Ok(Outcome::default()))
+        .await
+        .unwrap();
+    let kept = store::failure(&st.db, 1).await.unwrap().unwrap();
+    assert_eq!(
+        (kept.rejected(), kept.error),
+        (Some(("a".into(), "t".into())), None)
+    );
+    let (_, body) = call(&app, &t, "GET", "/api/items/1/karaoke", None).await;
+    let state = json_of(&body);
+    assert_eq!(
+        (&state["state"], &state["lyricsError"]),
+        (&json!("none"), &json!({"code": "no_word_timed"}))
+    );
+    assert_eq!(
+        call(&app, &t, "DELETE", "/api/items/1/karaoke", None)
+            .await
+            .0,
+        204
+    );
+    assert!(store::failure(&st.db, 1).await.unwrap().is_none());
 }
