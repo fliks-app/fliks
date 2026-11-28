@@ -1,5 +1,44 @@
 # Changelog
 
+## [7.3.2](https://github.com/fliks-app/fliks/compare/v7.3.1...v7.3.2) (2026-11-28)
+
+
+### Features
+
+* **karaoke:** show key, range and outdated steps, and nudge lyrics timing ([#3110](https://github.com/fliks-app/fliks/issues/3110)) ([c1ba7c5](https://github.com/fliks-app/fliks/commit/c1ba7c56167f49a0dd0570c8568a9c7b30925222))
+* **karaoke:** stamp every karaoke result and redo the outdated ones ([#3109](https://github.com/fliks-app/fliks/issues/3109)) ([94cf04a](https://github.com/fliks-app/fliks/commit/94cf04a64d58d18923ceada1108d819f67a51ee7))
+* **optimize:** link queue titles to their media and clarify job labels ([#3090](https://github.com/fliks-app/fliks/issues/3090)) ([1764647](https://github.com/fliks-app/fliks/commit/1764647796d20dc6c113135b2a86fed9dfa4335e))
+* **optimize:** pick a series episode as the sample file ([#3095](https://github.com/fliks-app/fliks/issues/3095)) ([1988f7e](https://github.com/fliks-app/fliks/commit/1988f7e0a778d927efb99ff6c9a94d8dd47c3197))
+* **optimize:** recompress a file already in the target codec when listed ([#3093](https://github.com/fliks-app/fliks/issues/3093)) ([0de80a5](https://github.com/fliks-app/fliks/commit/0de80a5596ba23beb998af89942576ad6cd92319))
+* **optimize:** show what each queue job does to its file ([#3089](https://github.com/fliks-app/fliks/issues/3089)) ([74fd2fc](https://github.com/fliks-app/fliks/commit/74fd2fc9a59697f086e6c5946e67908dea3c38cb))
+* **optimize:** show where a job runs and what its encode saved ([#3101](https://github.com/fliks-app/fliks/issues/3101)) ([775475c](https://github.com/fliks-app/fliks/commit/775475c3072003e74c4bfa5a1bf88eda566ae187))
+* **requests:** route every add through a request ([#3102](https://github.com/fliks-app/fliks/issues/3102)) ([df6efa9](https://github.com/fliks-app/fliks/commit/df6efa9a9cce35767e7708337397b41b5a4d57a4))
+* **subtitles:** run the OCR of every image track again from the settings ([#3079](https://github.com/fliks-app/fliks/issues/3079)) ([51d90d4](https://github.com/fliks-app/fliks/commit/51d90d4238e8d97a04c88bc71f9300e66a75ae3e))
+
+
+### Bug Fixes
+
+* **acquisition:** reject an unnumbered release for an episode target ([#3096](https://github.com/fliks-app/fliks/issues/3096)) ([1b2e3c9](https://github.com/fliks-app/fliks/commit/1b2e3c9e7878eb19d01e9497033595fe4758b83f))
+* **karaoke:** drop needless borrows of the aligner model list ([#3108](https://github.com/fliks-app/fliks/issues/3108)) ([1828a19](https://github.com/fliks-app/fliks/commit/1828a19af712d3754a1dc1908af5acdfcc0c1ed3))
+* **karaoke:** fix the client findings of the karaoke audit ([#3107](https://github.com/fliks-app/fliks/issues/3107)) ([89a1322](https://github.com/fliks-app/fliks/commit/89a13224db5eeb45074c8cc91abc23f92a97634d))
+* **karaoke:** fix the server findings of the karaoke audit ([#3106](https://github.com/fliks-app/fliks/issues/3106)) ([2cf0fbd](https://github.com/fliks-app/fliks/commit/2cf0fbdaccc64c125d57c012cd7b84afd662d767))
+* **layout:** reserve the cast button's space in the docked top bar ([#3098](https://github.com/fliks-app/fliks/issues/3098)) ([3d8e157](https://github.com/fliks-app/fliks/commit/3d8e157a032b2af2440f2dbe117084203377a7ae))
+* **libraries:** size disk space in fragment-size blocks ([#3099](https://github.com/fliks-app/fliks/issues/3099)) ([7feb431](https://github.com/fliks-app/fliks/commit/7feb4317a5456cf5505f956d58f2162b5af61954))
+* **livetv:** bump the engine to 1.30.7 and send it the probed bit depth ([#3088](https://github.com/fliks-app/fliks/issues/3088)) ([1b62568](https://github.com/fliks-app/fliks/commit/1b62568a749d2aed8cbd0e6964969c629735e0c0))
+* **media-detail:** show the subtitle picker before the modal is opened ([#3092](https://github.com/fliks-app/fliks/issues/3092)) ([cc32c95](https://github.com/fliks-app/fliks/commit/cc32c9500b0ce637125557f1cfb95582e7157063))
+* **migrations:** give the job diff migration its own version ([#3091](https://github.com/fliks-app/fliks/issues/3091)) ([6d8f5f8](https://github.com/fliks-app/fliks/commit/6d8f5f8f663c9562b495c8e989c8fb61e0a8591e))
+* **nav-rail:** center the logo on the rail icon column ([#3105](https://github.com/fliks-app/fliks/issues/3105)) ([611e885](https://github.com/fliks-app/fliks/commit/611e885ee3600c8595fbdad9cf37f3bb249aa7d8))
+* **ocr:** bump the engine to 1.30.6 to keep subtitles replaced with no gap ([#3081](https://github.com/fliks-app/fliks/issues/3081)) ([51e8f1f](https://github.com/fliks-app/fliks/commit/51e8f1fb84329a264e3169f6239e12ee310fe61c))
+* **requests:** reserve the poster height on TVs without aspect-ratio ([#3087](https://github.com/fliks-app/fliks/issues/3087)) ([7685af1](https://github.com/fliks-app/fliks/commit/7685af1fd7c3049ec56445869909d75808ce6af9))
+* **route-reuse:** keep the shell cached so reattached pages keep a live outlet ([#3084](https://github.com/fliks-app/fliks/issues/3084)) ([6b6ca23](https://github.com/fliks-app/fliks/commit/6b6ca23a05350dcff2dbcd3f2149d5f737b24314))
+* **setup-checklist:** count the enabled relay and hide done steps ([#3080](https://github.com/fliks-app/fliks/issues/3080)) ([6bdb79b](https://github.com/fliks-app/fliks/commit/6bdb79b552f6d48c748ea40707ce04fc24213ba4))
+* **subtitles:** explain what the auto-sync toggle aligns and when ([#3086](https://github.com/fliks-app/fliks/issues/3086)) ([b96acaf](https://github.com/fliks-app/fliks/commit/b96acaf1c967ca43b97a2e92f13ec84457a0d1c8))
+
+
+### Miscellaneous Chores
+
+* **release:** release 7.3.2 ([#3083](https://github.com/fliks-app/fliks/issues/3083)) ([5165f5f](https://github.com/fliks-app/fliks/commit/5165f5f89e3e9544dc0cd079bfc809d02ae3ae03))
+
 ## [7.3.1](https://github.com/fliks-app/fliks/compare/v7.3.0...v7.3.1) (2026-11-26)
 
 
