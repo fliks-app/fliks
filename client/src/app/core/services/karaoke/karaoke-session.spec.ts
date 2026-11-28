@@ -1,5 +1,5 @@
 import type { LyricsCue, StructuredLyrics } from '../api/lyrics.models';
-import { FrameStore, calibrate, onsets, scoreAll } from './karaoke-session';
+import { FrameStore, MAX_FRAMES, calibrate, onsets, scoreAll } from './karaoke-session';
 import { scoredLines, sides } from './karaoke-score';
 import type { PitchFrame } from './karaoke-score';
 
@@ -24,14 +24,14 @@ describe('karaoke session', () => {
     const store = new FrameStore();
     store.add(7, sing(0, 1000, 60));
     store.add(9, sing(1000, 2000, 64));
-    const [a, b] = scoreAll(duet, store, 'hard', 0);
+    const [a, b] = scoreAll(duet, store, 'hard');
     expect([a.agentId, a.score, b.agentId, b.score]).toEqual(['v1', 10000, 'v2', 10000]);
   });
 
   it('gives a lone singer every line', () => {
     const store = new FrameStore();
     store.add(7, [...sing(0, 1000, 60), ...sing(1000, 2000, 64)]);
-    const [a] = scoreAll(duet, store, 'hard', 0);
+    const [a] = scoreAll(duet, store, 'hard');
     expect([a.agentId, a.score]).toEqual([null, 10000]);
   });
 
@@ -40,14 +40,23 @@ describe('karaoke session', () => {
     const store = new FrameStore();
     store.add(7, sing(0, 1000, 60));
     store.add(9, sing(0, 1000, 72));
-    expect(scoreAll(d, store, 'hard', 0).map((r) => r.score)).toEqual([10000, 10000]);
+    expect(scoreAll(d, store, 'hard').map((r) => r.score)).toEqual([10000, 10000]);
   });
 
   it('bounds the frames it keeps', () => {
     const store = new FrameStore();
-    store.add(1, Array.from({ length: 20050 }, (_, i) => ({ t: i, midi: 60 })));
-    expect(store.frames(1).length).toBe(20000);
+    store.add(1, Array.from({ length: MAX_FRAMES + 50 }, (_, i) => ({ t: i, midi: 60 })));
+    expect(store.frames(1).length).toBe(MAX_FRAMES);
     expect(store.frames(1)[0].t).toBe(50);
+  });
+
+  it('drops the frames after a playhead that went back for another take', () => {
+    const store = new FrameStore();
+    store.add(1, [{ t: 100, midi: 60 }, { t: 5000, midi: 60 }]);
+    store.add(2, [{ t: 6000, midi: 60 }]);
+    store.truncate(1000);
+    expect(store.frames(1).map((f) => f.t)).toEqual([100]);
+    expect(store.singers()).toEqual([1]);
   });
 
   it('measures the capture delay from the onsets', () => {

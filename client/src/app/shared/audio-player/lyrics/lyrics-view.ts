@@ -162,6 +162,9 @@ export class LyricsViewComponent {
     void this.audio.seek(Math.max(0, (s - this.doc().offset) / 1000));
   }
 
+  /** A word the alignment placed by interpolation. */
+  protected readonly guessedMark = ' underline decoration-dotted decoration-1 underline-offset-4';
+
   /** The karaoke stage, solo: the unsung words stay white, the sung ones take a light primary. */
   protected staged(r: { agentId?: string }): boolean {
     return this.large() && !this.style(r.agentId)?.colour;

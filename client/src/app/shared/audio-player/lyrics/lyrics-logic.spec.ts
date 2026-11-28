@@ -102,6 +102,7 @@ describe('lyrics logic', () => {
     const cue = (w: string, guessed: boolean) => ({ start: 0, end: 1, value: w, byteStart: at(w), byteEnd: at(w) + w.length, guessed });
     const segs = cueSegments(text, [cue('go', true), cue('(so', true), cue('low)', false), cue('now', true)]);
     expect(segs.filter((s) => s.cue !== null).map((s) => !!s.dim)).toEqual([false, true, false, false]);
+    expect(segs.filter((s) => s.cue !== null).map((s) => !!s.guessed)).toEqual([true, false, false, true]);
     const mid = cueSegments(text, [cue('(so', false), cue('low)', true)]);
     expect(mid.filter((s) => s.cue !== null).map((s) => !!s.dim)).toEqual([false, true]);
   });

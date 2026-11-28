@@ -11,10 +11,12 @@ import { DeviceService } from '../../../core/services/device.service';
 import { KaraokeRelayService } from '../../../core/services/karaoke/karaoke-relay.service';
 import { KaraokeService, type BoardRow } from '../../../core/services/karaoke/karaoke.service';
 import { intoRange, laneNotes, laneRange } from '../../../core/services/karaoke/pitch-lane';
-import type { Difficulty } from '../../../core/services/karaoke/karaoke-score';
+import { TOLERANCE, foldedDistance, type Difficulty } from '../../../core/services/karaoke/karaoke-score';
 import { GOLD, SINGER_COLOURS, singerStyle } from '../../../core/services/karaoke/singer-style';
 import { PartyService } from '../../../core/services/party/party.service';
+import { sameItem } from '../../../core/services/party/party-item';
 import { TvSectionDirective } from '../../directives/tv-section.directive';
+import { CdgCanvasComponent } from '../cdg/cdg-canvas';
 import { LyricsViewComponent } from '../lyrics/lyrics-view';
 
 const BEHIND_MS = 2000;
@@ -25,6 +27,9 @@ const MODES: StemMode[] = ['instrumental', 'guide', 'original'];
 /** Guide never reaches the ends: 0 is Instrumental and 1 is Original. */
 const GUIDE_MIN = 0.05;
 const MIX_KEY = 'fliks.karaoke.mix';
+/** Taps on the key buttons gather this long before the track reopens in the new key. */
+const KEY_SETTLE_MS = 600;
+const UP_NEXT = 3;
 
 interface SavedMix {
   mode: StemMode;
@@ -44,7 +49,7 @@ function readMix(): SavedMix | null {
 /** The karaoke view: lyrics with word fill, the reference melody as a pitch lane, live scores, the mix bar and the settings. */
 @Component({
   selector: 'app-karaoke-stage',
-  imports: [NgTemplateOutlet, TranslatePipe, TvSectionDirective, LyricsViewComponent, LucideDynamicIcon],
+  imports: [NgTemplateOutlet, TranslatePipe, TvSectionDirective, LyricsViewComponent, CdgCanvasComponent, LucideDynamicIcon],
   templateUrl: './karaoke-stage.html',
 })
 export class KaraokeStageComponent {
@@ -73,7 +78,13 @@ export class KaraokeStageComponent {
   readonly busy = input(false);
   /** A failed lyrics step of the preparation, already worded. */
   readonly error = input('');
+  /** A tap on a line seeks; never in a party, where it would move everyone. */
+  readonly seekable = input(true);
+  /** The MP3+G graphics drawn above the lyrics. */
+  readonly cdgFile = input<number | null>(null);
   readonly recompute = output<'sync' | 'melody'>();
+  /** Drops the track's stems and generated lyrics (with `canEdit`). */
+  readonly remove = output<void>();
 
   protected get audio(): AudioOutput {
     return this.output() ?? this.local;
@@ -81,6 +92,28 @@ export class KaraokeStageComponent {
   protected readonly stemMode = computed(() => this.audio.stemMode?.() ?? 'original');
   protected readonly stemsAvailable = computed(() => this.audio.stemsAvailable?.() ?? false);
   protected readonly pitch = computed(() => this.audio.pitch?.() ?? 0);
+  /** The key the taps aim at, shown at once; the output follows once they settle. */
+  protected readonly targetKey = linkedSignal(() => this.pitch());
+  private keyTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Why the key cannot change here, or null. */
+  protected readonly keyBlocked = computed(() => {
+    if (this.karaoke.status() && !this.karaoke.status()!.pitchShift) return 'karaoke.key_unavailable';
+    return this.audio.canShiftKey && !this.audio.canShiftKey() ? 'karaoke.key_not_here' : null;
+  });
+  protected readonly hasLines = computed(() => this.doc().line.length > 0);
+  protected readonly lineSeek = computed(() => this.seekable() && !this.party.active());
+  /** The next programme rows with their singers, on the party's display. */
+  protected readonly upNext = computed(() => {
+    if (!this.party.active() || !this.party.isHost()) return [];
+    const rows = this.party.programme();
+    const now = this.party.item();
+    const at = now ? rows.findIndex((r) => sameItem(r, now)) : -1;
+    return rows
+      .slice(at + 1)
+      .filter((r) => !r.hidden)
+      .slice(0, UP_NEXT)
+      .map((r) => ({ title: r.title, singer: this.party.userName(r.addedBy) }));
+  });
 
   protected readonly difficulties = DIFFICULTIES;
   protected readonly modes = MODES;
@@ -107,7 +140,7 @@ export class KaraokeStageComponent {
     if (issue) return { error: true, text: this.translate.instant(`karaoke.mic_${issue}`) };
     if (this.error()) return { error: true, text: this.error() };
     if (!this.hasMelody()) return { error: false, text: this.translate.instant('karaoke.no_melody') };
-    if (!this.canSing && this.rows().length === 0) return { error: false, text: this.translate.instant('karaoke.phones_hint') };
+    if (!this.canSing && this.party.active()) return { error: false, text: this.translate.instant('karaoke.phones_hint') };
     return null;
   });
 
@@ -119,12 +152,12 @@ export class KaraokeStageComponent {
   constructor() {
     const destroyRef = inject(DestroyRef);
     const timer = setInterval(() => this.refresh(), RESULTS_MS);
-    let restored = !this.saved;
+    let restored = false;
     effect(() => {
       if (restored || !this.stemsAvailable()) return;
       restored = true;
-      // The preset is this browser's: another device's session keeps its own mix.
-      if (!this.output()) untracked(() => this.setMode(this.saved!.mode));
+      // The preset is this browser's, Instrumental the first time; another device's session keeps its own mix.
+      if (!this.output()) untracked(() => this.setMode(this.saved?.mode ?? 'instrumental'));
     });
     afterNextRender(() => {
       const ro = new ResizeObserver(([e]) => {
@@ -137,6 +170,7 @@ export class KaraokeStageComponent {
     });
     destroyRef.onDestroy(() => {
       clearInterval(timer);
+      if (this.keyTimer) clearTimeout(this.keyTimer);
       cancelAnimationFrame(this.frame);
       this.relay.close('display');
     });
@@ -147,6 +181,7 @@ export class KaraokeStageComponent {
       const board = this.karaoke.board();
       const el = this.dialog()?.nativeElement;
       if (board && el && !el.open) el.showModal();
+      if (!board && el?.open) el.close();
     });
     effect(() => {
       this.doc();
@@ -212,7 +247,14 @@ export class KaraokeStageComponent {
   }
 
   protected setPitch(delta: number): void {
-    void this.audio.setPitch?.(delta === 0 ? 0 : this.pitch() + delta);
+    this.targetKey.set(delta === 0 ? 0 : Math.min(12, Math.max(-12, this.targetKey() + delta)));
+    if (this.keyTimer) clearTimeout(this.keyTimer);
+    this.keyTimer = setTimeout(() => {
+      this.keyTimer = null;
+      if (this.targetKey() === this.pitch()) return;
+      // A local reopen that fails leaves the key; a remote device reports its own.
+      void Promise.resolve(this.audio.setPitch?.(this.targetKey())).then(() => !this.output() && this.targetKey.set(this.pitch()));
+    }, KEY_SETTLE_MS);
   }
 
   protected closeBoard(): void {
@@ -282,22 +324,24 @@ export class KaraokeStageComponent {
         ctx.stroke();
       }
     }
-    ctx.globalAlpha = 1;
-    const latency = this.karaoke.latencyMs();
+    const tol = TOLERANCE[this.karaoke.difficulty()];
     this.karaoke.store.singers().forEach((id, i) => {
       ctx.fillStyle = this.singer(null, i).colour;
       const frames = this.karaoke.store.frames(id);
       for (let k = frames.length - 1; k >= 0; k--) {
         const f = frames[k];
-        const t = f.t - latency + doc.offset;
+        const t = f.t + doc.offset;
         if (t < lyricNow - BEHIND_MS) break;
         if (f.midi === null || t > lyricNow) continue;
-        ctx.beginPath();
         const ref = notes.find((n) => n.start <= t && t < n.end);
-        ctx.arc(x(t), y(intoRange(f.midi, this.range(), ref?.midi ?? (lo + hi) / 2)), bar * 0.22, 0, 2 * Math.PI);
+        const hit = !!ref && foldedDistance(f.midi, ref.midi) <= tol;
+        ctx.globalAlpha = hit ? 1 : 0.5;
+        ctx.beginPath();
+        ctx.arc(x(t), y(intoRange(f.midi, this.range(), ref?.midi ?? (lo + hi) / 2)), bar * (hit ? 0.3 : 0.2), 0, 2 * Math.PI);
         ctx.fill();
       }
     });
+    ctx.globalAlpha = 1;
   }
 
   /** Cuts diagonal stripes out of the path just filled, so a group note differs by shape from a singer's. */

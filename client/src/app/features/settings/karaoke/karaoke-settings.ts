@@ -31,6 +31,8 @@ export function reportedProviders(reported: readonly string[]): string[] {
   return VERIFIABLE_PROVIDERS.filter((p) => reported.includes(p));
 }
 const MIN_BUDGET_MB = 256;
+/** The server's default for `karaoke.verified_providers`. */
+const DEFAULT_PROVIDERS = ['coreml', 'cuda', 'migraphx', 'directml'];
 /** The engine's opt-in alignment model that the `quality` aligner names. */
 export const QUALITY_MODEL_ID = 'w2v-bert-music-ctc';
 /** Microsoft's page of the Windows App SDK runtime installers, which hold the Windows ML runtime. */
@@ -61,7 +63,7 @@ export class KaraokeSettingsComponent implements OnInit {
   protected readonly aligner = signal<'standard' | 'quality'>('standard');
   protected readonly budget = signal('4096');
   protected readonly queueCap = signal('2');
-  protected readonly verified = signal<string[]>(['coreml']);
+  protected readonly verified = signal<string[]>(DEFAULT_PROVIDERS);
   protected readonly aligners = signal<Record<string, string>>({});
 
   protected readonly catalogue = signal<KaraokeModels | null>(null);
@@ -160,7 +162,7 @@ export class KaraokeSettingsComponent implements OnInit {
 }
 
 function parseProviders(raw: string | null | undefined): string[] {
-  if (raw == null) return ['coreml', 'cuda', 'migraphx', 'directml'];
+  if (raw == null) return DEFAULT_PROVIDERS;
   try {
     const v: unknown = JSON.parse(raw);
     return Array.isArray(v) ? v.filter((p): p is string => typeof p === 'string') : [];

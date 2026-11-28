@@ -59,7 +59,7 @@ const SING_KEYS: Record<SingKind, string> = {
   prepare: 'karaoke.sing',
   queued: 'karaoke.queued',
   running: 'karaoke.preparing_pct',
-  retry: 'karaoke.failed',
+  retry: 'karaoke.retry',
   enter: 'karaoke.title',
   exit: 'karaoke.title',
 };
@@ -244,8 +244,10 @@ export class AudioPlayerComponent {
   protected readonly hasLyrics = signal<boolean | null>(null);
   /** The edit tools of the lyrics panel, opened from the menu. */
   protected readonly lyricsEdit = signal(false);
-  /** What is shown: a track without lyrics has no panel, whatever the viewer chose. */
-  protected readonly lyricsShown = computed(() => this.lyricsOn() && (this.lyricsEdit() || this.hasLyrics() !== false));
+  /** The panel has something to show: lyrics, MP3+G graphics or the karaoke stage. */
+  protected readonly panelContent = computed(() => this.hasLyrics() !== false || this.karaoke.cdgFile() !== null || this.karaoke.stage());
+  /** What is shown: a track with nothing for the panel has none, whatever the viewer chose. */
+  protected readonly lyricsShown = computed(() => this.lyricsOn() && (this.lyricsEdit() || this.panelContent()));
   /** Desktop and TV list the queue inline in place of the lyrics; desktop fullscreen has room for both. */
   protected readonly queueInline = computed(
     () => this.audio.musicMode() && (this.isTv() || !this.asSheet()) && (!this.lyricsShown() || (this.fullscreen() && !this.isTv())),
@@ -253,7 +255,7 @@ export class AudioPlayerComponent {
   /** The side column fills the height and scrolls itself: the lyrics, or the inline queue. */
   protected readonly panelFills = computed(() => this.lyricsShown() || this.queueInline());
   protected readonly karaoke = inject(KaraokeService);
-  /** The mounted lyrics panel: the Sing button and the translation entries read its state. */
+  /** The mounted lyrics panel: the translation entries read its state. */
   protected readonly lyricsPanel = viewChild(LyricsPanelComponent);
   /** What the menu still offers while driving another device: lyrics layers and editing, the party. */
   protected readonly remoteMenu = computed(() => this.canEditLyrics || !!this.lyricsPanel()?.layers().length || this.party.active());
@@ -332,6 +334,15 @@ export class AudioPlayerComponent {
   /** Settles after Angular's next render; registering it schedules one. */
   private rendered(): Promise<void> {
     return new Promise((resolve) => afterNextRender(() => resolve(), { injector: this.injector }));
+  }
+
+  /** Entering the stage shows the lyrics panel it lives in. */
+  protected sing(): void {
+    if (this.karaoke.singKind() === 'enter') {
+      this.lyricsEdit.set(false);
+      this.lyricsOn.set(true);
+    }
+    this.karaoke.sing();
   }
 
   protected editLyrics(): void {

@@ -16,6 +16,8 @@ export interface PitchFrame {
   midi: number | null;
   /** The key in force when the frame was sung; `scoreSinger` falls back to its `keyShift`. */
   key?: number;
+  /** This device's own frames: the capture delay already taken off `t`. */
+  lag?: number;
 }
 
 /** Distance in semitones between two notes, octave-insensitive (0..6). */
@@ -64,7 +66,6 @@ export function scoreSinger(
   frames: readonly PitchFrame[],
   difficulty: Difficulty,
   offsetMs = 0,
-  latencyMs = 0,
   keyShift = 0,
 ): SingerScore {
   const tol = TOLERANCE[difficulty];
@@ -81,12 +82,12 @@ export function scoreSinger(
       let hi = sorted.length;
       while (lo < hi) {
         const mid = (lo + hi) >> 1;
-        if (sorted[mid].t - latencyMs < a) lo = mid + 1;
+        if (sorted[mid].t < a) lo = mid + 1;
         else hi = mid;
       }
       let hit = 0;
       let seen = 0;
-      for (let i = lo; i < sorted.length && sorted[i].t - latencyMs < b; i++) {
+      for (let i = lo; i < sorted.length && sorted[i].t < b; i++) {
         seen++;
         const m = sorted[i].midi;
         if (m !== null && foldedDistance(m, c.pitch + (sorted[i].key ?? keyShift)) <= tol) hit++;

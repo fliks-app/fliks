@@ -1,9 +1,24 @@
 <section class="relative flex h-full min-h-0 flex-col gap-3" data-testid="lyrics-panel">
-  <div class="pointer-events-none absolute inset-x-0 top-1 z-10 flex justify-center" aria-live="polite" data-testid="karaoke-bubble">
-    @if (singKind() === 'queued' || singKind() === 'running') {
-      <span class="rounded-full bg-base-300 px-3 py-1 text-sm shadow">{{ 'karaoke.preparing_pct' | translate: { pct: prepPct() } }}</span>
-    } @else if (readyBubble()) {
-      <button type="button" class="btn btn-primary btn-sm pointer-events-auto rounded-full shadow" (click)="enter()" data-testid="karaoke-ready">{{ 'karaoke.ready_tap' | translate }}</button>
+  <div class="pointer-events-none absolute inset-x-0 top-1 z-10 flex justify-center px-2" aria-live="polite" data-testid="karaoke-bubble">
+    @if (kState(); as k) {
+      @if (k.state === 'queued' || k.state === 'running') {
+        <span class="pointer-events-auto flex items-center gap-1 rounded-full bg-base-300 py-1 pl-3 text-sm shadow" [class.pr-3]="!canEdit" [class.pr-1]="canEdit">
+          @if (k.state === 'queued') {
+            {{ 'karaoke.queued' | translate }}
+          } @else {
+            {{ 'karaoke.stage_' + (k.stage ?? 'separate') | translate: { pct: session.prepPct() } }}
+          }
+          @if (canEdit) {
+            <button type="button" class="btn btn-ghost btn-circle btn-sm" [disabled]="session.busy()" (click)="removeKaraoke()" [attr.aria-label]="'karaoke.cancel' | translate" data-testid="karaoke-cancel">
+              <svg [lucideIcon]="icons.X" class="h-4 w-4"></svg>
+            </button>
+          }
+        </span>
+      } @else if (k.error && session.singKind() === 'retry') {
+        <span class="max-w-full rounded-full bg-base-300 px-3 py-1 text-sm text-error shadow" data-testid="karaoke-failed">{{ 'karaoke.failed' | translate }} {{ failure(k.error) }}</span>
+      } @else if (session.readyFlash()) {
+        <button type="button" class="btn btn-primary btn-sm pointer-events-auto rounded-full shadow" (click)="session.enter()" data-testid="karaoke-ready">{{ 'karaoke.ready_tap' | translate }}</button>
+      }
     }
   </div>
 
@@ -21,15 +36,16 @@
           [output]="output()"
           [title]="audio.track()?.title ?? ''"
           [canEdit]="canEdit"
-          [busy]="kBusy()"
+          [busy]="session.busy()"
+          [seekable]="seekable()"
+          [cdgFile]="current() ? session.cdgFile() : null"
           [error]="kState()?.lyricsError ? ('karaoke.lyrics_failed' | translate) + ' ' + failure(kState()!.lyricsError!) : ''"
           (recompute)="recompute($event)"
+          (remove)="removeKaraoke()"
         />
       } @else {
-        @if (kState(); as k) {
-          @if (k.cdg) {
-            <app-cdg-canvas class="mx-auto mb-3 block w-full max-w-3xl" [fileId]="k.fileId" [output]="output()" data-testid="karaoke-cdg" />
-          }
+        @if (current() && session.cdgFile(); as file) {
+          <app-cdg-canvas class="mx-auto mb-3 block w-full max-w-3xl" [fileId]="file" [output]="output()" data-testid="karaoke-cdg" />
         }
         @if (loading() && !res()) {
           <!-- Nothing until the lyrics land, so "no lyrics" never flashes. -->
@@ -37,7 +53,7 @@
           <app-lyrics-view animate.enter="fade-up-in" class="block h-full sm:h-80 sm:max-h-full lg:h-[28rem] tv:h-[22rem]" [doc]="d" [layer]="under()" [output]="output()" [seekable]="seekable() && !tv()" />
         } @else if (res()?.instrumental) {
           <p class="text-lg text-base-content/60" data-testid="lyrics-instrumental">{{ 'lyrics.instrumental' | translate }}</p>
-        } @else {
+        } @else if (!(current() && session.cdgFile())) {
           <p class="text-base text-base-content/60" data-testid="lyrics-empty">{{ 'lyrics.none' | translate }}</p>
         }
       }
@@ -109,6 +125,9 @@
     <div class="flex shrink-0 flex-wrap gap-2" appTvSection data-testid="lyrics-tools">
       @if (shown(); as d) {
         <button type="button" class="btn btn-sm" [disabled]="busy() || d.preferred" (click)="prefer(d)">{{ 'lyrics.prefer' | translate }}</button>
+        @if (d.source === 'generated' && !d.reviewed) {
+          <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="keep(d)" data-testid="lyrics-keep">{{ 'lyrics.keep_sync' | translate }}</button>
+        }
       }
       <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="mode.set('import')">{{ 'lyrics.import' | translate }}</button>
       <button type="button" class="btn btn-sm" [disabled]="busy()" (click)="fetchFromProviders()">{{ 'lyrics.fetch' | translate }}</button>

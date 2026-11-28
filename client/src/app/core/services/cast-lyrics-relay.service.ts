@@ -23,6 +23,10 @@ export class CastLyricsRelayService {
       const karaoke = this.karaoke.stage();
       untracked(() => void this.push(itemId, karaoke));
     });
+    // A preparation that ends writes the generated lyrics the receiver should show.
+    this.karaoke.prepared.subscribe((id) => {
+      if (id === this.itemId()) void this.push(id, this.karaoke.stage());
+    });
   }
 
   private async push(itemId: number | undefined, karaoke: boolean): Promise<void> {

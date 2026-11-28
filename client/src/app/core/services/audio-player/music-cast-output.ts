@@ -4,10 +4,8 @@ import { AuthService } from '../auth.service';
 import { CastPlayerService } from '../cast-player.service';
 import { CastService, castMixUrl, type CastMediaInfo, type CastMixSource } from '../cast.service';
 import { NowPlayingMetadataService } from '../playback/now-playing-metadata.service';
-import { SERVER_SINCE, ServerVersionService } from '../server-version.service';
 import { ToastService } from '../toast.service';
 import { StreamingApiService, type PlaybackInfoResponse } from '../api/streaming-api.service';
-import type { StemKind } from '../api/karaoke.models';
 import type { MusicTrackRequest, Repeat } from './music-queue';
 import type { MusicHandoff, MusicSnapshot } from '../playback/playback-output';
 import type { StemMode } from './stem-mix';
@@ -22,7 +20,7 @@ export interface MusicCastState {
   itemId: number;
   sid: string | null;
   /** The receiver's statuses carry no stem: the state does. */
-  stem: StemKind | 'mix' | null;
+  stem: 'mix' | null;
   queue: ResumeQueue | null;
   stemMode: StemMode;
   vocalLevel: number;
@@ -77,7 +75,6 @@ export class MusicCastOutput {
   private readonly streaming = inject(StreamingApiService);
   private readonly auth = inject(AuthService);
   private readonly images = inject(ImageUrls);
-  private readonly serverVersion = inject(ServerVersionService);
   private readonly nowPlaying = inject(NowPlayingMetadataService);
   private readonly translate = inject(TranslateService);
   private readonly toast = inject(ToastService);
@@ -108,10 +105,8 @@ export class MusicCastOutput {
   /** A status named our track: media without an item id then means another sender replaced it. */
   private seen = false;
   private stemFile: number | null = null;
-  /** Content type of each stem the receiver may load. */
-  private stemTypes: Partial<Record<StemKind, string>> = {};
-  /** What the receiver plays in place of the track: a stem, or its mix of the stems. */
-  private readonly stemKind = signal<StemKind | 'mix' | null>(null);
+  /** What the receiver plays in place of the track: its mix of the stems. */
+  private readonly stemKind = signal<'mix' | null>(null);
   private stemRun: Promise<void> = Promise.resolve();
 
   constructor() {
@@ -285,9 +280,8 @@ export class MusicCastOutput {
     void this.streaming.stopSession(queued.info.sessionId!).catch(() => undefined);
   }
 
-  setStemSource(fileId: number, types: Partial<Record<StemKind, string>>): void {
+  setStemSource(fileId: number): void {
     this.stemFile = fileId;
-    this.stemTypes = types;
   }
 
   clearStems(): void {
@@ -300,26 +294,22 @@ export class MusicCastOutput {
     return (this.stemRun = this.stemRun.then(() => this.switchStem()).catch(() => undefined));
   }
 
-  /** A stem mode plays the receiver's mix of the instrumental and the vocals at the vocal level (a server without
-   *  stem PCM: the guide stem, else the instrumental); `original` the track again. */
+  /** A stem mode plays the receiver's mix of the instrumental and the vocals at the vocal level; `original` the track again. */
   private async switchStem(): Promise<void> {
     const host = this.host();
     const req = host?.current();
     const file = this.stemFile;
     if (!host || !req || file === null) return;
     const { mode, level } = host.karaoke();
-    const mixed = this.serverVersion.supports(SERVER_SINCE.stemPcm);
-    const kind = mode === 'original' ? null : mixed ? 'mix' : mode === 'guide' && 'guide' in this.stemTypes ? 'guide' : 'instrumental';
-    if (kind === this.stemKind()) return kind === 'mix' ? this.setMixVocals(file, level) : undefined;
+    const kind = mode === 'original' ? null : 'mix';
+    if (kind === this.stemKind()) return kind ? this.setMixVocals(file, level) : undefined;
     // The LOAD below empties the receiver's queue.
     this.dropNext();
     const generation = this.generation;
     const { position, playing } = host.playhead();
     const current = () => generation === this.generation;
     if (kind) {
-      const loaded = kind === 'mix'
-        ? await this.castMix(req, file, level, position, playing, current)
-        : await this.castStem(req, file, kind, this.stemTypes[kind] ?? 'audio/ogg', position, playing, current);
+      const loaded = await this.castMix(req, file, level, position, playing, current);
       if (!loaded) return void (current() && host.stemsFailed());
     } else {
       const info = await this.loadTrack(req, playing, position, current);
@@ -374,20 +364,6 @@ export class MusicCastOutput {
     this.loaded.set({ mediaId: typeof media['mediaId'] === 'number' ? media['mediaId'] : pending.mediaId, mediaFileId, itemId, sid });
     this._active.set(true);
     host.adopted();
-  }
-
-  /** Replaces the receiver's media by a karaoke stem of the playing track (file-bound token), at `position`. */
-  private async castStem(
-    t: MusicTrackRequest,
-    fileId: number,
-    kind: StemKind,
-    contentType: string,
-    position: number,
-    autoplay: boolean,
-    current: () => boolean,
-  ): Promise<boolean> {
-    const url = await this.stemUrl(fileId, kind);
-    return !!url && current() && this.loadStem(t, fileId, url, contentType, kind, position, autoplay);
   }
 
   /** Replaces the receiver's media by its mix of the instrumental and the vocals of `t`, the vocals at `vocals`. */

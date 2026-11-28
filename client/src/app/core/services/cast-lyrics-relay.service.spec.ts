@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { Subject } from 'rxjs';
 import { LyricsApiService } from './api/lyrics-api.service';
 import { AudioPlayerService } from './audio-player/audio-player.service';
 import { CastLyricsRelayService } from './cast-lyrics-relay.service';
@@ -23,7 +24,7 @@ describe('CastLyricsRelayService', () => {
         { provide: LyricsApiService, useValue: { get: async () => ({ structuredLyrics: [main(1, false), main(2, true)] }) } },
         { provide: AudioPlayerService, useValue: { musicMode: signal(true), track: signal({ itemId: 7 }), stemMode: signal('original') } },
         { provide: CastService, useValue: { isConnected: signal(true), sendFliks: (m: never) => sent.push(m) } },
-        { provide: KaraokeService, useValue: { stage } },
+        { provide: KaraokeService, useValue: { stage, prepared: new Subject<number>() } },
       ],
     });
     TestBed.inject(CastLyricsRelayService);
@@ -31,5 +32,25 @@ describe('CastLyricsRelayService', () => {
     await vi.waitFor(() => expect(sent.some((m) => m.kind === 'lyrics')).toBe(true));
     const first = sent.find((m) => m.kind === 'lyrics')!;
     expect(JSON.parse(first.data!)).toMatchObject({ stage: true, rows: [{ text: 'cued' }] });
+  });
+
+  it('sends the lyrics again once a preparation of the playing track ends', async () => {
+    const prepared = new Subject<number>();
+    const get = vi.fn(async () => ({ structuredLyrics: [main(1, false)] }));
+    const sent: Array<{ kind: string }> = [];
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: LyricsApiService, useValue: { get } },
+        { provide: AudioPlayerService, useValue: { musicMode: signal(true), track: signal({ itemId: 7 }) } },
+        { provide: CastService, useValue: { isConnected: signal(true), sendFliks: (m: never) => sent.push(m) } },
+        { provide: KaraokeService, useValue: { stage: signal(false), prepared } },
+      ],
+    });
+    TestBed.inject(CastLyricsRelayService);
+    TestBed.tick();
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    prepared.next(3);
+    prepared.next(7);
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(2));
   });
 });

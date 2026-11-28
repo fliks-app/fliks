@@ -82,7 +82,8 @@ describe('rowStates', () => {
 
   it('is owned with a file, carrying the karaoke prep', () => {
     expect(kind(track({}))).toEqual({ kind: 'owned' });
-    expect(kind(track({}), { karaoke: () => ({ state: 'running', stage: 'align', progress: 50 }) })).toEqual({ kind: 'owned', karaoke: { progress: 80 } });
+    expect(kind(track({}), { karaoke: () => ({ state: 'running', stage: 'align', progress: 47.5 }) })).toEqual({ kind: 'owned', karaoke: { progress: 55 } });
+    expect(kind(track({}), { karaoke: () => ({ state: 'ready', stage: null, progress: null }) })).toEqual({ kind: 'owned', karaoke: { ready: true } });
     expect(kind(track({}), { karaoke: () => ({ state: 'running', progress: 30 }) })).toEqual({ kind: 'owned', karaoke: { progress: null } });
   });
 

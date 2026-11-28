@@ -8,7 +8,7 @@ describe('karaoke score', () => {
   it('scores a take sung in the new key against the shifted melody', () => {
     const lines = [{ cues: [cue(0, 1000, 60), cue(1000, 2000, 64)] }];
     const sung = [...sing(0, 1000, 63), ...sing(1000, 2000, 67)];
-    expect(scoreSinger(lines, sung, 'hard', 0, 0, 3).score).toBe(10000);
+    expect(scoreSinger(lines, sung, 'hard', 0, 3).score).toBe(10000);
     expect(scoreSinger(lines, sung, 'hard').score).toBe(0);
   });
 
@@ -56,11 +56,6 @@ describe('karaoke score', () => {
     expect(r.score).toBe(10000);
     expect(r.lines).toEqual([1, 0]);
     expect(scoreSinger([{ cues: [cue(0, 1000, 60)] }, { cues: [cue(0, 1000, 60)] }], sing(0, 1000, 60), 'hard').lines).toEqual([1, 0]);
-  });
-
-  it('removes the device latency', () => {
-    const lines = [{ cues: [cue(0, 1000, 60)] }];
-    expect(scoreSinger(lines, sing(150, 1150, 60), 'medium', 0, 150).score).toBe(10000);
   });
 
   it('estimates a latency from onsets', () => {

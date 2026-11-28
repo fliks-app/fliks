@@ -204,8 +204,8 @@ export class AlbumPageComponent {
     inject(SseService).karaokeEvents.pipe(takeUntilDestroyed()).subscribe((e) => {
       if (e.type !== 'karaoke.job_changed') return;
       const j = e as unknown as KaraokeJobChanged;
-      const live = j.state === 'queued' || j.state === 'running';
-      this.karaokeLive.update((m) => new Map(m).set(j.itemId, live ? { state: j.state as 'queued' | 'running', stage: j.stage, progress: j.progress ?? null } : null));
+      const kept = j.state === 'queued' || j.state === 'running' || j.state === 'ready';
+      this.karaokeLive.update((m) => new Map(m).set(j.itemId, kept ? { state: j.state as 'queued' | 'running' | 'ready', stage: j.stage, progress: j.progress ?? null } : null));
     });
     effect(() => {
       const key = this.titleKey();
