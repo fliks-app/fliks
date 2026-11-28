@@ -98,7 +98,8 @@ export class ShakaEngine extends AbstractPlaybackEngine implements PlaybackEngin
       // otherwise show a forced track in the audio language on every load.
       accessibility: { handleForcedSubtitlesAutomatically: false },
       cmcd: { enabled: true, useHeaders: false },
-      // The engine anchors every tfdt; a playlist-grid realignment opens audio gaps that drift A/V.
+      // VOD: the engine anchors every tfdt; a playlist-grid realignment opens audio gaps that drift
+      // A/V. Live turns it off (live-player).
       manifest: { hls: { ignoreManifestTimestampsInSegmentsMode: true } },
     });
 

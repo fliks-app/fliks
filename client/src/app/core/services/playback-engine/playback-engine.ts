@@ -145,7 +145,10 @@ export interface EngineConfig {
     advanced?: { minTotalBytes?: number; slowHalfLife?: number };
   };
   streaming?: { bufferBehind?: number; retryParameters?: RetryParameters; maxDisabledTime?: number };
-  manifest?: { retryParameters?: RetryParameters };
+  manifest?: {
+    retryParameters?: RetryParameters;
+    hls?: { ignoreManifestTimestampsInSegmentsMode?: boolean };
+  };
   preferredAudioLanguage?: string;
   /** mpv crop rectangle (`WxH+X+Y`), or null to clear it. */
   videoCrop?: string | null;
