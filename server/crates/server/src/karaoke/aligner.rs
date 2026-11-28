@@ -190,8 +190,8 @@ pub async fn languages(State(st): State<AppState>, a: Authed) -> Result<Json<Val
             json!({
                 "language": l,
                 "tracks": tracks,
-                "aligner": aligner(&models, l, &chosen, quality).map(|m| &m.id),
-                "recommended": recommended(&models, l).map(|m| &m.id),
+                "aligner": aligner(models, l, &chosen, quality).map(|m| &m.id),
+                "recommended": recommended(models, l).map(|m| &m.id),
             })
         })
         .collect();
@@ -212,7 +212,7 @@ pub(super) async fn auto_download(st: &AppState) {
     let langs = library_languages(st).await.unwrap_or_default();
     let mut wanted: Vec<&ModelInfo> = langs
         .keys()
-        .filter_map(|l| recommended(&models, Some(l)))
+        .filter_map(|l| recommended(models, Some(l)))
         .filter(|m| m.state == ModelState::Absent && m.licence.clear)
         .collect();
     let mut seen = std::collections::HashSet::new();
@@ -336,7 +336,7 @@ pub async fn realign_items(
     manage_settings(&a)?;
     let models = super::engine_models(&st).await.map_err(engine_err)?;
     let models = &models.models;
-    let mut all = stale(&st, &models).await?;
+    let mut all = stale(&st, models).await?;
     all.sort_by_key(|s| s.item);
     let total = all.len();
     let page = page_of(all, q.offset);
@@ -378,7 +378,7 @@ pub async fn realign_count(State(st): State<AppState>, a: Authed) -> Result<Json
     manage_settings(&a)?;
     let models = super::engine_models(&st).await.map_err(engine_err)?;
     let models = &models.models;
-    let all = stale(&st, &models).await?;
+    let all = stale(&st, models).await?;
     Ok(Json(json!({
         "tracks": all.iter().filter(|s| !s.blocked).count(),
         "refused": all.iter().filter(|s| s.blocked).count(),
@@ -408,7 +408,7 @@ pub async fn realign(
             "karaoke_realign_running",
         ));
     }
-    let tracks = match stale(&st, &models).await {
+    let tracks = match stale(&st, models).await {
         Ok(t) => t.into_iter().filter(|s| !s.blocked).collect::<Vec<_>>(),
         Err(e) => {
             st.karaoke.realigning.store(false, Ordering::SeqCst);
