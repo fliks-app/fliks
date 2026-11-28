@@ -42,6 +42,7 @@
           [error]="kState()?.lyricsError ? ('karaoke.lyrics_failed' | translate) + ' ' + failure(kState()!.lyricsError!) : ''"
           (recompute)="recompute($event)"
           (remove)="removeKaraoke()"
+          (offset)="setOffset(d.id, $event)"
         />
       } @else {
         @if (current() && session.cdgFile(); as file) {

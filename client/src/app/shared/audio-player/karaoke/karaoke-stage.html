@@ -123,6 +123,27 @@
             </button>
           </div>
         </div>
+        @if (analysis(); as a) {
+          <div class="flex flex-col gap-1 text-sm" data-testid="karaoke-analysis">
+            @if (a.key) {
+              <p data-testid="karaoke-key-estimate">
+                <span class="text-base-content/60">{{ 'karaoke.key_estimated' | translate }}</span> {{ a.key }}
+                @if (!a.sure) {
+                  <span class="text-base-content/60">· {{ 'karaoke.key_uncertain' | translate }}</span>
+                }
+              </p>
+            }
+            <p data-testid="karaoke-range">
+              {{ a.range }}
+              @if (a.fits !== null) {
+                <span [class.text-success]="a.fits" [class.text-warning]="!a.fits" data-testid="karaoke-range-fit">· {{ (a.fits ? 'karaoke.range_fits' : 'karaoke.range_outside') | translate }}</span>
+              }
+            </p>
+            @if (a.details) {
+              <p class="text-base-content/60">{{ a.details }}</p>
+            }
+          </div>
+        }
         <p class="min-h-4 text-sm text-base-content/60" data-testid="karaoke-key-hint">{{ (keyBlocked() ?? 'karaoke.key_stems_off') | translate }}</p>
         @if (canSing) {
           <div class="flex items-center justify-between gap-3">
@@ -147,6 +168,30 @@
             </div>
           </div>
           <p class="min-h-4 text-sm text-base-content/60" [class.invisible]="calibrated() !== false">{{ 'karaoke.calibrate_failed' | translate }}</p>
+        }
+        @if (canEdit() && doc().id && doc().synced) {
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-sm font-semibold">
+              {{ 'karaoke.lyrics_offset' | translate }}
+              <span class="font-normal text-base-content/60" aria-live="polite" data-testid="karaoke-offset">{{ 'karaoke.lyrics_offset_ms' | translate: { ms: (doc().offset > 0 ? '+' : '') + doc().offset } }}</span>
+            </span>
+            <div class="join items-center" role="group" [attr.aria-label]="'karaoke.lyrics_offset' | translate">
+              <button type="button" class="btn btn-sm join-item" (click)="nudgeOffset(-1)" [attr.aria-label]="'karaoke.lyrics_later' | translate" data-testid="karaoke-offset-later">
+                <svg [lucideIcon]="icons.Minus" class="h-4 w-4"></svg>
+              </button>
+              <button type="button" class="btn btn-sm join-item" [disabled]="doc().offset === 0" (click)="nudgeOffset(0)" data-testid="karaoke-offset-reset">{{ 'karaoke.latency_reset' | translate }}</button>
+              <button type="button" class="btn btn-sm join-item" (click)="nudgeOffset(1)" [attr.aria-label]="'karaoke.lyrics_sooner' | translate" data-testid="karaoke-offset-sooner">
+                <svg [lucideIcon]="icons.Plus" class="h-4 w-4"></svg>
+              </button>
+            </div>
+          </div>
+          <p class="text-sm text-base-content/60">{{ 'karaoke.lyrics_offset_hint' | translate }}</p>
+        }
+        @if (stale()) {
+          <div class="flex items-center justify-between gap-3" data-testid="karaoke-stale">
+            <span class="text-sm">{{ 'karaoke.outdated' | translate: { steps: stale() } }}</span>
+            <button type="button" class="btn btn-sm" [disabled]="busy() || preparing()" (click)="karaoke.prepare({})" data-testid="karaoke-update">{{ 'karaoke.update' | translate }}</button>
+          </div>
         }
         @if (canEdit()) {
           <div class="flex flex-col gap-2 border-t border-base-content/10 pt-3">

@@ -16,6 +16,7 @@ import type { Difficulty, PitchFrame } from './karaoke-score';
 import { FrameStore, calibrate, scoreAll, type SingerResult } from './karaoke-session';
 import { failureText } from './karaoke-failure';
 import { singKind, stemsReady, weightedProgress } from './karaoke-prep';
+import { VoiceRange } from './key-analysis';
 import { KaraokeRelayService } from './karaoke-relay.service';
 import { MicCapture } from './mic-capture';
 import { MAX_FRAMES_PER_BATCH, encodeBatch } from './pitch-frames';
@@ -94,6 +95,9 @@ export class KaraokeService {
   readonly latencyMs = signal(Number(readStored(LATENCY_KEY)) || 0);
   readonly difficulty = signal<Difficulty>(['easy', 'medium', 'hard'].includes(readStored(DIFFICULTY_KEY) ?? '') ? (readStored(DIFFICULTY_KEY) as Difficulty) : 'medium');
   readonly board = signal<Board | null>(null);
+  private readonly voice = new VoiceRange();
+  /** The range this device's singer sang in, learned from the mic; null until enough was sung. */
+  readonly voiceRange = signal(this.voice.range());
 
   private readonly capture = new MicCapture();
   private pending: PitchFrame[] = [];
@@ -321,6 +325,7 @@ export class KaraokeService {
       await this.capture.start((raw) => {
         const lag = this.latencyMs();
         const f = { ...raw, t: raw.t - lag, lag };
+        if (f.midi !== null && this.voice.add(f.midi)) this.voiceRange.set(this.voice.range());
         this.ingest(me, [f]);
         this.pending.push(f);
         if (this.pending.length >= MAX_FRAMES_PER_BATCH) this.flush();
@@ -342,6 +347,8 @@ export class KaraokeService {
   stopSinging(): void {
     this.startGen++;
     this.capture.stop();
+    this.voice.save();
+    this.voiceRange.set(this.voice.range());
     this.relay.close('singer');
     if (this.flushTimer) clearInterval(this.flushTimer);
     this.flushTimer = null;

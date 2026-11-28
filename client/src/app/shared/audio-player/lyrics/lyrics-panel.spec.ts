@@ -12,7 +12,7 @@ import { DeviceService } from '../../../core/services/device.service';
 import { KaraokeService } from '../../../core/services/karaoke/karaoke.service';
 import { LyricsPanelComponent } from './lyrics-panel';
 
-const none: KaraokeItemState = { state: 'none', fileId: 1, stems: {}, lyrics: false, melody: false, cdg: false };
+const none: KaraokeItemState = { state: 'none', fileId: 1, stems: {}, lyrics: false, melody: false, cdg: false, stale: [] };
 
 async function create(structuredLyrics: unknown[] = [], state: KaraokeItemState | null = null) {
   const session = {

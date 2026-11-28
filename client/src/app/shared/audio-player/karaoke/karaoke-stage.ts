@@ -11,6 +11,7 @@ import { DeviceService } from '../../../core/services/device.service';
 import { KaraokeRelayService } from '../../../core/services/karaoke/karaoke-relay.service';
 import { KaraokeService, type BoardRow } from '../../../core/services/karaoke/karaoke.service';
 import { intoRange, laneNotes, laneRange } from '../../../core/services/karaoke/pitch-lane';
+import { SURE_KEY, SURE_TEMPO, fitsVoice, keyName, noteName } from '../../../core/services/karaoke/key-analysis';
 import { TOLERANCE, foldedDistance, type Difficulty } from '../../../core/services/karaoke/karaoke-score';
 import { GOLD, SINGER_COLOURS, singerStyle } from '../../../core/services/karaoke/singer-style';
 import { PartyService } from '../../../core/services/party/party.service';
@@ -30,6 +31,8 @@ const MIX_KEY = 'fliks.karaoke.mix';
 /** Taps on the key buttons gather this long before the track reopens in the new key. */
 const KEY_SETTLE_MS = 600;
 const UP_NEXT = 3;
+const OFFSET_STEP_MS = 100;
+const MAX_OFFSET_MS = 60000;
 
 interface SavedMix {
   mode: StemMode;
@@ -85,6 +88,8 @@ export class KaraokeStageComponent {
   readonly recompute = output<'sync' | 'melody'>();
   /** Drops the track's stems and generated lyrics (with `canEdit`). */
   readonly remove = output<void>();
+  /** The new `offset` of the lyrics shown (with `canEdit`). */
+  readonly offset = output<number>();
 
   protected get audio(): AudioOutput {
     return this.output() ?? this.local;
@@ -100,6 +105,33 @@ export class KaraokeStageComponent {
     if (this.karaoke.status() && !this.karaoke.status()!.pitchShift) return 'karaoke.key_unavailable';
     return this.audio.canShiftKey && !this.audio.canShiftKey() ? 'karaoke.key_not_here' : null;
   });
+  /** What the melody found, worded for the key the taps aim at; null when the server sent no analysis. */
+  protected readonly analysis = computed(() => {
+    const a = this.karaoke.itemState()?.analysis;
+    if (!a) return null;
+    const shift = this.targetKey();
+    const t = (key: string, p?: object) => this.translate.instant(key, p) as string;
+    const names = { major: t('karaoke.tonics_major').split(' '), minor: t('karaoke.tonics_minor').split(' ') };
+    const named = (s: number) => {
+      const k = a.key!;
+      return k.alternative ? t('karaoke.key_or', { a: keyName(k.key, s, names), b: keyName(k.alternative, s, names) }) : keyName(k.key, s, names);
+    };
+    const cents = Math.round(a.tuningCents);
+    const details = [
+      a.tempo && a.tempo.confidence >= SURE_TEMPO ? t('karaoke.tempo', { bpm: Math.round(a.tempo.bpm) }) : '',
+      Math.abs(cents) >= 5 ? t('karaoke.tuning', { cents: (cents > 0 ? '+' : '') + cents }) : '',
+    ];
+    return {
+      key: a.key ? (shift ? `${named(0)} → ${named(shift)}` : named(0)) : '',
+      sure: !!a.key && a.key.confidence >= SURE_KEY,
+      range: t('karaoke.range', { low: noteName(a.lowMidi + shift, names.major), high: noteName(a.highMidi + shift, names.major) }),
+      fits: fitsVoice(a, shift, this.karaoke.voiceRange()),
+      details: details.filter(Boolean).join(' · '),
+    };
+  });
+  /** Steps an older model made, worded; the stage entry already asked for them to be redone. */
+  protected readonly stale = computed(() => (this.karaoke.itemState()?.stale ?? []).map((s) => this.translate.instant(`karaoke.admin.stage_${s}`) as string).join(' · '));
+  protected readonly preparing = computed(() => ['queued', 'running'].includes(this.karaoke.itemState()?.state ?? ''));
   protected readonly hasLines = computed(() => this.doc().line.length > 0);
   protected readonly lineSeek = computed(() => this.seekable() && !this.party.active());
   /** The next programme rows with their singers, on the party's display. */
@@ -255,6 +287,11 @@ export class KaraokeStageComponent {
       // A local reopen that fails leaves the key; a remote device reports its own.
       void Promise.resolve(this.audio.setPitch?.(this.targetKey())).then(() => !this.output() && this.targetKey.set(this.pitch()));
     }, KEY_SETTLE_MS);
+  }
+
+  protected nudgeOffset(steps: number): void {
+    const v = steps ? this.doc().offset + steps * OFFSET_STEP_MS : 0;
+    this.offset.emit(Math.min(MAX_OFFSET_MS, Math.max(-MAX_OFFSET_MS, v)));
   }
 
   protected closeBoard(): void {
